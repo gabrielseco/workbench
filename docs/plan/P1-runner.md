@@ -205,8 +205,9 @@ Status 2026-10-13. Evidence is in the tests named, `scripts/soak-real.py`, and t
 - [x] Second turn with `--resume` keeps context, checked with a real run (task 9).
 - [x] No use of `waitUntilExit`, `readDataToEndOfFile` or Foundation's `Process` in `Sources/`
       (grep-enforced in CI, with a check that it fails when one is added).
-- [ ] CI is green on a 3-core runner (the environment that bit us), not just locally. The workflow now
-      prints the runner's core count; confirm it in the first run of this PR.
+- [x] CI is green on a 3-core runner (the environment that bit us), not just locally. Confirmed from the
+      CI log of PR #12: `cores: 3`, macOS 15.7, Swift 6.1.2 (older than the 6.2.1 used locally), the full
+      suite and the 100-run soak both pass there.
 
 ## Risks
 
