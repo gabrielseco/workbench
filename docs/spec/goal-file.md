@@ -74,16 +74,19 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
 
 ## Tool permissions
 
-One fixed set per project, in `.workbench/config.toml` (no named profiles until there is a real need):
+One fixed set per project, in `.workbench/config.toml` (no named profiles until there is a real need).
+`Config.exampleTOML` is the starting point.
 
 ```toml
-check_command = "scripts/check.sh"
+check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
+default_budget_usd = 5.00               # used when drafting a goal
+# claude_path = "claude"                # name on PATH, or an absolute path
+# env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
 
 [tools]
-# Built-in tools made available at all (--tools). File tools are confined to the worktree by --restricted.
 available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
-# Bash patterns that may run (--allowedTools). Everything else is denied automatically.
-allowed = ["Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)",
+allowed = ["Read", "Grep", "Glob", "Edit", "Write",
+           "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)",
            "Bash(swift build:*)", "Bash(swift test:*)"]
 denied  = ["Bash(git push:*)", "Bash(gh pr merge:*)", "Bash(rm -rf:*)"]
 ```
@@ -91,12 +94,20 @@ denied  = ["Bash(git push:*)", "Bash(gh pr merge:*)", "Bash(rm -rf:*)"]
 Notes:
 
 - The runner passes `--permission-prompts none --restricted --tools <available> --allowedTools <allowed>
-  --disallowedTools <denied>`. Anything not allowed is denied automatically, and the model is told so.
-  That is the whole permission system.
-- **Never allow file tools by bare name outside `--restricted`.** Spike S3 showed `--allowedTools Read Edit
-  Write` lets the model read and write anywhere on disk. `--restricted` confines them to the worktree;
-  the fallback is `--permission-mode acceptEdits` with `Read(./**)`. See
-  [P1 spikes](../plan/P1-spikes.md).
-- `check_command` (P2) is added to `allowed` so Claude can run its own checks.
+  --disallowedTools <denied>`; the prompt follows `--`. Anything not allowed is denied automatically, and
+  the model is told so. That is the whole permission system.
+- **`--restricted` is always passed and cannot be turned off from the config.** It is what confines the
+  file tools to the worktree. Bare `Edit`/`Write` in `allowed` are therefore safe, and without
+  `--restricted` they would not be: spike S3 showed they can write anywhere on disk.
+- **The check command is a literal prefix.** `check_command = "scripts/check.sh"` becomes
+  `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
+  `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
+  with no shell operators or quotes. The runner should tell the model the exact string to use.
+- **The child environment is an allowlist**: `PATH HOME USER LOGNAME SHELL LANG TMPDIR TERM
+  CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
+  them `claude` reports "Not logged in" even though the config dir is set. `SSH_AUTH_SOCK` and every token
+  variable are left out on purpose, so a model that gets past the allowlist still holds no credentials.
+- Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
+  multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3
   (18 of 18). We do not re-implement any of that; the worktree and the absence of credentials cover the rest.
