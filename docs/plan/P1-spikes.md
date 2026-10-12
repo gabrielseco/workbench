@@ -240,3 +240,29 @@ Applied to [`P1-runner.md`](P1-runner.md) and [`README.md`](README.md) in the sa
 - Per-run network deny list: **not needed for the Bash allowlist** (no network commands are allowed and
   `WebFetch`/`WebSearch` are denied). Revisit only if the fixed set grows to include `npm`/`swift build`,
   which can themselves reach the network.
+
+---
+
+## Addendum: task 4 smoke test
+
+Run 2026-10-12 with the argv produced by `Config.invocation` and an environment built by
+`Config.childEnvironment`, against `claude` 2.1.296.
+
+| Check | Result |
+|---|---|
+| Full generated argv accepted by the CLI (`--restricted`, `--tools`, `--allowedTools`, `--disallowedTools`, `--` prompt) | yes |
+| Edit inside the worktree | worked |
+| `git push origin main` (in `denied`) | denied |
+| Write outside the worktree under `--restricted` | denied |
+| Scrubbed environment without `USER`/`LOGNAME` | **"Not logged in"**, cost 0 |
+| Scrubbed environment with `USER`/`LOGNAME` (the real base set) | logged in, runs normally |
+| `check_command = "scripts/check.sh"`: `scripts/check.sh`, `scripts/check.sh --fast` | ran |
+| Same pattern: `./scripts/check.sh`, `sh scripts/check.sh`, absolute path | denied |
+| `--session-id` reused across runs (a harness slip) | `Session ID … is already in use`, confirming S4 again |
+
+Two things this changes: `USER` and `LOGNAME` are in the fixed environment set, and `check_command` must
+be written exactly as it will be invoked.
+
+One more data point on cost caps: a $0.30 cap was exceeded (about $0.45) by a multi-step run on the default
+model, so the cap is a runaway stopper with a few turns of slack, as S5 suggested.
+
