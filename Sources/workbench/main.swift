@@ -1,52 +1,77 @@
 import Foundation
 import WorkbenchCore
 
-func fail(_ message: String, code: Int32 = 1) -> Never {
-    FileHandle.standardError.write(Data((message + "\n").utf8))
-    exit(code)
+let usage = """
+    usage: workbench <command>
+
+    setup
+      init                       write .workbench/config.toml
+      config                     show the resolved config and the command a turn would run
+
+    one thread at a time
+      goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
+      goal approve [id]          approve the goal; any later edit returns it to draft
+      run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
+      stop                       ask the running turn to stop cleanly
+      log [-f] [-v]              what happened; -f follows, -v shows every stream line
+      status                     where the thread stands
+      abandon [--force]          end the thread without accepting its work
+
+      version
+    """
+
+func report(_ error: Error) -> Never {
+    switch error {
+    case let e as CLIError:
+        err("workbench: \(e)")
+        if case .usage = e { exit(2) }
+        exit(1)
+    case let e as ConfigError:
+        err("workbench: invalid config\n\(e)")
+        exit(2)
+    case let e as GoalParseError:
+        err("workbench: invalid goal\n\(e)")
+        exit(2)
+    default:
+        err("workbench: \(error)")
+        exit(1)
+    }
 }
+
+// Progress must show up as it happens even when output is piped or redirected (`workbench run | tee`).
+setvbuf(stdout, nil, _IOLBF, 0)
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
-switch arguments.first {
-case "--version", "version":
-    print("workbench \(Workbench.version)")
-
-case "config":
-    // Prints what a turn would run, so the tool set can be inspected without spawning anything.
-    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent(".workbench/config.toml")
-    do {
-        let config = try Config.load(from: url)
-        let turn = TurnRequest(
-            sessionID: UUID(), resume: false, budgetUSD: config.defaultBudgetUSD, prompt: "<prompt>")
-        let invocation = try config.invocation(for: turn)
-        let resolved = ExecutableResolver.resolve(
-            config.claudePath, searchPath: ProcessInfo.processInfo.environment["PATH"])
-        print("config:   \(url.path)")
-        print("claude:   \(resolved?.path ?? "NOT FOUND on PATH (\(config.claudePath))")")
-        print("check:    \(config.checkCommand ?? "(none)")")
-        print("budget:   \(config.defaultBudgetUSD) USD default")
-        print("tools:    \(config.tools.available.joined(separator: ", "))")
-        print("allowed:  \(config.effectiveAllowedTools.joined(separator: ", "))")
-        print("denied:   \(config.tools.denied.joined(separator: ", "))")
-        print("env:      \(config.childEnvironment(from: ProcessInfo.processInfo.environment).keys.sorted().joined(separator: ", "))")
-        print("command:  \(invocation.displayCommand)")
-    } catch let error as ConfigError {
-        fail("workbench: invalid config\n\(error)", code: 2)
-    } catch {
-        fail("workbench: \(error)")
+do {
+    switch arguments.first {
+    case "version", "--version":
+        out("workbench \(Workbench.version)")
+    case nil, "help", "--help", "-h":
+        out(usage)
+    case "init":
+        try await Commands.initProject()
+    case "config":
+        try await Commands.config()
+    case "goal":
+        switch arguments.dropFirst().first {
+        case "new": try await Commands.goalNew(Array(arguments.dropFirst(2)))
+        case "approve": try await Commands.goalApprove(Array(arguments.dropFirst(2)))
+        default: throw CLIError.usage("usage: workbench goal new <name> | workbench goal approve [id]")
+        }
+    case "run":
+        exit(try await Commands.run(Array(arguments.dropFirst())))
+    case "stop":
+        try await Commands.stop(Array(arguments.dropFirst()))
+    case "log":
+        try await Commands.log(Array(arguments.dropFirst()))
+    case "status":
+        try await Commands.status(Array(arguments.dropFirst()))
+    case "abandon":
+        try await Commands.abandon(Array(arguments.dropFirst()))
+    default:
+        throw CLIError.usage("unknown command '\(arguments[0])'\n\n\(usage)")
     }
-
-case nil, "--help", "help":
-    print("""
-    usage: workbench <command>
-
-    commands:
-      version    print the version
-      config     show the resolved config and the command a turn would run
-    """)
-
-default:
-    fail("workbench: unknown command '\(arguments[0])'", code: 2)
+} catch {
+    report(error)
 }

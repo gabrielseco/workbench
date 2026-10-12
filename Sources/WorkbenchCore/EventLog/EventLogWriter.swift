@@ -95,6 +95,8 @@ public actor EventLogWriter {
     public var openTurn: Int? { state.openTurn }
     /// The `seq` the next append will get.
     public var nextSeq: Int { state.nextSeq }
+    /// The highest turn number started so far, 0 for a thread with no turns.
+    public var lastTurn: Int { state.lastTurn }
 
     /// Appends a structured event.
     @discardableResult
@@ -126,6 +128,22 @@ public actor EventLogWriter {
         }
         let event = Event(seq: seq, ts: timestamp(), turn: turn, kind: .claude, data: .null)
         if let problem = state.check(event) { throw EventLogError.invalid(problem) }
+        try write(event, dataJSON: dataJSON)
+        return seq
+    }
+
+    /// Records a line the process runner already cut short, in the same shape `appendClaudeLine` uses for a
+    /// line over the size limit.
+    @discardableResult
+    public func appendOversizedClaudeLine(preview: String, totalBytes: Int, turn: Int) throws -> Int {
+        let seq = state.nextSeq
+        let event = Event(seq: seq, ts: timestamp(), turn: turn, kind: .claude, data: .null)
+        if let problem = state.check(event) { throw EventLogError.invalid(problem) }
+        let dataJSON = try Self.json([
+            "truncated": true,
+            "original_bytes": .int(totalBytes),
+            "prefix": .string(String(preview.prefix(Self.truncationPrefixCharacters))),
+        ])
         try write(event, dataJSON: dataJSON)
         return seq
     }

@@ -213,6 +213,39 @@ Ordered slices, each ending with tests passing.
 | CLI output format changes | Parser ignores unknown fields; keep raw lines; fixtures pin the format we tested |
 | Real runs cost money | `--max-budget-usd` on every run; soak with real claude kept to 10 small goals |
 
+## Using it
+
+```
+workbench init                         # writes .workbench/config.toml; review the tool set
+workbench goal new add-greeting        # a draft to fill in; refused while another thread is active
+$EDITOR .workbench/threads/<id>/goal.md
+workbench goal approve                 # binds the hash; any later edit returns it to draft
+workbench run                          # first turn
+workbench log -f                       # from another terminal
+workbench stop                         # ends the running turn cleanly, recorded as `stopped`
+workbench run --feedback "..."         # next turn, same session (--resume)
+workbench status
+workbench abandon                      # ends the thread; keeps its branch
+```
+
+Exit codes of `run`: 0 succeeded, 1 failed, 3 stopped, 4 timed out, 5 budget exceeded, 2 usage or invalid
+config or goal.
+
+Per thread, on disk: `goal.md`, `events.jsonl`, `session.json` (`{session_id, confirmed}`),
+`prompts/turn-N.md`, and `runner.json` while a run holds the log.
+
+- **Sessions.** `session.json` is written before the first spawn and marked `confirmed` once a stream line
+  carries its id. A confirmed session is resumed. An unconfirmed one (a first turn killed before the CLI
+  saved anything) tries `--resume`, and if that fails at once with no output, creates it with
+  `--session-id`; both attempts are logged as turns. The failure text is not relied on.
+- **Feedback.** Required once any turn has succeeded, refused before the first turn. A run that failed or
+  was stopped can be re-run without it.
+- **Crash recovery.** The next `run` closes an open turn as a synthetic `interrupted`, then sweeps
+  processes whose parent is gone and whose working directory is inside the worktree. A shell or editor the
+  user has open there has a live parent and is left alone.
+- **`stop`** signals the runner (SIGTERM), identified by pid *and* start time. The runner stops the child
+  and writes the end of the turn itself. A second Ctrl-C quits at once, and the next run recovers.
+
 ## Demo
 
 In a scratch repo: write `goal.md`, `workbench goal approve`, `workbench run`, watch `workbench log -f`,
