@@ -199,33 +199,42 @@ enum FakeClaude {
 }
 
 /// A running fake, driven explicitly. Tests signal it after `ready`, never after a guess about startup time.
+/// Started through the same spawner as production code, so these tests cannot reintroduce the
+/// fork-to-exec descriptor window that Foundation's `Process` has.
 final class FakeProcess: @unchecked Sendable {
-    private let process = Process()
+    private let run: ProcessRun
     private let lock = NSLock()
     private var status: (code: Int32, signaled: Bool)?
     private let readyFile = FakeClaude.scratch("ready")
 
-    var pid: pid_t { process.processIdentifier }
+    var pid: pid_t { run.pid }
 
     init(_ directives: String..., arguments: [String] = ["-p", "--", "hi"]) throws {
         let joined = (directives + ["ready=\(readyFile)"]).joined(separator: ",")
-        process.executableURL = FakeClaude.executable
-        process.arguments = arguments
-        process.environment = FakeClaude.environment(joined)
-        process.currentDirectoryURL = URL(fileURLWithPath: "/tmp")
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { [self] p in
-            lock.lock()
-            status = (p.terminationStatus, p.terminationReason == .uncaughtSignal)
-            lock.unlock()
+        var request = SpawnRequest(
+            executable: FakeClaude.executable, arguments: arguments,
+            environment: FakeClaude.environment(joined), workingDirectory: URL(fileURLWithPath: "/tmp"),
+            timeout: 120)
+        request.killGrace = 60  // signals are sent by the test, not by the runner
+        run = try ProcessRunner.start(request)
+
+        let events = run.events
+        Task.detached { [self] in
+            for await event in events {
+                guard case .exited(let exit) = event else { continue }
+                let mapped: (Int32, Bool)
+                switch exit.termination {
+                case .exited(let code): mapped = (code, false)
+                case .signaled(let signal): mapped = (signal, true)
+                case .lost: mapped = (-1, false)
+                }
+                lock.withLock { status = mapped }
+            }
         }
-        try process.run()
     }
 
     deinit {
-        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        kill(run.pid, SIGKILL)
         try? FileManager.default.removeItem(atPath: readyFile)
     }
 

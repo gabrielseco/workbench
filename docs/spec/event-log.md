@@ -45,9 +45,11 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
 
 - **One writer, enforced.** The writer takes an exclusive `flock` on `events.jsonl` for its lifetime. A
   second writer fails with `alreadyOpen`. Readers need no lock.
-  `open` waits up to 0.5s for the lock before giving up: a child process spawned elsewhere in the same
-  process can briefly share the descriptor between fork and exec (measured: 2 to 7 ms, in 3 of 20 full test
-  runs), and failing instantly turned that into a flaky `alreadyOpen`. Use `close()` to release the lock
+  `open` waits up to 0.5s for the lock before giving up. A child process being spawned elsewhere in the
+  same process holds a copy of every descriptor between its creation and its exec (measured waits: 2 to
+  7 ms). Closing descriptors at exec, which `Spawner` does, cannot shorten that window, and failing
+  instantly turned it into a flaky `alreadyOpen` (10 of 30 test runs with concurrent spawns, 0 of 30
+  without). Use `close()` to release the lock
   deterministically; do not rely on the writer being deallocated.
 - **Turn numbers** are 1, 2, 3 with no gaps. `turn.started` while a turn is open, `turn.ended` for a turn
   that is not the open one, and `claude` lines outside an open turn are all rejected on append and
