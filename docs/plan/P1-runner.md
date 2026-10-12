@@ -211,7 +211,7 @@ Ordered slices, each ending with tests passing.
 | Bare file tools escape the worktree (S3, confirmed) | `--restricted` or `acceptEdits` + scoped `Read`; never bare names. Bash allowlist itself held in 18/18 cases |
 | Tool children outlive a killed `claude` (S6, confirmed) | SIGTERM first, tree sweep before SIGKILL, startup orphan sweep |
 | CLI output format changes | Parser ignores unknown fields; keep raw lines; fixtures pin the format we tested |
-| Real runs cost money | `--max-budget-usd` on every run; soak with real claude kept to 10 small goals |
+| Real runs cost window | `--max-budget-usd` on every run; safe mode on by default (measured about 150x less context); soak with real claude kept to 10 small goals, on `haiku` |
 
 ## Using it
 

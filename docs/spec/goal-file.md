@@ -81,6 +81,8 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
+# model = "haiku"                       # --model for every turn; unset = the CLI default
+# safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
 
 [tools]
@@ -96,6 +98,11 @@ Notes:
 - The runner passes `--permission-prompts none --restricted --tools <available> --allowedTools <allowed>
   --disallowedTools <denied>`; the prompt follows `--`. Anything not allowed is denied automatically, and
   the model is told so. That is the whole permission system.
+- **`--safe-mode --disable-slash-commands` are passed unless `safe_mode = false`.** They remove everything
+  installed on the machine from the run (CLAUDE.md, skills, plugins, hooks, MCP servers, custom agents).
+  Measured in task 9: a two-call job went from about 180k tokens of context to 2k, the same result at
+  roughly 1/150th of the list price, and far less of the 5-hour window. It applies only to sessions created
+  with it; a resumed session keeps the system prompt it was created with.
 - **`--restricted` is always passed and cannot be turned off from the config.** It is what confines the
   file tools to the worktree. Bare `Edit`/`Write` in `allowed` are therefore safe, and without
   `--restricted` they would not be: spike S3 showed they can write anywhere on disk.

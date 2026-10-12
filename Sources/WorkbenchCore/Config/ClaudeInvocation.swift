@@ -58,9 +58,11 @@ extension Config {
             "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
             "--permission-prompts", "none", "--restricted",
         ]
+        if safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
         let session = turn.sessionID.uuidString.lowercased()
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
         args += ["--max-budget-usd", NSDecimalNumber(decimal: turn.budgetUSD).stringValue]
+        if let model { args += ["--model", model] }
         args += ["--tools"] + tools.available
         let allowed = effectiveAllowedTools
         if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
