@@ -17,6 +17,15 @@ public struct Config: Sendable, Equatable {
 
     /// `claude` by name (looked up on PATH) or by path.
     public var claudePath: String
+    /// Run `claude` with `--safe-mode --disable-slash-commands`: no CLAUDE.md, skills, plugins, hooks, MCP
+    /// servers, custom agents or user settings. Auth, the model and the fixed tool set are unaffected.
+    /// On by default: it makes a run depend on the goal and the tool set and nothing installed on the
+    /// machine, and in the task 9 measurement it cut a two-call run from about 180k to 2k tokens of
+    /// context. Turn it off to let a project's CLAUDE.md and your plugins in.
+    public var safeMode: Bool
+    /// `--model` for every turn. Unset means the CLI's own default; note `--restricted` ignores the user's
+    /// settings files, so that default is not the one chosen in an interactive session.
+    public var model: String?
     /// The project's own check (tests, lint). Added to the allowed tools as `Bash(<command>:*)`.
     public var checkCommand: String?
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
@@ -56,7 +65,9 @@ public struct Config: Sendable, Equatable {
             problems.append(ConfigProblem(code: code, line: line, message: message))
         }
 
-        let rootKeys: Set<String> = ["claude_path", "check_command", "default_budget_usd", "env_pass"]
+        let rootKeys: Set<String> = [
+            "claude_path", "check_command", "default_budget_usd", "env_pass", "model", "safe_mode",
+        ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) {
@@ -104,6 +115,24 @@ public struct Config: Sendable, Equatable {
                 fail(.invalidValue, line, "'claude_path' must be a command name or a path")
             } else {
                 claudePath = value
+            }
+        }
+
+        var safeMode = true
+        if let entry = document.tables[""]?.entries["safe_mode"] {
+            if case .bool(let value) = entry.value {
+                safeMode = value
+            } else {
+                fail(.wrongType, entry.line, "'safe_mode' must be true or false, found \(entry.value.typeName)")
+            }
+        }
+
+        var model: String?
+        if let (value, line) = string("", "model") {
+            if value.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) == nil {
+                fail(.invalidValue, line, "'model' must be a model name or alias like \"haiku\"")
+            } else {
+                model = value
             }
         }
 
@@ -165,8 +194,9 @@ public struct Config: Sendable, Equatable {
 
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
         return Config(
-            claudePath: claudePath, checkCommand: checkCommand, defaultBudgetUSD: budget, envPass: envPass,
-            tools: ToolSet(available: available, allowed: allowed, denied: denied))
+            claudePath: claudePath, safeMode: safeMode, model: model, checkCommand: checkCommand,
+            defaultBudgetUSD: budget,
+            envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
     }
 
     private static func sorted(_ problems: [ConfigProblem]) -> [ConfigProblem] {
@@ -199,6 +229,8 @@ public struct Config: Sendable, Equatable {
         # Workbench project config. One fixed tool set per project.
 
         # claude_path = "claude"           # name on PATH, or an absolute path
+        # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
+        # model = "haiku"                  # --model for every turn; unset = the CLI default
         # check_command = "scripts/check.sh"
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude may see

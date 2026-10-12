@@ -266,3 +266,75 @@ be written exactly as it will be invoked.
 One more data point on cost caps: a $0.30 cap was exceeded (about $0.45) by a multi-step run on the default
 model, so the cap is a runaway stopper with a few turns of slack, as S5 suggested.
 
+---
+
+## Addendum: task 9, real runs through `workbench`
+
+Run 2026-10-13 with `claude` 2.1.296, `--model haiku`, subscription login (`apiKeySource: none`), against a
+throwaway Python project with a unit test and `scripts/check.sh`. Fixtures: `t9-real-turn1.jsonl`,
+`t9-real-turn2.jsonl` (before safe mode) and `t9-real-safe-mode-turn1.jsonl`.
+
+### What held
+
+| Check | Result |
+|---|---|
+| Real goal through `workbench run` with `--restricted`, scrubbed environment, subscription auth | succeeded: 8 model calls, edits and a commit on the thread's branch, main checkout untouched |
+| The model's own account vs. the repo | diff was exactly the request, `greet` untouched, check passes when run independently |
+| Check command as the model really invokes it | `scripts/check.sh` ran; `scripts/check.sh; echo "exit=$?"` was denied, and the model then ran it plainly |
+| Real resume with feedback | same session id, `resume: true`, and the model correctly recalled which file it edited first the turn before |
+| Result and cost fields | `total_cost_usd`, `usage`, `permission_denials`, `num_turns` as the spikes showed |
+| Denied tool call (compound `git log ...; git branch ...`) | logged, counted in `permission_denials`, turn still `succeeded` |
+
+### The S3 gaps, now tested (7 of 7 denied, nothing leaked, nothing created outside)
+
+| Probe | Result |
+|---|---|
+| Read through a symlink to a directory outside the worktree | denied |
+| Read through a symlink to a file outside | denied |
+| Write through a symlink to a directory outside | denied, file not created |
+| `git diff --no-index <file> <symlink-to-outside>` (reads outside via git) | denied |
+| Read `<repo>/.git/config` | denied (outside the working directory) |
+| Write `<repo>/.git/hooks/pre-commit` (code execution on a later commit) | denied, file not created |
+| Read a file in the main checkout | denied |
+
+So the worktree is a boundary for the file tools and for the allowed Bash patterns, as far as these probes
+reach. Still not tested: hard links, a symlink committed to the repo and checked out by the model itself,
+and a `Bash` pattern wider than the narrow ones we allow.
+
+### The big one: customizations dominated the context
+
+The session loaded 17 skills, 53 slash commands, 4 plugins and 5 agents despite `--restricted` (which
+dropped settings files and MCP tools, and no hook ran). That baseline, not the task, was most of the cost:
+
+| Same two-call job | list price | cache created | cache read |
+|---|---|---|---|
+| `--restricted` only | $0.184 | 181,596 | 141,176 |
+| `+ --safe-mode` | $0.001 | 1,652 | 14,476 |
+| `+ --safe-mode --disable-slash-commands` | $0.000 | 334 | 15,794 |
+
+Through `workbench`, a fresh thread with safe mode from turn one cost **$0.002 and $0.003** for two turns,
+against **$0.31 and $0.85** before: roughly 150 to 280 times less, with the same result.
+
+- `--safe-mode` is now the default (`safe_mode = true`, with `--disable-slash-commands`). It also means a run
+  depends on the goal and the tool set and nothing installed on the machine, which is what the goal-file
+  spec asks for. The cost is that the project's own `CLAUDE.md` is not read; put what matters in the goal,
+  or set `safe_mode = false`.
+- **It only applies to sessions created with it.** A resumed session reuses the system prompt recorded
+  when it was created ("as-is, even when a later launch passes different text"), so turning it on does
+  nothing for an existing thread: turn 3 and 4 of the old thread still cost $0.98 and $1.08.
+- `--restricted` ignores settings files but **not** plugins, skills or agents.
+
+### Window usage
+
+The whole task moved the 5-hour window from 35% to 41% and the 7-day from 14% to 15%, almost all of it from
+the runs before safe mode. List-price dollars are a poor guide to this; tokens are better.
+
+### Smaller findings
+
+- `model` is a config key now. `--restricted` ignores the user's settings, so without it a run uses the
+  CLI's own default, not the model chosen in an interactive session.
+- Follow-up turns are not cheaper: cost grows with the conversation. With safe mode it is negligible.
+- `abandon` refuses a worktree with untracked files (the model's test run leaves `__pycache__`), by design:
+  it would delete them. `--force` overrides it. A run of build artifacts blocking abandon will be common,
+  so P2's discard should say what would be lost.
+

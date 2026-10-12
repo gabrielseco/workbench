@@ -230,7 +230,7 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(
             invocation.arguments == [
                 "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                "--permission-prompts", "none", "--restricted",
+                "--permission-prompts", "none", "--restricted", "--safe-mode", "--disable-slash-commands",
                 "--session-id", "e79cf457-1714-495a-9ffe-526c12a4852e",
                 "--max-budget-usd", "5",
                 "--tools", "Read", "Edit", "Bash",
@@ -239,6 +239,43 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
                 "--append-system-prompt", "Be brief",
                 "--", "Do the thing",
             ])
+    }
+
+    @Test func safeModeIsOnByDefaultAndCanBeTurnedOff() throws {
+        func args(_ toml: String) throws -> [String] {
+            try Config.parse(toml).invocation(
+                for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+        }
+        let on = try args("[tools]\navailable = [\"Read\"]")
+        #expect(on.contains("--safe-mode"))
+        #expect(on.contains("--disable-slash-commands"))
+        #expect(on.contains("--restricted"))
+
+        let off = try args("safe_mode = false\n[tools]\navailable = [\"Read\"]")
+        #expect(!off.contains("--safe-mode"))
+        #expect(!off.contains("--disable-slash-commands"))
+        #expect(off.contains("--restricted"), "restricted is not optional")
+
+        #expect(codes("safe_mode = \"yes\"\n[tools]\navailable = [\"Read\"]") == [.wrongType])
+    }
+
+    @Test func modelIsPassedWhenSetAndOmittedWhenNot() throws {
+        let with = try Config.parse("model = \"haiku\"\n[tools]\navailable = [\"Read\"]")
+        let args = try with.invocation(
+            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+        let i = try #require(args.firstIndex(of: "--model"))
+        #expect(args[i + 1] == "haiku")
+        #expect(i < args.firstIndex(of: "--")!)
+
+        let without = try Config.parse("[tools]\navailable = [\"Read\"]")
+        #expect(!(try without.invocation(
+            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+            .contains("--model")))
+    }
+
+    @Test(arguments: ["-x", "a b", "a;b", ""])
+    func modelMustBeANameNotAFlag(model: String) {
+        #expect(codes("model = \"\(model)\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
     }
 
     @Test func laterTurnsResumeAndNeverReuseSessionID() throws {
