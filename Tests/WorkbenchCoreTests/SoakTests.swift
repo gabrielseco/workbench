@@ -70,15 +70,21 @@ private func waitForPath(_ path: String, timeout: TimeInterval = 15) async -> Bo
             ],
             workingDirectory: fx.repo, timeout: 120)
         spawn.killGrace = 30
+        // This runner is only here to start and watch the CLI. Its job in production is to sweep a dead
+        // child's descendants, which is exactly what this test needs to be left alone: so it must never
+        // track them. (With the default 100 ms snapshot the test passed or failed on runner speed.)
+        spawn.snapshotInterval = 3600
         let cli = try ProcessRunner.start(spawn)
         #expect(await waitForPath(ready), "the fake claude should be up inside the worktree")
         let grandchild = try #require(pid_t(try String(contentsOfFile: pidFile, encoding: .utf8)))
         defer { kill(grandchild, SIGKILL) }
 
+        #expect(cli.trackedDescendants().isEmpty, "the watching runner must not have seen the tool child")
+
         // The runner dies without a chance to clean up. Its child is in its own process group and stays.
         kill(cli.pid, SIGKILL)
         for await event in cli.events { if case .exited = event { break } }
-        #expect(FakeClaude.alive(grandchild))
+        #expect(FakeClaude.alive(grandchild), "a tool child outlives its SIGKILLed parent")
         let open = try fx.contents(id)
         #expect(open.openTurn == 1, "the turn is left open in the log")
 
@@ -111,6 +117,10 @@ private func waitForPath(_ path: String, timeout: TimeInterval = 15) async -> Bo
             ],
             workingDirectory: fx.repo, timeout: 120)
         spawn.killGrace = 30
+        // This runner is only here to start and watch the CLI. Its job in production is to sweep a dead
+        // child's descendants, which is exactly what this test needs to be left alone: so it must never
+        // track them. (With the default 100 ms snapshot the test passed or failed on runner speed.)
+        spawn.snapshotInterval = 3600
         let cli = try ProcessRunner.start(spawn)
         #expect(await waitForPath(ready))
 
