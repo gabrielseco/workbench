@@ -1,0 +1,95 @@
+# Plan
+
+**Do one thing well: one project, one thread at a time.** Concurrency, many projects, proof and Triage
+integration all come later, and only after the single-thread loop is boringly reliable.
+
+The thing we are building:
+
+```
+you write a goal → you approve it → Claude works in a worktree → you see diff + checks → accept / send back / discard
+```
+
+Three phases, in order. Each ends with a demo you can run, not just merged code.
+
+| Phase | Name | Outcome | Size |
+|---|---|---|---|
+| [P1](P1-runner.md) | Runner | `workbench run` runs Claude on an approved goal in a worktree, logs everything, always ends cleanly | M |
+| [P2](P2-review.md) | Review | `workbench review` shows diff and check results; accept, send back, discard | S |
+| [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
+
+Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
+
+## The scope rule
+
+At any moment there is **one project** (a git repo you point Workbench at) and **one active thread**.
+
+- Starting a new thread while another is not finished is refused with a clear message. No queue.
+- There is no thread list, no project list, no inbox. There is "the current thread" and a short history.
+- Nothing runs concurrently. Not turns, not checks, not two threads.
+
+The on-disk layout is still thread-shaped (a folder per thread id) so that lifting this later is deleting a
+guard, not a migration. But no code is written for the many-thread case now.
+
+## When is it "well"? (the gate for concurrency)
+
+We open [concurrency](../later/README.md) when all of these hold, not before:
+
+- [ ] P1 soak green on CI and locally: 100 fake runs and 10 real runs, zero hangs, one `turn.ended` per turn.
+- [ ] P2 accept/discard leaves the repo clean every time, including after stop, timeout and crash.
+- [ ] You have used P3 for **20 real tasks** on your own repos and finished them (accepted or discarded)
+      without touching the terminal or hand-editing a log.
+- [ ] You would let it run while you do something else. If you still watch it, it is not done.
+- [ ] The list of "annoying things" from those 20 tasks has been worked down. Fix the loop before widening it.
+
+## What we learned first (and why the plan looks like this)
+
+Building this inside Triage produced about 5.6k lines across PRs #54 to #58 and then a revert. The causes:
+
+- **A fragile process layer.** A long-lived `claude` process with a stdin channel, GCD drain queues and
+  `Process.waitUntilExit()` produced hangs we could sample and CI flakes we could not reproduce locally.
+- **Our own permission engine.** A shell parser and path canonicalizer re-deciding what Claude Code already
+  decides. Each verification round found another bypass class; the surface never ended.
+- **Heavy gates on everything.** Goal files, verdicts, lifecycle events and independent verifiers applied to
+  every change, including two-line test fixes.
+- **Building on an unproven base.** Each layer was added before the one below it was boringly reliable.
+- **Tackling everything at once.** Concurrency, many projects and proof were designed before one thread
+  worked. This plan is the answer to that one.
+
+## Design decisions
+
+Status: **proposed** until we agree; **decided** once written into the phase that uses it.
+
+| # | Decision | Proposal | Alternative | Decide in |
+|---|---|---|---|---|
+| D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided |
+| D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | P1 (spike gate) |
+| D2 | Permissions | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
+| D3 | Process model | **One process per turn.** First turn `--session-id`, every later spawn `--resume`, stdin `/dev/null`. Verified in S4 | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
+| D4 | Goal format | Markdown with YAML front matter, see [`spec/goal-file.md`](../spec/goal-file.md) | JSON (worse to write and review by hand) | P1 |
+| D5 | Event log | JSON lines, append-only, see [`spec/event-log.md`](../spec/event-log.md) | SQLite (heavier, harder to inspect) | P1 |
+| D6 | Where data lives | Everything under the repo's `.workbench/` (gitignored): `threads/<id>/`, `worktrees/<id>/`, `config.toml`. One project means no global store | `~/Library/Application Support/` (needed again once there are many projects) | P1 |
+
+### D1 gate
+
+Start P1 with the Swift process layer kept as small as possible (spawn, read lines, one termination
+handler, no `waitUntilExit`). The P1 soak test is the gate: if it shows any hang in 100 runs after one honest
+attempt at fixing it, switch the engine to the Agent SDK in a small sidecar and keep everything else.
+Deciding this by measurement, not preference, is the point.
+
+## How we work on this
+
+- **One slice per PR**, each ending in something runnable.
+- **CI is build + tests + the soak test.** No goal/verdict ceremony. A short checklist in the PR is enough.
+- **Independent review is for risk, not for everything.** Use it on the process layer. Skip it for UI copy
+  and docs.
+- **Reliability tests are first-class.** Every phase lists the failure cases it must survive.
+- **If a feature needs the word "concurrent", it goes in `later/`.**
+
+## Glossary
+
+- **Goal**: the approved task description and criteria for a thread.
+- **Thread**: a goal, a worktree, a Claude session and an event log. Exactly one is active.
+- **Turn**: one `claude` process run: a prompt in, a stream of events out, exit.
+- **Run result**: the terminal record of a turn (`succeeded`, `failed`, `stopped`, `timed_out`,
+  `budget_exceeded`, `interrupted`).
+- **Check**: the project's own command (tests, lint), run by Workbench after a turn.
