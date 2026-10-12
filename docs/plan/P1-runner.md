@@ -104,6 +104,28 @@ File tools are never allowed by bare name: that lets the model read and write ou
 
 Flags verified against `claude` 2.1.296 in S1–S5. Re-run `P1-spikes/scripts/` after a CLI upgrade.
 
+### The fake claude
+
+`Sources/fake-claude/` is a standalone executable (no dependency on `WorkbenchCore`, so a core bug cannot
+also break its own test double). It accepts the real CLI's flags, so a test points `claude_path` at it.
+`FAKE_CLAUDE` holds comma-separated directives; the full list is the header of its `main.swift`. In short:
+
+| Need | Directive |
+|---|---|
+| A normal turn (init, assistant, result), echoing the session id and prompt | none |
+| Replay a recorded real run, session id rewritten | `fixture=<file>` |
+| Hang, crash (no result), SIGKILL itself, non-zero exit, no result line | `hang-after=N`, `crash-after=N`, `die-after=N`, `exit=N`, `no-result` |
+| Bad input: non-JSON line, huge line, unterminated last line | `invalid-line`, `flood=BYTES`, `partial-tail` |
+| Ignore SIGTERM (default: stop the grandchild, exit 143, like the real CLI) | `ignore-term` |
+| A tool child in its own process group that outlives a SIGKILLed parent | `grandchild=<pidfile>` |
+| What the child received: argv, env, cwd, open descriptors, whether stdin is EOF | `dump=<file>` |
+| Session bookkeeping (S4): `--session-id` reuse and `--resume` of an unknown id exit 1 | `sessions=<dir>` |
+| Signal it without racing its startup | `ready=<file>` |
+
+Tests that send signals wait for `ready` instead of sleeping. A first version used a short timeout and
+signalled a process that had not yet installed its handler (startup is slow under parallel tests), which is
+the kind of flake this layer is meant to avoid.
+
 ### Worktree rules
 
 Implemented in `Sources/WorkbenchCore/Worktree/` and `Git/`.
