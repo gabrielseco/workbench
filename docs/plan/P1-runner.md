@@ -184,24 +184,30 @@ Ordered slices, each ending with tests passing.
 
 ## Acceptance criteria
 
-- [ ] `workbench run` on an approved goal produces an `events.jsonl` that satisfies every invariant in the
-      [event log spec](../spec/event-log.md).
-- [ ] **Soak:** 100 consecutive fake-claude runs and 10 real runs: zero hangs, every run has exactly one
-      `turn.ended`, no leftover processes, no leftover worktree locks.
-      Also zero `Termination.lost` (a child reaped by something else) and zero `alreadyOpen` once the lock
-      wait has expired: a real second writer is the only thing that should ever produce it.
-- [ ] **Failure matrix** (each is a test with the fake claude):
-      hang → `timed_out`; non-zero exit → `failed`; SIGTERM ignored → killed within 5s + 1s;
-      grandchild in its own process group survives SIGKILL of the parent → swept (S6);
-      budget cap → `budget_exceeded` from the `result` line, not the exit code (S5); runner killed mid-turn → next start records `interrupted`;
-      output flood → bounded log with a truncation marker; invalid JSON line → logged raw, run continues.
-- [ ] Editing an approved goal makes `run` refuse until re-approved.
-- [ ] Starting a second thread while one is active is refused with a message naming the active one.
-- [ ] Denied tool calls appear in the log and the turn still ends cleanly.
-- [ ] Second turn with `--resume` keeps context (checked with a real run).
-- [ ] No use of `waitUntilExit`, `readDataToEndOfFile` or blocking reads on the main actor/cooperative pool
-      (grep-enforced in CI).
-- [ ] CI is green on a 3-core runner (the environment that bit us), not just locally.
+Status 2026-10-13. Evidence is in the tests named, `scripts/soak-real.py`, and the PRs.
+
+- [x] `workbench run` on an approved goal produces an `events.jsonl` that satisfies every invariant in the
+      [event log spec](../spec/event-log.md). Asserted after every run of the soak and in `RunnerTests`.
+- [x] **Soak:** 100 consecutive fake-claude runs (`SoakTests`, five times over: 500 runs) and 10 real runs
+      (`scripts/soak-real.py`): zero hangs, every run exactly one `turn.ended`, no leftover processes, no
+      leftover worktrees or locks, descriptors flat (3 to 3), zero `lost`.
+      Real: 10 of 10 succeeded, 12 to 23 s each, about $0.002 list price each, `main` untouched.
+- [x] **Failure matrix** (each a test with the fake claude):
+      hang → `timed_out`; non-zero exit → `failed`; SIGTERM ignored → killed at the 5 s grace (asserted
+      between 4.9 and 6.0 s); grandchild in its own process group survives SIGKILL of the parent → swept;
+      budget cap → `budget_exceeded` from the `result` line; **runner process SIGKILLed mid-turn** → next
+      start records `interrupted`, sweeps the orphaned `claude` and its tool child, and the turn after
+      succeeds (`CrashRecoveryTests`, with the real CLI binary); output flood → bounded log with a
+      truncation marker; invalid JSON line → logged raw, run continues.
+- [x] Editing an approved goal makes `run` refuse until re-approved (`RunnerTests`).
+- [x] Starting a second thread while one is active is refused with a message naming the active one.
+- [x] Denied tool calls appear in the log and the turn still ends cleanly (also seen with the real CLI).
+- [x] Second turn with `--resume` keeps context, checked with a real run (task 9).
+- [x] No use of `waitUntilExit`, `readDataToEndOfFile` or Foundation's `Process` in `Sources/`
+      (grep-enforced in CI, with a check that it fails when one is added).
+- [x] CI is green on a 3-core runner (the environment that bit us), not just locally. Confirmed from the
+      CI log of PR #12: `cores: 3`, macOS 15.7, Swift 6.1.2 (older than the 6.2.1 used locally), the full
+      suite and the 100-run soak both pass there.
 
 ## Risks
 

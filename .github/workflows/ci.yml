@@ -10,9 +10,18 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Runner hardware
+        run: |
+          echo "cores: $(sysctl -n hw.ncpu)"
+          sw_vers
+          swift --version
       - name: Banned process APIs
         run: scripts/check-banned-apis.sh
       - name: Build
         run: swift build
       - name: Test
         run: swift test
+      - name: Soak (100 fake runs, failure matrix, no leaks)
+        # Its own step, so descriptor counts are not disturbed by other suites running alongside.
+        run: WORKBENCH_SOAK=1 swift test --filter SoakTests
+        timeout-minutes: 15

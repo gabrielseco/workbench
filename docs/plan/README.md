@@ -34,7 +34,8 @@ guard, not a migration. But no code is written for the many-thread case now.
 
 We open [concurrency](../later/README.md) when all of these hold, not before:
 
-- [ ] P1 soak green on CI and locally: 100 fake runs and 10 real runs, zero hangs, one `turn.ended` per turn.
+- [x] P1 soak green on CI and locally: 100 fake runs and 10 real runs, zero hangs, one `turn.ended` per turn.
+      (2026-10-13: five local soaks of 100 fake runs, 10 of 10 real runs; CI runs the fake soak on every PR.)
 - [ ] P2 accept/discard leaves the repo clean every time, including after stop, timeout and crash.
 - [ ] You have used P3 for **20 real tasks** on your own repos and finished them (accepted or discarded)
       without touching the terminal or hand-editing a log.
@@ -62,19 +63,24 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 | # | Decision | Proposal | Alternative | Decide in |
 |---|---|---|---|---|
 | D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided |
-| D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | P1 (spike gate) |
+| D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | **decided**: Swift holds (P1 soak) |
 | D2 | Permissions | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
 | D3 | Process model | **One process per turn.** First turn `--session-id`, every later spawn `--resume`, stdin `/dev/null`. Verified in S4 | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
 | D4 | Goal format | Markdown with YAML front matter, see [`spec/goal-file.md`](../spec/goal-file.md) | JSON (worse to write and review by hand) | P1 |
 | D5 | Event log | JSON lines, append-only, see [`spec/event-log.md`](../spec/event-log.md) | SQLite (heavier, harder to inspect) | P1 |
 | D6 | Where data lives | Everything under the repo's `.workbench/` (gitignored): `threads/<id>/`, `worktrees/<id>/`, `config.toml`. One project means no global store | `~/Library/Application Support/` (needed again once there are many projects) | P1 |
 
-### D1 gate
+### D1 gate: passed
 
-Start P1 with the Swift process layer kept as small as possible (spawn, read lines, one termination
-handler, no `waitUntilExit`). The P1 soak test is the gate: if it shows any hang in 100 runs after one honest
-attempt at fixing it, switch the engine to the Agent SDK in a small sidecar and keep everything else.
-Deciding this by measurement, not preference, is the point.
+The P1 soak was the gate, and it held: 500 fake runs and 10 real runs with no hang, no leftover process, no
+leaked descriptor. Two things were found and fixed on the way, both by the tests that exist to find them:
+a hang in the exit watcher (it trusted a single kqueue event; about 3 full test runs in 8 hung before the
+fix) and an orphan sweep that missed a tool child. The Agent SDK sidecar stays the fallback if the soak ever
+shows a hang again, not the plan.
+
+What the process layer now is: one spawn function (`posix_spawn`, `CLOEXEC_DEFAULT`), one exit watcher
+that polls behind the event, one runner that always ends a turn. About 700 lines, tested with a fake that
+can hang, crash, ignore SIGTERM and leave children in other process groups.
 
 ## How we work on this
 

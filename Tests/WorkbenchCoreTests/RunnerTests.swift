@@ -5,7 +5,7 @@ import Testing
 
 // MARK: fixture
 
-private func isolatedGit() throws -> GitRunner {
+func isolatedGit() throws -> GitRunner {
     try GitRunner.discover(
         extraEnvironment: [
             "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -15,7 +15,7 @@ private func isolatedGit() throws -> GitRunner {
 }
 
 /// A scratch repository with a `.workbench/config.toml` that points at the fake claude.
-private struct RunnerFixture {
+struct RunnerFixture {
     let repo: URL
     let project: Project
     let git: GitRunner
@@ -95,7 +95,7 @@ final class NoticeBox: @unchecked Sendable {
     var all: [RunNotice] { lock.withLock { items } }
 }
 
-private func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded } }
+func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded } }
 
 // MARK: the loop
 
@@ -567,7 +567,7 @@ private func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .t
 }
 
 extension RunnerFixture {
-    fileprivate func contentsOfRunnerFile(_ id: String) -> String? {
+    func contentsOfRunnerFile(_ id: String) -> String? {
         try? String(contentsOf: project.runnerURL(id), encoding: .utf8)
     }
 }
