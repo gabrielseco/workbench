@@ -39,6 +39,24 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 3. `claude` lines are stored verbatim. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 
+## Fields the runner writes
+
+| kind | data |
+|---|---|
+| `thread.created` | `repo`, `base`, `worktree`, `branch` |
+| `goal.saved` | `status`, `hash` (null for a new draft) |
+| `goal.approved` | `hash`, `budget_usd` |
+| `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`) |
+| `thread.note` | `text`: the feedback that started a follow-up turn |
+| `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
+| `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
+| `review.decision` | `decision` (`accepted`, `discarded`, `abandoned`), `by` |
+
+`result` is derived from the `result` line and the exit, in this order: stopped or timed out by us, then a
+signal is `failed`, no `result` line is `failed`, a budget error is `budget_exceeded`, a non-zero exit is
+`failed`, a success line is `succeeded`, anything else `failed`. Denied tool calls do **not** make a turn
+fail; they are counted in `permission_denials`.
+
 ## Writer behaviour
 
 Implemented in `Sources/WorkbenchCore/EventLog/`.
