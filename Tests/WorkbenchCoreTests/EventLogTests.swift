@@ -119,6 +119,7 @@ private func lines(of url: URL) throws -> [String] {
             try await log.append(.turnStarted, turn: 1)
             try await log.appendClaudeLine(#"{"type":"system"}"#, turn: 1)
             // runner "dies" here: no turn.ended
+            await log.close()
         }
 
         #expect(try EventLogReader.read(at: url).openTurn == 1)
@@ -146,6 +147,7 @@ private func lines(of url: URL) throws -> [String] {
             let log = try EventLogWriter.open(at: url)
             try await log.append(.threadCreated)
             try await log.append(.goalSaved)
+            await log.close()
         }
         let log = try EventLogWriter.open(at: url)
         let event = try await log.append(.goalApproved)
@@ -210,7 +212,7 @@ private func lines(of url: URL) throws -> [String] {
         let url = try tempLog()
         let first = try EventLogWriter.open(at: url)
         #expect(throws: EventLogError.alreadyOpen(path: url.path)) {
-            _ = try EventLogWriter.open(at: url)
+            _ = try EventLogWriter.open(at: url, lockTimeout: 0)
         }
         try await first.append(.threadCreated)
     }
@@ -249,6 +251,20 @@ private func lines(of url: URL) throws -> [String] {
             #expect(written.hasSuffix(#""data":\#(line)}"#))
         }
         #expect(try EventLogReader.read(at: url).isHealthy)
+    }
+
+    @Test func closeReleasesTheLockAndStopsAppends() async throws {
+        let url = try tempLog()
+        let first = try EventLogWriter.open(at: url)
+        try await first.append(.threadCreated)
+        await first.close()
+        await first.close()  // idempotent
+
+        await #expect(throws: EventLogError.io("event log is closed")) {
+            try await first.append(.goalSaved)
+        }
+        let second = try EventLogWriter.open(at: url)
+        #expect(try await second.append(.goalSaved).seq == 2)
     }
 
     @Test func missingFileIsAnError() {
