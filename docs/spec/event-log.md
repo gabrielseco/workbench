@@ -39,6 +39,26 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 3. `claude` lines are stored verbatim. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 
+## Writer behaviour
+
+Implemented in `Sources/WorkbenchCore/EventLog/`.
+
+- **One writer, enforced.** The writer takes an exclusive `flock` on `events.jsonl` for its lifetime. A
+  second writer fails with `alreadyOpen`. Readers need no lock.
+- **Turn numbers** are 1, 2, 3 with no gaps. `turn.started` while a turn is open, `turn.ended` for a turn
+  that is not the open one, and `claude` lines outside an open turn are all rejected on append and
+  reported as problems on replay.
+- **Rejected appends consume no `seq`.**
+- **Invalid JSON from `claude`** is stored as `{"invalid_json": "<raw line>"}` with `kind: "claude"`, so a bad
+  line is logged raw and the run continues.
+- **Oversized lines** (default 1 MiB) are stored as
+  `{"truncated": true, "original_bytes": N, "prefix": "<first 4096 characters>"}`.
+- **Opening a damaged log.** A half-written final line (no trailing newline) is cut off and kept in
+  `events.jsonl.truncated`; appending then continues. Any other damage (seq gap, invalid line in the middle,
+  turn rule broken) makes `open` fail with `corrupt` and leaves the file untouched.
+- **Orphaned turns** are state, not damage. `recoverOrphanedTurn()` appends
+  `turn.ended {result: "interrupted", synthetic: true}` for the open turn.
+
 ## Run results
 
 `succeeded`, `failed` (non-zero exit or error result), `stopped` (user), `timed_out`, `budget_exceeded`,
