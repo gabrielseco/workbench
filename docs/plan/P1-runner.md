@@ -75,6 +75,13 @@ CLI ── ThreadStore ── goal.md / events.jsonl / session.json
 5. **Single writer.** Only the runner appends to `events.jsonl`. The reader never needs a lock.
 6. **Bounded everything.** Max line size, max log size per turn (truncate with a marker), timeout, budget.
 7. **A turn cannot end silently.** Wrap the turn in one function whose `defer` writes `turn.ended`.
+8. **Children inherit nothing they were not given.** Spawn with `posix_spawn` and
+   `POSIX_SPAWN_CLOEXEC_DEFAULT` (macOS only, which is all we target), with explicit file actions for stdin
+   (`/dev/null`), stdout and stderr. Foundation's `Process` leaves a window between fork and exec in which
+   a child shares our descriptors, including the event log's lock. That showed up as an intermittent
+   `alreadyOpen` in the P1 worktree PR (errno `EWOULDBLOCK`, 2 to 7 ms waits), mitigated there with a
+   bounded lock wait. This rule is the actual fix, and it is tested: the fake claude reports its open
+   descriptors and the test asserts the log is not among them.
 
 ### Turn lifecycle
 
@@ -132,9 +139,13 @@ Ordered slices, each ending with tests passing.
 5. **Worktree manager.** Create from `base`, deterministic branch name, remove, refuse dirty/missing repo.
    Tests against a temp git repo.
 6. **Fake claude.** A small script or executable that replays a fixture, with switches: hang, crash after N
-   lines, ignore SIGTERM, spawn a grandchild, emit a huge line, exit non-zero.
-7. **ProcessRunner.** Spawn, line stream, stop, timeout, kill tree, bounded output. Driven entirely by the
-   fake claude first.
+   lines, ignore SIGTERM, spawn a grandchild (in its own process group, as real tool children are),
+   emit a huge line, exit non-zero, and `--list-fds` to report its own open descriptors.
+7. **ProcessRunner.** Spawn via `posix_spawn` with `POSIX_SPAWN_CLOEXEC_DEFAULT` (rule 8), line stream,
+   stop, timeout, kill tree, bounded output. Driven entirely by the fake claude first. Test: the child's
+   descriptor list contains stdin/stdout/stderr and nothing else, in particular not `events.jsonl`.
+   Once that passes, revisit the 0.5s lock wait in `EventLogWriter`: keep it as a safety net only if the
+   soak still shows contention, otherwise shorten it to what a real second writer needs.
 8. **Runner + CLI.** `workbench goal new|approve`, `run`, `stop`, `log`, `status`. The single-thread guard.
    Crash recovery on startup (orphan `turn.started` gets a synthetic `turn.ended: interrupted`).
 9. **Real claude, end to end.** One real goal in a scratch repo; record fixtures for later UI work.
@@ -146,6 +157,8 @@ Ordered slices, each ending with tests passing.
       [event log spec](../spec/event-log.md).
 - [ ] **Soak:** 100 consecutive fake-claude runs and 10 real runs: zero hangs, every run has exactly one
       `turn.ended`, no leftover processes, no leftover worktree locks.
+      Also zero `alreadyOpen` from the event log's lock across the soak (rule 8). If it ever appears, the
+      cause was not the one suspected, and the lock wait has been hiding it.
 - [ ] **Failure matrix** (each is a test with the fake claude):
       hang → `timed_out`; non-zero exit → `failed`; SIGTERM ignored → killed within 5s + 1s;
       grandchild in its own process group survives SIGKILL of the parent → swept (S6);
