@@ -75,13 +75,22 @@ CLI ── ThreadStore ── goal.md / events.jsonl / session.json
 5. **Single writer.** Only the runner appends to `events.jsonl`. The reader never needs a lock.
 6. **Bounded everything.** Max line size, max log size per turn (truncate with a marker), timeout, budget.
 7. **A turn cannot end silently.** Wrap the turn in one function whose `defer` writes `turn.ended`.
-8. **Children inherit nothing they were not given.** Spawn with `posix_spawn` and
-   `POSIX_SPAWN_CLOEXEC_DEFAULT` (macOS only, which is all we target), with explicit file actions for stdin
-   (`/dev/null`), stdout and stderr. Foundation's `Process` leaves a window between fork and exec in which
-   a child shares our descriptors, including the event log's lock. That showed up as an intermittent
-   `alreadyOpen` in the P1 worktree PR (errno `EWOULDBLOCK`, 2 to 7 ms waits), mitigated there with a
-   bounded lock wait. This rule is the actual fix, and it is tested: the fake claude reports its open
-   descriptors and the test asserts the log is not among them.
+8. **Children inherit nothing they were not given.** Every child starts through one function
+   (`Spawner`): `posix_spawn` with `POSIX_SPAWN_CLOEXEC_DEFAULT`, explicit file actions for stdin
+   (`/dev/null`), stdout and stderr, its own process group. Foundation's `Process` is banned in `Sources/`.
+   This guarantees a child never *keeps* one of our descriptors: without it, a long-lived `claude` could
+   hold the event log's lock for the whole run, long after we closed it. It is tested with a deliberately
+   leaked descriptor, and the test was checked to fail when the flag is removed.
+   It does **not** remove a smaller effect: a child briefly holds a copy of every descriptor between being
+   created and exec, in any multithreaded process, so a lock released at that moment stays held for a
+   few milliseconds. Measured with the lock wait at zero: 0 of 30 test runs fail without concurrent spawns,
+   10 of 30 with them. That is why `EventLogWriter.open` waits up to 0.5s for the lock, and why that wait
+   stays.
+9. **Never trust one kqueue exit event.** It can arrive while the child is still exiting and not yet
+   waitable, and a child can be reaped by something else. `ChildExitWatcher` polls behind the event (1 ms
+   after one, 50 ms otherwise), peeks with `waitid(WNOWAIT)` before reaping, and reports a vanished child
+   as `.lost` rather than waiting forever. A first version relied on the event alone and hung in about 3
+   full test runs in 8.
 
 ### Turn lifecycle
 
@@ -166,8 +175,8 @@ Ordered slices, each ending with tests passing.
 7. **ProcessRunner.** Spawn via `posix_spawn` with `POSIX_SPAWN_CLOEXEC_DEFAULT` (rule 8), line stream,
    stop, timeout, kill tree, bounded output. Driven entirely by the fake claude first. Test: the child's
    descriptor list contains stdin/stdout/stderr and nothing else, in particular not `events.jsonl`.
-   Once that passes, revisit the 0.5s lock wait in `EventLogWriter`: keep it as a safety net only if the
-   soak still shows contention, otherwise shorten it to what a real second writer needs.
+   The 0.5s lock wait in `EventLogWriter` was revisited with the fix in place and kept: the contention
+   it absorbs is the unavoidable create-to-exec window, not an inheritance bug.
 8. **Runner + CLI.** `workbench goal new|approve`, `run`, `stop`, `log`, `status`. The single-thread guard.
    Crash recovery on startup (orphan `turn.started` gets a synthetic `turn.ended: interrupted`).
 9. **Real claude, end to end.** One real goal in a scratch repo; record fixtures for later UI work.
@@ -179,8 +188,8 @@ Ordered slices, each ending with tests passing.
       [event log spec](../spec/event-log.md).
 - [ ] **Soak:** 100 consecutive fake-claude runs and 10 real runs: zero hangs, every run has exactly one
       `turn.ended`, no leftover processes, no leftover worktree locks.
-      Also zero `alreadyOpen` from the event log's lock across the soak (rule 8). If it ever appears, the
-      cause was not the one suspected, and the lock wait has been hiding it.
+      Also zero `Termination.lost` (a child reaped by something else) and zero `alreadyOpen` once the lock
+      wait has expired: a real second writer is the only thing that should ever produce it.
 - [ ] **Failure matrix** (each is a test with the fake claude):
       hang → `timed_out`; non-zero exit → `failed`; SIGTERM ignored → killed within 5s + 1s;
       grandchild in its own process group survives SIGKILL of the parent → swept (S6);

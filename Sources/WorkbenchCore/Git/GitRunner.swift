@@ -17,9 +17,11 @@ public enum GitError: Error, Equatable, Sendable {
 /// Runs short, bounded commands (git) to completion. Not for `claude`: that streams and has its own
 /// runner. Follows the process-layer rules in `docs/plan/P1-runner.md`:
 ///
-/// - no `waitUntilExit`, no blocking pipe reads: output goes to temp files and the termination handler
-///   resumes the caller exactly once,
+/// - started through `Spawner`, so the child inherits nothing but stdin, stdout and stderr (rule 8),
+/// - no blocking wait, no blocking pipe reads: output goes to temp files and a kqueue exit watcher resumes
+///   the caller exactly once,
 /// - stdin is `/dev/null`, so nothing can wait for input,
+/// - its own process group, killed as a whole on timeout and after exit, so no stray hook or helper stays,
 /// - there is always a timeout, SIGTERM then SIGKILL,
 /// - output is capped.
 public struct GitRunner: Sendable {
@@ -63,46 +65,37 @@ public struct GitRunner: Sendable {
             try? FileManager.default.removeItem(at: outFile)
             try? FileManager.default.removeItem(at: errFile)
         }
-        guard FileManager.default.createFile(atPath: outFile.path, contents: nil),
-            FileManager.default.createFile(atPath: errFile.path, contents: nil),
-            let outHandle = try? FileHandle(forWritingTo: outFile),
-            let errHandle = try? FileHandle(forWritingTo: errFile)
-        else { throw GitError.launchFailed("cannot create scratch files") }
-        defer {
-            try? outHandle.close()
-            try? errHandle.close()
+        let outFD = open(outFile.path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o600)
+        let errFD = open(errFile.path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o600)
+        guard outFD >= 0, errFD >= 0 else {
+            if outFD >= 0 { close(outFD) }
+            if errFD >= 0 { close(errFD) }
+            throw GitError.launchFailed("cannot create scratch files")
         }
 
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.currentDirectoryURL = directory
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = outHandle
-        process.standardError = errHandle
-
-        let status: Int32 = try await withCheckedThrowingContinuation { continuation in
-            let run = Execution(process: process, continuation: continuation)
-            process.terminationHandler = { finished in
-                run.finish(status: finished.terminationStatus)
-            }
-            do {
-                try process.run()
-            } catch {
-                run.fail(GitError.launchFailed("\(executable.path): \(error.localizedDescription)"))
-                return
-            }
-            run.armTimeout(seconds: timeout)
+        let pid: pid_t
+        do {
+            pid = try Spawner.spawn(
+                executable: executable.path, arguments: arguments, environment: environment,
+                workingDirectory: directory.path, stdout: outFD, stderr: errFD)
+        } catch {
+            close(outFD)
+            close(errFD)
+            throw GitError.launchFailed("\(error)")
         }
-        if status == Execution.timedOutStatus {
-            throw GitError.timedOut(arguments: arguments, seconds: timeout)
-        }
+        close(outFD)
+        close(errFD)
 
-        return GitResult(
-            status: status,
-            stdout: Self.read(outFile),
-            stderr: Self.read(errFile))
+        let outcome = await ShortCommand(pid: pid, timeout: timeout).wait()
+        if outcome.timedOut { throw GitError.timedOut(arguments: arguments, seconds: timeout) }
+
+        let status: Int32
+        switch outcome.termination {
+        case .exited(let code): status = code
+        case .signaled(let signal): status = 128 + signal
+        case .lost: status = -1
+        }
+        return GitResult(status: status, stdout: Self.read(outFile), stderr: Self.read(errFile))
     }
 
     private static func scratchFile() -> URL {
@@ -117,53 +110,62 @@ public struct GitRunner: Sendable {
     }
 }
 
-/// One running command: guarantees the continuation is resumed exactly once, whichever of exit, launch
-/// failure or timeout happens first.
-private final class Execution: @unchecked Sendable {
-    static let timedOutStatus: Int32 = .min
+/// One short-lived child: resumes its waiter exactly once, whichever of exit or timeout comes first.
+private final class ShortCommand: @unchecked Sendable {
+    struct Outcome: Sendable {
+        var termination: Termination
+        var timedOut: Bool
+    }
 
-    private let lock = NSLock()
-    private let process: Process
-    private var continuation: CheckedContinuation<Int32, Error>?
+    private let pid: pid_t
+    private let timeout: TimeInterval
+    private let queue = DispatchQueue(label: "workbench.shortcommand")
+    private var continuation: CheckedContinuation<Outcome, Never>?
+    private var watcher: ChildExitWatcher?
+    private var timeoutTimer: DispatchSourceTimer?
+    private var killTimer: DispatchSourceTimer?
     private var timedOut = false
 
-    init(process: Process, continuation: CheckedContinuation<Int32, Error>) {
-        self.process = process
-        self.continuation = continuation
+    init(pid: pid_t, timeout: TimeInterval) {
+        self.pid = pid
+        self.timeout = timeout
     }
 
-    func finish(status: Int32) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        let wasTimedOut = timedOut
-        lock.unlock()
-        cont?.resume(returning: wasTimedOut ? Self.timedOutStatus : status)
-    }
-
-    func fail(_ error: Error) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(throwing: error)
-    }
-
-    func armTimeout(seconds: TimeInterval) {
-        DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { [self] in
-            lock.lock()
-            let live = continuation != nil && process.isRunning
-            if live { timedOut = true }
-            let pid = process.processIdentifier
-            lock.unlock()
-            guard live else { return }
-            process.terminate()
-            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [self] in
-                lock.lock()
-                let stillRunning = continuation != nil && process.isRunning
-                lock.unlock()
-                if stillRunning { kill(pid, SIGKILL) }
+    func wait() async -> Outcome {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                self.continuation = continuation
+                watcher = ChildExitWatcher(pid: pid, queue: queue) { [self] in exited() }
+                timeoutTimer = timer(after: timeout) { [self] in
+                    timedOut = true
+                    killpg(pid, SIGTERM)
+                    kill(pid, SIGTERM)
+                    killTimer = timer(after: 2) { [self] in
+                        killpg(pid, SIGKILL)
+                        kill(pid, SIGKILL)
+                    }
+                }
             }
         }
+    }
+
+    private func exited() {
+        timeoutTimer?.cancel(); timeoutTimer = nil
+        killTimer?.cancel(); killTimer = nil
+        // Still a zombie, so the group id is ours: take anything the command left behind with it.
+        killpg(pid, SIGKILL)
+        let termination = watcher?.reap() ?? .lost
+        watcher = nil
+        let cont = continuation
+        continuation = nil
+        cont?.resume(returning: Outcome(termination: termination, timedOut: timedOut))
+    }
+
+    private func timer(after delay: TimeInterval, _ handler: @escaping @Sendable () -> Void) -> DispatchSourceTimer {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler(handler: handler)
+        timer.resume()
+        return timer
     }
 }
