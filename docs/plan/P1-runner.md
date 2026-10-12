@@ -97,6 +97,28 @@ File tools are never allowed by bare name: that lets the model read and write ou
 
 Flags verified against `claude` 2.1.296 in S1–S5. Re-run `P1-spikes/scripts/` after a CLI upgrade.
 
+### Worktree rules
+
+Implemented in `Sources/WorkbenchCore/Worktree/` and `Git/`.
+
+- Path `<repo>/.workbench/worktrees/<id>`, branch `workbench/<id>`, created with
+  `git worktree add --no-track -b <branch> <path> <sha>`. The sha is `base` resolved at creation, recorded
+  as `baseCommit`, so the cut point is fixed even if `base` moves.
+- **The worktree is the committed `base`, not the working tree.** Uncommitted edits in the main checkout are
+  not in it. Because accepting the work later merges into that checkout, creation refuses when tracked files
+  are modified (`dirtyRepository`), unless `allowDirty`. Untracked files and `.workbench/` do not count.
+- **`repoRoot` must be the repository top level.** A subdirectory is refused, so worktrees cannot end up in
+  the wrong place.
+- `.workbench/` is kept out of `git status` through `.git/info/exclude`, never by editing the project's
+  tracked `.gitignore`.
+- `remove` keeps the branch (and its commits) unless `deleteBranch`, and refuses a worktree with
+  uncommitted work unless `force`. Stale registrations from a hand-deleted directory are pruned on create.
+- Thread ids and bases are validated (`SafeNames`) before anything reaches git, with one definition shared
+  by the goal parser.
+- **Git is run through `GitRunner`**, a small bounded runner that follows the process-layer rules: output to
+  temp files (no pipe reads), termination handler resumes exactly once, stdin `/dev/null`, timeout with
+  SIGTERM then SIGKILL, output capped. It is the first, smaller exercise of the layer task 7 builds on.
+
 ## Tasks
 
 Ordered slices, each ending with tests passing.

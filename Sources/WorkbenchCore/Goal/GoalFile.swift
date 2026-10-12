@@ -70,8 +70,7 @@ public struct GoalFile: Sendable, Equatable {
 
         let id = required("id").flatMap { id -> String? in
             let entry = value("id")!
-            guard id.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"#, options: .regularExpression) != nil
-            else {
+            guard SafeNames.isThreadID(id) else {
                 add(
                     .invalidValue, entry.lineNumber,
                     "'id' is used as a directory name: letters, digits, '.', '_' and '-' only, up to 100")
@@ -82,9 +81,7 @@ public struct GoalFile: Sendable, Equatable {
         let title = required("title")
         let base = required("base").flatMap { base -> String? in
             let entry = value("base")!
-            guard base.range(of: #"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"#, options: .regularExpression) != nil,
-                !base.contains("..")
-            else {
+            guard SafeNames.isBranchName(base) else {
                 add(.invalidValue, entry.lineNumber, "'base' is not a safe branch name: '\(base)'")
                 return nil
             }

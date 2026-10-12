@@ -14,6 +14,10 @@ public enum EventLogError: Error, Equatable, Sendable {
 /// exclusive lock for its lifetime, so a second writer cannot exist.
 public actor EventLogWriter {
     public static let defaultMaxClaudeLineBytes = 1 << 20
+    /// How long `open` waits for a lock that is held. A short wait absorbs the moment a child process
+    /// spawned elsewhere in this process still shares the descriptor (between fork and exec); a real
+    /// second writer is still refused, just after this delay.
+    public static let defaultLockTimeout: TimeInterval = 0.5
     static let truncationPrefixCharacters = 4096
 
     /// Bytes of a half-written final line removed when the log was opened (kept in a `.truncated` sidecar).
@@ -23,6 +27,7 @@ public actor EventLogWriter {
     private let maxClaudeLineBytes: Int
     private let now: @Sendable () -> Date
     private var state: LogState
+    private var closed = false
 
     private init(
         handle: FileHandle, state: LogState, repairedTailBytes: Int, maxClaudeLineBytes: Int,
@@ -38,6 +43,7 @@ public actor EventLogWriter {
     public static func open(
         at url: URL,
         maxClaudeLineBytes: Int = defaultMaxClaudeLineBytes,
+        lockTimeout: TimeInterval = defaultLockTimeout,
         now: @escaping @Sendable () -> Date = { Date() }
     ) throws -> EventLogWriter {
         do {
@@ -52,9 +58,7 @@ public actor EventLogWriter {
             throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
         }
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            throw EventLogError.alreadyOpen(path: url.path)
-        }
+        try acquireLock(fd: fd, path: url.path, timeout: lockTimeout)
 
         let existing: Data
         do { existing = try handle.readToEnd() ?? Data() } catch {
@@ -77,6 +81,14 @@ public actor EventLogWriter {
         return EventLogWriter(
             handle: handle, state: state, repairedTailBytes: repaired,
             maxClaudeLineBytes: maxClaudeLineBytes, now: now)
+    }
+
+    /// Releases the lock and closes the file. Appends after this throw. Prefer this to letting the writer
+    /// go out of scope: deallocation of an actor is not a point you can order other work against.
+    public func close() {
+        guard !closed else { return }
+        closed = true
+        try? handle.close()
     }
 
     /// The turn that started and has not ended, if any.
@@ -130,7 +142,20 @@ public actor EventLogWriter {
 
     // MARK: - Internals
 
+    private static func acquireLock(fd: Int32, path: String, timeout: TimeInterval) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            let code = errno
+            guard code == EWOULDBLOCK || code == EINTR else {
+                throw EventLogError.io("cannot lock \(path): \(String(cString: strerror(code)))")
+            }
+            if Date() >= deadline { throw EventLogError.alreadyOpen(path: path) }
+            usleep(2_000)
+        }
+    }
+
     private func write(_ event: Event, dataJSON: String) throws {
+        guard !closed else { throw EventLogError.io("event log is closed") }
         let line =
             "{\"v\":\(event.v),\"seq\":\(event.seq),\"ts\":\(try Self.json(.string(event.ts))),"
             + "\"turn\":\(event.turn),\"kind\":\(try Self.json(.string(event.kind.rawValue))),"
