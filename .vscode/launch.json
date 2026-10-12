@@ -19,6 +19,26 @@
       "target": "workbench",
       "configuration": "release",
       "preLaunchTask": "swift: Build Release workbench"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:workbench}",
+      "name": "Debug fake-claude",
+      "target": "fake-claude",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug fake-claude"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:workbench}",
+      "name": "Release fake-claude",
+      "target": "fake-claude",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release fake-claude"
     }
   ]
 }
