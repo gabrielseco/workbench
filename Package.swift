@@ -13,6 +13,6 @@ let package = Package(
         .executableTarget(name: "workbench", dependencies: ["WorkbenchCore"]),
         // Test double for `claude`. Standalone on purpose: no dependency on WorkbenchCore.
         .executableTarget(name: "fake-claude"),
-        .testTarget(name: "WorkbenchCoreTests", dependencies: ["WorkbenchCore", "fake-claude"]),
+        .testTarget(name: "WorkbenchCoreTests", dependencies: ["WorkbenchCore", "fake-claude", "workbench"]),
     ]
 )
