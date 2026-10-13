@@ -182,8 +182,7 @@ public struct ProjectInstructions: Sendable, Equatable {
         }
 
         private mutating func resolve(_ requested: String, directory: String, depth: Int) async
-            -> Result<(String, String), Refusal>
-        {
+            -> Result<(String, String), Refusal> {
             if requested.hasPrefix("/") || requested.hasPrefix("~") { return .failure(.absolute) }
             if depth >= ProjectInstructions.maxImportDepth { return .failure(.tooDeep) }
             if imports >= ProjectInstructions.maxImports { return .failure(.tooMany) }
