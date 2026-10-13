@@ -160,6 +160,11 @@ enum Commands {
                     let text = LogFormatter.describeClaude(data) {
                     out("  \(text)")
                 }
+            case .checkStarted(let command):
+                out("check started: \(command)")
+            case .checkRan(let outcome):
+                out(LogFormatter.describeCheck(result: outcome.result.rawValue, exit: outcome.exitCode.map(Int.init))
+                    + "  \(outcome.durationMs / 1000)s")
             case .turnEnded(let report):
                 out("turn \(report.turn) ended: \(report.result.rawValue)"
                     + (report.costUSD.map { String(format: "  $%.4f", $0) } ?? "")

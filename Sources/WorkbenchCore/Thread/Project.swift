@@ -4,7 +4,7 @@ import Foundation
 ///
 ///     <repo>/.workbench/
 ///       config.toml
-///       threads/<id>/goal.md, events.jsonl, session.json, prompts/turn-N.md, runner.json
+///       threads/<id>/goal.md, events.jsonl, session.json, prompts/turn-N.md, checks/turn-N.log, runner.json
 ///       worktrees/<id>/
 public struct Project: Sendable, Equatable {
     public let root: URL
@@ -25,6 +25,10 @@ public struct Project: Sendable, Equatable {
     public func runnerURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("runner.json") }
     public func promptURL(_ id: String, turn: Int) -> URL {
         threadDirectory(id).appendingPathComponent("prompts/turn-\(turn).md")
+    }
+
+    public func checkLogURL(_ id: String, turn: Int) -> URL {
+        threadDirectory(id).appendingPathComponent("checks/turn-\(turn).log")
     }
 
     /// The main checkout's top level, whether `directory` is in it or in one of its worktrees.

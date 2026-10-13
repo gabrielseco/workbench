@@ -28,6 +28,8 @@ public enum RunNotice: Sendable {
     case turnStarted(turn: Int, pid: Int32?, resume: Bool)
     case claudeLine(String)
     case turnEnded(TurnReport)
+    case checkStarted(command: String)
+    case checkRan(CheckOutcome)
 }
 
 public struct RunOptions: Sendable {
@@ -83,6 +85,7 @@ public actor ThreadRunner {
     private let git: GitRunner
     private let notify: @Sendable (RunNotice) -> Void
     private var currentRun: ProcessRun?
+    private var currentCheck: Task<CheckOutcome, Never>?
     private var stopRequested = false
 
     public init(
@@ -99,6 +102,7 @@ public actor ThreadRunner {
     public func stop() {
         stopRequested = true
         currentRun?.stop()
+        currentCheck?.cancel()
     }
 
     // MARK: Entry point
@@ -155,6 +159,10 @@ public actor ThreadRunner {
         // left running in the worktree goes with it.
         if let recovered = try await log.recoverOrphanedTurn() {
             notify(.recoveredOrphanedTurn(recovered.turn))
+        }
+        // A check left open by a runner that died ends as `interrupted`, so none is ever stuck running.
+        if let recovered = try await log.recoverOrphanedCheck() {
+            notify(.checkRan(CheckOutcome.recovered(command: recovered.data["command"]?.stringValue)))
         }
         if worktreeManager.exists(threadID) {
             let swept = OrphanSweeper.sweep(inside: worktreeManager.path(for: threadID))
@@ -237,26 +245,19 @@ public actor ThreadRunner {
             break
         }
         // The loop above runs at least once and assigns `report` on every pass.
+        // The check is evidence from Workbench, not Claude's say-so. A turn the user stopped, or that was
+        // cut short by a dead runner, is not checked.
         // swiftlint:disable:next force_unwrapping
-        return report!
+        let finished = report!
+        if let command = config.checkCommand, finished.result != .stopped, finished.result != .interrupted {
+            try await runCheck(
+                command: command, turn: finished.turn, worktree: worktree, goal: goal, config: config,
+                log: log, options: options)
+        }
+        return finished
     }
 
     private var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
-
-    /// The commit the worktree was cut from: what `worktree.created` recorded, or for a thread that
-    /// predates that event the point its branch left `base`.
-    private func recordedBaseCommit(goal: Goal) async -> String? {
-        if let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
-            let event = contents.events.last(where: { $0.kind == .worktreeCreated }),
-            let sha = event.data["base_commit"]?.stringValue {
-            return sha
-        }
-        let result = try? await git.run(
-            ["merge-base", WorktreeManager.branch(for: threadID), goal.base], in: project.root)
-        guard let result, result.succeeded else { return nil }
-        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return sha.isEmpty ? nil : sha
-    }
 
     // MARK: One turn
 
@@ -482,5 +483,44 @@ public actor ThreadRunner {
 
     private static func object(_ line: String) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
+    }
+}
+
+extension ThreadRunner {
+    private func runCheck(
+        command: String, turn: Int, worktree: URL, goal: Goal, config: Config, log: EventLogWriter,
+        options: RunOptions
+    ) async throws {
+        try await log.append(.checkStarted, turn: turn, data: ["command": .string(command)])
+        notify(.checkStarted(command: command))
+        let task = Task { [project, threadID] in
+            await CheckRunner.run(
+                command: command, worktree: worktree,
+                environment: config.childEnvironment(from: options.parentEnvironment),
+                timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60,
+                killGrace: options.killGrace, logURL: project.checkLogURL(threadID, turn: turn),
+                outputRef: "checks/turn-\(turn).log")
+        }
+        currentCheck = task
+        if stopRequested { task.cancel() }
+        let outcome = await task.value
+        currentCheck = nil
+        try await log.append(.checkRan, turn: turn, data: outcome.eventData)
+        notify(.checkRan(outcome))
+    }
+
+    /// The commit the worktree was cut from: what `worktree.created` recorded, or for a thread that
+    /// predates that event the point its branch left `base`.
+    private func recordedBaseCommit(goal: Goal) async -> String? {
+        if let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
+            let event = contents.events.last(where: { $0.kind == .worktreeCreated }),
+            let sha = event.data["base_commit"]?.stringValue {
+            return sha
+        }
+        let result = try? await git.run(
+            ["merge-base", WorktreeManager.branch(for: threadID), goal.base], in: project.root)
+        guard let result, result.succeeded else { return nil }
+        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sha.isEmpty ? nil : sha
     }
 }

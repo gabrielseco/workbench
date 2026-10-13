@@ -19,12 +19,28 @@ public enum LogFormatter {
                 out += "  \(denials) denied"
             }
             return out
+        case .checkStarted:
+            return head + "check started: \(event.data["command"]?.stringValue ?? "")"
+        case .checkRan:
+            return head + describeCheck(result: event.data["result"]?.stringValue, exit: event.data["exit_code"]?.intValue)
         case .threadNote:
             return head + "feedback: \(event.data["text"]?.stringValue ?? "")"
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
         default:
             return head + event.kind.rawValue
+        }
+    }
+
+    /// `check passed`, `check failed (exit 3)`, `check timed out`, `check stopped`, `check interrupted`.
+    public static func describeCheck(result: String?, exit: Int?) -> String {
+        switch result {
+        case "passed": return "check passed"
+        case "failed": return "check failed" + (exit.map { " (exit \($0))" } ?? "")
+        case "timed_out": return "check timed out"
+        case "stopped": return "check stopped"
+        case "interrupted": return "check interrupted"
+        default: return "check \(result ?? "?")"
         }
     }
 

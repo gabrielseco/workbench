@@ -28,6 +28,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `claude` | each stream-json line | the raw line, unmodified |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
+| `check.started` | the project's check command is about to run | `command` |
+| `check.ran` | the check ended | `command`, `result`, `exit_code`, `duration_ms`, `output_ref` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
 | `proof.added` | evidence recorded (later) | `criterion`, `type`, `path` |
@@ -90,3 +92,25 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
 `succeeded`, `failed` (non-zero exit or error result), `stopped` (user), `timed_out`, `budget_exceeded`,
 `interrupted` (runner died mid-turn), `denied_only` (turn ended after tool denials made no progress; P2 uses
 this to flag "needs a broader tool set").
+
+## Checks
+
+Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`.
+
+After a turn ends, and when `check_command` is set, Workbench runs that command itself in the worktree: the
+check is evidence from Workbench, not Claude's claim. A turn that ended `stopped` or `interrupted` is not
+checked. The command comes from `config.toml` only and runs with the same minimal environment as a turn.
+
+- **`check.started`** `{command}` is appended before the command starts, `check.ran` after it ends, both with
+  the turn number of the turn that was checked. At most one check is open: a second `check.started`, or a
+  `check.ran` with none open, is rejected on append and reported on replay.
+- **`check.ran`** `{command, result, exit_code, signal?, duration_ms, output_ref, output_truncated, error?}`.
+  `result` is `passed` (exit 0), `failed`, `timed_out` (the turn's `turn_timeout_min`, then SIGTERM, SIGKILL
+  and a sweep of the process tree), `stopped` (`workbench stop`) or `interrupted` (recovery).
+- **Output** goes to `checks/turn-<N>.log` under the thread directory, stdout and stderr in the order
+  written, `output_ref` relative to it. At most 1 MiB is kept, then a line
+  `[output truncated at 1048576 bytes]`; the command is still drained so it never blocks.
+- **Recovery.** A check left open by a runner that died is closed on the next run, before anything else
+  is appended, with `check.ran {result: "interrupted", synthetic: true, exit_code: null}`. Any process it
+  left in the worktree is swept like a turn's.
+

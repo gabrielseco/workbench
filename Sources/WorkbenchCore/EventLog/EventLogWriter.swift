@@ -93,6 +93,8 @@ public actor EventLogWriter {
 
     /// The turn that started and has not ended, if any.
     public var openTurn: Int? { state.openTurn }
+    /// The turn whose check started and has not been recorded as run, if any.
+    public var openCheck: Int? { state.openCheck }
     /// The `seq` the next append will get.
     public var nextSeq: Int { state.nextSeq }
     /// The highest turn number started so far, 0 for a thread with no turns.
@@ -155,6 +157,15 @@ public actor EventLogWriter {
         guard let turn = state.openTurn else { return nil }
         return try append(
             .turnEnded, turn: turn,
+            data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
+    }
+
+    /// Closes a check left running by a runner that died, so no check is ever stuck "running".
+    @discardableResult
+    public func recoverOrphanedCheck() throws -> Event? {
+        guard let turn = state.openCheck else { return nil }
+        return try append(
+            .checkRan, turn: turn,
             data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
     }
 
