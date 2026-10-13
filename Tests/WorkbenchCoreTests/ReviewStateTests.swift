@@ -77,7 +77,8 @@ private struct Story {
         story.turn(2, denied: ["Write"])
         let review = story.state.review
         #expect(review.turnResult == "succeeded")
-        #expect(review.check == Review.Check(turn: 1, result: "failed", exitCode: 2, outputRef: "checks/turn-1.log"))
+        #expect(review.check == Review.Check(
+                turn: 1, result: "failed", exitCode: 2, durationMs: nil, outputRef: "checks/turn-1.log"))
         #expect(review.notes == [Review.Note(turn: 2, seq: 7, text: "fix the failing test")])
         #expect(review.deniedTools.map(\.tool) == ["Bash", "Bash", "Write"])
         #expect(review.deniedTools.map(\.turn) == [1, 1, 2])

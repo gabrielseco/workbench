@@ -71,7 +71,9 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    function, with `Review` (status, latest turn result and check, notes, denied tools) built from the
    decision and note events (`review.decision`, `thread.note`). See "Review state" in
    `docs/spec/event-log.md`.
-4. **`workbench review|accept|send-back|discard`.**
+4. **`workbench review`** (done: `Thread/ReviewReport.swift`, read-only: criteria, diff file list, check,
+   denied tools by name and `seq`, what can be done next; `--patch <path>` prints one file). `accept`,
+   `send-back` and `discard` are tasks 5 to 7.
 5. **Send back flow.** Compose note, adjust budget, start turn with note and check output attached.
 6. **Accept.** Commit pending work with a template message (editable), mark thread done, clear `current`.
 7. **Discard.** Safe removal with confirmation; refuse if there are uncommitted changes you haven't seen.

@@ -15,6 +15,7 @@ let usage = """
       stop                       ask the running turn to stop cleanly
       log [-f] [-v]              what happened; -f follows, -v shows every stream line
       status                     where the thread stands
+      review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
       abandon [--force]          end the thread without accepting its work
 
       version
@@ -67,6 +68,8 @@ do {
         try await Commands.log(Array(arguments.dropFirst()))
     case "status":
         try await Commands.status(Array(arguments.dropFirst()))
+    case "review":
+        try await Commands.review(Array(arguments.dropFirst()))
     case "abandon":
         try await Commands.abandon(Array(arguments.dropFirst()))
     default:

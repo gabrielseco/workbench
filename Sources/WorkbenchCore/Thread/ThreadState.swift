@@ -21,6 +21,7 @@ public struct Review: Sendable, Equatable {
         public var turn: Int
         public var result: String
         public var exitCode: Int?
+        public var durationMs: Int?
         public var outputRef: String?
     }
 
@@ -100,6 +101,7 @@ public struct ThreadState: Sendable, Equatable {
                 if let result {
                     state.review.check = Review.Check(
                         turn: event.turn, result: result, exitCode: event.data["exit_code"]?.intValue,
+                        durationMs: event.data["duration_ms"]?.intValue,
                         outputRef: event.data["output_ref"]?.stringValue)
                 }
             case .threadNote:
