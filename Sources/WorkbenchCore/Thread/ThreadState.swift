@@ -25,6 +25,7 @@ public struct Review: Sendable, Equatable {
     }
 
     public struct Note: Sendable, Equatable {
+        /// The follow-up turn the note started.
         public var turn: Int
         public var seq: Int
         public var text: String
@@ -103,7 +104,9 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
-                    state.review.notes.append(Review.Note(turn: event.turn, seq: event.seq, text: text))
+                    // The runner writes the note with turn 0, before the turn it starts.
+                    state.review.notes.append(
+                        Review.Note(turn: state.lastTurn + 1, seq: event.seq, text: text))
                     noteIsLatest = state.openTurn == nil
                 }
             case .claude:

@@ -73,7 +73,7 @@ private struct Story {
         story.add(.threadCreated)
         story.turn(1, denied: ["Bash", "Bash"])
         story.check(1, result: "failed", exit: 2)
-        story.add(.threadNote, turn: 2, ["text": "fix the failing test"])
+        story.add(.threadNote, ["text": "fix the failing test"])  // turn 0, as the runner writes it
         story.turn(2, denied: ["Write"])
         let review = story.state.review
         #expect(review.turnResult == "succeeded")
@@ -98,9 +98,13 @@ private struct Story {
         story.add(.checkRan, turn: 1, ["result": "passed", "exit_code": 0])
         #expect(story.state.review.status == .awaitingReview)
 
-        story.add(.reviewDecision, ["decision": "accepted", "by": "user"])
-        #expect(story.state.review.status == .decided("accepted"))
-        #expect(!story.state.isActive)
+        for decision in ["accepted", "discarded", "abandoned"] {
+            var decided = story
+            decided.add(.reviewDecision, ["decision": .string(decision), "by": "user"])
+            #expect(decided.state.review.status == .decided(decision))
+            #expect(decided.state.decision == decision)
+            #expect(!decided.state.isActive)
+        }
     }
 
     @Test(arguments: ["stopped", "timed_out", "interrupted", "failed", "budget_exceeded"])
@@ -116,8 +120,9 @@ private struct Story {
         var story = Story()
         story.add(.threadCreated)
         story.turn(1)
-        story.add(.threadNote, turn: 2, ["text": "again"])
+        story.add(.threadNote, ["text": "again"])
         #expect(story.state.review.status == .sentBack)
+        #expect(story.state.review.notes.map(\.turn) == [2])
 
         story.add(.turnStarted, turn: 2, ["session_id": "s1", "resume": true])
         #expect(story.state.review.status == .running)

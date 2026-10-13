@@ -112,7 +112,8 @@ of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown 
   `decided(accepted|discarded|abandoned)`, which wins over the rest.
 - **`turnResult`**: the latest `turn.ended` `result`.
 - **`check`**: the latest `check.ran` (turn it followed, `result`, `exit_code`, `output_ref`).
-- **`notes`**: every `thread.note` with its turn and `seq`.
+- **`notes`**: every `thread.note` with its `seq` and the follow-up turn it started. The runner writes the
+  note with `turn: 0` before that turn, so the turn is derived (last turn + 1), not read from the event.
 - **`deniedTools`**: one entry per tool in a `claude` `result` line's `permission_denials`, with the turn and
   the `seq` of that line so the raw event can be opened. `turn.ended.permission_denials` stays the count.
 
