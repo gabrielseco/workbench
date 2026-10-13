@@ -37,6 +37,14 @@ public struct Review: Sendable, Equatable {
         public var tool: String
         /// The `seq` of the `claude` line that carries the denial, so a reader can open the raw event.
         public var seq: Int
+        /// What it was denied for (the command, path or pattern), on one line and safe to print; nil when
+        /// the denial carried nothing usable.
+        public var input: String?
+        /// What equal denials share: the tool and the whole input, before it was shortened for display.
+        public var identity: String = ""
+
+        /// `Bash(git push origin main)`, or just the tool name.
+        public var label: String { input.map { "\(tool)(\($0))" } ?? tool }
     }
 
     public var status: ReviewStatus
@@ -115,10 +123,16 @@ public struct ThreadState: Sendable, Equatable {
                 guard event.data["type"]?.stringValue == "result",
                     case .array(let denials)? = event.data["permission_denials"]
                 else { break }
+                // The turn's final result line is the one whose length `turn.ended.permission_denials`
+                // records, so an earlier result line of the same turn (a replay) is replaced, not added.
+                state.review.deniedTools.removeAll { $0.turn == event.turn }
                 for denial in denials {
                     guard let tool = denial["tool_name"]?.stringValue else { continue }
+                    let identity = tool + "\u{0}" + (Self.denialRawInput(denial["tool_input"]) ?? "")
                     state.review.deniedTools.append(
-                        Review.DeniedTool(turn: event.turn, tool: tool, seq: event.seq))
+                        Review.DeniedTool(
+                            turn: event.turn, tool: Self.safeLine(tool, limit: 60), seq: event.seq,
+                            input: Self.denialInput(denial["tool_input"]), identity: String(identity.hashValue)))
                 }
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
@@ -141,5 +155,68 @@ public struct ThreadState: Sendable, Equatable {
             state.review.status = .awaitingReview
         }
         return state
+    }
+
+    /// Text from the log that will be printed in a terminal: one line, no control characters or escape
+    /// sequences, cut at `limit` characters.
+    static func safeLine(_ text: String, limit: Int) -> String {
+        var out = ""
+        var lastWasSpace = false
+        var scalars = text.unicodeScalars.makeIterator()
+        func emit(_ scalar: Unicode.Scalar, space: Bool) {
+            if space {
+                if lastWasSpace { return }
+                out.unicodeScalars.append(" ")
+                lastWasSpace = true
+            } else {
+                out.unicodeScalars.append(scalar)
+                lastWasSpace = false
+            }
+        }
+        while let scalar = scalars.next() {
+            if scalar == "\u{1B}" {
+                // A whole escape sequence goes, not just the ESC: CSI up to its final byte, OSC up to BEL or
+                // ST, any other ESC with the one character it introduces.
+                guard let kind = scalars.next() else { break }
+                if kind == "[" {
+                    while let next = scalars.next(), !(0x40...0x7E).contains(next.value) {}
+                } else if kind == "]" {
+                    while let next = scalars.next() {
+                        if next == "\u{07}" { break }
+                        if next == "\u{1B}" { _ = scalars.next(); break }
+                    }
+                }
+                continue
+            }
+            let isBreak = scalar == "\n" || scalar == "\r" || scalar == "\t" || scalar == "\u{2028}"
+                || scalar == "\u{2029}" || scalar == "\u{85}"
+            let isControl = scalar.properties.generalCategory == .control || scalar.value == 0x7F
+            if isControl && !isBreak { continue }
+            emit(scalar, space: isBreak || scalar == " ")
+        }
+        out = out.trimmingCharacters(in: .whitespaces)
+        return out.count > limit ? String(out.prefix(limit - 1)) + "…" : out
+    }
+
+    /// The input as written, for telling denials apart. Never printed.
+    static func denialRawInput(_ input: JSONValue?) -> String? {
+        guard let input else { return nil }
+        for key in ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"] {
+            if let value = input[key]?.stringValue { return value }
+        }
+        return nil
+    }
+
+    /// What a denied call was for: the command, path, URL or pattern in its `tool_input`.
+    static func denialInput(_ input: JSONValue?) -> String? {
+        guard let input else { return nil }
+        let keys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
+        for key in keys {
+            if let value = input[key]?.stringValue {
+                let line = safeLine(value, limit: 100)
+                if !line.isEmpty { return line }
+            }
+        }
+        return nil
     }
 }

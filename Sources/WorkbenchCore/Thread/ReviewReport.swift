@@ -93,15 +93,26 @@ public struct ReviewReport: Sendable, Equatable {
             lines.append("Check      none ran")
         }
 
-        let denied = Dictionary(grouping: review.deniedTools, by: \.tool)
-        if denied.isEmpty {
+        if review.deniedTools.isEmpty {
             lines.append("Denied     none")
         } else {
-            let parts = denied.sorted { $0.key < $1.key }.map { tool, items -> String in
+            let count = review.deniedTools.count
+            lines.append("Denied     \(count) tool call\(count == 1 ? "" : "s")")
+            // Grouped by what was denied, not by how it is shown: two long inputs that only differ after
+            // the cut are still two denials.
+            let groups = Dictionary(grouping: review.deniedTools, by: { $0.tool + "\u{0}" + $0.identity })
+            for items in groups.values.sorted(by: { $0[0].seq < $1[0].seq }) {
+                let label = items[0].label
+                let turns = Set(items.map(\.turn)).sorted().map(String.init).joined(separator: ", ")
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
-                return "\(tool) ×\(items.count) (seq \(seqs))"
+                lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
             }
-            lines.append("Denied     " + parts.joined(separator: "; "))
+            lines.append("  open one with `workbench log \(state.id) --seq <n>`")
+            let stalled = ["stopped", "timed_out", "failed", "interrupted", "budget_exceeded"]
+            if let result = review.turnResult, stalled.contains(result),
+                review.deniedTools.contains(where: { $0.turn == state.lastTurn }) {
+                lines.append("  turn \(state.lastTurn) ended \(result): denied tools may explain this")
+            }
         }
         if !review.notes.isEmpty {
             lines.append("Notes      \(review.notes.count) sent back")

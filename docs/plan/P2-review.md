@@ -107,7 +107,11 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    change times, so same-size text and binary edits also invalidate an old confirmation. Large text
    retains the size fallback for patches rather than being classified as binary.
    `abandon` stays: it keeps the branch.
-8. **Denied-tool summary.** Aggregate from the log, link to the raw event.
+8. **Denied-tool summary** (done: `ThreadState.derive`, `ReviewReport`, `workbench log --seq <n>`). `review`
+   groups denials by tool and what it was denied for (`Bash(git push origin main) ×2  turn 1, seq 5, 9`),
+   counts only a turn's last result line (a replay is not added), and says "denied tools may explain this" when the last turn was stopped,
+   timed out or failed with denials. `workbench log --seq <n>` prints that event in full. The denied input is
+   untrusted: control characters and escapes are stripped, one line, 100 characters.
 
 ## Acceptance criteria
 

@@ -257,7 +257,7 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
     private func report(denied: [(tool: String, seq: Int)]) -> ReviewReport {
         var state = ThreadState.derive(from: [], id: "t")
         state.review.status = .awaitingReview
-        state.review.deniedTools = denied.map { Review.DeniedTool(turn: 1, tool: $0.tool, seq: $0.seq) }
+        state.review.deniedTools = denied.map { Review.DeniedTool(turn: 1, tool: $0.tool, seq: $0.seq, input: nil) }
         return ReviewReport(
             state: state, title: "T", criteria: [], approval: "approved", goalProblem: nil,
             diff: .unavailable(reason: "x"))
@@ -265,6 +265,8 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
 
     @Test func deniedToolsAreGroupedByNameWithTheirSeq() {
         let lines = report(denied: [("Bash", 5), ("Write", 6), ("Bash", 9)]).render()
-        #expect(lines.contains("Denied     Bash ×2 (seq 5, 9); Write ×1 (seq 6)"), "\(lines)")
+        #expect(lines.contains("Denied     3 tool calls"), "\(lines)")
+        #expect(lines.contains("  Bash ×2  turn 1, seq 5, 9"), "\(lines)")
+        #expect(lines.contains("  Write ×1  turn 1, seq 6"), "\(lines)")
     }
 }
