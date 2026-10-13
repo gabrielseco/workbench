@@ -1,0 +1,121 @@
+import Foundation
+import Testing
+
+@testable import WorkbenchCore
+
+private func result(_ denials: [JSONValue]) -> JSONValue {
+    ["type": "result", "permission_denials": .array(denials)]
+}
+
+private func denial(_ tool: String, _ input: JSONValue? = nil, id: String? = nil) -> JSONValue {
+    var fields: [String: JSONValue] = ["tool_name": .string(tool)]
+    if let input { fields["tool_input"] = input }
+    if let id { fields["tool_use_id"] = .string(id) }
+    return .object(fields)
+}
+
+private func state(_ lines: [(turn: Int, JSONValue)], end: String = "succeeded") -> ThreadState {
+    var events: [Event] = []
+    func add(_ kind: EventKind, _ turn: Int, _ data: JSONValue) {
+        events.append(Event(seq: events.count + 1, ts: "2026-10-14T10:00:00.000Z", turn: turn, kind: kind, data: data))
+    }
+    add(.threadCreated, 0, [:])
+    for turn in Set(lines.map(\.turn)).sorted() {
+        add(.turnStarted, turn, ["session_id": "s", "resume": .bool(turn > 1)])
+        for line in lines where line.turn == turn { add(.claude, turn, line.1) }
+        add(.turnEnded, turn, ["result": .string(end)])
+    }
+    return ThreadState.derive(from: events, id: "t")
+}
+
+private func rendered(_ state: ThreadState) -> [String] {
+    ReviewReport(
+        state: state, title: "T", criteria: [], approval: "approved", goalProblem: nil,
+        diff: .unavailable(reason: "x")
+    ).render()
+}
+
+@Suite struct DeniedToolsTests {
+    @Test func aDenialShowsWhatItWasDeniedFor() {
+        let push = denial("Bash", ["command": "git push origin main"])
+        let s = state([(1, result([push, push, denial("Write", ["file_path": "/etc/hosts"])]))])
+        let lines = rendered(s)
+        #expect(lines.contains("Denied     3 tool calls"), "\(lines)")
+        #expect(lines.contains { $0.hasPrefix("  Bash(git push origin main) ×2  turn 1, seq ") }, "\(lines)")
+        #expect(lines.contains { $0.hasPrefix("  Write(/etc/hosts) ×1  turn 1, seq ") }, "\(lines)")
+        #expect(lines.contains { $0.contains("workbench log --seq") })
+    }
+
+    @Test func oddShapesStillShowTheToolAndNeverBreakTheLine() {
+        let huge = String(repeating: "x", count: 5_000)
+        let s = state([(1, result([
+            denial("A"), denial("B", 7), denial("C", ["command": 3]), denial("D", ["command": .string(huge)]),
+            denial("E", ["command": "\u{1B}[31mred\u{1B}[0m\nsecond\tline\u{07}"]), ["tool_input": "no name"],
+        ]))])
+        let tools = s.review.deniedTools
+        #expect(tools.map(\.tool) == ["A", "B", "C", "D", "E"])
+        #expect(tools[0].input == nil && tools[1].input == nil && tools[2].input == nil)
+        #expect((tools[3].input ?? "").count <= 100)
+        #expect(tools[4].input == "[31mred[0m second line", "\(String(describing: tools[4].input))")
+        for line in rendered(s) {
+            #expect(!line.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }, "\(line.debugDescription)")
+        }
+    }
+
+    @Test func theSameToolCallIsCountedOnce() {
+        let again = result([denial("Bash", ["command": "rm -rf /"], id: "toolu_1")])
+        let s = state([(1, again), (1, again), (2, result([denial("Bash", ["command": "rm -rf /"], id: "toolu_2")]))])
+        #expect(s.review.deniedTools.count == 2)
+        #expect(s.review.deniedTools.map(\.turn) == [1, 2])
+    }
+
+    @Test func aStalledTurnSaysDeniedToolsMayExplainIt() {
+        let denied = [(1, result([denial("Bash", ["command": "git push"])]))]
+        #expect(rendered(state(denied, end: "timed_out")).contains { $0.contains("denied tools may explain this") })
+        #expect(!rendered(state(denied, end: "succeeded")).contains { $0.contains("may explain") })
+        #expect(rendered(state([(1, result([]))], end: "stopped")).contains("Denied     none"))
+    }
+}
+
+@Suite struct DeniedToolsCommandTests {
+    private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (text: String, exit: ProcessExit?) {
+        var spawn = SpawnRequest(
+            executable: WorkbenchBinary.executable, arguments: arguments,
+            environment: ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName()],
+            workingDirectory: fx.repo, timeout: 60)
+        spawn.snapshotInterval = 3600
+        let run = try ProcessRunner.start(spawn)
+        var lines: [String] = []
+        var exit: ProcessExit?
+        for await event in run.events {
+            if case .line(let line) = event { lines.append(line) }
+            if case .exited(let e) = event { exit = e }
+        }
+        return (lines.joined(separator: "\n"), exit)
+    }
+
+    @Test func theSeqInReviewOpensTheRawEvent() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
+        let seq = try await log.append(
+            .claude, turn: 2, data: result([denial("Bash", ["command": "git push origin main"], id: "toolu_9")])).seq
+        _ = try await log.append(.turnEnded, turn: 2, data: ["result": "succeeded"])
+        await log.close()
+
+        let review = try await cli(["review", id], in: fx)
+        #expect(review.text.contains("Bash(git push origin main) ×1  turn 2, seq \(seq)"), "\(review.text)")
+
+        let raw = try await cli(["log", id, "--seq", String(seq)], in: fx)
+        #expect(raw.exit?.termination == .exited(0), "\(raw.text)")
+        #expect(raw.text.contains("toolu_9") && raw.text.contains("git push origin main"), "\(raw.text)")
+        #expect(raw.text.contains("\"seq\" : \(seq)"), "\(raw.text)")
+
+        let missing = try await cli(["log", id, "--seq", "9999"], in: fx)
+        #expect(missing.exit?.termination == .exited(1))
+        let junk = try await cli(["log", id, "--seq", "abc"], in: fx)
+        #expect(junk.exit?.termination != .exited(0))
+    }
+}

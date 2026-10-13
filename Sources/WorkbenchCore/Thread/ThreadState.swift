@@ -37,6 +37,12 @@ public struct Review: Sendable, Equatable {
         public var tool: String
         /// The `seq` of the `claude` line that carries the denial, so a reader can open the raw event.
         public var seq: Int
+        /// What it was denied for (the command, path or pattern), on one line and safe to print; nil when
+        /// the denial carried nothing usable.
+        public var input: String?
+
+        /// `Bash(git push origin main)`, or just the tool name.
+        public var label: String { input.map { "\(tool)(\($0))" } ?? tool }
     }
 
     public var status: ReviewStatus
@@ -75,6 +81,7 @@ public struct ThreadState: Sendable, Equatable {
             lastResult: nil, totalCostUSD: 0, sessionID: nil,
             review: Review(status: .empty, turnResult: nil, check: nil, notes: [], deniedTools: []))
         var noteIsLatest = false
+        var seenToolUses: Set<String> = []
         for event in events {
             switch event.kind {
             case .threadCreated:
@@ -117,8 +124,14 @@ public struct ThreadState: Sendable, Equatable {
                 else { break }
                 for denial in denials {
                     guard let tool = denial["tool_name"]?.stringValue else { continue }
+                    // The same tool call is never counted twice, whatever repeats the result line.
+                    if let useID = denial["tool_use_id"]?.stringValue, !seenToolUses.insert(useID).inserted {
+                        continue
+                    }
                     state.review.deniedTools.append(
-                        Review.DeniedTool(turn: event.turn, tool: tool, seq: event.seq))
+                        Review.DeniedTool(
+                            turn: event.turn, tool: Self.safeLine(tool, limit: 60), seq: event.seq,
+                            input: Self.denialInput(denial["tool_input"])))
                 }
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
@@ -141,5 +154,41 @@ public struct ThreadState: Sendable, Equatable {
             state.review.status = .awaitingReview
         }
         return state
+    }
+
+    /// Text from the log that will be printed in a terminal: one line, no control characters or escape
+    /// sequences, cut at `limit` characters.
+    static func safeLine(_ text: String, limit: Int) -> String {
+        var out = ""
+        var lastWasSpace = false
+        for scalar in text.unicodeScalars {
+            let isControl = scalar.properties.generalCategory == .control || scalar.value == 0x7F
+            let isLineBreak = scalar == "\n" || scalar == "\r" || scalar == "\t"
+            if isControl && !isLineBreak { continue }
+            let isSpace = isLineBreak || scalar == " "
+            if isSpace {
+                if lastWasSpace { continue }
+                out.unicodeScalars.append(" ")
+                lastWasSpace = true
+            } else {
+                out.unicodeScalars.append(scalar)
+                lastWasSpace = false
+            }
+        }
+        out = out.trimmingCharacters(in: .whitespaces)
+        return out.count > limit ? String(out.prefix(limit - 1)) + "…" : out
+    }
+
+    /// What a denied call was for: the command, path, URL or pattern in its `tool_input`.
+    static func denialInput(_ input: JSONValue?) -> String? {
+        guard let input else { return nil }
+        let keys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
+        for key in keys {
+            if let value = input[key]?.stringValue {
+                let line = safeLine(value, limit: 100)
+                if !line.isEmpty { return line }
+            }
+        }
+        return nil
     }
 }

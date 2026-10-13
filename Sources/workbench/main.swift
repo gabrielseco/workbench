@@ -14,7 +14,7 @@ let usage = """
       run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
-      log [-f] [-v]              what happened; -f follows, -v shows every stream line
+      log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
       status                     where the thread stands
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push

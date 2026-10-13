@@ -93,15 +93,23 @@ public struct ReviewReport: Sendable, Equatable {
             lines.append("Check      none ran")
         }
 
-        let denied = Dictionary(grouping: review.deniedTools, by: \.tool)
-        if denied.isEmpty {
+        if review.deniedTools.isEmpty {
             lines.append("Denied     none")
         } else {
-            let parts = denied.sorted { $0.key < $1.key }.map { tool, items -> String in
+            let count = review.deniedTools.count
+            lines.append("Denied     \(count) tool call\(count == 1 ? "" : "s")")
+            let groups = Dictionary(grouping: review.deniedTools, by: \.label)
+            for (label, items) in groups.sorted(by: { ($0.value[0].seq, $0.key) < ($1.value[0].seq, $1.key) }) {
+                let turns = Set(items.map(\.turn)).sorted().map(String.init).joined(separator: ", ")
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
-                return "\(tool) ×\(items.count) (seq \(seqs))"
+                lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
             }
-            lines.append("Denied     " + parts.joined(separator: "; "))
+            lines.append("  open one with `workbench log --seq <n>`")
+            let stalled = ["stopped", "timed_out", "failed", "interrupted", "budget_exceeded"]
+            if let result = review.turnResult, stalled.contains(result),
+                review.deniedTools.contains(where: { $0.turn == state.lastTurn }) {
+                lines.append("  turn \(state.lastTurn) ended \(result): denied tools may explain this")
+            }
         }
         if !review.notes.isEmpty {
             lines.append("Notes      \(review.notes.count) sent back")
