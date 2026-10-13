@@ -371,3 +371,53 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(ExecutableResolver.resolve("faketool", searchPath: nil) == nil)
     }
 }
+
+@Suite struct CheckingYourWorkPromptTests {
+    private func goal() throws -> Goal {
+        let text = """
+            ---
+            id: g-1
+            title: T
+            status: draft
+            base: main
+            budget_usd: 1
+            turn_timeout_min: 5
+            ---
+
+            ## Request
+
+            Do it.
+
+            ## Criteria
+
+            - [c1] It is done.
+              - proof: a test
+
+            ## Out of scope
+
+            - Nothing else.
+            """
+        return try GoalFile.parse(text).goal
+    }
+
+    @Test func theFirstPromptPrefersANarrowCheckAndNamesTheFullOne() throws {
+        let prompt = PromptBuilder.firstPrompt(goal: try goal(), checkCommand: "scripts/check.sh")
+        let section = try #require(prompt.range(of: "## Checking your work"))
+        let text = String(prompt[section.lowerBound...])
+        #expect(text.contains("narrowest command you are allowed to run"))
+        #expect(text.contains("`scripts/check.sh`"))
+        #expect(text.contains("Workbench runs it itself when you finish"))
+        #expect(text.contains("at most once, at the end"))
+    }
+
+    @Test func noCheckCommandMeansNoSection() throws {
+        let prompt = PromptBuilder.firstPrompt(goal: try goal(), checkCommand: nil)
+        #expect(!prompt.contains("## Checking your work"))
+    }
+
+    @Test func theRulesNameTheFullCheckWithoutForbiddingNarrowTests() {
+        let rules = PromptBuilder.rules(checkCommand: "scripts/check.sh")
+        #expect(rules.contains("The project's full check is `scripts/check.sh`"))
+        #expect(!rules.contains("use exactly"))
+    }
+}
