@@ -2,6 +2,8 @@
 
 Deliberately not now. Each item is real, but building it before one thread works well is how the first
 attempt went wrong. Nothing here is started until the "well" gate in the [plan](../plan/README.md) is met.
+One exception: the [portability](portability.md) *probe* (trying one non-Swift repo and writing down what
+breaks) comes after P2, before the app is designed. It builds nothing; fixing what it finds waits for the gate.
 
 Order of likely return, each decided on its own once the previous is used daily:
 
