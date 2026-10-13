@@ -87,7 +87,7 @@ Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`, called by `Thre
   that are not UTF-8 are replaced, and a last line without a newline gets one). At most 1 MiB is kept:
   past it the file ends with the line `[output truncated at 1048576 bytes]`, `output_truncated` is true
   and the command is still drained. One line longer than the limit is cut to its first 4096 bytes and
-  followed by `… [line of N bytes, first 4096 kept]`, so a reader knows how much is missing. Bytes are read
+  followed by `… [line of N bytes, cut after its first M characters]`, so a reader knows how much is missing. Bytes are read
   as lines on purpose: the log is for people, and capturing raw bytes would need a second, uncapped copy.
 - **`result`.** Stopped or timed out by us, then exit 0 is `passed`, anything else `failed`. Exit 0 with an
   output file that could not be written in full is `failed` with `error`: no evidence is not a pass. A command
