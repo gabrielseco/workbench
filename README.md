@@ -41,6 +41,11 @@ These come from what went wrong when this was built inside Triage.
 6. **Small slices that end in a demo.** A phase is done when you can use it, not when the checklist is long.
 7. **One thing well before more things.** If a feature needs the word "concurrent", it waits.
 
+## Checking changes
+
+`scripts/check.sh` runs what CI runs (banned APIs, build, tests) and stops at the first failure. The soak
+test is left to CI.
+
 ## Layout (planned)
 
 ```
