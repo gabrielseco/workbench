@@ -19,6 +19,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
+What got in the way while using Workbench on itself is kept in [`FRICTION.md`](FRICTION.md).
 
 ## The scope rule
 
