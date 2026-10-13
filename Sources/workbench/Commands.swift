@@ -151,6 +151,8 @@ enum Commands {
             switch notice {
             case .recoveredOrphanedTurn(let turn):
                 out("recovered: turn \(turn) was left open by a runner that died; recorded as interrupted")
+            case .recoveredOrphanedCheck(let turn):
+                out("recovered: the check after turn \(turn) was left open by a runner that died; recorded as interrupted")
             case .sweptOrphans(let pids):
                 out("swept \(pids.count) leftover process(es) from an earlier run")
             case .turnStarted(let turn, let pid, let resume):
@@ -165,10 +167,19 @@ enum Commands {
                     + (report.costUSD.map { String(format: "  $%.4f", $0) } ?? "")
                     + "  \(report.durationMs / 1000)s"
                     + (report.permissionDenials > 0 ? "  \(report.permissionDenials) denied" : ""))
+            case .checkStarted(_, let command):
+                out("check started: \(command)")
+            case .checkRan(let check):
+                out(LogFormatter.describeCheck(
+                        result: check.result.rawValue, exitCode: check.exitCode.map { Int($0) },
+                        signal: check.signal.map { Int($0) })
+                    + "  \(check.durationMs / 1000)s"
+                    + (check.outputTruncated ? "  output truncated" : "")
+                    + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(check.outputRef).path))")
             }
         }
 
-        // Ctrl-C and SIGTERM stop the turn cleanly: it still ends with a recorded `stopped`.
+        // Ctrl-C and SIGTERM stop the turn or check cleanly: it still ends with a recorded `stopped`.
         let signals = installStopHandlers(for: runner)
         defer { signals.forEach { $0.cancel() } }
 
@@ -214,6 +225,8 @@ enum Commands {
 
         func show(_ event: Event) {
             if event.kind == .claude, !verbose, LogFormatter.describeClaude(event.data) == nil { return }
+            // One line per check: how it ended.
+            if event.kind == .checkStarted, !verbose { return }
             out(LogFormatter.describe(event))
         }
 
@@ -226,6 +239,8 @@ enum Commands {
         }
         guard follow else { return }
 
+        // A turn is followed to the end of its check, when one will run.
+        let checks = (try? Config.load(from: ctx.project.configURL))?.checkCommand != nil
         var sawStart = startedWithOpenTurn
         while true {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -233,7 +248,10 @@ enum Commands {
             for event in contents.events.dropFirst(printed) {
                 show(event)
                 if event.kind == .turnStarted { sawStart = true }
-                if event.kind == .turnEnded, sawStart { return }
+                let result = event.data["result"]?.stringValue
+                let checkFollows = checks && result != "stopped" && result != "interrupted"
+                if event.kind == .turnEnded, sawStart, !checkFollows { return }
+                if event.kind == .checkRan, sawStart { return }
             }
             printed = contents.events.count
         }
@@ -278,6 +296,12 @@ enum Commands {
         }
         out(turns)
         if let result = state.lastResult { out("last turn: \(result)") }
+        if let open = state.openCheck {
+            let note = running ? "running" : "NOT running: will be recorded as interrupted on next run"
+            out("check:     turn \(open) open, \(note)")
+        } else if let check = state.lastCheck {
+            out("check:     \(check)")
+        }
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: worktree.path) { out("worktree:  \(worktree.path)") }

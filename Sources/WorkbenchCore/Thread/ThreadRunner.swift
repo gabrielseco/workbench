@@ -20,14 +20,19 @@ public struct TurnReport: Sendable, Equatable {
     public var permissionDenials: Int
     /// What Claude said last, from the `result` line.
     public var summary: String?
+    /// The project's check as Workbench ran it after this turn, nil when none ran.
+    public var check: CheckReport?
 }
 
 public enum RunNotice: Sendable {
     case recoveredOrphanedTurn(Int)
+    case recoveredOrphanedCheck(Int)
     case sweptOrphans([Int32])
     case turnStarted(turn: Int, pid: Int32?, resume: Bool)
     case claudeLine(String)
     case turnEnded(TurnReport)
+    case checkStarted(turn: Int, command: String)
+    case checkRan(CheckReport)
 }
 
 public struct RunOptions: Sendable {
@@ -35,6 +40,8 @@ public struct RunOptions: Sendable {
     public var feedback: String?
     /// Replaces the goal's `turn_timeout_min`. For tests.
     public var timeoutOverride: TimeInterval?
+    /// Replaces the check's timeout, which is otherwise the turn's. For tests.
+    public var checkTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
     public var allowDirty = false
     /// The environment `claude` is derived from. Defaults to this process's.
@@ -95,7 +102,7 @@ public actor ThreadRunner {
         self.notify = notify
     }
 
-    /// Asks the turn in progress to end. It still ends with a recorded `stopped`.
+    /// Asks the turn or check in progress to end. It still ends with a recorded `stopped`.
     public func stop() {
         stopRequested = true
         currentRun?.stop()
@@ -155,6 +162,9 @@ public actor ThreadRunner {
         // left running in the worktree goes with it.
         if let recovered = try await log.recoverOrphanedTurn() {
             notify(.recoveredOrphanedTurn(recovered.turn))
+        }
+        if let recovered = try await log.recoverOrphanedCheck() {
+            notify(.recoveredOrphanedCheck(recovered.turn))
         }
         if worktreeManager.exists(threadID) {
             let swept = OrphanSweeper.sweep(inside: worktreeManager.path(for: threadID))
@@ -234,6 +244,8 @@ public actor ThreadRunner {
             // output. Then, and only then, try creating it.
             let canFallBack = index < attempts.count - 1
             if canFallBack, result.report.result == .failed, !result.sawOutput, !stopRequested { continue }
+            report?.check = try await runCheck(
+                after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
             break
         }
         // The loop above runs at least once and assigns `report` on every pass.
@@ -428,6 +440,40 @@ public actor ThreadRunner {
             sessionID: sessionID, permissionDenials: denials, summary: resultLine?["result"] as? String)
         notify(.turnEnded(report))
         return TurnOutcome(report: report, sawOutput: sawOutput)
+    }
+
+}
+
+extension ThreadRunner {
+    // MARK: The check
+
+    /// The project's own check, run here so that a pass is Workbench's evidence and not Claude's claim.
+    /// The command is the config's; nothing in the worktree is consulted to choose it.
+    private func runCheck(
+        after report: TurnReport, config: Config, goal: Goal, worktree: URL, log: EventLogWriter, options: RunOptions
+    ) async throws -> CheckReport? {
+        guard let command = config.checkCommand, report.result != .stopped, report.result != .interrupted,
+            !stopRequested
+        else { return nil }
+        let check = CheckRunner(
+            command: command, worktree: worktree,
+            environment: config.childEnvironment(from: options.parentEnvironment),
+            timeout: options.checkTimeoutOverride ?? options.timeoutOverride
+                ?? TimeInterval(goal.turnTimeoutMin) * 60,
+            killGrace: options.killGrace)
+        notify(.checkStarted(turn: report.turn, command: command))
+        defer { currentRun = nil }
+        let ran = try await check.run(
+            turn: report.turn, outputURL: project.checkOutputURL(threadID, turn: report.turn), log: log
+        ) { [self] process in await attach(process) }
+        notify(.checkRan(ran))
+        return ran
+    }
+
+    /// Makes the check's process the one `stop()` reaches, and stops it if that was already asked.
+    private func attach(_ process: ProcessRun) {
+        currentRun = process
+        if stopRequested { process.stop() }
     }
 
     // MARK: Classification (pure, tested directly)

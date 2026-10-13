@@ -143,6 +143,7 @@ public struct ThreadService: Sendable {
 
         try await withLog(id) { log in
             _ = try await log.recoverOrphanedTurn()
+            _ = try await log.recoverOrphanedCheck()
             try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
         }
     }

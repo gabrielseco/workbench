@@ -19,6 +19,15 @@ public enum LogFormatter {
                 out += "  \(denials) denied"
             }
             return out
+        case .checkStarted:
+            return head + "check started: \(event.data["command"]?.stringValue ?? "?")"
+        case .checkRan:
+            var out = head + describeCheck(
+                result: event.data["result"]?.stringValue ?? "?", exitCode: event.data["exit_code"]?.intValue,
+                signal: event.data["signal"]?.intValue)
+            if let ms = event.data["duration_ms"]?.intValue { out += "  \(ms / 1000)s" }
+            if event.data["output_truncated"] == true { out += "  output truncated" }
+            return out
         case .threadNote:
             return head + "feedback: \(event.data["text"]?.stringValue ?? "")"
         case .reviewDecision:
@@ -26,6 +35,15 @@ public enum LogFormatter {
         default:
             return head + event.kind.rawValue
         }
+    }
+
+    /// `check passed`, `check failed (exit 1)`, `check timed out`: how a check ended, in words.
+    public static func describeCheck(result: String, exitCode: Int?, signal: Int?) -> String {
+        var out = "check \(result.replacingOccurrences(of: "_", with: " "))"
+        if result == CheckResult.failed.rawValue {
+            if let exitCode { out += " (exit \(exitCode))" } else if let signal { out += " (signal \(signal))" }
+        }
+        return out
     }
 
     /// The interesting part of a raw `claude` stream line, or nil for noise (partial messages, hooks).

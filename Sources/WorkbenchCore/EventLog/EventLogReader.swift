@@ -12,6 +12,8 @@ public struct EventLogContents: Sendable {
     /// A turn that started and never ended, if any.
     public var openTurn: Int?
     public var lastTurn: Int
+    /// The turn whose check started and never ended, if any.
+    public var openCheck: Int?
 
     public var isHealthy: Bool { problems.isEmpty && truncatedTail == nil }
 }
@@ -55,6 +57,7 @@ public enum EventLogReader {
         }
         contents.openTurn = state.openTurn
         contents.lastTurn = state.lastTurn
+        contents.openCheck = state.openCheck
         return contents
     }
 }

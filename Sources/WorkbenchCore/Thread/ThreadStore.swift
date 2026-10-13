@@ -24,6 +24,9 @@ public struct ThreadState: Sendable, Equatable {
     public var createdAt: String?
     public var lastTurn: Int
     public var openTurn: Int?
+    public var openCheck: Int?
+    /// The latest check's `result`, nil when no check has run.
+    public var lastCheck: String?
     /// `accepted`, `discarded` or `abandoned` once the thread has ended.
     public var decision: String?
     public var lastResult: String?
@@ -49,11 +52,12 @@ public struct ThreadStore: Sendable {
     /// Replays one thread's log. A thread with no log yet is a new one.
     public func state(of id: String) -> ThreadState {
         var state = ThreadState(
-            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, decision: nil, lastResult: nil,
-            totalCostUSD: 0, sessionID: nil)
+            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil, decision: nil,
+            lastResult: nil, totalCostUSD: 0, sessionID: nil)
         guard let contents = try? EventLogReader.read(at: project.eventsURL(id)) else { return state }
         state.lastTurn = contents.lastTurn
         state.openTurn = contents.openTurn
+        state.openCheck = contents.openCheck
         for event in contents.events {
             switch event.kind {
             case .threadCreated:
@@ -67,6 +71,8 @@ public struct ThreadStore: Sendable {
                 case .int(let i)?: state.totalCostUSD += Double(i)
                 default: break
                 }
+            case .checkRan:
+                state.lastCheck = event.data["result"]?.stringValue
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue,
                     Self.terminalDecisions.contains(decision) {
