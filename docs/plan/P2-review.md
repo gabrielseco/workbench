@@ -113,7 +113,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 
 - [ ] After any turn that changed files, the review shows the same files `git status` shows in the worktree.
 - [x] The check result is from Workbench's own run, with exit code and captured output.
-- [x] Send back produces a turn whose first prompt contains the note and the check failure, and the session
+- [ ] Send back produces a turn whose first prompt contains the note and the check failure, and the session
       context carries over (verified by a real run).
 - [x] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
 - [x] Discard removes worktree and branch and leaves the log readable.
