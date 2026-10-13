@@ -134,7 +134,7 @@ private func startedArgv(_ id: String, turn: Int, _ fx: RunnerFixture) throws ->
         _ = try await fx.runner(id).run(fx.options())
         let before = try Data(contentsOf: fx.project.eventsURL(id))
 
-        for budget in ["0", "-3", "abc", "101"] {
+        for budget in ["0", "-3", "abc", "101", "12.5oops", "1e1", ".5"] {
             let result = try await cli(["send-back", "x", "--budget", budget], in: fx)
             #expect(result.exit?.termination != .exited(0), "budget \(budget): \(result.text)")
         }
@@ -184,5 +184,20 @@ private func startedArgv(_ id: String, turn: Int, _ fx: RunnerFixture) throws ->
         #expect(events.filter { $0.kind == .turnStarted }.count == 2)
         #expect(events.filter { $0.kind == .turnEnded }.count == 2)
         #expect(try fx.contents(id).isHealthy)
+    }
+
+    @Test func reviewAndStatusShowTheNoteEvenBeforeItsTurnRuns() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        // The runner died after recording the note and before spawning the turn.
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.threadNote, data: ["text": "make the greeting\nlouder"])
+        await log.close()
+
+        let review = try await cli(["review", id], in: fx)
+        #expect(review.text.contains("1 sent back") && review.text.contains("make the greeting louder"), "\(review.text)")
+        let status = try await cli(["status", id], in: fx)
+        #expect(status.text.contains("note:") && status.text.contains("make the greeting louder"), "\(status.text)")
     }
 }

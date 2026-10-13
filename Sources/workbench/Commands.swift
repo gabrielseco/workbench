@@ -163,7 +163,10 @@ enum Commands {
         }
         var budget: Decimal?
         if let budgetText {
-            guard let value = Decimal(string: budgetText, locale: Locale(identifier: "en_US_POSIX")), value > 0 else {
+            // Decimal(string:) accepts a numeric prefix ("12.5oops"), so the whole text is checked first.
+            guard budgetText.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
+                let value = Decimal(string: budgetText, locale: Locale(identifier: "en_US_POSIX")), value > 0
+            else {
                 throw CLIError.usage("--budget needs a positive number of dollars, got '\(budgetText)'")
             }
             budget = value
@@ -332,6 +335,7 @@ enum Commands {
             out("check:     \(check)")
         }
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
+        for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: worktree.path) { out("worktree:  \(worktree.path)") }
     }

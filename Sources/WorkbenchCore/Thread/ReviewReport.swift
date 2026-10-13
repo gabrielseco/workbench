@@ -103,11 +103,20 @@ public struct ReviewReport: Sendable, Equatable {
             }
             lines.append("Denied     " + parts.joined(separator: "; "))
         }
-        if !review.notes.isEmpty { lines.append("Notes      \(review.notes.count) sent back") }
+        if !review.notes.isEmpty {
+            lines.append("Notes      \(review.notes.count) sent back")
+            for note in review.notes { lines.append("  turn \(note.turn): " + Self.oneLine(note.text)) }
+        }
 
         lines.append("")
         lines.append(Self.nextStep(for: review.status, openTurn: state.openTurn ?? state.openCheck))
         return lines
+    }
+
+    /// A note on one line, cut at 120 characters, for lists.
+    public static func oneLine(_ text: String) -> String {
+        let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return flat.count > 120 ? String(flat.prefix(119)) + "…" : flat
     }
 
     static func describe(_ file: FileChange) -> String {
