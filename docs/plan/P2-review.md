@@ -76,7 +76,19 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    `send-back` and `discard` are tasks 5 to 7.
 5. **Send back flow.** Compose note, adjust budget, start turn with note and check output attached.
 6. **Accept.** Commit pending work with a template message (editable), mark thread done, clear `current`.
-7. **Discard.** Safe removal with confirmation; refuse if there are uncommitted changes you haven't seen.
+7. **Discard** (done: `ThreadService.discard`, `workbench discard [id] [--yes]`). Shows the worktree, branch,
+   changed files and commits that exist nowhere else, and asks (`--yes` for scripts and agents; with no
+   terminal and no `--yes` it refuses). Closes an open turn or check, removes the worktree and the
+   `workbench/<id>` branch, then records `review.decision: discarded`. The decision is written last, so a
+   failure partway leaves the thread active and a second `discard` finishes. Refused while a runner is
+   live. Ignored files and the staged index are included because removal deletes them too. A changed list after confirmation
+   refuses deletion and asks the user to retry. Failed inspection or more than ten commits requires
+   `--yes`; commit inspection is bounded to eleven entries. Untracked and ignored line counting reads
+   at most 1 MiB per regular file and never follows symlinks; other files have unknown counts.
+   Preview comparison includes index blob identities and working-file identity, size, modification and
+   change times, so same-size text and binary edits also invalidate an old confirmation. Large text
+   retains the size fallback for patches rather than being classified as binary.
+   `abandon` stays: it keeps the branch.
 8. **Denied-tool summary.** Aggregate from the log, link to the raw event.
 
 ## Acceptance criteria
@@ -86,7 +98,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 - [ ] Send back produces a turn whose first prompt contains the note and the check failure, and the session
       context carries over (verified by a real run).
 - [ ] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
-- [ ] Discard removes worktree and branch and leaves the log readable.
+- [x] Discard removes worktree and branch and leaves the log readable.
 - [ ] A turn that was `stopped` or `timed_out` still reviews, with its partial diff.
 - [ ] Big diffs and binary files fall back without hanging.
 - [x] Killing the process during a check leaves an `interrupted` check, never a thread stuck running.

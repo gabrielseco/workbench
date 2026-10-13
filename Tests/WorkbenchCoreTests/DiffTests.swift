@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -126,6 +127,56 @@ private struct DiffRepo {
 
         let summary = try await repo.provider.summary(worktree: repo.root, base: base)
         #expect(summary.files.first?.isBinary == true)
+    }
+
+    @Test func ignoredSymlinkToFIFOHasNoCounts() async throws {
+        let repo = try await DiffRepo()
+        try repo.write(".gitignore", "ignored-link\npipe\n")
+        try await repo.run("add", ".gitignore")
+        try await repo.run("commit", "-qm", "ignore pipe")
+        let base = try await repo.base()
+        let pipe = repo.root.appendingPathComponent("pipe")
+        try #require(mkfifo(pipe.path, 0o600) == 0)
+        try FileManager.default.createSymbolicLink(
+            at: repo.root.appendingPathComponent("ignored-link"), withDestinationURL: pipe)
+        let fd = Darwin.open(pipe.path, O_RDWR | O_NONBLOCK | O_CLOEXEC)
+        try #require(fd >= 0)
+        let marker: [UInt8] = [0x78, 0x0A]
+        #expect(marker.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) } == marker.count)
+        let finished = DispatchSemaphore(value: 0)
+        // Let a reader of the old implementation reach EOF instead of hanging the test indefinitely.
+        DispatchQueue.global().async {
+            _ = finished.wait(timeout: .now() + 30)
+            Darwin.close(fd)
+        }
+        defer { finished.signal() }
+
+        let summary = try await repo.provider.summary(worktree: repo.root, base: base, includeIgnored: true)
+        let link = try #require(summary.files.first { $0.path == "ignored-link" })
+        #expect(link.isBinary)
+        #expect(link.additions == nil)
+        #expect(link.deletions == nil)
+        #expect(try await repo.provider.patch(for: link, worktree: repo.root, base: base) == .binary)
+    }
+
+    @Test func untrackedLineCountingStopsAtByteLimit() async throws {
+        let repo = try await DiffRepo()
+        let base = try await repo.base()
+        let limit = DiffProvider.untrackedCountLimit
+        try Data(repeating: 0x0A, count: limit).write(to: repo.root.appendingPathComponent("at-limit.txt"))
+        try Data(repeating: 0x0A, count: limit + 1).write(to: repo.root.appendingPathComponent("over-limit.txt"))
+
+        let summary = try await repo.provider.summary(worktree: repo.root, base: base)
+        let exact = try #require(summary.files.first { $0.path == "at-limit.txt" })
+        let large = try #require(summary.files.first { $0.path == "over-limit.txt" })
+        #expect(exact.additions == limit)
+        #expect(!exact.isBinary)
+        #expect(large.additions == nil)
+        #expect(large.deletions == nil)
+        #expect(!large.isBinary)
+        guard case .tooLarge(let bytes) = try await repo.provider.patch(for: large, worktree: repo.root, base: base)
+        else { Issue.record("expected tooLarge for over-limit text"); return }
+        #expect(bytes > DiffProvider.patchLimit)
     }
 
     @Test func patchHasHunksForTrackedAndUntrackedFiles() async throws {

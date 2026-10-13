@@ -122,9 +122,12 @@ public struct ReviewReport: Sendable, Equatable {
         if let old = file.oldPath { text = "\(mark)  \(old) → \(file.path)" }
         if file.isBinary {
             text += "  binary"
+        } else if file.additions == nil || file.deletions == nil {
+            text += "  counts unavailable"
         } else {
             text += "  +\(file.additions ?? 0) −\(file.deletions ?? 0)"
         }
+        if file.isStaged { text += "  (staged)" }
         return text
     }
 
@@ -146,7 +149,7 @@ public struct ReviewLoader: Sendable {
         self.git = git
     }
 
-    public func load(id: String) async -> ReviewReport {
+    public func load(id: String, includeIgnored: Bool = false) async -> ReviewReport {
         let state = ThreadStore(project: project).state(of: id)
         var title: String?
         var criteria: [Criterion] = []
@@ -170,7 +173,7 @@ public struct ReviewLoader: Sendable {
         }
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
-            diff: await diff(id: id, goalBase: goalBase))
+            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored))
     }
 
     /// One file's patch, by its path in the diff.
@@ -182,13 +185,17 @@ public struct ReviewLoader: Sendable {
             for: file, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id), base: summary.base)
     }
 
-    private func diff(id: String, goalBase: String?, limit: Int = DiffProvider.fileLimit) async -> ReviewReport.Diff {
+    private func diff(
+        id: String, goalBase: String?, limit: Int = DiffProvider.fileLimit, includeIgnored: Bool = false
+    ) async -> ReviewReport.Diff {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { return .unavailable(reason: "the worktree no longer exists") }
         guard let base = recordedBase(id) ?? goalBase else { return .unavailable(reason: "no base commit recorded") }
         do {
             return .summary(
-                try await DiffProvider(git: git).summary(worktree: manager.path(for: id), base: base, limit: limit))
+                try await DiffProvider(git: git).summary(
+                    worktree: manager.path(for: id), base: base, limit: limit,
+                    includeIgnored: includeIgnored, includeStaged: includeIgnored))
         } catch {
             return .unavailable(reason: "\(error)")
         }

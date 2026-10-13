@@ -119,6 +119,36 @@ public struct WorktreeManager: Sendable {
         }
     }
 
+    /// `false` only when git says the ref is missing (exit 1); any other failure is thrown, so "could not
+    /// look" is never taken for "not there".
+    public func branchExists(_ threadID: String) async throws -> Bool {
+        guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
+        let ref = "refs/heads/" + Self.branch(for: threadID)
+        let result = try await git.run(["rev-parse", "--verify", "--quiet", ref], in: repoRoot)
+        if result.succeeded { return true }
+        if result.status == 1 { return false }
+        throw WorktreeError.gitFailed(command: "rev-parse", status: result.status, stderr: result.stderr)
+    }
+
+    /// Deletes `workbench/<id>` and nothing else: the name is built here from a checked thread id.
+    public func deleteBranch(threadID: String) async throws {
+        guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
+        try await requireRepository()
+        try await check(["branch", "-D", Self.branch(for: threadID)])
+    }
+
+    /// Up to eleven commits not on `base`, newest first; nil means inspection failed, not an empty history.
+    public func commits(threadID: String, since base: String) async -> [String]? {
+        guard SafeNames.isThreadID(threadID), SafeNames.isBranchName(base) || base.range(
+            of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil
+        else { return nil }
+        let result = try? await git.run(
+            ["log", "--max-count=11", "--oneline", "--no-decorate", "\(base)..refs/heads/\(Self.branch(for: threadID))"],
+            in: repoRoot)
+        guard let result, result.succeeded, result.stdout.utf8.count < GitRunner.outputLimit else { return nil }
+        return Self.lines(result.stdout)
+    }
+
     // MARK: Inspection
 
     /// Uncommitted changes inside a thread's worktree (tracked and untracked), as porcelain lines.

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct FileChange: Sendable, Equatable {
@@ -14,6 +15,7 @@ public struct FileChange: Sendable, Equatable {
     public var deletions: Int?
     public var isBinary: Bool
     public var isUntracked: Bool
+    public var isStaged = false
 }
 
 /// What a worktree holds compared to its base: the same set of files `git status` reports there, with
@@ -24,6 +26,8 @@ public struct DiffSummary: Sendable, Equatable {
     /// `true` when there were more changed files than `DiffProvider.fileLimit`; `files` is cut.
     public var truncated: Bool
     public var totalFiles: Int
+    public var indexFingerprint: String?
+    public var workingFingerprint: [String: String]?
 
     public var additions: Int { files.reduce(0) { $0 + ($1.additions ?? 0) } }
     public var deletions: Int { files.reduce(0) { $0 + ($1.deletions ?? 0) } }
@@ -56,6 +60,7 @@ public enum DiffError: Error, Equatable, Sendable, CustomStringConvertible {
 public struct DiffProvider: Sendable {
     public static let fileLimit = 500
     public static let patchLimit = 256 << 10
+    static let untrackedCountLimit = 1 << 20
 
     public let git: GitRunner
 
@@ -63,7 +68,8 @@ public struct DiffProvider: Sendable {
 
     /// `limit` caps the file list for display; a caller that must find one file passes `Int.max`.
     public func summary(
-        worktree: URL, base: String, limit: Int = DiffProvider.fileLimit
+        worktree: URL, base: String, limit: Int = DiffProvider.fileLimit,
+        includeIgnored: Bool = false, includeStaged: Bool = false
     ) async throws -> DiffSummary {
         try requireDirectory(worktree)
 
@@ -77,17 +83,53 @@ public struct DiffProvider: Sendable {
             if change.oldPath == nil, let status = statuses[change.path] { change.status = status }
             return change
         }
+        var indexFingerprint: String?
+        if includeStaged {
+            let staged = try await run(
+                ["diff", "--cached", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
+            let stagedNames = try await run(
+                ["diff", "--cached", "--name-status", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
+            let stagedStatuses = Self.parseNameStatus(stagedNames.stdout)
+            files += Self.parseNumstat(staged.stdout).map { change -> FileChange in
+                var change = change
+                change.isStaged = true
+                if change.oldPath == nil, let status = stagedStatuses[change.path] { change.status = status }
+                return change
+            }
+            let snapshot = try await run(
+                ["diff", "--cached", "--raw", "--no-abbrev", "-z", "--no-ext-diff", base, "--"], in: worktree)
+            indexFingerprint = snapshot.stdout
+        }
 
         let untracked = try await run(
             ["ls-files", "--others", "--exclude-standard", "-z"], in: worktree)
         for path in untracked.stdout.split(separator: "\0").map(String.init) {
             files.append(try untrackedChange(path, in: worktree))
         }
+        // Discard removes ignored files too, so its confirmation must list them.
+        if includeIgnored {
+            let ignored = try await run(
+                ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], in: worktree)
+            for path in ignored.stdout.split(separator: "\0").map(String.init) {
+                files.append(try untrackedChange(path, in: worktree))
+            }
+        }
 
         files.sort { $0.path < $1.path }
         let total = files.count
         if files.count > limit { files = Array(files.prefix(limit)) }
-        return DiffSummary(base: base, files: files, truncated: total > files.count, totalFiles: total)
+        var workingFingerprint: [String: String]?
+        if includeIgnored {
+            var stamps: [String: String] = [:]
+            for file in files {
+                stamps[file.path] = Self.fileStamp(worktree.appendingPathComponent(file.path))
+                if let old = file.oldPath { stamps[old] = Self.fileStamp(worktree.appendingPathComponent(old)) }
+            }
+            workingFingerprint = stamps
+        }
+        return DiffSummary(
+            base: base, files: files, truncated: total > files.count, totalFiles: total,
+            indexFingerprint: indexFingerprint, workingFingerprint: workingFingerprint)
     }
 
     public func patch(for file: FileChange, worktree: URL, base: String) async throws -> FilePatch {
@@ -117,26 +159,50 @@ public struct DiffProvider: Sendable {
 
     // MARK: Internals
 
+    private static func fileStamp(_ url: URL) -> String {
+        var metadata = stat()
+        guard lstat(url.path, &metadata) == 0 else { return "missing:\(errno)" }
+        // ctime catches same-size edits even when an editor preserves mtime; lstat never follows a link.
+        return "\(metadata.st_dev):\(metadata.st_ino):\(metadata.st_mode):\(metadata.st_size):"
+            + "\(metadata.st_mtimespec.tv_sec):\(metadata.st_mtimespec.tv_nsec):"
+            + "\(metadata.st_ctimespec.tv_sec):\(metadata.st_ctimespec.tv_nsec)"
+    }
+
     private func untrackedChange(_ path: String, in worktree: URL) throws -> FileChange {
         let url = worktree.appendingPathComponent(path)
-        // Directories (nested repositories) and unreadable files count as changed but have no line counts.
-        guard let handle = try? FileHandle(forReadingFrom: url) else {
-            return FileChange(
-                path: path, status: .added, additions: nil, deletions: nil, isBinary: true, isUntracked: true)
-        }
-        defer { try? handle.close() }
-        let head = (try? handle.read(upToCount: 8192)) ?? Data()
-        if head.contains(0) {
-            return FileChange(
-                path: path, status: .added, additions: nil, deletions: nil, isBinary: true, isUntracked: true)
-        }
+        let unknown = FileChange(
+            path: path, status: .added, additions: nil, deletions: nil, isBinary: true, isUntracked: true)
+        let uncounted = FileChange(
+            path: path, status: .added, additions: nil, deletions: nil, isBinary: false, isUntracked: true)
+        var metadata = stat()
+        guard lstat(url.path, &metadata) == 0,
+            metadata.st_mode & S_IFMT == S_IFREG
+        else { return unknown }
+        // A replaced path must not make inspection follow a symlink or block opening a FIFO.
+        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return unknown }
+        defer { Darwin.close(fd) }
+        guard fstat(fd, &metadata) == 0,
+            metadata.st_mode & S_IFMT == S_IFREG
+        else { return unknown }
+        let oversized = metadata.st_size > Self.untrackedCountLimit
         var lines = 0
+        var bytes = 0
         var last: UInt8 = 0x0A
-        var chunk = head
-        while !chunk.isEmpty {
+        var buffer = [UInt8](repeating: 0, count: 1 << 16)
+        while true {
+            let count = Darwin.read(fd, &buffer, min(buffer.count, Self.untrackedCountLimit + 1 - bytes))
+            if count < 0 {
+                if errno == EINTR { continue }
+                return uncounted
+            }
+            if count == 0 { break }
+            bytes += count
+            let chunk = buffer.prefix(count)
+            if chunk.contains(0) { return unknown }
+            guard !oversized, bytes <= Self.untrackedCountLimit else { return uncounted }
             lines += chunk.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
             last = chunk[chunk.index(before: chunk.endIndex)]
-            chunk = (try? handle.read(upToCount: 1 << 16)) ?? Data()
         }
         if last != 0x0A { lines += 1 }
         return FileChange(

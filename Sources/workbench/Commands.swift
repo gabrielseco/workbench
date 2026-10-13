@@ -330,6 +330,34 @@ enum Commands {
         for line in await loader.load(id: id).render() { out(line) }
     }
 
+    static func discard(_ args: [String]) async throws {
+        var a = Arguments(args)
+        let yes = a.flag("--yes", "-y")
+        let named = a.positional()
+        try a.requireEmpty()
+        let ctx = try await Context.load()
+        let id = try ctx.threadID(named)
+        let plan = try await ctx.service.discardPlan(id: id)
+        for line in plan.render() { out(line) }
+
+        if !yes, !plan.fullyShown {
+            throw CLIError.message(
+                "not discarding: the list above does not show everything that would be lost. Pass --yes to confirm.")
+        }
+        let interactive = isatty(STDIN_FILENO) == 1
+        if !yes && interactive { print("Delete these for good? [y/N] ", terminator: "") }
+        switch Confirmation.ask(yes: yes, interactive: interactive, readLine: { readLine() }) {
+        case .proceed: break
+        case .declined:
+            out("nothing changed")
+            return
+        case .refused:
+            throw CLIError.message("not discarding: there is no terminal to ask on. Pass --yes to confirm.")
+        }
+        try await ctx.service.discard(id: id, shown: plan)
+        out("discarded \(id); the log is kept (`workbench log \(id)`)")
+    }
+
     static func abandon(_ args: [String]) async throws {
         var a = Arguments(args)
         let force = a.flag("--force")
