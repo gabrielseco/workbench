@@ -69,9 +69,11 @@ fail; they are counted in `permission_denials`.
 
 Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`, called by `ThreadRunner` after a turn.
 
-- **When.** After every turn that ends, except one that ended `stopped` or `interrupted`, when
-  `check_command` is set. With it unset no check events are written. A `--resume` attempt that failed at
-  once with no output and is retried by creating the session has no check of its own; the retry has.
+- **When.** Once per `workbench run`, after the last turn it ran, and not after one that ended `stopped` or
+  `interrupted`, when `check_command` is set. With it unset no check events are written. A `--resume`
+  attempt that failed at once with no output and is retried by creating the session did no work, so it has
+  no check; the retry, which is the turn that did the work, has. (Decided: the check measures the work, and
+  a 30 to 60 s check of an untouched worktree would only repeat the previous one.)
 - **Which command.** `check_command` from `.workbench/config.toml`, never anything read from the worktree.
   Its words are split on spaces and passed as arguments; no shell reads the command text. A first word
   with a `/` is a path in the worktree (`scripts/check.sh`); a bare name is looked up in the absolute
@@ -84,8 +86,11 @@ Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`, called by `Thre
 - **Output.** Stdout and stderr in the order written, in `checks/turn-N.log`, read line by line (bytes
   that are not UTF-8 are replaced, and a last line without a newline gets one). At most 1 MiB is kept:
   past it the file ends with the line `[output truncated at 1048576 bytes]`, `output_truncated` is true
-  and the command is still drained. One line longer than the limit is cut to its first 4096 bytes.
-- **`result`.** Stopped or timed out by us, then exit 0 is `passed`, anything else `failed`. A command
+  and the command is still drained. One line longer than the limit is cut to its first 4096 bytes and
+  followed by `… [line of N bytes, first 4096 kept]`, so a reader knows how much is missing. Bytes are read
+  as lines on purpose: the log is for people, and capturing raw bytes would need a second, uncapped copy.
+- **`result`.** Stopped or timed out by us, then exit 0 is `passed`, anything else `failed`. Exit 0 with an
+  output file that could not be written in full is `failed` with `error`: no evidence is not a pass. A command
   that cannot be found or started is `failed` with `error` and a null `exit_code`; the reason is also
   written to the output file.
 - **Stop.** `workbench stop` during a check stops the command and records `stopped`. A stop that arrives
