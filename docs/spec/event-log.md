@@ -114,12 +114,11 @@ of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown 
 - **`check`**: the latest `check.ran` (turn it followed, `result`, `exit_code`, `output_ref`).
 - **`deniedTools`**: one entry per `permission_denials` item of a `claude` result line: `tool`, `turn`, the
   `seq` of that line, and `input`, the `command`, `file_path`, `path`, `url`, `pattern` or `query` of its
-  `tool_input` made safe to print (one line, no control characters, at most 100 characters). An item with a
-  `tool_use_id` seen before is not counted again.
+  `tool_input` made safe to print (one line, no control characters, at most 100 characters). An item whose
+  `tool_use_id` was already seen in the same turn is not counted again, so a turn's entries match its
+  `turn.ended.permission_denials`. Entries are grouped by tool and the full, unshortened input.
 - **`notes`**: every `thread.note` with its `seq` and the follow-up turn it started. The runner writes the
   note with `turn: 0` before that turn, so the turn is derived (last turn + 1), not read from the event.
-- **`deniedTools`**: one entry per tool in a `claude` `result` line's `permission_denials`, with the turn and
-  the `seq` of that line so the raw event can be opened. `turn.ended.permission_denials` stays the count.
 
 ## Writer behaviour
 

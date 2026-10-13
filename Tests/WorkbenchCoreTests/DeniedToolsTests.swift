@@ -56,10 +56,28 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(tools.map(\.tool) == ["A", "B", "C", "D", "E"])
         #expect(tools[0].input == nil && tools[1].input == nil && tools[2].input == nil)
         #expect((tools[3].input ?? "").count <= 100)
-        #expect(tools[4].input == "[31mred[0m second line", "\(String(describing: tools[4].input))")
+        #expect(tools[4].input == "red second line", "\(String(describing: tools[4].input))")
         for line in rendered(s) {
+            #expect(!line.contains("\u{2028}") && !line.contains("\u{1B}"))
             #expect(!line.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }, "\(line.debugDescription)")
         }
+    }
+
+    @Test func longInputsThatDifferOnlyAfterTheCutAreTwoDenials() {
+        let prefix = String(repeating: "a", count: 150)
+        let s = state([(1, result([
+            denial("Write", ["file_path": .string(prefix + "1")]), denial("Write", ["file_path": .string(prefix + "2")]),
+            denial("Bash", ["command": "ls  -l"]), denial("Bash", ["command": "ls -l"]),
+        ]))])
+        let lines = rendered(s).filter { $0.contains("×") }
+        #expect(lines.count == 4, "\(lines)")
+    }
+
+    @Test func eachTurnsEntriesMatchItsRecordedCountEvenWhenAResumeIsDeniedTheSameCallAgain() {
+        let call = result([denial("Bash", ["command": "git push"], id: "toolu_1")])
+        let s = state([(1, call), (2, call)], end: "failed")
+        #expect(s.review.deniedTools.map(\.turn) == [1, 2])
+        #expect(rendered(s).contains { $0.contains("denied tools may explain this") })
     }
 
     @Test func theSameToolCallIsCountedOnce() {

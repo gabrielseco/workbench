@@ -98,8 +98,11 @@ public struct ReviewReport: Sendable, Equatable {
         } else {
             let count = review.deniedTools.count
             lines.append("Denied     \(count) tool call\(count == 1 ? "" : "s")")
-            let groups = Dictionary(grouping: review.deniedTools, by: \.label)
-            for (label, items) in groups.sorted(by: { ($0.value[0].seq, $0.key) < ($1.value[0].seq, $1.key) }) {
+            // Grouped by what was denied, not by how it is shown: two long inputs that only differ after
+            // the cut are still two denials.
+            let groups = Dictionary(grouping: review.deniedTools, by: { $0.tool + "\u{0}" + $0.identity })
+            for items in groups.values.sorted(by: { $0[0].seq < $1[0].seq }) {
+                let label = items[0].label
                 let turns = Set(items.map(\.turn)).sorted().map(String.init).joined(separator: ", ")
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
                 lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
