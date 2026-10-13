@@ -8,6 +8,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case running(pid: Int32)
     case nothingToDiscard
     case discardIncomplete(String)
+    case changedSinceShown
 
     public var description: String {
         switch self {
@@ -21,6 +22,8 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .nothingToDiscard:
             "this thread has no worktree and no branch to discard. `workbench abandon` ends it."
         case .discardIncomplete(let what): what
+        case .changedSinceShown:
+            "the thread changed after the list was shown, so nothing was discarded. Run `workbench discard` again."
         }
     }
 }
@@ -167,27 +170,37 @@ public struct ThreadService: Sendable {
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         let branchExists = try await manager.branchExists(id)
-        let report = await ReviewLoader(project: project, git: git).load(id: id)
+        let report = await ReviewLoader(project: project, git: git).load(id: id, includeIgnored: true)
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let created = events.contains { $0.kind == .worktreeCreated }
         // A discard that stopped halfway (worktree gone, branch left, or both gone) can be finished.
         guard manager.exists(id) || branchExists || created else { throw ThreadServiceError.nothingToDiscard }
 
         var commits: [String] = []
-        if branchExists, let base = events.last(where: { $0.kind == .worktreeCreated })?
-            .data["base_commit"]?.stringValue {
-            commits = await manager.commits(threadID: id, since: base)
+        var commitsKnown = true
+        if branchExists {
+            if let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue,
+                let found = await manager.commits(threadID: id, since: base) {
+                commits = found
+            } else {
+                commitsKnown = false
+            }
         }
         return DiscardPlan(
             id: id, worktree: manager.exists(id) ? manager.path(for: id) : nil,
-            branch: branchExists ? WorktreeManager.branch(for: id) : nil, diff: report.diff, commits: commits)
+            branch: branchExists ? WorktreeManager.branch(for: id) : nil, diff: report.diff, commits: commits,
+            commitsKnown: commitsKnown)
     }
 
     /// Throws the thread's work away: closes an open turn or check the runner left, removes the worktree
     /// and the branch, then records the decision. The decision comes last, so a failure partway leaves the
     /// thread active and running `discard` again finishes it.
-    public func discard(id: String, by: String = "user") async throws {
-        _ = try await discardPlan(id: id)
+    ///
+    /// - Parameter shown: the plan the person confirmed. If the thread no longer matches it, nothing is
+    ///   removed: new work that was never listed must not be deleted by an answer given about the old list.
+    public func discard(id: String, shown: DiscardPlan? = nil, by: String = "user") async throws {
+        let plan = try await discardPlan(id: id)
+        if let shown, shown != plan { throw ThreadServiceError.changedSinceShown }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         try await withLog(id) { log in
             _ = try await log.recoverOrphanedTurn()
@@ -266,9 +279,12 @@ public struct DiscardPlan: Sendable, Equatable {
     public var diff: ReviewReport.Diff
     /// `--oneline` of the commits on the branch that are not on its base.
     public var commits: [String]
+    /// False when git could not list the commits, so the list above may be missing some.
+    public var commitsKnown = true
 
-    /// Everything that would be lost was listed: the diff could be read and was not cut.
+    /// Everything that would be lost was listed: the diff and the commits could be read and were not cut.
     public var fullyShown: Bool {
+        guard commitsKnown, commits.count <= 10 else { return false }
         guard case .summary(let summary) = diff else { return worktree == nil }
         return !summary.truncated
     }
@@ -287,10 +303,12 @@ public struct DiscardPlan: Sendable, Equatable {
         case .unavailable(let reason):
             lines.append("  changes not shown: \(reason)")
         }
+        if !commitsKnown { lines.append("  commits on the branch could not be listed") }
         if !commits.isEmpty {
-            lines.append("  \(commits.count) commit\(commits.count == 1 ? "" : "s") on the branch, not on its base:")
+            let count = commits.count > 10 ? "more than 10 commits" : "\(commits.count) commit\(commits.count == 1 ? "" : "s")"
+            lines.append("  \(count) on the branch, not on its base:")
             for commit in commits.prefix(10) { lines.append("    " + commit) }
-            if commits.count > 10 { lines.append("    … and \(commits.count - 10) more") }
+            if commits.count > 10 { lines.append("    … more commits not listed; pass --yes to confirm") }
         }
         return lines
     }

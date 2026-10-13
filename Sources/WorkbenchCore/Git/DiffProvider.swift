@@ -63,7 +63,7 @@ public struct DiffProvider: Sendable {
 
     /// `limit` caps the file list for display; a caller that must find one file passes `Int.max`.
     public func summary(
-        worktree: URL, base: String, limit: Int = DiffProvider.fileLimit
+        worktree: URL, base: String, limit: Int = DiffProvider.fileLimit, includeIgnored: Bool = false
     ) async throws -> DiffSummary {
         try requireDirectory(worktree)
 
@@ -82,6 +82,14 @@ public struct DiffProvider: Sendable {
             ["ls-files", "--others", "--exclude-standard", "-z"], in: worktree)
         for path in untracked.stdout.split(separator: "\0").map(String.init) {
             files.append(try untrackedChange(path, in: worktree))
+        }
+        // Discard removes ignored files too, so its confirmation must list them.
+        if includeIgnored {
+            let ignored = try await run(
+                ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], in: worktree)
+            for path in ignored.stdout.split(separator: "\0").map(String.init) {
+                files.append(try untrackedChange(path, in: worktree))
+            }
         }
 
         files.sort { $0.path < $1.path }

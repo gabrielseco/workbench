@@ -137,15 +137,15 @@ public struct WorktreeManager: Sendable {
         try await check(["branch", "-D", Self.branch(for: threadID)])
     }
 
-    /// One line per commit on the thread's branch that is not on `base`, newest first.
-    public func commits(threadID: String, since base: String) async -> [String] {
+    /// Up to eleven commits not on `base`, newest first; nil means inspection failed, not an empty history.
+    public func commits(threadID: String, since base: String) async -> [String]? {
         guard SafeNames.isThreadID(threadID), SafeNames.isBranchName(base) || base.range(
             of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil
-        else { return [] }
+        else { return nil }
         let result = try? await git.run(
-            ["log", "--oneline", "--no-decorate", "\(base)..refs/heads/\(Self.branch(for: threadID))"],
+            ["log", "--max-count=11", "--oneline", "--no-decorate", "\(base)..refs/heads/\(Self.branch(for: threadID))"],
             in: repoRoot)
-        guard let result, result.succeeded else { return [] }
+        guard let result, result.succeeded, result.stdout.utf8.count < GitRunner.outputLimit else { return nil }
         return Self.lines(result.stdout)
     }
 

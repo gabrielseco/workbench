@@ -223,4 +223,86 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         #expect(!DiscardPlan(id: "t", worktree: URL(fileURLWithPath: "/w"), branch: nil,
             diff: .unavailable(reason: "git failed"), commits: []).fullyShown)
     }
+
+    @Test func newWorkAfterThePlanWasShownIsNotDeletedByTheOldAnswer() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        let shown = try await fx.service.discardPlan(id: id)
+        try "written after the list was shown\n".write(
+            to: worktree.appendingPathComponent("late.txt"), atomically: true, encoding: .utf8)
+
+        await #expect(throws: ThreadServiceError.changedSinceShown) {
+            try await fx.service.discard(id: id, shown: shown)
+        }
+        #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent("late.txt").path))
+        #expect(try await branchExists(id, fx))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+
+        let again = try await fx.service.discardPlan(id: id)
+        try await fx.service.discard(id: id, shown: again)
+    }
+
+    @Test func commitsThatCouldNotBeListedAreNotFullyShown() {
+        let plan = DiscardPlan(
+            id: "t", worktree: nil, branch: "workbench/t", diff: .unavailable(reason: "gone"), commits: [],
+            commitsKnown: false)
+        #expect(!plan.fullyShown)
+        #expect(plan.render().contains { $0.contains("could not be listed") })
+    }
+
+    @Test func failedGitLogDoesNotMeanThereAreNoCommits() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await workedThread(fx)
+        let wrapper = fx.repo.appendingPathComponent("failing-git")
+        let script = """
+            #!/bin/sh
+            if [ "$1" = log ]; then exit 1; fi
+            exec "\(fx.git.executable.path)" "$@"
+            """
+        try script.write(to: wrapper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
+        let git = GitRunner(executable: wrapper, environment: fx.git.environment)
+        let service = ThreadService(project: fx.project, git: git)
+        let plan = try await service.discardPlan(id: id)
+        #expect(!plan.commitsKnown)
+        #expect(!plan.fullyShown)
+        if case .summary = plan.diff {} else { Issue.record("only commit inspection should fail") }
+        #expect(try await branchExists(id, fx))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+    }
+
+    @Test func ignoredFilesAreShownAndNewIgnoredFilesInvalidateConfirmation() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try "*.private\n".write(to: worktree.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        let ignored = worktree.appendingPathComponent("notes.private")
+        try "notes\n".write(to: ignored, atomically: true, encoding: .utf8)
+        let shown = try await fx.service.discardPlan(id: id)
+        #expect(shown.render().contains { $0.contains("notes.private") })
+        try "more notes\n".write(
+            to: worktree.appendingPathComponent("late.private"), atomically: true, encoding: .utf8)
+        await #expect(throws: ThreadServiceError.changedSinceShown) {
+            try await fx.service.discard(id: id, shown: shown)
+        }
+        #expect(FileManager.default.fileExists(atPath: ignored.path))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+    }
+
+    @Test func moreThanTenCommitsRequireExplicitYes() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        for index in 1...11 {
+            let result = try await fx.git.run(["commit", "--allow-empty", "-q", "-m", "extra \(index)"], in: worktree)
+            #expect(result.succeeded)
+        }
+        let plan = try await fx.service.discardPlan(id: id)
+        #expect(plan.commits.count == 11)
+        #expect(!plan.fullyShown)
+        #expect(plan.render().contains { $0.contains("more commits not listed") })
+        let refused = try await cli(["discard", id], in: fx)
+        #expect(refused.exit?.termination == .exited(1))
+        #expect(try await branchExists(id, fx))
+        let confirmed = try await cli(["discard", id, "--yes"], in: fx)
+        #expect(confirmed.exit?.termination == .exited(0))
+    }
 }

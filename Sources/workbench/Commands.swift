@@ -354,7 +354,7 @@ enum Commands {
         case .refused:
             throw CLIError.message("not discarding: there is no terminal to ask on. Pass --yes to confirm.")
         }
-        try await ctx.service.discard(id: id)
+        try await ctx.service.discard(id: id, shown: plan)
         out("discarded \(id); the log is kept (`workbench log \(id)`)")
     }
 
