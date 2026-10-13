@@ -305,4 +305,25 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         let confirmed = try await cli(["discard", id, "--yes"], in: fx)
         #expect(confirmed.exit?.termination == .exited(0))
     }
+
+    @Test func stagedWorkHiddenByTheWorkingCopyIsListedAndRevalidated() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        let file = worktree.appendingPathComponent("a.txt")
+        try "staged work\n".write(to: file, atomically: true, encoding: .utf8)
+        #expect(try await fx.git.run(["add", "a.txt"], in: worktree).succeeded)
+        try "one\n".write(to: file, atomically: true, encoding: .utf8)
+        let shown = try await fx.service.discardPlan(id: id)
+        #expect(shown.render().contains { $0.contains("a.txt") && $0.contains("(staged)") })
+        try "different staged work\n".write(to: file, atomically: true, encoding: .utf8)
+        #expect(try await fx.git.run(["add", "a.txt"], in: worktree).succeeded)
+        try "one\n".write(to: file, atomically: true, encoding: .utf8)
+        await #expect(throws: ThreadServiceError.changedSinceShown) {
+            try await fx.service.discard(id: id, shown: shown)
+        }
+        #expect(try await branchExists(id, fx))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+        let staged = try await fx.git.run(["show", ":a.txt"], in: worktree)
+        #expect(staged.stdout == "different staged work\n")
+    }
 }

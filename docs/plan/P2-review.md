@@ -81,9 +81,11 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    terminal and no `--yes` it refuses). Closes an open turn or check, removes the worktree and the
    `workbench/<id>` branch, then records `review.decision: discarded`. The decision is written last, so a
    failure partway leaves the thread active and a second `discard` finishes. Refused while a runner is
-   live. Ignored files are included because removal deletes them too. A changed list after confirmation
+   live. Ignored files and the staged index are included because removal deletes them too. A changed list after confirmation
    refuses deletion and asks the user to retry. Failed inspection or more than ten commits requires
-   `--yes`; commit inspection is bounded to eleven entries. `abandon` stays: it keeps the branch.
+   `--yes`; commit inspection is bounded to eleven entries. Untracked and ignored line counting reads
+   at most 1 MiB per regular file and never follows symlinks; other files have unknown counts.
+   `abandon` stays: it keeps the branch.
 8. **Denied-tool summary.** Aggregate from the log, link to the raw event.
 
 ## Acceptance criteria

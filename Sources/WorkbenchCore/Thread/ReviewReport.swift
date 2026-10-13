@@ -125,6 +125,7 @@ public struct ReviewReport: Sendable, Equatable {
         } else {
             text += "  +\(file.additions ?? 0) −\(file.deletions ?? 0)"
         }
+        if file.isStaged { text += "  (staged)" }
         return text
     }
 
@@ -191,7 +192,8 @@ public struct ReviewLoader: Sendable {
         do {
             return .summary(
                 try await DiffProvider(git: git).summary(
-                    worktree: manager.path(for: id), base: base, limit: limit, includeIgnored: includeIgnored))
+                    worktree: manager.path(for: id), base: base, limit: limit,
+                    includeIgnored: includeIgnored, includeStaged: includeIgnored))
         } catch {
             return .unavailable(reason: "\(error)")
         }
