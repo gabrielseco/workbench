@@ -232,7 +232,8 @@ enum Commands {
 
         var printed = 0
         var contents = try EventLogReader.read(at: url)
-        let startedWithOpenTurn = contents.openTurn != nil
+        // Already in the middle of a turn or of its check: follow until that ends.
+        let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil
         for event in contents.events {
             show(event)
             printed += 1

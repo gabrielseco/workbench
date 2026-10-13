@@ -76,8 +76,9 @@ struct CheckRunner {
         case .signaled(let s)?: signal = s
         case .lost?, nil: break
         }
+        let result = Self.finalResult(Self.classify(outcome.exit), error: outcome.error)
         let report = CheckReport(
-            turn: turn, command: command, result: Self.classify(outcome.exit), exitCode: code, signal: signal,
+            turn: turn, command: command, result: result, exitCode: code, signal: signal,
             durationMs: outcome.exit?.durationMs ?? Int(Date().timeIntervalSince(started) * 1000),
             outputRef: Project.checkOutputRef(turn: turn), outputTruncated: outcome.truncated)
 
@@ -101,6 +102,11 @@ struct CheckRunner {
     }
 
     // MARK: Classification (pure, tested directly)
+
+    /// A command that exited 0 but whose output could not be kept has no evidence behind it: not a pass.
+    static func finalResult(_ classified: CheckResult, error: String?) -> CheckResult {
+        classified == .passed && error != nil ? .failed : classified
+    }
 
     static func classify(_ exit: ProcessExit?) -> CheckResult {
         guard let exit else { return .failed }
@@ -168,9 +174,9 @@ struct CheckRunner {
             switch event {
             case .started: break
             case .line(let line): sink.write(line)
-            case .oversizedLine(let preview, _):
-                // A single line over the limit: the runner kept only its start.
-                sink.write(preview)
+            case .oversizedLine(let preview, let total):
+                // A single line over the limit: the runner kept only its start, so say how much was cut.
+                sink.write("\(preview)… [line of \(total) bytes, first \(preview.utf8.count) kept]")
                 sink.truncated = true
             case .exited(let exit):
                 outcome.exit = exit
