@@ -167,24 +167,47 @@ public actor ThreadRunner {
         // What to say this turn.
         let anySuccess = await anyTurnSucceeded()
         let lastTurn = await log.lastTurn
-        let prompt: String
+        var prompt = ""
+        var builtFromGoal = false
         if let feedback = options.feedback {
             guard lastTurn > 0 else { throw RunnerError.feedbackWithoutPriorTurn }
             try await log.append(.threadNote, data: ["text": .string(feedback)])
             prompt = PromptBuilder.followUpPrompt(feedback: feedback)
         } else {
             if anySuccess { throw RunnerError.feedbackRequired }
-            prompt = PromptBuilder.firstPrompt(goal: goal, checkCommand: config.checkCommand)
+            builtFromGoal = true
         }
 
         // The worktree.
         var worktree: URL
+        var baseCommit: String?
         if worktreeManager.exists(threadID) {
             worktree = worktreeManager.path(for: threadID)
+            baseCommit = await recordedBaseCommit(goal: goal)
         } else {
-            worktree = try await worktreeManager.create(
-                threadID: threadID, base: goal.base, allowDirty: options.allowDirty
-            ).path
+            let created = try await worktreeManager.create(
+                threadID: threadID, base: goal.base, allowDirty: options.allowDirty)
+            worktree = created.path
+            baseCommit = created.baseCommit
+            try await log.append(
+                .worktreeCreated,
+                data: [
+                    "path": .string(created.path.path), "branch": .string(created.branch),
+                    "base_commit": .string(created.baseCommit),
+                ])
+        }
+
+        // The prompt built from the goal carries the project's instructions as they were at the base
+        // commit: not the main checkout, and not the worktree, which the run may already have edited.
+        var instructions: JSONValue?
+        if builtFromGoal {
+            var loaded: ProjectInstructions?
+            if config.projectInstructions, let baseCommit {
+                loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: baseCommit)
+            }
+            prompt = PromptBuilder.firstPrompt(
+                goal: goal, checkCommand: config.checkCommand, instructions: loaded)
+            instructions = loaded?.eventData ?? .null
         }
 
         // The session: decided before spawning and written down first (spike S4).
@@ -204,7 +227,8 @@ public actor ThreadRunner {
             let turn = await log.lastTurn + 1
             let result = try await executeTurn(
                 turn: turn, resume: resume, sessionID: sessionID, prompt: prompt, config: config, goal: goal,
-                claude: claude, worktree: worktree, log: log, store: store, options: options)
+                claude: claude, worktree: worktree, instructions: instructions, log: log, store: store,
+                options: options)
             report = result.report
             // An unconfirmed session may not exist at all, in which case `--resume` fails at once with no
             // output. Then, and only then, try creating it.
@@ -217,6 +241,22 @@ public actor ThreadRunner {
 
     private var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
 
+    /// The commit the worktree was cut from: what `worktree.created` recorded, or for a thread that
+    /// predates that event the point its branch left `base`.
+    private func recordedBaseCommit(goal: Goal) async -> String? {
+        if let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
+            let event = contents.events.last(where: { $0.kind == .worktreeCreated }),
+            let sha = event.data["base_commit"]?.stringValue
+        {
+            return sha
+        }
+        let result = try? await git.run(
+            ["merge-base", WorktreeManager.branch(for: threadID), goal.base], in: project.root)
+        guard let result, result.succeeded else { return nil }
+        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sha.isEmpty ? nil : sha
+    }
+
     // MARK: One turn
 
     private struct TurnOutcome {
@@ -226,7 +266,7 @@ public actor ThreadRunner {
 
     private func executeTurn(
         turn: Int, resume: Bool, sessionID: String, prompt: String, config: Config, goal: Goal, claude: URL,
-        worktree: URL, log: EventLogWriter, store: ThreadStore, options: RunOptions
+        worktree: URL, instructions: JSONValue?, log: EventLogWriter, store: ThreadStore, options: RunOptions
     ) async throws -> TurnOutcome {
         let promptURL = project.promptURL(threadID, turn: turn)
         try FileManager.default.createDirectory(
@@ -245,12 +285,14 @@ public actor ThreadRunner {
             shownArgs[i + 1] = "<rules>"
         }
         let startedData: (Int32?) -> JSONValue = { pid in
-            [
+            var data: [String: JSONValue] = [
                 "session_id": .string(sessionID), "resume": .bool(resume),
                 "pid": pid.map { .int(Int($0)) } ?? .null,
                 "argv": .array(([claude.path] + shownArgs).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
+            if let instructions { data["instructions"] = instructions }
+            return .object(data)
         }
 
         var spawn = SpawnRequest(

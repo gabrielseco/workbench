@@ -45,7 +45,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them
   and the status is `draft` again.
 - **Out of scope is part of the contract.** The runner puts it in the prompt and the review shows it.
-- **The goal is the only input.** The runner builds the first prompt from the goal and nothing else.
+- **The inputs are the goal and the project's instructions file.** The runner builds the first prompt from
+  the goal, and puts the repository's `AGENTS.md` (else `CLAUDE.md`) after "Out of scope" under
+  `## Project instructions`. Nothing else installed on the machine reaches a run. See "Project
+  instructions" below.
 
 ## Parsing details
 
@@ -83,6 +86,7 @@ default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
 # model = "haiku"                       # --model for every turn; unset = the CLI default
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
+# project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
 
 [tools]
@@ -118,3 +122,30 @@ Notes:
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3
   (18 of 18). We do not re-implement any of that; the worktree and the absence of credentials cover the rest.
+
+## Project instructions
+
+Safe mode keeps `claude` from reading `CLAUDE.md`, so Workbench reads the project's instructions file itself
+and includes it in the first prompt. Implemented in `Sources/WorkbenchCore/Thread/ProjectInstructions.swift`.
+
+- **Which file.** `AGENTS.md` at the top level of the repository, else `CLAUDE.md`. The first that is a
+  regular file wins; a symlink, a submodule or a directory counts as absent. Neither: no section.
+- **Read from the base commit, through git** (`git ls-tree`, `git cat-file`), never the filesystem. The main
+  checkout and the worktree, which the run may already have edited, cannot change it. The commit is the one
+  the worktree was cut from, recorded in the `worktree.created` event (older threads fall back to the
+  merge-base of the thread branch and `base`). At most 64 KiB is read from a file.
+- **Imports.** A line that is exactly `@<relative path>` is replaced by that file's content. Relative paths
+  resolve from the importing file's directory and must stay inside the repository. Absolute paths, `..`
+  escapes, symlinks, missing files, directories, a file already included and a depth over 3 are left as
+  written and listed in `skipped`. Lines inside fenced code blocks are not expanded.
+- **Normalised.** A leading BOM is dropped, CRLF becomes LF, invalid UTF-8 is replaced.
+- **Size.** At most 16384 bytes including the marker: cut at a line boundary, with a final line
+  `[project instructions truncated at 16384 bytes]`.
+- **Where.** After "Out of scope" and before "Checking your work", under `## Project instructions`, introduced
+  by a fixed sentence that says Workbench does the pushing and opening of pull requests after review, so the
+  run commits in its worktree and stops.
+- **When.** In every prompt built from the goal: the first turn, and a first turn that did not succeed and is
+  run again. A feedback turn resumes the session and does not repeat it.
+- **Recorded.** Such a turn's `turn.started` has `instructions` (see the event log spec). The text itself is
+  in `prompts/turn-N.md`.
+- **Opt out.** `project_instructions = false` in `config.toml`.

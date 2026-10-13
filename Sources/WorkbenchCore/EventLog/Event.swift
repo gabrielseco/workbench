@@ -22,6 +22,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let turnEnded: EventKind = "turn.ended"
     public static let threadNote: EventKind = "thread.note"
     public static let reviewDecision: EventKind = "review.decision"
+    public static let worktreeCreated: EventKind = "worktree.created"
     public static let proofAdded: EventKind = "proof.added"
 }
 

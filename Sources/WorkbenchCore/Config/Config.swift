@@ -23,6 +23,9 @@ public struct Config: Sendable, Equatable {
     /// machine, and in the task 9 measurement it cut a two-call run from about 180k to 2k tokens of
     /// context. Turn it off to let a project's CLAUDE.md and your plugins in.
     public var safeMode: Bool
+    /// Put the repository's `AGENTS.md` (else `CLAUDE.md`) in the first prompt of a thread. Safe mode keeps
+    /// `claude` itself from reading it, so Workbench does.
+    public var projectInstructions: Bool
     /// `--model` for every turn. Unset means the CLI's own default; note `--restricted` ignores the user's
     /// settings files, so that default is not the one chosen in an interactive session.
     public var model: String?
@@ -67,6 +70,7 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "default_budget_usd", "env_pass", "model", "safe_mode",
+            "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -124,6 +128,17 @@ public struct Config: Sendable, Equatable {
                 safeMode = value
             } else {
                 fail(.wrongType, entry.line, "'safe_mode' must be true or false, found \(entry.value.typeName)")
+            }
+        }
+
+        var projectInstructions = true
+        if let entry = document.tables[""]?.entries["project_instructions"] {
+            if case .bool(let value) = entry.value {
+                projectInstructions = value
+            } else {
+                fail(
+                    .wrongType, entry.line,
+                    "'project_instructions' must be true or false, found \(entry.value.typeName)")
             }
         }
 
@@ -194,7 +209,8 @@ public struct Config: Sendable, Equatable {
 
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
         return Config(
-            claudePath: claudePath, safeMode: safeMode, model: model, checkCommand: checkCommand,
+            claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
+            model: model, checkCommand: checkCommand,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
     }
@@ -230,6 +246,7 @@ public struct Config: Sendable, Equatable {
 
         # claude_path = "claude"           # name on PATH, or an absolute path
         # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
+        # project_instructions = true     # put AGENTS.md (else CLAUDE.md) in the first prompt (default)
         # model = "haiku"                  # --model for every turn; unset = the CLI default
         # check_command = "scripts/check.sh"
         # default_budget_usd = 5.00        # used when drafting a goal
