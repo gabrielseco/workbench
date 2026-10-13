@@ -314,10 +314,11 @@ enum Commands {
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
-        guard let id = try? ctx.threadIDForViewing(named) else {
+        if named == nil, ctx.store.threadIDs().isEmpty {
             out("no threads yet. Start one: workbench goal new <name>")
             return
         }
+        let id = try ctx.threadIDForViewing(named)
         let loader = ReviewLoader(project: ctx.project, git: ctx.git)
         if let patch {
             guard let shown = try await loader.patch(id: id, path: patch) else {

@@ -68,8 +68,14 @@ public struct ReviewReport: Sendable, Equatable {
                 lines.append("  too many files, showing \(summary.files.count) of \(summary.totalFiles)")
             }
             if !summary.files.isEmpty {
+                // Line counts are only known for the listed files, so say so when the list was cut.
                 let noun = summary.totalFiles == 1 ? "file" : "files"
-                lines.append("  \(summary.totalFiles) \(noun)  +\(summary.additions) −\(summary.deletions)")
+                let counts = "+\(summary.additions) −\(summary.deletions)"
+                if summary.truncated {
+                    lines.append("  \(summary.totalFiles) \(noun); \(counts) in the \(summary.files.count) listed")
+                } else {
+                    lines.append("  \(summary.totalFiles) \(noun)  \(counts)")
+                }
             }
         case .unavailable(let reason):
             lines.append("Diff unavailable: \(reason)")

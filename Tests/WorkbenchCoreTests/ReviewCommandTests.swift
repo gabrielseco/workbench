@@ -124,6 +124,7 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         #expect(review.text.contains("blob.bin  binary"), "binary file is one line")
         #expect(review.text.contains("too many files, showing \(DiffProvider.fileLimit) of \(DiffProvider.fileLimit + 6)"))
         #expect(review.lines.count < DiffProvider.fileLimit + 40)
+        #expect(review.text.contains("506 files; +499 −0 in the 500 listed"), "totals say what they cover")
     }
 
     @Test func patchPrintsOneFileAndFallsBackForBinaryLargeAndUnknown() async throws {
@@ -144,6 +145,8 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         #expect(big.text.contains("patch too large"), "\(big.text.prefix(200))")
         let missing = try await cli(["review", "--patch", "nope.txt"], in: fx)
         #expect(missing.exit?.termination == .exited(1))
+        let unknown = try await cli(["review", "no-such-thread"], in: fx)
+        #expect(unknown.exit?.termination == .exited(1), "a typo is an error: \(unknown.text)")
     }
 
     @Test func aStatusWithNothingToDecideSaysWhy() async throws {
