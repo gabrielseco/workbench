@@ -326,4 +326,27 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         let staged = try await fx.git.run(["show", ":a.txt"], in: worktree)
         #expect(staged.stdout == "different staged work\n")
     }
+
+    @Test func sameSizeAndSameCountEditsInvalidateConfirmation() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        let loose = worktree.appendingPathComponent("loose.txt")
+        let shown = try await fx.service.discardPlan(id: id)
+        try "newer\n".write(to: loose, atomically: false, encoding: .utf8)
+        await #expect(throws: ThreadServiceError.changedSinceShown) {
+            try await fx.service.discard(id: id, shown: shown)
+        }
+        #expect(try String(contentsOf: loose, encoding: .utf8) == "newer\n")
+
+        let binary = worktree.appendingPathComponent("b.bin")
+        try Data([0, 1, 2]).write(to: binary)
+        let binaryShown = try await fx.service.discardPlan(id: id)
+        try Data([0, 3, 4]).write(to: binary)
+        await #expect(throws: ThreadServiceError.changedSinceShown) {
+            try await fx.service.discard(id: id, shown: binaryShown)
+        }
+        #expect(try Data(contentsOf: binary) == Data([0, 3, 4]))
+        #expect(try await branchExists(id, fx))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+    }
 }

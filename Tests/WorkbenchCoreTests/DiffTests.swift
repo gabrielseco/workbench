@@ -173,7 +173,10 @@ private struct DiffRepo {
         #expect(!exact.isBinary)
         #expect(large.additions == nil)
         #expect(large.deletions == nil)
-        #expect(large.isBinary)
+        #expect(!large.isBinary)
+        guard case .tooLarge(let bytes) = try await repo.provider.patch(for: large, worktree: repo.root, base: base)
+        else { Issue.record("expected tooLarge for over-limit text"); return }
+        #expect(bytes > DiffProvider.patchLimit)
     }
 
     @Test func patchHasHunksForTrackedAndUntrackedFiles() async throws {

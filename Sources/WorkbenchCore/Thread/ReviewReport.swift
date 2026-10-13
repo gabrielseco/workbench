@@ -122,6 +122,8 @@ public struct ReviewReport: Sendable, Equatable {
         if let old = file.oldPath { text = "\(mark)  \(old) → \(file.path)" }
         if file.isBinary {
             text += "  binary"
+        } else if file.additions == nil || file.deletions == nil {
+            text += "  counts unavailable"
         } else {
             text += "  +\(file.additions ?? 0) −\(file.deletions ?? 0)"
         }

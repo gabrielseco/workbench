@@ -27,6 +27,7 @@ public struct DiffSummary: Sendable, Equatable {
     public var truncated: Bool
     public var totalFiles: Int
     public var indexFingerprint: String?
+    public var workingFingerprint: [String: String]?
 
     public var additions: Int { files.reduce(0) { $0 + ($1.additions ?? 0) } }
     public var deletions: Int { files.reduce(0) { $0 + ($1.deletions ?? 0) } }
@@ -117,8 +118,18 @@ public struct DiffProvider: Sendable {
         files.sort { $0.path < $1.path }
         let total = files.count
         if files.count > limit { files = Array(files.prefix(limit)) }
+        var workingFingerprint: [String: String]?
+        if includeIgnored {
+            var stamps: [String: String] = [:]
+            for file in files {
+                stamps[file.path] = Self.fileStamp(worktree.appendingPathComponent(file.path))
+                if let old = file.oldPath { stamps[old] = Self.fileStamp(worktree.appendingPathComponent(old)) }
+            }
+            workingFingerprint = stamps
+        }
         return DiffSummary(
-            base: base, files: files, truncated: total > files.count, totalFiles: total, indexFingerprint: indexFingerprint)
+            base: base, files: files, truncated: total > files.count, totalFiles: total,
+            indexFingerprint: indexFingerprint, workingFingerprint: workingFingerprint)
     }
 
     public func patch(for file: FileChange, worktree: URL, base: String) async throws -> FilePatch {
@@ -148,23 +159,33 @@ public struct DiffProvider: Sendable {
 
     // MARK: Internals
 
+    private static func fileStamp(_ url: URL) -> String {
+        var metadata = stat()
+        guard lstat(url.path, &metadata) == 0 else { return "missing:\(errno)" }
+        // ctime catches same-size edits even when an editor preserves mtime; lstat never follows a link.
+        return "\(metadata.st_dev):\(metadata.st_ino):\(metadata.st_mode):\(metadata.st_size):"
+            + "\(metadata.st_mtimespec.tv_sec):\(metadata.st_mtimespec.tv_nsec):"
+            + "\(metadata.st_ctimespec.tv_sec):\(metadata.st_ctimespec.tv_nsec)"
+    }
+
     private func untrackedChange(_ path: String, in worktree: URL) throws -> FileChange {
         let url = worktree.appendingPathComponent(path)
         let unknown = FileChange(
             path: path, status: .added, additions: nil, deletions: nil, isBinary: true, isUntracked: true)
+        let uncounted = FileChange(
+            path: path, status: .added, additions: nil, deletions: nil, isBinary: false, isUntracked: true)
         var metadata = stat()
         guard lstat(url.path, &metadata) == 0,
-            metadata.st_mode & S_IFMT == S_IFREG,
-            metadata.st_size <= Self.untrackedCountLimit
+            metadata.st_mode & S_IFMT == S_IFREG
         else { return unknown }
         // A replaced path must not make inspection follow a symlink or block opening a FIFO.
         let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { return unknown }
         defer { Darwin.close(fd) }
         guard fstat(fd, &metadata) == 0,
-            metadata.st_mode & S_IFMT == S_IFREG,
-            metadata.st_size <= Self.untrackedCountLimit
+            metadata.st_mode & S_IFMT == S_IFREG
         else { return unknown }
+        let oversized = metadata.st_size > Self.untrackedCountLimit
         var lines = 0
         var bytes = 0
         var last: UInt8 = 0x0A
@@ -173,13 +194,13 @@ public struct DiffProvider: Sendable {
             let count = Darwin.read(fd, &buffer, min(buffer.count, Self.untrackedCountLimit + 1 - bytes))
             if count < 0 {
                 if errno == EINTR { continue }
-                return unknown
+                return uncounted
             }
             if count == 0 { break }
             bytes += count
-            guard bytes <= Self.untrackedCountLimit else { return unknown }
             let chunk = buffer.prefix(count)
             if chunk.contains(0) { return unknown }
+            guard !oversized, bytes <= Self.untrackedCountLimit else { return uncounted }
             lines += chunk.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
             last = chunk[chunk.index(before: chunk.endIndex)]
         }

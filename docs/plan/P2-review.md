@@ -85,6 +85,9 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    refuses deletion and asks the user to retry. Failed inspection or more than ten commits requires
    `--yes`; commit inspection is bounded to eleven entries. Untracked and ignored line counting reads
    at most 1 MiB per regular file and never follows symlinks; other files have unknown counts.
+   Preview comparison includes index blob identities and working-file identity, size, modification and
+   change times, so same-size text and binary edits also invalidate an old confirmation. Large text
+   retains the size fallback for patches rather than being classified as binary.
    `abandon` stays: it keeps the branch.
 8. **Denied-tool summary.** Aggregate from the log, link to the raw event.
 
