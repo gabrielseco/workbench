@@ -308,6 +308,27 @@ enum Commands {
         if FileManager.default.fileExists(atPath: worktree.path) { out("worktree:  \(worktree.path)") }
     }
 
+    static func review(_ args: [String]) async throws {
+        var a = Arguments(args)
+        let patch = try a.value("--patch")
+        let named = a.positional()
+        try a.requireEmpty()
+        let ctx = try await Context.load()
+        guard let id = try? ctx.threadIDForViewing(named) else {
+            out("no threads yet. Start one: workbench goal new <name>")
+            return
+        }
+        let loader = ReviewLoader(project: ctx.project, git: ctx.git)
+        if let patch {
+            guard let shown = try await loader.patch(id: id, path: patch) else {
+                throw CLIError.message("'\(patch)' is not in the diff of \(id) (see `workbench review`)")
+            }
+            out(ReviewReport.render(shown))
+            return
+        }
+        for line in await loader.load(id: id).render() { out(line) }
+    }
+
     static func abandon(_ args: [String]) async throws {
         var a = Arguments(args)
         let force = a.flag("--force")
