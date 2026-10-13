@@ -1,0 +1,58 @@
+# SwiftLint owns code-smell rules; layout is not enforced yet.
+included:
+  - Sources
+  - Tests
+  - Package.swift
+
+strict: true   # warnings fail the lint
+
+disabled_rules:
+  - trailing_comma                    # swift-format adds trailing commas in multi-line literals
+  - optional_data_string_conversion   # lossy String(decoding:as:) is intended for logs/diffs with odd bytes
+
+opt_in_rules:
+  - empty_count
+  - first_where
+  - contains_over_filter_count
+  - contains_over_first_not_nil
+  - sorted_first_last
+  - redundant_nil_coalescing
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - implicit_return
+  - force_unwrapping
+
+line_length:
+  warning: 130
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+# The metric rules below are set just above what the code is today. The parsers (`GoalFile`,
+# `TOMLSubset`, `Config.parse`) and `ThreadRunner` are long by nature and are not being refactored to please
+# a linter; the numbers stop them growing. Lower them as the code is split.
+cyclomatic_complexity:
+  warning: 32
+  error: 45
+function_body_length:
+  warning: 140
+  error: 200
+function_parameter_count:
+  warning: 12
+  error: 16
+type_body_length:
+  warning: 340
+  error: 450
+file_length:
+  warning: 600
+  error: 800
+
+identifier_name:
+  min_length: 1            # short closure/loop names (p, e, t) are idiomatic here
+  excluded: [id]
+
+nesting:
+  type_level: 3            # Decodable structs mirror the GraphQL query's nesting
+
+force_unwrapping:
+  severity: warning

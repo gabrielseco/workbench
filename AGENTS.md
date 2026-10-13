@@ -11,7 +11,8 @@ phase's plan.
 ## Commands
 
 ```bash
-scripts/check.sh                         # what CI runs, minus the soak: banned APIs, build, tests
+scripts/check.sh                         # what CI runs, minus the soak: banned APIs, SwiftLint, build, tests
+swiftlint lint --quiet                   # just the lint (brew install swiftlint); config in .swiftlint.yml
 WORKBENCH_SOAK=1 swift test --filter SoakTests   # the soak, CI runs it as its own step
 swift build                              # builds `workbench` and the `fake-claude` test double
 scripts/soak-real.py                     # real `claude` runs; costs money, run by hand

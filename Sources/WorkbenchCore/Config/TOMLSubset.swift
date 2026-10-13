@@ -124,10 +124,12 @@ enum TOMLSubset {
 
             do {
                 let value = try parseValue(valueText)
-                if document.tables[currentTable]!.entries[key] != nil {
+                var table = document.tables[currentTable] ?? TOMLTable(line: number)
+                if table.entries[key] != nil {
                     fail(.duplicateKey, number, "key '\(key)' appears more than once")
                 } else {
-                    document.tables[currentTable]!.entries[key] = TOMLEntry(value: value, line: number)
+                    table.entries[key] = TOMLEntry(value: value, line: number)
+                    document.tables[currentTable] = table
                 }
             } catch let error as ValueError {
                 fail(error.code, number, "\(key): \(error.message)")
@@ -162,9 +164,13 @@ enum TOMLSubset {
         for ch in line {
             if let q = quote {
                 result.append(ch)
-                if q == "\"" && escaped { escaped = false }
-                else if q == "\"" && ch == "\\" { escaped = true }
-                else if ch == q { quote = nil }
+                if q == "\"" && escaped {
+                    escaped = false
+                } else if q == "\"" && ch == "\\" {
+                    escaped = true
+                } else if ch == q {
+                    quote = nil
+                }
             } else if ch == "#" {
                 return result
             } else {
@@ -183,9 +189,13 @@ enum TOMLSubset {
         var escaped = false
         for ch in text {
             if let q = quote {
-                if q == "\"" && escaped { escaped = false }
-                else if q == "\"" && ch == "\\" { escaped = true }
-                else if ch == q { quote = nil }
+                if q == "\"" && escaped {
+                    escaped = false
+                } else if q == "\"" && ch == "\\" {
+                    escaped = true
+                } else if ch == q {
+                    quote = nil
+                }
             } else if ch == "\"" || ch == "'" {
                 quote = ch
             } else if ch == "[" {
@@ -317,8 +327,7 @@ enum TOMLSubset {
                 return .int(n)
             }
             if token.range(of: #"^-?[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil,
-                let d = Decimal(string: token)
-            {
+                let d = Decimal(string: token) {
                 return .number(d)
             }
             throw ValueError(code: .syntax, message: "cannot read value '\(token)' (strings must be quoted)")

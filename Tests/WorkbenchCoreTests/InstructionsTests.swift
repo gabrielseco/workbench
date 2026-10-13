@@ -242,8 +242,7 @@ private struct InstructionsRepo {
 
 @Suite struct InstructionsInPromptTests {
     private func fixture(config: String = "", agents: String? = "Always run the checks.\n") async throws
-        -> (RunnerFixture, String)
-    {
+        -> (RunnerFixture, String) {
         let fx = try await RunnerFixture(extraConfig: config)
         if let agents {
             try agents.write(to: fx.repo.appendingPathComponent("AGENTS.md"), atomically: true, encoding: .utf8)

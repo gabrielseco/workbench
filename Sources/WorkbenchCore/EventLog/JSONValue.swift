@@ -28,13 +28,21 @@ public enum JSONValue: Sendable, Equatable {
 extension JSONValue: Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null }
-        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
-        else if let v = try? c.decode(Int.self) { self = .int(v) }
-        else if let v = try? c.decode(Double.self) { self = .double(v) }
-        else if let v = try? c.decode(String.self) { self = .string(v) }
-        else if let v = try? c.decode([JSONValue].self) { self = .array(v) }
-        else { self = .object(try c.decode([String: JSONValue].self)) }
+        if c.decodeNil() {
+            self = .null
+        } else if let v = try? c.decode(Bool.self) {
+            self = .bool(v)
+        } else if let v = try? c.decode(Int.self) {
+            self = .int(v)
+        } else if let v = try? c.decode(Double.self) {
+            self = .double(v)
+        } else if let v = try? c.decode(String.self) {
+            self = .string(v)
+        } else if let v = try? c.decode([JSONValue].self) {
+            self = .array(v)
+        } else {
+            self = .object(try c.decode([String: JSONValue].self))
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -53,8 +61,7 @@ extension JSONValue: Codable {
 
 extension JSONValue: ExpressibleByNilLiteral, ExpressibleByBooleanLiteral, ExpressibleByIntegerLiteral,
     ExpressibleByFloatLiteral, ExpressibleByStringLiteral, ExpressibleByArrayLiteral,
-    ExpressibleByDictionaryLiteral
-{
+    ExpressibleByDictionaryLiteral {
     public init(nilLiteral: ()) { self = .null }
     public init(booleanLiteral value: Bool) { self = .bool(value) }
     public init(integerLiteral value: Int) { self = .int(value) }

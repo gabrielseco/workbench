@@ -17,6 +17,10 @@ jobs:
           swift --version
       - name: Banned process APIs
         run: scripts/check-banned-apis.sh
+      - name: SwiftLint
+        run: |
+          command -v swiftlint || brew install swiftlint
+          swiftlint lint --quiet
       - name: Build
         run: swift build
       - name: Test

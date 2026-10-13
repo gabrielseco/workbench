@@ -81,8 +81,8 @@ public struct Config: Sendable, Equatable {
             }
             let known = name == "" ? rootKeys : toolKeys
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !known.contains(key) {
-                let where_ = name == "" ? "" : " in [\(name)]"
-                fail(.unknownKey, entry.line, "unknown key '\(key)'\(where_)")
+                let location = name == "" ? "" : " in [\(name)]"
+                fail(.unknownKey, entry.line, "unknown key '\(key)'\(location)")
             }
         }
 

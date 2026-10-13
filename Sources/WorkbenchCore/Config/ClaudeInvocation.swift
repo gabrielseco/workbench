@@ -96,8 +96,7 @@ public enum ExecutableResolver {
             let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent(name)
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: candidate.path, isDirectory: &isDir), !isDir.boolValue,
-                fm.isExecutableFile(atPath: candidate.path)
-            {
+                fm.isExecutableFile(atPath: candidate.path) {
                 return candidate
             }
         }

@@ -157,8 +157,7 @@ enum Commands {
                 out("turn \(turn) started\(pid.map { " (pid \($0))" } ?? ""), \(resume ? "resuming session" : "new session")")
             case .claudeLine(let line):
                 if let data = try? JSONDecoder().decode(JSONValue.self, from: Data(line.utf8)),
-                    let text = LogFormatter.describeClaude(data)
-                {
+                    let text = LogFormatter.describeClaude(data) {
                     out("  \(text)")
                 }
             case .turnEnded(let report):
@@ -266,12 +265,18 @@ enum Commands {
                 out("goal:      \(approval)")
                 out("base:      \(goal.base)   budget $\(goal.budgetUSD)/turn   timeout \(goal.turnTimeoutMin) min")
             } catch let error as GoalParseError {
-                out("goal:      not valid\n\(error.description.split(separator: "\n").map { "           \($0)" }.joined(separator: "\n"))")
+                let problems = error.description.split(separator: "\n").map { "           \($0)" }
+                out("goal:      not valid\n\(problems.joined(separator: "\n"))")
             }
         }
 
         let running = ctx.service.runnerPID(id: id) != nil
-        out("turns:     \(state.lastTurn)\(state.openTurn.map { "  (turn \($0) open\(running ? ", running" : ", NOT running: will be recorded as interrupted on next run"))" } ?? "")")
+        var turns = "turns:     \(state.lastTurn)"
+        if let open = state.openTurn {
+            let note = running ? "running" : "NOT running: will be recorded as interrupted on next run"
+            turns += "  (turn \(open) open, \(note))"
+        }
+        out(turns)
         if let result = state.lastResult { out("last turn: \(result)") }
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
