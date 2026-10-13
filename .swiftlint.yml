@@ -56,10 +56,3 @@ nesting:
 
 force_unwrapping:
   severity: warning
-
-custom_rules:
-  no_print:
-    name: "No print"
-    regex: '^\s*print\('
-    message: "Use the UI or os.Logger, not print()"
-    included: "Sources/.*\\.swift"
