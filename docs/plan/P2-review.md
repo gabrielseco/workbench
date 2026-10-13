@@ -26,8 +26,11 @@ After a turn ends, Workbench runs the configured `check_command` in the worktree
 turns: timeout, output cap, process group). The result is an event:
 
 ```json
-{"kind":"check.ran","data":{"command":"scripts/check.sh","exit":0,"duration_ms":93000,"output_ref":"checks/turn-2.log"}}
+{"kind":"check.ran","turn":2,"data":{"command":"scripts/check.sh","result":"passed","exit_code":0,"signal":null,"duration_ms":93000,"output_ref":"checks/turn-2.log","output_truncated":false}}
 ```
+
+A `check.started` is written first, so a runner that dies mid-check leaves something to recover
+(`docs/spec/event-log.md`, "Checks").
 
 Claude's claim "tests pass" is a hint; this is the evidence. The command comes from `config.toml`, not from
 the worktree, so Claude cannot edit its way to a pass.
@@ -57,7 +60,12 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 1. **Diff provider** (done: `Git/DiffProvider.swift`). Working tree against the base commit, so committed,
    staged and untracked work all show; file list with counts, patch per file on demand; rename and binary
    handling; size cap with a "too large" fallback.
-2. **Check runner.** Reuse `ProcessRunner`; artifacts stored under the thread.
+2. **Check runner** (done: `Thread/CheckRunner.swift`). After every turn that ended on its own (not
+   `stopped`, not `interrupted`) `ThreadRunner` runs `check_command` in the worktree through `ProcessRunner`,
+   with the turn's timeout and environment, and records `check.started` and `check.ran`. Output, both
+   streams in order and capped at 1 MiB, is kept in `checks/turn-N.log` under the thread. A stop during the
+   check is recorded as `stopped`, a check left open by a dead runner as `interrupted` on the next run.
+   `workbench log`, `run` and `status` show the result.
 3. **Review state.** `ThreadState.derive(from: events)` as one pure function, with `Review` and the decision
    events (`review.decision`, `thread.note`).
 4. **`workbench review|accept|send-back|discard`.**
@@ -69,14 +77,14 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 ## Acceptance criteria
 
 - [ ] After any turn that changed files, the review shows the same files `git status` shows in the worktree.
-- [ ] The check result is from Workbench's own run, with exit code and captured output.
+- [x] The check result is from Workbench's own run, with exit code and captured output.
 - [ ] Send back produces a turn whose first prompt contains the note and the check failure, and the session
       context carries over (verified by a real run).
 - [ ] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
 - [ ] Discard removes worktree and branch and leaves the log readable.
 - [ ] A turn that was `stopped` or `timed_out` still reviews, with its partial diff.
 - [ ] Big diffs and binary files fall back without hanging.
-- [ ] Killing the process during a check leaves an `interrupted` check, never a thread stuck running.
+- [x] Killing the process during a check leaves an `interrupted` check, never a thread stuck running.
 - [ ] After accept or discard the next thread can start; before, it is refused.
 
 ## Risks

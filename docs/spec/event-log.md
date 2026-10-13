@@ -28,6 +28,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `claude` | each stream-json line | the raw line, unmodified |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
+| `check.started` | before the project's check command starts | `command` |
+| `check.ran` | always, exactly once per `check.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
 | `proof.added` | evidence recorded (later) | `criterion`, `type`, `path` |
@@ -39,6 +41,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 2. `seq` is strictly increasing with no gaps, so truncation is detectable.
 3. `claude` lines are stored verbatim. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
+5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
+   synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
 
 ## Fields the runner writes
 
@@ -52,12 +56,44 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `thread.note` | `text`: the feedback that started a follow-up turn |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
+| `check.started` | `command`: `check_command` from the config, as written there. `turn` is the turn it follows |
+| `check.ran` | `command`, `result` (`passed`, `failed`, `timed_out`, `stopped`, `interrupted`), `exit_code`, `signal` (null when not applicable), `duration_ms`, `output_ref` (`checks/turn-N.log`, relative to the thread directory), `output_truncated`, and when present `escalated_to_kill`, `swept_processes`, `lost`, `error`, `synthetic`. A synthetic one has only `result`, `synthetic` and a null `exit_code` |
 | `review.decision` | `decision` (`accepted`, `discarded`, `abandoned`), `by` |
 
-`result` is derived from the `result` line and the exit, in this order: stopped or timed out by us, then a
+A turn's `result` is derived from the `result` line and the exit, in this order: stopped or timed out by us, then a
 signal is `failed`, no `result` line is `failed`, a budget error is `budget_exceeded`, a non-zero exit is
 `failed`, a success line is `succeeded`, anything else `failed`. Denied tool calls do **not** make a turn
 fail; they are counted in `permission_denials`.
+
+## Checks
+
+Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`, called by `ThreadRunner` after a turn.
+
+- **When.** After every turn that ends, except one that ended `stopped` or `interrupted`, when
+  `check_command` is set. With it unset no check events are written. A `--resume` attempt that failed at
+  once with no output and is retried by creating the session has no check of its own; the retry has.
+- **Which command.** `check_command` from `.workbench/config.toml`, never anything read from the worktree.
+  Its words are split on spaces and passed as arguments; no shell reads the command text. A first word
+  with a `/` is a path in the worktree (`scripts/check.sh`); a bare name is looked up in the absolute
+  entries of `PATH` only, so a file in the worktree cannot stand in for it.
+- **How.** Through `ProcessRunner`, like a turn: worktree as working directory, the same minimal
+  environment, stdin `/dev/null`, `turn_timeout_min` as the timeout, SIGTERM then SIGKILL, the process
+  tree swept. `ProcessRunner` reads stdout and stderr separately, so the command is started as
+  `/bin/sh -c 'exec "$@" 2>&1' sh <executable> <arguments>`: a fixed script that joins the two streams
+  and is replaced by the command.
+- **Output.** Stdout and stderr in the order written, in `checks/turn-N.log`, read line by line (bytes
+  that are not UTF-8 are replaced, and a last line without a newline gets one). At most 1 MiB is kept:
+  past it the file ends with the line `[output truncated at 1048576 bytes]`, `output_truncated` is true
+  and the command is still drained. One line longer than the limit is cut to its first 4096 bytes.
+- **`result`.** Stopped or timed out by us, then exit 0 is `passed`, anything else `failed`. A command
+  that cannot be found or started is `failed` with `error` and a null `exit_code`; the reason is also
+  written to the output file.
+- **Stop.** `workbench stop` during a check stops the command and records `stopped`. A stop that arrives
+  after the turn ended and before the check started means no check runs.
+- **Orphaned checks** are state, not damage. `recoverOrphanedCheck()` appends
+  `check.ran {result: "interrupted", synthetic: true}` for the open check, in the same place an orphaned
+  turn is recovered (the start of the next run, and `abandon`). The command it left running is found by
+  the orphan sweep. The check is not run again for that turn.
 
 ## Writer behaviour
 
@@ -74,6 +110,8 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
 - **Turn numbers** are 1, 2, 3 with no gaps. `turn.started` while a turn is open, `turn.ended` for a turn
   that is not the open one, and `claude` lines outside an open turn are all rejected on append and
   reported as problems on replay.
+- **Checks** follow the same rule: `check.started` while a check is open, and `check.ran` when the open
+  check is not that turn's (or none is open), are rejected on append and reported as problems on replay.
 - **Rejected appends consume no `seq`.**
 - **Invalid JSON from `claude`** is stored as `{"invalid_json": "<raw line>"}` with `kind: "claude"`, so a bad
   line is logged raw and the run continues.
