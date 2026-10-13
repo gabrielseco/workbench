@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -43,6 +44,19 @@ private struct InstructionsRepo {
 }
 
 @Suite struct ProjectInstructionsTests {
+    @Test func replacedImportPathsDoNotConsumeTheSizeLimit() async throws {
+        let repo = try await InstructionsRepo()
+        let prefix = String(repeating: "./", count: 150)
+        let count = ProjectInstructions.maxImports
+        let content = String(repeating: "x", count: 300)
+        try repo.write("AGENTS.md", (0..<count).map { "@\(prefix)f\($0).md" }.joined(separator: "\n"))
+        for i in 0..<count { try repo.write("f\(i).md", content) }
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(loaded.skipped.isEmpty)
+        #expect(loaded.text == Array(repeating: content, count: count).joined(separator: "\n"))
+        #expect(!loaded.truncated)
+    }
+
     @Test func agentsFileIsUsedAndHashed() async throws {
         let repo = try await InstructionsRepo()
         try repo.write("AGENTS.md", "# Rules\n\nBe kind.\n")
@@ -50,7 +64,8 @@ private struct InstructionsRepo {
         #expect(loaded.file == "AGENTS.md")
         #expect(loaded.text == "# Rules\n\nBe kind.")
         #expect(loaded.bytes == loaded.text.utf8.count)
-        #expect(loaded.sha256.count == 64)
+        let expected = SHA256.hash(data: Data(loaded.text.utf8)).map { String(format: "%02x", $0) }.joined()
+        #expect(loaded.sha256 == expected)
         #expect(!loaded.truncated)
         #expect(loaded.skipped.isEmpty)
     }
@@ -121,6 +136,62 @@ private struct InstructionsRepo {
         try repo.write("a.md", "A\n")
         let loaded = try #require(await repo.load(try await repo.commit()))
         #expect(loaded.text == "```\n@a.md\n```\nA")
+    }
+
+    @Test func aLongerFenceIsNotClosedByAShorterOne() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", "````\n```\n@a.md\n```\n@b.md\n````\n@c.md\n")
+        try repo.write("a.md", "A\n")
+        try repo.write("b.md", "B\n")
+        try repo.write("c.md", "C\n")
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(loaded.text == "````\n```\n@a.md\n```\n@b.md\n````\nC")
+    }
+
+    @Test func fencedImportsAreListedAsSkipped() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", "~~~\n@a.md\n~~~\n")
+        try repo.write("a.md", "A\n")
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(loaded.skipped == ["a.md: inside a code block"])
+    }
+
+    @Test func onlyAnExactImportLineIsExpanded() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", "    @a.md\n@a.md \n- @a.md\n@a.md\n")
+        try repo.write("a.md", "A\n")
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(loaded.text == "    @a.md\n@a.md \n- @a.md\nA")
+    }
+
+    @Test func importsAreBoundedInNumber() async throws {
+        let repo = try await InstructionsRepo()
+        let count = ProjectInstructions.maxImports + 3
+        try repo.write("AGENTS.md", (0..<count).map { "@f\($0).md" }.joined(separator: "\n") + "\n")
+        for i in 0..<count { try repo.write("f\(i).md", "file \(i)\n") }
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        let expanded = loaded.text.split(separator: "\n").filter { $0.hasPrefix("file ") }
+        #expect(expanded.count == ProjectInstructions.maxImports)
+        #expect(loaded.skipped.count == 3)
+        #expect(loaded.text.hasSuffix("@f\(count - 1).md"))
+    }
+
+    @Test func importsStopBeingFetchedOncePastTheSizeLimit() async throws {
+        let repo = try await InstructionsRepo()
+        let filler = String(repeating: "x", count: 99) + "\n"
+        try repo.write("AGENTS.md", String(repeating: filler, count: 200) + "@a.md\n")
+        try repo.write("a.md", "A\n")
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(!loaded.text.contains("\nA\n"))
+        #expect(loaded.skipped == ["a.md: past the size limit"])
+    }
+
+    @Test func aBlobOverTheCeilingIsNeverRead() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", String(repeating: "y\n", count: ProjectInstructions.blobSizeCeiling))
+        try repo.write("CLAUDE.md", "small\n")
+        // Too large to read, so it counts as absent and the fallback applies.
+        #expect(try await repo.load(try await repo.commit())?.file == "CLAUDE.md")
     }
 
     @Test func aSymlinkedInstructionsFileCountsAsAbsent() async throws {
@@ -200,7 +271,11 @@ private struct InstructionsRepo {
         let checks = try #require(text.range(of: "## Checking your work"))
         #expect(scope.upperBound < section.lowerBound)
         #expect(section.upperBound < checks.lowerBound)
-        #expect(text.contains(PromptBuilder.instructionsIntro))
+        #expect(
+            text.contains(
+                "These are the project's instructions for anyone working in this repository. Where they "
+                    + "describe pushing, opening or merging pull requests, Workbench does that after your work "
+                    + "is reviewed: commit in this worktree and stop there."))
         #expect(text.contains("Always run the checks."))
     }
 

@@ -133,14 +133,15 @@ and includes it in the first prompt. Implemented in `Sources/WorkbenchCore/Threa
 - **Read from the base commit, through git** (`git ls-tree`, `git cat-file`), never the filesystem. The main
   checkout and the worktree, which the run may already have edited, cannot change it. The commit is the one
   the worktree was cut from, recorded in the `worktree.created` event (older threads fall back to the
-  merge-base of the thread branch and `base`). At most 64 KiB is read from a file.
+  merge-base of the thread branch and `base`). A file over 1 MiB is not read (git writes the whole object before we see it) and counts as absent; of a smaller one at most 64 KiB is used.
 - **Imports.** A line that is exactly `@<relative path>` is replaced by that file's content. Relative paths
   resolve from the importing file's directory and must stay inside the repository. Absolute paths, `..`
   escapes, symlinks, missing files, directories, a file already included and a depth over 3 are left as
-  written and listed in `skipped`. Lines inside fenced code blocks are not expanded.
+  written and listed in `skipped`. At most 32 files are imported, and none once the text is past the size limit. A line is an import only when it is exactly `@path`: no indentation, no spaces, nothing after it. Lines inside fenced code blocks are not expanded (a fence closes only on a line of the same character that is at least as long) and are listed in `skipped` as "inside a code block".
 - **Normalised.** A leading BOM is dropped, CRLF becomes LF, invalid UTF-8 is replaced.
 - **Size.** At most 16384 bytes including the marker: cut at a line boundary, with a final line
-  `[project instructions truncated at 16384 bytes]`.
+  `[project instructions truncated at 16384 bytes]`. The import cutoff counts expanded text; a replaced
+  import directive does not consume the size limit.
 - **Where.** After "Out of scope" and before "Checking your work", under `## Project instructions`, introduced
   by a fixed sentence that says Workbench does the pushing and opening of pull requests after review, so the
   run commits in its worktree and stops.
