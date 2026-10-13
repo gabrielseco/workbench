@@ -67,8 +67,10 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    streams in order and capped at 1 MiB, is kept in `checks/turn-N.log` under the thread. A stop during the
    check is recorded as `stopped`, a check left open by a dead runner as `interrupted` on the next run.
    `workbench log`, `run` and `status` show the result.
-3. **Review state.** `ThreadState.derive(from: events)` as one pure function, with `Review` and the decision
-   events (`review.decision`, `thread.note`).
+3. **Review state** (done: `Thread/ThreadState.swift`). `ThreadState.derive(from: events, id:)` as one pure
+   function, with `Review` (status, latest turn result and check, notes, denied tools) built from the
+   decision and note events (`review.decision`, `thread.note`). See "Review state" in
+   `docs/spec/event-log.md`.
 4. **`workbench review|accept|send-back|discard`.**
 5. **Send back flow.** Compose note, adjust budget, start turn with note and check output attached.
 6. **Accept.** Commit pending work with a template message (editable), mark thread done, clear `current`.
