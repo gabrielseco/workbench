@@ -15,6 +15,11 @@ screenshot proof and Triage integration are in [`docs/later/`](docs/later/README
 
 **Status:** planning. No code yet. Start at [`docs/plan/README.md`](docs/plan/README.md).
 
+## Checking a change
+
+Run `scripts/check.sh` from any directory: it runs the banned-API check, `swift build` and `swift test`, as CI
+does, and stops at the first step that fails.
+
 ## What a thread is
 
 The thread is the unit of work. There is exactly one active at a time, and it is exactly:
