@@ -19,7 +19,7 @@ scripts/soak-real.py                     # real `claude` runs; costs money, run 
 
 ## Skills
 
-Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`). Agents that don't read that directory
+Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`). Agents that don't read that directory
 natively can open the `SKILL.md` and follow it. Claude Code reads them through the symlinks in
 `.claude/skills/`; when adding a skill, add its symlink there too:
 `ln -s ../../.agents/skills/<name> .claude/skills/<name>`.
