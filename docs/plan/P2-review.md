@@ -54,7 +54,8 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 
 ## Tasks
 
-1. **Diff provider.** `git diff base...HEAD` in the worktree, parsed to file list and hunks; rename and binary
+1. **Diff provider** (done: `Git/DiffProvider.swift`). Working tree against the base commit, so committed,
+   staged and untracked work all show; file list with counts, patch per file on demand; rename and binary
    handling; size cap with a "too large" fallback.
 2. **Check runner.** Reuse `ProcessRunner`; artifacts stored under the thread.
 3. **Review state.** `ThreadState.derive(from: events)` as one pure function, with `Review` and the decision
