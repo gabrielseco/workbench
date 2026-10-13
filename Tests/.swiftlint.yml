@@ -1,0 +1,4 @@
+# Tests may force-unwrap and force-try: a nil or a throw there should crash the test, which is a failure anyway.
+disabled_rules:
+  - force_unwrapping
+  - force_try

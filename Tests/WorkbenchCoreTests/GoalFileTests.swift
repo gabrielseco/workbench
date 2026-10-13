@@ -74,7 +74,8 @@ private let fixedDate = Date(timeIntervalSince1970: 1_791_835_800)  // any insta
     }
 
     @Test func hashInTitleIsNotAComment() throws {
-        let text = draftGoal.replacingOccurrences(of: "title: Add retry with backoff to the sync client", with: "title: Fix #12 retry")
+        let text = draftGoal.replacingOccurrences(
+            of: "title: Add retry with backoff to the sync client", with: "title: Fix #12 retry")
         #expect(try GoalFile.parse(text).goal.title == "Fix #12 retry")
     }
 
@@ -212,7 +213,8 @@ private let fixedDate = Date(timeIntervalSince1970: 1_791_835_800)  // any insta
     }
 
     @Test func unknownAndDuplicateKeys() {
-        let text = draftGoal.replacingOccurrences(of: "turn_timeout_min: 30", with: "turn_timeout_min: 30\nbudjet_usd: 9\nbase: dev")
+        let text = draftGoal.replacingOccurrences(
+            of: "turn_timeout_min: 30", with: "turn_timeout_min: 30\nbudjet_usd: 9\nbase: dev")
         #expect(Set(codes(text)) == [.unknownKey, .duplicateKey])
     }
 

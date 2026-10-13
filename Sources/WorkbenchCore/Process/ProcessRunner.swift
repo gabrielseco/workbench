@@ -185,8 +185,8 @@ private final class ProcessEngine: @unchecked Sendable {
             watcher = ChildExitWatcher(pid: pid, queue: queue) { [self] in childDidExit() }
 
             timeoutTimer = makeTimer(after: request.timeout) { [self] in beginTermination(.timedOut) }
-            snapshotTimer = makeTimer(after: request.snapshotInterval, repeating: request.snapshotInterval) {
-                [self] in refreshTracked()
+            snapshotTimer = makeTimer(after: request.snapshotInterval, repeating: request.snapshotInterval) { [self] in
+                refreshTracked()
             }
         }
     }

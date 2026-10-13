@@ -69,7 +69,7 @@ public struct GoalFile: Sendable, Equatable {
         }
 
         let id = required("id").flatMap { id -> String? in
-            let entry = value("id")!
+            guard let entry = value("id") else { return nil }
             guard SafeNames.isThreadID(id) else {
                 add(
                     .invalidValue, entry.lineNumber,
@@ -80,7 +80,7 @@ public struct GoalFile: Sendable, Equatable {
         }
         let title = required("title")
         let base = required("base").flatMap { base -> String? in
-            let entry = value("base")!
+            guard let entry = value("base") else { return nil }
             guard SafeNames.isBranchName(base) else {
                 add(.invalidValue, entry.lineNumber, "'base' is not a safe branch name: '\(base)'")
                 return nil
@@ -88,7 +88,7 @@ public struct GoalFile: Sendable, Equatable {
             return base
         }
         let budget = required("budget_usd").flatMap { raw -> Decimal? in
-            let entry = value("budget_usd")!
+            guard let entry = value("budget_usd") else { return nil }
             guard let d = Decimal(string: raw), d > 0, raw.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil
             else {
                 add(.invalidValue, entry.lineNumber, "'budget_usd' must be a positive number, found '\(raw)'")
@@ -97,7 +97,7 @@ public struct GoalFile: Sendable, Equatable {
             return d
         }
         let timeout = required("turn_timeout_min").flatMap { raw -> Int? in
-            let entry = value("turn_timeout_min")!
+            guard let entry = value("turn_timeout_min") else { return nil }
             guard let n = Int(raw), (1...1440).contains(n) else {
                 add(
                     .invalidValue, entry.lineNumber,
@@ -300,12 +300,14 @@ struct FrontMatterLine: Sendable, Equatable {
         comment = nil
 
         if let first = rest.first, first == "\"" || first == "'",
-            let close = rest.dropFirst().firstIndex(of: first)
-        {
+            let close = rest.dropFirst().firstIndex(of: first) {
             let inner = rest[rest.index(after: rest.startIndex)..<close]
             let after = rest[rest.index(after: close)...].trimmingCharacters(in: .whitespaces)
-            if after.hasPrefix("#") { comment = String(after.dropFirst()).trimmingCharacters(in: .whitespaces) }
-            else if !after.isEmpty { return nil }
+            if after.hasPrefix("#") {
+                comment = String(after.dropFirst()).trimmingCharacters(in: .whitespaces)
+            } else if !after.isEmpty {
+                return nil
+            }
             value = String(inner)
             return
         }

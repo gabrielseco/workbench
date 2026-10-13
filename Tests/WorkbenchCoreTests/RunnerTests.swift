@@ -54,9 +54,12 @@ struct RunnerFixture {
         let id = try await service.newThread(name: name, base: "main")
         let url = project.goalURL(id)
         var text = try String(contentsOf: url, encoding: .utf8)
-        text = text.replacingOccurrences(of: "TODO(workbench): say what should change, in a few sentences.", with: "Add a greeting to a.txt.")
-        text = text.replacingOccurrences(of: "TODO(workbench): something that can be checked.", with: "a.txt contains the word hello.")
-        text = text.replacingOccurrences(of: "TODO(workbench): how it will be shown (a test, a command, a screenshot).", with: "cat a.txt")
+        let fills = [
+            ("TODO(workbench): say what should change, in a few sentences.", "Add a greeting to a.txt."),
+            ("TODO(workbench): something that can be checked.", "a.txt contains the word hello."),
+            ("TODO(workbench): how it will be shown (a test, a command, a screenshot).", "cat a.txt"),
+        ]
+        for (placeholder, value) in fills { text = text.replacingOccurrences(of: placeholder, with: value) }
         text = text.replacingOccurrences(of: "TODO(workbench): what must not change.", with: "Do not touch other files.")
         try text.write(to: url, atomically: true, encoding: .utf8)
         try await service.approve(id: id)
@@ -307,7 +310,8 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(report.result == .succeeded)
         #expect(report.permissionDenials == 1)
         let log = try fx.events(id)
-        #expect(log.contains { $0.data["message"]?["content"]?.stringValue == nil && "\($0.data)".contains("Permission for this tool use was denied") })
+        let denialText = "Permission for this tool use was denied"
+        #expect(log.contains { $0.data["message"]?["content"]?.stringValue == nil && "\($0.data)".contains(denialText) })
         #expect(ended(log)[0].data["permission_denials"]?.intValue == 1)
     }
 

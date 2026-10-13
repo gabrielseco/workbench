@@ -69,8 +69,7 @@ public struct ThreadStore: Sendable {
                 }
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue,
-                    Self.terminalDecisions.contains(decision)
-                {
+                    Self.terminalDecisions.contains(decision) {
                     state.decision = decision
                 }
             default:

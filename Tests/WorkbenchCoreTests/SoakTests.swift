@@ -245,7 +245,9 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
         let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: admin.path)) ?? []
         #expect(leftovers.isEmpty, "worktree admin entries left: \(leftovers)")
         #expect(!FileManager.default.fileExists(atPath: fx.repo.appendingPathComponent(".git/index.lock").path))
-        let locked = leftovers.filter { FileManager.default.fileExists(atPath: admin.appendingPathComponent("\($0)/locked").path) }
+        let locked = leftovers.filter {
+            FileManager.default.fileExists(atPath: admin.appendingPathComponent("\($0)/locked").path)
+        }
         #expect(locked.isEmpty, "locked worktrees: \(locked)")
 
         print("SOAK fake runs=\(soakRuns) results=\(results.sorted { $0.key < $1.key }) fds \(before)->\(after)")

@@ -47,6 +47,8 @@ func argument(after flag: String, in args: [String]) -> String? {
 }
 
 func json(_ object: [String: Any]) -> String {
+    // A test double: a bug here should crash loudly rather than emit a plausible line.
+    // swiftlint:disable:next force_try
     let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
     return String(decoding: data, as: UTF8.self)
 }
@@ -136,8 +138,7 @@ if let fixture = d.string("fixture") {
     lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
     // Recorded runs carry the session id they were recorded with; use the one we were given.
     if let first = lines.first(where: { $0.contains("\"session_id\":\"") }),
-        let range = first.range(of: #"(?<="session_id":")[^"]+"#, options: .regularExpression)
-    {
+        let range = first.range(of: #"(?<="session_id":")[^"]+"#, options: .regularExpression) {
         let recorded = String(first[range])
         lines = lines.map { $0.replacingOccurrences(of: recorded, with: sessionID) }
     }
