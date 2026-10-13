@@ -100,6 +100,23 @@ Implemented in `Sources/WorkbenchCore/Thread/CheckRunner.swift`, called by `Thre
   turn is recovered (the start of the next run, and `abandon`). The command it left running is found by
   the orphan sweep. The check is not run again for that turn.
 
+## Review state
+
+`ThreadState.derive(from: events, id:)` (`Sources/WorkbenchCore/Thread/ThreadState.swift`) is a pure function
+of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown kinds and unknown
+`decision` values are ignored. `review` holds:
+
+- **`status`**: `empty` (no turn started), `running` (a turn or its check is open), `awaitingReview` (a turn
+  ended and nothing is open; a `stopped`, `timed_out` or `interrupted` turn is reviewable with its partial
+  work), `sentBack` (a `thread.note` came after the last turn ended and the next turn has not started), or
+  `decided(accepted|discarded|abandoned)`, which wins over the rest.
+- **`turnResult`**: the latest `turn.ended` `result`.
+- **`check`**: the latest `check.ran` (turn it followed, `result`, `exit_code`, `output_ref`).
+- **`notes`**: every `thread.note` with its `seq` and the follow-up turn it started. The runner writes the
+  note with `turn: 0` before that turn, so the turn is derived (last turn + 1), not read from the event.
+- **`deniedTools`**: one entry per tool in a `claude` `result` line's `permission_denials`, with the turn and
+  the `seq` of that line so the raw event can be opened. `turn.ended.permission_denials` stays the count.
+
 ## Writer behaviour
 
 Implemented in `Sources/WorkbenchCore/EventLog/`.

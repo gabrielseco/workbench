@@ -18,27 +18,7 @@ public enum ThreadStoreError: Error, Equatable, Sendable, CustomStringConvertibl
     }
 }
 
-/// What the log says about a thread, derived each time it is asked for. Nothing here is stored twice.
-public struct ThreadState: Sendable, Equatable {
-    public var id: String
-    public var createdAt: String?
-    public var lastTurn: Int
-    public var openTurn: Int?
-    public var openCheck: Int?
-    /// The latest check's `result`, nil when no check has run.
-    public var lastCheck: String?
-    /// `accepted`, `discarded` or `abandoned` once the thread has ended.
-    public var decision: String?
-    public var lastResult: String?
-    public var totalCostUSD: Double
-    public var sessionID: String?
-
-    public var isActive: Bool { decision == nil }
-}
-
 public struct ThreadStore: Sendable {
-    public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
-
     public let project: Project
 
     public init(project: Project) { self.project = project }
@@ -51,38 +31,8 @@ public struct ThreadStore: Sendable {
 
     /// Replays one thread's log. A thread with no log yet is a new one.
     public func state(of id: String) -> ThreadState {
-        var state = ThreadState(
-            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil, decision: nil,
-            lastResult: nil, totalCostUSD: 0, sessionID: nil)
-        guard let contents = try? EventLogReader.read(at: project.eventsURL(id)) else { return state }
-        state.lastTurn = contents.lastTurn
-        state.openTurn = contents.openTurn
-        state.openCheck = contents.openCheck
-        for event in contents.events {
-            switch event.kind {
-            case .threadCreated:
-                state.createdAt = event.ts
-            case .turnStarted:
-                if let session = event.data["session_id"]?.stringValue { state.sessionID = session }
-            case .turnEnded:
-                state.lastResult = event.data["result"]?.stringValue
-                switch event.data["cost_usd"] {
-                case .double(let d)?: state.totalCostUSD += d
-                case .int(let i)?: state.totalCostUSD += Double(i)
-                default: break
-                }
-            case .checkRan:
-                state.lastCheck = event.data["result"]?.stringValue
-            case .reviewDecision:
-                if let decision = event.data["decision"]?.stringValue,
-                    Self.terminalDecisions.contains(decision) {
-                    state.decision = decision
-                }
-            default:
-                break
-            }
-        }
-        return state
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        return ThreadState.derive(from: events, id: id)
     }
 
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
