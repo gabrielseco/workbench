@@ -7,6 +7,10 @@ import Foundation
 public struct ProjectInstructions: Sendable, Equatable {
     public static let sizeLimit = 16384
     public static let blobReadLimit = 64 << 10
+    /// A blob larger than this is not read at all: `git cat-file` writes the whole object before we see it.
+    public static let blobSizeCeiling = 1 << 20
+    /// Each import costs two git commands, so their number is bounded too.
+    public static let maxImports = 32
     public static let maxImportDepth = 3
     public static let candidates = ["AGENTS.md", "CLAUDE.md"]
     public static let truncationMarker = "[project instructions truncated at \(sizeLimit) bytes]"
@@ -80,6 +84,11 @@ public struct ProjectInstructions: Sendable, Equatable {
                 String(record[record.index(after: tab)...]) == path
             else { return nil }
             guard
+                let size = try? await git.run(["cat-file", "-s", String(fields[2])], in: repo),
+                size.succeeded, let bytes = Int(size.stdout.trimmingCharacters(in: .whitespacesAndNewlines)),
+                bytes <= blobSizeCeiling
+            else { return nil }
+            guard
                 let blob = try? await git.run(["cat-file", "blob", String(fields[2])], in: repo),
                 blob.succeeded
             else { return nil }
@@ -94,26 +103,54 @@ public struct ProjectInstructions: Sendable, Equatable {
         let reader: BlobReader
         var visited: Set<String> = []
         var skipped: [String] = []
+        private var imports = 0
+        private var bytes = 0
+
+        init(reader: BlobReader) { self.reader = reader }
+
+        /// An opening fence: three or more backticks or tildes. Returns the character and the length.
+        private static func fenceOpening(_ line: String) -> (Character, Int)? {
+            let indented = line.drop { $0 == " " }
+            guard let marker = indented.first, marker == "`" || marker == "~" else { return nil }
+            let run = indented.prefix { $0 == marker }.count
+            return run >= 3 ? (marker, run) : nil
+        }
+
+        /// A closing fence: at least as long as the opening one, the same character, nothing after it.
+        private static func closesFence(_ line: String, _ open: (Character, Int)) -> Bool {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return trimmed.count >= open.1 && trimmed.allSatisfy { $0 == open.0 }
+        }
 
         mutating func expand(_ text: String, directory: String, depth: Int) async -> [String] {
             var out: [String] = []
-            var fence: Character?
+            var fence: (Character, Int)?
             for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if let marker = trimmed.first, marker == "`" || marker == "~", trimmed.hasPrefix(String(repeating: marker, count: 3)) {
-                    if fence == nil { fence = marker } else if fence == marker { fence = nil }
+                defer { bytes += line.utf8.count + 1 }
+                if let open = fence {
+                    if Self.closesFence(line, open) { fence = nil }
+                    if let path = Self.importPath(line) { skipped.append("\(path): inside a code block") }
                     out.append(line)
                     continue
                 }
-                guard fence == nil, trimmed.hasPrefix("@"), trimmed.count > 1,
-                    !trimmed.contains(where: \.isWhitespace)
-                else {
+                if let opening = Self.fenceOpening(line) {
+                    fence = opening
                     out.append(line)
                     continue
                 }
-                let requested = String(trimmed.dropFirst())
+                guard let requested = Self.importPath(line) else {
+                    out.append(line)
+                    continue
+                }
+                // Past the size limit the text is cut anyway, so nothing more is fetched.
+                if bytes > ProjectInstructions.sizeLimit {
+                    skipped.append("\(requested): past the size limit")
+                    out.append(line)
+                    continue
+                }
                 switch await resolve(requested, directory: directory, depth: depth) {
                 case .success(let (path, content)):
+                    imports += 1
                     let nested = (path as NSString).deletingLastPathComponent
                     var body = content
                     while body.hasSuffix("\n") { body.removeLast() }
@@ -126,11 +163,18 @@ public struct ProjectInstructions: Sendable, Equatable {
             return out
         }
 
+        /// The path of a line that is exactly `@<path>`: no indentation, no spaces, nothing else.
+        static func importPath(_ line: String) -> String? {
+            guard line.hasPrefix("@"), line.count > 1, !line.contains(where: \.isWhitespace) else { return nil }
+            return String(line.dropFirst())
+        }
+
         enum Refusal: String, Error {
             case absolute = "absolute path"
             case escapes = "outside the repository"
             case tooDeep = "import depth over 3"
             case seen = "already included"
+            case tooMany = "more than 32 imports"
             case notAFile = "not a regular file in the base commit"
         }
 
@@ -139,6 +183,7 @@ public struct ProjectInstructions: Sendable, Equatable {
         {
             if requested.hasPrefix("/") || requested.hasPrefix("~") { return .failure(.absolute) }
             if depth >= ProjectInstructions.maxImportDepth { return .failure(.tooDeep) }
+            if imports >= ProjectInstructions.maxImports { return .failure(.tooMany) }
             var parts: [Substring] = directory.split(separator: "/")
             for piece in requested.split(separator: "/") {
                 switch piece {
