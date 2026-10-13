@@ -107,7 +107,7 @@ public struct ReviewReport: Sendable, Equatable {
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
                 lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
             }
-            lines.append("  open one with `workbench log --seq <n>`")
+            lines.append("  open one with `workbench log \(state.id) --seq <n>`")
             let stalled = ["stopped", "timed_out", "failed", "interrupted", "budget_exceeded"]
             if let result = review.turnResult, stalled.contains(result),
                 review.deniedTools.contains(where: { $0.turn == state.lastTurn }) {

@@ -83,7 +83,6 @@ public struct ThreadState: Sendable, Equatable {
             lastResult: nil, totalCostUSD: 0, sessionID: nil,
             review: Review(status: .empty, turnResult: nil, check: nil, notes: [], deniedTools: []))
         var noteIsLatest = false
-        var seenToolUses: Set<String> = []
         for event in events {
             switch event.kind {
             case .threadCreated:
@@ -124,14 +123,11 @@ public struct ThreadState: Sendable, Equatable {
                 guard event.data["type"]?.stringValue == "result",
                     case .array(let denials)? = event.data["permission_denials"]
                 else { break }
+                // The turn's final result line is the one whose length `turn.ended.permission_denials`
+                // records, so an earlier result line of the same turn (a replay) is replaced, not added.
+                state.review.deniedTools.removeAll { $0.turn == event.turn }
                 for denial in denials {
                     guard let tool = denial["tool_name"]?.stringValue else { continue }
-                    // The same tool call is never counted twice, whatever repeats the result line.
-                    // Per turn: a resumed turn that is denied the same call again did count it again.
-                    if let useID = denial["tool_use_id"]?.stringValue,
-                        !seenToolUses.insert("\(event.turn):\(useID)").inserted {
-                        continue
-                    }
                     let identity = tool + "\u{0}" + (Self.denialRawInput(denial["tool_input"]) ?? "")
                     state.review.deniedTools.append(
                         Review.DeniedTool(

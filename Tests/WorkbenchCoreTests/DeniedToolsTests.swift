@@ -23,7 +23,12 @@ private func state(_ lines: [(turn: Int, JSONValue)], end: String = "succeeded")
     for turn in Set(lines.map(\.turn)).sorted() {
         add(.turnStarted, turn, ["session_id": "s", "resume": .bool(turn > 1)])
         for line in lines where line.turn == turn { add(.claude, turn, line.1) }
-        add(.turnEnded, turn, ["result": .string(end)])
+        // What the runner records: the length of the turn's last result array.
+        var recorded = 0
+        if let last = lines.last(where: { $0.turn == turn }), case .array(let items)? = last.1["permission_denials"] {
+            recorded = items.count
+        }
+        add(.turnEnded, turn, ["result": .string(end), "permission_denials": .int(recorded)])
     }
     return ThreadState.derive(from: events, id: "t")
 }
@@ -43,7 +48,7 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(lines.contains("Denied     3 tool calls"), "\(lines)")
         #expect(lines.contains { $0.hasPrefix("  Bash(git push origin main) ×2  turn 1, seq ") }, "\(lines)")
         #expect(lines.contains { $0.hasPrefix("  Write(/etc/hosts) ×1  turn 1, seq ") }, "\(lines)")
-        #expect(lines.contains { $0.contains("workbench log --seq") })
+        #expect(lines.contains { $0.contains("workbench log t --seq") })
     }
 
     @Test func oddShapesStillShowTheToolAndNeverBreakTheLine() {
@@ -80,11 +85,16 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(rendered(s).contains { $0.contains("denied tools may explain this") })
     }
 
-    @Test func theSameToolCallIsCountedOnce() {
-        let again = result([denial("Bash", ["command": "rm -rf /"], id: "toolu_1")])
-        let s = state([(1, again), (1, again), (2, result([denial("Bash", ["command": "rm -rf /"], id: "toolu_2")]))])
-        #expect(s.review.deniedTools.count == 2)
-        #expect(s.review.deniedTools.map(\.turn) == [1, 2])
+    @Test func aReplayedResultLineIsCountedOnceAndEntriesMatchEachTurnsRecordedCount() {
+        let withID = result([denial("Bash", ["command": "rm -rf /"], id: "toolu_1")])
+        let noID = result([denial("Bash", ["command": "git push"])])
+        let two = result([denial("Bash", ["command": "ls"]), denial("Bash", ["command": "ls"])])
+        let s = state([(1, withID), (1, withID), (2, noID), (2, noID), (3, two)])
+        #expect(s.review.deniedTools.map(\.turn) == [1, 2, 3, 3])
+        for turn in 1...3 {
+            let recorded = s.review.deniedTools.filter { $0.turn == turn }.count
+            #expect(recorded == (turn == 3 ? 2 : 1))
+        }
     }
 
     @Test func aStalledTurnSaysDeniedToolsMayExplainIt() {
