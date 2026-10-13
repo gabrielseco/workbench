@@ -63,5 +63,8 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
 
 ## Using Workbench on this repo
 
-A Workbench run starts Claude in safe mode: it does not read `CLAUDE.md` or `AGENTS.md`. The goal is the
-only input, so put any rule a run must follow in the goal's request or out-of-scope section.
+A Workbench run starts Claude in safe mode, so Claude does not read `CLAUDE.md` or `AGENTS.md` itself.
+Workbench puts this file, as committed at the thread's base, in the first prompt of a thread
+(`docs/spec/goal-file.md`, "Project instructions"). The goal and this file are the only inputs: a rule
+that is here does not need repeating in a goal, and a rule that is only in an uncommitted edit, a skill
+or a user-level file does not reach a run. The text is cut at 16384 bytes, so keep this file short.

@@ -21,10 +21,10 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 
 | kind | When | data (essential fields) |
 |---|---|---|
-| `thread.created` | once | `repo`, `base`, `worktree`, `branch` |
+| `thread.created` | once | `repo`, `base`, `base_commit`, `worktree`, `branch` |
 | `goal.saved` | goal changed | `status`, `hash` |
 | `goal.approved` | approve | `hash`, `budget_usd` |
-| `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref` |
+| `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref`, `instructions?` |
 | `claude` | each stream-json line | the raw line, unmodified |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
 | `thread.note` | user feedback sent back (P2) | `text` |
@@ -43,14 +43,29 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 
 | kind | data |
 |---|---|
-| `thread.created` | `repo`, `base`, `worktree`, `branch` |
+| `thread.created` | `repo`, `base`, `base_commit` (the commit `base` pointed at when the thread was created, null if it did not resolve; the worktree is cut from it and the project's instructions are read from it), `worktree`, `branch` |
 | `goal.saved` | `status`, `hash` (null for a new draft) |
 | `goal.approved` | `hash`, `budget_usd` |
-| `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`) |
+| `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and on a turn built from the goal `instructions` (below) |
 | `thread.note` | `text`: the feedback that started a follow-up turn |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
 | `review.decision` | `decision` (`accepted`, `discarded`, `abandoned`), `by` |
+
+`instructions` says which project instructions file went into the prompt
+([goal-file.md](goal-file.md), "Project instructions"). Every `turn.started` of a turn built from the goal
+(the first turn, and a retry of a first turn that did not succeed) has it; a follow-up turn with feedback
+does not have the field at all.
+
+```json
+{"file": "AGENTS.md", "sha256": "<hex>", "bytes": 5120, "truncated": false, "skipped": ["docs/missing.md"]}
+```
+
+`sha256` and `bytes` describe the text as sent: imports expanded, encoding normalized, cut to 16384 bytes
+with the marker line when `truncated`. `skipped` lists the `@` imports that were left as literal lines, as
+written. It is `"instructions": null` when no file was used: neither `AGENTS.md` nor `CLAUDE.md` is a
+regular file in the base commit, or `project_instructions = false`. The text is not in the log; it is in
+`prompts/turn-N.md`.
 
 `result` is derived from the `result` line and the exit, in this order: stopped or timed out by us, then a
 signal is `failed`, no `result` line is `failed`, a budget error is `budget_exceeded`, a non-zero exit is

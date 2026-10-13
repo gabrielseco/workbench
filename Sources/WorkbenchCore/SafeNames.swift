@@ -14,4 +14,9 @@ enum SafeNames {
         s.range(of: #"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"#, options: .regularExpression) != nil
             && !s.contains("..") && !s.hasSuffix("/") && !s.hasSuffix(".lock") && !s.contains("//")
     }
+
+    /// A full object id, as `git rev-parse` prints it.
+    static func isCommitID(_ s: String) -> Bool {
+        s.range(of: #"^[0-9a-f]{40}([0-9a-f]{24})?$"#, options: .regularExpression) != nil
+    }
 }

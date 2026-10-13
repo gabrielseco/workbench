@@ -58,7 +58,11 @@ public struct GitRunner: Sendable {
         return GitRunner(executable: git, environment: env, timeout: timeout)
     }
 
-    public func run(_ arguments: [String], in directory: URL) async throws -> GitResult {
+    /// - Parameter outputLimit: how much of stdout and of stderr is read back, at most `GitRunner.outputLimit`.
+    public func run(
+        _ arguments: [String], in directory: URL, outputLimit: Int = GitRunner.outputLimit
+    ) async throws -> GitResult {
+        let limit = min(max(outputLimit, 0), Self.outputLimit)
         let outFile = Self.scratchFile()
         let errFile = Self.scratchFile()
         defer {
@@ -95,17 +99,17 @@ public struct GitRunner: Sendable {
         case .signaled(let signal): status = 128 + signal
         case .lost: status = -1
         }
-        return GitResult(status: status, stdout: Self.read(outFile), stderr: Self.read(errFile))
+        return GitResult(status: status, stdout: Self.read(outFile, limit), stderr: Self.read(errFile, limit))
     }
 
     private static func scratchFile() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("wb-git-\(UUID().uuidString)")
     }
 
-    private static func read(_ url: URL) -> String {
+    private static func read(_ url: URL, _ limit: Int) -> String {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
         defer { try? handle.close() }
-        let data = (try? handle.read(upToCount: outputLimit)) ?? Data()
+        let data = (try? handle.read(upToCount: limit)) ?? Data()
         return String(decoding: data, as: UTF8.self)
     }
 }

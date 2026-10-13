@@ -11,7 +11,7 @@ behalf, so entries about being usable by an agent (not only by a person at a ter
 |---|---|---|---|---|
 | 1 | `check.sh` round | A script could not be made executable: `chmod` is not in the default tool set, so the run only worked after `Bash(chmod +x scripts/check.sh)` was added to the project config by hand | Goals that create scripts need a way to ask for a tool; or a profile | open |
 | 2 | `check.sh` round | The run's first attempt used a shell heredoc to create files and was denied; it recovered with the file tools | The rules text could say "create files with the file tools" | open, minor |
-| 3 | `check.sh` round | A run does not read `AGENTS.md` or `CLAUDE.md` (safe mode), so repo conventions reach it only if the goal repeats them | Load the project's instructions file whole, read from the committed base, recorded by hash in `turn.started` | decided, spec PR pending |
+| 3 | `check.sh` round | A run does not read `AGENTS.md` or `CLAUDE.md` (safe mode), so repo conventions reach it only if the goal repeats them | Load the project's instructions file whole, read from the committed base, recorded by hash in `turn.started` ([spec](../spec/goal-file.md), "Project instructions") | closed |
 | 4 | `check.sh` round | A run cannot push or open a PR; `deliver` did it by hand | [P2.5](P2.5-ship.md) | planned |
 | 5 | after merge | The merged thread had to be ended with `abandon`, so its log says "abandoned" for work that shipped | P2 `accept`; P2.5 `pr.opened` | planned |
 | 6 | `check.sh` round | `review.decision` records `"by": "user"` even when an agent ran the command, so the log cannot tell who approved or abandoned | Record the actor (user, agent name) on decisions and on `goal.approved` | open |

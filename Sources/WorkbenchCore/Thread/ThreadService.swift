@@ -87,11 +87,13 @@ public struct ThreadService: Sendable {
         try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
+        let baseCommit = await manager.commit(of: baseBranch)
         try await withLog(id) { log in
             try await log.append(
                 .threadCreated,
                 data: [
                     "repo": .string(project.root.path), "base": .string(baseBranch),
+                    "base_commit": baseCommit.map { .string($0) } ?? .null,
                     "worktree": .string(manager.path(for: id).path),
                     "branch": .string(WorktreeManager.branch(for: id)),
                 ])

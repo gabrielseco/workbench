@@ -33,6 +33,9 @@ public struct Config: Sendable, Equatable {
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
     public var envPass: [String]
     public var tools: ToolSet
+    /// Put the repository's `AGENTS.md` (else `CLAUDE.md`) in prompts built from the goal. On by default:
+    /// safe mode keeps Claude from reading it, and a run should still follow the project's conventions.
+    public var projectInstructions: Bool = true
 
     /// `allowed` plus the check command, which Claude must be able to run.
     public var effectiveAllowedTools: [String] {
@@ -66,7 +69,8 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "default_budget_usd", "env_pass", "model", "safe_mode",
+            "claude_path", "check_command", "default_budget_usd", "env_pass", "model", "project_instructions",
+            "safe_mode",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -124,6 +128,17 @@ public struct Config: Sendable, Equatable {
                 safeMode = value
             } else {
                 fail(.wrongType, entry.line, "'safe_mode' must be true or false, found \(entry.value.typeName)")
+            }
+        }
+
+        var projectInstructions = true
+        if let entry = document.tables[""]?.entries["project_instructions"] {
+            if case .bool(let value) = entry.value {
+                projectInstructions = value
+            } else {
+                fail(
+                    .wrongType, entry.line,
+                    "'project_instructions' must be true or false, found \(entry.value.typeName)")
             }
         }
 
@@ -196,7 +211,8 @@ public struct Config: Sendable, Equatable {
         return Config(
             claudePath: claudePath, safeMode: safeMode, model: model, checkCommand: checkCommand,
             defaultBudgetUSD: budget,
-            envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
+            envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
+            projectInstructions: projectInstructions)
     }
 
     private static func sorted(_ problems: [ConfigProblem]) -> [ConfigProblem] {
@@ -230,6 +246,7 @@ public struct Config: Sendable, Equatable {
 
         # claude_path = "claude"           # name on PATH, or an absolute path
         # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
+        # project_instructions = true      # AGENTS.md (else CLAUDE.md) from the base commit goes in the prompt
         # model = "haiku"                  # --model for every turn; unset = the CLI default
         # check_command = "scripts/check.sh"
         # default_budget_usd = 5.00        # used when drafting a goal

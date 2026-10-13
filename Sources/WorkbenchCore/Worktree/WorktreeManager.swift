@@ -67,7 +67,11 @@ public struct WorktreeManager: Sendable {
 
     /// - Parameter allowDirty: skip the clean-checkout check. The worktree is cut from the committed
     ///   `base` either way; the check exists because accepting the work later merges into this checkout.
-    public func create(threadID: String, base: String, allowDirty: Bool = false) async throws -> Worktree {
+    /// - Parameter commit: the commit recorded for `base` when the thread was created. The worktree is cut
+    ///   from it, so the thread has one base commit even if `base` has moved since.
+    public func create(
+        threadID: String, base: String, commit: String? = nil, allowDirty: Bool = false
+    ) async throws -> Worktree {
         guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
 
@@ -77,7 +81,7 @@ public struct WorktreeManager: Sendable {
             if !dirty.isEmpty { throw WorktreeError.dirtyRepository(dirty) }
         }
 
-        let baseCommit = try await resolveCommit(base)
+        let baseCommit = try await resolveCommit(commit.flatMap { SafeNames.isCommitID($0) ? $0 : nil } ?? base)
         let target = path(for: threadID)
         let branch = Self.branch(for: threadID)
 
@@ -120,6 +124,22 @@ public struct WorktreeManager: Sendable {
     }
 
     // MARK: Inspection
+
+    /// The commit `base` points at now, if it is a safe name that resolves.
+    public func commit(of base: String) async -> String? {
+        guard SafeNames.isBranchName(base) else { return nil }
+        return try? await resolveCommit(base)
+    }
+
+    /// Where a thread's branch left `base`: the base commit of a thread whose log does not record one.
+    public func forkPoint(of threadID: String, base: String) async -> String? {
+        guard SafeNames.isThreadID(threadID), SafeNames.isBranchName(base),
+            let result = try? await git.run(["merge-base", Self.branch(for: threadID), base], in: repoRoot),
+            result.succeeded
+        else { return nil }
+        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return SafeNames.isCommitID(sha) ? sha : nil
+    }
 
     /// Uncommitted changes inside a thread's worktree (tracked and untracked), as porcelain lines.
     public func changes(in threadID: String) async throws -> [String] {

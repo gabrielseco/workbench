@@ -142,10 +142,12 @@ public actor ThreadRunner {
         log: EventLogWriter, store: ThreadStore, config: Config, goal: Goal, claude: URL, options: RunOptions
     ) async throws -> TurnReport {
         if await log.nextSeq == 1 {
+            let baseCommit = await worktreeManager.commit(of: goal.base)
             try await log.append(
                 .threadCreated,
                 data: [
                     "repo": .string(project.root.path), "base": .string(goal.base),
+                    "base_commit": baseCommit.map { .string($0) } ?? .null,
                     "worktree": .string(worktreeManager.path(for: threadID).path),
                     "branch": .string(WorktreeManager.branch(for: threadID)),
                 ])
@@ -167,24 +169,35 @@ public actor ThreadRunner {
         // What to say this turn.
         let anySuccess = await anyTurnSucceeded()
         let lastTurn = await log.lastTurn
-        let prompt: String
         if let feedback = options.feedback {
             guard lastTurn > 0 else { throw RunnerError.feedbackWithoutPriorTurn }
             try await log.append(.threadNote, data: ["text": .string(feedback)])
-            prompt = PromptBuilder.followUpPrompt(feedback: feedback)
-        } else {
-            if anySuccess { throw RunnerError.feedbackRequired }
-            prompt = PromptBuilder.firstPrompt(goal: goal, checkCommand: config.checkCommand)
+        } else if anySuccess {
+            throw RunnerError.feedbackRequired
         }
 
-        // The worktree.
+        // The worktree, cut from the commit the thread recorded when there is one.
+        var baseCommit = recordedBaseCommit(for: goal.base)
         var worktree: URL
         if worktreeManager.exists(threadID) {
             worktree = worktreeManager.path(for: threadID)
         } else {
-            worktree = try await worktreeManager.create(
-                threadID: threadID, base: goal.base, allowDirty: options.allowDirty
-            ).path
+            let created = try await worktreeManager.create(
+                threadID: threadID, base: goal.base, commit: baseCommit, allowDirty: options.allowDirty)
+            worktree = created.path
+            baseCommit = created.baseCommit
+        }
+
+        let prompt: String
+        // Only a turn built from the goal carries the project's instructions, and says so in its event.
+        var instructionsRecord: JSONValue?
+        if let feedback = options.feedback {
+            prompt = PromptBuilder.followUpPrompt(feedback: feedback)
+        } else {
+            let instructions = try await projectInstructions(config: config, goal: goal, baseCommit: baseCommit)
+            prompt = PromptBuilder.firstPrompt(
+                goal: goal, checkCommand: config.checkCommand, instructions: instructions)
+            instructionsRecord = instructions?.eventValue ?? .null
         }
 
         // The session: decided before spawning and written down first (spike S4).
@@ -203,8 +216,8 @@ public actor ThreadRunner {
         for (index, resume) in attempts.enumerated() {
             let turn = await log.lastTurn + 1
             let result = try await executeTurn(
-                turn: turn, resume: resume, sessionID: sessionID, prompt: prompt, config: config, goal: goal,
-                claude: claude, worktree: worktree, log: log, store: store, options: options)
+                turn: turn, resume: resume, sessionID: sessionID, prompt: prompt,
+                instructions: instructionsRecord, config: config, goal: goal, claude: claude, worktree: worktree, log: log, store: store, options: options)
             report = result.report
             // An unconfirmed session may not exist at all, in which case `--resume` fails at once with no
             // output. Then, and only then, try creating it.
@@ -225,8 +238,8 @@ public actor ThreadRunner {
     }
 
     private func executeTurn(
-        turn: Int, resume: Bool, sessionID: String, prompt: String, config: Config, goal: Goal, claude: URL,
-        worktree: URL, log: EventLogWriter, store: ThreadStore, options: RunOptions
+        turn: Int, resume: Bool, sessionID: String, prompt: String, instructions: JSONValue?, config: Config,
+        goal: Goal, claude: URL, worktree: URL, log: EventLogWriter, store: ThreadStore, options: RunOptions
     ) async throws -> TurnOutcome {
         let promptURL = project.promptURL(threadID, turn: turn)
         try FileManager.default.createDirectory(
@@ -245,12 +258,14 @@ public actor ThreadRunner {
             shownArgs[i + 1] = "<rules>"
         }
         let startedData: (Int32?) -> JSONValue = { pid in
-            [
+            var data: [String: JSONValue] = [
                 "session_id": .string(sessionID), "resume": .bool(resume),
                 "pid": pid.map { .int(Int($0)) } ?? .null,
                 "argv": .array(([claude.path] + shownArgs).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
+            if let instructions { data["instructions"] = instructions }
+            return .object(data)
         }
 
         var spawn = SpawnRequest(
@@ -415,6 +430,27 @@ public actor ThreadRunner {
         do { return try GoalFile.parse(text) } catch let error as GoalParseError {
             throw RunnerError.goalInvalid(error.description)
         }
+    }
+
+    /// The commit `thread.created` recorded, as long as it was recorded for the base the goal has now.
+    private func recordedBaseCommit(for base: String) -> String? {
+        guard let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
+            let created = contents.events.first(where: { $0.kind == .threadCreated }),
+            created.data["base"]?.stringValue == base,
+            let commit = created.data["base_commit"]?.stringValue, SafeNames.isCommitID(commit)
+        else { return nil }
+        return commit
+    }
+
+    private func projectInstructions(
+        config: Config, goal: Goal, baseCommit: String?
+    ) async throws -> ProjectInstructions? {
+        guard config.projectInstructions else { return nil }
+        var commit = baseCommit
+        if commit == nil { commit = await worktreeManager.forkPoint(of: threadID, base: goal.base) }
+        guard let commit, let loader = ProjectInstructionsLoader(git: git, repo: project.root, commit: commit)
+        else { return nil }
+        return try await loader.load()
     }
 
     private func anyTurnSucceeded() async -> Bool {
