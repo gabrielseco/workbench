@@ -11,6 +11,7 @@ phase's plan.
 ## Commands
 
 ```bash
+scripts/codex-review.sh <pr> [spec]      # Codex reviews a PR with the pr-review skill (read-only)
 scripts/check.sh                         # what CI runs, minus the soak: banned APIs, SwiftLint, build, tests
 swiftlint lint --quiet                   # just the lint (brew install swiftlint); config in .swiftlint.yml
 WORKBENCH_SOAK=1 swift test --filter SoakTests   # the soak, CI runs it as its own step
@@ -33,11 +34,51 @@ list the tasks.
 1. Branch from `origin/main`. Work in a git worktree, not in a checkout someone else is using.
 2. `scripts/check.sh` must pass before pushing. Add tests for what you add, including the failure cases
    the phase plan lists.
-3. After opening a PR, or after pushing a fix to an open one, run `pr-review` on it when that skill exists,
-   and fix its findings.
-4. Don't merge. Leave the PR open with CI green; the user reviews and merges.
-5. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
+3. Commit messages and the PR title follow Conventional Commits (below).
+4. After opening a PR, or after pushing a fix to an open one, have Codex review it with
+   `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
+5. Don't merge. Leave the PR open with CI green; the user reviews and merges.
+6. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
    same PR.
+
+### Commits and PR titles
+
+Conventional Commits, for every commit and for the PR title (a squash merge makes the title the commit on
+`main`, so it is the one that stays):
+
+```
+type(scope): subject
+```
+
+- **type:** `feat` (new behaviour), `fix` (a bug), `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`.
+  A change that does a bit of each takes the type of its main purpose; split it when it does two things.
+- **scope** (optional, one word): the area, for example `runner`, `check`, `instructions`, `config`, `lint`,
+  `plan`, `spec`, `skills`, `scripts`, `ci`.
+- **subject:** imperative, lower case, no full stop, 72 characters or fewer, and what changes for the
+  reader, not how: `fix(check): record a pass only when the output was kept`.
+- **body** (optional): why, and anything a reviewer would otherwise have to ask. Wrap at 100.
+- **breaking change:** `!` after the scope and a `BREAKING CHANGE:` line, for a changed event format or
+  config key.
+- Keep the agent attribution trailer (`Co-Authored-By: …`) at the end of the body.
+- A PR that is one task from a phase plan may say so after the type: `feat(check): run the project's check
+  after each turn (P2 task 2)`.
+
+### Review by Codex
+
+The author of a change should not be its only reviewer. After the PR is open:
+
+1. Run `scripts/codex-review.sh <pr-number> [spec-file]`. It checks the PR head out in a throwaway
+   worktree and has Codex run the `pr-review` skill read-only. Pass the goal or plan task the change was
+   written against as `spec-file` so it can judge criterion by criterion. The transcript is kept in
+   `.workbench/reviews/`.
+2. Treat each finding as a claim to verify, not an order. Check it against the code; some will not apply
+   (a finding about a different version, a case the code already handles). Say which ones you rejected
+   and why.
+3. Fix the ones that hold, with a test that fails without the fix, push, and run the script again. Two
+   rounds is the limit; what is still open after that goes in the PR description.
+4. If Codex is unavailable (not installed, or "at capacity" three times), say so in the PR; do not
+   report a review that did not happen.
+5. Codex only reports. Posting comments to the PR is the user's call (the `pr-review` skill asks first).
 
 ## Conventions
 

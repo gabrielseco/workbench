@@ -19,15 +19,16 @@ Take current changes to open, reviewed PR(s). **Never merge** — stop once PRs 
 
 ### 3. Commit
 - Stage everything (or only files the user named) — never `git add` unrelated leftovers; check `git status` first.
-- Conventional commit (`type(scope): subject`, ≤50 chars, body if needed), HEREDOC, plus the Co-Authored-By / attribution footer your agent's guidance asks for, if any.
+- Conventional commit (`type(scope): subject`, imperative, ≤72 chars; see "Commits and PR titles" in `AGENTS.md`), body if needed, HEREDOC, plus the Co-Authored-By / attribution footer your agent's guidance asks for, if any.
 - Never force push or skip hooks.
 
 ### 4. Push and open the PR
 - `git push -u origin <branch>`.
-- Analyze `git log <base>..HEAD` and `git diff <base>...HEAD`; `gh pr create --base <base>` with title + body following `.github/pull_request_template.md` via HEREDOC and the PR attribution line, if your agent uses one. Print the URL.
+- Analyze `git log <base>..HEAD` and `git diff <base>...HEAD`; `gh pr create --base <base>` with a Conventional Commits title (the squash merge keeps it) and a body following `.github/pull_request_template.md` via HEREDOC and the PR attribution line, if your agent uses one. Print the URL.
 
 ### 5. Review, if available
-- If the repo has a `pr-review` skill (`.agents/skills/pr-review` or `.claude/skills/pr-review`), run it on the new PR number. If it doesn't, skip this step silently.
+- Have Codex review the PR: `scripts/codex-review.sh <pr> [spec-file]` (see "Review by Codex" in `AGENTS.md`). If the script is missing, run the `pr-review` skill (`.agents/skills/pr-review`) yourself; if neither exists, skip this step silently.
+- Verify each finding against the code before acting on it, and say which you rejected.
 - Fix the findings it confirms: apply the change, add a test that covers each one, run the relevant tests, commit, push to the same branch.
 - Do NOT post review comments to GitHub without asking (the skill's own rule).
 
