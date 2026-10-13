@@ -126,7 +126,8 @@ public struct ProjectInstructions: Sendable, Equatable {
             var out: [String] = []
             var fence: (Character, Int)?
             for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-                defer { bytes += line.utf8.count + 1 }
+                var emittedBytes = line.utf8.count + 1
+                defer { bytes += emittedBytes }
                 if let open = fence {
                     if Self.closesFence(line, open) { fence = nil }
                     if let path = Self.importPath(line) { skipped.append("\(path): inside a code block") }
@@ -150,6 +151,8 @@ public struct ProjectInstructions: Sendable, Equatable {
                 }
                 switch await resolve(requested, directory: directory, depth: depth) {
                 case .success(let (path, content)):
+                    // Recursive expansion counts the replacement; the directive is not emitted.
+                    emittedBytes = 0
                     imports += 1
                     let nested = (path as NSString).deletingLastPathComponent
                     var body = content

@@ -44,6 +44,19 @@ private struct InstructionsRepo {
 }
 
 @Suite struct ProjectInstructionsTests {
+    @Test func replacedImportPathsDoNotConsumeTheSizeLimit() async throws {
+        let repo = try await InstructionsRepo()
+        let prefix = String(repeating: "./", count: 150)
+        let count = ProjectInstructions.maxImports
+        let content = String(repeating: "x", count: 300)
+        try repo.write("AGENTS.md", (0..<count).map { "@\(prefix)f\($0).md" }.joined(separator: "\n"))
+        for i in 0..<count { try repo.write("f\(i).md", content) }
+        let loaded = try #require(await repo.load(try await repo.commit()))
+        #expect(loaded.skipped.isEmpty)
+        #expect(loaded.text == Array(repeating: content, count: count).joined(separator: "\n"))
+        #expect(!loaded.truncated)
+    }
+
     @Test func agentsFileIsUsedAndHashed() async throws {
         let repo = try await InstructionsRepo()
         try repo.write("AGENTS.md", "# Rules\n\nBe kind.\n")

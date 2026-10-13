@@ -140,7 +140,8 @@ and includes it in the first prompt. Implemented in `Sources/WorkbenchCore/Threa
   written and listed in `skipped`. At most 32 files are imported, and none once the text is past the size limit. A line is an import only when it is exactly `@path`: no indentation, no spaces, nothing after it. Lines inside fenced code blocks are not expanded (a fence closes only on a line of the same character that is at least as long) and are listed in `skipped` as "inside a code block".
 - **Normalised.** A leading BOM is dropped, CRLF becomes LF, invalid UTF-8 is replaced.
 - **Size.** At most 16384 bytes including the marker: cut at a line boundary, with a final line
-  `[project instructions truncated at 16384 bytes]`.
+  `[project instructions truncated at 16384 bytes]`. The import cutoff counts expanded text; a replaced
+  import directive does not consume the size limit.
 - **Where.** After "Out of scope" and before "Checking your work", under `## Project instructions`, introduced
   by a fixed sentence that says Workbench does the pushing and opening of pull requests after review, so the
   run commits in its worktree and stops.
