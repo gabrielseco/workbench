@@ -19,6 +19,7 @@ behalf, so entries about being usable by an agent (not only by a person at a ter
 | 8 | `check.sh` round | Criteria proofs are free text, so "it fails correctly" and "works from another directory" were claimed by reading and had to be re-run by hand before merging | `later/proof.md` (typed proofs the runner can execute) | deferred |
 | 9 | `check.sh` round | `check_command` must be one plain command, so `build && test` needed a wrapper script first | Fine as is; the wrapper is now `scripts/check.sh` | closed |
 | 10 | whole loop | The CLI has no machine-readable output (`--json`) and some commands assume a terminal, which makes it harder for an agent to drive | Stable `--json` for `status`, `log`, `review`; non-interactive confirmation flags | open |
+| 11 | portability | A fresh worktree has no dependencies, build outputs or gitignored files, and git hooks run in it. This repo has no packages and no hooks, so it never showed | [`later/portability.md`](../later/portability.md): `setup_command`, secrets for the check only, a hooks setting, stack detection in `init` | deferred |
 
 ## How to use it
 
