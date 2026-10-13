@@ -119,6 +119,32 @@ public struct WorktreeManager: Sendable {
         }
     }
 
+    public func branchExists(_ threadID: String) async -> Bool {
+        guard SafeNames.isThreadID(threadID) else { return false }
+        let ref = "refs/heads/" + Self.branch(for: threadID)
+        let result = try? await git.run(["rev-parse", "--verify", "--quiet", ref], in: repoRoot)
+        return result?.succeeded ?? false
+    }
+
+    /// Deletes `workbench/<id>` and nothing else: the name is built here from a checked thread id.
+    public func deleteBranch(threadID: String) async throws {
+        guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
+        try await requireRepository()
+        try await check(["branch", "-D", Self.branch(for: threadID)])
+    }
+
+    /// One line per commit on the thread's branch that is not on `base`, newest first.
+    public func commits(threadID: String, since base: String) async -> [String] {
+        guard SafeNames.isThreadID(threadID), SafeNames.isBranchName(base) || base.range(
+            of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil
+        else { return [] }
+        let result = try? await git.run(
+            ["log", "--oneline", "--no-decorate", "\(base)..refs/heads/\(Self.branch(for: threadID))"],
+            in: repoRoot)
+        guard let result, result.succeeded else { return [] }
+        return Self.lines(result.stdout)
+    }
+
     // MARK: Inspection
 
     /// Uncommitted changes inside a thread's worktree (tracked and untracked), as porcelain lines.

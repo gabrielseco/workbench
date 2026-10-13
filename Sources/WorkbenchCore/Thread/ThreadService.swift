@@ -5,6 +5,8 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case goalMissing(String)
     case goalInvalid(String)
     case threadEnded(String)
+    case running(pid: Int32)
+    case nothingToDiscard
 
     public var description: String {
         switch self {
@@ -13,6 +15,10 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .goalMissing(let path): "no goal at \(path)"
         case .goalInvalid(let problems): "the goal is not valid:\n\(problems)"
         case .threadEnded(let decision): "this thread has ended (\(decision))"
+        case .running(let pid):
+            "a run is still working on this thread (pid \(pid)). `workbench stop` it first."
+        case .nothingToDiscard:
+            "this thread has no worktree and no branch to discard. `workbench abandon` ends it."
         }
     }
 }
@@ -148,6 +154,48 @@ public struct ThreadService: Sendable {
         }
     }
 
+    // MARK: Discard
+
+    /// What `discard` would remove, for the confirmation. Refuses an ended thread and a live runner.
+    public func discardPlan(id: String) async throws -> DiscardPlan {
+        guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
+        let state = store.state(of: id)
+        if let decision = state.decision { throw ThreadServiceError.threadEnded(decision) }
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        let branchExists = await manager.branchExists(id)
+        let report = await ReviewLoader(project: project, git: git).load(id: id)
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        let created = events.contains { $0.kind == .worktreeCreated }
+        // A discard that stopped halfway (worktree gone, branch left, or both gone) can be finished.
+        guard manager.exists(id) || branchExists || created else { throw ThreadServiceError.nothingToDiscard }
+
+        var commits: [String] = []
+        if branchExists, let base = events.last(where: { $0.kind == .worktreeCreated })?
+            .data["base_commit"]?.stringValue {
+            commits = await manager.commits(threadID: id, since: base)
+        }
+        return DiscardPlan(
+            id: id, worktree: manager.exists(id) ? manager.path(for: id) : nil,
+            branch: branchExists ? WorktreeManager.branch(for: id) : nil, diff: report.diff, commits: commits)
+    }
+
+    /// Throws the thread's work away: closes an open turn or check the runner left, removes the worktree
+    /// and the branch, then records the decision. The decision comes last, so a failure partway leaves the
+    /// thread active and running `discard` again finishes it.
+    public func discard(id: String, by: String = "user") async throws {
+        _ = try await discardPlan(id: id)
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        try await withLog(id) { log in
+            _ = try await log.recoverOrphanedTurn()
+            _ = try await log.recoverOrphanedCheck()
+            if manager.exists(id) { try await manager.remove(threadID: id, force: true) }
+            if await manager.branchExists(id) { try await manager.deleteBranch(threadID: id) }
+            try await log.append(.reviewDecision, data: ["decision": "discarded", "by": .string(by)])
+        }
+    }
+
     // MARK: Stop
 
     public enum StopResult: Equatable, Sendable {
@@ -192,4 +240,50 @@ extension DateFormatter {
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
+}
+
+/// What a discard would remove, shown before asking.
+public struct DiscardPlan: Sendable, Equatable {
+    public var id: String
+    public var worktree: URL?
+    public var branch: String?
+    public var diff: ReviewReport.Diff
+    /// `--oneline` of the commits on the branch that are not on its base.
+    public var commits: [String]
+
+    public func render() -> [String] {
+        var lines = ["discard \(id) will delete:"]
+        if let worktree { lines.append("  worktree  \(worktree.path)") }
+        if let branch { lines.append("  branch    \(branch)") }
+        switch diff {
+        case .summary(let summary):
+            if summary.files.isEmpty { lines.append("  no changed files") }
+            for file in summary.files.prefix(30) { lines.append("  " + ReviewReport.describe(file)) }
+            if summary.files.count > 30 { lines.append("  … and \(summary.totalFiles - 30) more files") }
+        case .unavailable(let reason):
+            lines.append("  changes not shown: \(reason)")
+        }
+        if !commits.isEmpty {
+            lines.append("  \(commits.count) commit\(commits.count == 1 ? "" : "s") that exist nowhere else:")
+            for commit in commits.prefix(10) { lines.append("    " + commit) }
+            if commits.count > 10 { lines.append("    … and \(commits.count - 10) more") }
+        }
+        return lines
+    }
+}
+
+/// The yes/no before a destructive command, kept out of the CLI so it can be tested.
+public enum Confirmation: Equatable, Sendable {
+    case proceed
+    /// The person said no (or anything but yes). Nothing was changed.
+    case declined
+    /// No `--yes` and nobody to ask.
+    case refused
+
+    public static func ask(yes: Bool, interactive: Bool, readLine: () -> String?) -> Confirmation {
+        if yes { return .proceed }
+        guard interactive else { return .refused }
+        guard let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() else { return .declined }
+        return answer == "y" || answer == "yes" ? .proceed : .declined
+    }
 }
