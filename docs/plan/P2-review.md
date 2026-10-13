@@ -75,7 +75,19 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    denied tools by name and `seq`, what can be done next; `--patch <path>` prints one file). `accept`,
    `send-back` and `discard` are tasks 5 to 7.
 5. **Send back flow.** Compose note, adjust budget, start turn with note and check output attached.
-6. **Accept.** Commit pending work with a template message (editable), mark thread done, clear `current`.
+6. **Accept** (done: `ThreadService.accept`, `workbench accept [id] [-m <msg>] [--yes]`). Commits everything
+   `review` lists (tracked, staged and untracked; ignored files stay out) on `workbench/<id>`, then records
+   `review.decision: accepted` with the commit. The default message is `chore: <goal title>`, the request and
+   a `Workbench-Thread:` line; `-m` replaces it, and on a terminal a one-line replacement can be typed at the
+   prompt (no `$EDITOR`: children start through `Spawner`, which has no terminal to give an editor). An empty
+   message changes nothing. The commit goes through `git commit -m`, so hooks run and the message is never
+   parsed by a shell. A failed check is allowed but said out loud: it asks, and with no terminal needs
+   `--yes`. Refused while a runner is live, when the thread has a decision, when the worktree is not on
+   `workbench/<id>`, and when there is nothing to commit and no commit beyond base. A turn or check left
+   open by a dead runner is recorded as interrupted first. The decision is written last, so a rejected
+   commit leaves the thread active with the changes staged and a second `accept` finishes. The worktree is
+   kept for `ship`. Removing it after the work is shipped is not built yet (`git worktree remove` by
+   hand); `discard` refuses an accepted thread like any ended one.
 7. **Discard** (done: `ThreadService.discard`, `workbench discard [id] [--yes]`). Shows the worktree, branch,
    changed files and commits that exist nowhere else, and asks (`--yes` for scripts and agents; with no
    terminal and no `--yes` it refuses). Closes an open turn or check, removes the worktree and the
@@ -97,7 +109,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 - [x] The check result is from Workbench's own run, with exit code and captured output.
 - [ ] Send back produces a turn whose first prompt contains the note and the check failure, and the session
       context carries over (verified by a real run).
-- [ ] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
+- [x] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
 - [x] Discard removes worktree and branch and leaves the log readable.
 - [ ] A turn that was `stopped` or `timed_out` still reviews, with its partial diff.
 - [ ] Big diffs and binary files fall back without hanging.

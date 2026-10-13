@@ -9,6 +9,12 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case nothingToDiscard
     case discardIncomplete(String)
     case changedSinceShown
+    case nothingToAccept
+    case worktreeMissing(String)
+    case emptyMessage
+    case invalidMessage(String)
+    case acceptIncomplete(String)
+    case changedSinceAcceptShown
 
     public var description: String {
         switch self {
@@ -24,6 +30,15 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .discardIncomplete(let what): what
         case .changedSinceShown:
             "the thread changed after the list was shown, so nothing was discarded. Run `workbench discard` again."
+        case .nothingToAccept:
+            "there is nothing to accept: the worktree has no changes and the branch has no commits beyond its base."
+        case .worktreeMissing(let path): "no worktree at \(path), so there is no work to accept"
+        case .emptyMessage: "the commit message is empty, so nothing was accepted"
+        case .invalidMessage(let why): "the commit message is not usable: \(why)"
+        case .acceptIncomplete(let what): what
+        case .changedSinceAcceptShown:
+            "the thread changed after the list and check were shown, so nothing was accepted. "
+                + "Run `workbench accept` again."
         }
     }
 }
@@ -225,6 +240,161 @@ public struct ThreadService: Sendable {
         }
     }
 
+    // MARK: Accept
+
+    /// What `accept` would commit and record, for the person to see first. Refuses an ended thread, a live
+    /// runner, a missing worktree and a thread with nothing to accept.
+    public func acceptPlan(id: String) async throws -> AcceptPlan {
+        guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
+        let state = store.state(of: id)
+        if let decision = state.decision { throw ThreadServiceError.threadEnded(decision) }
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        guard manager.exists(id) else { throw ThreadServiceError.worktreeMissing(manager.path(for: id).path) }
+        let worktree = manager.path(for: id)
+
+        // The commit goes on workbench/<id> and nowhere else: a model that switched branches in its
+        // worktree must not get its work committed to another one.
+        let head = try await git.run(["symbolic-ref", "--short", "-q", "HEAD"], in: worktree)
+        let branch = WorktreeManager.branch(for: id)
+        guard head.succeeded, head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == branch else {
+            throw ThreadServiceError.acceptIncomplete(
+                "the worktree is not on \(branch) (it is on "
+                    + (head.succeeded ? head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : "a detached HEAD")
+                    + "), so nothing was accepted. Check it out there, or `workbench discard`.")
+        }
+
+        let pending: [String]
+        do { pending = try await Self.pendingChanges(in: worktree, git: git) } catch {
+            throw ThreadServiceError.acceptIncomplete("cannot read the worktree's changes: \(error)")
+        }
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        var commits: [String] = []
+        if let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue {
+            guard let found = await manager.commits(threadID: id, since: base) else {
+                throw ThreadServiceError.acceptIncomplete("git could not list the commits on \(branch)")
+            }
+            commits = found
+        }
+        if pending.isEmpty && commits.isEmpty { throw ThreadServiceError.nothingToAccept }
+
+        let report = await ReviewLoader(project: project, git: git).load(id: id)
+        // Same-size edits keep paths and counts, so what was shown is also pinned by file identity.
+        var snapshot = ""
+        if case .summary(let shown) = report.diff {
+            let full = try? await DiffProvider(git: git).summary(
+                worktree: worktree, base: shown.base, limit: Int.max, includeIgnored: true, includeStaged: true)
+            let stamps = (full?.workingFingerprint ?? [:]).sorted { $0.key < $1.key }
+            snapshot = (full?.indexFingerprint ?? "") + "\n"
+                + stamps.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")
+        }
+        return AcceptPlan(
+            id: id, worktree: worktree, branch: branch, diff: report.diff, hasPendingChanges: !pending.isEmpty,
+            commits: commits, check: state.review.check,
+            // Recovery will record these as interrupted, which is not a pass.
+            openWork: state.openTurn != nil || state.openCheck != nil, snapshot: snapshot,
+            defaultMessage: Self.defaultCommitMessage(id: id, goalURL: project.goalURL(id)))
+    }
+
+    /// Commits what is pending in the worktree (everything `review` lists; ignored files stay out), then
+    /// records `accepted`. The decision comes last: a commit that fails (a hook, say) leaves the thread
+    /// active with the changes staged, and running `accept` again finishes it. No push, no PR.
+    ///
+    /// - Parameter message: the commit message; the default from the goal when nil.
+    /// - Parameter shown: the plan the person saw and confirmed. If the thread no longer matches it (new
+    ///   work, a new check result), nothing is committed: the answer was about the old state.
+    @discardableResult
+    public func accept(
+        id: String, message: String? = nil, shown: AcceptPlan? = nil, by: String = "user"
+    ) async throws -> AcceptResult {
+        let plan = try await acceptPlan(id: id)
+        if let shown, shown != plan { throw ThreadServiceError.changedSinceAcceptShown }
+        let text = (message ?? plan.defaultMessage).trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { throw ThreadServiceError.emptyMessage }
+        if text.utf8.count > 8_000 { throw ThreadServiceError.invalidMessage("longer than 8000 bytes") }
+        if text.unicodeScalars.contains(where: { $0.value == 0 }) {
+            throw ThreadServiceError.invalidMessage("it contains a NUL byte")
+        }
+
+        let worktree = plan.worktree
+        return try await withLog(id) { log in
+            var committedNow = false
+            // The plan was made before the lock: a competing accept or discard may have ended the thread.
+            if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
+            _ = try await log.recoverOrphanedTurn()
+            _ = try await log.recoverOrphanedCheck()
+            // A child the dead runner left behind could still be writing files while they are committed.
+            let swept = OrphanSweeper.sweep(inside: worktree)
+            if !swept.isEmpty {
+                _ = try await log.append(
+                    EventKind(rawValue: "orphans.swept"), data: ["pids": .array(swept.map { .int(Int($0)) })])
+            }
+
+            // Always staged and asked of git, not taken from the plan: a user's `status.showUntrackedFiles`
+            // must not make work that `review` lists look absent.
+            do {
+                let staged = try await git.run(["add", "-A"], in: worktree)
+                guard staged.succeeded else {
+                    throw ThreadServiceError.acceptIncomplete(
+                        "git add failed, so nothing was committed and the thread is still active: "
+                            + staged.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                // Exit 1 means something is staged. The message is one argv entry: no shell sees it.
+                let differs = try await git.run(["diff", "--cached", "--quiet"], in: worktree)
+                if differs.status == 1 {
+                    committedNow = true
+                } else if !differs.succeeded {
+                    throw ThreadServiceError.acceptIncomplete(
+                        "git could not compare the index, so nothing was committed and the thread is still "
+                            + "active: " + differs.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+            }
+            if committedNow {
+                let committed = try await git.run(["commit", "-q", "-m", text], in: worktree)
+                guard committed.succeeded else {
+                    let detail = (committed.stderr + committed.stdout).trimmingCharacters(in: .whitespacesAndNewlines)
+                    throw ThreadServiceError.acceptIncomplete(
+                        "the commit failed, so nothing was accepted and the thread is still active; the "
+                            + "changes are staged in the worktree. Fix the cause, then run `workbench accept` "
+                            + "again.\n\(detail)")
+                }
+            }
+            let left = (try? await Self.pendingChanges(in: worktree, git: git)) ?? ["?"]
+            guard left.isEmpty else {
+                throw ThreadServiceError.acceptIncomplete(
+                    "the worktree is not clean after the commit (\(left.prefix(3).joined(separator: ", "))), so "
+                        + "nothing was accepted. Look at it, then run `workbench accept` again.")
+            }
+            let head = try await git.run(["rev-parse", "--short=12", "HEAD"], in: worktree)
+            let commit = head.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await log.append(
+                .reviewDecision, data: ["decision": "accepted", "by": .string(by), "commit": .string(commit)])
+            return AcceptResult(branch: plan.branch, commit: commit, committedNow: committedNow)
+        }
+    }
+
+    /// Uncommitted work as porcelain lines, untracked files always included (ignored ones never).
+    static func pendingChanges(in worktree: URL, git: GitRunner) async throws -> [String] {
+        let result = try await git.run(["status", "--porcelain", "--untracked-files=all"], in: worktree)
+        guard result.succeeded else {
+            throw WorktreeError.gitFailed(command: "status", status: result.status, stderr: result.stderr)
+        }
+        return result.stdout.split(separator: "\n").map(String.init)
+    }
+
+    /// `chore: <goal title>`, then the request and the thread id. The type is a guess; edit it with `-m`.
+    static func defaultCommitMessage(id: String, goalURL: URL) -> String {
+        guard let text = try? String(contentsOf: goalURL, encoding: .utf8),
+            let goal = try? GoalFile.parse(text).goal
+        else { return "chore: \(id)\n\nWorkbench-Thread: \(id)" }
+        let title = goal.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var subject = "chore: " + (title.isEmpty ? id : title)
+        if subject.count > 72 { subject = String(subject.prefix(71)) + "…" }
+        let request = goal.request.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [subject, request, "Workbench-Thread: \(id)"].filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
     // MARK: Stop
 
     public enum StopResult: Equatable, Sendable {
@@ -328,4 +498,59 @@ public enum Confirmation: Equatable, Sendable {
         guard let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() else { return .declined }
         return answer == "y" ? .proceed : .declined
     }
+}
+
+/// What an accept would commit, shown before it happens.
+public struct AcceptPlan: Sendable, Equatable {
+    public var id: String
+    public var worktree: URL
+    public var branch: String
+    public var diff: ReviewReport.Diff
+    /// Uncommitted work in the worktree, which accept commits.
+    public var hasPendingChanges: Bool
+    /// Commits already on the branch that are not on its base (at most eleven are listed).
+    public var commits: [String]
+    public var check: Review.Check?
+    /// A turn or check is open (its runner died): accept records it as interrupted.
+    public var openWork: Bool
+    /// Index and working-file identities, so an edit that keeps paths and line counts still counts as new.
+    public var snapshot: String
+    public var defaultMessage: String
+
+    /// A check ran and did not pass, or a turn or check was cut off. Accepting is still allowed; it has
+    /// to be said out loud.
+    public var checkFailed: Bool { openWork || (check.map { $0.result != "passed" } ?? false) }
+
+    public func render() -> [String] {
+        var lines = ["accept \(id) will commit to \(branch):"]
+        switch diff {
+        case .summary(let summary):
+            if summary.files.isEmpty { lines.append("  no changed files") }
+            for file in summary.files { lines.append("  " + ReviewReport.describe(file)) }
+            if summary.truncated {
+                lines.append("  … and \(summary.totalFiles - summary.files.count) more files not listed")
+            }
+        case .unavailable(let reason):
+            lines.append("  changes not shown: \(reason)")
+        }
+        if !commits.isEmpty {
+            lines.append("  \(commits.count > 10 ? "more than 10" : String(commits.count)) commit(s) already on the branch")
+        }
+        if !hasPendingChanges { lines.append("  nothing pending: the commits above are accepted as they are") }
+        if openWork {
+            lines.append("  a turn or check was cut off; accepting records it as interrupted")
+        } else if let check {
+            lines.append("  check: \(check.result)\(check.exitCode.map { " (exit \($0))" } ?? "") after turn \(check.turn)")
+        } else {
+            lines.append("  check: none ran")
+        }
+        return lines
+    }
+}
+
+public struct AcceptResult: Sendable, Equatable {
+    public var branch: String
+    public var commit: String
+    /// False when the work was already committed and accept only recorded the decision.
+    public var committedNow: Bool
 }
