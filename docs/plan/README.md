@@ -43,6 +43,9 @@ We open [concurrency](../later/README.md) when all of these hold, not before:
       without touching the terminal or hand-editing a log.
 - [ ] You would let it run while you do something else. If you still watch it, it is not done.
 - [ ] The list of "annoying things" from those 20 tasks has been worked down. Fix the loop before widening it.
+- [ ] It has been tried once on a repo of another stack, and what broke is written down in
+      [`later/portability.md`](../later/portability.md). Do this after P2, before P3 is designed around one
+      repo's layout.
 
 ## What we learned first (and why the plan looks like this)
 
