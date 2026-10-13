@@ -146,6 +146,36 @@ enum Commands {
 
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
+        var options = RunOptions(feedback: feedback)
+        options.allowDirty = allowDirty
+        return try await runTurn(ctx: ctx, id: id, options: options)
+    }
+
+    /// `send-back "<note>" [--budget <usd>] [id]`: the next turn with the note and the failed check's output.
+    static func sendBack(_ args: [String]) async throws -> Int32 {
+        var a = Arguments(args)
+        let budgetText = try a.value("--budget")
+        let note = a.positional()
+        let named = a.positional()
+        try a.requireEmpty()
+        guard let note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.usage("send-back needs a note: workbench send-back \"<what to change>\" [--budget <usd>]")
+        }
+        var budget: Decimal?
+        if let budgetText {
+            guard let value = Decimal(string: budgetText, locale: Locale(identifier: "en_US_POSIX")), value > 0 else {
+                throw CLIError.usage("--budget needs a positive number of dollars, got '\(budgetText)'")
+            }
+            budget = value
+        }
+        let ctx = try await Context.load()
+        let id = try ctx.threadID(named)
+        var options = RunOptions(feedback: note)
+        options.budgetOverride = budget
+        return try await runTurn(ctx: ctx, id: id, options: options)
+    }
+
+    private static func runTurn(ctx: Context, id: String, options: RunOptions) async throws -> Int32 {
 
         let runner = ThreadRunner(project: ctx.project, threadID: id, git: ctx.git) { notice in
             switch notice {
@@ -183,8 +213,6 @@ enum Commands {
         let signals = installStopHandlers(for: runner)
         defer { signals.forEach { $0.cancel() } }
 
-        var options = RunOptions(feedback: feedback)
-        options.allowDirty = allowDirty
         let report = try await runner.run(options)
         if let summary = report.summary, report.result == .succeeded {
             out()

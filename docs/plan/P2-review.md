@@ -74,7 +74,13 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 4. **`workbench review`** (done: `Thread/ReviewReport.swift`, read-only: criteria, diff file list, check,
    denied tools by name and `seq`, what can be done next; `--patch <path>` prints one file). `accept`,
    `send-back` and `discard` are tasks 5 to 7.
-5. **Send back flow.** Compose note, adjust budget, start turn with note and check output attached.
+5. **Send back flow** (done: `workbench send-back "<note>" [--budget <usd>] [id]`, which runs the turn itself;
+   `run --feedback` shares the path). The note is recorded as `thread.note` before the turn starts, then the
+   turn resumes the same session in the same worktree. When the latest check did not pass, the last 16 KiB of
+   its output goes into the prompt in a fence longer than any backtick run inside it and labelled as data,
+   with how many bytes were left out. `--budget` is for that turn only (more than 0, at most $100); the goal
+   file and its approval hash are untouched. Refused with nothing recorded: no prior turn, an ended thread,
+   a live runner, an empty note. No `$EDITOR`, for the reason given under accept.
 6. **Accept** (done: `ThreadService.accept`, `workbench accept [id] [-m <msg>] [--yes]`). Commits everything
    `review` lists (tracked, staged and untracked; ignored files stay out) on `workbench/<id>`, then records
    `review.decision: accepted` with the commit. The default message is `chore: <goal title>`, the request and
@@ -107,7 +113,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 
 - [ ] After any turn that changed files, the review shows the same files `git status` shows in the worktree.
 - [x] The check result is from Workbench's own run, with exit code and captured output.
-- [ ] Send back produces a turn whose first prompt contains the note and the check failure, and the session
+- [x] Send back produces a turn whose first prompt contains the note and the check failure, and the session
       context carries over (verified by a real run).
 - [x] Accept leaves a clean worktree and a branch with the commit; no push, no PR.
 - [x] Discard removes worktree and branch and leaves the log readable.
