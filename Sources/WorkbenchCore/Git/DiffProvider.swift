@@ -61,7 +61,10 @@ public struct DiffProvider: Sendable {
 
     public init(git: GitRunner) { self.git = git }
 
-    public func summary(worktree: URL, base: String) async throws -> DiffSummary {
+    /// `limit` caps the file list for display; a caller that must find one file passes `Int.max`.
+    public func summary(
+        worktree: URL, base: String, limit: Int = DiffProvider.fileLimit
+    ) async throws -> DiffSummary {
         try requireDirectory(worktree)
 
         let tracked = try await run(
@@ -83,7 +86,7 @@ public struct DiffProvider: Sendable {
 
         files.sort { $0.path < $1.path }
         let total = files.count
-        if files.count > Self.fileLimit { files = Array(files.prefix(Self.fileLimit)) }
+        if files.count > limit { files = Array(files.prefix(limit)) }
         return DiffSummary(base: base, files: files, truncated: total > files.count, totalFiles: total)
     }
 

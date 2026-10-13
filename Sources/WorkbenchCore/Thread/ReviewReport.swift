@@ -12,6 +12,10 @@ public struct ReviewReport: Sendable, Equatable {
     public var state: ThreadState
     public var title: String?
     public var criteria: [Criterion]
+    /// How the goal stands (`approved`, `draft`, `changed since approval`), nil when the file is not valid.
+    public var approval: String?
+    /// Why the goal file could not be read; the criteria are then unknown, not empty.
+    public var goalProblem: String?
     public var diff: Diff
 
     public var status: ReviewStatus { state.review.status }
@@ -33,7 +37,7 @@ public struct ReviewReport: Sendable, Equatable {
         var lines: [String] = []
         let review = state.review
         lines.append("thread:    \(state.id)")
-        if let title { lines.append("goal:      \(title)") }
+        if let title { lines.append("goal:      \(title)\(approval.map { "  (\($0))" } ?? "")") }
 
         var turns = "turns:     \(state.lastTurn)"
         if let result = review.turnResult { turns += "  last \(result)" }
@@ -42,7 +46,10 @@ public struct ReviewReport: Sendable, Equatable {
 
         lines.append("")
         lines.append("Criteria")
-        if criteria.isEmpty {
+        if let goalProblem {
+            lines.append("  goal file not valid, criteria unknown:")
+            for line in goalProblem.split(separator: "\n") { lines.append("    \(line)") }
+        } else if criteria.isEmpty {
             lines.append("  (none)")
         } else {
             for c in criteria {
@@ -138,30 +145,44 @@ public struct ReviewLoader: Sendable {
         var title: String?
         var criteria: [Criterion] = []
         var goalBase: String?
-        if let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8),
-            let goal = try? GoalFile.parse(text).goal {
+        var approval: String?
+        var problem: String?
+        do {
+            let goal = try GoalFile.parse(try String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
             title = goal.title
             criteria = goal.criteria
             goalBase = goal.base
+            switch goal.approval {
+            case .approved: approval = "approved"
+            case .draft: approval = "draft"
+            case .stale: approval = "changed since approval"
+            }
+        } catch let error as GoalParseError {
+            problem = error.description
+        } catch {
+            problem = "cannot read the goal file: \(error.localizedDescription)"
         }
-        return ReviewReport(state: state, title: title, criteria: criteria, diff: await diff(id: id, goalBase: goalBase))
+        return ReviewReport(
+            state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
+            diff: await diff(id: id, goalBase: goalBase))
     }
 
     /// One file's patch, by its path in the diff.
     public func patch(id: String, path: String) async throws -> FilePatch? {
-        guard case .summary(let summary) = await diff(id: id, goalBase: nil),
+        guard case .summary(let summary) = await diff(id: id, goalBase: nil, limit: Int.max),
             let file = summary.files.first(where: { $0.path == path })
         else { return nil }
         return try await DiffProvider(git: git).patch(
             for: file, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id), base: summary.base)
     }
 
-    private func diff(id: String, goalBase: String?) async -> ReviewReport.Diff {
+    private func diff(id: String, goalBase: String?, limit: Int = DiffProvider.fileLimit) async -> ReviewReport.Diff {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { return .unavailable(reason: "the worktree no longer exists") }
         guard let base = recordedBase(id) ?? goalBase else { return .unavailable(reason: "no base commit recorded") }
         do {
-            return .summary(try await DiffProvider(git: git).summary(worktree: manager.path(for: id), base: base))
+            return .summary(
+                try await DiffProvider(git: git).summary(worktree: manager.path(for: id), base: base, limit: limit))
         } catch {
             return .unavailable(reason: "\(error)")
         }

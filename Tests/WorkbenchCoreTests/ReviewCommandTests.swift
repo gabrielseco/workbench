@@ -49,19 +49,25 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
 
         // Modified, staged, committed and untracked work all show.
         try write("one\ntwo\n", to: "a.txt", id: id, in: fx)
-        try write("staged\n", to: "staged.txt", id: id, in: fx)
-        _ = try await fx.git.run(["add", "staged.txt"], in: worktree)
         try write("committed\n", to: "committed.txt", id: id, in: fx)
         _ = try await fx.git.run(["add", "committed.txt"], in: worktree)
         _ = try await fx.git.run(["commit", "-q", "-m", "c"], in: worktree)
+        try write("staged\n", to: "staged.txt", id: id, in: fx)
+        _ = try await fx.git.run(["add", "staged.txt"], in: worktree)
         try write("loose\n", to: "dir/loose.txt", id: id, in: fx)
 
         let review = try await cli(["review"], in: fx)
         #expect(review.exit?.termination == .exited(0), "\(review.text)")
         let text = review.text
         #expect(text.contains("thread:    \(id)"), "\(text)")
-        #expect(text.contains("☐"), "criteria are listed: \(text)")
-        #expect(text.contains("Check      failed (exit 3)  turn 1"), "\(text)")
+        #expect(text.contains("[c1] ☐ a.txt contains the word hello."), "criteria are listed: \(text)")
+        #expect(text.contains("proof: cat a.txt"), "\(text)")
+        #expect(text.contains("(approved)"), "\(text)")
+        let checkLine = try #require(review.lines.first { $0.hasPrefix("Check ") })
+        #expect(checkLine.hasPrefix("Check      failed (exit 3)  turn 1  "), "\(checkLine)")
+        #expect(checkLine.hasSuffix("s  log: checks/turn-1.log"), "\(checkLine)")
+        #expect(text.contains("4 files  +4 −0"), "\(text)")
+        #expect(review.lines.last == #"accept | send-back "<note>" | discard"#, "the next step is the last line")
         #expect(text.contains("Denied     none"), "\(text)")
         #expect(text.contains("accept | send-back"), "\(text)")
 
@@ -96,11 +102,13 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         _ = try await fx.runner(id).run(fx.options())
         let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
         _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
+        try write("half done\n", to: "half.txt", id: id, in: fx)
         _ = try await log.recoverOrphanedTurn()
         await log.close()
 
         let review = try await cli(["review"], in: fx)
         #expect(review.text.contains("last interrupted"), "\(review.text)")
+        #expect(review.text.contains("half.txt  +1 −0"), "partial work shows: \(review.text)")
         #expect(review.text.contains("accept | send-back \"<note>\" | discard"), "\(review.text)")
     }
 
@@ -190,5 +198,70 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         #expect(review.text.contains("Diff unavailable: the worktree no longer exists"), "\(review.text)")
         #expect(review.text.contains("this thread was abandoned"), "\(review.text)")
         #expect(review.text.contains("turns:     1  last succeeded"), "\(review.text)")
+    }
+
+    @Test func aStoppedTurnStillReviewsWithItsPartialDiff() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let ready = FakeClaude.scratch("review-ready-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: ready) }
+        let runner = fx.runner(id)
+        let options = fx.options("ready=\(ready)", "hang-after=1")
+        let task = Task { try await runner.run(options) }
+        let deadline = Date().addingTimeInterval(15)
+        while !FileManager.default.fileExists(atPath: ready), Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try write("so far\n", to: "so-far.txt", id: id, in: fx)
+        await runner.stop()
+        #expect(try await task.value.result == .stopped)
+
+        let review = try await cli(["review"], in: fx)
+        #expect(review.text.contains("last stopped"), "\(review.text)")
+        #expect(review.text.contains("so-far.txt"), "\(review.text)")
+        #expect(review.lines.last == #"accept | send-back "<note>" | discard"#)
+    }
+
+    @Test func aFileBeyondTheListedCapStillHasItsPatch() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        for i in 0..<(DiffProvider.fileLimit + 5) { try write("x\n", to: "a/f\(i).txt", id: id, in: fx) }
+        try write("last one\n", to: "zzz-last.txt", id: id, in: fx)
+
+        let list = try await cli(["review"], in: fx)
+        #expect(!list.text.contains("zzz-last.txt"), "cut from the list")
+        let patch = try await cli(["review", "--patch", "zzz-last.txt"], in: fx)
+        #expect(patch.exit?.termination == .exited(0), "\(patch.text)")
+        #expect(patch.text.contains("+last one"), "\(patch.text)")
+    }
+
+    @Test func anInvalidGoalFileIsShownNotPresentedAsNoCriteria() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        try "not a goal file\n".write(to: fx.project.goalURL(id), atomically: true, encoding: .utf8)
+
+        let review = try await cli(["review"], in: fx)
+        #expect(review.text.contains("goal file not valid, criteria unknown"), "\(review.text)")
+        #expect(!review.text.contains("(none)"), "\(review.text)")
+    }
+}
+
+// MARK: rendering without a process
+
+@Suite struct ReviewReportRenderingTests {
+    private func report(denied: [(tool: String, seq: Int)]) -> ReviewReport {
+        var state = ThreadState.derive(from: [], id: "t")
+        state.review.status = .awaitingReview
+        state.review.deniedTools = denied.map { Review.DeniedTool(turn: 1, tool: $0.tool, seq: $0.seq) }
+        return ReviewReport(
+            state: state, title: "T", criteria: [], approval: "approved", goalProblem: nil,
+            diff: .unavailable(reason: "x"))
+    }
+
+    @Test func deniedToolsAreGroupedByNameWithTheirSeq() {
+        let lines = report(denied: [("Bash", 5), ("Write", 6), ("Bash", 9)]).render()
+        #expect(lines.contains("Denied     Bash ×2 (seq 5, 9); Write ×1 (seq 6)"), "\(lines)")
     }
 }
