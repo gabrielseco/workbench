@@ -60,8 +60,9 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 1. **Diff provider** (done: `Git/DiffProvider.swift`). Working tree against the base commit, so committed,
    staged and untracked work all show; file list with counts, patch per file on demand; rename and binary
    handling; size cap with a "too large" fallback.
-2. **Check runner** (done: `Thread/CheckRunner.swift`). After every turn that ended on its own (not
-   `stopped`, not `interrupted`) `ThreadRunner` runs `check_command` in the worktree through `ProcessRunner`,
+2. **Check runner** (done: `Thread/CheckRunner.swift`). Once per `workbench run`, after the turn that did
+   the work and not after one that ended `stopped` or `interrupted` (a `--resume` attempt that failed at once
+   is not checked, its retry is), `ThreadRunner` runs `check_command` in the worktree through `ProcessRunner`,
    with the turn's timeout and environment, and records `check.started` and `check.ran`. Output, both
    streams in order and capped at 1 MiB, is kept in `checks/turn-N.log` under the thread. A stop during the
    check is recorded as `stopped`, a check left open by a dead runner as `interrupted` on the next run.

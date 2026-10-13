@@ -65,7 +65,7 @@ private func waitFor(_ path: String, timeout: TimeInterval = 20) async -> Bool {
         let (fx, id) = try await fixture(script: "head -c 3000000 /dev/zero | tr '\\0' 'x'; echo; echo after")
         _ = try await fx.runner(id).run(fx.options("stream-events=1"))
         let output = try String(contentsOf: fx.project.checkOutputURL(id, turn: 1), encoding: .utf8)
-        #expect(output.contains("[line of 3000000 bytes, first 4096 kept]"))
+        #expect(output.contains("[line of 3000000 bytes, cut after its first 4096 characters]"))
         #expect(output.hasSuffix("[output truncated at 1048576 bytes]\n"))
     }
 
@@ -89,11 +89,23 @@ private func waitFor(_ path: String, timeout: TimeInterval = 20) async -> Bool {
             workingDirectory: fx.repo, timeout: 40)
         spawn.snapshotInterval = 3600
         let follower = try ProcessRunner.start(spawn)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        FileManager.default.createFile(atPath: go, contents: nil)
 
+        // Release the check only once the follower has printed the finished turn: it is then running, and it
+        // began while the check was open.
+        var released = false
         var exit: ProcessExit?
-        for await event in follower.events { if case .exited(let e) = event { exit = e } }
+        for await event in follower.events {
+            switch event {
+            case .line(let line):
+                if !released, line.contains("turn ended") {
+                    released = true
+                    FileManager.default.createFile(atPath: go, contents: nil)
+                }
+            case .exited(let e): exit = e
+            default: break
+            }
+        }
+        #expect(released, "the follower printed the turn before the check ended")
         _ = try await running.value
         #expect(exit?.termination == .exited(0), "it returned instead of waiting for ever")
         #expect(exit?.cause == .natural)

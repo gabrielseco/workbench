@@ -176,7 +176,7 @@ struct CheckRunner {
             case .line(let line): sink.write(line)
             case .oversizedLine(let preview, let total):
                 // A single line over the limit: the runner kept only its start, so say how much was cut.
-                sink.write("\(preview)… [line of \(total) bytes, first \(preview.utf8.count) kept]")
+                sink.write("\(preview)… [line of \(total) bytes, cut after its first \(preview.count) characters]")
                 sink.truncated = true
             case .exited(let exit):
                 outcome.exit = exit
