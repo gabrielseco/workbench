@@ -9,12 +9,13 @@ The thing we are building:
 you write a goal → you approve it → Claude works in a worktree → you see diff + checks → accept / send back / discard
 ```
 
-Three phases, in order. Each ends with a demo you can run, not just merged code.
+Phases, in order. Each ends with a demo you can run, not just merged code.
 
 | Phase | Name | Outcome | Size |
 |---|---|---|---|
 | [P1](P1-runner.md) | Runner | `workbench run` runs Claude on an approved goal in a worktree, logs everything, always ends cleanly | M |
 | [P2](P2-review.md) | Review | `workbench review` shows diff and check results; accept, send back, discard | S |
+| [P2.5](P2.5-ship.md) | Ship | `workbench ship` pushes an accepted thread and opens its PR; Claude never holds credentials | S |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).

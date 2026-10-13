@@ -15,7 +15,7 @@ In:
 - Decisions: accept, send back (follow-up turn with your note), discard (remove worktree and branch).
 - A "denied tools" summary so a stall is explainable.
 
-Out: screenshots and verifier (`later/proof.md`), opening a PR, merging, CI. Accept here means "this branch is
+Out: screenshots and verifier (`later/proof.md`), opening a PR (that is [P2.5](P2.5-ship.md)), merging, CI. Accept here means "this branch is
 good": it commits pending work and leaves a branch ready for you. No push.
 
 ## Design
