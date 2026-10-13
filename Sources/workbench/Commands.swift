@@ -393,7 +393,7 @@ enum Commands {
             print("Commit message: Enter keeps this, or type a one-line replacement: ", terminator: "")
             if let typed = readLine(), !typed.trimmingCharacters(in: .whitespaces).isEmpty { text = typed }
         }
-        let result = try await ctx.service.accept(id: id, message: text)
+        let result = try await ctx.service.accept(id: id, message: text, shown: plan)
         if result.committedNow {
             out("accepted \(id): committed \(result.commit) on \(result.branch). Nothing was pushed.")
         } else {

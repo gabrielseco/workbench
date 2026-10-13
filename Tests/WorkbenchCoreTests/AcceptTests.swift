@@ -296,4 +296,20 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         let accepted = try await cli(["accept", "--yes"], in: fx)
         #expect(accepted.exit?.termination == .exited(0), "\(accepted.text)")
     }
+
+    @Test func workOrAChangedCheckAfterThePlanWasShownIsNotCommittedByTheOldAnswer() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        let shown = try await fx.service.acceptPlan(id: id)
+        try write("late.txt", "after the list\n", in: worktree)
+
+        await #expect(throws: ThreadServiceError.changedSinceAcceptShown) {
+            try await fx.service.accept(id: id, message: "chore: x", shown: shown)
+        }
+        #expect(try await gitOut(["status", "--porcelain"], worktree, fx).contains("late.txt"))
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+
+        let again = try await fx.service.acceptPlan(id: id)
+        try await fx.service.accept(id: id, message: "chore: x", shown: again)
+    }
 }

@@ -14,6 +14,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case emptyMessage
     case invalidMessage(String)
     case acceptIncomplete(String)
+    case changedSinceAcceptShown
 
     public var description: String {
         switch self {
@@ -35,6 +36,9 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .emptyMessage: "the commit message is empty, so nothing was accepted"
         case .invalidMessage(let why): "the commit message is not usable: \(why)"
         case .acceptIncomplete(let what): what
+        case .changedSinceAcceptShown:
+            "the thread changed after the list and check were shown, so nothing was accepted. "
+                + "Run `workbench accept` again."
         }
     }
 }
@@ -289,9 +293,14 @@ public struct ThreadService: Sendable {
     /// active with the changes staged, and running `accept` again finishes it. No push, no PR.
     ///
     /// - Parameter message: the commit message; the default from the goal when nil.
+    /// - Parameter shown: the plan the person saw and confirmed. If the thread no longer matches it (new
+    ///   work, a new check result), nothing is committed: the answer was about the old state.
     @discardableResult
-    public func accept(id: String, message: String? = nil, by: String = "user") async throws -> AcceptResult {
+    public func accept(
+        id: String, message: String? = nil, shown: AcceptPlan? = nil, by: String = "user"
+    ) async throws -> AcceptResult {
         let plan = try await acceptPlan(id: id)
+        if let shown, shown != plan { throw ThreadServiceError.changedSinceAcceptShown }
         let text = (message ?? plan.defaultMessage).trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { throw ThreadServiceError.emptyMessage }
         if text.utf8.count > 8_000 { throw ThreadServiceError.invalidMessage("longer than 8000 bytes") }
