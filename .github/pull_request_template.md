@@ -1,3 +1,5 @@
+<!-- Title: Conventional Commits, `type(scope): subject` (see AGENTS.md). A squash merge keeps it. -->
+
 ## Summary
 
 <!-- What changes, in a few sentences. -->
