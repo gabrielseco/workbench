@@ -279,6 +279,8 @@ public struct ThreadService: Sendable {
         return AcceptPlan(
             id: id, worktree: worktree, branch: branch, diff: report.diff, hasPendingChanges: !pending.isEmpty,
             commits: commits, check: state.review.check,
+            // Recovery will record these as interrupted, which is not a pass.
+            openWork: state.openTurn != nil || state.openCheck != nil,
             defaultMessage: Self.defaultCommitMessage(id: id, goalURL: project.goalURL(id)))
     }
 
@@ -300,6 +302,8 @@ public struct ThreadService: Sendable {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         let worktree = plan.worktree
         return try await withLog(id) { log in
+            // The plan was made before the lock: a competing accept or discard may have ended the thread.
+            if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
             // A child the dead runner left behind could still be writing files while they are committed.
@@ -468,10 +472,13 @@ public struct AcceptPlan: Sendable, Equatable {
     /// Commits already on the branch that are not on its base (at most eleven are listed).
     public var commits: [String]
     public var check: Review.Check?
+    /// A turn or check is open (its runner died): accept records it as interrupted.
+    public var openWork: Bool
     public var defaultMessage: String
 
-    /// A check ran and did not pass. Accepting is still allowed; it has to be said out loud.
-    public var checkFailed: Bool { check.map { $0.result != "passed" } ?? false }
+    /// A check ran and did not pass, or a turn or check was cut off. Accepting is still allowed; it has
+    /// to be said out loud.
+    public var checkFailed: Bool { openWork || (check.map { $0.result != "passed" } ?? false) }
 
     public func render() -> [String] {
         var lines = ["accept \(id) will commit to \(branch):"]
@@ -489,7 +496,9 @@ public struct AcceptPlan: Sendable, Equatable {
             lines.append("  \(commits.count > 10 ? "more than 10" : String(commits.count)) commit(s) already on the branch")
         }
         if !hasPendingChanges { lines.append("  nothing pending: the commits above are accepted as they are") }
-        if let check {
+        if openWork {
+            lines.append("  a turn or check was cut off; accepting records it as interrupted")
+        } else if let check {
             lines.append("  check: \(check.result)\(check.exitCode.map { " (exit \($0))" } ?? "") after turn \(check.turn)")
         } else {
             lines.append("  check: none ran")

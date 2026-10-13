@@ -86,7 +86,8 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    `workbench/<id>`, and when there is nothing to commit and no commit beyond base. A turn or check left
    open by a dead runner is recorded as interrupted first. The decision is written last, so a rejected
    commit leaves the thread active with the changes staged and a second `accept` finishes. The worktree is
-   kept for `ship`; `discard` can still remove it.
+   kept for `ship`. Removing it after the work is shipped is not built yet (`git worktree remove` by
+   hand); `discard` refuses an accepted thread like any ended one.
 7. **Discard** (done: `ThreadService.discard`, `workbench discard [id] [--yes]`). Shows the worktree, branch,
    changed files and commits that exist nowhere else, and asks (`--yes` for scripts and agents; with no
    terminal and no `--yes` it refuses). Closes an open turn or check, removes the worktree and the

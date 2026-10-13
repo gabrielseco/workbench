@@ -371,7 +371,7 @@ enum Commands {
         let interactive = isatty(STDIN_FILENO) == 1
 
         if plan.checkFailed {
-            let result = plan.check?.result ?? "unknown"
+            let result = plan.openWork ? "cut off" : (plan.check?.result ?? "unknown")
             out("the latest check did not pass (\(result)); `workbench review \(id)` has the details")
             if !yes && interactive { print("Accept it anyway? [y/N] ", terminator: "") }
             switch Confirmation.ask(yes: yes, interactive: interactive, readLine: { readLine() }) {

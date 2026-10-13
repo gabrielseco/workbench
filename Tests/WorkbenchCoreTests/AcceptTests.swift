@@ -259,4 +259,41 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         #expect(try await gitOut(["rev-parse", "precious"], fx.repo, fx) == tip)
         #expect(try await gitOut(["rev-list", "--count", "main..workbench/\(id)"], fx.repo, fx) == "1")
     }
+
+    @Test func twoCompetingAcceptsRecordOneDecision() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+
+        async let first: Void = { _ = try await fx.service.accept(id: id) }()
+        async let second: Void = { _ = try await fx.service.accept(id: id) }()
+        _ = await (try? first, try? second)
+        let decisions = try fx.events(id).filter { $0.kind == .reviewDecision }
+        #expect(decisions.count == 1, "\(decisions.count)")
+        #expect(try fx.contents(id).isHealthy)
+    }
+
+    @Test func aCheckCutOffByADeadRunnerNeedsYesEvenAfterAnEarlierPass() async throws {
+        let script = try CheckScript()
+        let fx = try await RunnerFixture.checking(try script.write("exit 0"))
+        let id = try await fx.approvedThread()
+        let report = try await fx.runner(id).run(fx.options())
+        #expect(report.check?.result == .passed)
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
+        _ = try await log.append(.checkStarted, turn: 2, data: ["command": "c"])
+        await log.close()
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try write("loose.txt", "x\n", in: worktree)
+
+        let refused = try await cli(["accept"], in: fx)
+        #expect(refused.exit?.termination == .exited(1), "\(refused.text)")
+        #expect(refused.text.contains("cut off"), "\(refused.text)")
+        #expect(try fx.events(id).last?.kind != .reviewDecision)
+        #expect(try await gitOut(["status", "--porcelain"], worktree, fx).contains("loose.txt"))
+
+        let accepted = try await cli(["accept", "--yes"], in: fx)
+        #expect(accepted.exit?.termination == .exited(0), "\(accepted.text)")
+    }
 }
