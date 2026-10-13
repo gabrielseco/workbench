@@ -312,4 +312,31 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         let again = try await fx.service.acceptPlan(id: id)
         try await fx.service.accept(id: id, message: "chore: x", shown: again)
     }
+
+    @Test func aSameSizeEditAfterThePlanWasShownIsNotCommittedByTheOldAnswer() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        let shown = try await fx.service.acceptPlan(id: id)
+        try write("loose.txt", "LOOSE\n", in: worktree)
+
+        await #expect(throws: ThreadServiceError.changedSinceAcceptShown) {
+            try await fx.service.accept(id: id, message: "chore: x", shown: shown)
+        }
+        #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+    }
+
+    @Test func untrackedWorkIsCommittedEvenWhenGitIsConfiguredToHideIt() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+        _ = try await fx.git.run(["config", "status.showUntrackedFiles", "no"], in: fx.repo)
+        try write("hidden.txt", "review lists me\n", in: worktree)
+
+        let result = try await fx.service.accept(id: id, message: "chore: all of it")
+        #expect(result.committedNow)
+        let tracked = try await gitOut(["ls-tree", "-r", "--name-only", "workbench/\(id)"], fx.repo, fx)
+        #expect(tracked.contains("hidden.txt"))
+        #expect(try await gitOut(["ls-files", "--others", "--exclude-standard"], worktree, fx).isEmpty)
+    }
 }

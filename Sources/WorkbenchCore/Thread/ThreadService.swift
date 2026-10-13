@@ -266,7 +266,7 @@ public struct ThreadService: Sendable {
         }
 
         let pending: [String]
-        do { pending = try await manager.changes(in: id) } catch {
+        do { pending = try await Self.pendingChanges(in: worktree, git: git) } catch {
             throw ThreadServiceError.acceptIncomplete("cannot read the worktree's changes: \(error)")
         }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
@@ -280,11 +280,20 @@ public struct ThreadService: Sendable {
         if pending.isEmpty && commits.isEmpty { throw ThreadServiceError.nothingToAccept }
 
         let report = await ReviewLoader(project: project, git: git).load(id: id)
+        // Same-size edits keep paths and counts, so what was shown is also pinned by file identity.
+        var snapshot = ""
+        if case .summary(let shown) = report.diff {
+            let full = try? await DiffProvider(git: git).summary(
+                worktree: worktree, base: shown.base, limit: Int.max, includeIgnored: true, includeStaged: true)
+            let stamps = (full?.workingFingerprint ?? [:]).sorted { $0.key < $1.key }
+            snapshot = (full?.indexFingerprint ?? "") + "\n"
+                + stamps.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")
+        }
         return AcceptPlan(
             id: id, worktree: worktree, branch: branch, diff: report.diff, hasPendingChanges: !pending.isEmpty,
             commits: commits, check: state.review.check,
             // Recovery will record these as interrupted, which is not a pass.
-            openWork: state.openTurn != nil || state.openCheck != nil,
+            openWork: state.openTurn != nil || state.openCheck != nil, snapshot: snapshot,
             defaultMessage: Self.defaultCommitMessage(id: id, goalURL: project.goalURL(id)))
     }
 
@@ -308,9 +317,9 @@ public struct ThreadService: Sendable {
             throw ThreadServiceError.invalidMessage("it contains a NUL byte")
         }
 
-        let manager = WorktreeManager(repoRoot: project.root, git: git)
         let worktree = plan.worktree
         return try await withLog(id) { log in
+            var committedNow = false
             // The plan was made before the lock: a competing accept or discard may have ended the thread.
             if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
             _ = try await log.recoverOrphanedTurn()
@@ -322,14 +331,26 @@ public struct ThreadService: Sendable {
                     EventKind(rawValue: "orphans.swept"), data: ["pids": .array(swept.map { .int(Int($0)) })])
             }
 
-            if plan.hasPendingChanges {
+            // Always staged and asked of git, not taken from the plan: a user's `status.showUntrackedFiles`
+            // must not make work that `review` lists look absent.
+            do {
                 let staged = try await git.run(["add", "-A"], in: worktree)
                 guard staged.succeeded else {
                     throw ThreadServiceError.acceptIncomplete(
                         "git add failed, so nothing was committed and the thread is still active: "
                             + staged.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
-                // The message is one argv entry: it never passes through a shell.
+                // Exit 1 means something is staged. The message is one argv entry: no shell sees it.
+                let differs = try await git.run(["diff", "--cached", "--quiet"], in: worktree)
+                if differs.status == 1 {
+                    committedNow = true
+                } else if !differs.succeeded {
+                    throw ThreadServiceError.acceptIncomplete(
+                        "git could not compare the index, so nothing was committed and the thread is still "
+                            + "active: " + differs.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+            }
+            if committedNow {
                 let committed = try await git.run(["commit", "-q", "-m", text], in: worktree)
                 guard committed.succeeded else {
                     let detail = (committed.stderr + committed.stdout).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -339,7 +360,7 @@ public struct ThreadService: Sendable {
                             + "again.\n\(detail)")
                 }
             }
-            let left = (try? await manager.changes(in: id)) ?? ["?"]
+            let left = (try? await Self.pendingChanges(in: worktree, git: git)) ?? ["?"]
             guard left.isEmpty else {
                 throw ThreadServiceError.acceptIncomplete(
                     "the worktree is not clean after the commit (\(left.prefix(3).joined(separator: ", "))), so "
@@ -349,8 +370,17 @@ public struct ThreadService: Sendable {
             let commit = head.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             try await log.append(
                 .reviewDecision, data: ["decision": "accepted", "by": .string(by), "commit": .string(commit)])
-            return AcceptResult(branch: plan.branch, commit: commit, committedNow: plan.hasPendingChanges)
+            return AcceptResult(branch: plan.branch, commit: commit, committedNow: committedNow)
         }
+    }
+
+    /// Uncommitted work as porcelain lines, untracked files always included (ignored ones never).
+    static func pendingChanges(in worktree: URL, git: GitRunner) async throws -> [String] {
+        let result = try await git.run(["status", "--porcelain", "--untracked-files=all"], in: worktree)
+        guard result.succeeded else {
+            throw WorktreeError.gitFailed(command: "status", status: result.status, stderr: result.stderr)
+        }
+        return result.stdout.split(separator: "\n").map(String.init)
     }
 
     /// `chore: <goal title>`, then the request and the thread id. The type is a guess; edit it with `-m`.
@@ -483,6 +513,8 @@ public struct AcceptPlan: Sendable, Equatable {
     public var check: Review.Check?
     /// A turn or check is open (its runner died): accept records it as interrupted.
     public var openWork: Bool
+    /// Index and working-file identities, so an edit that keeps paths and line counts still counts as new.
+    public var snapshot: String
     public var defaultMessage: String
 
     /// A check ran and did not pass, or a turn or check was cut off. Accepting is still allowed; it has
