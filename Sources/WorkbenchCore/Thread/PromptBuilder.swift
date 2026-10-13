@@ -2,7 +2,15 @@ import Foundation
 
 /// Builds what Claude is told. The goal is the only input to the first prompt (docs/spec/goal-file.md).
 public enum PromptBuilder {
-    public static func firstPrompt(goal: Goal, checkCommand: String?) -> String {
+    /// Shown above the project's instructions file, which is included whole and unmodified.
+    public static let instructionsIntro =
+        "These are the project's instructions for anyone working in this repository. Where they describe "
+        + "pushing, opening or merging pull requests, Workbench does that after your work is reviewed: "
+        + "commit in this worktree and stop there."
+
+    public static func firstPrompt(
+        goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil
+    ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
         out += "## Criteria\n\nThe work is done when every criterion holds. Each says how it will be shown.\n\n"
@@ -12,6 +20,9 @@ public enum PromptBuilder {
         if !goal.outOfScope.isEmpty {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"
             for item in goal.outOfScope { out += "- \(item)\n" }
+        }
+        if let instructions {
+            out += "\n## Project instructions\n\n\(instructionsIntro)\n\n\(instructions.text)\n"
         }
         if let check = checkCommand {
             out += "\n## Checking your work\n\nRun this exact command to check: `\(check)`\n"

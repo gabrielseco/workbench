@@ -115,7 +115,9 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(contents.isHealthy)
         #expect(contents.openTurn == nil)
         let kinds = try fx.kinds(id)
-        #expect(kinds.prefix(4) == ["thread.created", "goal.saved", "goal.approved", "turn.started"])
+        #expect(
+            kinds.prefix(5)
+                == ["thread.created", "goal.saved", "goal.approved", "worktree.created", "turn.started"])
         #expect(kinds.last == "turn.ended")
         #expect(kinds.filter { $0 == "turn.ended" }.count == 1)
         #expect(kinds.filter { $0 == "claude" }.count == 5)  // init, 2 stream events, assistant, result

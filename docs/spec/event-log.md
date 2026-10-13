@@ -27,6 +27,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref` |
 | `claude` | each stream-json line | the raw line, unmodified |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
+| `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
 | `proof.added` | evidence recorded (later) | `criterion`, `type`, `path` |
@@ -46,7 +47,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `thread.created` | `repo`, `base`, `worktree`, `branch` |
 | `goal.saved` | `status`, `hash` (null for a new draft) |
 | `goal.approved` | `hash`, `budget_usd` |
-| `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`) |
+| `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off |
+| `worktree.created` | `path`, `branch`, `base_commit`: the commit the worktree was cut from, also where the project's instructions are read |
 | `thread.note` | `text`: the feedback that started a follow-up turn |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
