@@ -12,6 +12,7 @@ let usage = """
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
       goal approve [id]          approve the goal; any later edit returns it to draft
       run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
+      send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
       log [-f] [-v]              what happened; -f follows, -v shows every stream line
       status                     where the thread stands
@@ -64,6 +65,8 @@ do {
         }
     case "run":
         exit(try await Commands.run(Array(arguments.dropFirst())))
+    case "send-back":
+        exit(try await Commands.sendBack(Array(arguments.dropFirst())))
     case "stop":
         try await Commands.stop(Array(arguments.dropFirst()))
     case "log":

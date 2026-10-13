@@ -44,6 +44,10 @@ public struct RunOptions: Sendable {
     public var checkTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
     public var allowDirty = false
+    /// The budget for this run's turns instead of the goal's. The goal file is not touched.
+    public var budgetOverride: Decimal?
+    /// Most a single turn may be given by `budgetOverride`.
+    public static let budgetCeilingUSD: Decimal = 100
     /// The environment `claude` is derived from. Defaults to this process's.
     public var parentEnvironment: [String: String] = ProcessInfo.processInfo.environment
 
@@ -57,6 +61,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case goalNotApproved(ApprovalState)
     case feedbackRequired
     case feedbackWithoutPriorTurn
+    case emptyFeedback
+    case invalidBudget(String)
     case alreadyRunning
     case claudeNotFound(String)
     case threadEnded(String)
@@ -75,6 +81,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .feedbackRequired:
             "this thread already has a successful turn. Say what to change: `workbench run --feedback \"...\"`."
         case .feedbackWithoutPriorTurn: "there is nothing to send feedback on yet; run the goal first."
+        case .emptyFeedback: "the note is empty. Say what should change."
+        case .invalidBudget(let why): "the budget is not usable: \(why)"
         case .alreadyRunning: "another `workbench run` holds this thread's log."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
         case .threadEnded(let decision): "this thread has ended (\(decision))."
@@ -113,6 +121,15 @@ public actor ThreadRunner {
     public func run(_ options: RunOptions = RunOptions()) async throws -> TurnReport {
         let store = ThreadStore(project: project)
         if let decision = store.state(of: threadID).decision { throw RunnerError.threadEnded(decision) }
+        if let feedback = options.feedback, feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw RunnerError.emptyFeedback
+        }
+        if let budget = options.budgetOverride {
+            guard budget > 0 else { throw RunnerError.invalidBudget("it must be more than 0") }
+            guard budget <= RunOptions.budgetCeilingUSD else {
+                throw RunnerError.invalidBudget("at most $\(RunOptions.budgetCeilingUSD) for one turn")
+            }
+        }
 
         let config = try Config.load(from: project.configURL)
         let goalFile = try loadGoal()
@@ -181,8 +198,23 @@ public actor ThreadRunner {
         var builtFromGoal = false
         if let feedback = options.feedback {
             guard lastTurn > 0 else { throw RunnerError.feedbackWithoutPriorTurn }
-            try await log.append(.threadNote, data: ["text": .string(feedback)])
-            prompt = PromptBuilder.followUpPrompt(feedback: feedback)
+            // The check's output goes in the prompt (and prompts/turn-N.md), not in the note event.
+            var attachment: CheckAttachment?
+            if let check = store.state(of: threadID).review.check, check.result != "passed" {
+                attachment = CheckAttachment.load(
+                    from: project.checkOutputURL(threadID, turn: check.turn), turn: check.turn,
+                    result: check.result, exitCode: check.exitCode)
+            }
+            var note: [String: JSONValue] = ["text": .string(feedback)]
+            if let attachment {
+                note["check_turn"] = .int(attachment.turn)
+                note["check_omitted_bytes"] = .int(attachment.omittedBytes)
+            }
+            if let budget = options.budgetOverride {
+                note["budget_usd"] = .double(NSDecimalNumber(decimal: budget).doubleValue)
+            }
+            try await log.append(.threadNote, data: .object(note))
+            prompt = PromptBuilder.followUpPrompt(feedback: feedback, check: attachment)
         } else {
             if anySuccess { throw RunnerError.feedbackRequired }
             builtFromGoal = true
@@ -290,7 +322,7 @@ public actor ThreadRunner {
         // swiftlint:disable:next force_unwrapping
         let sessionUUID = UUID(uuidString: sessionID)!
         let turnRequest = TurnRequest(
-            sessionID: sessionUUID, resume: resume, budgetUSD: goal.budgetUSD, prompt: prompt,
+            sessionID: sessionUUID, resume: resume, budgetUSD: options.budgetOverride ?? goal.budgetUSD, prompt: prompt,
             appendSystemPrompt: PromptBuilder.rules(checkCommand: config.checkCommand))
         let invocation = try config.invocation(for: turnRequest)
 

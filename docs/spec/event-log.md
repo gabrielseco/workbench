@@ -53,7 +53,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.approved` | `hash`, `budget_usd` |
 | `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off |
 | `worktree.created` | `path`, `branch`, `base_commit`: the commit the worktree was cut from, also where the project's instructions are read |
-| `thread.note` | `text`: the feedback that started a follow-up turn |
+| `thread.note` | `text`: the feedback that started a follow-up turn; when the latest check did not pass also `check_turn` and `check_omitted_bytes` (its output, last 16 KiB, is in `prompts/turn-N.md`, not here); `budget_usd` when `workbench send-back --budget` set one for that turn only |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
 | `check.started` | `command`: `check_command` from the config, as written there. `turn` is the turn it follows |
