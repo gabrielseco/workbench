@@ -119,11 +119,15 @@ public struct WorktreeManager: Sendable {
         }
     }
 
-    public func branchExists(_ threadID: String) async -> Bool {
-        guard SafeNames.isThreadID(threadID) else { return false }
+    /// `false` only when git says the ref is missing (exit 1); any other failure is thrown, so "could not
+    /// look" is never taken for "not there".
+    public func branchExists(_ threadID: String) async throws -> Bool {
+        guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
         let ref = "refs/heads/" + Self.branch(for: threadID)
-        let result = try? await git.run(["rev-parse", "--verify", "--quiet", ref], in: repoRoot)
-        return result?.succeeded ?? false
+        let result = try await git.run(["rev-parse", "--verify", "--quiet", ref], in: repoRoot)
+        if result.succeeded { return true }
+        if result.status == 1 { return false }
+        throw WorktreeError.gitFailed(command: "rev-parse", status: result.status, stderr: result.stderr)
     }
 
     /// Deletes `workbench/<id>` and nothing else: the name is built here from a checked thread id.

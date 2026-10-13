@@ -340,6 +340,10 @@ enum Commands {
         let plan = try await ctx.service.discardPlan(id: id)
         for line in plan.render() { out(line) }
 
+        if !yes, !plan.fullyShown {
+            throw CLIError.message(
+                "not discarding: the list above does not show everything that would be lost. Pass --yes to confirm.")
+        }
         let interactive = isatty(STDIN_FILENO) == 1
         if !yes && interactive { print("Delete these for good? [y/N] ", terminator: "") }
         switch Confirmation.ask(yes: yes, interactive: interactive, readLine: { readLine() }) {

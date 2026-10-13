@@ -63,9 +63,12 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
             let shown = try await cli([command, id], in: fx)
             #expect(shown.exit?.termination == .exited(0), "\(command): \(shown.text)")
         }
+        #expect(events.last?.data["by"]?.stringValue == "user")
         #expect(try await cli(["status", id], in: fx).text.contains("ended: discarded"))
+        #expect(try await cli(["log", id], in: fx).text.contains("decision: discarded"))
         #expect(try await cli(["review", id], in: fx).text.contains("this thread was discarded"))
-        _ = try await fx.service.newThread(name: "next", base: "main")
+        let next = try await cli(["goal", "new", "next"], in: fx)
+        #expect(next.exit?.termination == .exited(0), "the slot is free: \(next.text)")
     }
 
     @Test func withoutYesAndWithoutATerminalNothingIsRemoved() async throws {
@@ -86,7 +89,8 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         #expect(Confirmation.ask(yes: true, interactive: false, readLine: { nil }) == .proceed)
         #expect(Confirmation.ask(yes: false, interactive: false, readLine: { "y" }) == .refused)
         #expect(Confirmation.ask(yes: false, interactive: true, readLine: { "y" }) == .proceed)
-        #expect(Confirmation.ask(yes: false, interactive: true, readLine: { " YES " }) == .proceed)
+        #expect(Confirmation.ask(yes: false, interactive: true, readLine: { " Y " }) == .proceed)
+        #expect(Confirmation.ask(yes: false, interactive: true, readLine: { "yes" }) == .declined)
         #expect(Confirmation.ask(yes: false, interactive: true, readLine: { "n" }) == .declined)
         #expect(Confirmation.ask(yes: false, interactive: true, readLine: { "" }) == .declined)
         #expect(Confirmation.ask(yes: false, interactive: true, readLine: { "yep" }) == .declined)
@@ -128,6 +132,7 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         #expect(kinds == [.checkRan, .turnEnded, .reviewDecision] || kinds == [.turnEnded, .checkRan, .reviewDecision],
             "\(kinds)")
         #expect(events.contains { $0.kind == .turnEnded && $0.data["result"]?.stringValue == "interrupted" })
+        #expect(events.contains { $0.kind == .checkRan && $0.data["result"]?.stringValue == "interrupted" })
     }
 
     @Test func aFailurePartwayLeavesTheThreadActiveAndASecondDiscardFinishes() async throws {
@@ -137,7 +142,15 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         let lock = fx.repo.appendingPathComponent(".git/refs/heads/workbench/\(id).lock")
         try "".write(to: lock, atomically: true, encoding: .utf8)
 
-        await #expect(throws: (any Error).self) { try await fx.service.discard(id: id) }
+        do {
+            try await fx.service.discard(id: id)
+            Issue.record("expected the branch deletion to fail")
+        } catch let error as ThreadServiceError {
+            let message = error.description
+            #expect(message.contains("worktree is removed"), "\(message)")
+            #expect(message.contains("workbench/\(id)"), "\(message)")
+            #expect(message.contains("run `workbench discard` again"), "\(message)")
+        }
         #expect(!FileManager.default.fileExists(atPath: worktree.path), "the worktree is already gone")
         #expect(try await branchExists(id, fx))
         #expect(try fx.events(id).last?.kind != .reviewDecision)
@@ -172,5 +185,42 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         let id = try await fx.approvedThread()
         await #expect(throws: ThreadServiceError.nothingToDiscard) { try await fx.service.discard(id: id) }
         #expect(ThreadStore(project: fx.project).state(of: id).isActive)
+    }
+
+    @Test func childrenTheRunnerLeftInTheWorktreeAreSweptBeforeItIsRemoved() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+
+        let null = open("/dev/null", O_WRONLY)
+        defer { close(null) }
+        let sh = try Spawner.spawn(
+            executable: "/bin/sh", arguments: ["-c", "exec sleep 300 &"], environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: worktree.path, stdout: null, stderr: null)
+        var status: Int32 = 0
+        waitpid(sh, &status, 0)
+        var orphan: ProcessMember?
+        let deadline = Date().addingTimeInterval(5)
+        while orphan == nil, Date() < deadline {
+            orphan = OrphanSweeper.orphans(inside: worktree).first
+            if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        let member = try #require(orphan, "the helper should be orphaned and found by its cwd")
+        defer { kill(member.pid, SIGKILL) }
+
+        try await fx.service.discard(id: id)
+        #expect(await FakeClaude.waitUntilGone(member.pid))
+        #expect(try fx.kinds(id).contains("orphans.swept"))
+    }
+
+    @Test func aCutFileListCannotBeConfirmedInteractively() {
+        var summary = DiffSummary(base: "b", files: [], truncated: true, totalFiles: 600)
+        let cut = DiscardPlan(id: "t", worktree: URL(fileURLWithPath: "/w"), branch: "workbench/t",
+            diff: .summary(summary), commits: [])
+        #expect(!cut.fullyShown)
+        summary.truncated = false
+        #expect(DiscardPlan(id: "t", worktree: URL(fileURLWithPath: "/w"), branch: nil,
+            diff: .summary(summary), commits: []).fullyShown)
+        #expect(!DiscardPlan(id: "t", worktree: URL(fileURLWithPath: "/w"), branch: nil,
+            diff: .unavailable(reason: "git failed"), commits: []).fullyShown)
     }
 }

@@ -7,6 +7,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case threadEnded(String)
     case running(pid: Int32)
     case nothingToDiscard
+    case discardIncomplete(String)
 
     public var description: String {
         switch self {
@@ -19,6 +20,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
             "a run is still working on this thread (pid \(pid)). `workbench stop` it first."
         case .nothingToDiscard:
             "this thread has no worktree and no branch to discard. `workbench abandon` ends it."
+        case .discardIncomplete(let what): what
         }
     }
 }
@@ -164,7 +166,7 @@ public struct ThreadService: Sendable {
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
-        let branchExists = await manager.branchExists(id)
+        let branchExists = try await manager.branchExists(id)
         let report = await ReviewLoader(project: project, git: git).load(id: id)
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let created = events.contains { $0.kind == .worktreeCreated }
@@ -190,8 +192,22 @@ public struct ThreadService: Sendable {
         try await withLog(id) { log in
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
-            if manager.exists(id) { try await manager.remove(threadID: id, force: true) }
-            if await manager.branchExists(id) { try await manager.deleteBranch(threadID: id) }
+            if manager.exists(id) {
+                // Children the dead runner left in the worktree would outlive it, and no later run sweeps it.
+                let swept = OrphanSweeper.sweep(inside: manager.path(for: id))
+                if !swept.isEmpty {
+                    _ = try await log.append(
+                        EventKind(rawValue: "orphans.swept"), data: ["pids": .array(swept.map { .int(Int($0)) })])
+                }
+                try await manager.remove(threadID: id, force: true)
+            }
+            do {
+                if try await manager.branchExists(id) { try await manager.deleteBranch(threadID: id) }
+            } catch {
+                throw ThreadServiceError.discardIncomplete(
+                    "the worktree is removed but branch \(WorktreeManager.branch(for: id)) could not be "
+                        + "deleted: \(error)\nThe thread is still active. Fix that, then run `workbench discard` again.")
+            }
             try await log.append(.reviewDecision, data: ["decision": "discarded", "by": .string(by)])
         }
     }
@@ -251,6 +267,12 @@ public struct DiscardPlan: Sendable, Equatable {
     /// `--oneline` of the commits on the branch that are not on its base.
     public var commits: [String]
 
+    /// Everything that would be lost was listed: the diff could be read and was not cut.
+    public var fullyShown: Bool {
+        guard case .summary(let summary) = diff else { return worktree == nil }
+        return !summary.truncated
+    }
+
     public func render() -> [String] {
         var lines = ["discard \(id) will delete:"]
         if let worktree { lines.append("  worktree  \(worktree.path)") }
@@ -258,13 +280,15 @@ public struct DiscardPlan: Sendable, Equatable {
         switch diff {
         case .summary(let summary):
             if summary.files.isEmpty { lines.append("  no changed files") }
-            for file in summary.files.prefix(30) { lines.append("  " + ReviewReport.describe(file)) }
-            if summary.files.count > 30 { lines.append("  … and \(summary.totalFiles - 30) more files") }
+            for file in summary.files { lines.append("  " + ReviewReport.describe(file)) }
+            if summary.truncated {
+                lines.append("  … and \(summary.totalFiles - summary.files.count) more files not listed")
+            }
         case .unavailable(let reason):
             lines.append("  changes not shown: \(reason)")
         }
         if !commits.isEmpty {
-            lines.append("  \(commits.count) commit\(commits.count == 1 ? "" : "s") that exist nowhere else:")
+            lines.append("  \(commits.count) commit\(commits.count == 1 ? "" : "s") on the branch, not on its base:")
             for commit in commits.prefix(10) { lines.append("    " + commit) }
             if commits.count > 10 { lines.append("    … and \(commits.count - 10) more") }
         }
@@ -284,6 +308,6 @@ public enum Confirmation: Equatable, Sendable {
         if yes { return .proceed }
         guard interactive else { return .refused }
         guard let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() else { return .declined }
-        return answer == "y" || answer == "yes" ? .proceed : .declined
+        return answer == "y" ? .proceed : .declined
     }
 }
