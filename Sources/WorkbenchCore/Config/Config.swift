@@ -255,7 +255,9 @@ public struct Config: Sendable, Equatable {
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).
         available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
-        # Allowed without asking. Anything not listed is denied automatically.
+        # Allowed without asking. Anything not listed is denied automatically. A narrow test command lets a
+        # run check what it changed without repeating the full check: for a Swift project add
+        # "Bash(swift build:*)" and "Bash(swift test --filter:*)".
         allowed = [
           "Read", "Grep", "Glob", "Edit", "Write",
           "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)",

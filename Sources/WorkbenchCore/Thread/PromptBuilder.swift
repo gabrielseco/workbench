@@ -25,7 +25,16 @@ public enum PromptBuilder {
             out += "\n## Project instructions\n\n\(instructionsIntro)\n\n\(instructions.text)\n"
         }
         if let check = checkCommand {
-            out += "\n## Checking your work\n\nRun this exact command to check: `\(check)`\n"
+            out += """
+
+                ## Checking your work
+
+                While you work, check what you changed with the narrowest command you are allowed to run \
+                (one test target or file) instead of the full check each time. The full check is \
+                `\(check)`: Workbench runs it itself when you finish, and that run is what the reviewer \
+                sees. Run it yourself at most once, at the end, to be sure.
+
+                """
         }
         out += "\nWork in the current directory. When you finish, say which criteria you believe hold and why.\n"
         return out
@@ -46,7 +55,7 @@ public enum PromptBuilder {
             it: say what you needed and continue with what is allowed.
             """
         if let check = checkCommand {
-            out += " To run the project's checks use exactly `\(check)`; variations of that command are denied."
+            out += " The project's full check is `\(check)`; run it exactly as written, variations of it are denied."
         }
         return out
     }

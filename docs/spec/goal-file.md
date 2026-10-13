@@ -110,6 +110,10 @@ Notes:
 - **`--restricted` is always passed and cannot be turned off from the config.** It is what confines the
   file tools to the worktree. Bare `Edit`/`Write` in `allowed` are therefore safe, and without
   `--restricted` they would not be: spike S3 showed they can write anywhere on disk.
+- **While working, a run is told to prefer the narrowest check it is allowed.** The "Checking your work"
+  section of the first prompt says the full `check_command` is run by Workbench when the turn ends, and that
+  the run itself should use it at most once, at the end. Allowing a narrow test command in `[tools]`
+  (for Swift: `Bash(swift build:*)`, `Bash(swift test --filter:*)`) is what gives it a fast loop.
 - **The check command is a literal prefix.** `check_command = "scripts/check.sh"` becomes
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
