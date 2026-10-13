@@ -16,6 +16,7 @@ let usage = """
       log [-f] [-v]              what happened; -f follows, -v shows every stream line
       status                     where the thread stands
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
       abandon [--force]          end the thread without accepting its work
 
@@ -71,6 +72,8 @@ do {
         try await Commands.status(Array(arguments.dropFirst()))
     case "review":
         try await Commands.review(Array(arguments.dropFirst()))
+    case "accept":
+        try await Commands.accept(Array(arguments.dropFirst()))
     case "discard":
         try await Commands.discard(Array(arguments.dropFirst()))
     case "abandon":
