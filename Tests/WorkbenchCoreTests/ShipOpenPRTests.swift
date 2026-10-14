@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// A `gh` that records what it was asked and answers from files in its directory.
-private struct FakeGH {
+struct FakeGH {
     let dir: URL
     let runner: GitRunner
 

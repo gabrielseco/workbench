@@ -18,6 +18,8 @@ let usage = """
       status                     where the thread stands
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
+      ship [id] [--yes]          push the accepted branch and open its pull request; asks first
+                                 exit 3 not accepted, 4 already shipped (URL printed), 5 push rejected
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
       abandon [--force]          end the thread without accepting its work
 
@@ -77,6 +79,8 @@ do {
         try await Commands.review(Array(arguments.dropFirst()))
     case "accept":
         try await Commands.accept(Array(arguments.dropFirst()))
+    case "ship":
+        exit(try await Commands.ship(Array(arguments.dropFirst())))
     case "discard":
         try await Commands.discard(Array(arguments.dropFirst()))
     case "abandon":
