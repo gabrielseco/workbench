@@ -144,6 +144,9 @@ public struct GoalFile: Sendable, Equatable {
                 if trimmed.isEmpty { continue }
                 if trimmed.hasPrefix("- ") {
                     outOfScope.append(String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces))
+                } else if !outOfScope.isEmpty, line.text.first == " " || line.text.first == "\t" {
+                    // An indented line wraps the bullet above it, as it does in a criterion.
+                    outOfScope[outOfScope.count - 1] += " " + trimmed
                 } else {
                     add(.unrecognizedLine, line.number, "expected a '- ' bullet in 'Out of scope', found '\(trimmed)'")
                 }
