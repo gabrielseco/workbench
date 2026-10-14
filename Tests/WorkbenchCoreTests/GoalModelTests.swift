@@ -47,7 +47,9 @@ private func problems(in text: String) -> [GoalProblem] {
     @Test func anUnsafeModelIsRejectedWithItsLine() {
         for bad in ["--dangerous", "two words", "a;b", "$(x)"] {
             let found = problems(in: goal(model: bad))
-            #expect(found.contains { $0.code == .invalidValue && $0.message.contains("'model'") }, "\(bad)")
+            #expect(
+                found.contains { $0.code == .invalidValue && $0.line == 7 && $0.message.contains("'model'") },
+                "\(bad)")
         }
     }
 
