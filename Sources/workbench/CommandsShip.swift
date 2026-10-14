@@ -60,7 +60,8 @@ extension Commands {
         case .proceed: break
         case .declined:
             out("nothing changed")
-            return 0
+            // With --watch, exit 0 means every check passed; no PR was made, so there is nothing to claim.
+            return watch ? 1 : 0
         case .refused:
             throw CLIError.message("not shipping: there is no terminal to ask on. Pass --yes to confirm.")
         }
@@ -152,7 +153,8 @@ extension Commands {
     /// The thread named, or else the most recent one that is accepted and not yet shipped.
     private static func shippableThread(_ named: String?, ctx: Context) throws -> String {
         if let named {
-            guard FileManager.default.fileExists(atPath: ctx.project.threadDirectory(named).path) else {
+            // Only a name the store lists is used to build a path.
+            guard ctx.store.threadIDs().contains(named) else {
                 throw ShipError.notAccepted("there is no thread '\(named)'")
             }
             return named

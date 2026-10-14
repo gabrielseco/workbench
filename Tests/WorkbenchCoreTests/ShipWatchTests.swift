@@ -187,6 +187,24 @@ private func watch(
         #expect(gh.calls.filter { $0.hasPrefix("pr checks") }.count == 1)
     }
 
+    @Test func aBadPollAtTheDeadlineReportsTheLastGoodStateAsTimedOut() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shippedThread(fx, gh)
+        try gh.put("checks_1", checks([("build", "pending")]))
+        try gh.put("checks_hang_from", "2")
+        // Every reading of the clock is 17 s later, so the limit passes during the second, hung poll.
+        let ticks = Clock()
+        let result = try await fx.service.watchPR(
+            id: id, gh: gh.runner, interval: 1, timeout: 60, callTimeout: 1,
+            now: {
+                ticks.advance(17)
+                return ticks.now
+            },
+            sleep: { _ in }, onChange: { _ in })
+        #expect(result == .timedOut([PRCheck(name: "build", bucket: "pending")]))
+    }
+
     @Test func repeatedMalformedAnswersEndWithAnErrorNotAsPending() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

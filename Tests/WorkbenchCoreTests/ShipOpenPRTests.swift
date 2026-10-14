@@ -21,6 +21,8 @@ struct FakeGH {
             "auth status") exit 0 ;;
             "pr checks")
               n=$(cat "$d/checks_n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$d/checks_n"
+              from=$(cat "$d/checks_hang_from" 2>/dev/null || echo 99999)
+              if [ "$n" -ge "$from" ]; then echo $$ > "$d/checks_pid"; exec sleep 60; fi
               if [ -f "$d/checks_hang" ]; then echo $$ > "$d/checks_pid"; exec sleep 60; fi
               if [ -f "$d/checks_fail" ]; then echo "boom" >&2; exit 1; fi
               f=""

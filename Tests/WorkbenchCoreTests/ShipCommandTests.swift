@@ -237,6 +237,12 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(typo.code == 3, "\(typo.text)")
         #expect(gh.count("pr checks") == before, "no other thread's PR was watched")
 
+        // A name that is a path to a thread directory, not a thread id, is never used to read a log.
+        let sneaky = try await ship(["--yes", "--watch", "../threads/\(shipped.id)"], fx: fx, gh: gh)
+        #expect(sneaky.code == 3, "\(sneaky.text)")
+        #expect(!sneaky.text.contains("watching"), "\(sneaky.text)")
+        #expect(gh.count("pr checks") == before)
+
         // A named thread that was never accepted has no PR to watch: refused, with the way to end it.
         let active = try await fx.approvedThread("second")
         let notYet = try await ship(["--yes", "--watch", active], fx: fx, gh: gh)

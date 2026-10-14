@@ -125,7 +125,11 @@ extension ThreadService {
             } catch let error as ShipError {
                 failures += 1
                 if failures >= Self.watchFailureLimit { throw error }
-                if timeout - now().timeIntervalSince(started) <= 0 { throw error }
+                // Out of time during a bad poll: the last good answer is the result, not this error.
+                if timeout - now().timeIntervalSince(started) <= 0 {
+                    if lastSignature != nil { return .timedOut(known) }
+                    throw error
+                }
             }
             let left = timeout - now().timeIntervalSince(started)
             if left <= 0 {
