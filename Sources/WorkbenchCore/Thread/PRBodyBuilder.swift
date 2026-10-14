@@ -101,9 +101,11 @@ public enum PRBodyBuilder {
             var lines: [String] = []
         }
         var sections = [Section()]
-        var fenced = false
+        var fence: (char: Character, length: Int)?
         for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-            if line.hasPrefix("```") || line.hasPrefix("~~~") { fenced.toggle() }
+            let wasFenced = fence != nil
+            fence = nextFence(after: fence, line: line)
+            let fenced = wasFenced || fence != nil
             if !fenced, line.hasPrefix("#"), headingName(line) != nil {
                 sections.append(Section(heading: line))
             } else {
@@ -120,7 +122,7 @@ public enum PRBodyBuilder {
 
         var parts: [String] = []
         for section in sections {
-            var content = section.lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            var content = trimBlankLines(section.lines)
             if let heading = section.heading {
                 switch headingName(heading) {
                 case "summary": content = summary
@@ -134,6 +136,26 @@ public enum PRBodyBuilder {
             }
         }
         return parts.joined(separator: "\n\n")
+    }
+
+    /// Tracks a fenced code block: up to three spaces of indent, three or more backticks or tildes, and a
+    /// closing fence of the same character that is at least as long and carries nothing else.
+    private static func nextFence(after open: (char: Character, length: Int)?, line: String)
+        -> (char: Character, length: Int)? {
+        let indent = line.prefix { $0 == " " }.count
+        guard indent <= 3 else { return open }
+        let rest = line.dropFirst(indent)
+        guard let first = rest.first, first == "`" || first == "~" else { return open }
+        let run = rest.prefix { $0 == first }.count
+        guard run >= 3 else { return open }
+        if let open {
+            let closes = first == open.char && run >= open.length
+                && rest.dropFirst(run).allSatisfy { $0 == " " || $0 == "\t" }
+            return closes ? nil : open
+        }
+        // A backtick fence's info string cannot hold a backtick, which keeps inline code from opening one.
+        if first == "`", rest.dropFirst(run).contains("`") { return nil }
+        return (first, run)
     }
 
     /// Lower-cased heading text for an ATX heading (`## Summary`), nil when the line is not one.
@@ -150,6 +172,18 @@ public enum PRBodyBuilder {
 
     // MARK: Text
 
+    /// Drops blank lines at both ends and keeps the indentation of the first real line.
+    private static func trimBlankLines(_ lines: [String]) -> String {
+        let isBlank: (String) -> Bool = { $0.allSatisfy(\.isWhitespace) }
+        guard let first = lines.firstIndex(where: { !isBlank($0) }),
+            let last = lines.lastIndex(where: { !isBlank($0) })
+        else { return "" }
+        var kept = Array(lines[first...last])
+        kept[kept.count - 1] = kept[kept.count - 1].replacingOccurrences(
+            of: "[ \\t]+$", with: "", options: .regularExpression)
+        return kept.joined(separator: "\n")
+    }
+
     private static func oneLine(_ text: String) -> String {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
@@ -158,6 +192,8 @@ public enum PRBodyBuilder {
     static func scrub(_ text: String) -> String {
         let roots = "Users|home|private|var|tmp|Volumes|opt|etc|root|Library"
         let patterns = [
+            // Any absolute path of two or more segments; `(?<!:/)` keeps the path of an http(s) URL whole.
+            "(?<![\\w.-])(?<!:/)/[^\\s/)\\]>`'\"]+(?:/[^\\s)\\]>`'\"]*)+",
             "(?<![\\w.-])/(?:\(roots))/[^\\s)\\]>`'\"]*",
             "(?<![\\w.-])~/[^\\s)\\]>`'\"]*",
             "(?<![\\w-])\\.workbench/[^\\s)\\]>`'\"]*",

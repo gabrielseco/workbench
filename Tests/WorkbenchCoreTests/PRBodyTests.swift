@@ -184,6 +184,30 @@ private let repoTemplate = """
         #expect(PRBodyBuilder.scrub("https://example.com/Users/x") == "https://example.com/Users/x")
     }
 
+    @Test func theWholePathGoesNotJustItsTail() {
+        let out = PRBodyBuilder.scrub(
+            "see /data/client/.workbench/worktrees/t1/A.swift and /Applications/client/A.swift and /tmp/x")
+        #expect(out == "see <path> and <path> and <path>")
+        #expect(PRBodyBuilder.scrub("[doc](https://github.com/a/b/blob/main/x.md)").contains("github.com/a/b/blob"))
+    }
+
+    @Test func indentedAndLongerFencesHideTheirHeadings() {
+        let template = "## Notes\n\n   ```\n## Testing\n   ```\n\n````\n```\n## Summary\n```\n````\n"
+        let body = PRBodyBuilder.build(goal: goal(), check: check("passed"), template: template).body
+        #expect(body.contains("   ```\n## Testing\n   ```"))
+        #expect(body.contains("````\n```\n## Summary\n```\n````"))
+        // Nothing inside the fences was filled; the real sections were added around them.
+        #expect(body.hasPrefix("## Summary\n\nAdd retry"))
+        #expect(body.contains("\n\n## Testing\n\nCheck: passed"))
+        #expect(body.components(separatedBy: "Check: passed").count == 2)
+    }
+
+    @Test func indentedCodeInAKeptSectionIsNotDedented() {
+        let template = "## Rollout\n\n    run migrate\n"
+        let body = PRBodyBuilder.build(goal: goal(), check: nil, template: template).body
+        #expect(body.contains("## Rollout\n\n    run migrate"))
+    }
+
     @Test func templateWithoutSummaryOrTestingStillCarriesRequestCriteriaAndCheck() {
         let body = PRBodyBuilder.build(
             goal: goal(), check: check("passed"), template: "## Rollout\n\nShip behind the flag.\n").body
