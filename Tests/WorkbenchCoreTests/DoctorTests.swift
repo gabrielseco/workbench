@@ -219,6 +219,18 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let ok = try await cli(["doctor"], in: passing)
         #expect(ok.code == 0, "\(ok.text)")
         #expect(ok.text.contains("setup:") && ok.text.contains("passed"))
+        #expect(ok.text.contains("check:") && ok.text.contains("claude:") && ok.text.contains("model:"))
+
+        let (undeclared, _) = try await fixture()
+        let none = try await cli(["doctor"], in: undeclared)
+        #expect(none.code == 0)
+        #expect(none.text.contains("turns will end with no check evidence"))
+
+        let (badSetup, _) = try await fixture(setup: "echo auth failed >&2\nexit 4", check: "true")
+        let setupFailed = try await cli(["doctor"], in: badSetup)
+        #expect(setupFailed.code == 1)
+        #expect(setupFailed.text.contains("auth failed") && setupFailed.text.contains("env_pass"))
+        #expect(setupFailed.text.contains("skipped"))
 
         let (failing, _) = try await fixture(check: "echo nope\nexit 1")
         let bad = try await cli(["doctor"], in: failing)
@@ -233,5 +245,35 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let usage = try await cli(["doctor", "--base", "a..b"], in: passing)
         #expect(usage.code == 2)
         #expect(try await cli(["doctor", "stray"], in: passing).code == 2)
+    }
+}
+
+@Suite struct DoctorOwnershipTests {
+    @Test func aSecondDoctorIsRefusedAndTheFirstKeepsItsWorktree() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let first = Doctor(project: fx.project, git: fx.git)
+        let task = Task { try await first.run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+            Issue.record("expected a refusal")
+        } catch let error as DoctorError {
+            #expect(error == .alreadyRunning)
+        }
+        #expect(FileManager.default.fileExists(atPath: fx.project.worktreesDirectory.appendingPathComponent("doctor").path))
+        let report = try await task.value
+        #expect(report.passed)
+        try await expectClean(fx)
+    }
+
+    @Test func aWorktreeThatCannotBeRemovedIsReportedNotHidden() async throws {
+        // A locked worktree: `worktree remove --force` refuses it.
+        let (fx, _) = try await fixture(setup: "git worktree lock \"$PWD\"", check: "true")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.setup.outcome == .passed && report.check.outcome == .passed)
+        #expect(!report.passed)
+        let problem = try #require(report.cleanupProblem)
+        #expect(problem.contains("git worktree remove --force --force"))
     }
 }

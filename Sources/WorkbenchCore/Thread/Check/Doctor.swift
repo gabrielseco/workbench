@@ -4,9 +4,11 @@ public enum DoctorError: Error, Equatable, CustomStringConvertible {
     case noConfig(String)
     case threadActive(String)
     case invalidBase(String)
+    case alreadyRunning
 
     public var description: String {
         switch self {
+        case .alreadyRunning: "another `workbench doctor` is running in this project"
         case .noConfig(let path): "no config at \(path): run `workbench init` first"
         case .threadActive(let id):
             "thread \(id) is still active; doctor would run a second check next to it. End it (accept, discard, abandon) first"
@@ -50,15 +52,19 @@ public struct DoctorReport: Sendable, Equatable {
     public var checkPattern: String?
     public var setup: DoctorStep
     public var check: DoctorStep
+    /// Set when the throwaway worktree could not be removed, with what to run by hand.
+    public var cleanupProblem: String?
 
-    /// Everything declared passed. A step the config does not declare is not a failure.
+    /// Everything declared passed and nothing was left behind. A step the config does not declare is not a
+    /// failure.
     public var passed: Bool {
-        [setup, check].allSatisfy {
+        cleanupProblem == nil
+            && [setup, check].allSatisfy {
             switch $0.outcome {
-            case .passed, .notDeclared: true
-            default: false
+                case .passed, .notDeclared: true
+                default: false
+                }
             }
-        }
     }
 
     public var wasStopped: Bool {
@@ -138,6 +144,9 @@ public final class Doctor: @unchecked Sendable {
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""))
         guard config.setupCommand != nil || config.checkCommand != nil else { return report }
 
+        // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover".
+        let lock = try acquireLock()
+        defer { close(lock) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         try await removeLeftover(manager)
         let worktree = try await manager.create(threadID: Self.worktreeID, base: base)
@@ -153,9 +162,29 @@ public final class Doctor: @unchecked Sendable {
         }
         // Removed on every path, also after an error and after a stop.
         try? FileManager.default.removeItem(at: scratch)
-        try? await manager.remove(threadID: Self.worktreeID, force: true, deleteBranch: true)
+        var cleanupProblem: String?
+        do {
+            try await manager.remove(threadID: Self.worktreeID, force: true, deleteBranch: true)
+        } catch {
+            cleanupProblem =
+                "could not remove the throwaway worktree (\(error)). Remove it by hand: "
+                + "git worktree remove --force --force \(worktree.path) && git branch -D "
+                + WorktreeManager.branch(for: Self.worktreeID)
+        }
         report = try result.get()
+        report.cleanupProblem = cleanupProblem
         return report
+    }
+
+    /// An exclusive lock on the `.workbench` directory itself, so no file is left behind.
+    private func acquireLock() throws -> Int32 {
+        let fd = open(project.workbenchDirectory.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { throw DoctorError.noConfig(project.configURL.path) }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            throw DoctorError.alreadyRunning
+        }
+        return fd
     }
 
     private func removeLeftover(_ manager: WorktreeManager) async throws {

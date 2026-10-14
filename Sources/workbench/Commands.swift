@@ -133,10 +133,11 @@ enum Commands {
         do { report = try await doctor.run(base: resolved) } catch let error as DoctorError {
             switch error {
             case .invalidBase: throw CLIError.usage("\(error)")
-            case .noConfig, .threadActive: throw CLIError.refused("\(error)")
+            case .noConfig, .threadActive, .alreadyRunning: throw CLIError.refused("\(error)")
             }
         }
         printDoctor(report)
+        if let problem = report.cleanupProblem { return fail(.failed, problem) }
         if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
         return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
     }
