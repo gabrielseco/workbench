@@ -32,7 +32,9 @@ Every code change ends in a PR, via the `deliver` skill or by hand. One PR per t
 list the tasks.
 
 1. Branch from `origin/main`. Work in a git worktree, not in a checkout someone else is using.
-2. `scripts/check.sh` must pass before pushing. Add tests for what you add, including the failure cases
+2. Before pushing, run the tests for what you touched (`swift test --filter <suite>`) and
+   `swiftlint lint --quiet`; CI runs the full `scripts/check.sh` and the soak, so don't repeat them locally
+   unless you changed something that crosses areas. Add tests for what you add, including the failure cases
    the phase plan lists.
 3. Commit messages and the PR title follow Conventional Commits (below).
 4. After opening a PR, or after pushing a fix to an open one, have Codex review it with
