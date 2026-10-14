@@ -60,7 +60,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
 1. **Diff provider** (done: `Git/DiffProvider.swift`). Working tree against the base commit, so committed,
    staged and untracked work all show; file list with counts, patch per file on demand; rename and binary
    handling; size cap with a "too large" fallback.
-2. **Check runner** (done: `Thread/CheckRunner.swift`). Once per `workbench run`, after the turn that did
+2. **Check runner** (done: `Thread/Check/CheckRunner.swift`). Once per `workbench run`, after the turn that did
    the work and not after one that ended `stopped` or `interrupted` (a `--resume` attempt that failed at once
    is not checked, its retry is), `ThreadRunner` runs `check_command` in the worktree through `ProcessRunner`,
    with the turn's timeout and environment, and records `check.started` and `check.ran`. Output, both
@@ -71,7 +71,7 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    function, with `Review` (status, latest turn result and check, notes, denied tools) built from the
    decision and note events (`review.decision`, `thread.note`). See "Review state" in
    `docs/spec/event-log.md`.
-4. **`workbench review`** (done: `Thread/ReviewReport.swift`, read-only: criteria, diff file list, check,
+4. **`workbench review`** (done: `Thread/Review/ReviewReport.swift`, read-only: criteria, diff file list, check,
    denied tools by name and `seq`, what can be done next; `--patch <path>` prints one file). `accept`,
    `send-back` and `discard` are tasks 5 to 7.
 5. **Send back flow** (done: `workbench send-back "<note>" [--budget <usd>] [id]`, which runs the turn itself;
