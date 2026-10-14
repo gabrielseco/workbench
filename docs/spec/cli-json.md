@@ -24,8 +24,9 @@ status keys: v, thread, ended, goal, turns, open_turn, running, last_result, che
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, criteria, diff, check, denied_tools, notes, next, base_gap
+review keys: v, thread, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, base, worktree, criteria, diff, check, denied_tools, notes, next, base_gap
 
+- `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
 - `criteria`: `{id, text, proof}`.
 - `diff`: `{state: summary | unavailable, base, total_files, truncated, additions, deletions, files, reason}`;
@@ -37,4 +38,4 @@ review keys: v, thread, status, ended, title, approval, goal_problem, turns, las
 ## log
 
 JSON lines: the stored events, one per line, exactly as in `events.jsonl` (`claude` lines verbatim).
-`log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one event.
+`log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one stored line.

@@ -13,7 +13,7 @@ extension Commands {
 
     static func reviewKeys() -> [String] {
         ["v", "thread", "status", "ended", "title", "approval", "goal_problem", "turns", "last_result", "cost_usd",
-         "criteria", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
+         "base", "worktree", "criteria", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
     }
 
     private static func gapJSON(_ base: String, ctx: Context) async -> JSONValue {
@@ -66,14 +66,7 @@ extension Commands {
                 ]
             } catch {}
         }
-        let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
-        var worktreeState = "none"
-        if FileManager.default.fileExists(atPath: worktree.path) {
-            worktreeState = "present"
-        } else if let events = try? EventLogReader.read(at: ctx.project.eventsURL(id)).events,
-            events.contains(where: { $0.kind == .worktreeRemoved }) {
-            worktreeState = "removed"
-        }
+        let worktreeValue = worktreeJSON(id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
@@ -86,8 +79,20 @@ extension Commands {
                 "last": state.lastCheck.map { .string($0) } ?? .null,
             ],
             "cost_usd": .double(state.totalCostUSD), "notes": noteJSON(state.review.notes), "base_gap": gap,
-            "worktree": ["state": .string(worktreeState), "path": .string(worktree.path)],
+            "worktree": worktreeValue,
         ]
+    }
+
+    private static func worktreeJSON(id: String, ctx: Context) -> JSONValue {
+        let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
+        var state = "none"
+        if FileManager.default.fileExists(atPath: worktree.path) {
+            state = "present"
+        } else if let events = try? EventLogReader.read(at: ctx.project.eventsURL(id)).events,
+            events.contains(where: { $0.kind == .worktreeRemoved }) {
+            state = "removed"
+        }
+        return ["state": .string(state), "path": .string(worktree.path)]
     }
 
     static func reviewJSON(_ report: ReviewReport, ctx: Context) async -> JSONValue {
@@ -140,6 +145,7 @@ extension Commands {
             "approval": report.approval.map { .string($0) } ?? .null,
             "goal_problem": report.goalProblem.map { .string($0) } ?? .null, "turns": .int(state.lastTurn),
             "last_result": review.turnResult.map { .string($0) } ?? .null, "cost_usd": .double(state.totalCostUSD),
+            "base": base.map { .string($0) } ?? .null, "worktree": worktreeJSON(id: state.id, ctx: ctx),
             "criteria": .array(
                 report.criteria.map { ["id": .string($0.id), "text": .string($0.text), "proof": .string($0.proof)] }),
             "diff": diff, "check": check,

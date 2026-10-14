@@ -94,7 +94,7 @@ do {
     case "abandon":
         try await Commands.abandon(Array(arguments.dropFirst()))
     default:
-        throw CLIError.usage("unknown command '\(arguments[0])'\n\n\(usage)")
+        throw CLIError.usage("unknown command '\(arguments[0])'. `workbench help` lists the commands.")
     }
 } catch {
     report(error)

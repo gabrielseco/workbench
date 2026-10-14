@@ -15,11 +15,17 @@ enum FailureKind: String {
     case pushRejected = "push-rejected"
     case checkFailed = "check-failed"
     case noResult = "no-result"
+    case stopped
+    case timedOut = "timed-out"
+    case budgetExceeded = "budget-exceeded"
 
     var code: Int32 {
         switch self {
         case .failed: 1
         case .usage, .invalidConfig, .invalidGoal: 2
+        case .stopped: 3
+        case .timedOut: 4
+        case .budgetExceeded: 5
         case .refused: 6
         case .notFound: 7
         case .notAccepted: 10
@@ -47,7 +53,10 @@ func fail(_ kind: FailureKind, _ message: String) -> Int32 {
         ]
         printJSON(object)
     } else {
-        err("workbench: \(kind.rawValue): \(message)")
+        // One line: a goal's problems or a remote's message are joined, so a reader of stderr gets one record.
+        let oneLine = message.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: "; ")
+        err("workbench: \(kind.rawValue): \(oneLine)")
     }
     return kind.code
 }
@@ -91,12 +100,13 @@ func failureKind(of error: Error) -> FailureKind {
         return .refused
     case let e as ThreadServiceError:
         switch e {
-        case .acceptIncomplete, .discardIncomplete, .goalInvalid: return .failed
+        case .goalInvalid: return .invalidGoal
+        case .acceptIncomplete, .discardIncomplete: return .failed
         default: return .refused
         }
     case let e as RunnerError:
         if case .claudeNotFound = e { return .failed }
-        if case .goalInvalid = e { return .failed }
+        if case .goalInvalid = e { return .invalidGoal }
         return .refused
     default: return .failed
     }

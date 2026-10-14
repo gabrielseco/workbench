@@ -78,13 +78,22 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
 
         let one = try await cli(["log", id, "--seq", "1", "--json"], in: fx)
         #expect(one.code == 0)
-        let event = try JSONSerialization.jsonObject(with: Data(one.stdout.joined().utf8)) as? [String: Any]
-        #expect(event?["seq"] as? Int == 1)
+        #expect(one.stdout.count == 1, "one stored line")
+        #expect(one.stdout.first == stored.first)
+
+        // A raw `claude` line comes back byte for byte.
+        let claudeSeq = try #require(
+            try fx.events(id).first { $0.kind == .claude }?.seq)
+        let raw = try await cli(["log", id, "--seq", String(claudeSeq), "--json"], in: fx)
+        #expect(raw.stdout.count == 1 && raw.stdout.first == stored[claudeSeq - 1])
     }
 
     @Test func everyFailureHasAKindAndOneCodeInTextAndJSON() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
+        // The active thread's goal, with its front matter gone.
+        let broken = id
+        try "no front matter here\n".write(to: fx.project.goalURL(id), atomically: true, encoding: .utf8)
 
         struct Case {
             var arguments: [String]
@@ -99,6 +108,8 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
             Case(arguments: ["accept", id], kind: "refused", code: 6),
             Case(arguments: ["discard", id], kind: "refused", code: 6),
             Case(arguments: ["ship", "g-missing"], kind: "not-accepted", code: 10),
+            Case(arguments: ["goal", "approve", broken], kind: "invalid-goal", code: 2),
+            Case(arguments: ["frobnicate"], kind: "usage", code: 2),
         ]
         for item in cases {
             let (arguments, kind, code) = (item.arguments, item.kind, item.code)

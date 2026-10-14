@@ -240,10 +240,11 @@ enum Commands {
         out("review:  workbench log    (worktree: \(ctx.project.worktreesDirectory.appendingPathComponent(id).path))")
         switch report.result {
         case .succeeded: return 0
-        case .failed, .interrupted: return 1
-        case .stopped: return 3
-        case .timedOut: return 4
-        case .budgetExceeded: return 5
+        case .failed, .interrupted:
+            return fail(.failed, "turn \(report.turn) ended \(report.result.rawValue). `workbench log` has the details.")
+        case .stopped: return fail(.stopped, "turn \(report.turn) was stopped.")
+        case .timedOut: return fail(.timedOut, "turn \(report.turn) timed out.")
+        case .budgetExceeded: return fail(.budgetExceeded, "turn \(report.turn) went over its budget.")
         }
     }
 

@@ -10,6 +10,20 @@ extension Commands {
             throw CLIError.notFound("no event \(seq) in \(id) (it has \(events.count))")
         }
         let encoder = JSONEncoder()
+        if Output.json {
+            // The line as stored, not a re-encoding: `claude` lines stay verbatim.
+            let raw = ((try? String(contentsOf: url, encoding: .utf8)) ?? "").split(separator: "\n")
+            for line in raw {
+                let decoded = try? JSONDecoder().decode(Event.self, from: Data(line.utf8))
+                if decoded?.seq == seq {
+                    out(String(line))
+                    return
+                }
+            }
+            encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+            out(String(decoding: try encoder.encode(event), as: UTF8.self))
+            return
+        }
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         out(String(decoding: try encoder.encode(event), as: UTF8.self))
     }
