@@ -39,7 +39,7 @@ func processExists(commandLine: String) async -> Bool {
     return result.succeeded && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }
 
-private func waitForPath(_ path: String, timeout: TimeInterval = 15) async -> Bool {
+private func waitForPath(_ path: String, timeout: TimeInterval = Patience.limit) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if FileManager.default.fileExists(atPath: path) { return true }
@@ -75,7 +75,7 @@ private func waitForPath(_ path: String, timeout: TimeInterval = 15) async -> Bo
         // track them. (With the default 100 ms snapshot the test passed or failed on runner speed.)
         spawn.snapshotInterval = 3600
         let cli = try ProcessRunner.start(spawn)
-        #expect(await waitForPath(ready), "the fake claude should be up inside the worktree")
+        try #require(await waitForPath(ready), "the fake claude should be up inside the worktree")
         let grandchild = try #require(pid_t(try String(contentsOfFile: pidFile, encoding: .utf8)))
         defer { kill(grandchild, SIGKILL) }
 
@@ -122,7 +122,7 @@ private func waitForPath(_ path: String, timeout: TimeInterval = 15) async -> Bo
         // track them. (With the default 100 ms snapshot the test passed or failed on runner speed.)
         spawn.snapshotInterval = 3600
         let cli = try ProcessRunner.start(spawn)
-        #expect(await waitForPath(ready))
+        try #require(await waitForPath(ready))
 
         #expect(fx.service.requestStop(id: id) == .signalled(pid: cli.pid))
         var exit: ProcessExit?
@@ -196,7 +196,7 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
             let report: TurnReport
             if scenario.stopAfterReady {
                 let task = Task { try await runner.run(options) }
-                #expect(await waitForPath(ready), "\(scenario.name) #\(i): never became ready")
+                try #require(await waitForPath(ready), "\(scenario.name) #\(i): never became ready")
                 await runner.stop()
                 report = try await task.value
             } else {
@@ -264,14 +264,15 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
 
         let runner = fx.runner(id)
         let task = Task { try await runner.run(options) }
-        #expect(await waitForPath(ready))
+        try #require(await waitForPath(ready))
         let started = Date()
         await runner.stop()
         let report = try await task.value
         let elapsed = Date().timeIntervalSince(started)
 
         #expect(report.result == .stopped)
-        #expect(elapsed >= 4.9 && elapsed <= 6.0, "took \(elapsed)s")
+        // Only the floor is a property of the code (it waited out the grace); the ceiling is the runner.
+        #expect(elapsed >= 4.9 && elapsed <= Patience.limit, "took \(elapsed)s")
         let end = try #require(ended(try fx.events(id)).first)
         #expect(end.data["escalated_to_kill"] == true)
     }

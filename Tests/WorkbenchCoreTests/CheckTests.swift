@@ -395,10 +395,9 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
         let options = fx.options("ready=\(ready)", "hang-after=1")
 
         let task = Task { try await runner.run(options) }
-        let deadline = Date().addingTimeInterval(15)
-        while !FileManager.default.fileExists(atPath: ready), Date() < deadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // #require: going on without it would stop a run that has not started, or write into a worktree
+        // that does not exist yet.
+        try #require(await pollUntil { FileManager.default.fileExists(atPath: ready) })
         await runner.stop()
         let report = try await task.value
 

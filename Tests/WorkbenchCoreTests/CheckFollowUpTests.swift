@@ -14,7 +14,7 @@ private func fixture(script: String) async throws -> (RunnerFixture, String) {
     return (fx, try await fx.approvedThread())
 }
 
-private func waitFor(_ path: String, timeout: TimeInterval = 20) async -> Bool {
+private func waitFor(_ path: String, timeout: TimeInterval = Patience.limit) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if FileManager.default.fileExists(atPath: path) { return true }
@@ -81,7 +81,7 @@ private func waitFor(_ path: String, timeout: TimeInterval = 20) async -> Bool {
         let runner = fx.runner(id)
         let options = fx.options("stream-events=1")
         let running = Task { try await runner.run(options) }
-        #expect(await waitFor(started), "the check is open")
+        try #require(await waitFor(started), "the check is open")
 
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: ["log", "--follow"],

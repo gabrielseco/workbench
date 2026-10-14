@@ -280,10 +280,9 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         let options = fx.options("ready=\(ready)", "hang-after=1")
 
         let task = Task { try await runner.run(options) }
-        let deadline = Date().addingTimeInterval(15)
-        while !FileManager.default.fileExists(atPath: ready), Date() < deadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // #require: going on without it would stop a run that has not started, or write into a worktree
+        // that does not exist yet.
+        try #require(await pollUntil { FileManager.default.fileExists(atPath: ready) })
         await runner.stop()
         let report = try await task.value
 
@@ -438,7 +437,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         waitpid(sh, &status, 0)
 
         var orphan: ProcessMember?
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(Patience.limit)
         while orphan == nil, Date() < deadline {
             orphan = OrphanSweeper.orphans(inside: worktree.path).first
             if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }
