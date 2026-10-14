@@ -31,7 +31,10 @@ extension ThreadService {
             throw ShipError.notPushed("origin is at \(sha.prefix(12)), this thread at \(plan.head.prefix(12))")
         }
         guard let gh else { throw ShipError.ghMissing }
-        let runner = GitRunner(executable: gh.executable, environment: gh.environment, timeout: timeout)
+        // `GH_REPO` would point lookup and creation somewhere other than the origin that was just verified.
+        var environment = gh.environment
+        environment["GH_REPO"] = nil
+        let runner = GitRunner(executable: gh.executable, environment: environment, timeout: timeout)
 
         let found = try await existingPR(branch: plan.branch, runner: runner, worktree: plan.worktree)
         let outcome: ShipPRResult.Outcome
@@ -108,13 +111,25 @@ extension ThreadService {
             let reader = ProjectInstructions.BlobReader(git: git, repo: project.root, commit: commit)
             for path in [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE.md"] {
                 if let text = await reader.read(path) {
+                    // The reader cuts at its limit; a template cut short would drop sections without a word.
+                    guard text.utf8.count < ProjectInstructions.blobReadLimit else {
+                        throw ShipError.gitFailed("\(path) is larger than 64 KiB; shorten it so the whole template is used.")
+                    }
                     template = text
                     break
+                }
+                // Not read, but there: too large for the reader, so it is not silently treated as absent.
+                let present = try? await git.run(["cat-file", "-e", "\(commit):\(path)"], in: project.root)
+                if present?.succeeded == true {
+                    throw ShipError.gitFailed("\(path) cannot be read (larger than 1 MiB or not a regular file)")
                 }
             }
         }
         let state = ThreadState.derive(from: events, id: plan.id)
-        let body = PRBodyBuilder.build(goal: goal, check: state.review.check, template: template)
+        var body = PRBodyBuilder.build(goal: goal, check: state.review.check, template: template)
+        // What is published must not carry a credential that was pasted into the goal or the template.
+        body.title = Self.withoutCredentials(body.title, environment: runner.environment)
+        body.body = Self.withoutCredentials(body.body, environment: runner.environment)
 
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("wb-pr-\(UUID().uuidString).md")
         guard FileManager.default.createFile(

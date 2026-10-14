@@ -16,6 +16,7 @@ private struct FakeGH {
             #!/bin/sh
             d="$GH_FAKE_DIR"
             echo "$@" >> "$d/calls"
+            echo "${GH_REPO:-unset}" > "$d/repo"
             case "$1 $2" in
             "auth status") exit 0 ;;
             "pr list") if [ -f "$d/list" ]; then cat "$d/list"; else echo '[]'; fi; exit 0 ;;
@@ -213,6 +214,47 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         let body = try #require(gh.read("body"))
         #expect(!body.contains("/Users/alice"))
         #expect(body.contains("Check: passed (exit 0, 4s)"), "\(body)")
+    }
+
+    @Test func credentialsPastedIntoTheGoalOrTemplateAreNotPublishedAndGHRepoIsDropped() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+        let goal = fx.project.goalURL(id)
+        let text = try String(contentsOf: goal, encoding: .utf8)
+        try text.replacingOccurrences(of: "title: work", with: "title: fix with ghp_abcdefgh12345678")
+            .replacingOccurrences(of: "Add a greeting to a.txt.", with: "Use Authorization: Bearer abc123def456")
+            .write(to: goal, atomically: true, encoding: .utf8)
+
+        let withRepo = GitRunner(
+            executable: gh.runner.executable, environment: gh.runner.environment.merging(["GH_REPO": "evil/repo"]) { $1 },
+            timeout: 10)
+        _ = try await fx.service.shipOpenPR(id: id, gh: withRepo)
+        let published = (gh.read("body") ?? "") + gh.calls.joined(separator: "\n")
+        #expect(!published.contains("ghp_abcdefgh") && !published.contains("abc123def456"), "\(published)")
+        #expect(gh.read("repo")?.trimmingCharacters(in: .whitespacesAndNewlines) == "unset")
+    }
+
+    @Test func aTemplateTooLargeToReadWholeIsRefusedNotTruncated() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let path = fx.repo.appendingPathComponent(".github/pull_request_template.md")
+        try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try ("## Summary\n\n" + String(repeating: "x", count: 70_000) + "\n## Rollout\n").write(
+            to: path, atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "template"], in: fx.repo)
+        let id = try await pushedThread(fx, gh.runner).id
+
+        let error = await openRefusal { try await fx.service.shipOpenPR(id: id, gh: gh.runner) }
+        guard case .gitFailed(let why)? = error else {
+            Issue.record("got \(String(describing: error))")
+            return
+        }
+        #expect(why.contains("64 KiB"), "\(why)")
+        #expect(gh.count("pr create") == 0)
     }
 
     @Test func aBranchThatIsNotOnOriginAtTheTipIsRefusedWithoutCreating() async throws {
