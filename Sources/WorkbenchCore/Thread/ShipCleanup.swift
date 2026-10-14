@@ -21,14 +21,36 @@ extension ThreadService {
         else { return .notShipped }
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
-        guard manager.exists(id) else { return .alreadyGone }
+        let removedRecorded = events.contains { $0.kind == .worktreeRemoved }
+        guard manager.exists(id) else {
+            // Gone without a record (the process died between removing and writing): say it now.
+            guard !removedRecorded else { return .alreadyGone }
+            do {
+                try await withLog(id) { log in
+                    try await log.append(.worktreeRemoved, data: ["reason": "shipped", "head_sha": .string(head)])
+                }
+            } catch { return .kept("the worktree is gone but the log could not be written: \(error)") }
+            return .alreadyGone
+        }
         let worktree = manager.path(for: id)
         let branch = WorktreeManager.branch(for: id)
         if let pid = runnerPID(id: id) { return .kept("a run is still active (pid \(pid))") }
 
+        // Children a dead runner left could write into the worktree while it is inspected: stop them first,
+        // then look, and look again right before removing.
+        let swept = OrphanSweeper.sweep(inside: worktree)
+
         func read(_ args: [String]) async -> String? {
             guard let result = try? await git.run(args, in: worktree), result.succeeded else { return nil }
             return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        func untidy() async -> String? {
+            guard let status = await read(["status", "--porcelain", "--ignored", "--untracked-files=all"]) else {
+                return "git could not read its state"
+            }
+            guard !status.isEmpty else { return nil }
+            let first = status.split(separator: "\n").first.map(String.init) ?? ""
+            return "it has files that are not committed or are ignored (\(first)); nothing was removed"
         }
         guard await read(["symbolic-ref", "--short", "-q", "HEAD"]) == branch else {
             return .kept("it is not on \(branch)")
@@ -36,13 +58,7 @@ extension ThreadService {
         guard await read(["rev-parse", "HEAD"]) == head else {
             return .kept("its HEAD is not the commit that was shipped; there is newer work in it")
         }
-        guard let status = await read(["status", "--porcelain", "--ignored", "--untracked-files=all"]) else {
-            return .kept("git could not read its state")
-        }
-        if !status.isEmpty {
-            let first = status.split(separator: "\n").first.map(String.init) ?? ""
-            return .kept("it has files that are not committed or are ignored (\(first)); nothing was removed")
-        }
+        if let why = await untidy() { return .kept(why) }
         // Not just "the branch is on origin": the commit that is there must be this one.
         let listed = try? await git.run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"], in: worktree)
         let tip = listed.flatMap { result -> String? in
@@ -50,20 +66,23 @@ extension ThreadService {
             return Self.remoteBranchSHAIfExact(result.stdout, branch: branch)
         }
         guard tip == head else { return .kept("origin does not have \(branch) at the shipped commit") }
+        if let why = await untidy() { return .kept(why) }
 
-        let swept = OrphanSweeper.sweep(inside: worktree)
+        do {
+            try await manager.remove(threadID: id, force: false)
+        } catch {
+            return .kept("git would not remove it: \(Self.withoutCredentials("\(error)"))")
+        }
         do {
             try await withLog(id) { log in
                 if !swept.isEmpty {
                     _ = try await log.append(
                         EventKind(rawValue: "orphans.swept"), data: ["pids": .array(swept.map { .int(Int($0)) })])
                 }
-                try await manager.remove(threadID: id, force: false)
-                try await log.append(
-                    .worktreeRemoved, data: ["reason": "shipped", "head_sha": .string(head)])
+                try await log.append(.worktreeRemoved, data: ["reason": "shipped", "head_sha": .string(head)])
             }
         } catch {
-            return .kept("git would not remove it: \(Self.withoutCredentials("\(error)"))")
+            return .kept("the worktree is removed but the log could not be written (\(error)); run ship again to record it")
         }
         return .removed(path: worktree.path)
     }

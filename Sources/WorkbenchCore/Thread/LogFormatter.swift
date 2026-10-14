@@ -32,6 +32,9 @@ public enum LogFormatter {
             return head + "feedback: \(event.data["text"]?.stringValue ?? "")"
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
+        case .worktreeRemoved:
+            let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
+            return head + "worktree removed (\(event.data["reason"]?.stringValue ?? "?"))\(sha); the branch is kept"
         default:
             return head + event.kind.rawValue
         }

@@ -123,6 +123,70 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         #expect(await fx.service.cleanShipped(id: id, gh: gh.runner) == .removed(path: worktree.path))
     }
 
+    @Test func aRemovalWithoutARecordIsRecordedByTheNextRun() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let thread = try await shipped(fx, gh)
+        // As if the process died after removing and before writing the event.
+        _ = try await fx.git.run(["worktree", "remove", thread.worktree.path], in: fx.repo)
+
+        #expect(await fx.service.cleanShipped(id: thread.id, gh: gh.runner) == .alreadyGone)
+        let recorded = try fx.events(thread.id).filter { $0.kind == .worktreeRemoved }
+        #expect(recorded.count == 1)
+        #expect(recorded.first?.data["head_sha"]?.stringValue?.count == 40)
+        #expect(await fx.service.cleanShipped(id: thread.id, gh: gh.runner) == .alreadyGone)
+        #expect(try fx.events(thread.id).filter { $0.kind == .worktreeRemoved }.count == 1)
+
+        let line = LogFormatter.describe(try #require(recorded.first))
+        #expect(line.contains("worktree removed (shipped)") && line.contains("branch is kept"), "\(line)")
+    }
+
+    @Test func aWrongBranchAndAStagedChangeAreKept() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let thread = try await shipped(fx, gh)
+        try "s\n".write(to: thread.worktree.appendingPathComponent("s.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "s.txt"], in: thread.worktree)
+        guard case .kept = await fx.service.cleanShipped(id: thread.id, gh: gh.runner) else {
+            Issue.record("a staged file must keep the worktree")
+            return
+        }
+        _ = try await fx.git.run(["reset", "-q", "--hard"], in: thread.worktree)
+        _ = try await fx.git.run(["clean", "-qfd"], in: thread.worktree)
+        _ = try await fx.git.run(["checkout", "-q", "--detach"], in: thread.worktree)
+        guard case .kept(let why) = await fx.service.cleanShipped(id: thread.id, gh: gh.runner) else {
+            Issue.record("a detached HEAD must keep the worktree")
+            return
+        }
+        #expect(why.contains("not on"))
+        #expect(FileManager.default.fileExists(atPath: thread.worktree.path))
+    }
+
+    @Test func childrenADeadRunnerLeftAreSweptBeforeRemoval() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let thread = try await shipped(fx, gh)
+        let null = open("/dev/null", O_WRONLY)
+        defer { close(null) }
+        let sh = try Spawner.spawn(
+            executable: "/bin/sh", arguments: ["-c", "exec sleep 300 &"], environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: thread.worktree.path, stdout: null, stderr: null)
+        var status: Int32 = 0
+        waitpid(sh, &status, 0)
+        var orphan: ProcessMember?
+        let deadline = Date().addingTimeInterval(5)
+        while orphan == nil, Date() < deadline {
+            orphan = OrphanSweeper.orphans(inside: thread.worktree).first
+            if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        let member = try #require(orphan, "a leftover child to sweep")
+
+        #expect(await fx.service.cleanShipped(id: thread.id, gh: gh.runner) == .removed(path: thread.worktree.path))
+        defer { kill(member.pid, SIGKILL) }
+        #expect(await FakeClaude.waitUntilGone(member.pid), "the leftover child is gone")
+        #expect(try fx.kinds(thread.id).contains("orphans.swept"))
+    }
+
     @Test func aThreadThatIsNotShippedIsLeftAlone() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
@@ -160,6 +224,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
             #expect(code == 0, "\(command): \(text)")
             if command == "status" { #expect(text.contains("removed after shipping")) }
             if command == "review" { #expect(text.contains("removed after shipping")) }
+            if command == "log" { #expect(text.contains("worktree removed (shipped)"), Comment(rawValue: text)) }
         }
 
         // Shipped again: exit 4, URL last, no second removal event.
