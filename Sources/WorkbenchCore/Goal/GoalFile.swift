@@ -106,6 +106,7 @@ public struct GoalFile: Sendable, Equatable {
             }
             return n
         }
+        let model = modelValue(value("model"), add: add)
         var declared = GoalStatus.draft
         if let entry = value("status") {
             if let status = GoalStatus(rawValue: entry.value) {
@@ -160,11 +161,24 @@ public struct GoalFile: Sendable, Equatable {
         let body = lines[bodyStart...].joined(separator: "\n")
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, budgetUSD: budget,
-            turnTimeoutMin: timeout, approvedAt: value("approved_at")?.value,
+            turnTimeoutMin: timeout, model: model, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
-            contentHash: GoalHash.hash(base: base, budgetUSD: budget, turnTimeoutMin: timeout, body: body))
+            contentHash: GoalHash.hash(base: base, budgetUSD: budget, turnTimeoutMin: timeout, model: model, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
+    }
+
+    private static func modelValue(
+        _ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> String? {
+        guard let entry else { return nil }
+        guard SafeNames.isModelName(entry.value) else {
+            add(
+                .invalidValue, entry.lineNumber,
+                "'model' must be a model name or alias like \"opus\", found '\(entry.value)'")
+            return nil
+        }
+        return entry.value
     }
 
     // MARK: Approval
@@ -279,7 +293,8 @@ public struct GoalFile: Sendable, Equatable {
 /// One `key: value  # comment` line of the front matter.
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
-        "id", "title", "status", "base", "budget_usd", "turn_timeout_min", "approved_at", "approved_hash",
+        "id", "title", "status", "base", "budget_usd", "turn_timeout_min", "model", "approved_at",
+        "approved_hash",
     ]
 
     var key: String

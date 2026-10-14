@@ -9,6 +9,11 @@ enum SafeNames {
             && !s.hasSuffix(".lock") && !s.hasSuffix(".")
     }
 
+    /// A model name or alias that goes to `--model`: no leading `-`, no whitespace.
+    static func isModelName(_ s: String) -> Bool {
+        s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) != nil
+    }
+
     /// A branch or ref name we are willing to pass to git: no leading `-`, no `..`, no whitespace.
     static func isBranchName(_ s: String) -> Bool {
         s.range(of: #"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"#, options: .regularExpression) != nil

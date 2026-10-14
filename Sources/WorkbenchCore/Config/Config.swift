@@ -147,7 +147,7 @@ public struct Config: Sendable, Equatable {
 
         var model: String?
         if let (value, line) = string("", "model") {
-            if value.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) == nil {
+            if !SafeNames.isModelName(value) {
                 fail(.invalidValue, line, "'model' must be a model name or alias like \"haiku\"")
             } else {
                 model = value
@@ -252,7 +252,7 @@ public struct Config: Sendable, Equatable {
         # claude_path = "claude"           # name on PATH, or an absolute path
         # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
         # project_instructions = true     # put AGENTS.md (else CLAUDE.md) in the first prompt (default)
-        # model = "haiku"                  # --model for every turn; unset = the CLI default
+        # model = "opus"                   # --model for every turn; a goal's `model` wins; unset = the CLI default
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # default_budget_usd = 5.00        # used when drafting a goal
