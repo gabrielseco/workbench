@@ -21,9 +21,11 @@ extension ThreadService {
     /// first, so a PR that was created but never recorded (a crash in between) is recorded on the next run
     /// and never duplicated. Writes the event last.
     public func shipOpenPR(
-        id: String, gh: GitRunner?, timeout: TimeInterval = ThreadService.prTimeout
+        id: String, gh: GitRunner?, shown: ShipPlan? = nil, timeout: TimeInterval = ThreadService.prTimeout
     ) async throws -> ShipPRResult {
         let plan = try await shipPreflight(id: id, gh: gh)
+        // The branch is on origin by now, so only what was confirmed about the target must still hold.
+        if let shown, !shown.sameTarget(as: plan) { throw ShipError.changedAfterPush }
         switch plan.remote {
         case .upToDate: break
         case .absent: throw ShipError.notPushed("origin has no \(plan.branch)")

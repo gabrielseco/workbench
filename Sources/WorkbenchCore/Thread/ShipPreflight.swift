@@ -20,10 +20,17 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case pushRejected(String)
     case notPushed(String)
     case ghFailed(String)
+    case changedSinceShown
+    case changedAfterPush
 
     public var description: String {
         switch self {
-        case .notAccepted(let why): "this thread is not accepted (\(why)). Only an accepted thread is shipped."
+        case .notAccepted(let why):
+            "this thread is not accepted (\(why)). Only an accepted thread is shipped: "
+                + "`workbench accept` ends a thread with its work committed."
+        case .changedSinceShown:
+            "the thread, its branch or origin changed after the plan was shown, so nothing was published. "
+                + "Run `workbench ship` again."
         case .alreadyShipped(let url): "this thread was already shipped: \(url)"
         case .running(let pid): "a run is still working on this thread (pid \(pid)). `workbench stop` it first."
         case .worktreeMissing(let path): "no worktree at \(path), so there is nothing to push"
@@ -43,10 +50,16 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .ghNotAuthenticated: "`gh` is not logged in. Run `gh auth login`."
         case .remoteDiverged(let sha):
             "origin already has this branch at \(sha.prefix(12)), which is not part of this one. "
-                + "Shipping would need a force push, and Workbench never does that."
+                + "Shipping would need a force push, and Workbench never does that. Look at what is on origin, "
+                + "then remove or rename that remote branch yourself, or ship from a different thread."
         case .gitFailed(let what): what
         case .notPushed(let why): "the branch is not on origin at this thread's tip (\(why)). Push it first."
-        case .ghFailed(let why): "`gh` could not open the pull request, so nothing was recorded: \(why)"
+        case .ghFailed(let why):
+            "`gh` could not open the pull request, so nothing was recorded: \(why) "
+                + "Fix the cause and run `workbench ship` again; the branch is not pushed twice."
+        case .changedAfterPush:
+            "the branch was pushed, but the thread, its tip or origin changed before the pull request was "
+                + "opened, so no PR was made. Run `workbench ship` again to see the new plan."
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }
@@ -73,6 +86,12 @@ public struct ShipPlan: Sendable, Equatable {
     /// The URL of `origin` with any credentials removed, safe to print and to record.
     public var origin: String
     public var remote: Remote
+
+    /// Same thread, branch, base, tip and origin: what a confirmation is about.
+    public func sameTarget(as other: ShipPlan) -> Bool {
+        id == other.id && branch == other.branch && base == other.base && head == other.head
+            && origin == other.origin
+    }
 }
 
 extension ThreadService {

@@ -24,10 +24,16 @@ extension ThreadService {
     /// Runs the preflight, then pushes `workbench/<id>` to `origin` with its upstream set. A rejected,
     /// timed-out or killed push changes nothing the next attempt depends on: preflight reads the remote
     /// again and a plain push is repeated. Writes no event; the PR is task 4.
+    ///
+    /// - Parameter shown: the plan the person confirmed. If the thread, tip, base or origin differ now,
+    ///   nothing is pushed: the answer was about something else.
     public func shipPush(
-        id: String, gh: GitRunner?, timeout: TimeInterval = ThreadService.pushTimeout
+        id: String, gh: GitRunner?, shown: ShipPlan? = nil, timeout: TimeInterval = ThreadService.pushTimeout
     ) async throws -> ShipPushResult {
         let plan = try await shipPreflight(id: id, gh: gh)
+        if let shown, !shown.sameTarget(as: plan) || shown.remote != plan.remote {
+            throw ShipError.changedSinceShown
+        }
         if plan.remote == .upToDate { return ShipPushResult(plan: plan, outcome: .alreadyOnOrigin) }
 
         let pusher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
