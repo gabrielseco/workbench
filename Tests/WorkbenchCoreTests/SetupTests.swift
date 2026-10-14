@@ -93,6 +93,7 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
             return
         }
         #expect(output.contains("cannot find"))
+        #expect(!"\(error!)".contains("env_pass"), "nothing ran, so the environment is not the suspect")
         #expect(!(try fx.kinds(id)).contains("turn.started"))
     }
 
