@@ -93,9 +93,15 @@ extension Commands {
 
     static func status(_ args: [String]) async throws {
         var a = Arguments(args)
+        let all = a.flag("--all")
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
+        if all {
+            if named != nil { throw CLIError.usage("status --all lists every thread; it takes no id") }
+            statusAll(ctx: ctx)
+            return
+        }
 
         // A named thread that does not exist is an error; only "no threads at all" is a friendly line.
         if named != nil { _ = try ctx.threadIDForViewing(named) }
@@ -144,7 +150,11 @@ extension Commands {
         } else if let check = state.lastCheck {
             out("check:     \(check)")
         }
+        if state.openTurn != nil {
+            for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
+        }
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
+        if state.openTurn != nil { out("           the open turn's cost is reported when it ends") }
         for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: worktree.path) {
@@ -153,6 +163,34 @@ extension Commands {
             events.contains(where: { $0.kind == .worktreeRemoved }) {
             out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
         }
+    }
+
+    /// One line per thread on disk, newest first. A view over `.workbench/threads/`, not a thread list to act on.
+    static func statusAll(ctx: Context) {
+        let states = ctx.store.threadIDs().map { ctx.store.state(of: $0) }
+            .sorted { ($0.createdAt ?? "", $0.id) > ($1.createdAt ?? "", $1.id) }
+        if Output.json {
+            printJSON(statusAllJSON(states))
+            return
+        }
+        if states.isEmpty {
+            out("no threads yet. Start one: workbench goal new <name>")
+            return
+        }
+        for state in states {
+            // How it ended: the decision once there is one, else where the thread stands.
+            var line = state.decision ?? statusString(state.review.status)
+            if let result = state.lastResult { line += " (last turn \(result))" }
+            out(String(format: "%@  %@  $%.2f", state.id, line, state.totalCostUSD))
+        }
+    }
+
+    /// The goal's per-turn limit in seconds, nil when the goal cannot be read.
+    static func turnTimeout(id: String, ctx: Context) -> TimeInterval? {
+        guard let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
+            let goal = try? GoalFile.parse(text).goal
+        else { return nil }
+        return TimeInterval(goal.turnTimeoutMin * 60)
     }
 
     static func review(_ args: [String]) async throws {

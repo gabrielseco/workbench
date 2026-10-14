@@ -9,7 +9,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, ended, goal, turns, open_turn, running, last_result, check, cost_usd, notes, base_gap, worktree
+status keys: v, thread, ended, goal, turns, open_turn, running, last_result, check, cost_usd, notes, base_gap, worktree, progress
 
 - `ended`: `accepted`, `discarded`, `abandoned`, or null while the thread is active.
 - `goal`: null when there is no goal file; else `title`, `approval` (`approved`, `draft`, `stale`,
@@ -18,6 +18,13 @@ status keys: v, thread, ended, goal, turns, open_turn, running, last_result, che
 - `notes`: `{turn, seq, text}` for each send-back.
 - `base_gap`: null, or `{base, behind, fetch_note}`.
 - `worktree`: `{state: present | removed | none, path}`.
+- `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
+  tool_calls, denied_calls}`, derived from the log on each call. `quiet` is true when the newest event is
+  60 s old or more. `cost_usd` does not include the open turn: `claude` reports cost only in the result line.
+
+`workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
+cost_usd}` (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
+runs and queues nothing.
 
 ## review
 

@@ -42,6 +42,39 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
 }
 
 @Suite struct CLIJSONTests {
+    @Test func statusTakesAnIdOfAFinishedThreadAndAllListsEveryThread() async throws {
+        let fx = try await RunnerFixture()
+        let first = try await fx.approvedThread("first")
+        _ = try await fx.runner(first).run(fx.options())
+        try await fx.service.abandon(id: first)
+        let second = try await fx.approvedThread("second")
+
+        let one = try await cli(["status", first, "--json"], in: fx)
+        #expect(one.code == 0, "\(one.text)")
+        let o = try object(one.stdout)
+        #expect(o["thread"] as? String == first)
+        #expect(o["ended"] as? String == "abandoned")
+        #expect(o["progress"] is NSNull)
+        let log = try await cli(["log", first], in: fx)
+        #expect(log.code == 0 && !log.stdout.isEmpty, "\(log.text)")
+
+        let all = try await cli(["status", "--all", "--json"], in: fx)
+        #expect(all.code == 0, "\(all.text)")
+        let a = try object(all.stdout)
+        let threads = try #require(a["threads"] as? [[String: Any]])
+        #expect(Set(threads.compactMap { $0["thread"] as? String }) == [first, second])
+        let ended = try #require(threads.first { $0["thread"] as? String == first })
+        #expect(ended["ended"] as? String == "abandoned")
+        #expect(ended["status"] as? String == "decided")
+        let live = try #require(threads.first { $0["thread"] as? String == second })
+        #expect(live["ended"] is NSNull)
+
+        let text = try await cli(["status", "--all"], in: fx)
+        #expect(text.stdout.count == 2, "\(text.text)")
+        let both = try await cli(["status", "--all", first], in: fx)
+        #expect(both.code != 0)
+    }
+
     @Test func statusAndReviewAreOneDocumentedObjectEach() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

@@ -8,7 +8,7 @@ extension Commands {
 
     static func statusKeys() -> [String] {
         ["v", "thread", "ended", "goal", "turns", "open_turn", "running", "last_result", "check", "cost_usd",
-         "notes", "base_gap", "worktree"]
+         "notes", "base_gap", "worktree", "progress"]
     }
 
     static func reviewKeys() -> [String] {
@@ -25,7 +25,7 @@ extension Commands {
         ]
     }
 
-    private static func statusString(_ status: ReviewStatus) -> String {
+    static func statusString(_ status: ReviewStatus) -> String {
         switch status {
         case .empty: "empty"
         case .running: "running"
@@ -33,6 +33,22 @@ extension Commands {
         case .sentBack: "sent_back"
         case .decided: "decided"
         }
+    }
+
+    /// `status --all`: one entry per thread on disk, newest first. Read-only; nothing in it can be started.
+    static func statusAllJSON(_ states: [ThreadState]) -> JSONValue {
+        [
+            "v": .int(jsonVersion),
+            "threads": .array(
+                states.map { state in
+                    [
+                        "thread": .string(state.id), "status": .string(statusString(state.review.status)),
+                        "ended": state.decision.map { .string($0) } ?? .null,
+                        "last_result": state.lastResult.map { .string($0) } ?? .null,
+                        "turns": .int(state.lastTurn), "cost_usd": .double(state.totalCostUSD),
+                    ]
+                }),
+        ]
     }
 
     private static func noteJSON(_ notes: [Review.Note]) -> JSONValue {
@@ -67,6 +83,7 @@ extension Commands {
             } catch {}
         }
         let worktreeValue = worktreeJSON(id: id, ctx: ctx)
+        let progressValue = progressJSON(state: state, id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
@@ -79,7 +96,23 @@ extension Commands {
                 "last": state.lastCheck.map { .string($0) } ?? .null,
             ],
             "cost_usd": .double(state.totalCostUSD), "notes": noteJSON(state.review.notes), "base_gap": gap,
-            "worktree": worktreeValue,
+            "worktree": worktreeValue, "progress": progressValue,
+        ]
+    }
+
+    /// The open turn's progress; null when no turn is open.
+    private static func progressJSON(state: ThreadState, id: String, ctx: Context) -> JSONValue {
+        guard let turn = state.openTurn else { return .null }
+        let now = Date()
+        let p = state.progress
+        func seconds(_ value: TimeInterval?) -> JSONValue { value.map { .int(Int($0.rounded())) } ?? .null }
+        let age = p.quietFor(now: now)
+        return [
+            "turn": .int(turn), "elapsed_s": seconds(p.elapsed(now: now)),
+            "timeout_s": seconds(turnTimeout(id: id, ctx: ctx)),
+            "last_event": p.lastEvent.map { .string($0) } ?? .null, "last_event_age_s": seconds(age),
+            "quiet": .bool((age ?? 0) >= Progress.quietThreshold),
+            "tool_calls": .int(p.toolCalls), "denied_calls": .int(p.deniedCalls),
         ]
     }
 
