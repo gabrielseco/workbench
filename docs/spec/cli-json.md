@@ -22,6 +22,10 @@ status keys: v, thread, ended, goal, turns, open_turn, running, last_result, che
   tool_calls, denied_calls}`, derived from the log on each call. `quiet` is true when the newest event is
   60 s old or more. `cost_usd` does not include the open turn: `claude` reports cost only in the result line.
 
+`workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
+cost_usd}` (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
+runs and queues nothing.
+
 ## review
 
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints

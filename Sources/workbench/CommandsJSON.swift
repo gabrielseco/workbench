@@ -25,7 +25,7 @@ extension Commands {
         ]
     }
 
-    private static func statusString(_ status: ReviewStatus) -> String {
+    static func statusString(_ status: ReviewStatus) -> String {
         switch status {
         case .empty: "empty"
         case .running: "running"
@@ -33,6 +33,22 @@ extension Commands {
         case .sentBack: "sent_back"
         case .decided: "decided"
         }
+    }
+
+    /// `status --all`: one entry per thread on disk, newest first. Read-only; nothing in it can be started.
+    static func statusAllJSON(_ states: [ThreadState]) -> JSONValue {
+        [
+            "v": .int(jsonVersion),
+            "threads": .array(
+                states.map { state in
+                    [
+                        "thread": .string(state.id), "status": .string(statusString(state.review.status)),
+                        "ended": state.decision.map { .string($0) } ?? .null,
+                        "last_result": state.lastResult.map { .string($0) } ?? .null,
+                        "turns": .int(state.lastTurn), "cost_usd": .double(state.totalCostUSD),
+                    ]
+                }),
+        ]
     }
 
     private static func noteJSON(_ notes: [Review.Note]) -> JSONValue {
