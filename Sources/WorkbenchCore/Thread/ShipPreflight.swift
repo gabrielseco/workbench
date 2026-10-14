@@ -196,8 +196,29 @@ extension ThreadService {
         text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
-    /// `https://user:token@host/x` becomes `https://host/x`, wherever it appears in a line.
+    /// Removes what must never be shown or recorded: `user:token@` in a URL, `Authorization` headers,
+    /// well-known token shapes, and `token=`-style query values. Stays conservative: it cuts, it does not guess.
     static func withoutCredentials(_ text: String) -> String {
-        text.replacingOccurrences(of: #"(?<=://)[^/@\s]+@"#, with: "", options: .regularExpression)
+        let patterns: [(String, String)] = [
+            (#"(?<=://)[^/@\s]+@"#, ""),
+            (#"(?i)(authorization:?\s*)(bearer|basic|token)?\s*[^\s,;]+"#, "$1<redacted>"),
+            (#"\b(gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,})"#, "<redacted>"),
+            (#"(?i)([?&](?:access_token|token|auth|key|password|secret)=)[^&\s'")]+"#, "$1<redacted>"),
+        ]
+        return patterns.reduce(text) {
+            $0.replacingOccurrences(of: $1.0, with: $1.1, options: .regularExpression)
+        }
+    }
+
+    /// `withoutCredentials`, and also the exact values of any token in the environment `gh` was given.
+    static func withoutCredentials(_ text: String, environment: [String: String]) -> String {
+        var clean = withoutCredentials(text)
+        for (key, value) in environment where value.count >= 6 {
+            let upper = key.uppercased()
+            if upper.contains("TOKEN") || upper.contains("SECRET") || upper.contains("PASSWORD") {
+                clean = clean.replacingOccurrences(of: value, with: "<redacted>")
+            }
+        }
+        return clean
     }
 }

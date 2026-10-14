@@ -44,13 +44,14 @@ extension ThreadService {
             pr = try await createPR(plan: plan, runner: runner)
         }
         let (url, number, base) = (pr.url, pr.number, pr.base ?? plan.base)
+        let head = pr.head ?? plan.head
 
         try await withLog(id) { log in
             try await log.append(
                 .prOpened,
                 data: [
                     "url": .string(url), "number": .int(number), "branch": .string(plan.branch),
-                    "base": .string(base), "head_sha": .string(plan.head),
+                    "base": .string(base), "head_sha": .string(head),
                 ])
         }
         return ShipPRResult(plan: plan, url: url, number: number, outcome: outcome)
@@ -62,24 +63,31 @@ extension ThreadService {
         var url: String
         var number: Int
         var base: String?
+        /// The PR's own head commit, when `gh` reported one.
+        var head: String?
     }
 
     private func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
         let args = [
             "pr", "list", "--head", branch, "--state", "open", "--limit", "10",
-            "--json", "number,url,headRefName,baseRefName",
+            "--json", "number,url,headRefName,baseRefName,headRefOid",
         ]
         let result = try await ghRun(args, runner: runner, worktree: worktree)
-        guard result.succeeded else { throw ShipError.ghFailed(Self.shown(result)) }
+        guard result.succeeded else { throw ShipError.ghFailed(Self.shown(result, environment: runner.environment)) }
         guard let data = result.stdout.data(using: .utf8),
             let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { throw ShipError.ghFailed("`gh pr list` did not answer with JSON") }
         for item in list where item["headRefName"] as? String == branch {
+            // A record for our branch that cannot be trusted is an error, not "no PR": creating a second
+            // one on top of it is the thing this lookup exists to prevent.
             guard let url = item["url"] as? String, let parsed = Self.pullRequest(from: url),
                 (item["number"] as? Int) == parsed.number
-            else { continue }
+            else { throw ShipError.ghFailed("`gh pr list` returned a pull request for \(branch) that is not usable") }
             let base = (item["baseRefName"] as? String).flatMap { SafeNames.isBranchName($0) ? $0 : nil }
-            return FoundPR(url: parsed.url, number: parsed.number, base: base)
+            let head = (item["headRefOid"] as? String).flatMap {
+                $0.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil ? $0 : nil
+            }
+            return FoundPR(url: parsed.url, number: parsed.number, base: base, head: head)
         }
         return nil
     }
@@ -119,12 +127,12 @@ extension ThreadService {
             "--body-file", file.path,
         ]
         let result = try await ghRun(args, runner: runner, worktree: plan.worktree)
-        guard result.succeeded else { throw ShipError.ghFailed(Self.shown(result)) }
+        guard result.succeeded else { throw ShipError.ghFailed(Self.shown(result, environment: runner.environment)) }
         let last = result.stdout.split(separator: "\n").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
         guard let parsed = Self.pullRequest(from: last) else {
             throw ShipError.ghFailed("`gh` printed no pull request URL, so it was not recorded")
         }
-        return FoundPR(url: parsed.url, number: parsed.number, base: nil)
+        return FoundPR(url: parsed.url, number: parsed.number, base: nil, head: nil)
     }
 
     private func ghRun(_ args: [String], runner: GitRunner, worktree: URL) async throws -> GitResult {
@@ -135,10 +143,10 @@ extension ThreadService {
         } catch { throw ShipError.ghMissing }
     }
 
-    private static func shown(_ result: GitResult) -> String {
+    private static func shown(_ result: GitResult, environment: [String: String]) -> String {
         let text = (result.stderr.isEmpty ? result.stdout : result.stderr)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let clean = String(withoutCredentials(text).suffix(2_000))
+        let clean = String(withoutCredentials(text, environment: environment).suffix(2_000))
         return clean.isEmpty ? "gh exited \(result.status)" : clean
     }
 

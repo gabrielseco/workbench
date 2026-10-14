@@ -29,7 +29,8 @@ public enum PRBodyBuilder {
             sections.append("## Check\n\n" + checkLine)
             body = sections.joined(separator: "\n\n")
         }
-        return PRBody(title: title(goal.title), body: body + "\n")
+        // The template is the repository's text, which can carry paths too.
+        return PRBody(title: title(goal.title), body: scrub(body) + "\n")
     }
 
     // MARK: Title

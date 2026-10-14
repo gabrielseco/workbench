@@ -151,6 +151,70 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         #expect(gh.count("pr create") == 0)
     }
 
+    @Test func anExistingPRKeepsItsOwnHeadAndAnUnusableRecordIsRefusedNotDuplicated() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await pushedThread(fx, gh.runner).id
+        let other = String(repeating: "b", count: 40)
+        try gh.put(
+            "list",
+            "[{\"number\": 7, \"url\": \"https://user:tok@github.com/o/r/pull/7\", \"headRefName\": \"workbench/\(id)\"}]")
+        let bad = await openRefusal { try await fx.service.shipOpenPR(id: id, gh: gh.runner) }
+        guard case .ghFailed? = bad else {
+            Issue.record("got \(String(describing: bad))")
+            return
+        }
+        #expect(gh.count("pr create") == 0)
+        #expect(!(try fx.events(id).contains { $0.kind == .prOpened }))
+
+        try gh.put(
+            "list",
+            "[{\"number\": 7, \"url\": \"https://github.com/o/r/pull/7\", \"headRefName\": \"workbench/\(id)\", "
+                + "\"baseRefName\": \"main\", \"headRefOid\": \"\(other)\"}]")
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        #expect(try fx.events(id).last?.data["head_sha"]?.stringValue == other)
+    }
+
+    @Test func otherCredentialShapesAreRemovedFromGHsMessages() {
+        let samples = [
+            "Authorization: Bearer ghp_abcdefgh12345678", "token ghp_abcdefgh12345678 rejected",
+            "GET https://api.github.com/x?access_token=hunter2hunter2&per_page=1", "github_pat_11ABCDEFG0abcdefgh",
+        ]
+        for sample in samples {
+            let clean = ThreadService.withoutCredentials(sample)
+            #expect(!clean.contains("ghp_") && !clean.contains("hunter2") && !clean.contains("github_pat_"), "\(clean)")
+        }
+        let env = ThreadService.withoutCredentials(
+            "denied for letmein-12345", environment: ["GH_TOKEN": "letmein-12345", "HOME": "/x"])
+        #expect(env == "denied for <redacted>")
+    }
+
+    @Test func aPathInTheTemplateAndTheCheckOutcomeReachTheBodyCorrectly() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let templatePath = fx.repo.appendingPathComponent(".github/pull_request_template.md")
+        try FileManager.default.createDirectory(
+            at: templatePath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "## Summary\n\n## Rollout\n\nRun /Users/alice/private/deploy.sh\n".write(
+            to: templatePath, atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "template"], in: fx.repo)
+        let (id, _) = try await acceptedThread(fx)
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.checkStarted, turn: 1, data: ["command": "scripts/check.sh"])
+        _ = try await log.append(
+            .checkRan, turn: 1,
+            data: ["result": "passed", "exit_code": 0, "duration_ms": 4000, "output_ref": "checks/turn-1.log"])
+        await log.close()
+        _ = try await addOrigin(fx)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        let body = try #require(gh.read("body"))
+        #expect(!body.contains("/Users/alice"))
+        #expect(body.contains("Check: passed (exit 0, 4s)"), "\(body)")
+    }
+
     @Test func aBranchThatIsNotOnOriginAtTheTipIsRefusedWithoutCreating() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
