@@ -18,6 +18,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case remoteDiverged(sha: String)
     case gitFailed(String)
     case pushRejected(String)
+    case notPushed(String)
+    case ghFailed(String)
 
     public var description: String {
         switch self {
@@ -43,6 +45,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
             "origin already has this branch at \(sha.prefix(12)), which is not part of this one. "
                 + "Shipping would need a force push, and Workbench never does that."
         case .gitFailed(let what): what
+        case .notPushed(let why): "the branch is not on origin at this thread's tip (\(why)). Push it first."
+        case .ghFailed(let why): "`gh` could not open the pull request, so nothing was recorded: \(why)"
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }
@@ -192,8 +196,29 @@ extension ThreadService {
         text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
-    /// `https://user:token@host/x` becomes `https://host/x`, wherever it appears in a line.
+    /// Removes what must never be shown or recorded: `user:token@` in a URL, `Authorization` headers,
+    /// well-known token shapes, and `token=`-style query values. Stays conservative: it cuts, it does not guess.
     static func withoutCredentials(_ text: String) -> String {
-        text.replacingOccurrences(of: #"(?<=://)[^/@\s]+@"#, with: "", options: .regularExpression)
+        let patterns: [(String, String)] = [
+            (#"(?<=://)[^/@\s]+@"#, ""),
+            (#"(?i)(authorization:?\s*)(bearer|basic|token)?\s*[^\s,;]+"#, "$1<redacted>"),
+            (#"\b(gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,})"#, "<redacted>"),
+            (#"(?i)([?&](?:access_token|token|auth|key|password|secret)=)[^&\s'")]+"#, "$1<redacted>"),
+        ]
+        return patterns.reduce(text) {
+            $0.replacingOccurrences(of: $1.0, with: $1.1, options: .regularExpression)
+        }
+    }
+
+    /// `withoutCredentials`, and also the exact values of any token in the environment `gh` was given.
+    static func withoutCredentials(_ text: String, environment: [String: String]) -> String {
+        var clean = withoutCredentials(text)
+        for (key, value) in environment where value.count >= 6 {
+            let upper = key.uppercased()
+            if upper.contains("TOKEN") || upper.contains("SECRET") || upper.contains("PASSWORD") {
+                clean = clean.replacingOccurrences(of: value, with: "<redacted>")
+            }
+        }
+        return clean
     }
 }
