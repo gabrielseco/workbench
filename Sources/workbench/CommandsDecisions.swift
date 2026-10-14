@@ -83,6 +83,6 @@ extension Commands {
         } else {
             out("accepted \(id): \(result.branch) at \(result.commit), already committed. Nothing was pushed.")
         }
-        out("the worktree is kept for `ship`; the log is kept (`workbench log \(id)`)")
+        out("the worktree is kept for `ship`, which removes it once the PR is open; the log is kept (`workbench log \(id)`)")
     }
 }

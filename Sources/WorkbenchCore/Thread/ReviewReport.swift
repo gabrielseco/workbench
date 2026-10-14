@@ -209,7 +209,14 @@ public struct ReviewLoader: Sendable {
         id: String, goalBase: String?, limit: Int = DiffProvider.fileLimit, includeIgnored: Bool = false
     ) async -> ReviewReport.Diff {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
-        guard manager.exists(id) else { return .unavailable(reason: "the worktree no longer exists") }
+        guard manager.exists(id) else {
+            let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+            if events.contains(where: { $0.kind == .worktreeRemoved }) {
+                return .unavailable(
+                    reason: "the worktree was removed after shipping; \(WorktreeManager.branch(for: id)) is kept")
+            }
+            return .unavailable(reason: "the worktree no longer exists")
+        }
         guard let base = recordedBase(id) ?? goalBase else { return .unavailable(reason: "no base commit recorded") }
         do {
             return .summary(
