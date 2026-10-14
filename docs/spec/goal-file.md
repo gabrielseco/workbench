@@ -70,14 +70,16 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   wrap onto indented continuation lines. A criterion without proof is an error.
 - **Out-of-scope bullets wrap like criteria.** An indented line directly under a `- ` bullet continues it;
   any other line in the section is an error.
-- **Approve warns about proofs that cannot run.** `workbench goal approve` reads the backticked commands in
-  each `proof:` and prints `warning: [c2] proof names ... ` for one the tool set would not let a run
-  execute: denied by a `[tools] denied` pattern, absent from `allowed` (the entry that would permit it is
+- **A proof that cannot run blocks approval and the run.** `workbench goal approve` reads the backticked
+  commands in each `proof:` and refuses (exit 6, nothing approved) with `[c2] proof names ... ` for one the
+  tool set would not let a run execute: denied by a `[tools] denied` pattern, absent from `allowed` (the entry that would permit it is
   named), or `Bash` not available. A span counts as a command when its first word is an executable the
   tool set already names or a path under `./`, `scripts/` or `bin/`, so code identifiers in backticks are
-  left alone. A span joined with `&&`, `||`, `;` or `|` is judged part by part. It is a warning: the goal is
-  approved either way, `check_command` counts as allowed, and approving an already approved goal repeats the
-  warnings, since the config is not in the hash.
+  left alone. A span joined with `&&`, `||`, `;` or `|` is judged part by part. `check_command` counts as
+  allowed. The config is not in the hash, so `run` and `send-back` check again against the config as it is
+  then and refuse before a turn is spent. `--allow-unrunnable-proofs` (on `goal approve`, `run`,
+  `send-back`) goes ahead anyway, for a proof that only looks like a command; `approve` then prints the
+  warnings.
 - **Errors are collected**, in file order, with line numbers, so one pass fixes the file.
 - **Approval state** is derived on every read, never trusted from the file:
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`

@@ -190,12 +190,22 @@ enum Commands {
 
     static func goalApprove(_ args: [String]) async throws {
         var a = Arguments(args)
+        let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
 
         let before = try? GoalFile.parse(String(contentsOf: ctx.project.goalURL(id), encoding: .utf8))
+        // Nothing is approved while a proof cannot run (friction #30); a goal that does not parse is left to
+        // `approve` to report.
+        // A config that is there but broken is an error here, not a reason to skip the check; no config at all
+        // means there is no tool set to judge against.
+        if let before, !allowUnrunnable, FileManager.default.fileExists(atPath: ctx.project.configURL.path) {
+            let config = try Config.load(from: ctx.project.configURL)
+            let unrunnable = ProofCommands.warnings(goal: before.goal, config: config)
+            if !unrunnable.isEmpty { throw CLIError.refused(ProofWarning.refusal(unrunnable)) }
+        }
         let approved = try await ctx.service.approve(id: id)
         if before?.goal.approval == .approved {
             out("\(id) is already approved (\(approved.goal.contentHash.prefix(12)))")
@@ -205,9 +215,7 @@ enum Commands {
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
             if let model = approved.goal.model { out("model:   \(model)") }
         }
-        // A goal whose proofs cannot run is caught here, before a turn is spent on it (friction #30). Also
-        // when it was already approved: the config may have changed since, and the hash does not cover it.
-        if let config = try? Config.load(from: ctx.project.configURL) {
+        if allowUnrunnable, let config = try? Config.load(from: ctx.project.configURL) {
             for warning in ProofCommands.warnings(goal: approved.goal, config: config) {
                 out("warning: " + warning.line)
             }
@@ -220,6 +228,7 @@ enum Commands {
         let feedback = try a.value("--feedback", "-f")
         // Accepted and ignored: a checkout with local edits no longer blocks a run.
         let allowDirty = a.flag("--allow-dirty")
+        let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
         let named = a.positional()
         try a.requireEmpty()
 
@@ -227,6 +236,7 @@ enum Commands {
         let id = try ctx.threadID(named)
         var options = RunOptions(feedback: feedback)
         options.allowDirty = allowDirty
+        options.allowUnrunnableProofs = allowUnrunnable
         return try await runTurn(ctx: ctx, id: id, options: options)
     }
 
@@ -234,6 +244,7 @@ enum Commands {
     static func sendBack(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let budgetText = try a.value("--budget")
+        let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
         let note = a.positional()
         let named = a.positional()
         try a.requireEmpty()
@@ -254,6 +265,7 @@ enum Commands {
         let id = try ctx.threadID(named)
         var options = RunOptions(feedback: note)
         options.budgetOverride = budget
+        options.allowUnrunnableProofs = allowUnrunnable
         return try await runTurn(ctx: ctx, id: id, options: options)
     }
 

@@ -43,4 +43,14 @@ extension ThreadRunner {
         return "If it passes in your own shell, the child environment may be dropping a variable your version "
             + "manager sets (mise: MIX_HOME, MIX_ARCHIVES): add it to `env_pass` in .workbench/config.toml."
     }
+
+    /// A run needs an approved goal, and proofs the tool set can execute. The config is not in the approval
+    /// hash, so the proofs are judged again here, where a turn gets paid for.
+    static func requireRunnable(goal: Goal, config: Config, options: RunOptions) throws {
+        guard goal.approval == .approved else { throw RunnerError.goalNotApproved(goal.approval) }
+        let unrunnable = ProofCommands.warnings(goal: goal, config: config)
+        if !unrunnable.isEmpty, !options.allowUnrunnableProofs {
+            throw RunnerError.unrunnableProofs(ProofWarning.refusal(unrunnable))
+        }
+    }
 }

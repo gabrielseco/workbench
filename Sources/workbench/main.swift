@@ -12,6 +12,8 @@ let usage = """
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
       goal approve [id]          approve the goal; any later edit returns it to draft
+                                 refused while a proof names a command a run cannot execute
+                                 (--allow-unrunnable-proofs to approve anyway; also on run, send-back)
       run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
                                  (local edits in your checkout are left out; --allow-dirty is ignored)
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output

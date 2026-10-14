@@ -16,6 +16,15 @@ public struct ProofWarning: Sendable, Equatable {
     }
 }
 
+extension ProofWarning {
+    /// What `approve` and `run` refuse with. Names the way out for a proof that only looks like a command.
+    public static func refusal(_ warnings: [ProofWarning]) -> String {
+        warnings.map(\.line).joined(separator: "\n")
+            + "\nFix the tool set or the proof, or pass --allow-unrunnable-proofs if the proof is not meant "
+            + "to be run by the run."
+    }
+}
+
 /// Reads the commands a goal's proofs name and says which the allowlist denies (friction #30). A proof is
 /// free text, so only a backticked span that looks like a command counts: its first word is an
 /// executable the tool set already mentions, or a path into the repository.

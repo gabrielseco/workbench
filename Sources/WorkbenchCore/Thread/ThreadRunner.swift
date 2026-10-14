@@ -51,6 +51,8 @@ public struct RunOptions: Sendable {
     public var killGrace: TimeInterval = 5
     /// Kept so scripts that pass `--allow-dirty` still work; a dirty checkout no longer blocks a run.
     public var allowDirty = false
+    /// Run although a proof names a command the tool set would not let the run execute (`ProofCommands`).
+    public var allowUnrunnableProofs = false
     /// The budget for this run's turns instead of the goal's. The goal file is not touched.
     public var budgetOverride: Decimal?
     /// Most a single turn may be given by `budgetOverride`.
@@ -59,47 +61,6 @@ public struct RunOptions: Sendable {
     public var parentEnvironment: [String: String] = ProcessInfo.processInfo.environment
 
     public init(feedback: String? = nil) { self.feedback = feedback }
-}
-
-public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
-    case noActiveThread
-    case goalMissing(String)
-    case goalInvalid(String)
-    case goalNotApproved(ApprovalState)
-    case feedbackRequired
-    case feedbackWithoutPriorTurn
-    case emptyFeedback
-    case invalidBudget(String)
-    case alreadyRunning
-    case claudeNotFound(String)
-    case threadEnded(String)
-    /// Setup did not pass; no turn was started. `output` is its tail, `hint` empty or a likely cause.
-    case setupFailed(command: String, how: String, output: String, hint: String)
-
-    public var description: String {
-        switch self {
-        case .noActiveThread: "there is no active thread. Start one with `workbench goal new <name>`."
-        case .goalMissing(let path): "no goal at \(path)"
-        case .goalInvalid(let problems): "the goal is not valid:\n\(problems)"
-        case .goalNotApproved(let state):
-            switch state {
-            case .stale:
-                "the goal changed since it was approved. Review it and run `workbench goal approve` again."
-            default: "the goal is not approved. Run `workbench goal approve`."
-            }
-        case .feedbackRequired:
-            "this thread already has a successful turn. Say what to change: `workbench run --feedback \"...\"`."
-        case .feedbackWithoutPriorTurn: "there is nothing to send feedback on yet; run the goal first."
-        case .emptyFeedback: "the note is empty. Say what should change."
-        case .invalidBudget(let why): "the budget is not usable: \(why)"
-        case .alreadyRunning: "another `workbench run` holds this thread's log."
-        case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
-        case .threadEnded(let decision): "this thread has ended (\(decision))."
-        case .setupFailed(let command, let how, let output, let hint):
-            "setup `\(command)` \(how), so no turn was started. The worktree is kept; fix it and run again."
-                + (output.isEmpty ? "" : "\n\(output)") + (hint.isEmpty ? "" : "\n\(hint)")
-        }
-    }
 }
 
 /// Runs turns for one thread. At most one turn at a time, by construction: the event log's exclusive lock
@@ -146,7 +107,7 @@ public actor ThreadRunner {
         let config = try Config.load(from: project.configURL)
         let goalFile = try loadGoal()
         let goal = goalFile.goal
-        guard goal.approval == .approved else { throw RunnerError.goalNotApproved(goal.approval) }
+        try Self.requireRunnable(goal: goal, config: config, options: options)
         guard
             let claude = ExecutableResolver.resolve(
                 config.claudePath, searchPath: options.parentEnvironment["PATH"])
