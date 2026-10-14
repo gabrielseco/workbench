@@ -4,3 +4,6 @@
 *.xcodeproj
 xcuserdata/
 .DS_Store
+
+# per-task scratch from agent runs
+.claude/tasks/

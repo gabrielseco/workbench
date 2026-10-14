@@ -1,6 +1,6 @@
 # Portability: other stacks, more projects
 
-**Status:** not started, written down on 2026-10-13 so it is not lost.
+**Status:** probe 1 (expenses-backend, Elixir) run on 2026-10-14, see the end of this file; nothing built yet. Written down on 2026-10-13 so it is not lost.
 **Trigger:** the first time Workbench is used on a repo that is not this one, or when P2 and P2.5 are done,
 whichever comes first. P3 (the app) should not be designed before one other repo has been tried.
 
@@ -48,3 +48,38 @@ paths, no assumption that a check is quick, no assumption that a worktree can bu
 Pick one repo that is not Swift, give Workbench a small real goal, and write every point where it breaks
 into this file, in the order they happen. Do not fix anything during the probe: the list is the product.
 Good candidates are the Next.js and Elixir repos next to this one.
+
+## Probe 1: expenses-backend (Elixir), 2026-10-14
+
+**Task:** record the crm write operations in the API contract and make them clock-stable, the same kind of
+outcome as expenses-backend#323. Base `main`, #323 left unmerged to compare. `check_command = "mix test"`,
+`mix test`, `mix format` and `mix api.contract*` allowed. Debug build of Workbench at `6b9f2ee`, real `claude`.
+
+**Result:** turn 1 succeeded ($2.72), check failed in 0s, nothing verified. 19 operations recorded by hand
+(`examples.json` +836), one clock fix in `goal.ex`, docs updated, one untracked scratch file. The thread was
+neither accepted nor sent back; see below.
+
+**Where it broke, in order** (nothing was fixed during the probe; rows are in
+[`FRICTION.md`](../plan/FRICTION.md) #26 to #31):
+
+| # | What happened | Hits problem | Row |
+|---|---|---|---|
+| 1 | No `deps/` or `_build/` in the worktree; `mix deps.get` was denied (network, and not in the allowlist). The run could not format, test or regenerate anything | 1 | #27 |
+| 2 | `UPDATE_API_EXAMPLES=1 mix test <file>`, the documented way to regenerate examples, was denied by the prefix rule | 5, 7 | #28 |
+| 3 | Brace expansion, heredocs, `python3`, `env`, `rm` and pipes were denied one call at a time | 7 | #29 |
+| 4 | The goal's proofs named commands the worktree could not run; found only when the run said so | none (goal side) | #30 |
+| 5 | Out-of-scope bullets cannot wrap; found at `goal approve` | none (spec) | #31 |
+| 6 | Progress was invisible from `status` while the turn ran | none (CLI) | #26 |
+
+**What held, stack-free:** goal approval, the worktree and branch, the event log, `review` (diff, denied
+tools with the turn and seq, criteria with their proofs), and the model reporting honestly what it could not
+prove. It found a real backend gap (`createConcert` and `updateConcert` return `expenseSlug: null` because the
+expense association is never loaded), the same kind of finding as #323's schema fixes.
+
+**Not answered:** whether the output matches #323's quality. That needs a green check, which needs problem #1
+solved first. Not addressed: #2 (gitignored files; the test database needed none here), #3 (no git hooks in
+this repo) and #4 (mise put `mix` on `PATH`, which is in the allowlist).
+
+**Reading:** problem #1 is not cosmetic on a stack with an install step. Without a `setup_command` the first
+turn is spent discovering it, and the run's own account of the work is unverifiable. It is the first thing to
+build when this file moves from "not started".
