@@ -7,6 +7,10 @@ extension Commands {
         static let notAccepted: Int32 = 3
         static let alreadyShipped: Int32 = 4
         static let pushRejected: Int32 = 5
+        /// `--watch`: a check failed or was cancelled.
+        static let checkFailed: Int32 = 6
+        /// `--watch`: checks still running at the time limit, or none ever reported.
+        static let noResult: Int32 = 7
     }
 
     /// `ship [id] [--yes]`: push the accepted thread's branch and open its pull request. Asks first, because
@@ -14,13 +18,24 @@ extension Commands {
     static func ship(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
+        let watch = a.flag("--watch")
+        let minutes = try a.value("--timeout")
+        let seconds = try a.value("--interval")
         let named = a.positional()
         try a.requireEmpty()
+        let limits = try watchLimits(watch: watch, minutes: minutes, seconds: seconds)
         let ctx = try await Context.load()
         let gh = try? GitRunner.discover(tool: "gh")
 
         let id: String
-        do { id = try shippableThread(named, ctx: ctx) } catch let error as ShipError { return refuse(error) }
+        do {
+            id = try shippableThread(named, ctx: ctx)
+        } catch let error as ShipError {
+            // With --watch a thread that is already shipped is simply followed.
+            guard watch, let shipped = latestShipped(ctx: ctx) else { return refuse(error) }
+            return await follow(id: shipped, ctx: ctx, gh: gh, limits: limits)
+        }
+        if watch, isShipped(id, ctx: ctx) { return await follow(id: id, ctx: ctx, gh: gh, limits: limits) }
         if named == nil { out("shipping \(id)") }
 
         let plan: ShipPlan
@@ -55,9 +70,81 @@ extension Commands {
             let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
             out(pr.url)
-            return 0
+            return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
+        }
+    }
+
+    private struct WatchLimits {
+        var timeout: TimeInterval
+        var interval: TimeInterval
+    }
+
+    private static func watchLimits(watch: Bool, minutes: String?, seconds: String?) throws -> WatchLimits {
+        if !watch, minutes != nil || seconds != nil { throw CLIError.usage("--timeout and --interval need --watch") }
+        func number(_ text: String?, _ name: String, _ range: ClosedRange<Int>, default value: Int) throws -> Int {
+            guard let text else { return value }
+            guard let n = Int(text), range.contains(n) else {
+                throw CLIError.usage("\(name) needs a whole number from \(range.lowerBound) to \(range.upperBound)")
+            }
+            return n
+        }
+        return WatchLimits(
+            timeout: TimeInterval(try number(minutes, "--timeout (minutes)", 1...240, default: 30) * 60),
+            interval: TimeInterval(try number(seconds, "--interval (seconds)", 1...300, default: 15)))
+    }
+
+    private static func prOpenedEvent(_ id: String, ctx: Context) -> Event? {
+        let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
+        return events.last { $0.kind == .prOpened }
+    }
+
+    private static func isShipped(_ id: String, ctx: Context) -> Bool { prOpenedEvent(id, ctx: ctx) != nil }
+
+    private static func latestShipped(ctx: Context) -> String? {
+        ctx.store.threadIDs().filter { isShipped($0, ctx: ctx) }
+            .max { (ctx.store.state(of: $0).createdAt ?? "") < (ctx.store.state(of: $1).createdAt ?? "") }
+    }
+
+    /// Prints each change of the checks once, then the final list, and returns the exit code for it.
+    private static func follow(id: String, ctx: Context, gh: GitRunner?, limits: WatchLimits) async -> Int32 {
+        if let event = prOpenedEvent(id, ctx: ctx), let url = event.data["url"]?.stringValue {
+            out("watching \(url)")
+        }
+        func line(_ check: PRCheck) -> String {
+            let name = check.name.unicodeScalars.map { $0.value < 32 || $0.value == 127 ? " " : String($0) }.joined()
+            return "  \(check.bucket.padding(toLength: 8, withPad: " ", startingAt: 0)) \(name)"
+        }
+        do {
+            let result = try await ctx.service.watchPR(
+                id: id, gh: gh, interval: limits.interval, timeout: limits.timeout
+            ) { summary in
+                let count = { (o: PRCheck.Outcome) in summary.checks.filter { $0.outcome == o }.count }
+                out("checks: \(count(.passed)) passed, \(count(.pending)) pending, \(count(.failed)) failed")
+            }
+            switch result {
+            case .passed(let checks):
+                for check in checks { out(line(check)) }
+                out("all checks passed")
+                return 0
+            case .failed(let checks):
+                for check in checks { out(line(check)) }
+                err("workbench: a check failed. `workbench send-back` is for fixing it; nothing was changed.")
+                return ShipExit.checkFailed
+            case .timedOut(let checks):
+                for check in checks { out(line(check)) }
+                err("workbench: checks were still running when the time limit passed. Run `workbench ship --watch` again.")
+                return ShipExit.noResult
+            case .noChecks:
+                err("workbench: no checks were reported for the pull request.")
+                return ShipExit.noResult
+            }
+        } catch let error as ShipError {
+            return refuse(error)
+        } catch {
+            err("workbench: \(error)")
+            return 1
         }
     }
 

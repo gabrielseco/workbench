@@ -10,6 +10,12 @@
 | 2 | Usage: unknown option or argument | the reason on stderr |
 | 3 | Thread not accepted (active, discarded, abandoned, unknown, or none waiting) | the reason on stderr |
 | 4 | Already shipped | the reason on stderr, then the recorded URL as the last line of stdout |
+| 6 | `--watch`: a check failed or was cancelled | the final list of checks on stdout, the reason on stderr |
+| 7 | `--watch`: checks still running at the time limit, or none reported within two minutes | the list so far, the reason on stderr |
 | 5 | Push rejected by origin, or origin's branch is not an ancestor of ours (a force would be needed) | the remote's message on stderr, credentials removed |
+
+`--watch` is read-only: no event, no file. Exit 0 with `--watch` means every check passed (or was skipped). It
+ends at 30 minutes by default (`--timeout` 1 to 240), polls every 15 s (`--interval` 1 to 300) and gives up
+with exit 1 after three failed polls in a row.
 
 Every failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists.
