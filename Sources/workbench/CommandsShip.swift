@@ -2,17 +2,6 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// Exit codes of `ship`: 0 done, 1 any other failure, 2 usage, then one per refusal worth scripting on.
-    enum ShipExit {
-        static let notAccepted: Int32 = 3
-        static let alreadyShipped: Int32 = 4
-        static let pushRejected: Int32 = 5
-        /// `--watch`: a check failed or was cancelled.
-        static let checkFailed: Int32 = 6
-        /// `--watch`: checks still running at the time limit, or none ever reported.
-        static let noResult: Int32 = 7
-    }
-
     /// `ship [id] [--yes]`: push the accepted thread's branch and open its pull request. Asks first, because
     /// it publishes; running it again after any failure resumes where it stopped.
     static func ship(_ args: [String]) async throws -> Int32 {
@@ -66,7 +55,7 @@ extension Commands {
             // With --watch, exit 0 means every check passed; no PR was made, so there is nothing to claim.
             return watch ? 1 : 0
         case .refused:
-            throw CLIError.message("not shipping: there is no terminal to ask on. Pass --yes to confirm.")
+            throw CLIError.refused("not shipping: there is no terminal to ask on. Pass --yes to confirm.")
         }
 
         do {
@@ -146,21 +135,18 @@ extension Commands {
                 return 0
             case .failed(let checks):
                 for check in checks { out(line(check)) }
-                err("workbench: a check failed. `workbench send-back` is for fixing it; nothing was changed.")
-                return ShipExit.checkFailed
+                return fail(.checkFailed, "a check failed. `workbench send-back` is for fixing it; nothing was changed.")
             case .timedOut(let checks):
                 for check in checks { out(line(check)) }
-                err("workbench: checks were still running when the time limit passed. Run `workbench ship --watch` again.")
-                return ShipExit.noResult
+                return fail(
+                    .noResult, "checks were still running when the time limit passed. Run `workbench ship --watch` again.")
             case .noChecks:
-                err("workbench: no checks were reported for the pull request.")
-                return ShipExit.noResult
+                return fail(.noResult, "no checks were reported for the pull request.")
             }
         } catch let error as ShipError {
             return refuse(error)
         } catch {
-            err("workbench: \(error)")
-            return 1
+            return fail(.failed, "\(error)")
         }
     }
 
@@ -186,20 +172,8 @@ extension Commands {
 
     /// Prints why and returns the exit code for it. An already shipped thread also prints its URL, last.
     private static func refuse(_ error: ShipError) -> Int32 {
-        switch error {
-        case .alreadyShipped(let url):
-            err("workbench: \(error)")
-            out(url)
-            return ShipExit.alreadyShipped
-        case .notAccepted:
-            err("workbench: \(error)")
-            return ShipExit.notAccepted
-        case .pushRejected, .remoteDiverged:
-            err("workbench: \(error)")
-            return ShipExit.pushRejected
-        default:
-            err("workbench: \(error)")
-            return 1
-        }
+        let code = fail(error.failureKind, "\(error)")
+        if case .alreadyShipped(let url) = error { out(url) }
+        return code
     }
 }

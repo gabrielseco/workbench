@@ -22,36 +22,40 @@ let usage = """
       ship [id] [--yes] [--keep-worktree] [--watch [--timeout <min>] [--interval <s>]]
                                  push the accepted branch and open its pull request; asks first;
                                  --watch then follows the CI checks (read-only)
-                                 exit 3 not accepted, 4 already shipped (URL printed), 5 push rejected,
-                                 6 a check failed, 7 no result in time
+                                 exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
+                                 13 a check failed, 14 no result in time
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
       abandon [--force]          end the thread without accepting its work
+
+      --json on status, review and log; exit codes: docs/spec/exit-codes.md
 
       version
     """
 
 func report(_ error: Error) -> Never {
+    let kind = failureKind(of: error)
     switch error {
-    case let e as CLIError:
-        err("workbench: \(e)")
-        if case .usage = e { exit(2) }
-        exit(1)
-    case let e as ConfigError:
-        err("workbench: invalid config\n\(e)")
-        exit(2)
-    case let e as GoalParseError:
-        err("workbench: invalid goal\n\(e)")
-        exit(2)
+    case is ConfigError, is GoalParseError:
+        // The core's text starts with the first problem; the kind says what it is about.
+        exit(fail(kind, "\(error)"))
     default:
-        err("workbench: \(error)")
-        exit(1)
+        exit(fail(kind, "\(error)"))
     }
 }
 
 // Progress must show up as it happens even when output is piped or redirected (`workbench run | tee`).
 setvbuf(stdout, nil, _IOLBF, 0)
 
-let arguments = Array(CommandLine.arguments.dropFirst())
+var arguments = Array(CommandLine.arguments.dropFirst())
+// `--json` is global: it is taken out here so every command sees the same arguments, and only the read
+// commands may use it.
+if let at = arguments.firstIndex(of: "--json") {
+    arguments.remove(at: at)
+    Output.json = true
+    if !["status", "review", "log"].contains(arguments.first ?? "") {
+        exit(fail(.usage, "--json is available on status, review and log"))
+    }
+}
 
 do {
     switch arguments.first {

@@ -1,23 +1,39 @@
-# Exit codes
+# Exit codes and errors
 
-`workbench ship` (P2.5). Other commands use 0, 1 and 2; `run` and `send-back` have their own 3 to 5
-(see friction #13: to be unified).
+One table for every command. A code means one thing everywhere.
 
-| Code | Meaning | Prints |
+| Code | Kind | Meaning |
 |---|---|---|
-| 0 | Shipped; or the person answered no at the prompt, which prints `nothing changed` and no URL (as `accept` and `discard` do), so a script that needs a PR should use `--yes` and read the last line | the PR URL as the last line of stdout |
-| 1 | Any other failure: no terminal and no `--yes`, `gh` missing or logged out, no `origin`, dirty worktree, `gh` failed, timeout | the reason on stderr |
-| 2 | Usage: unknown option or argument | the reason on stderr |
-| 3 | Thread not accepted (active, discarded, abandoned, unknown, or none waiting) | the reason on stderr |
-| 4 | Already shipped | the reason on stderr, then the recorded URL as the last line of stdout |
-| 6 | `--watch`: a check failed or was cancelled | the final list of checks on stdout, the reason on stderr |
-| 7 | `--watch`: checks still running at the time limit, or none reported within two minutes | the list so far, the reason on stderr |
-| 5 | Push rejected by origin, or origin's branch is not an ancestor of ours (a force would be needed) | the remote's message on stderr, credentials removed |
+| 0 | | Done. (Also: the person answered no at a prompt and `nothing changed` was printed, as `accept` and `discard` do; scripts use `--yes`. With `ship --watch`, 0 means every check passed, or was skipped.) |
+| 1 | `failed` | Something went wrong that is not one of the rows below: git, `gh` or the network failed, a timeout, a partial result. |
+| 2 | `usage`, `invalid-config`, `invalid-goal` | The command line, `config.toml` or the goal file is wrong. |
+| 3 | | `run`, `send-back`: the turn was stopped. |
+| 4 | | `run`, `send-back`: the turn timed out. |
+| 5 | | `run`, `send-back`: the budget was exceeded. |
+| 6 | `refused` | A precondition is not met and nothing was changed: no terminal to ask on (pass `--yes`), a live runner, a dirty worktree, no `origin`, `gh` missing or logged out, the thread ended, nothing to accept. |
+| 7 | `not-found` | The thread, event or file named does not exist. |
+| 10 | `not-accepted` | `ship`: the thread is not accepted (still active, discarded, abandoned, unknown, or none waiting). |
+| 11 | `already-shipped` | `ship`: already shipped. The recorded URL is the last line of stdout. |
+| 12 | `push-rejected` | `ship`: origin rejected the push, or its branch is not an ancestor of ours (a force would be needed). |
+| 13 | `check-failed` | `ship --watch`: a check failed or was cancelled. |
+| 14 | `no-result` | `ship --watch`: checks were still running at the time limit, or none appeared within two minutes. |
 
-With `--watch`, answering no at the prompt exits 1 (no PR was made, so exit 0 would claim passing checks). A thread that is not accepted and has no recorded PR is refused with 3 (it names `workbench accept`), and a named thread is never replaced by another one.
+## Errors
 
-`--watch` is read-only: no event, no file. Exit 0 with `--watch` means every check passed (or was skipped). It
-ends at 30 minutes by default (`--timeout` 1 to 240), polls every 15 s (`--interval` 1 to 300) and gives up
-with exit 1 after three failed polls in a row.
+Text mode: one line on stderr, `workbench: <kind>: <message>`. The message can continue on further lines
+(a goal's problems, say) but the first line always starts with that prefix.
 
-Every failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists.
+`--json` mode (`status`, `review`, `log`): one object on stdout, nothing on stderr:
+
+```json
+{"v": 1, "error": {"kind": "not-found", "code": 7, "message": "no thread 'g-x'"}}
+```
+
+## Notes
+
+`ship --watch` is read-only: no event, no file. It ends at 30 minutes by default (`--timeout` 1 to 240),
+polls every 15 s (`--interval` 1 to 300) and gives up with exit 1 after three failed polls in a row.
+With `--watch`, answering no at the prompt exits 1 (no PR was made, so 0 would claim passing checks), and a
+named thread is never replaced by another one.
+
+Every `ship` failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists.

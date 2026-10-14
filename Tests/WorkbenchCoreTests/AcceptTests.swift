@@ -115,7 +115,7 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
             await #expect(throws: ThreadServiceError.emptyMessage) { try await fx.service.accept(id: id, message: text) }
         }
         let cliResult = try await cli(["accept", "-m", ""], in: fx)
-        #expect(cliResult.exit?.termination == .exited(1), "\(cliResult.text)")
+        #expect(cliResult.exit?.termination == .exited(6), "\(cliResult.text)")
         #expect(try await gitOut(["status", "--porcelain"], worktree, fx).contains("loose.txt"))
         #expect(try await gitOut(["rev-list", "--count", "main..workbench/\(id)"], fx.repo, fx) == "0")
         #expect(ThreadStore(project: fx.project).state(of: id).isActive)
@@ -197,7 +197,7 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         try write("loose.txt", "x\n", in: worktree)
 
         let refused = try await cli(["accept"], in: fx)
-        #expect(refused.exit?.termination == .exited(1), "\(refused.text)")
+        #expect(refused.exit?.termination == .exited(6), "\(refused.text)")
         #expect(refused.text.contains("did not pass"), "\(refused.text)")
         #expect(ThreadStore(project: fx.project).state(of: id).isActive)
         #expect(try await gitOut(["status", "--porcelain"], worktree, fx).contains("loose.txt"))
@@ -288,7 +288,7 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         try write("loose.txt", "x\n", in: worktree)
 
         let refused = try await cli(["accept"], in: fx)
-        #expect(refused.exit?.termination == .exited(1), "\(refused.text)")
+        #expect(refused.exit?.termination == .exited(6), "\(refused.text)")
         #expect(refused.text.contains("cut off"), "\(refused.text)")
         #expect(try fx.events(id).last?.kind != .reviewDecision)
         #expect(try await gitOut(["status", "--porcelain"], worktree, fx).contains("loose.txt"))

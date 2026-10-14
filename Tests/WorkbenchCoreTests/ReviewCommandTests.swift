@@ -144,9 +144,9 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         let big = try await cli(["review", "--patch", "big.txt"], in: fx)
         #expect(big.text.contains("patch too large"), "\(big.text.prefix(200))")
         let missing = try await cli(["review", "--patch", "nope.txt"], in: fx)
-        #expect(missing.exit?.termination == .exited(1))
+        #expect(missing.exit?.termination == .exited(7))
         let unknown = try await cli(["review", "no-such-thread"], in: fx)
-        #expect(unknown.exit?.termination == .exited(1), "a typo is an error: \(unknown.text)")
+        #expect(unknown.exit?.termination == .exited(7), "a typo is an error: \(unknown.text)")
     }
 
     @Test func aStatusWithNothingToDecideSaysWhy() async throws {

@@ -7,7 +7,7 @@ extension Commands {
         guard let seq = Int(seqText) else { throw CLIError.usage("--seq needs an event number, got '\(seqText)'") }
         let events = try EventLogReader.read(at: url).events
         guard let event = events.first(where: { $0.seq == seq }) else {
-            throw CLIError.message("no event \(seq) in \(id) (it has \(events.count))")
+            throw CLIError.notFound("no event \(seq) in \(id) (it has \(events.count))")
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -25,7 +25,7 @@ extension Commands {
         for line in plan.render() { out(line) }
 
         if !yes, !plan.fullyShown {
-            throw CLIError.message(
+            throw CLIError.refused(
                 "not discarding: the list above does not show everything that would be lost. Pass --yes to confirm.")
         }
         let interactive = isatty(STDIN_FILENO) == 1
@@ -36,7 +36,7 @@ extension Commands {
             out("nothing changed")
             return
         case .refused:
-            throw CLIError.message("not discarding: there is no terminal to ask on. Pass --yes to confirm.")
+            throw CLIError.refused("not discarding: there is no terminal to ask on. Pass --yes to confirm.")
         }
         try await ctx.service.discard(id: id, shown: plan)
         out("discarded \(id); the log is kept (`workbench log \(id)`)")
@@ -64,7 +64,7 @@ extension Commands {
                 out("nothing changed")
                 return
             case .refused:
-                throw CLIError.message(
+                throw CLIError.refused(
                     "not accepting: the check did not pass and there is no terminal to ask on. "
                         + "Pass --yes to accept anyway.")
             }
