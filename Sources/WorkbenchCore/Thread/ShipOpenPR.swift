@@ -25,7 +25,7 @@ extension ThreadService {
     ) async throws -> ShipPRResult {
         let plan = try await shipPreflight(id: id, gh: gh)
         // The branch is on origin by now, so only what was confirmed about the target must still hold.
-        if let shown, !shown.sameTarget(as: plan) { throw ShipError.changedSinceShown }
+        if let shown, !shown.sameTarget(as: plan) { throw ShipError.changedAfterPush }
         switch plan.remote {
         case .upToDate: break
         case .absent: throw ShipError.notPushed("origin has no \(plan.branch)")

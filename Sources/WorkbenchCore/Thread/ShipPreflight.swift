@@ -21,6 +21,7 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case notPushed(String)
     case ghFailed(String)
     case changedSinceShown
+    case changedAfterPush
 
     public var description: String {
         switch self {
@@ -53,7 +54,12 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
                 + "then remove or rename that remote branch yourself, or ship from a different thread."
         case .gitFailed(let what): what
         case .notPushed(let why): "the branch is not on origin at this thread's tip (\(why)). Push it first."
-        case .ghFailed(let why): "`gh` could not open the pull request, so nothing was recorded: \(why)"
+        case .ghFailed(let why):
+            "`gh` could not open the pull request, so nothing was recorded: \(why) "
+                + "Fix the cause and run `workbench ship` again; the branch is not pushed twice."
+        case .changedAfterPush:
+            "the branch was pushed, but the thread, its tip or origin changed before the pull request was "
+                + "opened, so no PR was made. Run `workbench ship` again to see the new plan."
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }

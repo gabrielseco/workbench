@@ -65,7 +65,7 @@ extension Commands {
     private static func shippableThread(_ named: String?, ctx: Context) throws -> String {
         if let named {
             guard FileManager.default.fileExists(atPath: ctx.project.threadDirectory(named).path) else {
-                throw CLIError.message("no thread '\(named)'")
+                throw ShipError.notAccepted("there is no thread '\(named)'")
             }
             return named
         }

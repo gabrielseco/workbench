@@ -72,6 +72,9 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
     @Test func aThreadThatIsNotAcceptedExitsThree() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
+        let unknown = try await ship(["--yes", "g-nope"], fx: fx, gh: gh)
+        #expect(unknown.code == 3, "\(unknown.text)")
+
         let none = try await ship(["--yes"], fx: fx, gh: gh)
         #expect(none.code == 3, "\(none.text)")
         #expect(none.text.contains("workbench accept"))

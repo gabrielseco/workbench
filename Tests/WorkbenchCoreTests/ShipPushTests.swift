@@ -95,6 +95,10 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         }
         #expect(try await shipOut(["for-each-ref", "refs/heads"], second, fx).isEmpty)
         #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+
+        // After the push the wording must not claim that nothing was published.
+        #expect(ShipError.changedAfterPush.description.contains("was pushed"))
+        #expect(!ShipError.changedAfterPush.description.contains("nothing was published"))
     }
 
     @Test func thereIsNoForceInTheArguments() {

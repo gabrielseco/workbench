@@ -5,7 +5,7 @@
 
 | Code | Meaning | Prints |
 |---|---|---|
-| 0 | Shipped, or the person answered no (`nothing changed`) | the PR URL as the last line of stdout |
+| 0 | Shipped; or the person answered no at the prompt, which prints `nothing changed` and no URL (as `accept` and `discard` do), so a script that needs a PR should use `--yes` and read the last line | the PR URL as the last line of stdout |
 | 1 | Any other failure: no terminal and no `--yes`, `gh` missing or logged out, no `origin`, dirty worktree, `gh` failed, timeout | the reason on stderr |
 | 2 | Usage: unknown option or argument | the reason on stderr |
 | 3 | Thread not accepted (active, discarded, abandoned, unknown, or none waiting) | the reason on stderr |
