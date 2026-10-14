@@ -37,6 +37,17 @@ import Testing
         #expect(state.progress.lastEventAt == "2026-10-14T10:00:11.000Z")
     }
 
+    @Test func aTextOrThinkingMessageIsStillASignOfLife() {
+        var events = running
+        events.append(
+            event(
+                6, "2026-10-14T10:03:00.000Z", .claude,
+                ["type": "assistant", "message": ["content": [["type": "text", "text": "thinking it over"]]]]))
+        let progress = ThreadState.derive(from: events, id: "t").progress
+        #expect(progress.lastEventAt == "2026-10-14T10:03:00.000Z")
+        #expect(progress.toolCalls == 2)
+    }
+
     @Test func aFailedCommandIsNotARefusal() {
         var events = running
         events.append(event(6, "2026-10-14T10:00:12.000Z", .claude, toolResult("exit 1: no such file", error: true)))

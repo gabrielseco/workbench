@@ -237,6 +237,8 @@ public struct ThreadState: Sendable, Equatable {
 
     /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.
     static func track(_ event: Event, in progress: inout Progress) {
+        // Every line is a sign of life, whatever it carries; the cases below only say it better.
+        progress.note(event.ts, "claude \(safeLine(event.data["type"]?.stringValue ?? "?", limit: 30))")
         switch event.data["type"]?.stringValue {
         case "assistant":
             guard case .array(let blocks)? = event.data["message"]?["content"] else { return }
@@ -260,7 +262,7 @@ public struct ThreadState: Sendable, Equatable {
                 }
             }
         default:
-            progress.note(event.ts, "claude \(safeLine(event.data["type"]?.stringValue ?? "?", limit: 30))")
+            break
         }
     }
 
