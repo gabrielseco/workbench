@@ -22,6 +22,7 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case ghFailed(String)
     case changedSinceShown
     case changedAfterPush
+    case notShipped
 
     public var description: String {
         switch self {
@@ -57,6 +58,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .ghFailed(let why):
             "`gh` could not open the pull request, so nothing was recorded: \(why) "
                 + "Fix the cause and run `workbench ship` again; the branch is not pushed twice."
+        case .notShipped:
+            "this thread has no recorded pull request. Run `workbench ship` first; `--watch` follows it."
         case .changedAfterPush:
             "the branch was pushed, but the thread, its tip or origin changed before the pull request was "
                 + "opened, so no PR was made. Run `workbench ship` again to see the new plan."

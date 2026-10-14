@@ -19,6 +19,19 @@ struct FakeGH {
             echo "${GH_REPO:-unset}" > "$d/repo"
             case "$1 $2" in
             "auth status") exit 0 ;;
+            "pr checks")
+              n=$(cat "$d/checks_n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$d/checks_n"
+              from=$(cat "$d/checks_hang_from" 2>/dev/null || echo 99999)
+              if [ "$n" -ge "$from" ]; then echo $$ > "$d/checks_pid"; exec sleep 60; fi
+              if [ -f "$d/checks_hang" ]; then echo $$ > "$d/checks_pid"; exec sleep 60; fi
+              if [ -f "$d/checks_fail" ]; then echo "boom" >&2; exit 1; fi
+              f=""
+              if [ -f "$d/checks_$n" ]; then f="$d/checks_$n"; elif [ -f "$d/checks_last" ]; then f="$d/checks_last"; fi
+              if [ -z "$f" ]; then echo "no checks reported on the 'x' branch" >&2; exit 1; fi
+              cat "$f"
+              if grep -q pending "$f"; then exit 8; fi
+              if grep -q '"fail"' "$f"; then exit 1; fi
+              exit 0 ;;
             "pr list") if [ -f "$d/list" ]; then cat "$d/list"; else echo '[]'; fi; exit 0 ;;
             "pr create")
               prev=""

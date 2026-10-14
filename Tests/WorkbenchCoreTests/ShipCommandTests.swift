@@ -184,6 +184,72 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(try await branches(bare, fx).isEmpty)
     }
 
+    @Test func watchFollowsTheChecksAfterShippingAndOnAnAlreadyShippedThread() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        try gh.put("checks_1", "[{\"name\": \"build\", \"bucket\": \"pending\"}]")
+        try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"pass\"}]")
+
+        let first = try await ship(["--yes", "--watch", "--interval", "1"], fx: fx, gh: gh)
+        #expect(first.code == 0, "\(first.text)")
+        #expect(first.text.contains("all checks passed") && first.text.contains("checks: 0 passed, 1 pending"))
+        #expect(gh.count("pr create") == 1)
+
+        // Already shipped: it is followed, and neither creates nor exits 4.
+        try FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_n"))
+        let again = try await ship(["--yes", "--watch", "--interval", "1", id], fx: fx, gh: gh)
+        #expect(again.code == 0, "\(again.text)")
+        let nameless = try await ship(["--yes", "--watch", "--interval", "1"], fx: fx, gh: gh)
+        #expect(nameless.code == 0, "\(nameless.text)")
+        #expect(gh.count("pr create") == 1)
+        #expect(try fx.events(id).filter { $0.kind == .prOpened }.count == 1)
+    }
+
+    @Test func aFailedCheckExitsSixAndBadWatchOptionsAreUsageErrors() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        _ = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"fail\"}]")
+
+        let failed = try await ship(["--yes", "--watch", "--interval", "1"], fx: fx, gh: gh)
+        #expect(failed.code == 6, "\(failed.text)")
+        #expect(failed.text.contains("fail") && failed.text.contains("build"))
+
+        for bad in [["--timeout", "5"], ["--watch", "--interval", "0"], ["--watch", "--timeout", "999"]] {
+            let result = try await ship(["--yes"] + bad, fx: fx, gh: gh)
+            #expect(result.code == 2, "\(bad): \(result.text)")
+        }
+    }
+
+    @Test func watchNeverSwapsANamedThreadForAnotherOne() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let shipped = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"pass\"}]")
+        #expect(try await ship(["--yes"], fx: fx, gh: gh).code == 0)
+        let before = gh.count("pr checks")
+
+        let typo = try await ship(["--yes", "--watch", "g-typo"], fx: fx, gh: gh)
+        #expect(typo.code == 3, "\(typo.text)")
+        #expect(gh.count("pr checks") == before, "no other thread's PR was watched")
+
+        // A name that is a path to a thread directory, not a thread id, is never used to read a log.
+        let sneaky = try await ship(["--yes", "--watch", "../threads/\(shipped.id)"], fx: fx, gh: gh)
+        #expect(sneaky.code == 3, "\(sneaky.text)")
+        #expect(!sneaky.text.contains("watching"), "\(sneaky.text)")
+        #expect(gh.count("pr checks") == before)
+
+        // A named thread that was never accepted has no PR to watch: refused, with the way to end it.
+        let active = try await fx.approvedThread("second")
+        let notYet = try await ship(["--yes", "--watch", active], fx: fx, gh: gh)
+        #expect(notYet.code == 3 && notYet.text.contains("workbench accept"), "\(notYet.text)")
+        #expect(try fx.events(shipped.id).contains { $0.kind == .prOpened })
+    }
+
     @Test func anUnknownOptionIsAUsageError() async throws {
         let fx = try await RunnerFixture()
         let result = try await ship(["--bogus"], fx: fx, gh: nil)
