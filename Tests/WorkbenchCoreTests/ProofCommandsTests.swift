@@ -134,7 +134,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
 }
 
 @Suite struct GoalApproveWarningTests {
-    @Test func approveNamesAProofTheAllowlistWouldDenyAndStillApproves() async throws {
+    @Test func approveNamesAProofTheAllowlistWouldDenyAndApprovesOnlyWithTheFlag() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.service.newThread(name: "proof", base: "main")
         let url = fx.project.goalURL(id)
@@ -149,7 +149,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         try text.write(to: url, atomically: true, encoding: .utf8)
 
         var spawn = SpawnRequest(
-            executable: WorkbenchBinary.executable, arguments: ["goal", "approve", id],
+            executable: WorkbenchBinary.executable, arguments: ["goal", "approve", "--allow-unrunnable-proofs", id],
             environment: ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName()],
             workingDirectory: fx.repo, timeout: 60)
         spawn.snapshotInterval = 3600

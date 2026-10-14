@@ -10,7 +10,7 @@ One table for every command. A code means one thing everywhere.
 | 3 | `stopped` | `run`, `send-back`: the turn was stopped. `doctor`: stopped by Ctrl-C. |
 | 4 | `timed-out` | `run`, `send-back`: the turn timed out. |
 | 5 | `budget-exceeded` | `run`, `send-back`: the budget was exceeded. |
-| 6 | `refused` | A precondition is not met and nothing was changed: no terminal to ask on (pass `--yes`), a live runner, `doctor` with a thread still active, another doctor running or no config, a dirty worktree, no `origin`, `gh` missing or logged out, the thread ended, nothing to accept. |
+| 6 | `refused` | A precondition is not met and nothing was changed: no terminal to ask on (pass `--yes`), a live runner, a proof naming a command the run cannot execute (`goal approve`, `run`, `send-back`), `doctor` with a thread still active, another doctor running or no config, a dirty worktree, no `origin`, `gh` missing or logged out, the thread ended, nothing to accept. |
 | 7 | `not-found` | The thread, event or file named does not exist. |
 | 10 | `not-accepted` | `ship`: the thread is not accepted (still active, discarded, abandoned, unknown, or none waiting). |
 | 11 | `already-shipped` | `ship`: already shipped. The recorded URL is the last line of stdout. |
