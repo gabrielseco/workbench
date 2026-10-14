@@ -148,13 +148,7 @@ extension ThreadService {
                 listed.stderr.split(separator: "\n").first.map(String.init) ?? "git ls-remote failed")
             throw ShipError.remoteUnreachable(detail)
         }
-        // `ls-remote` patterns match the tail of a ref name, so `a/refs/heads/<branch>` also comes back.
-        let wanted = "refs/heads/\(branch)"
-        let sha = Self.lines(listed.stdout).compactMap { line -> String? in
-            let columns = line.split(whereSeparator: \.isWhitespace).map(String.init)
-            return columns.count == 2 && columns[1] == wanted ? columns[0] : nil
-        }.first ?? ""
-        guard !sha.isEmpty else { return .absent }
+        guard let sha = try Self.remoteBranchSHA(in: listed.stdout, branch: branch) else { return .absent }
         guard sha.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil else {
             throw ShipError.remoteUnreachable("unexpected answer from origin")
         }
@@ -170,6 +164,25 @@ extension ThreadService {
         } catch {
             throw ShipError.gitFailed("git could not be run: \(error)")
         }
+    }
+
+    /// The commit `origin` has for exactly `refs/heads/<branch>`, nil when it has none. `ls-remote` patterns
+    /// match the tail of a ref name, so lookalikes come back too; and a cut-off answer proves nothing, so
+    /// it is refused rather than read as "absent".
+    static func remoteBranchSHA(in output: String, branch: String) throws -> String? {
+        guard output.utf8.count < GitRunner.outputLimit else {
+            throw ShipError.remoteUnreachable("origin listed too many matching refs to tell where the branch is")
+        }
+        let wanted = "refs/heads/\(branch)"
+        let sha = lines(output).compactMap { line -> String? in
+            let columns = line.split(whereSeparator: \.isWhitespace).map(String.init)
+            return columns.count == 2 && columns[1] == wanted ? columns[0] : nil
+        }.first
+        guard let sha else { return nil }
+        guard sha.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil else {
+            throw ShipError.remoteUnreachable("unexpected answer from origin")
+        }
+        return sha
     }
 
     private static func lines(_ text: String) -> [String] {

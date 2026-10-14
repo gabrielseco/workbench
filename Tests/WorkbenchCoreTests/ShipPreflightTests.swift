@@ -249,6 +249,35 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         }
     }
 
+    @Test func aCutOffRemoteListingIsRefusedNotReadAsAbsent() throws {
+        let sha = String(repeating: "a", count: 40)
+        let wanted = "\(sha)\trefs/heads/workbench/t\n"
+        #expect(try ThreadService.remoteBranchSHA(in: wanted, branch: "workbench/t") == sha)
+        let lookalike = "\(sha)\trefs/heads/x/refs/heads/workbench/t\n"
+        #expect(try ThreadService.remoteBranchSHA(in: lookalike, branch: "workbench/t") == nil)
+        let huge = String(repeating: "\(sha)\trefs/heads/a/refs/heads/workbench/t\n", count: GitRunner.outputLimit / 40)
+        #expect(throws: ShipError.self) { try ThreadService.remoteBranchSHA(in: huge, branch: "workbench/t") }
+    }
+
+    @Test func stagedChangesAndAnAbandonedThreadAreRefused() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        let gh = try fakeGH(status: 0, in: fx)
+        try "s\n".write(to: worktree.appendingPathComponent("s.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "s.txt"], in: worktree)
+        let staged = await refusal { try await fx.service.shipPreflight(id: id, gh: gh) }
+        guard case .uncommitted? = staged else {
+            Issue.record("got \(String(describing: staged))")
+            return
+        }
+
+        let other = try await fx.approvedThread("other")
+        try await fx.service.abandon(id: other)
+        let abandoned = await refusal { try await fx.service.shipPreflight(id: other, gh: gh) }
+        #expect(abandoned == .notAccepted("abandoned"))
+    }
+
     @Test func aBaseThatLooksLikeAnOptionNeverReachesGit() async throws {
         let fx = try await RunnerFixture()
         let (id, _) = try await acceptedThread(fx)
