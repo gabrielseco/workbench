@@ -141,6 +141,9 @@ Notes:
   CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
   them `claude` reports "Not logged in" even though the config dir is set. `SSH_AUTH_SOCK` and every token
   variable are left out on purpose, so a model that gets past the allowlist still holds no credentials.
+  A version manager's own variables are dropped too (mise on Elixir sets `MIX_HOME` and `MIX_ARCHIVES`), so a
+  `setup_command` that passes in your shell can fail here. A failed setup (exit or signal, not a timeout)
+  prints a hint at `env_pass`.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

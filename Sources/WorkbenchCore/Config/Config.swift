@@ -256,7 +256,8 @@ public struct Config: Sendable, Equatable {
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # default_budget_usd = 5.00        # used when drafting a goal
-        # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude may see
+        # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
+        # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
 
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).
