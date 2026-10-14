@@ -5,9 +5,12 @@ public enum ThreadStoreError: Error, Equatable, Sendable, CustomStringConvertibl
     case threadExists(String)
     case noActiveThread
     case invalidName(String)
+    /// `workbench doctor` holds the project; a thread started now would run its check next to doctor's.
+    case doctorRunning
 
     public var description: String {
         switch self {
+        case .doctorRunning: "`workbench doctor` is running in this project; try again when it has finished."
         case .activeThreadExists(let id):
             "thread '\(id)' is still active. Finish it first (accept, discard) or run `workbench abandon`."
         case .threadExists(let id): "thread '\(id)' already exists"
@@ -48,6 +51,10 @@ public struct ThreadStore: Sendable {
     public func create(id: String) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         if let active = activeThreadID() { throw ThreadStoreError.activeThreadExists(active) }
+        // Doctor holds this lock for its whole run; taking and dropping it here is the check.
+        if let held = try? ProjectLock.acquire(project) { ProjectLock.release(held) } else {
+            throw ThreadStoreError.doctorRunning
+        }
         guard !FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
             throw ThreadStoreError.threadExists(id)
         }

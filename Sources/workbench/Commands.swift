@@ -146,7 +146,13 @@ enum Commands {
         out("claude:   \(report.claude ?? "NOT FOUND (\(report.claudePath))")")
         out("model:    \(report.model ?? "the claude CLI default (no `model` in the config)")")
         if let pattern = report.checkPattern {
-            out("allowed:  \(pattern)" + (report.bashAvailable ? "" : "  (but Bash is not in [tools].available)"))
+            var note = ""
+            if report.checkDenied {
+                note = "  (but [tools].denied blocks it: a run cannot call the check)"
+            } else if !report.bashAvailable {
+                note = "  (but Bash is not in [tools].available)"
+            }
+            out("allowed:  \(pattern)" + note)
         }
         func show(_ name: String, _ step: DoctorStep, undeclared: String) {
             let label = name.padding(toLength: 10, withPad: " ", startingAt: 0)

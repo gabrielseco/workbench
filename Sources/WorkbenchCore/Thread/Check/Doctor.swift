@@ -17,6 +17,22 @@ public enum DoctorError: Error, Equatable, CustomStringConvertible {
     }
 }
 
+/// An exclusive, non-blocking lock on the `.workbench` directory itself, so no file is left behind. Doctor
+/// holds it for its whole run; creating a thread takes and drops it, so the two never run checks together.
+enum ProjectLock {
+    static func acquire(_ project: Project) throws -> Int32 {
+        let fd = open(project.workbenchDirectory.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { throw DoctorError.noConfig(project.configURL.path) }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            throw DoctorError.alreadyRunning
+        }
+        return fd
+    }
+
+    static func release(_ fd: Int32) { close(fd) }
+}
+
 /// How one declared command did when doctor ran it.
 public struct DoctorStep: Sendable, Equatable {
     public enum Outcome: Sendable, Equatable {
@@ -50,6 +66,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var bashAvailable: Bool
     /// What a run is allowed for the check, `Bash(<command>:*)`.
     public var checkPattern: String?
+    /// `[tools].denied` names `Bash` or the check's own pattern, so a run could not call it.
+    public var checkDenied = false
     public var setup: DoctorStep
     public var check: DoctorStep
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
@@ -140,16 +158,26 @@ public final class Doctor: @unchecked Sendable {
         var report = DoctorReport(
             base: base, claude: claude?.path, claudePath: config.claudePath, model: config.model,
             bashAvailable: bash, checkPattern: config.checkCommand.map { "Bash(\($0):*)" },
+            checkDenied: config.checkCommand.map {
+                config.tools.denied.contains("Bash") || config.tools.denied.contains("Bash(\($0):*)")
+            } ?? false,
             setup: DoctorStep(command: config.setupCommand, outcome: .notDeclared, tail: "", hint: ""),
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""))
         guard config.setupCommand != nil || config.checkCommand != nil else { return report }
 
         // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover".
-        let lock = try acquireLock()
-        defer { close(lock) }
+        let lock = try ProjectLock.acquire(project)
+        defer { ProjectLock.release(lock) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         try await removeLeftover(manager)
-        let worktree = try await manager.create(threadID: Self.worktreeID, base: base)
+        let worktree: Worktree
+        do {
+            worktree = try await manager.create(threadID: Self.worktreeID, base: base)
+        } catch {
+            // `worktree add` can register the worktree and then fail (a post-checkout hook, say).
+            try? await removeLeftover(manager)
+            throw error
+        }
 
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("workbench-doctor-\(UUID().uuidString)")
@@ -174,17 +202,6 @@ public final class Doctor: @unchecked Sendable {
         report = try result.get()
         report.cleanupProblem = cleanupProblem
         return report
-    }
-
-    /// An exclusive lock on the `.workbench` directory itself, so no file is left behind.
-    private func acquireLock() throws -> Int32 {
-        let fd = open(project.workbenchDirectory.path, O_RDONLY | O_CLOEXEC)
-        guard fd >= 0 else { throw DoctorError.noConfig(project.configURL.path) }
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            close(fd)
-            throw DoctorError.alreadyRunning
-        }
-        return fd
     }
 
     private func removeLeftover(_ manager: WorktreeManager) async throws {

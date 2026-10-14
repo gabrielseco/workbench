@@ -277,3 +277,47 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         #expect(problem.contains("git worktree remove --force --force"))
     }
 }
+
+@Suite struct DoctorBoundaryTests {
+    @Test func aThreadCannotBeStartedWhileDoctorRuns() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await fx.service.newThread(name: "work", base: "main")
+            Issue.record("expected a refusal")
+        } catch let error as ThreadStoreError {
+            #expect(error == .doctorRunning)
+        }
+        #expect(ThreadStore(project: fx.project).threadIDs().isEmpty, "nothing was created")
+        _ = try await task.value
+        _ = try await fx.service.newThread(name: "work", base: "main")
+    }
+
+    @Test func aWorktreeThatFailsDuringCreationIsStillCleanedUp() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let hook = fx.repo.appendingPathComponent(".git/hooks/post-checkout")
+        try FileManager.default.createDirectory(
+            at: hook.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "#!/bin/sh\nexit 1\n".write(to: hook, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+
+        _ = try? await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        try await expectClean(fx)
+    }
+
+    @Test func aDeniedCheckIsReportedAsDenied() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        var config = try String(contentsOf: fx.project.configURL, encoding: .utf8)
+        config += "\ndenied = [\"Bash\"]\n"
+        try config.write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.checkDenied)
+        #expect(report.check.outcome == .passed, "Workbench itself still runs the check")
+
+        let (open, _) = try await fixture(check: "true")
+        let fine = try await Doctor(project: open.project, git: open.git).run(base: "main", options: options())
+        #expect(!fine.checkDenied)
+    }
+}
