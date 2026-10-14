@@ -141,6 +141,32 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         #expect(line.contains("worktree removed (shipped)") && line.contains("branch is kept"), "\(line)")
     }
 
+    @Test func aLeftoverRegistrationIsPrunedBeforeTheRemovalIsDeclaredDone() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let thread = try await shipped(fx, gh)
+        // The directory was deleted by hand: git still lists it.
+        try FileManager.default.removeItem(at: thread.worktree)
+        #expect(try await shipOut(["worktree", "list", "--porcelain"], fx.repo, fx).contains(thread.worktree.path))
+
+        #expect(await fx.service.cleanShipped(id: thread.id, gh: gh.runner) == .alreadyGone)
+        #expect(!(try await shipOut(["worktree", "list", "--porcelain"], fx.repo, fx).contains(thread.worktree.path)))
+        #expect(try fx.events(thread.id).filter { $0.kind == .worktreeRemoved }.count == 1)
+    }
+
+    @Test func twoRunsRecordingTheSameRemovalWriteOneEvent() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let thread = try await shipped(fx, gh)
+        _ = try await fx.git.run(["worktree", "remove", thread.worktree.path], in: fx.repo)
+
+        async let first = fx.service.cleanShipped(id: thread.id, gh: gh.runner)
+        async let second = fx.service.cleanShipped(id: thread.id, gh: gh.runner)
+        _ = await (first, second)
+        #expect(try fx.events(thread.id).filter { $0.kind == .worktreeRemoved }.count == 1)
+        #expect(try fx.contents(thread.id).isHealthy)
+    }
+
     @Test func aWrongBranchAndAStagedChangeAreKept() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
