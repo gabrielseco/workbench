@@ -288,13 +288,15 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         let run = try ProcessRunner.start(request("ready=\(ready)", "hang-after=1"))
         #expect(await waitForFile(ready))
 
+        // Timed from the stop: durationMs starts at spawn and so counts a slow start under CI load.
+        let stopped = ContinuousClock.now
         run.stop()
         run.stop()  // idempotent
         let result = try await collect(run)
         #expect(result.exit.cause == .stopped)
         #expect(result.exit.termination == .exited(143))
         #expect(!result.exit.escalatedToKill)
-        #expect(result.exit.durationMs < 4000)
+        #expect(ContinuousClock.now - stopped < .seconds(4))
     }
 
     @Test func timeoutStopsTheChildAndSaysWhy() async throws {
