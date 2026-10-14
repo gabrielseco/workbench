@@ -14,6 +14,15 @@ private func remoteTip(_ bare: URL, _ id: String, _ fx: RunnerFixture) async thr
     try await shipOut(["rev-parse", "-q", "--verify", "refs/heads/workbench/\(id)"], bare, fx)
 }
 
+private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> ShipError? {
+    do {
+        _ = try await body()
+        return nil
+    } catch {
+        return error as? ShipError
+    }
+}
+
 @Suite struct ShipPushTests {
     @Test func aPushPutsTheBranchOnOriginSetsUpstreamAndASecondRunPushesNothing() async throws {
         let fx = try await RunnerFixture()
@@ -50,8 +59,11 @@ private func remoteTip(_ bare: URL, _ id: String, _ fx: RunnerFixture) async thr
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)
         let bare = try await addOrigin(fx)
-        try "x".write(to: worktree.appendingPathComponent("loose.txt"), atomically: true, encoding: .utf8)
+        let loggedOut = await pushRefusal { try await fx.service.shipPush(id: id, gh: fakeGH(status: 1, in: fx)) }
+        #expect(loggedOut == .ghNotAuthenticated)
+        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
 
+        try "x".write(to: worktree.appendingPathComponent("loose.txt"), atomically: true, encoding: .utf8)
         do {
             _ = try await fx.service.shipPush(id: id, gh: fakeGH(status: 0, in: fx))
             Issue.record("expected a refusal")
@@ -61,8 +73,6 @@ private func remoteTip(_ bare: URL, _ id: String, _ fx: RunnerFixture) async thr
                 return
             }
         }
-        let loggedOut = try? await fx.service.shipPush(id: id, gh: fakeGH(status: 1, in: fx))
-        #expect(loggedOut == nil)
         #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
     }
 
@@ -111,6 +121,23 @@ private func remoteTip(_ bare: URL, _ id: String, _ fx: RunnerFixture) async thr
             #expect(!error.description.contains("sekret"), "\(error)")
             #expect(error.description.contains("https://git.example/x.git"))
         }
+    }
+
+    @Test func aCredentialUrlCrossingTheCutIsStillRedacted() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        // The URL starts so that the 2000-character cut would have fallen inside `user:token@`.
+        let filler = String(repeating: "x", count: 1_990)
+        try hook("pre-receive", "echo \"\(filler) https://user:sekret@git.example/p\" >&2\nexit 1", in: bare)
+
+        let error = await pushRefusal { try await fx.service.shipPush(id: id, gh: fakeGH(status: 0, in: fx)) }
+        guard case .pushRejected(let why)? = error else {
+            Issue.record("got \(String(describing: error))")
+            return
+        }
+        #expect(!why.contains("sekret") && !why.contains("user:"), "\(why)")
+        #expect(why.count <= 2_000)
     }
 
     @Test func aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated() async throws {

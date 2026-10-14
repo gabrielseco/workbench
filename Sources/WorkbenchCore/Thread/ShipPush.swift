@@ -43,7 +43,8 @@ extension ThreadService {
         guard result.succeeded else {
             let text = (result.stderr.isEmpty ? result.stdout : result.stderr)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let shown = Self.withoutCredentials(String(text.suffix(2_000)))
+            // Redact first: cutting first could leave `user:token@host` with its `://` already gone.
+            let shown = String(Self.withoutCredentials(text).suffix(2_000))
             throw ShipError.pushRejected(shown.isEmpty ? "git push exited \(result.status)" : shown)
         }
         return ShipPushResult(plan: plan, outcome: .pushed)
