@@ -355,7 +355,12 @@ enum Commands {
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
         for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
-        if FileManager.default.fileExists(atPath: worktree.path) { out("worktree:  \(worktree.path)") }
+        if FileManager.default.fileExists(atPath: worktree.path) {
+            out("worktree:  \(worktree.path)")
+        } else if let events = try? EventLogReader.read(at: ctx.project.eventsURL(id)).events,
+            events.contains(where: { $0.kind == .worktreeRemoved }) {
+            out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
+        }
     }
 
     static func review(_ args: [String]) async throws {

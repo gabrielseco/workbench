@@ -27,6 +27,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let worktreeCreated: EventKind = "worktree.created"
     public static let proofAdded: EventKind = "proof.added"
     public static let prOpened: EventKind = "pr.opened"
+    public static let worktreeRemoved: EventKind = "worktree.removed"
 }
 
 /// One line of `events.jsonl`.

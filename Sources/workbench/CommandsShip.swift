@@ -19,6 +19,7 @@ extension Commands {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
         let watch = a.flag("--watch")
+        let keepWorktree = a.flag("--keep-worktree")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
         let named = a.positional()
@@ -41,6 +42,8 @@ extension Commands {
 
         let plan: ShipPlan
         do { plan = try await ctx.service.shipPreflight(id: id, gh: gh) } catch let error as ShipError {
+            // A shipped thread whose worktree is still there gets it removed now, under the same rules.
+            if case .alreadyShipped = error, !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
             return refuse(error)
         }
         out("thread:  \(plan.id)")
@@ -71,10 +74,21 @@ extension Commands {
             out(pushed.outcome == .pushed ? "pushed \(plan.branch)" : "origin already has \(plan.branch)")
             let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
+            if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
+        }
+    }
+
+    /// Removes the shipped thread's worktree when nothing could be lost, and says what happened. A worktree
+    /// that stays is a note: the thread is shipped either way, and the next `ship` tries again.
+    private static func cleanUp(id: String, ctx: Context, gh: GitRunner?) async {
+        switch await ctx.service.cleanShipped(id: id, gh: gh) {
+        case .removed(let path): out("removed the worktree \(path); \(WorktreeManager.branch(for: id)) is kept")
+        case .kept(let why): out("kept the worktree: \(why)")
+        case .alreadyGone, .notShipped: break
         }
     }
 
