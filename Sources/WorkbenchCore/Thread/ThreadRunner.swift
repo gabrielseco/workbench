@@ -33,6 +33,8 @@ public enum RunNotice: Sendable {
     case turnEnded(TurnReport)
     case checkStarted(turn: Int, command: String)
     case checkRan(CheckReport)
+    case setupStarted(command: String)
+    case setupRan(SetupReport)
     /// Something worth a line that is not an error: local edits left out, a base behind its origin.
     case advisory(String)
 }
@@ -44,6 +46,8 @@ public struct RunOptions: Sendable {
     public var timeoutOverride: TimeInterval?
     /// Replaces the check's timeout, which is otherwise the turn's. For tests.
     public var checkTimeoutOverride: TimeInterval?
+    /// Replaces the setup command's timeout (`SetupRunner.defaultTimeout`). For tests.
+    public var setupTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
     /// Kept so scripts that pass `--allow-dirty` still work; a dirty checkout no longer blocks a run.
     public var allowDirty = false
@@ -69,6 +73,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case alreadyRunning
     case claudeNotFound(String)
     case threadEnded(String)
+    /// The setup command did not pass; no turn was started. `output` is the tail of what it printed.
+    case setupFailed(command: String, how: String, output: String)
 
     public var description: String {
         switch self {
@@ -89,6 +95,9 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .alreadyRunning: "another `workbench run` holds this thread's log."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
         case .threadEnded(let decision): "this thread has ended (\(decision))."
+        case .setupFailed(let command, let how, let output):
+            "setup `\(command)` \(how), so no turn was started. The worktree is kept; fix it and run again."
+                + (output.isEmpty ? "" : "\n\(output)")
         }
     }
 }
@@ -96,11 +105,11 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
 /// Runs turns for one thread. At most one turn at a time, by construction: the event log's exclusive lock
 /// belongs to the run in progress.
 public actor ThreadRunner {
-    private let project: Project
-    private let threadID: String
+    let project: Project
+    let threadID: String
     private let git: GitRunner
-    private let notify: @Sendable (RunNotice) -> Void
-    private var currentRun: ProcessRun?
+    let notify: @Sendable (RunNotice) -> Void
+    var currentRun: ProcessRun?
     private var stopRequested = false
 
     public init(
@@ -248,6 +257,10 @@ public actor ThreadRunner {
                         + "of this thread (it starts from \(goal.base)'s commit)"))
             }
         }
+
+        // The install step, before the first turn only (SetupRunner says when it runs).
+        try await runSetupIfNeeded(
+            lastTurn: lastTurn, config: config, goal: goal, worktree: worktree, log: log, options: options)
 
         // Said whenever the goal's prompt is built, not only when the worktree is cut: a runner killed during
         // the fetch leaves the worktree and no turn, and the retry must still look.
@@ -526,7 +539,7 @@ extension ThreadRunner {
     }
 
     /// Makes the check's process the one `stop()` reaches, and stops it if that was already asked.
-    private func attach(_ process: ProcessRun) {
+    func attach(_ process: ProcessRun) {
         currentRun = process
         if stopRequested { process.stop() }
     }

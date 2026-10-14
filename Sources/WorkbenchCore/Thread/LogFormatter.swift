@@ -28,6 +28,10 @@ public enum LogFormatter {
             if let ms = event.data["duration_ms"]?.intValue { out += "  \(ms / 1000)s" }
             if event.data["output_truncated"] == true { out += "  output truncated" }
             return out
+        case .setupRan:
+            var out = head + "setup \(event.data["result"]?.stringValue?.replacingOccurrences(of: "_", with: " ") ?? "?")"
+            if let ms = event.data["duration_ms"]?.intValue { out += "  \(ms / 1000)s" }
+            return out
         case .threadNote:
             return head + "feedback: \(event.data["text"]?.stringValue ?? "")"
         case .reviewDecision:

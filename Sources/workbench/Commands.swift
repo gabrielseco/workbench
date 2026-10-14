@@ -215,6 +215,11 @@ enum Commands {
                     + (report.permissionDenials > 0 ? "  \(report.permissionDenials) denied" : ""))
             case .advisory(let text):
                 out("note: \(text)")
+            case .setupStarted(let command):
+                out("setup started: \(command)")
+            case .setupRan(let setup):
+                out("setup \(setup.result.rawValue)  \(setup.durationMs / 1000)s"
+                    + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(setup.outputRef).path))")
             case .checkStarted(_, let command):
                 out("check started: \(command)")
             case .checkRan(let check):

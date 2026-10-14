@@ -31,6 +31,9 @@ public struct Config: Sendable, Equatable {
     public var model: String?
     /// The project's own check (tests, lint). Added to the allowed tools as `Bash(<command>:*)`.
     public var checkCommand: String?
+    /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
+    /// `claude`, so it is not added to the allowed tools.
+    public var setupCommand: String?
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
@@ -69,7 +72,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "default_budget_usd", "env_pass", "model", "safe_mode",
+            "claude_path", "check_command", "setup_command", "default_budget_usd", "env_pass", "model", "safe_mode",
             "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
@@ -151,14 +154,16 @@ public struct Config: Sendable, Equatable {
             }
         }
 
-        var checkCommand: String?
-        if let (value, line) = string("", "check_command") {
+        func command(_ key: String) -> String? {
+            guard let (value, line) = string("", key) else { return nil }
             if let reason = Config.checkCommandProblem(value) {
-                fail(.invalidValue, line, "'check_command' \(reason)")
-            } else {
-                checkCommand = value
+                fail(.invalidValue, line, "'\(key)' \(reason)")
+                return nil
             }
+            return value
         }
+        let checkCommand = command("check_command")
+        let setupCommand = command("setup_command")
 
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
@@ -210,7 +215,7 @@ public struct Config: Sendable, Equatable {
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
         return Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
-            model: model, checkCommand: checkCommand,
+            model: model, checkCommand: checkCommand, setupCommand: setupCommand,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
     }
@@ -249,6 +254,7 @@ public struct Config: Sendable, Equatable {
         # project_instructions = true     # put AGENTS.md (else CLAUDE.md) in the first prompt (default)
         # model = "haiku"                  # --model for every turn; unset = the CLI default
         # check_command = "scripts/check.sh"
+        # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude may see
 
