@@ -23,9 +23,15 @@ enum ProjectLock {
     static func acquire(_ project: Project) throws -> Int32 {
         let fd = open(project.workbenchDirectory.path, O_RDONLY | O_CLOEXEC)
         guard fd >= 0 else { throw DoctorError.noConfig(project.configURL.path) }
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            close(fd)
-            throw DoctorError.alreadyRunning
+        // A child spawned elsewhere in this process shares the descriptor between fork and exec, and the lock
+        // lives on the open file, so a short wait absorbs that moment (as the event log's lock does).
+        let deadline = Date().addingTimeInterval(1)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            guard errno == EWOULDBLOCK || errno == EINTR, Date() < deadline else {
+                close(fd)
+                throw DoctorError.alreadyRunning
+            }
+            usleep(2_000)
         }
         return fd
     }
