@@ -95,6 +95,7 @@ public struct ThreadService: Sendable {
             base: \(baseBranch)
             budget_usd: \(budget)
             turn_timeout_min: 30
+            # model: opus   (optional; unset = the config's model, else the claude CLI default)
             ---
 
             ## Request

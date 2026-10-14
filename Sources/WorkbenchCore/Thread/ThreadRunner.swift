@@ -359,7 +359,7 @@ public actor ThreadRunner {
         let sessionUUID = UUID(uuidString: sessionID)!
         let turnRequest = TurnRequest(
             sessionID: sessionUUID, resume: resume, budgetUSD: options.budgetOverride ?? goal.budgetUSD, prompt: prompt,
-            appendSystemPrompt: PromptBuilder.rules(checkCommand: config.checkCommand))
+            appendSystemPrompt: PromptBuilder.rules(checkCommand: config.checkCommand), model: goal.model)
         let invocation = try config.invocation(for: turnRequest)
 
         // The prompt and system prompt are in prompts/turn-N.md and the config, not in the log.

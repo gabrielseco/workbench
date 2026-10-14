@@ -13,6 +13,7 @@ status: approved            # draft | approved
 base: main                  # branch the worktree is cut from
 budget_usd: 5.00            # hard cap passed to the CLI
 turn_timeout_min: 30        # runner kills the turn after this
+model: opus                 # optional; --model for every turn of this thread
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -58,6 +59,9 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   duplicate keys are errors, so a typo like `budjet_usd` is caught). A comment starts at `#` after two or
   more spaces, so `title: Fix #12` stays intact. Quote a value to be safe: `title: "Fix  # twelve"`.
 - **Required:** `id`, `title`, `base`, `budget_usd`, `turn_timeout_min`. `status` defaults to `draft`.
+  **Optional:** `model`, a model name or alias (`opus`, `claude-opus-5-5`; no leading `-`, no spaces). It
+  wins over the config's `model`, which wins over the CLI default, and applies to every turn of the thread,
+  send-backs included. The turn's `argv` in `turn.started` shows what ran.
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole
@@ -79,7 +83,8 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`
   (status says approved but the hash is missing or differs). Only `approved` runs.
 - **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`),
-  `turn_timeout_min`, and the body after the front matter. Line endings, trailing whitespace and blank
+  `turn_timeout_min`, `model` (only when set, so a goal without one keeps its hash), and the body after the
+  front matter. Line endings, trailing whitespace and blank
   lines at the edges are normalized first. `title` and `id` are not covered, so renaming a goal does not
   revoke approval.
 - **Approving rewrites only** `status`, `approved_at` and `approved_hash`; the body and the author's
@@ -95,7 +100,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
-# model = "haiku"                       # --model for every turn; unset = the CLI default
+# model = "haiku"                       # --model for every turn; a goal's `model` wins; unset = the CLI default
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see

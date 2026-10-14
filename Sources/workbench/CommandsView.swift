@@ -133,6 +133,7 @@ extension Commands {
                 }
                 out("goal:      \(approval)")
                 out("base:      \(goal.base)   budget $\(goal.budgetUSD)/turn   timeout \(goal.turnTimeoutMin) min")
+                if let model = goal.model { out("model:     \(model)") }
                 if let line = await baseGapLine(goal.base, ctx: ctx) { out("           \(line)") }
             } catch let error as GoalParseError {
                 let problems = error.description.split(separator: "\n").map { "           \($0)" }

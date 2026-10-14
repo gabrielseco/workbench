@@ -30,6 +30,8 @@ public struct Goal: Sendable, Equatable {
     public var base: String
     public var budgetUSD: Decimal
     public var turnTimeoutMin: Int
+    /// `--model` for every turn of this thread; nil falls back to the config's `model`, then the CLI default.
+    public var model: String?
     public var approvedAt: String?
     public var approvedHash: String?
 
@@ -38,7 +40,7 @@ public struct Goal: Sendable, Equatable {
     public var outOfScope: [String]
 
     /// Hash of the body and the front matter fields that change what runs (`base`, `budget_usd`,
-    /// `turn_timeout_min`). This is what approval binds.
+    /// `turn_timeout_min`, `model`). This is what approval binds.
     public var contentHash: String
 
     public var approval: ApprovalState {
@@ -68,15 +70,18 @@ enum GoalHash {
         return lines.joined(separator: "\n")
     }
 
-    static func hash(base: String, budgetUSD: Decimal, turnTimeoutMin: Int, body: String) -> String {
-        let canonical = [
+    static func hash(
+        base: String, budgetUSD: Decimal, turnTimeoutMin: Int, model: String? = nil, body: String
+    ) -> String {
+        // The model line exists only when set, so a goal without one keeps the hash it was approved with.
+        var fields = [
             version,
             "base=\(base)",
             "budget_usd=\(NSDecimalNumber(decimal: budgetUSD).stringValue)",
             "turn_timeout_min=\(turnTimeoutMin)",
-            "---",
-            canonicalBody(body),
-        ].joined(separator: "\n")
+        ]
+        if let model { fields.append("model=\(model)") }
+        let canonical = (fields + ["---", canonicalBody(body)]).joined(separator: "\n")
         return SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }

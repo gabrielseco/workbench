@@ -203,6 +203,7 @@ enum Commands {
             out("approved \(id)")
             out("hash:    \(approved.goal.contentHash.prefix(12))")
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
+            if let model = approved.goal.model { out("model:   \(model)") }
         }
         // A goal whose proofs cannot run is caught here, before a turn is spent on it (friction #30). Also
         // when it was already approved: the config may have changed since, and the hash does not cover it.
