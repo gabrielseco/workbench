@@ -145,14 +145,15 @@ enum Commands {
             out("approved \(id)")
             out("hash:    \(approved.goal.contentHash.prefix(12))")
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
-            // A goal whose proofs cannot run is caught here, before a turn is spent on it (friction #30).
-            if let config = try? Config.load(from: ctx.project.configURL) {
-                for warning in ProofCommands.warnings(goal: approved.goal, config: config) {
-                    out("warning: " + warning.line)
-                }
-            }
-            out("next:    workbench run")
         }
+        // A goal whose proofs cannot run is caught here, before a turn is spent on it (friction #30). Also
+        // when it was already approved: the config may have changed since, and the hash does not cover it.
+        if let config = try? Config.load(from: ctx.project.configURL) {
+            for warning in ProofCommands.warnings(goal: approved.goal, config: config) {
+                out("warning: " + warning.line)
+            }
+        }
+        if before?.goal.approval != .approved { out("next:    workbench run") }
     }
 
     static func run(_ args: [String]) async throws -> Int32 {

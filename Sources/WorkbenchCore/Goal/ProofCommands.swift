@@ -29,7 +29,7 @@ public enum ProofCommands {
         var out: [ProofWarning] = []
         var seen = Set<String>()
         for criterion in goal.criteria {
-            for span in spans(in: criterion.proof) {
+            for span in spans(in: criterion.proof).flatMap(parts(of:)) {
                 guard let first = span.split(separator: " ").first.map(String.init),
                     known.contains(first) || isRepositoryPath(first),
                     seen.insert("\(criterion.id)\u{0}\(span)").inserted
@@ -59,6 +59,13 @@ public enum ProofCommands {
     static func spans(in text: String) -> [String] {
         text.matches(of: #/`([^`\n]+)`/#).map { String($0.1).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+
+    /// `a && b | c` is three commands, and the permission layer judges each. Only these four joiners are
+    /// split; anything else stays one command.
+    static func parts(of span: String) -> [String] {
+        span.split(omittingEmptySubsequences: true, whereSeparator: { "&|;".contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     private static func isRepositoryPath(_ word: String) -> Bool {

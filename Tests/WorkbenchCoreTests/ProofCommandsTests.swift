@@ -98,6 +98,16 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         #expect(ProofCommands.warnings(goal: g, config: c).first?.reason == "the Bash tool is not available")
     }
 
+    @Test func eachPartOfACompoundCommandIsJudgedOnItsOwn() throws {
+        let g = try goal(proofs: ["`mix test && git push origin main` is clean"])
+        let c = try config(allowed: ["Bash(mix test:*)", "Bash(git status:*)"], denied: ["Bash(git push:*)"])
+        let warnings = ProofCommands.warnings(goal: g, config: c)
+        #expect(warnings.map(\.command) == ["git push origin main"])
+        #expect(warnings[0].reason.contains("denied by `Bash(git push:*)`"))
+        let allFine = try goal(proofs: ["`mix test | mix test --failed`"])
+        #expect(ProofCommands.warnings(goal: allFine, config: try config(allowed: ["Bash(mix test:*)"])).isEmpty)
+    }
+
     @Test func theSameCommandTwiceInOneProofIsSaidOnce() throws {
         let g = try goal(proofs: ["`mix format` then `mix format` again"])
         let c = try config(allowed: ["Bash(mix test:*)"])
@@ -154,5 +164,13 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         let warning = try #require(lines.first { $0.hasPrefix("warning:") })
         #expect(warning.contains("[c1]") && warning.contains("./scripts/verify.sh") && warning.contains("[tools] allowed"))
         #expect(try GoalFile.parse(String(contentsOf: url, encoding: .utf8)).goal.approval == .approved)
+
+        // Approving again says it is approved and still names the proof: the config is not in the hash.
+        var again: [String] = []
+        for await event in try ProcessRunner.start(spawn).events {
+            if case .line(let line) = event { again.append(line) }
+        }
+        #expect(again.contains { $0.contains("already approved") })
+        #expect(again.contains { $0.hasPrefix("warning:") && $0.contains("./scripts/verify.sh") })
     }
 }

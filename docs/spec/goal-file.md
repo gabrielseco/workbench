@@ -71,7 +71,9 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   execute: denied by a `[tools] denied` pattern, absent from `allowed` (the entry that would permit it is
   named), or `Bash` not available. A span counts as a command when its first word is an executable the
   tool set already names or a path under `./`, `scripts/` or `bin/`, so code identifiers in backticks are
-  left alone. It is a warning: the goal is approved either way, and `check_command` counts as allowed.
+  left alone. A span joined with `&&`, `||`, `;` or `|` is judged part by part. It is a warning: the goal is
+  approved either way, `check_command` counts as allowed, and approving an already approved goal repeats the
+  warnings, since the config is not in the hash.
 - **Errors are collected**, in file order, with line numbers, so one pass fixes the file.
 - **Approval state** is derived on every read, never trusted from the file:
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`
