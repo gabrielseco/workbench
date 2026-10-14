@@ -145,6 +145,12 @@ enum Commands {
             out("approved \(id)")
             out("hash:    \(approved.goal.contentHash.prefix(12))")
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
+            // A goal whose proofs cannot run is caught here, before a turn is spent on it (friction #30).
+            if let config = try? Config.load(from: ctx.project.configURL) {
+                for warning in ProofCommands.warnings(goal: approved.goal, config: config) {
+                    out("warning: " + warning.line)
+                }
+            }
             out("next:    workbench run")
         }
     }
