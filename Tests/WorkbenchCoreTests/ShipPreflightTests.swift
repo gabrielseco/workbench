@@ -213,6 +213,42 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         #expect(try await out(["for-each-ref", "refs/remotes"], fx.repo, fx) == before)
     }
 
+    @Test func aPushURLThatDiffersFromTheFetchURLIsRefused() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let gh = try fakeGH(status: 0, in: fx)
+        _ = try await fx.git.run(["remote", "set-url", "--push", "origin", bare.path + "-elsewhere"], in: fx.repo)
+        let pushElsewhere = await refusal { try await fx.service.shipPreflight(id: id, gh: gh) }
+        #expect(pushElsewhere == .pushDestinationDiffers)
+
+        _ = try await fx.git.run(["config", "--unset-all", "remote.origin.pushurl"], in: fx.repo)
+        _ = try await fx.git.run(["remote", "set-url", "--add", "origin", bare.path + "-second"], in: fx.repo)
+        let several = await refusal { try await fx.service.shipPreflight(id: id, gh: gh) }
+        #expect(several == .pushDestinationDiffers)
+    }
+
+    @Test func onlyTheExactBranchCountsNotARefWithTheSameTail() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let head = try await out(["rev-parse", "HEAD"], worktree, fx)
+        // Only a lookalike exists, and it is at our tip: the real branch is still absent.
+        _ = try await fx.git.run(["push", "-q", bare.path, "\(head):refs/heads/a/refs/heads/workbench/\(id)"], in: fx.repo)
+        let plan = try await fx.service.shipPreflight(id: id, gh: fakeGH(status: 0, in: fx))
+        #expect(plan.remote == .absent)
+    }
+
+    @Test func theRunnerKeepsTheSSHAgentAndGHLogin() throws {
+        let parent = ["PATH": "/usr/bin:/bin", "SSH_AUTH_SOCK": "/tmp/agent", "GH_TOKEN": "t", "SECRET": "s"]
+        let git = try GitRunner.discover(from: parent)
+        #expect(git.environment["SSH_AUTH_SOCK"] == "/tmp/agent")
+        #expect(git.environment["SECRET"] == nil && git.environment["GH_TOKEN"] == nil)
+        #expect(throws: GitError.toolNotFound("gh-not-installed-here")) {
+            try GitRunner.discover(tool: "gh-not-installed-here", from: parent)
+        }
+    }
+
     @Test func aBaseThatLooksLikeAnOptionNeverReachesGit() async throws {
         let fx = try await RunnerFixture()
         let (id, _) = try await acceptedThread(fx)

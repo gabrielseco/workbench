@@ -51,7 +51,9 @@ public struct GitRunner: Sendable {
             ?? (tool == "git" ? ExecutableResolver.resolve("/usr/bin/git", searchPath: nil) : nil)
         else { throw tool == "git" ? GitError.gitNotFound : GitError.toolNotFound(tool) }
 
-        let keep = ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL"]
+        // `SSH_AUTH_SOCK` is the person's own agent: a push or `ls-remote` over ssh needs it, and this
+        // environment is Workbench's, never the model's.
+        let keep = ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL", "SSH_AUTH_SOCK"]
         let keepPrefixes = tool == "gh" ? ["LC_", "GH_", "GITHUB_", "XDG_CONFIG"] : ["LC_"]
         var env = parent.filter { entry in
             keep.contains(entry.key) || keepPrefixes.contains { entry.key.hasPrefix($0) }

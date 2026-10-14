@@ -12,6 +12,7 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case invalidName(String)
     case noOrigin
     case remoteUnreachable(String)
+    case pushDestinationDiffers
     case ghMissing
     case ghNotAuthenticated
     case remoteDiverged(sha: String)
@@ -32,6 +33,9 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidName(let name): "'\(name)' is not a usable name to pass to git"
         case .noOrigin: "this repository has no remote named origin. Add one with `git remote add origin <url>`."
         case .remoteUnreachable(let why): "origin could not be read: \(why)"
+        case .pushDestinationDiffers:
+            "origin pushes somewhere other than where it fetches (a push URL, or several), so what was read "
+                + "from it says nothing about where a push would go. Make them one URL, then ship."
         case .ghMissing: "`gh` is not installed or not on PATH. Install it (https://cli.github.com) and run `gh auth login`."
         case .ghNotAuthenticated: "`gh` is not logged in. Run `gh auth login`."
         case .remoteDiverged(let sha):
@@ -107,10 +111,16 @@ extension ThreadService {
         }
         guard pending.isEmpty else { throw ShipError.uncommitted(pending) }
 
-        let originResult = try await run(["remote", "get-url", "origin"], in: worktree)
+        let originResult = try await run(["remote", "get-url", "--all", "origin"], in: worktree)
         guard originResult.succeeded else { throw ShipError.noOrigin }
-        let origin = Self.withoutCredentials(originResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !origin.isEmpty else { throw ShipError.noOrigin }
+        let fetchURLs = Self.lines(originResult.stdout)
+        guard let first = fetchURLs.first else { throw ShipError.noOrigin }
+        // The branch is read from where origin fetches; the push must go to that same place.
+        let pushResult = try await run(["remote", "get-url", "--all", "--push", "origin"], in: worktree)
+        guard pushResult.succeeded, fetchURLs.count == 1, Self.lines(pushResult.stdout) == fetchURLs else {
+            throw ShipError.pushDestinationDiffers
+        }
+        let origin = Self.withoutCredentials(first)
 
         guard let gh else { throw ShipError.ghMissing }
         // Only the exit status is used: what `gh` prints about the account stays out of messages and logs.
@@ -138,8 +148,12 @@ extension ThreadService {
                 listed.stderr.split(separator: "\n").first.map(String.init) ?? "git ls-remote failed")
             throw ShipError.remoteUnreachable(detail)
         }
-        let line = listed.stdout.split(separator: "\n").first.map(String.init) ?? ""
-        let sha = line.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+        // `ls-remote` patterns match the tail of a ref name, so `a/refs/heads/<branch>` also comes back.
+        let wanted = "refs/heads/\(branch)"
+        let sha = Self.lines(listed.stdout).compactMap { line -> String? in
+            let columns = line.split(whereSeparator: \.isWhitespace).map(String.init)
+            return columns.count == 2 && columns[1] == wanted ? columns[0] : nil
+        }.first ?? ""
         guard !sha.isEmpty else { return .absent }
         guard sha.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil else {
             throw ShipError.remoteUnreachable("unexpected answer from origin")
@@ -156,6 +170,10 @@ extension ThreadService {
         } catch {
             throw ShipError.gitFailed("git could not be run: \(error)")
         }
+    }
+
+    private static func lines(_ text: String) -> [String] {
+        text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     /// `https://user:token@host/x` becomes `https://host/x`, wherever it appears in a line.
