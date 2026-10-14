@@ -138,4 +138,57 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
             "setup_command = \"mix deps.get\"\n[tools]\navailable = [\"Bash\"]\nallowed = [\"Read\"]\n")
         #expect(!config.effectiveAllowedTools.contains { $0.contains("mix") })
     }
+
+    @Test func stoppingDuringTheSetupRecordsItAsStoppedAndStartsNoTurn() async throws {
+        let script = try CheckScript()
+        let fx = try await setupFixture(
+            script, body: "sleep 300 &\necho $! > \(script.path("child"))\ntouch \(script.path("ready"))\nwait")
+        let id = try await fx.approvedThread()
+        let runner = fx.runner(id)
+        let options = fx.options()
+        let task = Task { try await runner.run(options) }
+        try #require(await script.waitFor("ready"))
+        await runner.stop()
+        let error = await failure { try await task.value }
+
+        guard case .setupFailed(_, let how, _)? = error else {
+            Issue.record("expected setupFailed, got \(String(describing: error))")
+            return
+        }
+        #expect(how == "was stopped")
+        let ran = try #require(try fx.events(id).first { $0.kind == .setupRan })
+        #expect(ran.data["result"]?.stringValue == "stopped")
+        #expect(!(try fx.kinds(id)).contains("turn.started"))
+        let child = try script.pid("child")
+        defer { kill(child, SIGKILL) }
+        #expect(await FakeClaude.waitUntilGone(child))
+    }
+
+    @Test func followingTheLogEndsWhenTheSetupFails() async throws {
+        let script = try CheckScript()
+        let go = script.path("go")
+        let fx = try await setupFixture(
+            script, body: "touch \(script.path("started"))\nwhile [ ! -f \(go) ]; do sleep 0.1; done\nexit 1")
+        let id = try await fx.approvedThread()
+        let runner = fx.runner(id)
+        let options = fx.options()
+        let running = Task { try await runner.run(options) }
+        try #require(await script.waitFor("started"))
+
+        var spawn = SpawnRequest(
+            executable: WorkbenchBinary.executable, arguments: ["log", "--follow"],
+            environment: ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName()],
+            workingDirectory: fx.repo, timeout: 40)
+        spawn.snapshotInterval = 3600
+        let follower = try ProcessRunner.start(spawn)
+        // The follower reads the log once, then polls; release the setup after it had time to start.
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        FileManager.default.createFile(atPath: go, contents: nil)
+
+        var exit: ProcessExit?
+        for await event in follower.events { if case .exited(let e) = event { exit = e } }
+        _ = await failure { try await running.value }
+        #expect(exit?.termination == .exited(0), "it returned instead of waiting for ever")
+        #expect(exit?.cause == .natural)
+    }
 }
