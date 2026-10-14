@@ -101,6 +101,8 @@ enum Commands {
             out("wrote \(ctx.project.configURL.path)")
             out("review the tool set, then: workbench goal new <name>")
         }
+        // Keeps `.workbench/` out of the repository's `git status` without touching its .gitignore.
+        try? await WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).excludeWorkbench()
     }
 
     static func goalNew(_ args: [String]) async throws {
@@ -140,6 +142,7 @@ enum Commands {
     static func run(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let feedback = try a.value("--feedback", "-f")
+        // Accepted and ignored: a checkout with local edits no longer blocks a run.
         let allowDirty = a.flag("--allow-dirty")
         let named = a.positional()
         try a.requireEmpty()
@@ -200,6 +203,8 @@ enum Commands {
                     + (report.costUSD.map { String(format: "  $%.4f", $0) } ?? "")
                     + "  \(report.durationMs / 1000)s"
                     + (report.permissionDenials > 0 ? "  \(report.permissionDenials) denied" : ""))
+            case .advisory(let text):
+                out("note: \(text)")
             case .checkStarted(_, let command):
                 out("check started: \(command)")
             case .checkRan(let check):
@@ -320,6 +325,7 @@ enum Commands {
                 }
                 out("goal:      \(approval)")
                 out("base:      \(goal.base)   budget $\(goal.budgetUSD)/turn   timeout \(goal.turnTimeoutMin) min")
+                if let line = await baseGapLine(goal.base, ctx: ctx) { out("           \(line)") }
             } catch let error as GoalParseError {
                 let problems = error.description.split(separator: "\n").map { "           \($0)" }
                 out("goal:      not valid\n\(problems.joined(separator: "\n"))")
@@ -365,7 +371,27 @@ enum Commands {
             out(ReviewReport.render(shown))
             return
         }
-        for line in await loader.load(id: id).render() { out(line) }
+        let report = await loader.load(id: id)
+        for line in report.render() { out(line) }
+        if report.status == .empty || report.status == .awaitingReview || report.status == .sentBack,
+            let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
+            let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx) {
+            out("")
+            out("Base       \(line)")
+        }
+    }
+
+    /// One line when the base branch is behind its origin counterpart or could not be compared; nil when
+    /// there is nothing to say. Fetches that one branch, bounded; offline is a note, not an error.
+    static func baseGapLine(_ base: String, ctx: Context) async -> String? {
+        let manager = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git)
+        guard let gap = await manager.baseGap(base: base) else { return nil }
+        var parts: [String] = []
+        if gap.behind > 0 {
+            parts.append("\(base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind origin/\(base)")
+        }
+        if let note = gap.fetchNote { parts.append(note) }
+        return parts.isEmpty ? nil : parts.joined(separator: "; ")
     }
 
     static func abandon(_ args: [String]) async throws {

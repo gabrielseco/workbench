@@ -143,8 +143,9 @@ Implemented in `Sources/WorkbenchCore/Worktree/` and `Git/`.
   `git worktree add --no-track -b <branch> <path> <sha>`. The sha is `base` resolved at creation, recorded
   as `baseCommit`, so the cut point is fixed even if `base` moves.
 - **The worktree is the committed `base`, not the working tree.** Uncommitted edits in the main checkout are
-  not in it. Because accepting the work later merges into that checkout, creation refuses when tracked files
-  are modified (`dirtyRepository`), unless `allowDirty`. Untracked files and `.workbench/` do not count.
+  not in it, so a checkout with local edits does not block a run: the run says how many files are left out.
+  (Creation used to refuse a dirty checkout because accept merged into it; accept now commits on the thread's
+  branch and merges nothing, and `--allow-dirty` is accepted and ignored.)
 - **`repoRoot` must be the repository top level.** A subdirectory is refused, so worktrees cannot end up in
   the wrong place.
 - `.workbench/` is kept out of `git status` through `.git/info/exclude`, never by editing the project's

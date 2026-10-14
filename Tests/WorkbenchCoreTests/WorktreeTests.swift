@@ -162,21 +162,81 @@ private struct TestRepo {
         #expect(exclude.components(separatedBy: ".workbench/").count == 2)
     }
 
-    @Test func refusesATrackedChangeInTheCheckoutUnlessAllowed() async throws {
+    @Test func aTrackedChangeInTheCheckoutDoesNotBlockAndStaysOutOfTheWorktree() async throws {
         let repo = try await TestRepo()
         try repo.write("a.txt", "edited\n")
+        #expect(try await repo.manager.checkoutChanges() == [" M a.txt"])
 
-        do {
-            _ = try await repo.manager.create(threadID: "t1", base: "main")
-            Issue.record("expected dirtyRepository")
-        } catch let error as WorktreeError {
-            #expect(error == .dirtyRepository([" M a.txt"]))
-        }
-        #expect(!repo.manager.exists("t1"))
-
-        let worktree = try await repo.manager.create(threadID: "t1", base: "main", allowDirty: true)
-        // The worktree is the committed state, not the uncommitted edit.
+        let worktree = try await repo.manager.create(threadID: "t1", base: "main")
+        // The worktree is the committed state, not the uncommitted edit; the checkout keeps its edit.
         #expect(try String(contentsOf: worktree.path.appendingPathComponent("a.txt"), encoding: .utf8) == "one\n")
+        #expect(try String(contentsOf: repo.root.appendingPathComponent("a.txt"), encoding: .utf8) == "edited\n")
+    }
+
+    @Test func excludeWorkbenchIsOnceAndSkippedWhenAlreadyIgnored() async throws {
+        let repo = try await TestRepo()
+        try await repo.manager.excludeWorkbench()
+        try await repo.manager.excludeWorkbench()
+        let exclude = try String(
+            contentsOf: repo.root.appendingPathComponent(".git/info/exclude"), encoding: .utf8)
+        #expect(exclude.components(separatedBy: ".workbench/").count == 2)
+        try repo.write(".workbench/config.toml", "x\n")
+        #expect(try await repo.run("status", "--porcelain").stdout.isEmpty)
+
+        let other = try await TestRepo()
+        try other.write(".gitignore", ".workbench\n")
+        try await other.manager.excludeWorkbench()
+        let none = try? String(contentsOf: other.root.appendingPathComponent(".git/info/exclude"), encoding: .utf8)
+        #expect(none?.contains(".workbench/") != true, "already ignored, so nothing was added")
+    }
+
+    @Test func theBaseGapCountsCommitsBehindOriginAndSaysNothingWithoutOne() async throws {
+        let repo = try await TestRepo()
+        #expect(await repo.manager.baseGap(base: "main") == nil, "no origin")
+
+        let bare = repo.root.deletingLastPathComponent().appendingPathComponent("o-\(UUID().uuidString).git")
+        _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
+        try await repo.run("remote", "add", "origin", bare.path)
+        try await repo.run("push", "-q", "origin", "main")
+        #expect(await repo.manager.baseGap(base: "main") == WorktreeManager.BaseGap(base: "main", behind: 0, fetchNote: nil))
+
+        // Someone else moves origin/main two commits ahead.
+        let clone = repo.root.deletingLastPathComponent().appendingPathComponent("c-\(UUID().uuidString)")
+        _ = try await repo.git.run(["clone", "-q", "-b", "main", bare.path, clone.path], in: repo.root)
+        for n in 1...2 {
+            try "\(n)\n".write(to: clone.appendingPathComponent("n\(n).txt"), atomically: true, encoding: .utf8)
+            _ = try await repo.git.run(["add", "-A"], in: clone)
+            _ = try await repo.git.run(["commit", "-q", "-m", "n\(n)"], in: clone)
+        }
+        let pushed = try await repo.git.run(["push", "-q", "origin", "HEAD:main"], in: clone)
+        #expect(pushed.succeeded, "\(pushed.stderr)")
+
+        let before = try await repo.head("main")
+        let gap = await repo.manager.baseGap(base: "main")
+        #expect(gap == WorktreeManager.BaseGap(base: "main", behind: 2, fetchNote: nil))
+        #expect(try await repo.head("main") == before, "the local branch is untouched")
+        let worktree = try await repo.manager.create(threadID: "t1", base: "main")
+        #expect(worktree.baseCommit == before, "still cut from the local base")
+    }
+
+    @Test func anUnreachableOrHungOriginIsANoteNotAnError() async throws {
+        let repo = try await TestRepo()
+        try await repo.run("remote", "add", "origin", "/nonexistent/origin.git")
+        let gone = await repo.manager.baseGap(base: "main")
+        #expect(gone?.behind == 0)
+        #expect(gone?.fetchNote?.contains("could not fetch origin") == true, "\(String(describing: gone))")
+
+        let bare = repo.root.deletingLastPathComponent().appendingPathComponent("h-\(UUID().uuidString).git")
+        _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
+        let hang = bare.appendingPathExtension("sh")
+        try "#!/bin/sh\nexec sleep 60\n".write(to: hang, atomically: true, encoding: .utf8)
+        chmod(hang.path, 0o755)
+        try await repo.run("remote", "set-url", "origin", bare.path)
+        try await repo.run("config", "remote.origin.uploadpack", hang.path)
+        let started = Date()
+        let slow = await repo.manager.baseGap(base: "main", fetchTimeout: 2)
+        #expect(Date().timeIntervalSince(started) < 20)
+        #expect(slow?.fetchNote?.contains("no answer") == true, "\(String(describing: slow))")
     }
 
     @Test func untrackedFilesDoNotCountAsDirty() async throws {

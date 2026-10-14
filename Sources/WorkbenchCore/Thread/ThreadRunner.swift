@@ -33,6 +33,8 @@ public enum RunNotice: Sendable {
     case turnEnded(TurnReport)
     case checkStarted(turn: Int, command: String)
     case checkRan(CheckReport)
+    /// Something worth a line that is not an error: local edits left out, a base behind its origin.
+    case advisory(String)
 }
 
 public struct RunOptions: Sendable {
@@ -43,6 +45,7 @@ public struct RunOptions: Sendable {
     /// Replaces the check's timeout, which is otherwise the turn's. For tests.
     public var checkTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
+    /// Kept so scripts that pass `--allow-dirty` still work; a dirty checkout no longer blocks a run.
     public var allowDirty = false
     /// The budget for this run's turns instead of the goal's. The goal file is not touched.
     public var budgetOverride: Decimal?
@@ -227,8 +230,21 @@ public actor ThreadRunner {
             worktree = worktreeManager.path(for: threadID)
             baseCommit = await recordedBaseCommit(goal: goal)
         } else {
-            let created = try await worktreeManager.create(
-                threadID: threadID, base: goal.base, allowDirty: options.allowDirty)
+            let local = (try? await worktreeManager.checkoutChanges()) ?? []
+            let created = try await worktreeManager.create(threadID: threadID, base: goal.base)
+            if !local.isEmpty {
+                notify(.advisory(
+                    "\(local.count) file\(local.count == 1 ? "" : "s") changed in your checkout "
+                        + "\(local.count == 1 ? "is" : "are") not part of this thread (it starts from \(goal.base)'s commit)"))
+            }
+            if let gap = await worktreeManager.baseGap(base: goal.base) {
+                if let note = gap.fetchNote { notify(.advisory("\(note); comparing with what is known")) }
+                if gap.behind > 0 {
+                    notify(.advisory(
+                        "\(goal.base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind origin/\(goal.base); "
+                            + "this thread is cut from your local \(goal.base)"))
+                }
+            }
             worktree = created.path
             baseCommit = created.baseCommit
             try await log.append(
