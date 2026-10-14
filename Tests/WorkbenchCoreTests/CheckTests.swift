@@ -33,7 +33,8 @@ struct CheckScript {
 
     func exists(_ name: String) -> Bool { FileManager.default.fileExists(atPath: path(name)) }
 
-    func waitFor(_ name: String, timeout: TimeInterval = 15) async -> Bool {
+    /// Generous: CI runs the suites in parallel and a spawn can wait seconds; a pass returns at once.
+    func waitFor(_ name: String, timeout: TimeInterval = 60) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if exists(name) { return true }
@@ -209,7 +210,8 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
         #expect(report.check?.exitCode == nil)
         let ran = try fx.checkRuns(id)
         #expect(ran.count == 1)
-        #expect(ran[0].data["error"]?.stringValue?.contains("cannot find") == true)
+        let failed = try #require(ran.first)
+        #expect(failed.data["error"]?.stringValue?.contains("cannot find") == true)
         #expect(try fx.checkOutput(id).contains("cannot find"))
         #expect(try fx.contents(id).isHealthy)
     }
@@ -331,7 +333,8 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
         let options = fx.options()
 
         let task = Task { try await runner.run(options) }
-        #expect(await script.waitFor("ready"))
+        // #require: a missed wait must not run on into indexing an empty array, which kills the whole run.
+        try #require(await script.waitFor("ready"))
         await runner.stop()
         let report = try await task.value
 
@@ -340,8 +343,9 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
         #expect(try fx.checkStarts(id).count == 1)
         let ran = try fx.checkRuns(id)
         #expect(ran.count == 1)
-        #expect(ran[0].data["result"]?.stringValue == "stopped")
-        #expect(ran[0].data["synthetic"] == nil)
+        let stopped = try #require(ran.first)
+        #expect(stopped.data["result"]?.stringValue == "stopped")
+        #expect(stopped.data["synthetic"] == nil)
         #expect(ended(try fx.events(id)).count == 1)
         #expect(try fx.checkOutput(id) == "started\n")
         let contents = try fx.contents(id)
