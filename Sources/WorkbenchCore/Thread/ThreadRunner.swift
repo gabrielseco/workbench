@@ -247,6 +247,11 @@ public actor ThreadRunner {
                     "\(local.count) file\(one ? "" : "s") changed in your checkout \(one ? "is" : "are") not part "
                         + "of this thread (it starts from \(goal.base)'s commit)"))
             }
+        }
+
+        // Said whenever the goal's prompt is built, not only when the worktree is cut: a runner killed during
+        // the fetch leaves the worktree and no turn, and the retry must still look.
+        if builtFromGoal {
             if let gap = await worktreeManager.baseGap(base: goal.base) {
                 if let note = gap.fetchNote { notify(.advisory("\(note); comparing with what is known")) }
                 if gap.behind > 0 {
