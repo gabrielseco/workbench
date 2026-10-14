@@ -44,12 +44,13 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         let id = try await fx.approvedThread()
         let error = await failure { try await fx.runner(id).run(fx.options()) }
 
-        guard case .setupFailed(_, let how, let output)? = error else {
+        guard case .setupFailed(_, let how, let output, _)? = error else {
             Issue.record("expected setupFailed, got \(String(describing: error))")
             return
         }
         #expect(how == "failed (exit 3)")
         #expect(output.contains("boom") && output.contains("installing"))
+        #expect("\(error!)".contains("env_pass"), "a failed setup says where a dropped variable goes")
         let kinds = try fx.kinds(id)
         #expect(!kinds.contains("turn.started"))
         #expect(kinds.contains("setup.ran"))
@@ -87,11 +88,12 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         let fx = try await RunnerFixture(extraConfig: "setup_command = \"\(name)\"")
         let id = try await fx.approvedThread()
         let error = await failure { try await fx.runner(id).run(fx.options()) }
-        guard case .setupFailed(_, _, let output)? = error else {
+        guard case .setupFailed(_, _, let output, _)? = error else {
             Issue.record("expected setupFailed, got \(String(describing: error))")
             return
         }
         #expect(output.contains("cannot find"))
+        #expect(!"\(error!)".contains("env_pass"), "nothing ran, so the environment is not the suspect")
         #expect(!(try fx.kinds(id)).contains("turn.started"))
     }
 
@@ -104,11 +106,12 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         options.setupTimeoutOverride = 2
         let error = await failure { try await fx.runner(id).run(options) }
 
-        guard case .setupFailed(_, let how, _)? = error else {
+        guard case .setupFailed(_, let how, _, _)? = error else {
             Issue.record("expected setupFailed, got \(String(describing: error))")
             return
         }
         #expect(how == "timed out")
+        #expect(!"\(error!)".contains("env_pass"), "a timeout is not an environment problem")
         let child = try script.pid("child")
         defer { kill(child, SIGKILL) }
         #expect(await FakeClaude.waitUntilGone(child))
@@ -151,7 +154,7 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         await runner.stop()
         let error = await failure { try await task.value }
 
-        guard case .setupFailed(_, let how, _)? = error else {
+        guard case .setupFailed(_, let how, _, _)? = error else {
             Issue.record("expected setupFailed, got \(String(describing: error))")
             return
         }

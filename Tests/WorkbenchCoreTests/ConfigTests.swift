@@ -121,6 +121,7 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         let config = try Config.parse(Config.exampleTOML)
         #expect(config.tools.available.contains("Bash"))
         #expect(config.tools.denied.contains("Bash(git push:*)"))
+        #expect(Config.exampleTOML.contains("MIX_HOME"), "the example says what a version manager needs")
     }
 
     @Test func missingFileSaysWhere() {

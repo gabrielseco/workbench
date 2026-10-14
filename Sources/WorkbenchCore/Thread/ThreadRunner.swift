@@ -73,8 +73,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case alreadyRunning
     case claudeNotFound(String)
     case threadEnded(String)
-    /// The setup command did not pass; no turn was started. `output` is the tail of what it printed.
-    case setupFailed(command: String, how: String, output: String)
+    /// Setup did not pass; no turn was started. `output` is its tail, `hint` empty or a likely cause.
+    case setupFailed(command: String, how: String, output: String, hint: String)
 
     public var description: String {
         switch self {
@@ -95,9 +95,9 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .alreadyRunning: "another `workbench run` holds this thread's log."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
         case .threadEnded(let decision): "this thread has ended (\(decision))."
-        case .setupFailed(let command, let how, let output):
+        case .setupFailed(let command, let how, let output, let hint):
             "setup `\(command)` \(how), so no turn was started. The worktree is kept; fix it and run again."
-                + (output.isEmpty ? "" : "\n\(output)")
+                + (output.isEmpty ? "" : "\n\(output)") + (hint.isEmpty ? "" : "\n\(hint)")
         }
     }
 }

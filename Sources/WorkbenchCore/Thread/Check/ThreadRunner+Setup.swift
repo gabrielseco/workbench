@@ -31,7 +31,16 @@ extension ThreadRunner {
         notify(.setupRan(report))
         guard report.result == .passed else {
             let tail = SetupRunner.tail(of: project.setupOutputURL(threadID))
-            throw RunnerError.setupFailed(command: command, how: report.how, output: tail)
+            throw RunnerError.setupFailed(
+                command: command, how: report.how, output: tail, hint: Self.envHint(report))
         }
+    }
+
+    /// A setup that works in the person's shell and fails here is usually a variable the child environment
+    /// (an allowlist) dropped, and the output names the tool, not the environment (friction #32).
+    static func envHint(_ report: SetupReport) -> String {
+        guard report.result == .failed, report.exitCode != nil || report.signal != nil else { return "" }
+        return "If it passes in your own shell, the child environment may be dropping a variable your version "
+            + "manager sets (mise: MIX_HOME, MIX_ARCHIVES): add it to `env_pass` in .workbench/config.toml."
     }
 }
