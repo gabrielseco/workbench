@@ -7,6 +7,7 @@ let usage = """
     setup
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
+      doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing
 
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
@@ -73,6 +74,8 @@ do {
         try await Commands.initProject()
     case "config":
         try await Commands.config()
+    case "doctor":
+        exit(try await Commands.doctor(Array(arguments.dropFirst())))
     case "goal":
         switch arguments.dropFirst().first {
         case "new": try await Commands.goalNew(Array(arguments.dropFirst(2)))

@@ -144,6 +144,15 @@ Notes:
   A version manager's own variables are dropped too (mise on Elixir sets `MIX_HOME` and `MIX_ARCHIVES`), so a
   `setup_command` that passes in your shell can fail here. A failed setup (exit or signal, not a timeout)
   prints a hint at `env_pass`.
+- **`workbench doctor [--base <branch>]` proves the declared config works** before any goal exists. It cuts
+  a throwaway worktree (reserved id `doctor`, removed on every path, a crash leftover is replaced by the next
+  run) at the base (default: the checked-out branch), runs `setup_command` then `check_command` through the
+  same runners, environment and limits a thread uses, and prints each step's result, duration, output tail
+  and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `model` (or
+  the CLI default), and whether `Bash` is in `[tools].available`. It runs nothing the config does not
+  declare, writes no event into a thread and no file into the project, and refuses while a thread is active.
+  A step the config leaves out is reported, not failed; the check is skipped when a declared setup did not
+  pass. Exit 0 when everything declared passed, 1 when a step did not, 3 when stopped (`exit-codes.md`).
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

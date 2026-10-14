@@ -83,7 +83,7 @@ public struct ThreadService: Sendable {
         try store.create(id: id)
 
         let baseBranch: String
-        if let base { baseBranch = base } else { baseBranch = await currentBranch() ?? "main" }
+        if let base { baseBranch = base } else { baseBranch = await defaultBase() }
         let budget = NSDecimalNumber(decimal: config?.defaultBudgetUSD ?? Config.defaultBudgetUSD).stringValue
         let title = name.replacingOccurrences(of: "-", with: " ")
 
@@ -422,6 +422,9 @@ public struct ThreadService: Sendable {
         kill(pid, SIGTERM)
         return .signalled(pid: pid)
     }
+
+    /// The branch a thread is cut from when none is named: the checked-out one, else `main`.
+    public func defaultBase() async -> String { await currentBranch() ?? "main" }
 
     private func currentBranch() async -> String? {
         guard let result = try? await git.run(["rev-parse", "--abbrev-ref", "HEAD"], in: project.root),

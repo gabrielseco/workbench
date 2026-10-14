@@ -103,7 +103,8 @@ enum Commands {
         } else {
             try Config.exampleTOML.write(to: ctx.project.configURL, atomically: true, encoding: .utf8)
             out("wrote \(ctx.project.configURL.path)")
-            out("review the tool set, then: workbench goal new <name>")
+            out("review the tool set, set check_command and setup_command, then: workbench doctor")
+            out("then: workbench goal new <name>")
         }
         // Keeps `.workbench/` out of the repository's `git status` without touching its .gitignore.
         do {
@@ -113,6 +114,56 @@ enum Commands {
                 "the config is in place, but .workbench/ could not be kept out of `git status` "
                     + "(\(error)). Add `.workbench/` to .git/info/exclude yourself.")
         }
+    }
+
+    /// `doctor [--base <branch>]`: runs the declared setup and check in a throwaway worktree.
+    static func doctor(_ args: [String]) async throws -> Int32 {
+        var a = Arguments(args)
+        let base = try a.value("--base")
+        try a.requireEmpty()
+        let ctx = try await Context.load()
+        let doctor = Doctor(project: ctx.project, git: ctx.git)
+        let resolved: String
+        if let base { resolved = base } else { resolved = await ctx.service.defaultBase() }
+
+        let handlers = installStopHandlers(what: "the doctor run") { doctor.stop() }
+        defer { handlers.forEach { $0.cancel() } }
+        out("base:     \(resolved)")
+        let report: DoctorReport
+        do { report = try await doctor.run(base: resolved) } catch let error as DoctorError {
+            switch error {
+            case .invalidBase: throw CLIError.usage("\(error)")
+            case .noConfig, .threadActive: throw CLIError.refused("\(error)")
+            }
+        }
+        printDoctor(report)
+        if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
+        return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
+    }
+
+    private static func printDoctor(_ report: DoctorReport) {
+        out("claude:   \(report.claude ?? "NOT FOUND (\(report.claudePath))")")
+        out("model:    \(report.model ?? "the claude CLI default (no `model` in the config)")")
+        if let pattern = report.checkPattern {
+            out("allowed:  \(pattern)" + (report.bashAvailable ? "" : "  (but Bash is not in [tools].available)"))
+        }
+        func show(_ name: String, _ step: DoctorStep, undeclared: String) {
+            let label = name.padding(toLength: 10, withPad: " ", startingAt: 0)
+            guard let command = step.command else { return out("\(label)none declared: \(undeclared)") }
+            let seconds = step.durationMs.map { String(format: " in %.1fs", Double($0) / 1000) } ?? ""
+            switch step.outcome {
+            case .passed: out("\(label)passed\(seconds): \(command)")
+            case .failed(let how): out("\(label)\(how)\(seconds): \(command)")
+            case .timedOut: out("\(label)timed out\(seconds): \(command)")
+            case .stopped: out("\(label)stopped\(seconds): \(command)")
+            case .skipped(let why): out("\(label)skipped (\(why)): \(command)")
+            case .notDeclared: out("\(label)none declared: \(undeclared)")
+            }
+            if !step.tail.isEmpty { out(step.tail) }
+            if !step.hint.isEmpty { out("  \(step.hint)") }
+        }
+        show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
+        show("check:", report.check, undeclared: "turns will end with no check evidence")
     }
 
     static func goalNew(_ args: [String]) async throws {
@@ -308,13 +359,17 @@ enum Commands {
 /// SIGINT and SIGTERM ask the running turn to stop. The default action would kill this process and leave
 /// the turn open until the next run recovers it; this way it ends as `stopped`.
 func installStopHandlers(for runner: ThreadRunner) -> [DispatchSourceSignal] {
+    installStopHandlers(what: "the turn") { await runner.stop() }
+}
+
+func installStopHandlers(what: String, stop: @escaping @Sendable () async -> Void) -> [DispatchSourceSignal] {
     var sources: [DispatchSourceSignal] = []
     for sig in [SIGINT, SIGTERM] {
         signal(sig, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
-            err("\nstopping: ending the turn cleanly (press Ctrl-C again to quit immediately)")
-            Task { await runner.stop() }
+            err("\nstopping: ending \(what) cleanly (press Ctrl-C again to quit immediately)")
+            Task { await stop() }
             signal(sig, SIG_DFL)  // a second press takes the default action
         }
         source.resume()

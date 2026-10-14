@@ -1,6 +1,7 @@
 # Project setup: doctor, guided init, checks by project size
 
-**Status:** notes from a design conversation on 2026-10-14; nothing built. Revisits item 7 in
+**Status:** `workbench doctor` built (see `docs/spec/goal-file.md`); the rest below is still notes, from a
+design conversation on 2026-10-14. Revisits item 7 in
 [portability](portability.md) ("detect the stack and propose"), which this replaces.
 **Trigger:** the first time a config turns out wrong only after a paid turn (friction #27 was that), or when
 a second project is set up by hand.
@@ -14,7 +15,7 @@ a second project is set up by hand.
 - **Leaving it unset is a choice, said out loud.** With no `check_command` a turn ends with no check
   evidence.
 
-## `workbench doctor`
+## `workbench doctor` (built)
 
 Proves the declared setup works before a goal exists.
 
@@ -62,6 +63,13 @@ The per-turn check answers "did this turn break the obvious things?". It does no
   an env flag the script reads (less visible). Lean: the second key, but only once a large project hits it.
 - **Literal prefix.** The check is allowed as `Bash(<command>:*)`, so a script must be invoked exactly as
   written in the config.
+
+## Presets by stack (idea)
+
+A named preset per stack (`node`, `elixir`, `swift`) that a config inherits, so the commands and the
+allowlist entries are a starting point shared across projects. The user still picks and edits the result,
+and an AI assistant can help write the config; Workbench does not choose for them. Later, once two or
+three projects have settled on the same shape.
 
 ## Not decided
 
