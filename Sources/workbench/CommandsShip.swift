@@ -32,7 +32,8 @@ extension Commands {
             id = try shippableThread(named, ctx: ctx)
         } catch let error as ShipError {
             // With --watch a thread that is already shipped is simply followed.
-            guard watch, let shipped = latestShipped(ctx: ctx) else { return refuse(error) }
+            // An id that was named is never swapped for another thread.
+            guard watch, named == nil, let shipped = latestShipped(ctx: ctx) else { return refuse(error) }
             return await follow(id: shipped, ctx: ctx, gh: gh, limits: limits)
         }
         if watch, isShipped(id, ctx: ctx) { return await follow(id: id, ctx: ctx, gh: gh, limits: limits) }

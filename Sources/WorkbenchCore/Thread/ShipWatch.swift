@@ -10,6 +10,8 @@ public struct PRCheck: Sendable, Equatable {
         case passed, failed, pending
     }
 
+    static let knownBuckets: Set<String> = ["pass", "skipping", "fail", "cancel", "pending"]
+
     public var outcome: Outcome {
         switch bucket {
         case "pass", "skipping": .passed
@@ -45,8 +47,10 @@ public struct PRChecksSummary: Sendable, Equatable {
         else { throw ShipError.ghFailed("`gh pr checks` did not answer with a JSON list") }
         var checks: [PRCheck] = []
         for item in list {
-            guard let name = item["name"] as? String, let bucket = item["bucket"] as? String else {
-                throw ShipError.ghFailed("`gh pr checks` returned a check without a name or bucket")
+            guard let name = item["name"] as? String, let bucket = item["bucket"] as? String,
+                PRCheck.knownBuckets.contains(bucket)
+            else {
+                throw ShipError.ghFailed("`gh pr checks` returned a check without a name or a known bucket")
             }
             checks.append(PRCheck(name: name, bucket: bucket))
         }
@@ -91,15 +95,22 @@ extension ThreadService {
         guard let gh else { throw ShipError.ghMissing }
         var environment = gh.environment
         environment["GH_REPO"] = nil
-        let runner = GitRunner(executable: gh.executable, environment: environment, timeout: callTimeout)
 
         let started = now()
         var failures = 0
         var lastSignature: String?
+        var known: [PRCheck] = []
         while true {
+            // The limit is checked before asking again, so a long interval cannot carry past it.
+            let remaining = timeout - now().timeIntervalSince(started)
+            if lastSignature != nil, remaining <= 0 { return .timedOut(known) }
             do {
+                let runner = GitRunner(
+                    executable: gh.executable, environment: environment,
+                    timeout: max(1, min(callTimeout, remaining)))
                 let summary = try await pollChecks(number: number, runner: runner)
                 failures = 0
+                known = summary.checks
                 if summary.signature != lastSignature {
                     lastSignature = summary.signature
                     onChange(summary)
@@ -111,13 +122,17 @@ extension ThreadService {
                     if now().timeIntervalSince(started) >= noChecksGrace { return .noChecks }
                 case .pending: break
                 }
-                if now().timeIntervalSince(started) >= timeout { return .timedOut(summary.checks) }
             } catch let error as ShipError {
                 failures += 1
                 if failures >= Self.watchFailureLimit { throw error }
-                if now().timeIntervalSince(started) >= timeout { throw error }
+                if timeout - now().timeIntervalSince(started) <= 0 { throw error }
             }
-            await sleep(interval)
+            let left = timeout - now().timeIntervalSince(started)
+            if left <= 0 {
+                if lastSignature != nil { return .timedOut(known) }
+                continue
+            }
+            await sleep(min(interval, left))
         }
     }
 

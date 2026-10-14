@@ -224,6 +224,26 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         }
     }
 
+    @Test func watchNeverSwapsANamedThreadForAnotherOne() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let shipped = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"pass\"}]")
+        #expect(try await ship(["--yes"], fx: fx, gh: gh).code == 0)
+        let before = gh.count("pr checks")
+
+        let typo = try await ship(["--yes", "--watch", "g-typo"], fx: fx, gh: gh)
+        #expect(typo.code == 3, "\(typo.text)")
+        #expect(gh.count("pr checks") == before, "no other thread's PR was watched")
+
+        // A named thread that was never accepted has no PR to watch: refused, with the way to end it.
+        let active = try await fx.approvedThread("second")
+        let notYet = try await ship(["--yes", "--watch", active], fx: fx, gh: gh)
+        #expect(notYet.code == 3 && notYet.text.contains("workbench accept"), "\(notYet.text)")
+        #expect(try fx.events(shipped.id).contains { $0.kind == .prOpened })
+    }
+
     @Test func anUnknownOptionIsAUsageError() async throws {
         let fx = try await RunnerFixture()
         let result = try await ship(["--bogus"], fx: fx, gh: nil)

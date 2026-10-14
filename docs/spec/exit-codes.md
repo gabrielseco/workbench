@@ -14,6 +14,8 @@
 | 7 | `--watch`: checks still running at the time limit, or none reported within two minutes | the list so far, the reason on stderr |
 | 5 | Push rejected by origin, or origin's branch is not an ancestor of ours (a force would be needed) | the remote's message on stderr, credentials removed |
 
+With `--watch`, a thread that is not accepted and has no recorded PR is refused with 3 (it names `workbench accept`), and a named thread is never replaced by another one.
+
 `--watch` is read-only: no event, no file. Exit 0 with `--watch` means every check passed (or was skipped). It
 ends at 30 minutes by default (`--timeout` 1 to 240), polls every 15 s (`--interval` 1 to 300) and gives up
 with exit 1 after three failed polls in a row.

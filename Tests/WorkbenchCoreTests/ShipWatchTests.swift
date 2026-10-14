@@ -50,7 +50,7 @@ private func watch(
         #expect(try state([("a", "pass"), ("b", "pending")]) == .pending)
         #expect(try state([("a", "fail"), ("b", "pending")]) == .pending, "wait for the rest before ending")
         #expect(try state([]) == .none)
-        for bad in ["", "not json", "{}", "[1]", "[{\"name\": \"a\"}]"] {
+        for bad in ["", "not json", "{}", "[1]", "[{\"name\": \"a\"}]", checks([("a", "bogus")])] {
             #expect(throws: ShipError.self) { try PRChecksSummary.parse(bad) }
         }
     }
@@ -166,6 +166,42 @@ private func watch(
             try await Task.sleep(nanoseconds: 300_000_000)
             #expect(kill(pid, 0) != 0, "no `gh` is left behind")
         }
+    }
+
+    @Test func theLimitIsCheckedBeforeAskingAgainAndTheSleepIsCutToWhatIsLeft() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shippedThread(fx, gh)
+        try gh.put("checks_1", checks([("build", "pending")]))
+        try gh.put("checks_2", checks([("build", "pass")]))
+        let clock = Clock()
+        let result = try await fx.service.watchPR(
+            id: id, gh: gh.runner, interval: 300, timeout: 60, callTimeout: 10,
+            now: { clock.now }, sleep: { clock.advance($0) }, onChange: { _ in })
+        // One poll, then a sleep of the 60 s that were left, then the limit: the later pass is not waited for.
+        guard case .timedOut = result else {
+            Issue.record("got \(result)")
+            return
+        }
+        #expect(clock.now.timeIntervalSince1970 - 1_000_000 <= 60)
+        #expect(gh.calls.filter { $0.hasPrefix("pr checks") }.count == 1)
+    }
+
+    @Test func repeatedMalformedAnswersEndWithAnErrorNotAsPending() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shippedThread(fx, gh)
+        try gh.put("checks_last", checks([("build", "bogus")]))
+        do {
+            _ = try await watch(fx, gh, id: id)
+            Issue.record("expected an error")
+        } catch let error as ShipError {
+            guard case .ghFailed = error else {
+                Issue.record("got \(error)")
+                return
+            }
+        }
+        #expect(gh.calls.filter { $0.hasPrefix("pr checks") }.count == ThreadService.watchFailureLimit)
     }
 
     @Test func aThreadWithoutARecordedPRIsRefusedWithTheFix() async throws {
