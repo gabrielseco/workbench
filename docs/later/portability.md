@@ -83,3 +83,35 @@ this repo) and #4 (mise put `mix` on `PATH`, which is in the allowlist).
 **Reading:** problem #1 is not cosmetic on a stack with an install step. Without a `setup_command` the first
 turn is spent discovering it, and the run's own account of the work is unverifiable. It is the first thing to
 build when this file moves from "not started".
+
+## Probe 2: expenses-backend re-run, 2026-10-14 (P2.6 task 5)
+
+The same repo with `setup_command = "mix deps.get"` set. The task was changed on purpose: #323 is merged, so
+a new run on the same goal could not be compared with it. This one is as small as it can be, to answer only
+"does a fresh worktree on this stack start, and does the loop close". Goal: `GET /hi` in the `/` scope (so
+outside the `/api` contract) returning `{"message": "hi"}`, with a controller test; proofs
+`mix test <the test>`, `mix format --check-formatted`, and an unchanged `api-contract/`.
+
+**Result:** setup passed in 2 s, one turn, $0.23 at list price, 75 s, check (`mix test`, 7 s) passed. The
+diff is 3 files, +16 lines, exactly the three the goal named, nothing under `api-contract/`. `goal approve`
+raised no warning: both command proofs were in the allowlist.
+
+| # | What happened | Verdict |
+|---|---|---|
+| 1 | Setup ran before the turn and a broken one stopped the start: first attempt, `mix deps.get` failed (exit 1) with its output shown, `$0`, no turn, worktree kept. Fixed the cause, ran again, setup passed | P2.6 task 3 works on this stack |
+| 2 | That first failure was the environment, not the project: mise sets `MIX_HOME` and `MIX_ARCHIVES` per Elixir version, and the child environment is an allowlist that dropped them, so `mix` fell back to `~/.mix` and a Hex built for another Elixir (`Enum.__in__/2 is undefined`). Cleared with `env_pass = ["MIX_HOME", "MIX_ARCHIVES"]` | friction #32; the config was enough, no code change |
+| 3 | Two shell calls were denied again, both compound (`cat > f <<EOF`, `mix format ...; echo "exit $?"`); the run used its file tools and a plain command instead and lost nothing | friction #29, unchanged |
+| 4 | The run said honestly that `mix format --check-formatted` fails on three files it did not touch, and left them alone as the goal required | c2 as written could never pass; a proof should name only files the thread changes |
+| 5 | The old thread's worktree held one untracked scratch script, so `abandon` refused (no force) until it was removed by hand | working as designed |
+
+**Not observed:** `status` on a running turn. The turn ended inside the 90 s before the first look, so the
+progress lines are covered by tests but have not been seen on a real run. Look at one on the next longer task.
+
+**Answers to the open questions:** the output cannot be compared with #323 (a different task, by design), so
+that line of the plan is closed as not answerable. What the probe was for is answered: on a stack with an
+install step a fresh worktree starts, a broken setup is caught before a turn is spent, and the allowlist
+warning stays quiet when the proofs are runnable.
+
+**Left alone:** #28 (an `env` form in `[tools]`, a decision for deleting inside the worktree) and #29 stay
+open; nothing here made either cheaper to judge. #2 and #3 were not hit again.
+
