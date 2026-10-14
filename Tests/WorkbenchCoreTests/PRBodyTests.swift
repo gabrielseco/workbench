@@ -103,7 +103,7 @@ private let repoTemplate = """
         #expect(line("passed", exit: 0) == "Check: passed (exit 0, 12s)")
         #expect(line("failed", exit: 2) == "Check: failed (exit 2, 12s)")
         #expect(line("timed_out") == "Check: timed out (12s)")
-        #expect(line("stopped") == "Check: stopped before it finished (12s)")
+        #expect(line("stopped", exit: 2) == "Check: stopped before it finished (exit 2, 12s)")
         #expect(line("interrupted") == "Check: interrupted, no result (12s)")
         #expect(PRBodyBuilder.checkLine(nil) == "Check: not run")
         for r in ["failed", "timed_out", "stopped", "interrupted", "weird"] {
@@ -156,8 +156,8 @@ private let repoTemplate = """
     @Test func headingInsideACodeFenceIsNotASection() {
         let template = "## Summary\n\n## Notes\n\n```\n## Testing\n```\n"
         let body = PRBodyBuilder.build(goal: goal(), check: check("passed"), template: template).body
-        #expect(body.contains("```\n## Testing\n```"))
-        #expect(!body.contains("Check: passed"))
+        // The fenced line stays as it was; the real Testing section is appended after it.
+        #expect(body.contains("```\n## Testing\n```\n\n## Testing\n\nCheck: passed"))
     }
 
     @Test func machinePathsAreRemoved() {
@@ -175,6 +175,32 @@ private let repoTemplate = """
         #expect(out.body.contains("<path>"))
         #expect(PRBodyBuilder.scrub("see https://github.com/a/b/pull/1 and docs/spec/x.md") ==
             "see https://github.com/a/b/pull/1 and docs/spec/x.md")
+    }
+
+    @Test func urlAndPrefixedPathsAreRemoved() {
+        let text = "see file:///Users/gabriel/p/x.swift and path:/Users/gabriel/p and (/Users/gabriel/p)"
+        let out = PRBodyBuilder.scrub(text)
+        #expect(!out.contains("gabriel"))
+        #expect(PRBodyBuilder.scrub("https://example.com/Users/x") == "https://example.com/Users/x")
+    }
+
+    @Test func templateWithoutSummaryOrTestingStillCarriesRequestCriteriaAndCheck() {
+        let body = PRBodyBuilder.build(
+            goal: goal(), check: check("passed"), template: "## Rollout\n\nShip behind the flag.\n").body
+        #expect(body.contains("## Summary\n\nAdd retry to `SyncClient.fetch`."))
+        #expect(body.contains("- [ ] Delay is capped at 30s."))
+        #expect(body.contains("Check: passed"))
+        #expect(body.contains("## Rollout\n\nShip behind the flag."))
+        let headings = body.split(separator: "\n").filter { $0.hasPrefix("## ") }
+        #expect(headings == ["## Summary", "## Rollout", "## Testing"])
+    }
+
+    @Test func headingsWithClosingHashesAreRecognised() {
+        let template = "## Summary ##\n\nhint\n\n## Testing ##\n\n- [ ] placeholder\n"
+        let body = PRBodyBuilder.build(goal: goal(), check: check("passed"), template: template).body
+        #expect(body.contains("## Summary ##\n\nAdd retry"))
+        #expect(body.contains("## Testing ##\n\nCheck: passed"))
+        #expect(!body.contains("placeholder") && !body.contains("hint"))
     }
 
     @Test func sameInputGivesTheSameOutput() {

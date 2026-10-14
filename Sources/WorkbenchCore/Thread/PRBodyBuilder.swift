@@ -53,17 +53,14 @@ public enum PRBodyBuilder {
         var detail: [String] = []
         let verdict: String
         switch check.result {
-        case "passed":
-            verdict = "passed"
-            if let code = check.exitCode { detail.append("exit \(code)") }
-        case "failed":
-            verdict = "failed"
-            if let code = check.exitCode { detail.append("exit \(code)") }
+        case "passed": verdict = "passed"
+        case "failed": verdict = "failed"
         case "timed_out": verdict = "timed out"
         case "stopped": verdict = "stopped before it finished"
         case "interrupted": verdict = "interrupted, no result"
         default: verdict = "no result"
         }
+        if let code = check.exitCode { detail.append("exit \(code)") }
         if let ms = check.durationMs { detail.append("\(ms / 1000)s") }
         return "Check: \(verdict)" + (detail.isEmpty ? "" : " (\(detail.joined(separator: ", ")))")
     }
@@ -114,6 +111,13 @@ public enum PRBodyBuilder {
             }
         }
 
+        // A template without these headings must not swallow the content a reader needs.
+        let names = Set(sections.compactMap { $0.heading.flatMap(headingName) })
+        if !names.contains("summary") {
+            sections.insert(Section(heading: "## Summary"), at: 1)  // 0 is the text before any heading
+        }
+        if !names.contains("testing") { sections.append(Section(heading: "## Testing")) }
+
         var parts: [String] = []
         for section in sections {
             var content = section.lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -138,7 +142,10 @@ public enum PRBodyBuilder {
         guard (1...6).contains(hashes.count) else { return nil }
         let rest = line.dropFirst(hashes.count)
         guard rest.first == " " else { return nil }
-        return rest.trimmingCharacters(in: .whitespaces).lowercased()
+        var name = rest.trimmingCharacters(in: .whitespaces)
+        // `## Testing ##` closes the heading with hashes that are not part of its name.
+        while name.hasSuffix("#") { name.removeLast() }
+        return name.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     // MARK: Text
@@ -151,7 +158,7 @@ public enum PRBodyBuilder {
     static func scrub(_ text: String) -> String {
         let roots = "Users|home|private|var|tmp|Volumes|opt|etc|root|Library"
         let patterns = [
-            "(?<![\\w.:/-])/(?:\(roots))/[^\\s)\\]>`'\"]*",
+            "(?<![\\w.-])/(?:\(roots))/[^\\s)\\]>`'\"]*",
             "(?<![\\w.-])~/[^\\s)\\]>`'\"]*",
             "(?<![\\w-])\\.workbench/[^\\s)\\]>`'\"]*",
         ]
