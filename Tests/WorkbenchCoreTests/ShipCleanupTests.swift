@@ -255,7 +255,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
 
         // Shipped again: exit 4, URL last, no second removal event.
         let again = try await ship(["--yes", id], fx: fx, gh: gh)
-        #expect(again.code == 4, Comment(rawValue: again.text))
+        #expect(again.code == 11, Comment(rawValue: again.text))
         #expect(try fx.events(id).filter { $0.kind == .worktreeRemoved }.count == 1)
     }
 
@@ -271,7 +271,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         #expect(!(try fx.events(id).contains { $0.kind == .worktreeRemoved }))
 
         let later = try await ship(["--yes", id], fx: fx, gh: gh)
-        #expect(later.code == 4, Comment(rawValue: later.text))
+        #expect(later.code == 11, Comment(rawValue: later.text))
         #expect(later.text.contains("removed the worktree"))
         #expect(!FileManager.default.fileExists(atPath: worktree.path))
     }

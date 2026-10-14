@@ -77,7 +77,7 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         let before = try Data(contentsOf: fx.project.eventsURL(id))
 
         let result = try await cli(["discard"], in: fx)
-        #expect(result.exit?.termination == .exited(1), "\(result.text)")
+        #expect(result.exit?.termination == .exited(6), "\(result.text)")
         #expect(result.text.contains("will delete"), "the plan is shown before refusing")
         #expect(!result.text.contains("discarded \(id)"))
         #expect(FileManager.default.fileExists(atPath: worktree.path))
@@ -300,7 +300,7 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         #expect(!plan.fullyShown)
         #expect(plan.render().contains { $0.contains("more commits not listed") })
         let refused = try await cli(["discard", id], in: fx)
-        #expect(refused.exit?.termination == .exited(1))
+        #expect(refused.exit?.termination == .exited(6))
         #expect(try await branchExists(id, fx))
         let confirmed = try await cli(["discard", id, "--yes"], in: fx)
         #expect(confirmed.exit?.termination == .exited(0))

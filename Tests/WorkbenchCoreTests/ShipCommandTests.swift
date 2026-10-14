@@ -51,7 +51,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(opened.count == 1 && opened[0].data["number"]?.intValue == 12)
 
         let again = try await ship(["--yes", id], fx: fx, gh: gh)
-        #expect(again.code == 4, "\(again.text)")
+        #expect(again.code == 11, "\(again.text)")
         #expect(again.lines.last == "https://github.com/o/r/pull/12")
         #expect(gh.count("pr create") == 1)
     }
@@ -63,7 +63,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let bare = try await addOrigin(fx)
 
         let result = try await ship([], fx: fx, gh: gh)
-        #expect(result.code == 1, "\(result.text)")
+        #expect(result.code == 6, "\(result.text)")
         #expect(result.text.contains("branch:  workbench/\(id)") && result.text.contains("Pass --yes"))
         #expect(try await branches(bare, fx).isEmpty)
         #expect(gh.count("pr create") == 0)
@@ -73,10 +73,10 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
         let unknown = try await ship(["--yes", "g-nope"], fx: fx, gh: gh)
-        #expect(unknown.code == 3, "\(unknown.text)")
+        #expect(unknown.code == 10, "\(unknown.text)")
 
         let none = try await ship(["--yes"], fx: fx, gh: gh)
-        #expect(none.code == 3, "\(none.text)")
+        #expect(none.code == 10, "\(none.text)")
         #expect(none.text.contains("workbench accept"))
         #expect(none.text.contains("no accepted thread"))
 
@@ -84,7 +84,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         _ = try await fx.runner(id).run(fx.options())
         let bare = try await addOrigin(fx)
         let active = try await ship(["--yes", id], fx: fx, gh: gh)
-        #expect(active.code == 3, "\(active.text)")
+        #expect(active.code == 10, "\(active.text)")
         #expect(active.text.contains("workbench accept"), "an active thread is told how to end it")
         #expect(try await branches(bare, fx).isEmpty)
     }
@@ -100,7 +100,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         chmod(hook.path, 0o755)
 
         let rejected = try await ship(["--yes"], fx: fx, gh: gh)
-        #expect(rejected.code == 5, "\(rejected.text)")
+        #expect(rejected.code == 12, "\(rejected.text)")
         #expect(rejected.text.contains("closed for release"))
         #expect(try await branches(bare, fx).isEmpty)
         #expect(!(try fx.events(id).contains { $0.kind == .prOpened }))
@@ -166,7 +166,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let before = try await branches(bare, fx)
 
         let result = try await ship(["--yes"], fx: fx, gh: gh)
-        #expect(result.code == 5, "\(result.text)")
+        #expect(result.code == 12, "\(result.text)")
         #expect(result.text.contains("remove or rename"))
         #expect(try await branches(bare, fx) == before)
         #expect(gh.count("pr create") == 0)
@@ -179,8 +179,8 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let bare = try await addOrigin(fx)
 
         let result = try await ship(["--yes"], fx: fx, gh: gh, withGH: false)
-        #expect(result.code == 1, "\(result.text)")
-        #expect(result.text.contains("gh"))
+        #expect(result.code == 6, "\(result.text)")
+        #expect(result.text.contains("not-found") == false && result.text.contains("gh"))
         #expect(try await branches(bare, fx).isEmpty)
     }
 
@@ -215,7 +215,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"fail\"}]")
 
         let failed = try await ship(["--yes", "--watch", "--interval", "1"], fx: fx, gh: gh)
-        #expect(failed.code == 6, "\(failed.text)")
+        #expect(failed.code == 13, "\(failed.text)")
         #expect(failed.text.contains("fail") && failed.text.contains("build"))
 
         for bad in [["--timeout", "5"], ["--watch", "--interval", "0"], ["--watch", "--timeout", "999"]] {
@@ -234,19 +234,19 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let before = gh.count("pr checks")
 
         let typo = try await ship(["--yes", "--watch", "g-typo"], fx: fx, gh: gh)
-        #expect(typo.code == 3, "\(typo.text)")
+        #expect(typo.code == 10, "\(typo.text)")
         #expect(gh.count("pr checks") == before, "no other thread's PR was watched")
 
         // A name that is a path to a thread directory, not a thread id, is never used to read a log.
         let sneaky = try await ship(["--yes", "--watch", "../threads/\(shipped.id)"], fx: fx, gh: gh)
-        #expect(sneaky.code == 3, "\(sneaky.text)")
+        #expect(sneaky.code == 10, "\(sneaky.text)")
         #expect(!sneaky.text.contains("watching"), "\(sneaky.text)")
         #expect(gh.count("pr checks") == before)
 
         // A named thread that was never accepted has no PR to watch: refused, with the way to end it.
         let active = try await fx.approvedThread("second")
         let notYet = try await ship(["--yes", "--watch", active], fx: fx, gh: gh)
-        #expect(notYet.code == 3 && notYet.text.contains("workbench accept"), "\(notYet.text)")
+        #expect(notYet.code == 10 && notYet.text.contains("workbench accept"), "\(notYet.text)")
         #expect(try fx.events(shipped.id).contains { $0.kind == .prOpened })
     }
 

@@ -142,7 +142,7 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(raw.text.contains("\"seq\" : \(seq)"), "\(raw.text)")
 
         let missing = try await cli(["log", id, "--seq", "9999"], in: fx)
-        #expect(missing.exit?.termination == .exited(1))
+        #expect(missing.exit?.termination == .exited(7))
         let junk = try await cli(["log", id, "--seq", "abc"], in: fx)
         #expect(junk.exit?.termination != .exited(0))
     }

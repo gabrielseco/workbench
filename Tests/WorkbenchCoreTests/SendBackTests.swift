@@ -152,7 +152,7 @@ private func startedArgv(_ id: String, turn: Int, _ fx: RunnerFixture) throws ->
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         let result = try await cli(["send-back", "too early"], in: fx)
-        #expect(result.exit?.termination == .exited(1), "\(result.text)")
+        #expect(result.exit?.termination == .exited(6), "\(result.text)")
         #expect(try fx.events(id).allSatisfy { $0.kind != .threadNote && $0.kind != .turnStarted })
 
         _ = try await fx.runner(id).run(fx.options())
