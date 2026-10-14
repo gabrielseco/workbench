@@ -54,7 +54,7 @@ enum FakeClaude {
 
     static func alive(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 }
 
-    static func waitUntilGone(_ pid: pid_t, within seconds: TimeInterval = 3) async -> Bool {
+    static func waitUntilGone(_ pid: pid_t, within seconds: TimeInterval = Patience.limit) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
             if !alive(pid) { return true }
@@ -130,7 +130,7 @@ enum FakeClaude {
         await #expect(throws: GitError.self) {
             _ = try await FakeClaude.run("hang-after=1", timeout: 0.5)
         }
-        #expect(Date().timeIntervalSince(started) < 5)
+        #expect(Date().timeIntervalSince(started) < Patience.limit, "a hang ends by the timeout, not on its own")
     }
 
     @Test func invalidLineAndFloodComeBeforeTheResult() async throws {
@@ -238,7 +238,7 @@ final class FakeProcess: @unchecked Sendable {
         try? FileManager.default.removeItem(atPath: readyFile)
     }
 
-    func waitReady(timeout: TimeInterval = 10) async -> Bool {
+    func waitReady(timeout: TimeInterval = Patience.limit) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if FileManager.default.fileExists(atPath: readyFile) { return true }

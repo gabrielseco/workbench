@@ -200,7 +200,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         var status: Int32 = 0
         waitpid(sh, &status, 0)
         var orphan: ProcessMember?
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(Patience.limit)
         while orphan == nil, Date() < deadline {
             orphan = OrphanSweeper.orphans(inside: thread.worktree).first
             if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }

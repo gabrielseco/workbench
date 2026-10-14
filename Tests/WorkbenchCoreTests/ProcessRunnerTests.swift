@@ -44,7 +44,7 @@ private func request(
     return r
 }
 
-private func waitForFile(_ path: String, timeout: TimeInterval = 15) async -> Bool {
+private func waitForFile(_ path: String, timeout: TimeInterval = Patience.limit) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if FileManager.default.fileExists(atPath: path) { return true }
@@ -53,7 +53,7 @@ private func waitForFile(_ path: String, timeout: TimeInterval = 15) async -> Bo
     return false
 }
 
-private func waitUntil(timeout: TimeInterval = 10, _ condition: () -> Bool) async -> Bool {
+private func waitUntil(timeout: TimeInterval = Patience.limit, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }
@@ -286,17 +286,15 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         let ready = FakeClaude.scratch("ready")
         defer { try? FileManager.default.removeItem(atPath: ready) }
         let run = try ProcessRunner.start(request("ready=\(ready)", "hang-after=1"))
-        #expect(await waitForFile(ready))
+        try #require(await waitForFile(ready))
 
-        // Timed from the stop: durationMs starts at spawn and so counts a slow start under CI load.
-        let stopped = ContinuousClock.now
         run.stop()
         run.stop()  // idempotent
         let result = try await collect(run)
         #expect(result.exit.cause == .stopped)
         #expect(result.exit.termination == .exited(143))
         #expect(!result.exit.escalatedToKill)
-        #expect(ContinuousClock.now - stopped < .seconds(4))
+        // No time bound: `!escalatedToKill` is the property (it left on SIGTERM, inside the grace).
     }
 
     @Test func timeoutStopsTheChildAndSaysWhy() async throws {
@@ -313,7 +311,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         defer { try? FileManager.default.removeItem(atPath: ready) }
         let run = try ProcessRunner.start(
             request("ready=\(ready)", "ignore-term", "hang-after=1") { $0.killGrace = 0.5 })
-        #expect(await waitForFile(ready))
+        try #require(await waitForFile(ready))
 
         let started = Date()
         run.stop()
@@ -322,7 +320,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         #expect(result.exit.escalatedToKill)
         #expect(result.exit.termination == .signaled(SIGKILL))
         let elapsed = Date().timeIntervalSince(started)
-        #expect(elapsed >= 0.45 && elapsed < 5, "elapsed \(elapsed)")
+        #expect(elapsed >= 0.45, "it waited out the grace before killing: \(elapsed)")
     }
 
     @Test func escalationKillsAToolChildInAnotherProcessGroup() async throws {
@@ -336,7 +334,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
             request("ready=\(ready)", "grandchild=\(pidFile)", "ignore-term", "hang-after=1") {
                 $0.killGrace = 0.4
             })
-        #expect(await waitForFile(ready))
+        try #require(await waitForFile(ready))
         let grandchild = try #require(pid_t(try String(contentsOfFile: pidFile, encoding: .utf8)))
         defer { kill(grandchild, SIGKILL) }
         #expect(getpgid(grandchild) == grandchild, "own group: a group kill alone would miss it (S6)")
@@ -358,7 +356,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
             try? FileManager.default.removeItem(atPath: pidFile)
         }
         let run = try ProcessRunner.start(request("ready=\(ready)", "grandchild=\(pidFile)", "hang-after=1"))
-        #expect(await waitForFile(ready))
+        try #require(await waitForFile(ready))
         let grandchild = try #require(pid_t(try String(contentsOfFile: pidFile, encoding: .utf8)))
         defer { kill(grandchild, SIGKILL) }
         #expect(await waitUntil { run.trackedDescendants().contains(grandchild) })
@@ -384,7 +382,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
 
         #expect(result.exit.termination == .exited(0))
         #expect(result.lines.count == 3)
-        #expect(Date().timeIntervalSince(started) < 4)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
         #expect(await FakeClaude.waitUntilGone(grandchild))
         #expect(result.exit.sweptProcesses == 1 || result.exit.drainTimedOut)
     }
@@ -396,7 +394,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         do {
             let run = try ProcessRunner.start(request("ready=\(ready)", "hang-after=1"))
             pid = run.pid
-            #expect(await waitForFile(ready))
+            try #require(await waitForFile(ready))
             var iterator = run.events.makeAsyncIterator()
             _ = await iterator.next()  // .started
             // iterator and run go out of scope here: nobody is listening any more

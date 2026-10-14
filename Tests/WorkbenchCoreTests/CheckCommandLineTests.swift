@@ -97,7 +97,7 @@ import Testing
         let id = try await fx.approvedThread()
 
         let cli = try cli(["run"], in: fx)
-        #expect(await script.waitFor("ready"))
+        try #require(await script.waitFor("ready"))
         #expect(fx.service.requestStop(id: id) == .signalled(pid: cli.pid))
         let run = await output(of: cli)
 

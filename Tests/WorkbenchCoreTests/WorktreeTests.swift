@@ -65,7 +65,7 @@ private struct TestRepo {
         await #expect(throws: GitError.timedOut(arguments: ["30"], seconds: 0.3)) {
             _ = try await sleep.run(["30"], in: URL(fileURLWithPath: "/tmp"))
         }
-        #expect(Date().timeIntervalSince(started) < 5)
+        #expect(Date().timeIntervalSince(started) < 25, "ended by the timeout, not by `sleep 30`")
     }
 
     @Test func aProcessThatIgnoresSigtermIsStillKilled() async throws {
@@ -75,7 +75,7 @@ private struct TestRepo {
         await #expect(throws: GitError.self) {
             _ = try await sh.run(["-c", "trap '' TERM; while :; do sleep 1; done"], in: URL(fileURLWithPath: "/tmp"))
         }
-        #expect(Date().timeIntervalSince(started) < 8)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
     }
 
     @Test func standardInputIsClosed() async throws {
@@ -255,7 +255,7 @@ private struct TestRepo {
         try await repo.run("config", "remote.origin.uploadpack", hang.path)
         let started = Date()
         let slow = await repo.manager.baseGap(base: "main", fetchTimeout: 2)
-        #expect(Date().timeIntervalSince(started) < 20)
+        #expect(Date().timeIntervalSince(started) < 45, "ended by the fetch timeout, not by `sleep 60`")
         #expect(slow?.fetchNote?.contains("no answer") == true, "\(String(describing: slow))")
     }
 

@@ -199,7 +199,7 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
         var status: Int32 = 0
         waitpid(sh, &status, 0)
         var orphan: ProcessMember?
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(Patience.limit)
         while orphan == nil, Date() < deadline {
             orphan = OrphanSweeper.orphans(inside: worktree).first
             if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }

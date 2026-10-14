@@ -211,10 +211,9 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         let runner = fx.runner(id)
         let options = fx.options("ready=\(ready)", "hang-after=1")
         let task = Task { try await runner.run(options) }
-        let deadline = Date().addingTimeInterval(15)
-        while !FileManager.default.fileExists(atPath: ready), Date() < deadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // #require: going on without it would stop a run that has not started, or write into a worktree
+        // that does not exist yet.
+        try #require(await pollUntil { FileManager.default.fileExists(atPath: ready) })
         try write("so far\n", to: "so-far.txt", id: id, in: fx)
         await runner.stop()
         #expect(try await task.value.result == .stopped)
