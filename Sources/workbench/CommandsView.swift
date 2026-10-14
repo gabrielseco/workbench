@@ -144,7 +144,11 @@ extension Commands {
         } else if let check = state.lastCheck {
             out("check:     \(check)")
         }
+        if state.openTurn != nil {
+            for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
+        }
         out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
+        if state.openTurn != nil { out("           the open turn's cost is reported when it ends") }
         for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: worktree.path) {
@@ -153,6 +157,14 @@ extension Commands {
             events.contains(where: { $0.kind == .worktreeRemoved }) {
             out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
         }
+    }
+
+    /// The goal's per-turn limit in seconds, nil when the goal cannot be read.
+    static func turnTimeout(id: String, ctx: Context) -> TimeInterval? {
+        guard let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
+            let goal = try? GoalFile.parse(text).goal
+        else { return nil }
+        return TimeInterval(goal.turnTimeoutMin * 60)
     }
 
     static func review(_ args: [String]) async throws {
