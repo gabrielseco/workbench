@@ -103,4 +103,33 @@ private func draft(_ fx: RunnerFixture, proof command: String) async throws -> S
         let report = try await fx.runner(id).run(options)
         #expect(report.result == .succeeded)
     }
+
+    @Test func aBrokenConfigStopsApprovalInsteadOfSkippingTheCheck() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await draft(fx, proof: "scripts/verify.sh")
+        try "this is = not valid [toml\n".write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+
+        let result = try await cli(["goal", "approve"], in: fx)
+        #expect(result.code == 2, "\(result.text)")
+        let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8))
+        #expect(goal.goal.approval == .draft, "nothing was approved")
+    }
+
+    @Test func runAndSendBackRefuseThroughTheCommandLineAndTheFlagIsWired() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await draft(fx, proof: "scripts/verify.sh")
+        _ = try await fx.service.approve(id: id)
+
+        let refused = try await cli(["run"], in: fx)
+        #expect(refused.code == 6, "\(refused.text)")
+        #expect(refused.text.contains("scripts/verify.sh") && refused.text.contains("--allow-unrunnable-proofs"))
+        #expect(!(try fx.kinds(id)).contains("turn.started"))
+
+        let sent = try await cli(["send-back", "more"], in: fx)
+        #expect(sent.code == 6, "\(sent.text)")
+
+        let allowed = try await cli(["run", "--allow-unrunnable-proofs"], in: fx)
+        #expect(allowed.code == 0, "\(allowed.text)")
+        #expect(try fx.kinds(id).contains("turn.started"))
+    }
 }

@@ -199,7 +199,10 @@ enum Commands {
         let before = try? GoalFile.parse(String(contentsOf: ctx.project.goalURL(id), encoding: .utf8))
         // Nothing is approved while a proof cannot run (friction #30); a goal that does not parse is left to
         // `approve` to report.
-        if let before, !allowUnrunnable, let config = try? Config.load(from: ctx.project.configURL) {
+        // A config that is there but broken is an error here, not a reason to skip the check; no config at all
+        // means there is no tool set to judge against.
+        if let before, !allowUnrunnable, FileManager.default.fileExists(atPath: ctx.project.configURL.path) {
+            let config = try Config.load(from: ctx.project.configURL)
             let unrunnable = ProofCommands.warnings(goal: before.goal, config: config)
             if !unrunnable.isEmpty { throw CLIError.refused(ProofWarning.refusal(unrunnable)) }
         }
