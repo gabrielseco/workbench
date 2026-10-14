@@ -12,6 +12,7 @@ let usage = """
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
       goal approve [id]          approve the goal; any later edit returns it to draft
       run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
+                                 (local edits in your checkout are left out; --allow-dirty is ignored)
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
       log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full

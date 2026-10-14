@@ -232,27 +232,29 @@ public actor ThreadRunner {
         } else {
             let local = (try? await worktreeManager.checkoutChanges()) ?? []
             let created = try await worktreeManager.create(threadID: threadID, base: goal.base)
-            if !local.isEmpty {
-                notify(.advisory(
-                    "\(local.count) file\(local.count == 1 ? "" : "s") changed in your checkout "
-                        + "\(local.count == 1 ? "is" : "are") not part of this thread (it starts from \(goal.base)'s commit)"))
-            }
-            if let gap = await worktreeManager.baseGap(base: goal.base) {
-                if let note = gap.fetchNote { notify(.advisory("\(note); comparing with what is known")) }
-                if gap.behind > 0 {
-                    notify(.advisory(
-                        "\(goal.base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind origin/\(goal.base); "
-                            + "this thread is cut from your local \(goal.base)"))
-                }
-            }
             worktree = created.path
             baseCommit = created.baseCommit
+            // Recorded before anything slow (the fetch below), so a runner killed meanwhile still has it.
             try await log.append(
                 .worktreeCreated,
                 data: [
                     "path": .string(created.path.path), "branch": .string(created.branch),
                     "base_commit": .string(created.baseCommit),
                 ])
+            if !local.isEmpty {
+                let one = local.count == 1
+                notify(.advisory(
+                    "\(local.count) file\(one ? "" : "s") changed in your checkout \(one ? "is" : "are") not part "
+                        + "of this thread (it starts from \(goal.base)'s commit)"))
+            }
+            if let gap = await worktreeManager.baseGap(base: goal.base) {
+                if let note = gap.fetchNote { notify(.advisory("\(note); comparing with what is known")) }
+                if gap.behind > 0 {
+                    notify(.advisory(
+                        "\(goal.base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind "
+                            + "origin/\(goal.base); this thread is cut from your local \(goal.base)"))
+                }
+            }
         }
 
         // The prompt built from the goal carries the project's instructions as they were at the base

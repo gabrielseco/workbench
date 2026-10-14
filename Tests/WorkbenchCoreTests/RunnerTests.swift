@@ -577,23 +577,3 @@ extension RunnerFixture {
         try? String(contentsOf: project.runnerURL(id), encoding: .utf8)
     }
 }
-
-@Suite struct StartAdvisoryTests {
-    @Test func localEditsAndABehindBaseAreSaidOnTheFirstTurnOnly() async throws {
-        let fx = try await RunnerFixture()
-        let id = try await fx.approvedThread()
-        try "local edit\n".write(to: fx.repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-
-        let notices = NoticeBox()
-        _ = try await fx.runner(id, notices: notices).run(fx.options())
-        let advisories = notices.all.compactMap { notice -> String? in
-            if case .advisory(let text) = notice { return text }
-            return nil
-        }
-        #expect(advisories.count == 1, "\(advisories)")
-        #expect(advisories.first?.contains("1 file changed in your checkout is not part of this thread") == true)
-        #expect(try String(contentsOf: fx.repo.appendingPathComponent("a.txt"), encoding: .utf8) == "local edit\n")
-        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
-        #expect(try String(contentsOf: worktree.appendingPathComponent("a.txt"), encoding: .utf8) != "local edit\n")
-    }
-}

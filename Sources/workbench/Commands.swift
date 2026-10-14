@@ -102,7 +102,13 @@ enum Commands {
             out("review the tool set, then: workbench goal new <name>")
         }
         // Keeps `.workbench/` out of the repository's `git status` without touching its .gitignore.
-        try? await WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).excludeWorkbench()
+        do {
+            try await WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).excludeWorkbench()
+        } catch {
+            throw CLIError.message(
+                "the config is in place, but .workbench/ could not be kept out of `git status` "
+                    + "(\(error)). Add `.workbench/` to .git/info/exclude yourself.")
+        }
     }
 
     static func goalNew(_ args: [String]) async throws {
@@ -373,8 +379,7 @@ enum Commands {
         }
         let report = await loader.load(id: id)
         for line in report.render() { out(line) }
-        if report.status == .empty || report.status == .awaitingReview || report.status == .sentBack,
-            let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
+        if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx) {
             out("")
             out("Base       \(line)")

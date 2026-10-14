@@ -219,6 +219,26 @@ private struct TestRepo {
         #expect(worktree.baseCommit == before, "still cut from the local base")
     }
 
+    @Test func whenTheFetchFailsTheKnownOriginRefIsStillCompared() async throws {
+        let repo = try await TestRepo()
+        let bare = repo.root.deletingLastPathComponent().appendingPathComponent("k-\(UUID().uuidString).git")
+        _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
+        try await repo.run("remote", "add", "origin", bare.path)
+        try await repo.run("push", "-q", "origin", "main")
+        // origin/main is ahead by one, as far as this clone knows.
+        try repo.write("b.txt", "b\n")
+        try await repo.run("add", "-A")
+        try await repo.run("commit", "-q", "-m", "b")
+        try await repo.run("push", "-q", "origin", "main")
+        try await repo.run("reset", "-q", "--hard", "HEAD~1")
+        // Then the origin goes away.
+        try FileManager.default.removeItem(at: bare)
+
+        let gap = await repo.manager.baseGap(base: "main")
+        #expect(gap?.behind == 1, "\(String(describing: gap))")
+        #expect(gap?.fetchNote?.contains("could not fetch origin") == true)
+    }
+
     @Test func anUnreachableOrHungOriginIsANoteNotAnError() async throws {
         let repo = try await TestRepo()
         try await repo.run("remote", "add", "origin", "/nonexistent/origin.git")

@@ -168,7 +168,8 @@ Ordered slices, each ending with tests passing.
 3. **Goal file.** Parse front matter + criteria, `approved_hash`, draft/approved transitions. Tests: edit after
    approval resets to draft, malformed goals produce specific errors.
 4. **Config and the fixed tool set.** Load `config.toml`, resolve to argv. Tests: missing config, unknown keys.
-5. **Worktree manager.** Create from `base`, deterministic branch name, remove, refuse dirty/missing repo.
+5. **Worktree manager.** Create from `base`, deterministic branch name, remove, refuse a missing repo (a dirty
+   checkout is fine: the worktree is the committed base).
    Tests against a temp git repo.
 6. **Fake claude.** A small script or executable that replays a fixture, with switches: hang, crash after N
    lines, ignore SIGTERM, spawn a grandchild (in its own process group, as real tool children are),
