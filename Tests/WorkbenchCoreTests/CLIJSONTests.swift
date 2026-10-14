@@ -88,6 +88,32 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         #expect(raw.stdout.count == 1 && raw.stdout.first == stored[claudeSeq - 1])
     }
 
+    @Test func aHalfWrittenMultibyteTailHidesNothingBeforeIt() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let url = fx.project.eventsURL(id)
+        let stored = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)
+        // A writer that died inside a two-byte character.
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data([0x7B, 0x22, 0xC3]))
+        try handle.close()
+
+        let log = try await cli(["log", id, "--json"], in: fx)
+        #expect(log.code == 0)
+        #expect(log.stdout == stored, "every whole event is still there")
+    }
+
+    @Test func anOptionValueThatReadsJSONIsNotTheFlag() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let result = try await cli(["accept", id, "-m", "--json"], in: fx)
+        // It reached `accept` (nothing to accept: refused), and was not read as an unsupported --json.
+        #expect(result.code == 6, "\(result.text)")
+        #expect(result.stderr.hasPrefix("workbench: refused: "))
+    }
+
     @Test func everyFailureHasAKindAndOneCodeInTextAndJSON() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

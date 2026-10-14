@@ -49,7 +49,13 @@ setvbuf(stdout, nil, _IOLBF, 0)
 var arguments = Array(CommandLine.arguments.dropFirst())
 // `--json` is global: it is taken out here so every command sees the same arguments, and only the read
 // commands may use it.
-if let at = arguments.firstIndex(of: "--json") {
+// An option's value that happens to read `--json` is a value, not the flag.
+let valueOptions: Set = [
+    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--patch", "--seq", "--timeout", "--interval",
+]
+if let at = arguments.indices.first(where: {
+    arguments[$0] == "--json" && !($0 > 0 && valueOptions.contains(arguments[$0 - 1]))
+}) {
     arguments.remove(at: at)
     Output.json = true
     if !["status", "review", "log"].contains(arguments.first ?? "") {

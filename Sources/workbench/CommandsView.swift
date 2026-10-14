@@ -23,10 +23,12 @@ extension Commands {
         if Output.json {
             var written = 0
             func rawLines() -> [String] {
-                let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-                var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-                _ = lines.popLast()  // the part after the last newline is not a whole event yet
-                return lines
+                // Split as bytes: a writer that died inside a multibyte character must not hide the whole
+                // events before it.
+                let data = (try? Data(contentsOf: url)) ?? Data()
+                var parts = data.split(separator: 0x0A, omittingEmptySubsequences: false)
+                _ = parts.popLast()  // the part after the last newline is not a whole event yet
+                return parts.map { String(decoding: $0, as: UTF8.self) }
             }
             var contents = try EventLogReader.read(at: url)
             for line in rawLines() {
