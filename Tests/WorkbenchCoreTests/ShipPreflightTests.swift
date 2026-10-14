@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// An accepted thread: one turn that changed `a.txt`, then `accept`.
-private func acceptedThread(_ fx: RunnerFixture) async throws -> (id: String, worktree: URL) {
+func acceptedThread(_ fx: RunnerFixture) async throws -> (id: String, worktree: URL) {
     let id = try await fx.approvedThread()
     _ = try await fx.runner(id).run(fx.options())
     let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
@@ -14,19 +14,19 @@ private func acceptedThread(_ fx: RunnerFixture) async throws -> (id: String, wo
 }
 
 /// A `gh` stand-in: a script that exits with `status`, as a runner.
-private func fakeGH(status: Int, in fx: RunnerFixture) throws -> GitRunner {
+func fakeGH(status: Int, in fx: RunnerFixture) throws -> GitRunner {
     let script = fx.repo.deletingLastPathComponent().appendingPathComponent("gh-\(UUID().uuidString).sh")
     try "#!/bin/sh\necho \"token ghp_secret\" >&2\nexit \(status)\n".write(to: script, atomically: true, encoding: .utf8)
     chmod(script.path, 0o755)
     return GitRunner(executable: script, environment: ["PATH": "/usr/bin:/bin"], timeout: 10)
 }
 
-private func out(_ args: [String], _ dir: URL, _ fx: RunnerFixture) async throws -> String {
+func shipOut(_ args: [String], _ dir: URL, _ fx: RunnerFixture) async throws -> String {
     try await fx.git.run(args, in: dir).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// A bare repository added as `origin`.
-private func addOrigin(_ fx: RunnerFixture) async throws -> URL {
+func addOrigin(_ fx: RunnerFixture) async throws -> URL {
     let bare = fx.repo.deletingLastPathComponent().appendingPathComponent("origin-\(UUID().uuidString).git")
     _ = try await fx.git.run(["init", "-q", "--bare", bare.path], in: fx.repo)
     _ = try await fx.git.run(["remote", "add", "origin", bare.path], in: fx.repo)
@@ -53,7 +53,7 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
 
         let plan = try await fx.service.shipPreflight(id: id, gh: fakeGH(status: 0, in: fx))
         #expect(plan.branch == "workbench/\(id)" && plan.base == "main")
-        #expect(plan.head == (try await out(["rev-parse", "HEAD"], worktree, fx)))
+        #expect(plan.head == (try await shipOut(["rev-parse", "HEAD"], worktree, fx)))
         #expect(plan.remote == .absent)
         // Reading only: the log has no new event and the repository has no new ref.
         #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted")
@@ -184,12 +184,12 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         let bare = try await addOrigin(fx)
         let gh = try fakeGH(status: 0, in: fx)
         let branch = "workbench/\(id)"
-        let head = try await out(["rev-parse", "HEAD"], worktree, fx)
-        let mainSHA = try await out(["rev-parse", "main"], fx.repo, fx)
+        let head = try await shipOut(["rev-parse", "HEAD"], worktree, fx)
+        let mainSHA = try await shipOut(["rev-parse", "main"], fx.repo, fx)
 
         // An ancestor (the base) is a plain fast-forward.
         _ = try await fx.git.run(["push", "-q", bare.path, "\(mainSHA):refs/heads/\(branch)"], in: fx.repo)
-        let before = try await out(["for-each-ref", "refs/remotes"], fx.repo, fx)
+        let before = try await shipOut(["for-each-ref", "refs/remotes"], fx.repo, fx)
         let behind = try await fx.service.shipPreflight(id: id, gh: gh)
         #expect(behind.remote == .behind(sha: mainSHA))
 
@@ -204,13 +204,13 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         try "other\n".write(to: other.appendingPathComponent("o.txt"), atomically: true, encoding: .utf8)
         _ = try await fx.git.run(["add", "-A"], in: other)
         _ = try await fx.git.run(["commit", "-q", "-m", "other"], in: other)
-        let theirs = try await out(["rev-parse", "HEAD"], other, fx)
+        let theirs = try await shipOut(["rev-parse", "HEAD"], other, fx)
         _ = try await fx.git.run(["push", "-q", "-f", bare.path, "HEAD:refs/heads/\(branch)"], in: other)
         let diverged = await refusal { try await fx.service.shipPreflight(id: id, gh: gh) }
         // The commit is not in this repository, so it is refused without fetching it.
         #expect(diverged == .remoteDiverged(sha: theirs))
         #expect(try await fx.git.run(["cat-file", "-e", theirs], in: fx.repo).status != 0, "nothing was fetched")
-        #expect(try await out(["for-each-ref", "refs/remotes"], fx.repo, fx) == before)
+        #expect(try await shipOut(["for-each-ref", "refs/remotes"], fx.repo, fx) == before)
     }
 
     @Test func aPushURLThatDiffersFromTheFetchURLIsRefused() async throws {
@@ -232,7 +232,7 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)
         let bare = try await addOrigin(fx)
-        let head = try await out(["rev-parse", "HEAD"], worktree, fx)
+        let head = try await shipOut(["rev-parse", "HEAD"], worktree, fx)
         // Only a lookalike exists, and it is at our tip: the real branch is still absent.
         _ = try await fx.git.run(["push", "-q", bare.path, "\(head):refs/heads/a/refs/heads/workbench/\(id)"], in: fx.repo)
         let plan = try await fx.service.shipPreflight(id: id, gh: fakeGH(status: 0, in: fx))
