@@ -32,6 +32,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `check.ran` | always, exactly once per `check.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
+| `pr.opened` | `workbench ship` opened the pull request (P2.5) | `url`, `number`, `branch`, `base`, `head_sha` |
 | `proof.added` | evidence recorded (later) | `criterion`, `type`, `path` |
 
 ## Invariants (tested)
@@ -58,6 +59,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
 | `check.started` | `command`: `check_command` from the config, as written there. `turn` is the turn it follows |
 | `check.ran` | `command`, `result` (`passed`, `failed`, `timed_out`, `stopped`, `interrupted`), `exit_code`, `signal` (null when not applicable), `duration_ms`, `output_ref` (`checks/turn-N.log`, relative to the thread directory), `output_truncated`, and when present `escalated_to_kill`, `swept_processes`, `lost`, `error`, `synthetic`. A synthetic one has only `result`, `synthetic` and a null `exit_code` |
+| `pr.opened` | `url`, `number`, `branch`, `base`, `head_sha`. Written by `workbench ship` (P2.5 task 4) after the push and the PR exist; preflight reads it to refuse a second ship and never records it. The URL carries no credentials |
 | `review.decision` | `decision` (`accepted`, `discarded`, `abandoned`), `by`, and for `accepted` the `commit` (the branch's tip). `accepted` is written by `workbench accept` after the pending work is committed on `workbench/<id>`; the worktree and branch are kept, nothing is pushed. `discarded` is written by `workbench discard` after the worktree and the `workbench/<id>` branch are removed; `abandoned` keeps the branch |
 
 A turn's `result` is derived from the `result` line and the exit, in this order: stopped or timed out by us, then a

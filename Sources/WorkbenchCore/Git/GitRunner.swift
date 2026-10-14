@@ -10,6 +10,7 @@ public struct GitResult: Sendable, Equatable {
 
 public enum GitError: Error, Equatable, Sendable {
     case gitNotFound
+    case toolNotFound(String)
     case launchFailed(String)
     case timedOut(arguments: [String], seconds: Double)
 }
@@ -37,19 +38,26 @@ public struct GitRunner: Sendable {
         self.timeout = timeout
     }
 
-    /// Finds `git` on PATH and builds a minimal, prompt-free environment.
-    /// `extraEnvironment` is for tests (for example to ignore the user's global git config).
+    /// Finds `git` (or another short command such as `gh`) on PATH and builds a minimal, prompt-free
+    /// environment. `gh` also keeps what it needs to use the person's own login. `extraEnvironment` is for
+    /// tests (for example to ignore the user's global git config).
     public static func discover(
+        tool: String = "git",
         from parent: [String: String] = ProcessInfo.processInfo.environment,
         extraEnvironment: [String: String] = [:],
         timeout: TimeInterval = 60
     ) throws -> GitRunner {
-        guard let git = ExecutableResolver.resolve("git", searchPath: parent["PATH"])
-            ?? ExecutableResolver.resolve("/usr/bin/git", searchPath: nil)
-        else { throw GitError.gitNotFound }
+        guard let git = ExecutableResolver.resolve(tool, searchPath: parent["PATH"])
+            ?? (tool == "git" ? ExecutableResolver.resolve("/usr/bin/git", searchPath: nil) : nil)
+        else { throw tool == "git" ? GitError.gitNotFound : GitError.toolNotFound(tool) }
 
-        let keep = ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL"]
-        var env = parent.filter { keep.contains($0.key) || $0.key.hasPrefix("LC_") }
+        // `SSH_AUTH_SOCK` is the person's own agent: a push or `ls-remote` over ssh needs it, and this
+        // environment is Workbench's, never the model's.
+        let keep = ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL", "SSH_AUTH_SOCK"]
+        let keepPrefixes = tool == "gh" ? ["LC_", "GH_", "GITHUB_", "XDG_CONFIG"] : ["LC_"]
+        var env = parent.filter { entry in
+            keep.contains(entry.key) || keepPrefixes.contains { entry.key.hasPrefix($0) }
+        }
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GIT_OPTIONAL_LOCKS"] = "0"
         env["GIT_PAGER"] = "cat"
