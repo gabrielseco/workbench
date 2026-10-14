@@ -18,6 +18,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case remoteDiverged(sha: String)
     case gitFailed(String)
     case pushRejected(String)
+    case notPushed(String)
+    case ghFailed(String)
 
     public var description: String {
         switch self {
@@ -43,6 +45,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
             "origin already has this branch at \(sha.prefix(12)), which is not part of this one. "
                 + "Shipping would need a force push, and Workbench never does that."
         case .gitFailed(let what): what
+        case .notPushed(let why): "the branch is not on origin at this thread's tip (\(why)). Push it first."
+        case .ghFailed(let why): "`gh` could not open the pull request, so nothing was recorded: \(why)"
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }

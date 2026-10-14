@@ -60,7 +60,7 @@ public struct ThreadService: Sendable {
     /// Opens the thread's log for the duration of `body` and closes it before returning, so the next open
     /// never races a lingering close.
     @discardableResult
-    private func withLog<T>(_ id: String, _ body: (EventLogWriter) async throws -> T) async throws -> T {
+    func withLog<T>(_ id: String, _ body: (EventLogWriter) async throws -> T) async throws -> T {
         let log = try EventLogWriter.open(at: project.eventsURL(id), now: now)
         do {
             let value = try await body(log)

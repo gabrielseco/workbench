@@ -150,7 +150,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
 
         let started = Date()
         do {
-            _ = try await fx.service.shipPush(id: id, gh: gh, timeout: 3)
+            _ = try await fx.service.shipPush(id: id, gh: gh, timeout: 8)
             Issue.record("expected a timeout")
         } catch let error as ShipError {
             guard case .gitFailed(let why) = error else {
