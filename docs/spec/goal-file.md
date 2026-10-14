@@ -100,7 +100,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
-# model = "haiku"                       # --model for every turn; a goal's `model` wins; unset = the CLI default
+# model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
