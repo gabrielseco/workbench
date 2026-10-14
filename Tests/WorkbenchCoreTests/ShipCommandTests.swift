@@ -75,12 +75,14 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let none = try await ship(["--yes"], fx: fx, gh: gh)
         #expect(none.code == 3, "\(none.text)")
         #expect(none.text.contains("workbench accept"))
+        #expect(none.text.contains("no accepted thread"))
 
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
         let bare = try await addOrigin(fx)
         let active = try await ship(["--yes", id], fx: fx, gh: gh)
         #expect(active.code == 3, "\(active.text)")
+        #expect(active.text.contains("workbench accept"), "an active thread is told how to end it")
         #expect(try await branches(bare, fx).isEmpty)
     }
 
@@ -122,7 +124,49 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let resumed = try await ship(["--yes"], fx: fx, gh: gh)
         #expect(resumed.code == 0, "\(resumed.text)")
         #expect(resumed.text.contains("origin already has workbench/\(id)"))
+        #expect(gh.count("pr create") == 2, "one that failed, one that worked")
         #expect(try fx.events(id).filter { $0.kind == .prOpened }.count == 1)
+    }
+
+    @Test func withoutAnIdTheNewestAcceptedThreadIsShipped() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (older, _) = try await acceptedThread(fx)
+        // The slot is free after accept, so a second thread can be accepted too.
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        let newer = try await fx.approvedThread("second")
+        _ = try await fx.runner(newer).run(fx.options())
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(newer)
+        try "two\n".write(to: worktree.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        try await fx.service.accept(id: newer, message: "chore: second")
+        _ = try await addOrigin(fx)
+
+        let result = try await ship(["--yes"], fx: fx, gh: gh)
+        #expect(result.code == 0, "\(result.text)")
+        #expect(result.text.contains("shipping \(newer)"))
+        #expect(!(try fx.events(older).contains { $0.kind == .prOpened }))
+        #expect(try fx.events(newer).contains { $0.kind == .prOpened })
+    }
+
+    @Test func aDivergedOriginExitsFiveAndPushesNothing() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let other = fx.repo.deletingLastPathComponent().appendingPathComponent("clone-\(UUID().uuidString)")
+        _ = try await fx.git.run(["clone", "-q", bare.path, other.path], in: fx.repo)
+        _ = try await fx.git.run(["checkout", "-q", "-b", "x"], in: other)
+        try "z\n".write(to: other.appendingPathComponent("z.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: other)
+        _ = try await fx.git.run(["commit", "-q", "-m", "other"], in: other)
+        _ = try await fx.git.run(["push", "-q", bare.path, "HEAD:refs/heads/workbench/\(id)"], in: other)
+        let before = try await branches(bare, fx)
+
+        let result = try await ship(["--yes"], fx: fx, gh: gh)
+        #expect(result.code == 5, "\(result.text)")
+        #expect(result.text.contains("remove or rename"))
+        #expect(try await branches(bare, fx) == before)
+        #expect(gh.count("pr create") == 0)
     }
 
     @Test func aMissingGHIsReportedBeforeAnythingIsPushed() async throws {

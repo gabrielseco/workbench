@@ -76,6 +76,27 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
     }
 
+    @Test func aPlanThatChangedAfterItWasShownPushesNothing() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let gh = try fakeGH(status: 0, in: fx)
+        let shown = try await fx.service.shipPreflight(id: id, gh: gh)
+
+        // The person answered yes to origin A; origin is now B.
+        let second = fx.repo.deletingLastPathComponent().appendingPathComponent("other-\(UUID().uuidString).git")
+        _ = try await fx.git.run(["init", "-q", "--bare", second.path], in: fx.repo)
+        _ = try await fx.git.run(["remote", "set-url", "origin", second.path], in: fx.repo)
+        do {
+            _ = try await fx.service.shipPush(id: id, gh: gh, shown: shown)
+            Issue.record("expected a refusal")
+        } catch let error as ShipError {
+            #expect(error == .changedSinceShown)
+        }
+        #expect(try await shipOut(["for-each-ref", "refs/heads"], second, fx).isEmpty)
+        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+    }
+
     @Test func thereIsNoForceInTheArguments() {
         let args = ThreadService.pushArguments(branch: "workbench/g-1")
         #expect(args == ["push", "--set-upstream", "origin", "refs/heads/workbench/g-1:refs/heads/workbench/g-1"])

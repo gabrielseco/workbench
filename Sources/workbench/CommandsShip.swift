@@ -50,9 +50,9 @@ extension Commands {
         }
 
         do {
-            let pushed = try await ctx.service.shipPush(id: id, gh: gh)
+            let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
             out(pushed.outcome == .pushed ? "pushed \(plan.branch)" : "origin already has \(plan.branch)")
-            let pr = try await ctx.service.shipOpenPR(id: id, gh: gh)
+            let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
             out(pr.url)
             return 0
