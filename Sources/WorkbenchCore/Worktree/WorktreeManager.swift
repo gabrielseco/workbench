@@ -13,8 +13,6 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
     case invalidBase(String)
     case notAGitRepository(String)
     case baseNotFound(String)
-    /// Tracked files in the main checkout have uncommitted changes.
-    case dirtyRepository([String])
     case worktreeExists(String)
     case branchExists(String)
     case worktreeNotFound(String)
@@ -26,9 +24,6 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidBase(let base): "'\(base)' is not a safe branch name"
         case .notAGitRepository(let path): "\(path) is not a git repository"
         case .baseNotFound(let base): "base '\(base)' does not resolve to a commit"
-        case .dirtyRepository(let files):
-            "the repository has uncommitted changes: \(files.prefix(5).joined(separator: ", "))"
-                + (files.count > 5 ? " and \(files.count - 5) more" : "")
         case .worktreeExists(let path): "a worktree already exists at \(path)"
         case .branchExists(let name): "branch '\(name)' already exists"
         case .worktreeNotFound(let path): "no worktree at \(path)"
@@ -65,17 +60,13 @@ public struct WorktreeManager: Sendable {
 
     // MARK: Create
 
-    /// - Parameter allowDirty: skip the clean-checkout check. The worktree is cut from the committed
-    ///   `base` either way; the check exists because accepting the work later merges into this checkout.
-    public func create(threadID: String, base: String, allowDirty: Bool = false) async throws -> Worktree {
+    /// The worktree is cut from the committed `base`, so uncommitted edits in this checkout never reach it
+    /// and no clean checkout is needed (accept commits on the thread's branch and merges nothing here).
+    public func create(threadID: String, base: String) async throws -> Worktree {
         guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
 
         try await requireRepository()
-        if !allowDirty {
-            let dirty = try await trackedChanges()
-            if !dirty.isEmpty { throw WorktreeError.dirtyRepository(dirty) }
-        }
 
         let baseCommit = try await resolveCommit(base)
         let target = path(for: threadID)
@@ -91,7 +82,7 @@ public struct WorktreeManager: Sendable {
             ["show-ref", "--verify", "--quiet", "refs/heads/\(branch)"], in: repoRoot)
         if branchProbe.succeeded { throw WorktreeError.branchExists(branch) }
 
-        try await keepWorkbenchOutOfStatus()
+        try await excludeWorkbench()
         try FileManager.default.createDirectory(
             at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
 
@@ -177,7 +168,8 @@ public struct WorktreeManager: Sendable {
         guard top.path == repoRoot.path else { throw WorktreeError.notAGitRepository(repoRoot.path) }
     }
 
-    private func trackedChanges() async throws -> [String] {
+    /// Uncommitted changes to tracked files in the main checkout, which a thread does not contain.
+    public func checkoutChanges() async throws -> [String] {
         let result = try await git.run(
             ["status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).workbench"],
             in: repoRoot)
@@ -196,8 +188,11 @@ public struct WorktreeManager: Sendable {
     }
 
     /// `.workbench/` lives inside the repo but is ours, so keep it out of `git status` without editing
-    /// the project's tracked `.gitignore`. `info/exclude` is local to this clone.
-    private func keepWorkbenchOutOfStatus() async throws {
+    /// the project's tracked `.gitignore`. `info/exclude` is local to this clone. Does nothing when the
+    /// repository already ignores it.
+    public func excludeWorkbench() async throws {
+        let ignored = try await git.run(["check-ignore", "-q", ".workbench/"], in: repoRoot)
+        if ignored.succeeded { return }
         let result = try await git.run(
             ["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repoRoot)
         guard result.succeeded else {
@@ -215,6 +210,48 @@ public struct WorktreeManager: Sendable {
             at: exclude.deletingLastPathComponent(), withIntermediateDirectories: true)
         let separator = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
         try (existing + separator + entry + "\n").write(to: exclude, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: Base against origin
+
+    public struct BaseGap: Sendable, Equatable {
+        public var base: String
+        /// Commits on `origin/<base>` that the local branch does not have.
+        public var behind: Int
+        /// Why the fetch did not happen, when it did not; the comparison then uses what is already known.
+        public var fetchNote: String?
+    }
+
+    /// How far the local `base` branch is behind `origin/<base>`, after one bounded fetch of that branch.
+    /// nil when there is no `origin`, `base` is not a local branch, or origin has no such branch. A fetch
+    /// that fails is a note, never an error: being offline must not stop work.
+    public func baseGap(base: String, fetchTimeout: TimeInterval = 20) async -> BaseGap? {
+        guard SafeNames.isBranchName(base) else { return nil }
+        guard let origin = try? await git.run(["remote", "get-url", "origin"], in: repoRoot), origin.succeeded
+        else { return nil }
+        let local = try? await git.run(["rev-parse", "--verify", "--quiet", "refs/heads/\(base)"], in: repoRoot)
+        guard local?.succeeded == true else { return nil }
+
+        var note: String?
+        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: fetchTimeout)
+        let refspec = "+refs/heads/\(base):refs/remotes/origin/\(base)"
+        do {
+            let fetched = try await fetcher.run(["fetch", "--no-tags", "--quiet", "origin", refspec], in: repoRoot)
+            if !fetched.succeeded {
+                let first = fetched.stderr.split(separator: "\n").first.map(String.init) ?? "exit \(fetched.status)"
+                note = "could not fetch origin (\(ThreadService.withoutCredentials(first)))"
+            }
+        } catch GitError.timedOut {
+            note = "could not fetch origin (no answer in \(Int(fetchTimeout))s)"
+        } catch {
+            note = "could not fetch origin"
+        }
+        let remote = "refs/remotes/origin/\(base)"
+        let known = try? await git.run(["rev-parse", "--verify", "--quiet", remote], in: repoRoot)
+        guard known?.succeeded == true else { return note == nil ? nil : BaseGap(base: base, behind: 0, fetchNote: note) }
+        let count = try? await git.run(["rev-list", "--count", "refs/heads/\(base)..\(remote)"], in: repoRoot)
+        let behind = Int(count?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
+        return BaseGap(base: base, behind: behind, fetchNote: note)
     }
 
     private func check(_ args: [String]) async throws {

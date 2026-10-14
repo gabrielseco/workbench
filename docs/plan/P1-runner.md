@@ -143,8 +143,9 @@ Implemented in `Sources/WorkbenchCore/Worktree/` and `Git/`.
   `git worktree add --no-track -b <branch> <path> <sha>`. The sha is `base` resolved at creation, recorded
   as `baseCommit`, so the cut point is fixed even if `base` moves.
 - **The worktree is the committed `base`, not the working tree.** Uncommitted edits in the main checkout are
-  not in it. Because accepting the work later merges into that checkout, creation refuses when tracked files
-  are modified (`dirtyRepository`), unless `allowDirty`. Untracked files and `.workbench/` do not count.
+  not in it, so a checkout with local edits does not block a run: the run says how many files are left out.
+  (Creation used to refuse a dirty checkout because accept merged into it; accept now commits on the thread's
+  branch and merges nothing, and `--allow-dirty` is accepted and ignored.)
 - **`repoRoot` must be the repository top level.** A subdirectory is refused, so worktrees cannot end up in
   the wrong place.
 - `.workbench/` is kept out of `git status` through `.git/info/exclude`, never by editing the project's
@@ -167,7 +168,8 @@ Ordered slices, each ending with tests passing.
 3. **Goal file.** Parse front matter + criteria, `approved_hash`, draft/approved transitions. Tests: edit after
    approval resets to draft, malformed goals produce specific errors.
 4. **Config and the fixed tool set.** Load `config.toml`, resolve to argv. Tests: missing config, unknown keys.
-5. **Worktree manager.** Create from `base`, deterministic branch name, remove, refuse dirty/missing repo.
+5. **Worktree manager.** Create from `base`, deterministic branch name, remove, refuse a missing repo (a dirty
+   checkout is fine: the worktree is the committed base).
    Tests against a temp git repo.
 6. **Fake claude.** A small script or executable that replays a fixture, with switches: hang, crash after N
    lines, ignore SIGTERM, spawn a grandchild (in its own process group, as real tool children are),
