@@ -82,6 +82,7 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 
 ```toml
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
+# setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
 # model = "haiku"                       # --model for every turn; unset = the CLI default
@@ -118,6 +119,14 @@ Notes:
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
   with no shell operators or quotes. The runner should tell the model the exact string to use.
+- **`setup_command` is run by Workbench, not offered to the model.** One plain command, validated like
+  `check_command`, run in the new worktree after it is cut and before the first turn: an install step
+  (`mix deps.get`, `npm ci`). It uses the check's machinery (minimal environment, merged streams, process
+  tree swept) with a 15 minute limit and 1 MiB of output kept in `setup.log`. It is not added to `allowed`,
+  and not run again on a send-back. A failure ends `run` with the command's output and exit code 1 before
+  any turn is spent; the worktree is kept and the next `run` tries it again. What it writes into the
+  worktree is untracked there: keep installs in ignored paths (`deps/`, `node_modules/`), or they show up
+  in the diff.
 - **The child environment is an allowlist**: `PATH HOME USER LOGNAME SHELL LANG TMPDIR TERM
   CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
   them `claude` reports "Not logged in" even though the config dir is set. `SSH_AUTH_SOCK` and every token

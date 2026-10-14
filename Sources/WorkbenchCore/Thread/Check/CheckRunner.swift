@@ -150,13 +150,13 @@ struct CheckRunner {
 
     // MARK: Running
 
-    private struct Outcome {
+    struct Outcome {
         var exit: ProcessExit?
         var truncated = false
         var error: String?
     }
 
-    private func execute(outputURL: URL, attach: @Sendable (ProcessRun) async -> Void) async throws -> Outcome {
+    func execute(outputURL: URL, attach: @Sendable (ProcessRun) async -> Void) async throws -> Outcome {
         guard let request = request() else {
             throw CheckError.notFound(command.split(separator: " ").first.map(String.init) ?? command)
         }

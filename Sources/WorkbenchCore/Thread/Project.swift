@@ -29,6 +29,11 @@ public struct Project: Sendable, Equatable {
 
     /// Where a turn's check output is kept, relative to the thread directory (`output_ref` in the log).
     public static func checkOutputRef(turn: Int) -> String { "checks/turn-\(turn).log" }
+    /// Where the setup command's output is kept, relative to the thread directory.
+    public static let setupOutputRef = "setup.log"
+    public func setupOutputURL(_ id: String) -> URL {
+        threadDirectory(id).appendingPathComponent(Self.setupOutputRef)
+    }
     public func checkOutputURL(_ id: String, turn: Int) -> URL {
         threadDirectory(id).appendingPathComponent(Self.checkOutputRef(turn: turn))
     }

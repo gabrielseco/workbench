@@ -51,6 +51,8 @@ extension Commands {
                     let checkFollows = checks && result != "stopped" && result != "interrupted"
                     if event.kind == .turnEnded, sawStart, !checkFollows { return }
                     if event.kind == .checkRan, sawStart { return }
+                    // A setup that did not pass ends the run before any turn: nothing else will come.
+                    if event.kind == .setupRan, result != "passed" { return }
                 }
                 seen = contents.events.count
             }
@@ -86,6 +88,8 @@ extension Commands {
                 let checkFollows = checks && result != "stopped" && result != "interrupted"
                 if event.kind == .turnEnded, sawStart, !checkFollows { return }
                 if event.kind == .checkRan, sawStart { return }
+                // A setup that did not pass ends the run before any turn: nothing else will come.
+                if event.kind == .setupRan, result != "passed" { return }
             }
             printed = contents.events.count
         }
