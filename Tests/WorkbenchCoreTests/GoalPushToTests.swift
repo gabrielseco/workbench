@@ -53,10 +53,13 @@ private func problems(in text: String) -> [GoalProblem] {
         #expect(found.contains { $0.code == .invalidValue && $0.line == 4 && $0.message.contains("origin/feature/pr") })
     }
 
-    @Test func approvalBindsThePushTarget() throws {
-        let a = try GoalFile.parse(goal()).goal.contentHash
-        let b = try GoalFile.parse(goal(base: "origin/other", pushTo: "other")).goal.contentHash
-        #expect(a != b)
+    @Test func approvalBindsThePushTargetAndOnlyWhenItIsSet() {
+        let without = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, body: "body")
+        let with = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: "x", body: "body")
+        let other = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: "y", body: "body")
+        #expect(without != with)
+        #expect(with != other)
+        #expect(without == GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: nil, body: "body"))
     }
 
     @Test func aDuplicatePushToKeyIsAnError() {
@@ -147,6 +150,18 @@ private func approvedUpdateThread(_ fx: RunnerFixture, branch: String = "feature
         let created = try fx.events(id).last { $0.kind == .worktreeCreated }
         #expect(created?.data["base_commit"]?.stringValue == tip)
         #expect(created?.data["branch"]?.stringValue == "workbench/\(id)")
+    }
+
+    @Test func aLocalBranchNamedLikeTheRemoteOneDoesNotHijackTheCut() async throws {
+        let fx = try await RunnerFixture()
+        _ = try await originWithBranch(fx)
+        _ = try await fx.git.run(["branch", "origin/feature/pr", "main"], in: fx.repo)
+        let id = try await approvedUpdateThread(fx)
+        _ = try await fx.runner(id).run(fx.options())
+
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        let tip = try await shipOut(["rev-parse", "refs/remotes/origin/feature/pr"], fx.repo, fx)
+        #expect(try await shipOut(["rev-parse", "HEAD"], worktree, fx) == tip)
     }
 
     @Test func aCommitPushedToTheBranchBeforeTheFirstRunIsPickedUp() async throws {

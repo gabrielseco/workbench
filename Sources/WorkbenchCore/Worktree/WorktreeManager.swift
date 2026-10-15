@@ -70,9 +70,12 @@ public struct WorktreeManager: Sendable {
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
 
         try await requireRepository()
-        if let remoteBranch { try await fetchRemoteBranch(remoteBranch) }
+        // The fetched commit is used as is: `origin/<branch>` by name could resolve to a local branch or tag.
+        var fetched: String?
+        if let remoteBranch { fetched = try await fetchRemoteBranch(remoteBranch) }
 
-        let baseCommit = try await resolveCommit(base)
+        let baseCommit: String
+        if let fetched { baseCommit = fetched } else { baseCommit = try await resolveCommit(base) }
         let target = path(for: threadID)
         let branch = Self.branch(for: threadID)
 
