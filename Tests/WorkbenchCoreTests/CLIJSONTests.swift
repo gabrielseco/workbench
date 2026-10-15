@@ -198,7 +198,9 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("docs/spec/exit-codes.md")
-        let text = try String(contentsOf: url, encoding: .utf8)
+        // Only the table of meanings: the per-command tables under "By command" repeat codes on purpose.
+        let whole = try String(contentsOf: url, encoding: .utf8)
+        let text = String(whole.prefix(upTo: try #require(whole.range(of: "## By command")).lowerBound))
         let rows = text.split(separator: "\n").filter { $0.hasPrefix("| ") && !$0.hasPrefix("| Code") && !$0.contains("---") }
         let codes = rows.compactMap { row in
             Int(row.split(separator: "|")[0].trimmingCharacters(in: .whitespaces))
