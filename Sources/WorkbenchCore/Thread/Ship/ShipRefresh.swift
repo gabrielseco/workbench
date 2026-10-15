@@ -130,7 +130,8 @@ extension ThreadService {
             guard let old = before[name] else { return nil }
             return PRRefreshProposal.Change(heading: old.heading, before: old.content, after: after)
         }
-        let title = clean(refresh.title)
+        // A title the answer left alone is kept exactly; scrubbing it could change text nobody asked to change.
+        let title = refresh.title == current.title ? current.title : clean(refresh.title)
         return PRRefreshProposal(
             number: number, current: current, updated: PRText(title: title, body: body),
             titleChanged: title != current.title, changes: changes)

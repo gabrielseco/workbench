@@ -60,6 +60,7 @@ public enum PRBodyRefresher {
     // MARK: Reading
 
     public static func editable(in body: String) -> [Editable] {
+        guard !body.contains(tokenPrefix) else { return [] }
         let masked = mask(body).text
         return parts(of: masked).compactMap { part in
             guard let heading = part.heading, let name = headingName(of: heading), isEditable(part.lines) else { return nil }
@@ -74,6 +75,8 @@ public enum PRBodyRefresher {
     /// a bot block. A proposal that names no section returns the body itself.
     public static func apply(_ refresh: PRRefresh, to body: String) throws -> String {
         if refresh.sections.isEmpty { return body }
+        // The placeholders could be confused with text that happens to look like one.
+        if body.contains(tokenPrefix), let name = refresh.sections.keys.min() { throw PRRefreshError.notEditable(name) }
         let crlf = body.contains("\r\n")
         let (masked, blocks) = mask(body)
         var all = parts(of: masked)
@@ -88,7 +91,7 @@ public enum PRBodyRefresher {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !content.isEmpty else { throw PRRefreshError.emptySection(name) }
             guard content.count <= sectionLimit else { throw PRRefreshError.tooLong(name) }
-            guard mask(content).blocks.isEmpty else { throw PRRefreshError.blockInContent(name) }
+            guard mask(content).blocks.isEmpty, !content.contains(tokenPrefix) else { throw PRRefreshError.blockInContent(name) }
             let inner = parts(of: content)
             guard inner.count == 1, inner[0].heading == nil, !hasHeading(inner[0].lines) else {
                 throw PRRefreshError.headingInContent(name)

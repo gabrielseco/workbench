@@ -157,6 +157,20 @@ private func parts(_ body: String) -> [String] {
         #expect(edited == "## A\r\n\r\nold\r\n\r\n## B\r\n\r\nnew last")
     }
 
+    @Test func textThatLooksLikeAnInternalPlaceholderMakesTheBodyNonEditable() {
+        let body = "## A\n\nold\n\n## B\n\nkeep <!--wb-block-0--> this\n\n<!-- BOT -->x<!-- /BOT -->\n"
+        #expect(PRBodyRefresher.editable(in: body).isEmpty)
+        do {
+            _ = try PRBodyRefresher.apply(PRRefresh(title: "t", sections: ["a": "new"]), to: body)
+            Issue.record("expected a refusal")
+        } catch let error as PRRefreshError { #expect(error == .notEditable("a")) } catch { Issue.record("\(error)") }
+        do {
+            _ = try PRBodyRefresher.apply(
+                PRRefresh(title: "t", sections: ["a": "x <!--wb-block-0--> y"]), to: "## A\n\nold\n")
+            Issue.record("expected a refusal")
+        } catch let error as PRRefreshError { #expect(error == .blockInContent("a")) } catch { Issue.record("\(error)") }
+    }
+
     @Test func twoSectionsWithTheSameNameCannotBeEdited() {
         let body = "## Notes\n\none\n\n## Notes\n\ntwo\n"
         do {

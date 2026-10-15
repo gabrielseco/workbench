@@ -98,6 +98,18 @@ private let fourCountries = """
         #expect(try #require(result.proposal).isEmpty)
     }
 
+    @Test func aTitleTheAnswerLeavesAloneIsNeverRewrittenByScrubbing() async throws {
+        let r = try await refresh()
+        let title = "fix: handle /api/v1 requests"
+        try r.publish(title: title)
+        let plan = try await r.plan()
+        let same = try r.file("answer.txt", #"{"title": "fix: handle /api/v1 requests", "sections": {}}"#)
+        let result = try await r.fx.service.proposePRRefresh(
+            plan: plan, config: try Config.load(from: r.fx.project.configURL), environment: r.environment("answer=\(same)"))
+        let proposal = try #require(result.proposal)
+        #expect(proposal.isEmpty && proposal.updated.title == title)
+    }
+
     @Test func applyingWritesTheTextWithGhAndRecordsIt() async throws {
         let r = try await refresh()
         let plan = try await r.plan()
