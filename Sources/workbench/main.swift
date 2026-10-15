@@ -27,7 +27,7 @@ let usage = """
       status [id] [--all]        where the thread stands; --all: one line per thread
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
-      ship [id] [--yes] [--keep-worktree] [--watch [--timeout <min>] [--interval <s>]]
+      ship [id] [--yes] [--keep-worktree] [--watch|-w [--timeout <min>] [--interval <s>]]
                                  push the accepted branch and open its pull request; asks first;
                                  --watch then follows the CI checks (read-only)
                                  exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
