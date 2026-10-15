@@ -35,7 +35,10 @@ review keys: v, thread, status, ended, title, approval, goal_problem, turns, las
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
-- `criteria`: `{id, text, proof}`.
+- `criteria`: `{id, text, proof, status, commands, note}`. `status` is `passed` or `failed` only when the
+  proof is exactly the configured `check_command` and the latest check ran after the latest turn;
+  otherwise `manual`. `commands` are the proof's backticked commands; `note` says why a check-shaped proof
+  is still `manual`, or which check backs a verdict (null otherwise).
 - `diff`: `{state: summary | unavailable, base, total_files, truncated, additions, deletions, files, reason}`;
   each file `{path, old_path, status, binary, untracked, staged, additions, deletions}`.
 - `check`: null, or `{turn, result, exit_code, duration_ms}`.

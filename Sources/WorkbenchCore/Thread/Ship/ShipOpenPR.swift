@@ -128,7 +128,10 @@ extension ThreadService {
             }
         }
         let state = ThreadState.derive(from: events, id: plan.id)
-        var body = PRBodyBuilder.build(goal: goal, check: state.review.check, template: template)
+        let checkCommand = (try? Config.load(from: project.configURL))?.checkCommand
+        var body = PRBodyBuilder.build(
+            goal: goal, check: state.review.check, template: template, checkCommand: checkCommand,
+            lastTurn: state.lastTurn)
         // What is published must not carry a credential that was pasted into the goal or the template.
         body.title = Self.withoutCredentials(body.title, environment: runner.environment)
         body.body = Self.withoutCredentials(body.body, environment: runner.environment)

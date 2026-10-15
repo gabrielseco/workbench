@@ -180,7 +180,14 @@ extension Commands {
             "last_result": review.turnResult.map { .string($0) } ?? .null, "cost_usd": .double(state.totalCostUSD),
             "base": base.map { .string($0) } ?? .null, "worktree": worktreeJSON(id: state.id, ctx: ctx),
             "criteria": .array(
-                report.criteria.map { ["id": .string($0.id), "text": .string($0.text), "proof": .string($0.proof)] }),
+                zip(report.criteria, report.criterionStatuses).map { criterion, status in
+                    [
+                        "id": .string(criterion.id), "text": .string(criterion.text),
+                        "proof": .string(criterion.proof), "status": .string(status.state.rawValue),
+                        "commands": .array(status.commands.map { .string($0) }),
+                        "note": status.note.map { .string($0) } ?? .null,
+                    ]
+                }),
             "diff": diff, "check": check,
             "denied_tools": .array(
                 review.deniedTools.map {

@@ -268,4 +268,24 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         #expect(lines.contains("  Bash ×2  turn 1, seq 5, 9"), "\(lines)")
         #expect(lines.contains("  Write ×1  turn 1, seq 6"), "\(lines)")
     }
+
+    @Test func theCriteriaTableFollowsTheListAndSaysWhoChecks() {
+        var state = ThreadState.derive(from: [], id: "t")
+        state.review.status = .awaitingReview
+        state.lastTurn = 1
+        state.review.check = Review.Check(turn: 1, result: "passed", exitCode: 0, durationMs: 2000, outputRef: nil)
+        let report = ReviewReport(
+            state: state, title: "T",
+            criteria: [
+                Criterion(id: "c1", text: "Checks pass.", proof: "`scripts/check.sh` exits 0"),
+                Criterion(id: "c2", text: "Docs.", proof: "`git diff --stat` is empty"),
+            ],
+            approval: "approved", goalProblem: nil, diff: .unavailable(reason: "x"), checkCommand: "scripts/check.sh")
+        let lines = report.render()
+        let list = lines.firstIndex(of: "  [c2] ☐ Docs.")
+        let summary = lines.firstIndex(of: "Criteria: 1 passed · 0 failed · 1 for you to check")
+        #expect(list != nil && summary != nil && list! < summary!, "\(lines)")
+        #expect(lines.contains("  [c1] ✔ passed  (check, turn 1)"), "\(lines)")
+        #expect(lines.contains("  [c2] you check") && lines.contains("         run: git diff --stat"), "\(lines)")
+    }
 }

@@ -14,10 +14,22 @@ public enum PRBodyBuilder {
 
     /// - Parameters:
     ///   - template: the repository's PR template text, nil when it has none.
-    public static func build(goal: Goal, check: Review.Check?, template: String?) -> PRBody {
+    ///   - checkCommand: the config's `check_command`, so a criterion proven by it can show its result.
+    ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
+    public static func build(
+        goal: Goal, check: Review.Check?, template: String?, checkCommand: String? = nil, lastTurn: Int? = nil
+    ) -> PRBody {
         let request = scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
         let checkLine = checkLine(check)
-        let criteria = criteriaList(goal.criteria)
+        var criteria = criteriaList(goal.criteria)
+        if !goal.criteria.isEmpty {
+            let statuses = CriteriaStatus.evaluate(
+                criteria: goal.criteria, checkCommand: checkCommand, check: check,
+                lastTurn: lastTurn ?? check?.turn ?? 0)
+            // The checklist stays as the reviewer's to tick; the table says who verifies each line.
+            criteria += "\n\n" + CriteriaStatus.summary(statuses, check: check) + "\n\n"
+                + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }
+        }
         let testing = [checkLine, criteria].filter { !$0.isEmpty }.joined(separator: "\n\n")
 
         let body: String

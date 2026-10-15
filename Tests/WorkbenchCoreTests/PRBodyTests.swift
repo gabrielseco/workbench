@@ -243,4 +243,30 @@ private let repoTemplate = """
         #expect(headings == ["## Summary", "## Why", "## What changed", "## Testing"])
         #expect(!body.contains("<!--"))
     }
+
+    @Test func theTableComesAfterTheChecklistAndTheChecklistIsKept() {
+        let g = goal(criteria: [
+            Criterion(id: "c1", text: "Checks pass.", proof: "`scripts/check.sh` exits 0"),
+            Criterion(id: "c2", text: "Docs.", proof: "read the diff"),
+        ])
+        let body = PRBodyBuilder.build(
+            goal: g, check: check("passed"), template: nil, checkCommand: "scripts/check.sh", lastTurn: 1
+        ).body
+        let list = body.range(of: "- [ ] Checks pass.")
+        let table = body.range(of: "| c1 | ✔ passed |")
+        #expect(list != nil && table != nil && list!.lowerBound < table!.lowerBound, "\(body)")
+        #expect(body.contains("Criteria: 1 passed · 0 failed · 1 for you to check"))
+        #expect(body.contains("| c2 | you check |"))
+        #expect(!body.contains("checks/turn-1.log"))
+    }
+
+    @Test func theTableIsInsideTheTemplatesTestingSection() {
+        let body = PRBodyBuilder.build(
+            goal: goal(), check: check("passed"), template: repoTemplate, checkCommand: "scripts/check.sh",
+            lastTurn: 1
+        ).body
+        let testing = body.range(of: "## Testing")
+        let table = body.range(of: "| c1 | you check |")
+        #expect(testing != nil && table != nil && testing!.lowerBound < table!.lowerBound, "\(body)")
+    }
 }
