@@ -50,8 +50,8 @@ struct RunnerFixture {
     }
 
     /// A thread with a filled-in, approved goal.
-    func approvedThread(_ name: String = "work") async throws -> String {
-        let id = try await service.newThread(name: name, base: "main")
+    func approvedThread(_ name: String = "work", base: String = "main") async throws -> String {
+        let id = try await service.newThread(name: name, base: base)
         let url = project.goalURL(id)
         var text = try String(contentsOf: url, encoding: .utf8)
         let fills = [

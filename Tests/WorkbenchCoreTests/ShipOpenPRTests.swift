@@ -93,6 +93,36 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
 }
 
 @Suite struct ShipOpenPRTests {
+    @Test func aRemoteTrackingBaseOpensThePRAgainstTheBranch() {
+        func plan(base: String) -> ShipPlan {
+            ShipPlan(
+                id: "g", worktree: URL(fileURLWithPath: "/tmp"), branch: "workbench/g", remoteBranch: "workbench/g",
+                base: base, head: "abc", origin: "o", remote: .absent)
+        }
+        #expect(plan(base: "origin/main").prBase == "main")
+        #expect(plan(base: "origin/release/1.x").prBase == "release/1.x")
+        #expect(plan(base: "main").prBase == "main")
+    }
+
+    @Test func aThreadCutFromARemoteTrackingBaseOpensItsPRAgainstTheBranch() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        _ = try await addOrigin(fx)
+        _ = try await fx.git.run(["push", "-q", "origin", "main"], in: fx.repo)
+        _ = try await fx.git.run(["fetch", "-q", "origin"], in: fx.repo)
+        let id = try await fx.approvedThread(base: "origin/main")
+        _ = try await fx.runner(id).run(fx.options())
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "one\nhello\n".write(to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try await fx.service.accept(id: id, message: "chore: work")
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        let create = try #require(gh.calls.first { $0.hasPrefix("pr create") })
+        #expect(create.contains("--base main --head workbench/\(id) "), "got: \(create)")
+        #expect(try fx.events(id).last?.data["base"]?.stringValue == "main")
+    }
+
     @Test func aPushedThreadGetsOnePRAndARecord() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
