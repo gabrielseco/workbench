@@ -105,6 +105,58 @@ private func parts(_ body: String) -> [String] {
         } catch let error as PRRefreshError { #expect(error == expected) } catch { Issue.record("\(error)") }
     }
 
+    @Test(arguments: [
+        "## A\n\nBefore <!-- BOT -->x<!-- /BOT --> after\n\n## B\n\nb\n",
+        "## A\n\none\n\n<!-- BOT -->x<!-- /BOT -->\n\ntwo\n\n## B\n\nb\n",
+        "## A\n\nTitle\n=====\n\ntext\n\n## B\n\nb\n",
+        "## A\n\ntext\n---\nmore\n\n## B\n\nb\n",
+        "## A\n\n  ## Indented\n\ntext\n\n## B\n\nb\n",
+    ])
+    func aSectionThatCannotBeRewrittenWholeIsLeftForAPerson(body: String) {
+        #expect(PRBodyRefresher.editable(in: body).map(\.name) == ["b"])
+        do {
+            _ = try PRBodyRefresher.apply(PRRefresh(title: "t", sections: ["a": "new"]), to: body)
+            Issue.record("expected a refusal")
+        } catch let error as PRRefreshError { #expect(error == .notEditable("a")) } catch { Issue.record("\(error)") }
+    }
+
+    @Test(arguments: ["text\n  ## Extra\nmore", "Extra\n-----\nmore", "Extra\n=====", "text\n### Deep"])
+    func everyMarkdownHeadingFormIsRefusedInNewText(text: String) {
+        let body = "## A\n\nold\n\n## B\n\nb\n"
+        do {
+            _ = try PRBodyRefresher.apply(PRRefresh(title: "t", sections: ["a": text]), to: body)
+            Issue.record("expected a refusal")
+        } catch let error as PRRefreshError { #expect(error == .headingInContent("a")) } catch { Issue.record("\(error)") }
+    }
+
+    @Test func aTableSeparatorOrAThematicBreakAfterABlankLineIsNotAHeading() throws {
+        let body = "## A\n\nold\n\n## B\n\nb\n"
+        let text = "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n---\n\nend"
+        let edited = try PRBodyRefresher.apply(PRRefresh(title: "t", sections: ["a": text]), to: body)
+        #expect(edited.contains("| --- | --- |"))
+    }
+
+    @Test func aBodyWithWindowsLineEndingsKeepsEveryUntouchedByte() throws {
+        let body = sampleBody.replacingOccurrences(of: "\n", with: "\r\n")
+        #expect(try PRBodyRefresher.apply(PRRefresh(title: "new title", sections: [:]), to: body) == body)
+
+        let edited = try PRBodyRefresher.apply(
+            PRRefresh(title: "t", sections: ["summary": "Four countries.\n\nSecond paragraph."]), to: body)
+        #expect(edited.contains("Four countries.\r\n\r\nSecond paragraph.\r\n"))
+        #expect(!edited.replacingOccurrences(of: "\r\n", with: "").contains("\n"), "no bare LF was introduced")
+        let before = PRBodyRefresher.parts(of: body).map { ($0.heading ?? "") + $0.lines.joined(separator: "\n") }
+        let after = PRBodyRefresher.parts(of: edited).map { ($0.heading ?? "") + $0.lines.joined(separator: "\n") }
+        for (index, pair) in zip(before, after).enumerated() where index != 1 { #expect(pair.0 == pair.1, "part \(index)") }
+        #expect(PRBodyRefresher.editable(in: edited).first { $0.name == "summary" }?.content
+            == "Four countries.\n\nSecond paragraph.")
+    }
+
+    @Test func anEditThatEndsABodyWithoutATrailingNewlineAddsNone() throws {
+        let body = "## A\r\n\r\nold\r\n\r\n## B\r\n\r\nlast"
+        let edited = try PRBodyRefresher.apply(PRRefresh(title: "t", sections: ["b": "new last"]), to: body)
+        #expect(edited == "## A\r\n\r\nold\r\n\r\n## B\r\n\r\nnew last")
+    }
+
     @Test func twoSectionsWithTheSameNameCannotBeEdited() {
         let body = "## Notes\n\none\n\n## Notes\n\ntwo\n"
         do {
