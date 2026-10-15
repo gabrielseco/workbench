@@ -36,6 +36,27 @@ private func branchExists(_ id: String, _ fx: RunnerFixture) async throws -> Boo
     try await fx.git.run(["rev-parse", "--verify", "--quiet", "refs/heads/workbench/\(id)"], in: fx.repo).succeeded
 }
 
+private func runClean(_ arguments: [String], fx: RunnerFixture, gh: GitRunner) async throws -> (code: Int32?, text: String) {
+    var spawn = SpawnRequest(
+        executable: WorkbenchBinary.executable, arguments: ["clean"] + arguments,
+        environment: [
+            "PATH": "\(gh.executable.deletingLastPathComponent().path):/usr/bin:/bin",
+            "HOME": NSHomeDirectory(), "USER": NSUserName(), "GITHUB_TOKEN": "ghp_zzz",
+        ],
+        workingDirectory: fx.repo, timeout: 120)
+    spawn.snapshotInterval = 3600
+    let process = try ProcessRunner.start(spawn)
+    var lines: [String] = []
+    var exit: ProcessExit?
+    for await event in process.events {
+        if case .line(let line) = event { lines.append(line) }
+        if case .exited(let e) = event { exit = e }
+    }
+    var code: Int32?
+    if case .exited(let c)? = exit?.termination { code = c }
+    return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
+}
+
 @Suite struct ShipCleanTests {
     @Test func aMergedPullRequestLosesItsWorktreeAndBranch() async throws {
         let fx = try await RunnerFixture()
@@ -158,27 +179,7 @@ private func branchExists(_ id: String, _ fx: RunnerFixture) async throws -> Boo
         let fx = try await RunnerFixture()
         let t = try await shippedThread(fx)
         let gh = try viewGH(fx, state: "MERGED", head: t.head)
-
-        func run(_ arguments: [String]) async throws -> (code: Int32?, text: String) {
-            var spawn = SpawnRequest(
-                executable: WorkbenchBinary.executable, arguments: ["clean"] + arguments,
-                environment: [
-                    "PATH": "\(gh.executable.deletingLastPathComponent().path):/usr/bin:/bin",
-                    "HOME": NSHomeDirectory(), "USER": NSUserName(),
-                ],
-                workingDirectory: fx.repo, timeout: 120)
-            spawn.snapshotInterval = 3600
-            let process = try ProcessRunner.start(spawn)
-            var lines: [String] = []
-            var exit: ProcessExit?
-            for await event in process.events {
-                if case .line(let line) = event { lines.append(line) }
-                if case .exited(let e) = event { exit = e }
-            }
-            var code: Int32?
-            if case .exited(let c)? = exit?.termination { code = c }
-            return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
-        }
+        let run = { try await runClean($0, fx: fx, gh: gh) }
 
         let dry = try await run([])
         #expect(dry.code == 0)
@@ -242,6 +243,19 @@ private func branchExists(_ id: String, _ fx: RunnerFixture) async throws -> Boo
         let t = try await shippedThread(fx)
         // The thread's own worktree still has it checked out.
         #expect(await fx.service.deleteBranch(id: t.id, at: t.head) != nil)
+        #expect(try await branchExists(t.id, fx))
+    }
+
+    @Test func aGitHubFailureIsNamedAndExitsNonZero() async throws {
+        let fx = try await RunnerFixture()
+        let t = try await shippedThread(fx)
+        let failing = try viewGH(fx, state: nil, head: "")
+
+        let result = try await runClean(["--yes"], fx: fx, gh: failing)
+        #expect(result.code == 1)
+        #expect(result.text.contains(t.id))
+        #expect(result.text.contains("502"))
+        #expect(!result.text.contains("ghp_zzz"))
         #expect(try await branchExists(t.id, fx))
     }
 }
