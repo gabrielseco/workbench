@@ -15,6 +15,7 @@ public struct CleanReport: Sendable, Equatable {
     }
 
     public var id: String
+    public var dryRun = false
     /// nil when GitHub could not be asked; `note` says why.
     public var state: PRState?
     public var worktree: ShipCleanup?
@@ -36,7 +37,7 @@ extension ThreadService {
         guard SafeNames.isThreadID(id) else { return nil }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let opened = events.last(where: { $0.kind == .prOpened }) else { return nil }
-        var report = CleanReport(id: id, state: nil, worktree: nil, branch: .absent)
+        var report = CleanReport(id: id, dryRun: dryRun, state: nil, worktree: nil, branch: .absent)
 
         guard let number = opened.data["number"]?.intValue, number > 0,
             let head = opened.data["head_sha"]?.stringValue,
@@ -48,9 +49,9 @@ extension ThreadService {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         let hasWorktree = manager.exists(id)
         let hasBranch = (try? await manager.branchExists(id)) ?? true
-        guard hasWorktree || hasBranch else {
-            return report
-        }
+        // A removal that was done but not recorded (the process died in between) is still owed a record.
+        let recorded = events.contains { $0.kind == .worktreeRemoved }
+        guard hasWorktree || hasBranch || !recorded else { return report }
 
         let lookup = await prState(number: number, gh: gh)
         let (state, remoteHead): (PRState, String)
@@ -61,7 +62,7 @@ extension ThreadService {
             return report
         case .success(let found): (state, remoteHead) = found
         }
-        report.state = state
+        report.state = hasWorktree || hasBranch ? state : nil
         switch state {
         case .open:
             report.branch = hasBranch ? .kept("the pull request is open") : .absent
@@ -77,20 +78,19 @@ extension ThreadService {
             return report
         }
 
-        if hasWorktree, !dryRun {
-            report.worktree = await cleanShipped(id: id, gh: gh, requireOrigin: false)
-        } else if hasWorktree {
-            report.worktree = .kept("dry run: removed only if clean and at the shipped commit")
+        if hasWorktree || !recorded {
+            report.worktree = await cleanShipped(id: id, gh: gh, requireOrigin: false, dryRun: dryRun)
         }
+        var worktreeLeft = manager.exists(id)
+        if dryRun, case .removed? = report.worktree { worktreeLeft = false }
         report.branch = await removeLocalBranch(
-            id: id, head: head, reason: state.rawValue, manager: manager,
-            hasBranch: hasBranch, worktreeLeft: !dryRun && manager.exists(id), dryRun: dryRun)
+            id: id, head: head, reason: state.rawValue, hasBranch: hasBranch, worktreeLeft: worktreeLeft,
+            dryRun: dryRun)
         return report
     }
 
     private func removeLocalBranch(
-        id: String, head: String, reason: String, manager: WorktreeManager,
-        hasBranch: Bool, worktreeLeft: Bool, dryRun: Bool
+        id: String, head: String, reason: String, hasBranch: Bool, worktreeLeft: Bool, dryRun: Bool
     ) async -> CleanReport.Branch {
         guard hasBranch else { return .absent }
         if worktreeLeft { return .kept("its worktree is still there") }
@@ -102,9 +102,7 @@ extension ThreadService {
             return .kept("it has commits after the shipped one")
         }
         if dryRun { return .wouldRemove }
-        do { try await manager.deleteBranch(threadID: id) } catch {
-            return .kept("git would not delete it: \(Self.withoutCredentials("\(error)"))")
-        }
+        if let why = await deleteBranch(id: id, at: head) { return .kept(why) }
         do {
             try await withLog(id) { log in
                 _ = try await log.append(.branchRemoved, data: ["reason": .string(reason), "head_sha": .string(head)])
@@ -113,6 +111,23 @@ extension ThreadService {
             return .kept("the branch is deleted but the log could not be written (\(error))")
         }
         return .removed
+    }
+
+    /// Deletes `workbench/<id>` only if it still points at `sha` (the check and the delete are one ref
+    /// transaction, so a commit that lands in between is not lost) and is not checked out anywhere.
+    /// Returns why not, or nil when it is gone.
+    func deleteBranch(id: String, at sha: String) async -> String? {
+        guard SafeNames.isThreadID(id), sha.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil
+        else { return "not a thread id or commit" }
+        let ref = "refs/heads/" + WorktreeManager.branch(for: id)
+        let listed = try? await git.run(["worktree", "list", "--porcelain"], in: project.root)
+        guard let listed, listed.succeeded else { return "git could not list its worktrees" }
+        if listed.stdout.split(separator: "\n").contains(where: { $0 == "branch \(ref)" }) {
+            return "it is checked out in a worktree"
+        }
+        let result = try? await git.run(["update-ref", "-d", ref, sha], in: project.root)
+        guard result?.succeeded == true else { return "it moved while it was being deleted, or git refused" }
+        return nil
     }
 
     /// `gh pr view <number> --json state,headRefOid` from the project root, so a removed worktree does not
@@ -153,7 +168,8 @@ extension CleanReport {
     public func render() -> [String] {
         var lines = ["\(id)  \(state.map(\.rawValue) ?? "unknown")"]
         switch worktree {
-        case .removed(let path): lines.append("  worktree: removed \(path)")
+        case .removed(let path):
+            lines.append("  worktree: \(dryRun ? "would remove" : "removed") \(path)")
         case .kept(let why): lines.append("  worktree: kept (\(why))")
         case .alreadyGone, .notShipped, nil: break
         }

@@ -192,4 +192,56 @@ private func branchExists(_ id: String, _ fx: RunnerFixture) async throws -> Boo
         #expect(try await branchExists(t.id, fx) == false)
         #expect(try await run(["--yes"]).text.contains("nothing to clean"))
     }
+
+    @Test func aDryRunDoesNotPromiseWhatADirtyWorktreeBlocks() async throws {
+        let fx = try await RunnerFixture()
+        let t = try await shippedThread(fx)
+        let gh = try viewGH(fx, state: "MERGED", head: t.head)
+        try "scratch".write(to: t.worktree.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+
+        let dry = try #require(await fx.service.cleanMerged(id: t.id, gh: gh, includeClosed: false, dryRun: true))
+        guard case .kept = dry.worktree, case .kept = dry.branch else {
+            Issue.record("expected both kept, got \(String(describing: dry.worktree)) / \(dry.branch)")
+            return
+        }
+        let real = try #require(await fx.service.cleanMerged(id: t.id, gh: gh, includeClosed: false, dryRun: false))
+        #expect(real.worktree == dry.worktree)
+        #expect(real.branch == dry.branch)
+        #expect(try await branchExists(t.id, fx))
+    }
+
+    @Test func aRemovalThatWasNotRecordedIsRecordedByTheNextClean() async throws {
+        let fx = try await RunnerFixture()
+        let t = try await shippedThread(fx)
+        let gh = try viewGH(fx, state: "MERGED", head: t.head)
+        // The process died after `git worktree remove` and before the event.
+        _ = try await fx.git.run(["worktree", "remove", t.worktree.path], in: fx.repo)
+        #expect(try fx.events(t.id).contains { $0.kind == .worktreeRemoved } == false)
+
+        _ = try #require(await fx.service.cleanMerged(id: t.id, gh: gh, includeClosed: false, dryRun: false))
+        let kinds = try fx.events(t.id).map(\.kind)
+        #expect(kinds.filter { $0 == .worktreeRemoved }.count == 1)
+        #expect(try await branchExists(t.id, fx) == false)
+    }
+
+    @Test func theBranchIsDeletedOnlyAtTheCommitThatWasInspected() async throws {
+        let fx = try await RunnerFixture()
+        let t = try await shippedThread(fx)
+        #expect(await fx.service.cleanShipped(id: t.id, gh: nil) == .removed(path: t.worktree.path))
+        let main = try await shipOut(["rev-parse", "HEAD"], fx.repo, fx)
+
+        // A stale inspection: the tip is no longer what was looked at.
+        #expect(await fx.service.deleteBranch(id: t.id, at: main) != nil)
+        #expect(try await branchExists(t.id, fx))
+        #expect(await fx.service.deleteBranch(id: t.id, at: t.head) == nil)
+        #expect(try await branchExists(t.id, fx) == false)
+    }
+
+    @Test func aBranchCheckedOutElsewhereIsNotDeleted() async throws {
+        let fx = try await RunnerFixture()
+        let t = try await shippedThread(fx)
+        // The thread's own worktree still has it checked out.
+        #expect(await fx.service.deleteBranch(id: t.id, at: t.head) != nil)
+        #expect(try await branchExists(t.id, fx))
+    }
 }

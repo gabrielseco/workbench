@@ -15,7 +15,12 @@ extension ThreadService {
     ///
     /// `requireOrigin: false` is for a pull request that is already merged or closed: origin has usually
     /// dropped the branch by then, and the caller has checked the PR's head is the shipped commit.
-    public func cleanShipped(id: String, gh: GitRunner?, requireOrigin: Bool = true) async -> ShipCleanup {
+    ///
+    /// `dryRun` answers the same questions without touching anything: it returns `.removed` for a worktree
+    /// that would go, and neither sweeps, prunes, records nor removes.
+    public func cleanShipped(
+        id: String, gh: GitRunner?, requireOrigin: Bool = true, dryRun: Bool = false
+    ) async -> ShipCleanup {
         guard SafeNames.isThreadID(id) else { return .kept("'\(id)' is not a thread id") }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -28,6 +33,7 @@ extension ThreadService {
         guard manager.exists(id) else {
             // Gone without a record (the process died between removing and writing): say it now.
             // A directory deleted by hand can leave git's registration behind: prune it before claiming done.
+            if dryRun { return removedRecorded ? .alreadyGone : .removed(path: manager.path(for: id).path) }
             _ = try? await git.run(["worktree", "prune"], in: project.root)
             let listed = try? await git.run(["worktree", "list", "--porcelain"], in: project.root)
             let target = manager.path(for: id).path
@@ -46,7 +52,7 @@ extension ThreadService {
 
         // Children a dead runner left could write into the worktree while it is inspected: stop them first,
         // then look, and look again right before removing.
-        let swept = OrphanSweeper.sweep(inside: worktree)
+        let swept = dryRun ? [] : OrphanSweeper.sweep(inside: worktree)
 
         func read(_ args: [String]) async -> String? {
             guard let result = try? await git.run(args, in: worktree), result.succeeded else { return nil }
@@ -78,6 +84,7 @@ extension ThreadService {
         }
         if let why = await untidy() { return .kept(why) }
 
+        if dryRun { return .removed(path: worktree.path) }
         do {
             try await manager.remove(threadID: id, force: false)
         } catch {
