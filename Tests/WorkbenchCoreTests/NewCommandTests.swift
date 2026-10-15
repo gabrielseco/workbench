@@ -16,7 +16,7 @@ private struct NewHome {
         try "[user]\n\tname = t\n\temail = t@example.com\n".write(
             to: home.appendingPathComponent(".gitconfig"), atomically: true, encoding: .utf8)
         if let globalConfig {
-            let file = home.appendingPathComponent(".config/workbench/config.toml")
+            let file = home.appendingPathComponent(".workbench/config.toml")
             try FileManager.default.createDirectory(
                 at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try globalConfig.write(to: file, atomically: true, encoding: .utf8)
@@ -88,7 +88,7 @@ private struct NewHome {
             .replacingOccurrences(of: "model = \"haiku\"", with: "model = \"opus\"")
         try edited.write(to: configURL, atomically: true, encoding: .utf8)
         try "projects_dir = \"~/p\"\nmodel = \"sonnet\"\n".write(
-            to: h.home.appendingPathComponent(".config/workbench/config.toml"), atomically: true, encoding: .utf8)
+            to: h.home.appendingPathComponent(".workbench/config.toml"), atomically: true, encoding: .utf8)
         #expect(try Config.load(from: configURL).model == "opus")
     }
 
@@ -133,7 +133,7 @@ private struct NewHome {
         #expect(!h.exists("p/kit2", under: h.home))
 
         try "check_command = \"make\"\n".write(
-            to: h.home.appendingPathComponent(".config/workbench/config.toml"), atomically: true, encoding: .utf8)
+            to: h.home.appendingPathComponent(".workbench/config.toml"), atomically: true, encoding: .utf8)
         let bad = try await h.run(["new", "kit3", "--in", h.work.path])
         #expect(bad.code == 2 && bad.text.contains("'check_command' is not allowed in the global config"), "\(bad.text)")
     }

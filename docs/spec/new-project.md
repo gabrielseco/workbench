@@ -44,7 +44,9 @@ removed; a directory that was already there is emptied of what `new` wrote).
 
 ## Global config
 
-`$XDG_CONFIG_HOME/workbench/config.toml`, else `~/.config/workbench/config.toml`. Optional.
+`~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`. Optional. If `~` is
+itself a git repository (a dotfiles setup), that directory is also the repository's project directory, so
+the two share it; the global file is only ever read by `new`.
 
 ```toml
 projects_dir = "~/code"   # absolute, or starting with ~/

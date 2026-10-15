@@ -1,6 +1,6 @@
 import Foundation
 
-/// `~/.config/workbench/config.toml`: machine-level defaults for `workbench new`. It supplies a few keys
+/// `~/.workbench/config.toml`: machine-level defaults for `workbench new`. It supplies a few keys
 /// and nothing else; a project's own `.workbench/config.toml` is still the only thing a run reads, so a
 /// global file can never change what an existing project does.
 public struct GlobalConfig: Sendable, Equatable {
@@ -17,16 +17,10 @@ public struct GlobalConfig: Sendable, Equatable {
         self.model = model
     }
 
-    /// `$XDG_CONFIG_HOME/workbench/config.toml`, else `$HOME/.config/workbench/config.toml`.
+    /// `~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`.
     public static func defaultURL(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        let base: URL
-        if let xdg = environment["XDG_CONFIG_HOME"], xdg.hasPrefix("/") {
-            base = URL(fileURLWithPath: xdg)
-        } else {
-            let home = environment["HOME"] ?? NSHomeDirectory()
-            base = URL(fileURLWithPath: home).appendingPathComponent(".config")
-        }
-        return base.appendingPathComponent("workbench/config.toml")
+        let home = environment["HOME"] ?? NSHomeDirectory()
+        return URL(fileURLWithPath: home).appendingPathComponent(".workbench/config.toml")
     }
 
     /// An absent file is an empty config. An unreadable or invalid one is an error naming the file.

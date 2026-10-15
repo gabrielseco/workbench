@@ -67,12 +67,11 @@ private final class CopyCounter: @unchecked Sendable {
         #expect(throws: ConfigError.self) { try GlobalConfig.parse("model = \"--evil\"") }
     }
 
-    @Test func defaultLocationFollowsXDGThenHome() {
-        #expect(
-            GlobalConfig.defaultURL(environment: ["HOME": "/h"]).path == "/h/.config/workbench/config.toml")
+    @Test func defaultLocationIsADotDirectoryInHome() {
+        #expect(GlobalConfig.defaultURL(environment: ["HOME": "/h"]).path == "/h/.workbench/config.toml")
         #expect(
             GlobalConfig.defaultURL(environment: ["HOME": "/h", "XDG_CONFIG_HOME": "/x"]).path
-                == "/x/workbench/config.toml")
+                == "/h/.workbench/config.toml")
     }
 
     @Test func theProjectTemplateTakesTheDefaultsAndStillParses() throws {
