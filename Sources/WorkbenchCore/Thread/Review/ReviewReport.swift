@@ -17,6 +17,10 @@ public struct ReviewReport: Sendable, Equatable {
     /// Why the goal file could not be read; the criteria are then unknown, not empty.
     public var goalProblem: String?
     public var diff: Diff
+    /// One entry per criterion: who verifies it, from the log and the goal alone.
+    public var criterionStatuses: [CriterionStatus] {
+        CriteriaStatus.evaluate(criteria: criteria, check: state.review.check, lastTurn: state.lastTurn)
+    }
 
     public var status: ReviewStatus { state.review.status }
 
@@ -56,6 +60,11 @@ public struct ReviewReport: Sendable, Equatable {
                 lines.append("  [\(c.id)] ☐ \(c.text)")
                 if !c.proof.isEmpty { lines.append("         proof: \(c.proof)") }
             }
+            // Beside the checklist, not instead of it: which of these Workbench proved and which are yours.
+            let statuses = criterionStatuses
+            lines.append("")
+            lines.append(CriteriaStatus.summary(statuses, check: review.check))
+            lines.append(contentsOf: CriteriaStatus.render(statuses))
         }
 
         lines.append("")

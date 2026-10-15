@@ -42,6 +42,15 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown.
   `proof` is free text for now; typed proofs (`check:`, `screenshot:`, `diff:`) are described in
   [`later/proof.md`](../later/proof.md).
+- **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
+  unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a
+  status and a summary line (`Criteria: 1 passed · 0 failed · 4 for you to check`). Workbench runs one
+  command itself, the project's check, so only a criterion whose proof is exactly the command the latest
+  `check.ran` recorded (not the config as it is now)
+  (backticked, with at most words like "exits 0" or "passes") shows `✔ passed` or `✘ failed`, from the
+  check recorded after the latest turn. Every other proof is `you check`, with its backticked commands
+  listed. Nothing is ever passed on Claude's say-so, `review` runs nothing, and none of this gates
+  `accept` or `ship`. The PR table carries pass or fail only, never check output.
 - **Approval binds a hash.** `approved_hash` covers the body (request, criteria, out of scope) and the front
   matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them
   and the status is `draft` again.
