@@ -27,6 +27,8 @@ let usage = """
                                  --watch then follows the CI checks (read-only)
                                  exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
                                  13 a check failed, 14 no result in time
+      clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
+                                 merged (or closed, with --closed); a dry run unless --yes
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
       abandon [--force]          end the thread without accepting its work
 
@@ -100,6 +102,8 @@ do {
         try await Commands.accept(Array(arguments.dropFirst()))
     case "ship":
         exit(try await Commands.ship(Array(arguments.dropFirst())))
+    case "clean":
+        exit(try await Commands.clean(Array(arguments.dropFirst())))
     case "discard":
         try await Commands.discard(Array(arguments.dropFirst()))
     case "abandon":

@@ -39,6 +39,9 @@ public enum LogFormatter {
         case .worktreeRemoved:
             let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
             return head + "worktree removed (\(event.data["reason"]?.stringValue ?? "?"))\(sha); the branch is kept"
+        case .branchRemoved:
+            let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
+            return head + "branch removed (pull request \(event.data["reason"]?.stringValue ?? "?"))\(sha)"
         default:
             return head + event.kind.rawValue
         }
