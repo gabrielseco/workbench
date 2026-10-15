@@ -17,6 +17,7 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
     case branchExists(String)
     case worktreeNotFound(String)
     case gitFailed(command: String, status: Int32, stderr: String)
+    case remoteBranchUnavailable(branch: String, reason: String)
 
     public var description: String {
         switch self {
@@ -27,6 +28,8 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
         case .worktreeExists(let path): "a worktree already exists at \(path)"
         case .branchExists(let name): "branch '\(name)' already exists"
         case .worktreeNotFound(let path): "no worktree at \(path)"
+        case .remoteBranchUnavailable(let branch, let reason):
+            "cannot read origin/\(branch): \(reason)"
         case .gitFailed(let command, let status, let stderr):
             "git \(command) failed (exit \(status)): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
         }
@@ -62,11 +65,12 @@ public struct WorktreeManager: Sendable {
 
     /// The worktree is cut from the committed `base`, so uncommitted edits in this checkout never reach it
     /// and no clean checkout is needed (accept commits on the thread's branch and merges nothing here).
-    public func create(threadID: String, base: String) async throws -> Worktree {
+    public func create(threadID: String, base: String, fetching remoteBranch: String? = nil) async throws -> Worktree {
         guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
 
         try await requireRepository()
+        if let remoteBranch { try await fetchRemoteBranch(remoteBranch) }
 
         let baseCommit = try await resolveCommit(base)
         let target = path(for: threadID)
@@ -252,6 +256,29 @@ public struct WorktreeManager: Sendable {
         let count = try? await git.run(["rev-list", "--count", "refs/heads/\(base)..\(remote)"], in: repoRoot)
         let behind = Int(count?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
         return BaseGap(base: base, behind: behind, fetchNote: note)
+    }
+
+    /// Brings `refs/remotes/origin/<branch>` up to date and returns its commit. Unlike `baseGap`, a failure
+    /// throws: a thread that continues a branch must start from that branch's real tip, never a stale one.
+    @discardableResult
+    public func fetchRemoteBranch(_ branch: String, timeout: TimeInterval = 30) async throws -> String {
+        guard SafeNames.isBranchName(branch) else { throw WorktreeError.invalidBase(branch) }
+        guard let origin = try? await git.run(["remote", "get-url", "origin"], in: repoRoot), origin.succeeded
+        else { throw WorktreeError.remoteBranchUnavailable(branch: branch, reason: "this repository has no origin") }
+
+        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
+        let refspec = "+refs/heads/\(branch):refs/remotes/origin/\(branch)"
+        do {
+            let fetched = try await fetcher.run(["fetch", "--no-tags", "--quiet", "origin", refspec], in: repoRoot)
+            guard fetched.succeeded else {
+                let first = fetched.stderr.split(separator: "\n").first.map(String.init) ?? "exit \(fetched.status)"
+                throw WorktreeError.remoteBranchUnavailable(
+                    branch: branch, reason: ThreadService.withoutCredentials(first))
+            }
+        } catch GitError.timedOut {
+            throw WorktreeError.remoteBranchUnavailable(branch: branch, reason: "no answer in \(Int(timeout))s")
+        }
+        return try await resolveCommit("refs/remotes/origin/\(branch)")
     }
 
     private func check(_ args: [String]) async throws {

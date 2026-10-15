@@ -16,6 +16,7 @@ let usage = """
 
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
+                                 --update <branch> continues that branch of origin; ship pushes to it
       goal approve [id]          approve the goal; any later edit returns it to draft
                                  refused while a proof names a command a run cannot execute
                                  (--allow-unrunnable-proofs to approve anyway; also on run, send-back)
@@ -63,7 +64,8 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 // commands may use it.
 // An option's value that happens to read `--json` is a value, not the flag.
 let valueOptions: Set = [
-    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--patch", "--seq", "--timeout", "--interval", "--in", "--seed",
+    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--update", "--patch", "--seq", "--timeout",
+    "--interval", "--in", "--seed",
 ]
 if let at = arguments.indices.first(where: {
     arguments[$0] == "--json" && !($0 > 0 && valueOptions.contains(arguments[$0 - 1]))

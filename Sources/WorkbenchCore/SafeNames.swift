@@ -21,6 +21,11 @@ enum SafeNames {
         s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) != nil
     }
 
+    /// A branch a thread may push to: a safe branch name that is not the repository's mainline.
+    static func isPushTarget(_ s: String) -> Bool {
+        isBranchName(s) && !["main", "master", "trunk", "develop", "head"].contains(s.lowercased())
+    }
+
     /// A branch or ref name we are willing to pass to git: no leading `-`, no `..`, no whitespace.
     static func isBranchName(_ s: String) -> Bool {
         s.range(of: #"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"#, options: .regularExpression) != nil
