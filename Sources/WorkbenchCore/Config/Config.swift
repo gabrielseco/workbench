@@ -245,6 +245,19 @@ public struct Config: Sendable, Equatable {
         return nil
     }
 
+    /// `exampleTOML` with the global defaults filled in as real lines, for `workbench new`.
+    public static func exampleTOML(claudePath: String?, model: String?) -> String {
+        func quoted(_ s: String) -> String {
+            "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        }
+        let lines = exampleTOML.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            if let claudePath, line.hasPrefix("# claude_path = ") { return "claude_path = \(quoted(claudePath))" }
+            if let model, line.hasPrefix("# model = ") { return "model = \(quoted(model))" }
+            return String(line)
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// A starting point for `workbench init`.
     public static let exampleTOML = """
         # Workbench project config. One fixed tool set per project.

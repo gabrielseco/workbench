@@ -9,6 +9,13 @@ enum SafeNames {
             && !s.hasSuffix(".lock") && !s.hasSuffix(".")
     }
 
+    /// A project directory name for `workbench new`: one path component, no separators, no leading dash,
+    /// no `..`, no trailing dot or `.git`.
+    static func isProjectName(_ s: String) -> Bool {
+        s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"#, options: .regularExpression) != nil
+            && !s.hasSuffix(".") && !s.hasSuffix(".git") && !s.contains("..")
+    }
+
     /// A model name or alias that goes to `--model`: no leading `-`, no whitespace.
     static func isModelName(_ s: String) -> Bool {
         s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) != nil

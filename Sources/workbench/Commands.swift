@@ -116,6 +116,68 @@ enum Commands {
         }
     }
 
+    /// `new <name|path> [--in <dir>] [--seed <path>]... [--nested]`: creates a project; runs only git and copies.
+    static func newProject(_ args: [String]) async throws {
+        var a = Arguments(args)
+        let directory = try a.value("--in")
+        var seeds: [String] = []
+        while let seed = try a.value("--seed") { seeds.append(seed) }
+        let nested = a.flag("--nested")
+        guard let given = a.positional() else {
+            throw CLIError.usage("usage: workbench new <name|path> [--in <dir>] [--seed <path>]... [--nested]")
+        }
+        try a.requireEmpty()
+
+        let environment = ProcessInfo.processInfo.environment
+        let home = environment["HOME"] ?? NSHomeDirectory()
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        func resolve(_ path: String) -> URL {
+            if path == "~" { return URL(fileURLWithPath: home) }
+            if path.hasPrefix("~/") { return URL(fileURLWithPath: home).appendingPathComponent(String(path.dropFirst(2))) }
+            return URL(fileURLWithPath: path, relativeTo: cwd).absoluteURL
+        }
+
+        let globalURL = GlobalConfig.defaultURL(environment: environment)
+        let defaults = try GlobalConfig.load(from: globalURL, home: home)
+
+        // Precedence: an explicit path, then --in, then projects_dir. Never the current directory.
+        let name: String
+        let parent: URL
+        if given.contains("/") || given.hasPrefix("~") {
+            if directory != nil { throw CLIError.usage("give either a path or a name with --in, not both") }
+            let full = resolve(given).standardizedFileURL
+            name = full.lastPathComponent
+            parent = full.deletingLastPathComponent()
+        } else if let directory {
+            name = given
+            parent = resolve(directory).standardizedFileURL
+        } else if let projects = defaults.projectsDirectory {
+            name = given
+            parent = projects
+        } else {
+            throw CLIError.usage(
+                "no location: pass a path, --in <dir>, or set projects_dir in \(globalURL.path)")
+        }
+
+        let git = try GitRunner.discover()
+        let seedURLs = seeds.map { resolve($0) }
+        do {
+            let root = try await ProjectCreator(git: git).create(
+                NewProjectRequest(name: name, parent: parent, seeds: seedURLs, nested: nested, defaults: defaults))
+            out("created \(root.path)")
+            if !seeds.isEmpty { out("seeded vendor/ with \(seeds.count) path\(seeds.count == 1 ? "" : "s")") }
+            out("next: cd \(root.path) && workbench goal new <name>")
+            out("      (set check_command and setup_command in .workbench/config.toml first, then `workbench doctor`)")
+        } catch let error as NewProjectError {
+            switch error {
+            case .invalidName, .seedHasSymlink, .seedCollision, .seedTooLarge: throw CLIError.usage("\(error)")
+            case .seedNotFound: throw CLIError.notFound("\(error)")
+            case .targetNotEmpty, .targetNotADirectory, .insideRepository: throw CLIError.refused("\(error)")
+            case .gitFailed: throw CLIError.message("\(error)")
+            }
+        }
+    }
+
     /// `doctor [--base <branch>]`: runs the declared setup and check in a throwaway worktree.
     static func doctor(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)

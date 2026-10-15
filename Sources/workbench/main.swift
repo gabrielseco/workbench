@@ -5,6 +5,11 @@ let usage = """
     usage: workbench <command>
 
     setup
+      new <name|path> [--in <dir>] [--seed <path>]... [--nested]
+                                 create a project: git repo on main with one empty commit, --seed copies into
+                                 vendor/, .workbench/config.toml. Location: a path, else --in, else projects_dir
+                                 in ~/.config/workbench/config.toml (also claude_path, model); refuses a
+                                 non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
       doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing
@@ -56,7 +61,7 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 // commands may use it.
 // An option's value that happens to read `--json` is a value, not the flag.
 let valueOptions: Set = [
-    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--patch", "--seq", "--timeout", "--interval",
+    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--patch", "--seq", "--timeout", "--interval", "--in", "--seed",
 ]
 if let at = arguments.indices.first(where: {
     arguments[$0] == "--json" && !($0 > 0 && valueOptions.contains(arguments[$0 - 1]))
@@ -74,6 +79,8 @@ do {
         out("workbench \(Workbench.version)")
     case nil, "help", "--help", "-h":
         out(usage)
+    case "new":
+        try await Commands.newProject(Array(arguments.dropFirst()))
     case "init":
         try await Commands.initProject()
     case "config":
