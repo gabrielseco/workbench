@@ -19,6 +19,12 @@ private func listing(_ url: URL) -> [String] {
     (try? FileManager.default.contentsOfDirectory(atPath: url.path))?.sorted() ?? []
 }
 
+private final class CopyCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int { lock.withLock { count += 1; return count } }
+}
+
 // MARK: global config
 
 @Suite struct GlobalConfigTests {
@@ -362,6 +368,53 @@ private func listing(_ url: URL) -> [String] {
             try await ProjectCreator(git: git).create(NewProjectRequest(name: "p", parent: parent, seeds: [seed]))
         }
         #expect(!FileManager.default.fileExists(atPath: parent.path))
+    }
+
+    @Test func ignoredSeedFilesAreStillCommittedAndSoReachTheWorktree() async throws {
+        let base = try scratch()
+        let seed = base.appendingPathComponent("mocks")
+        try write("*.ts\n", to: seed.appendingPathComponent(".gitignore"))
+        try write("h\n", to: seed.appendingPathComponent("helper.ts"))
+        let git = try isolatedGit()
+        let root = try await creator().create(
+            NewProjectRequest(name: "p", parent: base.appendingPathComponent("out"), seeds: [seed]))
+        let tracked = try await git.run(["ls-files"], in: root).stdout
+        #expect(tracked.contains("vendor/mocks/helper.ts"), "\(tracked)")
+        #expect(try await git.run(["status", "--porcelain"], in: root).stdout.isEmpty)
+    }
+
+    @Test func aCopyThatFailsAfterOneFileLeavesNothingBehind() async throws {
+        let base = try scratch()
+        let seed = base.appendingPathComponent("seed")
+        for name in ["a.ts", "b.ts", "c.ts"] { try write("x\n", to: seed.appendingPathComponent(name)) }
+        let bystander = base.appendingPathComponent("bystander.txt")
+        try write("mine\n", to: bystander)
+
+        struct Boom: Error {}
+        let copied = CopyCounter()
+        var failing = ProjectCreator(git: try isolatedGit())
+        failing.beforeCopy = { _ in if copied.next() > 2 { throw Boom() } }
+
+        // A target the call makes, below parents the call makes.
+        let parent = base.appendingPathComponent("a/b")
+        await #expect(throws: Boom.self) {
+            try await failing.create(NewProjectRequest(name: "p", parent: parent, seeds: [seed]))
+        }
+        #expect(!FileManager.default.fileExists(atPath: base.appendingPathComponent("a").path))
+
+        // A target that was already there stays, empty.
+        let existing = base.appendingPathComponent("e")
+        try FileManager.default.createDirectory(
+            at: existing.appendingPathComponent("p"), withIntermediateDirectories: true)
+        let again = CopyCounter()
+        failing.beforeCopy = { _ in if again.next() > 2 { throw Boom() } }
+        await #expect(throws: Boom.self) {
+            try await failing.create(NewProjectRequest(name: "p", parent: existing, seeds: [seed]))
+        }
+        #expect(FileManager.default.fileExists(atPath: existing.appendingPathComponent("p").path))
+        #expect(listing(existing.appendingPathComponent("p")).isEmpty)
+        #expect(try String(contentsOf: bystander, encoding: .utf8) == "mine\n")
+        #expect(listing(seed) == ["a.ts", "b.ts", "c.ts"])
     }
 
     @Test func aSeedOverTheFileLimitIsRefused() async throws {

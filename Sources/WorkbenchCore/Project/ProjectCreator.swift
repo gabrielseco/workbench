@@ -65,6 +65,8 @@ public struct ProjectCreator: Sendable {
     public static let maxSeedBytes = 100 << 20
 
     let git: GitRunner
+    /// Called with each file or directory about to be copied. A test seam: it makes a copy fail midway.
+    var beforeCopy: (@Sendable (URL) throws -> Void)?
 
     public init(git: GitRunner) { self.git = git }
 
@@ -148,9 +150,10 @@ public struct ProjectCreator: Sendable {
             let vendor = target.appendingPathComponent("vendor")
             try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: false)
             for seed in seeds {
-                try Self.copy(seed.source, to: vendor.appendingPathComponent(seed.name))
+                try copy(seed.source, to: vendor.appendingPathComponent(seed.name))
             }
-            try await run(["add", "-A", "--", "vendor"], in: target)
+            // -f: the seed's own .gitignore and the user's global excludes must not drop copied files.
+            try await run(["add", "-A", "-f", "--", "vendor"], in: target)
             let names = seeds.map(\.name).joined(separator: ", ")
             try await run(["commit", "-q", "--allow-empty", "-m", "chore: seed vendor/ with \(names)"], in: target)
         }
@@ -268,14 +271,15 @@ public struct ProjectCreator: Sendable {
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
-    private static func copy(_ source: URL, to destination: URL) throws {
+    private func copy(_ source: URL, to destination: URL) throws {
         let fm = FileManager.default
-        guard directoryExists(source) else {
+        try beforeCopy?(source)
+        guard Self.directoryExists(source) else {
             try fm.copyItem(at: source, to: destination)
             return
         }
         try fm.createDirectory(at: destination, withIntermediateDirectories: false)
-        for entry in try fm.contentsOfDirectory(atPath: source.path) where !skipped(entry) {
+        for entry in try fm.contentsOfDirectory(atPath: source.path) where !Self.skipped(entry) {
             try copy(source.appendingPathComponent(entry), to: destination.appendingPathComponent(entry))
         }
     }
