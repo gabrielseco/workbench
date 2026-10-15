@@ -315,8 +315,11 @@ private func listing(_ url: URL) -> [String] {
             try await creator().create(NewProjectRequest(name: "p", parent: out, seeds: [seed]))
             Issue.record("expected the unreadable seed to be refused")
         } catch let error as NewProjectError {
-            guard case .seedUnreadable(let path) = error else { return Issue.record("wrong error: \(error)") }
-            #expect(path.hasSuffix("locked/secret.ts"))
+            if case .seedUnreadable(let path) = error {
+                #expect(path.hasSuffix("locked/secret.ts"))
+            } else {
+                Issue.record("wrong error: \(error)")
+            }
         }
         #expect(!FileManager.default.fileExists(atPath: out.path))
     }
