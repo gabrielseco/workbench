@@ -131,6 +131,10 @@ public struct ShipPlan: Sendable, Equatable {
     /// request instead of creating a new branch and a new pull request.
     public var updatesExistingBranch: Bool { remoteBranch != branch }
 
+    /// `base` as a branch name for `gh pr create`: a thread cut from `origin/main` opens its pull request
+    /// against `main`, since `gh` rejects a remote-tracking ref.
+    public var prBase: String { base.hasPrefix("origin/") ? String(base.dropFirst("origin/".count)) : base }
+
     /// Same thread, branches, base, tip and origin: what a confirmation is about.
     public func sameTarget(as other: ShipPlan) -> Bool {
         id == other.id && branch == other.branch && remoteBranch == other.remoteBranch && base == other.base

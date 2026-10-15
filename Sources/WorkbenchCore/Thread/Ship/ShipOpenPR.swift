@@ -54,7 +54,7 @@ extension ThreadService {
             outcome = .created
             pr = try await createPR(plan: plan, runner: runner, description: description)
         }
-        let (url, number, base) = (pr.url, pr.number, pr.base ?? plan.base)
+        let (url, number, base) = (pr.url, pr.number, pr.base ?? plan.prBase)
         let head = pr.head ?? plan.head
 
         try await withLog(id) { log in
@@ -159,7 +159,7 @@ extension ThreadService {
         defer { try? FileManager.default.removeItem(at: file) }
 
         let args = [
-            "pr", "create", "--base", plan.base, "--head", plan.branch, "--title=\(body.title)",
+            "pr", "create", "--base", plan.prBase, "--head", plan.branch, "--title=\(body.title)",
             "--body-file", file.path,
         ]
         let result = try await ghRun(args, runner: runner, worktree: plan.worktree)
