@@ -186,11 +186,20 @@ extension ThreadService {
         guard headResult.succeeded else { throw ShipError.gitFailed("git could not read HEAD of \(branch)") }
         let head = headResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let remote = try await remoteState(
+            branch: remoteBranch, head: head, worktree: worktree, updating: pushTo != nil)
+        if pushTo != nil {
+            // Before any push: a branch without an open pull request is refused with nothing changed.
+            var environment = gh.environment
+            environment["GH_REPO"] = nil
+            let reader = GitRunner(executable: gh.executable, environment: environment, timeout: Self.prTimeout)
+            if try await existingPR(branch: remoteBranch, runner: reader, worktree: worktree) == nil {
+                throw ShipError.noPullRequest(remoteBranch)
+            }
+        }
         return ShipPlan(
             id: id, worktree: worktree, branch: branch, remoteBranch: remoteBranch, base: base, head: head,
-            origin: origin,
-            remote: try await remoteState(
-                branch: remoteBranch, head: head, worktree: worktree, updating: pushTo != nil))
+            origin: origin, remote: remote)
     }
 
     /// Reads `origin`'s copy of the branch. No fetch: a commit that is not in this repository cannot be an

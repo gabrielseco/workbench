@@ -58,6 +58,7 @@ private func runShip(_ arguments: [String], fx: RunnerFixture, gh: FakeGH) async
         let thread = try await acceptedUpdateThread(fx)
         let gh = try FakeGH(in: fx)
         let head = try await shipOut(["rev-parse", "HEAD"], thread.worktree, fx)
+        try openPR(gh, head: head)
 
         let plan = try await fx.service.shipPreflight(id: thread.id, gh: gh.runner)
         #expect(plan.remoteBranch == "feature/pr" && plan.updatesExistingBranch)
@@ -91,20 +92,39 @@ private func runShip(_ arguments: [String], fx: RunnerFixture, gh: FakeGH) async
         #expect(opened.data["url"]?.stringValue == "https://github.com/o/r/pull/12")
     }
 
-    @Test func withoutAnOpenPullRequestNothingIsCreatedOrRecorded() async throws {
+    @Test func withoutAnOpenPullRequestNothingIsPushedCreatedOrRecorded() async throws {
         let fx = try await RunnerFixture()
         let thread = try await acceptedUpdateThread(fx)
         let gh = try FakeGH(in: fx)
-        _ = try await fx.service.shipPush(id: thread.id, gh: gh.runner)
+        let before = try await remoteRef(thread.bare, "refs/heads/feature/pr", fx)
 
+        do {
+            _ = try await fx.service.shipPush(id: thread.id, gh: gh.runner)
+            Issue.record("expected a refusal")
+        } catch let error as ShipError {
+            #expect(error == .noPullRequest("feature/pr"))
+        }
         do {
             _ = try await fx.service.shipOpenPR(id: thread.id, gh: gh.runner)
             Issue.record("expected a refusal")
         } catch let error as ShipError {
             #expect(error == .noPullRequest("feature/pr"))
         }
+        #expect(try await remoteRef(thread.bare, "refs/heads/feature/pr", fx) == before)
         #expect(gh.count("pr create") == 0)
         #expect(!(try fx.kinds(thread.id)).contains("pr.opened"))
+    }
+
+    @Test func theCommandRefusesWithExitSixAndLeavesTheBranchAloneWhenNoPullRequestIsOpen() async throws {
+        let fx = try await RunnerFixture()
+        let thread = try await acceptedUpdateThread(fx)
+        let gh = try FakeGH(in: fx)
+        let before = try await remoteRef(thread.bare, "refs/heads/feature/pr", fx)
+
+        let shipped = try await runShip(["--yes"], fx: fx, gh: gh)
+        #expect(shipped.code == 6, "\(shipped.text)")
+        #expect(shipped.text.contains("no open pull request uses it"))
+        #expect(try await remoteRef(thread.bare, "refs/heads/feature/pr", fx) == before)
     }
 
     @Test func aBranchThatMovedAfterTheThreadStartedIsNeverForced() async throws {

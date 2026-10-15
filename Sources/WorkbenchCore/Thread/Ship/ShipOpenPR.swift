@@ -66,7 +66,7 @@ extension ThreadService {
 
     // MARK: Lookup
 
-    private struct FoundPR {
+    struct FoundPR {
         var url: String
         var number: Int
         var base: String?
@@ -74,7 +74,7 @@ extension ThreadService {
         var head: String?
     }
 
-    private func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
+    func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
         let args = [
             "pr", "list", "--head", branch, "--state", "open", "--limit", "10",
             "--json", "number,url,headRefName,baseRefName,headRefOid",
