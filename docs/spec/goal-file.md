@@ -76,8 +76,9 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   branch. `workbench goal new <name> --update <branch>` writes it together with `base: origin/<branch>`, and
   `base` must be exactly that. Before the first turn the run fetches the branch and cuts the worktree from
   its current tip, so review and accept see only what the thread adds on top. The local branch is still
-  `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. (`ship` pushing to the branch
-  follows in a later change; until then the work stays on `workbench/<id>`.)
+  `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. `ship` pushes the work to that
+  branch and records the branch's open pull request, instead of creating a branch and a PR
+  ([P2.5](../plan/P2.5-ship.md)).
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole

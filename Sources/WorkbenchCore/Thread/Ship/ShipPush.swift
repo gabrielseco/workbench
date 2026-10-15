@@ -17,11 +17,12 @@ extension ThreadService {
 
     /// The whole argument list of the push. Fully qualified on both sides so a tag or file of the same
     /// name is never picked up, and nothing here can force: no `-f`, no `--force*`, no `+` refspec.
-    static func pushArguments(branch: String) -> [String] {
-        ["push", "--set-upstream", "origin", "refs/heads/\(branch):refs/heads/\(branch)"]
+    static func pushArguments(branch: String, remoteBranch: String? = nil) -> [String] {
+        ["push", "--set-upstream", "origin", "refs/heads/\(branch):refs/heads/\(remoteBranch ?? branch)"]
     }
 
-    /// Runs the preflight, then pushes `workbench/<id>` to `origin` with its upstream set. A rejected,
+    /// Runs the preflight, then pushes `workbench/<id>` to `origin` (to the goal's `push_to` branch when it has
+    /// one) with its upstream set. A rejected,
     /// timed-out or killed push changes nothing the next attempt depends on: preflight reads the remote
     /// again and a plain push is repeated. Writes no event; the PR is task 4.
     ///
@@ -39,7 +40,8 @@ extension ThreadService {
         let pusher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
         let result: GitResult
         do {
-            result = try await pusher.run(Self.pushArguments(branch: plan.branch), in: plan.worktree)
+            result = try await pusher.run(
+                Self.pushArguments(branch: plan.branch, remoteBranch: plan.remoteBranch), in: plan.worktree)
         } catch GitError.timedOut(_, let seconds) {
             throw ShipError.gitFailed(
                 "the push did not finish in \(Int(seconds))s and was stopped. Nothing was shipped; run it again.")

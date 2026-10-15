@@ -72,12 +72,13 @@ extension ShipError {
         switch self {
         case .notAccepted: .notAccepted
         case .alreadyShipped: .alreadyShipped
-        case .pushRejected, .remoteDiverged: .pushRejected
+        case .pushRejected, .remoteDiverged, .branchMoved: .pushRejected
         case .running, .worktreeMissing, .wrongBranch, .uncommitted, .noOrigin, .ghMissing, .ghNotAuthenticated,
-            .notPushed, .changedSinceShown, .changedAfterPush, .goalUnreadable, .pushDestinationDiffers, .notShipped:
+            .notPushed, .changedSinceShown, .changedAfterPush, .goalUnreadable, .pushDestinationDiffers, .notShipped,
+            .pushTargetMissing, .noPullRequest:
             .refused
         case .invalidName: .usage
-        case .remoteUnreachable, .gitFailed, .ghFailed: .failed
+        case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind: .failed
         }
     }
 }
