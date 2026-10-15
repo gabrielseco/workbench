@@ -40,17 +40,25 @@ extension Commands {
         }
         out("thread:  \(plan.id)")
         out("branch:  \(plan.branch)  (\(plan.head.prefix(12)))")
-        out("base:    \(plan.base)")
+        if plan.updatesExistingBranch {
+            out("updates: \(plan.remoteBranch) on origin")
+        } else {
+            out("base:    \(plan.base)")
+        }
         out("origin:  \(plan.origin)")
         switch plan.remote {
         case .absent: out("push:    new branch on origin")
         case .upToDate: out("push:    nothing, origin already has this commit")
         case .behind(let sha): out("push:    fast-forward from \(sha.prefix(12))")
         }
-        out("then:    open a pull request against \(plan.base)")
+        if plan.updatesExistingBranch {
+            out("then:    record the open pull request for \(plan.remoteBranch); its title and description stay as they are")
+        } else {
+            out("then:    open a pull request against \(plan.base)")
+        }
 
         var description: PRDescription?
-        if !noDescribe {
+        if !noDescribe && !plan.updatesExistingBranch {
             if let config = try? Config.load(from: ctx.project.configURL) {
                 out("describing the change...")
                 let described = try await ctx.service.describePR(plan: plan, config: config)
@@ -62,15 +70,17 @@ extension Commands {
                 out("no readable .workbench/config.toml; using the goal-based description")
             }
         }
-        do {
-            let preview = try await ctx.service.prBody(
-                plan: plan, description: description, environment: gh?.environment ?? [:])
-            out("title:   \(preview.title)")
-            out("")
-            out(preview.body.trimmingCharacters(in: .newlines))
-            out("")
-        } catch let error as ShipError {
-            return refuse(error)
+        if !plan.updatesExistingBranch {
+            do {
+                let preview = try await ctx.service.prBody(
+                    plan: plan, description: description, environment: gh?.environment ?? [:])
+                out("title:   \(preview.title)")
+                out("")
+                out(preview.body.trimmingCharacters(in: .newlines))
+                out("")
+            } catch let error as ShipError {
+                return refuse(error)
+            }
         }
 
         let interactive = isatty(STDIN_FILENO) == 1
@@ -87,7 +97,8 @@ extension Commands {
 
         do {
             let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
-            out(pushed.outcome == .pushed ? "pushed \(plan.branch)" : "origin already has \(plan.branch)")
+            let pushedName = plan.updatesExistingBranch ? plan.remoteBranch : plan.branch
+            out(pushed.outcome == .pushed ? "pushed \(pushedName)" : "origin already has \(pushedName)")
             let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan, description: description)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
             if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }

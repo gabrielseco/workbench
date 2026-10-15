@@ -69,7 +69,7 @@ private func problems(in text: String) -> [GoalProblem] {
 }
 
 /// A branch with one commit on a bare `origin`, and no local copy of it.
-private func originWithBranch(_ fx: RunnerFixture, _ branch: String = "feature/pr") async throws -> URL {
+func originWithBranch(_ fx: RunnerFixture, _ branch: String = "feature/pr") async throws -> URL {
     let bare = try await addOrigin(fx)
     let scratch = fx.repo.deletingLastPathComponent().appendingPathComponent("pr-\(UUID().uuidString)")
     _ = try await fx.git.run(["worktree", "add", "-q", "-b", branch, scratch.path, "main"], in: fx.repo)
@@ -82,7 +82,7 @@ private func originWithBranch(_ fx: RunnerFixture, _ branch: String = "feature/p
     return bare
 }
 
-private func approvedUpdateThread(_ fx: RunnerFixture, branch: String = "feature/pr") async throws -> String {
+func approvedUpdateThread(_ fx: RunnerFixture, branch: String = "feature/pr") async throws -> String {
     let id = try await fx.service.newThread(name: "update", updating: branch)
     let url = fx.project.goalURL(id)
     var text = try String(contentsOf: url, encoding: .utf8)

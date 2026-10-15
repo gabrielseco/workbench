@@ -69,12 +69,15 @@ extension ThreadService {
         // The slow, networked question first; everything about the worktree is looked at after it, so that
         // what is removed is what was just inspected.
         if requireOrigin {
-            let listed = try? await git.run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"], in: worktree)
+            // A thread that continued a branch shipped to that branch, so that is where the commit is looked for.
+            let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8)
+            let remote = text.flatMap { try? GoalFile.parse($0).goal.pushTo } ?? branch
+            let listed = try? await git.run(["ls-remote", "--heads", "origin", "refs/heads/\(remote)"], in: worktree)
             let tip = listed.flatMap { result -> String? in
                 guard result.succeeded else { return nil }
-                return Self.remoteBranchSHAIfExact(result.stdout, branch: branch)
+                return Self.remoteBranchSHAIfExact(result.stdout, branch: remote)
             }
-            guard tip == head else { return .kept("origin does not have \(branch) at the shipped commit") }
+            guard tip == head else { return .kept("origin does not have \(remote) at the shipped commit") }
         }
         guard await read(["symbolic-ref", "--short", "-q", "HEAD"]) == branch else {
             return .kept("it is not on \(branch)")
