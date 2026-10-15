@@ -12,7 +12,10 @@ extension ThreadService {
     /// Removes a shipped thread's worktree when nothing could be lost: it is on `workbench/<id>`, clean
     /// (ignored files count), at the commit `pr.opened` recorded, that commit is what `origin` has, and no
     /// run is active. Never forces. The branch is kept. Records `worktree.removed` and nothing else.
-    public func cleanShipped(id: String, gh: GitRunner?) async -> ShipCleanup {
+    ///
+    /// `requireOrigin: false` is for a pull request that is already merged or closed: origin has usually
+    /// dropped the branch by then, and the caller has checked the PR's head is the shipped commit.
+    public func cleanShipped(id: String, gh: GitRunner?, requireOrigin: Bool = true) async -> ShipCleanup {
         guard SafeNames.isThreadID(id) else { return .kept("'\(id)' is not a thread id") }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -59,12 +62,14 @@ extension ThreadService {
         }
         // The slow, networked question first; everything about the worktree is looked at after it, so that
         // what is removed is what was just inspected.
-        let listed = try? await git.run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"], in: worktree)
-        let tip = listed.flatMap { result -> String? in
-            guard result.succeeded else { return nil }
-            return Self.remoteBranchSHAIfExact(result.stdout, branch: branch)
+        if requireOrigin {
+            let listed = try? await git.run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"], in: worktree)
+            let tip = listed.flatMap { result -> String? in
+                guard result.succeeded else { return nil }
+                return Self.remoteBranchSHAIfExact(result.stdout, branch: branch)
+            }
+            guard tip == head else { return .kept("origin does not have \(branch) at the shipped commit") }
         }
-        guard tip == head else { return .kept("origin does not have \(branch) at the shipped commit") }
         guard await read(["symbolic-ref", "--short", "-q", "HEAD"]) == branch else {
             return .kept("it is not on \(branch)")
         }
