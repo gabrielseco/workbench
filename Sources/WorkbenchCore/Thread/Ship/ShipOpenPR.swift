@@ -21,7 +21,8 @@ extension ThreadService {
     /// first, so a PR that was created but never recorded (a crash in between) is recorded on the next run
     /// and never duplicated. Writes the event last.
     public func shipOpenPR(
-        id: String, gh: GitRunner?, shown: ShipPlan? = nil, timeout: TimeInterval = ThreadService.prTimeout
+        id: String, gh: GitRunner?, shown: ShipPlan? = nil, description: PRDescription? = nil,
+        timeout: TimeInterval = ThreadService.prTimeout
     ) async throws -> ShipPRResult {
         let plan = try await shipPreflight(id: id, gh: gh)
         // The branch is on origin by now, so only what was confirmed about the target must still hold.
@@ -46,7 +47,7 @@ extension ThreadService {
             pr = found
         } else {
             outcome = .created
-            pr = try await createPR(plan: plan, runner: runner)
+            pr = try await createPR(plan: plan, runner: runner, description: description)
         }
         let (url, number, base) = (pr.url, pr.number, pr.base ?? plan.base)
         let head = pr.head ?? plan.head
@@ -99,7 +100,9 @@ extension ThreadService {
 
     // MARK: Create
 
-    private func createPR(plan: ShipPlan, runner: GitRunner) async throws -> FoundPR {
+    /// The title and body `ship` gives the pull request, built the same way for the preview the person
+    /// confirms and for the PR itself.
+    public func prBody(plan: ShipPlan, description: PRDescription?, environment: [String: String]) async throws -> PRBody {
         let events = (try? EventLogReader.read(at: project.eventsURL(plan.id)))?.events ?? []
         let goal: Goal
         do {
@@ -129,11 +132,16 @@ extension ThreadService {
         }
         let state = ThreadState.derive(from: events, id: plan.id)
         var body = PRBodyBuilder.build(
-            goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn)
+            goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn,
+            description: description)
         // What is published must not carry a credential that was pasted into the goal or the template.
-        body.title = Self.withoutCredentials(body.title, environment: runner.environment)
-        body.body = Self.withoutCredentials(body.body, environment: runner.environment)
+        body.title = Self.withoutCredentials(body.title, environment: environment)
+        body.body = Self.withoutCredentials(body.body, environment: environment)
+        return body
+    }
 
+    private func createPR(plan: ShipPlan, runner: GitRunner, description: PRDescription?) async throws -> FoundPR {
+        let body = try await prBody(plan: plan, description: description, environment: runner.environment)
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("wb-pr-\(UUID().uuidString).md")
         guard FileManager.default.createFile(
             atPath: file.path, contents: Data(body.body.utf8), attributes: [.posixPermissions: 0o600])

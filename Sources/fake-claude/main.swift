@@ -22,6 +22,8 @@ import Foundation
 //   ready=<file>          create this file once signal handling and the grandchild are set up, so a
 //                         test can signal the process without racing its startup
 //   dump=<file>           write argv, environment, cwd, open descriptors and stdin state as JSON
+//   answer=<file>         with `--output-format json` (one object, not a stream) answer with this file's text
+//                         as the `result`, then exit; `exit=<n>` still applies
 //   sessions=<dir>        emulate session bookkeeping: --session-id twice, or --resume of an unknown id,
 //                         exits 1 with no output (the first is spike S4; the second message is a guess)
 
@@ -126,6 +128,19 @@ if let pidFile = d.string("grandchild") {
 
 if let path = d.string("ready") {
     FileManager.default.createFile(atPath: path, contents: nil)
+}
+
+// MARK: single-object answer
+
+if argument(after: "--output-format", in: args) == "json" {
+    if d.int("hang-after") != nil { while true { sleep(60) } }
+    let text = d.string("answer").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? "fake claude: \(prompt)"
+    write(
+        json([
+            "type": "result", "subtype": "success", "is_error": false, "result": text,
+            "session_id": sessionID, "total_cost_usd": 0.001,
+        ]) + "\n")
+    exit(Int32(d.int("exit") ?? 0))
 }
 
 // MARK: the turn

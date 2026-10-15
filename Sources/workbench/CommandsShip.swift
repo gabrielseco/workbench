@@ -2,13 +2,16 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `ship [id] [--yes]`: push the accepted thread's branch and open its pull request. Asks first, because
-    /// it publishes; running it again after any failure resumes where it stopped.
+    /// `ship [id] [--yes] [--no-describe]`: push the accepted thread's branch and open its pull request. The
+    /// title and description are written by a read-only Claude turn from the goal, the diff and the check;
+    /// `--no-describe` (or a failed turn) uses the goal-based body. Asks first, because it publishes, and
+    /// shows what it will publish; running it again after any failure resumes where it stopped.
     static func ship(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
         let watch = a.flag("--watch", "-w")
         let keepWorktree = a.flag("--keep-worktree")
+        let noDescribe = a.flag("--no-describe")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
         let named = a.positional()
@@ -46,6 +49,30 @@ extension Commands {
         }
         out("then:    open a pull request against \(plan.base)")
 
+        var description: PRDescription?
+        if !noDescribe {
+            if let config = try? Config.load(from: ctx.project.configURL) {
+                out("describing the change...")
+                let described = try await ctx.service.describePR(plan: plan, config: config)
+                description = described.description
+                if let why = described.fallback {
+                    out("could not describe the change (\(why)); using the goal-based description")
+                }
+            } else {
+                out("no readable .workbench/config.toml; using the goal-based description")
+            }
+        }
+        do {
+            let preview = try await ctx.service.prBody(
+                plan: plan, description: description, environment: gh?.environment ?? [:])
+            out("title:   \(preview.title)")
+            out("")
+            out(preview.body.trimmingCharacters(in: .newlines))
+            out("")
+        } catch let error as ShipError {
+            return refuse(error)
+        }
+
         let interactive = isatty(STDIN_FILENO) == 1
         if !yes && interactive { print("Publish this? [y/N] ", terminator: "") }
         switch Confirmation.ask(yes: yes, interactive: interactive, readLine: { readLine() }) {
@@ -61,7 +88,7 @@ extension Commands {
         do {
             let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
             out(pushed.outcome == .pushed ? "pushed \(plan.branch)" : "origin already has \(plan.branch)")
-            let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan)
+            let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan, description: description)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
             if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
