@@ -250,6 +250,18 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(try fx.events(shipped.id).contains { $0.kind == .prOpened })
     }
 
+    @Test func dashWIsTheShortFormOfWatch() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        _ = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        try gh.put("checks_last", "[{\"name\": \"build\", \"bucket\": \"pass\"}]")
+
+        let result = try await ship(["--yes", "-w", "--interval", "1"], fx: fx, gh: gh)
+        #expect(result.code == 0, "\(result.text)")
+        #expect(result.text.contains("all checks passed"), "\(result.text)")
+    }
+
     @Test func anUnknownOptionIsAUsageError() async throws {
         let fx = try await RunnerFixture()
         let result = try await ship(["--bogus"], fx: fx, gh: nil)

@@ -7,7 +7,7 @@ extension Commands {
     static func ship(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
-        let watch = a.flag("--watch")
+        let watch = a.flag("--watch", "-w")
         let keepWorktree = a.flag("--keep-worktree")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")

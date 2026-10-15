@@ -32,7 +32,7 @@ problems) is joined with `; `. `run` and `send-back` also print their turn's out
 
 ## Notes
 
-`ship --watch` is read-only: no event, no file. It ends at 30 minutes by default (`--timeout` 1 to 240),
+`ship --watch` (short form `-w`) is read-only: no event, no file. It ends at 30 minutes by default (`--timeout` 1 to 240),
 polls every 15 s (`--interval` 1 to 300) and gives up with exit 1 after three failed polls in a row.
 With `--watch`, answering no at the prompt exits 1 (no PR was made, so 0 would claim passing checks), and a
 named thread is never replaced by another one.
