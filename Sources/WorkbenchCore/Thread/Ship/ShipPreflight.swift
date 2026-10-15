@@ -23,6 +23,9 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case changedSinceShown
     case changedAfterPush
     case notShipped
+    case pushTargetMissing(String)
+    case branchMoved(branch: String, sha: String)
+    case noPullRequest(String)
 
     public var description: String {
         switch self {
@@ -63,6 +66,16 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .changedAfterPush:
             "the branch was pushed, but the thread, its tip or origin changed before the pull request was "
                 + "opened, so no PR was made. Run `workbench ship` again to see the new plan."
+        case .pushTargetMissing(let branch):
+            "origin no longer has \(branch), the branch this thread continues. It may have been merged and deleted. "
+                + "Nothing was pushed."
+        case .branchMoved(let branch, let sha):
+            "origin's \(branch) is at \(sha.prefix(12)), which this thread's work does not include: it moved after "
+                + "the thread started. Nothing was pushed, and Workbench never forces. Start a new thread from its "
+                + "current tip with `workbench goal new <name> --update \(branch)`."
+        case .noPullRequest(let branch):
+            "origin has \(branch) but no open pull request uses it, and shipping a thread that continues a branch "
+                + "never opens one. Nothing was recorded."
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }
@@ -83,6 +96,8 @@ public struct ShipPlan: Sendable, Equatable {
     public var id: String
     public var worktree: URL
     public var branch: String
+    /// The branch on `origin` that is pushed to: `branch`, or the goal's `push_to`.
+    public var remoteBranch: String
     public var base: String
     /// Our tip.
     public var head: String
@@ -90,10 +105,14 @@ public struct ShipPlan: Sendable, Equatable {
     public var origin: String
     public var remote: Remote
 
-    /// Same thread, branch, base, tip and origin: what a confirmation is about.
+    /// True when the thread continues an existing branch, so ship pushes to it and records its open pull
+    /// request instead of creating a new branch and a new pull request.
+    public var updatesExistingBranch: Bool { remoteBranch != branch }
+
+    /// Same thread, branches, base, tip and origin: what a confirmation is about.
     public func sameTarget(as other: ShipPlan) -> Bool {
-        id == other.id && branch == other.branch && base == other.base && head == other.head
-            && origin == other.origin
+        id == other.id && branch == other.branch && remoteBranch == other.remoteBranch && base == other.base
+            && head == other.head && origin == other.origin
     }
 }
 
@@ -116,15 +135,19 @@ extension ThreadService {
 
         // The base comes from the goal that was approved, and is checked like every name that reaches git.
         let base: String
+        let pushTo: String?
         do {
             let text = try String(contentsOf: project.goalURL(id), encoding: .utf8)
-            base = try GoalFile.parse(text).goal.base
+            let goal = try GoalFile.parse(text).goal
+            (base, pushTo) = (goal.base, goal.pushTo)
         } catch {
             throw ShipError.goalUnreadable("\(error)")
         }
         let branch = WorktreeManager.branch(for: id)
+        let remoteBranch = pushTo ?? branch
         guard SafeNames.isBranchName(base) else { throw ShipError.invalidName(base) }
         guard SafeNames.isBranchName(branch) else { throw ShipError.invalidName(branch) }
+        guard pushTo == nil || SafeNames.isPushTarget(remoteBranch) else { throw ShipError.invalidName(remoteBranch) }
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { throw ShipError.worktreeMissing(manager.path(for: id).path) }
@@ -164,26 +187,35 @@ extension ThreadService {
         let head = headResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return ShipPlan(
-            id: id, worktree: worktree, branch: branch, base: base, head: head, origin: origin,
-            remote: try await remoteState(branch: branch, head: head, worktree: worktree))
+            id: id, worktree: worktree, branch: branch, remoteBranch: remoteBranch, base: base, head: head,
+            origin: origin,
+            remote: try await remoteState(
+                branch: remoteBranch, head: head, worktree: worktree, updating: pushTo != nil))
     }
 
     /// Reads `origin`'s copy of the branch. No fetch: a commit that is not in this repository cannot be an
     /// ancestor of ours, which is the answer that refuses.
-    private func remoteState(branch: String, head: String, worktree: URL) async throws -> ShipPlan.Remote {
+    private func remoteState(
+        branch: String, head: String, worktree: URL, updating: Bool
+    ) async throws -> ShipPlan.Remote {
         let listed = try await run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"], in: worktree)
         guard listed.succeeded else {
             let detail = Self.withoutCredentials(
                 listed.stderr.split(separator: "\n").first.map(String.init) ?? "git ls-remote failed")
             throw ShipError.remoteUnreachable(detail)
         }
-        guard let sha = try Self.remoteBranchSHA(in: listed.stdout, branch: branch) else { return .absent }
+        guard let sha = try Self.remoteBranchSHA(in: listed.stdout, branch: branch) else {
+            if updating { throw ShipError.pushTargetMissing(branch) }
+            return .absent
+        }
         guard sha.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil else {
             throw ShipError.remoteUnreachable("unexpected answer from origin")
         }
         if sha == head { return .upToDate }
         let ancestor = try await run(["merge-base", "--is-ancestor", sha, head], in: worktree)
-        guard ancestor.status == 0 else { throw ShipError.remoteDiverged(sha: sha) }
+        guard ancestor.status == 0 else {
+            throw updating ? ShipError.branchMoved(branch: branch, sha: sha) : ShipError.remoteDiverged(sha: sha)
+        }
         return .behind(sha: sha)
     }
 

@@ -130,7 +130,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 7 | `not-found` | no such thread |
 | 10 | `not-accepted` | the thread is not accepted: still active, discarded, abandoned, unknown, or none waiting |
 | 11 | `already-shipped` | the recorded URL is the last line of stdout |
-| 12 | `push-rejected` | origin rejected the push, or its branch is not an ancestor of ours |
+| 12 | `push-rejected` | origin rejected the push, or its branch is not an ancestor of ours (for a thread that continues a branch: the branch moved after the thread started) |
 | 13 | `check-failed` | `--watch` (`-w`): a check failed or was cancelled |
 | 14 | `no-result` | `--watch` (`-w`): checks were still running at the time limit, or none appeared within two minutes |
 
