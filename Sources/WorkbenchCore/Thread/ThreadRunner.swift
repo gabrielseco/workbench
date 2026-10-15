@@ -201,7 +201,7 @@ public actor ThreadRunner {
             baseCommit = await recordedBaseCommit(goal: goal)
         } else {
             let local = (try? await worktreeManager.checkoutChanges()) ?? []
-            let created = try await worktreeManager.create(threadID: threadID, base: goal.base)
+            let created = try await worktreeManager.create(threadID: threadID, base: goal.base, fetching: goal.pushTo)
             worktree = created.path
             baseCommit = created.baseCommit
             // Recorded before anything slow (the fetch below), so a runner killed meanwhile still has it.

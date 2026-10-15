@@ -14,6 +14,7 @@ base: main                  # branch the worktree is cut from
 budget_usd: 5.00            # hard cap passed to the CLI
 turn_timeout_min: 30        # runner kills the turn after this
 model: opus                 # optional; --model for every turn of this thread
+push_to: feature/x          # optional; continue this branch of origin (base must be origin/feature/x)
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -71,6 +72,12 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   **Optional:** `model`, a model name or alias (`opus`, `claude-opus-5-5`; no leading `-`, no spaces). It
   wins over the config's `model`, which wins over the CLI default, and applies to every turn of the thread,
   send-backs included. The turn's `argv` in `turn.started` shows what ran.
+  **Optional:** `push_to`, an existing branch of `origin` the thread continues, such as a pull request's
+  branch. `workbench goal new <name> --update <branch>` writes it together with `base: origin/<branch>`, and
+  `base` must be exactly that. Before the first turn the run fetches the branch and cuts the worktree from
+  its current tip, so review and accept see only what the thread adds on top. The local branch is still
+  `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. (`ship` pushing to the branch
+  follows in a later change; until then the work stays on `workbench/<id>`.)
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole
@@ -94,7 +101,7 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`
   (status says approved but the hash is missing or differs). Only `approved` runs.
 - **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`),
-  `turn_timeout_min`, `model` (only when set, so a goal without one keeps its hash), and the body after the
+  `turn_timeout_min`, `model` and `push_to` (each only when set, so a goal without them keeps its hash), and the body after the
   front matter. Line endings, trailing whitespace and blank
   lines at the edges are normalized first. `title` and `id` are not covered, so renaming a goal does not
   revoke approval.

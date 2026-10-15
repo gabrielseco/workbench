@@ -15,9 +15,15 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case invalidMessage(String)
     case acceptIncomplete(String)
     case changedSinceAcceptShown
+    case invalidPushTarget(String)
+    case updateWithBase
 
     public var description: String {
         switch self {
+        case .invalidPushTarget(let name):
+            "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
+        case .updateWithBase:
+            "--update already sets the base to that branch; drop --base."
         case .goalPlaceholdersRemain:
             "the goal still has TODO(workbench) placeholders. Write the request and criteria first."
         case .goalMissing(let path): "no goal at \(path)"
@@ -76,14 +82,29 @@ public struct ThreadService: Sendable {
 
     /// Creates the thread directory, a draft goal to fill in and the first events. Refuses while another
     /// thread is active.
-    public func newThread(name: String, base: String? = nil, config: Config? = nil) async throws -> String {
+    public func newThread(
+        name: String, base: String? = nil, updating: String? = nil, config: Config? = nil
+    ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
+        if let updating {
+            guard SafeNames.isPushTarget(updating) else { throw ThreadServiceError.invalidPushTarget(updating) }
+            if base != nil { throw ThreadServiceError.updateWithBase }
+            // Fails before anything is created when origin has no such branch.
+            try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(updating)
+        }
         let day = DateFormatter.dayStamp.string(from: now())
         let id = "g-\(day)-\(name)"
         try store.create(id: id)
 
         let baseBranch: String
-        if let base { baseBranch = base } else { baseBranch = await defaultBase() }
+        if let updating {
+            baseBranch = "origin/\(updating)"
+        } else if let base {
+            baseBranch = base
+        } else {
+            baseBranch = await defaultBase()
+        }
+        let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
         let budget = NSDecimalNumber(decimal: config?.defaultBudgetUSD ?? Config.defaultBudgetUSD).stringValue
         let title = name.replacingOccurrences(of: "-", with: " ")
 
@@ -92,7 +113,7 @@ public struct ThreadService: Sendable {
             id: \(id)
             title: \(title)
             status: draft
-            base: \(baseBranch)
+            base: \(baseBranch)\(pushToLine)
             budget_usd: \(budget)
             turn_timeout_min: 30
             # model: opus   (optional; unset = the config's model, else the claude CLI default)

@@ -239,12 +239,15 @@ enum Commands {
     static func goalNew(_ args: [String]) async throws {
         var a = Arguments(args)
         let base = try a.value("--base")
-        guard let name = a.positional() else { throw CLIError.usage("usage: workbench goal new <name> [--base <branch>]") }
+        let updating = try a.value("--update")
+        guard let name = a.positional() else {
+            throw CLIError.usage("usage: workbench goal new <name> [--base <branch> | --update <branch>]")
+        }
         try a.requireEmpty()
 
         let ctx = try await Context.load()
         let config = try? Config.load(from: ctx.project.configURL)
-        let id = try await ctx.service.newThread(name: name, base: base, config: config)
+        let id = try await ctx.service.newThread(name: name, base: base, updating: updating, config: config)
         out("created \(id)")
         out("edit:    \(ctx.project.goalURL(id).path)")
         out("then:    workbench goal approve")
@@ -277,6 +280,7 @@ enum Commands {
             out("hash:    \(approved.goal.contentHash.prefix(12))")
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
             if let model = approved.goal.model { out("model:   \(model)") }
+            if let pushTo = approved.goal.pushTo { out("push to: \(pushTo)") }
         }
         if allowUnrunnable, let config = try? Config.load(from: ctx.project.configURL) {
             for warning in ProofCommands.warnings(goal: approved.goal, config: config) {

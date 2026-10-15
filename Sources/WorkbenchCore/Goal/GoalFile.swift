@@ -107,6 +107,10 @@ public struct GoalFile: Sendable, Equatable {
             return n
         }
         let model = modelValue(value("model"), add: add)
+        let pushTo = pushToValue(value("push_to"), add: add)
+        if let pushTo, let base, let entry = value("base"), base != "origin/\(pushTo)" {
+            add(.invalidValue, entry.lineNumber, "'base' must be 'origin/\(pushTo)' when 'push_to' is set, found '\(base)'")
+        }
         var declared = GoalStatus.draft
         if let entry = value("status") {
             if let status = GoalStatus(rawValue: entry.value) {
@@ -138,21 +142,7 @@ public struct GoalFile: Sendable, Equatable {
             add(.missingSection, nil, "missing '## Criteria' section")
         }
 
-        var outOfScope: [String] = []
-        if let section = sections["out of scope"] {
-            for line in section.lines {
-                let trimmed = line.text.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { continue }
-                if trimmed.hasPrefix("- ") {
-                    outOfScope.append(String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces))
-                } else if !outOfScope.isEmpty, line.text.first == " " || line.text.first == "\t" {
-                    // An indented line wraps the bullet above it, as it does in a criterion.
-                    outOfScope[outOfScope.count - 1] += " " + trimmed
-                } else {
-                    add(.unrecognizedLine, line.number, "expected a '- ' bullet in 'Out of scope', found '\(trimmed)'")
-                }
-            }
-        }
+        let outOfScope = sections["out of scope"].map { parseOutOfScope($0, add: add) } ?? []
 
         guard problems.isEmpty, let id, let title, let base, let budget, let timeout else {
             throw GoalParseError(problems: problems.sorted { ($0.line ?? .max) < ($1.line ?? .max) })
@@ -161,10 +151,11 @@ public struct GoalFile: Sendable, Equatable {
         let body = lines[bodyStart...].joined(separator: "\n")
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, budgetUSD: budget,
-            turnTimeoutMin: timeout, model: model, approvedAt: value("approved_at")?.value,
+            turnTimeoutMin: timeout, model: model, pushTo: pushTo, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
-            contentHash: GoalHash.hash(base: base, budgetUSD: budget, turnTimeoutMin: timeout, model: model, body: body))
+            contentHash: GoalHash.hash(
+                base: base, budgetUSD: budget, turnTimeoutMin: timeout, model: model, pushTo: pushTo, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
@@ -176,6 +167,19 @@ public struct GoalFile: Sendable, Equatable {
             add(
                 .invalidValue, entry.lineNumber,
                 "'model' must be a model name or alias like \"opus\", found '\(entry.value)'")
+            return nil
+        }
+        return entry.value
+    }
+
+    private static func pushToValue(
+        _ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> String? {
+        guard let entry else { return nil }
+        guard SafeNames.isPushTarget(entry.value) else {
+            add(
+                .invalidValue, entry.lineNumber,
+                "'push_to' must be a safe branch name that is not main, master, trunk or develop, found '\(entry.value)'")
             return nil
         }
         return entry.value
@@ -237,6 +241,25 @@ public struct GoalFile: Sendable, Equatable {
         return sections
     }
 
+    private static func parseOutOfScope(
+        _ section: Section, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> [String] {
+        var bullets: [String] = []
+        for line in section.lines {
+            let trimmed = line.text.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            if trimmed.hasPrefix("- ") {
+                bullets.append(String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces))
+            } else if !bullets.isEmpty, line.text.first == " " || line.text.first == "\t" {
+                // An indented line wraps the bullet above it, as it does in a criterion.
+                bullets[bullets.count - 1] += " " + trimmed
+            } else {
+                add(.unrecognizedLine, line.number, "expected a '- ' bullet in 'Out of scope', found '\(trimmed)'")
+            }
+        }
+        return bullets
+    }
+
     private static func parseCriteria(
         _ section: Section, add: (GoalProblem.Code, Int?, String) -> Void
     ) -> [Criterion] {
@@ -293,7 +316,7 @@ public struct GoalFile: Sendable, Equatable {
 /// One `key: value  # comment` line of the front matter.
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
-        "id", "title", "status", "base", "budget_usd", "turn_timeout_min", "model", "approved_at",
+        "id", "title", "status", "base", "budget_usd", "turn_timeout_min", "model", "push_to", "approved_at",
         "approved_hash",
     ]
 
