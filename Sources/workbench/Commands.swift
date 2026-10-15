@@ -144,7 +144,7 @@ enum Commands {
         let name: String
         let parent: URL
         if given.contains("/") || given.hasPrefix("~") {
-            if directory != nil { throw CLIError.usage("give either a path or a name with --in, not both") }
+            if directory != nil { err("note: --in is ignored because a path was given") }
             let full = resolve(given).standardizedFileURL
             name = full.lastPathComponent
             parent = full.deletingLastPathComponent()
@@ -170,7 +170,8 @@ enum Commands {
             out("      (set check_command and setup_command in .workbench/config.toml first, then `workbench doctor`)")
         } catch let error as NewProjectError {
             switch error {
-            case .invalidName, .seedHasSymlink, .seedCollision, .seedTooLarge: throw CLIError.usage("\(error)")
+            case .invalidName, .seedHasSymlink, .seedCollision, .seedTooLarge, .seedUnreadable, .seedOverlapsTarget:
+                throw CLIError.usage("\(error)")
             case .seedNotFound: throw CLIError.notFound("\(error)")
             case .targetNotEmpty, .targetNotADirectory, .insideRepository: throw CLIError.refused("\(error)")
             case .gitFailed: throw CLIError.message("\(error)")

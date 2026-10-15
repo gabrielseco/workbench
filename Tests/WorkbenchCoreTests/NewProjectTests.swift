@@ -272,6 +272,95 @@ private func listing(_ url: URL) -> [String] {
         #expect(listing(existing).isEmpty)
     }
 
+    @Test func aSeedThatContainsTheTargetIsRefusedBeforeItCopiesItself() async throws {
+        let base = try scratch()
+        let seed = base.appendingPathComponent("source")
+        try write("x\n", to: seed.appendingPathComponent("f.txt"))
+        let inside = seed.appendingPathComponent("kit")
+        await #expect(throws: NewProjectError.self) {
+            try await creator().create(NewProjectRequest(name: "kit", parent: seed, seeds: [seed]))
+        }
+        #expect(!FileManager.default.fileExists(atPath: inside.path))
+        // The other way round: a seed inside the target's own place.
+        let target = base.appendingPathComponent("proj")
+        try write("y\n", to: target.appendingPathComponent("s/f.txt"))
+        await #expect(throws: NewProjectError.self) {
+            try await creator().create(
+                NewProjectRequest(name: "proj", parent: base, seeds: [target.appendingPathComponent("s")]))
+        }
+    }
+
+    @Test func anEmptySeedDirectoryStillMakesAProject() async throws {
+        let base = try scratch()
+        let seed = base.appendingPathComponent("empty")
+        try FileManager.default.createDirectory(at: seed, withIntermediateDirectories: true)
+        try write("meta\n", to: seed.appendingPathComponent(".git/HEAD"))
+        let git = try isolatedGit()
+        let root = try await creator().create(
+            NewProjectRequest(name: "p", parent: base.appendingPathComponent("out"), seeds: [seed]))
+        #expect(try await git.run(["rev-list", "--count", "HEAD"], in: root).stdout == "2\n")
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("vendor/empty").path))
+    }
+
+    @Test func anUnreadableSeedIsRefusedBeforeAnythingIsCreated() async throws {
+        let base = try scratch()
+        let seed = base.appendingPathComponent("locked")
+        let file = seed.appendingPathComponent("secret.ts")
+        try write("x\n", to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path) }
+        let out = base.appendingPathComponent("out")
+        guard !FileManager.default.isReadableFile(atPath: file.path) else { return }  // running as root
+        do {
+            try await creator().create(NewProjectRequest(name: "p", parent: out, seeds: [seed]))
+            Issue.record("expected the unreadable seed to be refused")
+        } catch let error as NewProjectError {
+            guard case .seedUnreadable(let path) = error else { return Issue.record("wrong error: \(error)") }
+            #expect(path.hasSuffix("locked/secret.ts"))
+        }
+        #expect(!FileManager.default.fileExists(atPath: out.path))
+    }
+
+    @Test func aTargetThatIsALinkIsRefusedSoTheNestingCheckCannotBeSidestepped() async throws {
+        let base = try scratch()
+        let outer = base.appendingPathComponent("outer")
+        try FileManager.default.createDirectory(at: outer, withIntermediateDirectories: true)
+        _ = try await isolatedGit().run(["init", "-q", "-b", "main"], in: outer)
+        let empty = outer.appendingPathComponent("empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        let parent = base.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: parent.appendingPathComponent("kit"), withDestinationURL: empty)
+        await #expect(throws: NewProjectError.self) {
+            try await creator().create(NewProjectRequest(name: "kit", parent: parent))
+        }
+        #expect(listing(empty).isEmpty)
+    }
+
+    @Test func aFailureAfterTheSeedsWereCopiedLeavesNothingBehind() async throws {
+        // A pre-commit hook that rejects a tree containing vendor/ fails the second commit, after the copy.
+        let base = try scratch()
+        let hooks = base.appendingPathComponent("hooks")
+        let hook = hooks.appendingPathComponent("pre-commit")
+        try write("#!/bin/sh\n[ -d vendor ] && exit 1\nexit 0\n", to: hook)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        let git = try GitRunner.discover(
+            extraEnvironment: [
+                "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
+                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
+                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
+                "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": hooks.path,
+            ])
+        let seed = base.appendingPathComponent("seed")
+        try write("x\n", to: seed.appendingPathComponent("f.txt"))
+        let parent = base.appendingPathComponent("out")
+        await #expect(throws: NewProjectError.self) {
+            try await ProjectCreator(git: git).create(NewProjectRequest(name: "p", parent: parent, seeds: [seed]))
+        }
+        #expect(!FileManager.default.fileExists(atPath: parent.path))
+    }
+
     @Test func aSeedOverTheFileLimitIsRefused() async throws {
         let base = try scratch()
         let seed = base.appendingPathComponent("big")

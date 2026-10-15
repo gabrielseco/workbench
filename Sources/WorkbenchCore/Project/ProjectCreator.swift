@@ -26,6 +26,8 @@ public enum NewProjectError: Error, Equatable, Sendable, CustomStringConvertible
     case insideRepository(target: String, repository: String)
     case seedNotFound(String)
     case seedHasSymlink(String)
+    case seedUnreadable(String)
+    case seedOverlapsTarget(seed: String, target: String)
     case seedCollision(String)
     case seedTooLarge(String)
     case gitFailed(command: String, stderr: String)
@@ -43,6 +45,9 @@ public enum NewProjectError: Error, Equatable, Sendable, CustomStringConvertible
         case .seedHasSymlink(let p):
             "seed \(p) is or contains a symbolic link; Claude cannot follow it out of the worktree, so seeds "
                 + "are copied and links are refused"
+        case .seedUnreadable(let p): "seed \(p) cannot be read"
+        case .seedOverlapsTarget(let seed, let target):
+            "seed \(seed) and the new project \(target) overlap; the copy would include its own output"
         case .seedCollision(let n): "two seeds would both land in vendor/\(n)"
         case .seedTooLarge(let p):
             "seed \(p) is larger than \(ProjectCreator.maxSeedFiles) files or \(ProjectCreator.maxSeedBytes >> 20) MB"
@@ -79,6 +84,18 @@ public struct ProjectCreator: Sendable {
         let fm = FileManager.default
         let parent = request.parent.standardizedFileURL
         let target = parent.appendingPathComponent(request.name)
+
+        // A link in the target's place would let the project land somewhere the checks below never looked.
+        if Self.isSymlink(target) { throw NewProjectError.targetNotADirectory(target.path) }
+
+        let resolvedTarget = Self.resolved(target)
+        for seed in seeds {
+            let source = Self.resolved(seed.source).path
+            let place = resolvedTarget.path
+            if place == source || place.hasPrefix(source + "/") || source.hasPrefix(place + "/") {
+                throw NewProjectError.seedOverlapsTarget(seed: seed.source.path, target: target.path)
+            }
+        }
 
         var targetExisted = false
         var isDirectory: ObjCBool = false
@@ -135,7 +152,7 @@ public struct ProjectCreator: Sendable {
             }
             try await run(["add", "-A", "--", "vendor"], in: target)
             let names = seeds.map(\.name).joined(separator: ", ")
-            try await run(["commit", "-q", "-m", "chore: seed vendor/ with \(names)"], in: target)
+            try await run(["commit", "-q", "--allow-empty", "-m", "chore: seed vendor/ with \(names)"], in: target)
         }
 
         let project = Project(root: target)
@@ -188,26 +205,36 @@ public struct ProjectCreator: Sendable {
             var files = 0
             var bytes = 0
             if directoryExists(source) {
+                var unreadable: String?
                 guard
                     let walker = fm.enumerator(
                         at: source, includingPropertiesForKeys: [.isSymbolicLinkKey, .fileSizeKey, .isDirectoryKey],
-                        options: [])
+                        options: [],
+                        errorHandler: { failed, _ in
+                            unreadable = failed.path
+                            return false
+                        })
                 else { throw NewProjectError.seedNotFound(url.path) }
                 for case let entry as URL in walker {
+                    if let unreadable { throw NewProjectError.seedUnreadable(unreadable) }
                     if skipped(entry.lastPathComponent) {
                         walker.skipDescendants()
                         continue
                     }
                     if isSymlink(entry) { throw NewProjectError.seedHasSymlink(entry.path) }
-                    let values = try? entry.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
-                    if values?.isDirectory != true {
+                    guard let values = try? entry.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey]),
+                        fm.isReadableFile(atPath: entry.path)
+                    else { throw NewProjectError.seedUnreadable(entry.path) }
+                    if values.isDirectory != true {
                         files += 1
-                        bytes += values?.fileSize ?? 0
+                        bytes += values.fileSize ?? 0
                     }
                     if files > maxSeedFiles || bytes > maxSeedBytes { throw NewProjectError.seedTooLarge(url.path) }
                 }
+                if let unreadable { throw NewProjectError.seedUnreadable(unreadable) }
             } else {
                 files = 1
+                guard fm.isReadableFile(atPath: source.path) else { throw NewProjectError.seedUnreadable(url.path) }
                 let size = (try? source.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
                 if size > maxSeedBytes { throw NewProjectError.seedTooLarge(url.path) }
             }
@@ -218,6 +245,19 @@ public struct ProjectCreator: Sendable {
 
     /// Repository metadata and Workbench's own directory never travel in a seed.
     private static func skipped(_ name: String) -> Bool { name == ".git" || name == ".workbench" }
+
+    /// The path with symbolic links resolved as far as it exists, and the rest appended as written.
+    private static func resolved(_ url: URL) -> URL {
+        var existing = url.standardizedFileURL
+        var rest: [String] = []
+        while !FileManager.default.fileExists(atPath: existing.path), existing.path != "/" {
+            rest.insert(existing.lastPathComponent, at: 0)
+            existing = existing.deletingLastPathComponent()
+        }
+        var result = existing.resolvingSymlinksInPath()
+        for part in rest { result.appendPathComponent(part) }
+        return result
+    }
 
     private static func isSymlink(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true

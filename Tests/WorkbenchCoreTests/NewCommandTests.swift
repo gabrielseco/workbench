@@ -66,8 +66,8 @@ private struct NewHome {
         #expect(!h.exists("code/a", under: h.home))
 
         let explicit = h.work.appendingPathComponent("anywhere/b")
-        #expect(try await h.run(["new", explicit.path, "--in", elsewhere.path]).code == 2)
-        #expect(try await h.run(["new", explicit.path]).code == 0)
+        let both = try await h.run(["new", explicit.path, "--in", elsewhere.path])
+        #expect(both.code == 0 && both.text.contains("--in is ignored"), "\(both.text)")
         #expect(h.exists(".git", under: explicit))
         #expect(!h.exists("b", under: elsewhere))
 
@@ -76,6 +76,20 @@ private struct NewHome {
         #expect(h.exists("tilde-proj/.git", under: h.home))
         #expect(try await h.run(["new", "./rel-proj"]).code == 0)
         #expect(h.exists("rel-proj/.git", under: h.work))
+    }
+
+    @Test func theProjectConfigIsTheOnlyOneARunReadsSoItWinsOverLaterGlobalChanges() async throws {
+        let h = try NewHome(globalConfig: "projects_dir = \"~/p\"\nmodel = \"haiku\"\n")
+        #expect(try await h.run(["new", "kit"]).code == 0)
+        let configURL = h.home.appendingPathComponent("p/kit/.workbench/config.toml")
+        #expect(try Config.load(from: configURL).model == "haiku")
+
+        let edited = try String(contentsOf: configURL, encoding: .utf8)
+            .replacingOccurrences(of: "model = \"haiku\"", with: "model = \"opus\"")
+        try edited.write(to: configURL, atomically: true, encoding: .utf8)
+        try "projects_dir = \"~/p\"\nmodel = \"sonnet\"\n".write(
+            to: h.home.appendingPathComponent(".config/workbench/config.toml"), atomically: true, encoding: .utf8)
+        #expect(try Config.load(from: configURL).model == "opus")
     }
 
     @Test func noLocationIsRefusedAndNothingIsCreatedInTheCurrentDirectory() async throws {

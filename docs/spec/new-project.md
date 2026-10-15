@@ -25,8 +25,8 @@ Resolved in this order; the first that applies wins, and there is no fallback to
 2. `--in <dir>` with a bare name.
 3. `projects_dir` from the global config.
 
-With none of them, `new` refuses (exit 2) and says where `projects_dir` goes. A path together with `--in` is
-a usage error.
+With none of them, `new` refuses (exit 2) and says where `projects_dir` goes. A path together with `--in`
+uses the path and says on stderr that `--in` was ignored.
 
 ## Refusals
 
@@ -36,9 +36,9 @@ removed; a directory that was already there is emptied of what `new` wrote).
 | Case | Exit |
 |---|---|
 | Name is not one path component of `[A-Za-z0-9._-]` starting with a letter or digit, or has `..`, a trailing `.` or `.git` | 2 |
-| Seed is a symlink or contains one; two seeds share a basename; a seed is over the bounds | 2 |
+| Seed is a symlink or contains one; a seed or something in it cannot be read; two seeds share a basename; a seed is over the bounds; a seed and the new project contain one another | 2 |
 | A seed does not exist | 7 |
-| The target exists and is not an empty directory | 6 |
+| The target exists and is not an empty directory, or is a symbolic link | 6 |
 | The parent is inside another git repository (name it in the message) and `--nested` was not given | 6 |
 | `git` fails (no `user.name`/`user.email`, say) | 1 |
 
