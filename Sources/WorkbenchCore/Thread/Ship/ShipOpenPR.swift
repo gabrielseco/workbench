@@ -29,7 +29,7 @@ extension ThreadService {
         if let shown, !shown.sameTarget(as: plan) { throw ShipError.changedAfterPush }
         switch plan.remote {
         case .upToDate: break
-        case .absent: throw ShipError.notPushed("origin has no \(plan.branch)")
+        case .absent: throw ShipError.notPushed("origin has no \(plan.remoteBranch)")
         case .behind(let sha):
             throw ShipError.notPushed("origin is at \(sha.prefix(12)), this thread at \(plan.head.prefix(12))")
         }
@@ -39,10 +39,15 @@ extension ThreadService {
         environment["GH_REPO"] = nil
         let runner = GitRunner(executable: gh.executable, environment: environment, timeout: timeout)
 
-        let found = try await existingPR(branch: plan.branch, runner: runner, worktree: plan.worktree)
+        let found = try await existingPR(branch: plan.remoteBranch, runner: runner, worktree: plan.worktree)
+        if plan.updatesExistingBranch && found == nil { throw ShipError.noPullRequest(plan.remoteBranch) }
         let outcome: ShipPRResult.Outcome
         let pr: FoundPR
         if let found {
+            // Recording a head that is not ours would make cleanup refuse this thread for good.
+            if plan.updatesExistingBranch, let theirs = found.head, theirs != plan.head {
+                throw ShipError.pullRequestBehind(pr: theirs)
+            }
             outcome = .existing
             pr = found
         } else {
@@ -56,7 +61,7 @@ extension ThreadService {
             try await log.append(
                 .prOpened,
                 data: [
-                    "url": .string(url), "number": .int(number), "branch": .string(plan.branch),
+                    "url": .string(url), "number": .int(number), "branch": .string(plan.remoteBranch),
                     "base": .string(base), "head_sha": .string(head),
                 ])
         }
@@ -65,7 +70,7 @@ extension ThreadService {
 
     // MARK: Lookup
 
-    private struct FoundPR {
+    struct FoundPR {
         var url: String
         var number: Int
         var base: String?
@@ -73,7 +78,7 @@ extension ThreadService {
         var head: String?
     }
 
-    private func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
+    func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
         let args = [
             "pr", "list", "--head", branch, "--state", "open", "--limit", "10",
             "--json", "number,url,headRefName,baseRefName,headRefOid",
