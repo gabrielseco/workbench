@@ -23,6 +23,8 @@ public struct Review: Sendable, Equatable {
         public var exitCode: Int?
         public var durationMs: Int?
         public var outputRef: String?
+        /// The command that ran, as `check.ran` recorded it; nil for a synthetic result that has none.
+        public var command: String?
     }
 
     public struct Note: Sendable, Equatable {
@@ -186,7 +188,8 @@ public struct ThreadState: Sendable, Equatable {
                     state.review.check = Review.Check(
                         turn: event.turn, result: result, exitCode: event.data["exit_code"]?.intValue,
                         durationMs: event.data["duration_ms"]?.intValue,
-                        outputRef: event.data["output_ref"]?.stringValue)
+                        outputRef: event.data["output_ref"]?.stringValue,
+                        command: event.data["command"]?.stringValue)
                 }
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {

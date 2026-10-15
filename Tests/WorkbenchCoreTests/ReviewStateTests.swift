@@ -25,8 +25,8 @@ private struct Story {
         add(
             .checkRan, turn: n,
             [
-                "result": .string(result), "exit_code": exit.map { .int($0) } ?? .null,
-                "output_ref": .string("checks/turn-\(n).log"),
+                "command": "scripts/check.sh", "result": .string(result),
+                "exit_code": exit.map { .int($0) } ?? .null, "output_ref": .string("checks/turn-\(n).log"),
             ])
     }
 
@@ -34,6 +34,14 @@ private struct Story {
 }
 
 @Suite struct ReviewStateTests {
+    @Test func theCheckKeepsTheCommandItRan() {
+        var story = Story()
+        story.add(.threadCreated)
+        story.turn(1)
+        story.check(1)
+        #expect(story.state.review.check?.command == "scripts/check.sh")
+    }
+
     @Test func emptyLogIsEmpty() {
         #expect(ThreadState.derive(from: [], id: "t").review.status == .empty)
         var story = Story()
@@ -78,7 +86,8 @@ private struct Story {
         let review = story.state.review
         #expect(review.turnResult == "succeeded")
         #expect(review.check == Review.Check(
-                turn: 1, result: "failed", exitCode: 2, durationMs: nil, outputRef: "checks/turn-1.log"))
+                turn: 1, result: "failed", exitCode: 2, durationMs: nil, outputRef: "checks/turn-1.log",
+                command: "scripts/check.sh"))
         #expect(review.notes == [Review.Note(turn: 2, seq: 7, text: "fix the failing test")])
         #expect(review.deniedTools.map(\.tool) == ["Bash", "Bash", "Write"])
         #expect(review.deniedTools.map(\.turn) == [1, 1, 2])

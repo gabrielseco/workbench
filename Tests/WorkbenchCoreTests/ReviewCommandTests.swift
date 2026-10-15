@@ -273,14 +273,15 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
         var state = ThreadState.derive(from: [], id: "t")
         state.review.status = .awaitingReview
         state.lastTurn = 1
-        state.review.check = Review.Check(turn: 1, result: "passed", exitCode: 0, durationMs: 2000, outputRef: nil)
+        state.review.check = Review.Check(
+            turn: 1, result: "passed", exitCode: 0, durationMs: 2000, outputRef: nil, command: "scripts/check.sh")
         let report = ReviewReport(
             state: state, title: "T",
             criteria: [
                 Criterion(id: "c1", text: "Checks pass.", proof: "`scripts/check.sh` exits 0"),
                 Criterion(id: "c2", text: "Docs.", proof: "`git diff --stat` is empty"),
             ],
-            approval: "approved", goalProblem: nil, diff: .unavailable(reason: "x"), checkCommand: "scripts/check.sh")
+            approval: "approved", goalProblem: nil, diff: .unavailable(reason: "x"))
         let lines = report.render()
         let list = lines.firstIndex(of: "  [c2] ☐ Docs.")
         let summary = lines.firstIndex(of: "Criteria: 1 passed · 0 failed · 1 for you to check")

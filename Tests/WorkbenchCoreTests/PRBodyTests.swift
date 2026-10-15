@@ -18,7 +18,9 @@ private func goal(
 }
 
 private func check(_ result: String, exit: Int? = 0, ms: Int? = 12_000) -> Review.Check {
-    Review.Check(turn: 1, result: result, exitCode: exit, durationMs: ms, outputRef: "checks/turn-1.log")
+    Review.Check(
+        turn: 1, result: result, exitCode: exit, durationMs: ms, outputRef: "checks/turn-1.log",
+        command: "scripts/check.sh")
 }
 
 private let repoTemplate = """
@@ -250,7 +252,7 @@ private let repoTemplate = """
             Criterion(id: "c2", text: "Docs.", proof: "read the diff"),
         ])
         let body = PRBodyBuilder.build(
-            goal: g, check: check("passed"), template: nil, checkCommand: "scripts/check.sh", lastTurn: 1
+            goal: g, check: check("passed"), template: nil, lastTurn: 1
         ).body
         let list = body.range(of: "- [ ] Checks pass.")
         let table = body.range(of: "| c1 | ✔ passed |")
@@ -262,8 +264,7 @@ private let repoTemplate = """
 
     @Test func theTableIsInsideTheTemplatesTestingSection() {
         let body = PRBodyBuilder.build(
-            goal: goal(), check: check("passed"), template: repoTemplate, checkCommand: "scripts/check.sh",
-            lastTurn: 1
+            goal: goal(), check: check("passed"), template: repoTemplate, lastTurn: 1
         ).body
         let testing = body.range(of: "## Testing")
         let table = body.range(of: "| c1 | you check |")

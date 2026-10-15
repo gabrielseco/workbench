@@ -28,21 +28,17 @@ public struct CriterionStatus: Sendable, Equatable {
 
 public enum CriteriaStatus {
     /// - Parameters:
-    ///   - checkCommand: the config's `check_command`, nil when the project has none.
-    ///   - check: the latest completed check, nil when none ran.
+    ///   - check: the latest completed check, nil when none ran. Its recorded `command` is what a proof
+    ///     is matched against, so a config changed since the run cannot turn a result into someone else's.
     ///   - lastTurn: the newest turn; a check from an earlier turn says nothing about the current work.
-    public static func evaluate(
-        criteria: [Criterion], checkCommand: String?, check: Review.Check?, lastTurn: Int
-    ) -> [CriterionStatus] {
+    public static func evaluate(criteria: [Criterion], check: Review.Check?, lastTurn: Int) -> [CriterionStatus] {
         criteria.map { criterion in
             let spans = ProofCommands.spans(in: criterion.proof)
             var status = CriterionStatus(
                 id: criterion.id, state: .manual, commands: spans, note: nil, proof: criterion.proof)
-            guard let checkCommand, isTheCheck(proof: criterion.proof, spans: spans, command: checkCommand) else {
-                return status
-            }
-            guard let check else {
-                status.note = "the check has not run"
+            // Without a recorded check there is no command to match; the summary line says no check ran.
+            guard let check else { return status }
+            guard let ran = check.command, isTheCheck(proof: criterion.proof, spans: spans, command: ran) else {
                 return status
             }
             guard check.turn == lastTurn else {

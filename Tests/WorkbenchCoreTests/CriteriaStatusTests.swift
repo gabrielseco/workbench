@@ -7,15 +7,15 @@ private func crit(_ id: String, _ proof: String) -> Criterion {
     Criterion(id: id, text: "text of \(id)", proof: proof)
 }
 
-private func check(_ result: String, turn: Int = 1, exit: Int? = 0) -> Review.Check {
-    Review.Check(turn: turn, result: result, exitCode: exit, durationMs: 2000, outputRef: nil)
+private func check(
+    _ result: String, turn: Int = 1, exit: Int? = 0, command: String? = "npm run ci"
+) -> Review.Check {
+    Review.Check(turn: turn, result: result, exitCode: exit, durationMs: 2000, outputRef: nil, command: command)
 }
 
-private func eval(
-    _ proofs: [String], command: String? = "npm run ci", check: Review.Check? = nil, lastTurn: Int = 1
-) -> [CriterionStatus] {
+private func eval(_ proofs: [String], check: Review.Check? = nil, lastTurn: Int = 1) -> [CriterionStatus] {
     let criteria = proofs.enumerated().map { crit("c\($0.offset + 1)", $0.element) }
-    return CriteriaStatus.evaluate(criteria: criteria, checkCommand: command, check: check, lastTurn: lastTurn)
+    return CriteriaStatus.evaluate(criteria: criteria, check: check, lastTurn: lastTurn)
 }
 
 @Suite struct CriteriaStatusTests {
@@ -38,16 +38,21 @@ private func eval(
 
     @Test func noCheckOrAnOlderOneBacksNoVerdict() {
         let none = eval(["`npm run ci` passes"], check: nil)
-        #expect(none[0].state == .manual && none[0].note == "the check has not run")
+        #expect(none[0].state == .manual && none[0].note == nil)
         let older = eval(["`npm run ci` passes"], check: check("passed", turn: 1), lastTurn: 2)
         #expect(older[0].state == .manual && older[0].note?.contains("turn 1") == true)
         let timedOut = eval(["`npm run ci` passes"], check: check("timed_out", exit: nil))
         #expect(timedOut[0].state == .manual && timedOut[0].note == "the check ended timed out")
     }
 
-    @Test func noConfiguredCheckMeansEverythingIsForAPerson() {
-        let out = eval(["`npm run ci` passes"], command: nil, check: check("passed"))
-        #expect(out[0].state == .manual)
+    @Test func theVerdictIsBoundToTheCommandThatRanNotTheConfigNow() {
+        // The check that ran was `npm run lint`; a proof naming `npm run ci` was never proven by it.
+        let other = eval(["`npm run ci` passes"], check: check("passed", command: "npm run lint"))
+        #expect(other[0].state == .manual)
+        let same = eval(["`npm run lint` passes"], check: check("passed", command: "npm run lint"))
+        #expect(same[0].state == .passed)
+        let synthetic = eval(["`npm run ci` passes"], check: check("interrupted", exit: nil, command: nil))
+        #expect(synthetic[0].state == .manual)
     }
 
     @Test func aFreeTextProofHasNoCommandsAndTwoCommandsAreListed() {

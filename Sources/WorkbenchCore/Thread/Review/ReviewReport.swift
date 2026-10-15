@@ -17,13 +17,9 @@ public struct ReviewReport: Sendable, Equatable {
     /// Why the goal file could not be read; the criteria are then unknown, not empty.
     public var goalProblem: String?
     public var diff: Diff
-    /// The config's `check_command`; a criterion whose proof is exactly it takes its result from the check.
-    public var checkCommand: String?
-
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
-        CriteriaStatus.evaluate(
-            criteria: criteria, checkCommand: checkCommand, check: state.review.check, lastTurn: state.lastTurn)
+        CriteriaStatus.evaluate(criteria: criteria, check: state.review.check, lastTurn: state.lastTurn)
     }
 
     public var status: ReviewStatus { state.review.status }
@@ -189,7 +185,6 @@ public struct ReviewLoader: Sendable {
         var goalBase: String?
         var approval: String?
         var problem: String?
-        let checkCommand = (try? Config.load(from: project.configURL))?.checkCommand
         do {
             let goal = try GoalFile.parse(try String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
             title = goal.title
@@ -207,7 +202,7 @@ public struct ReviewLoader: Sendable {
         }
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
-            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored), checkCommand: checkCommand)
+            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored))
     }
 
     /// One file's patch, by its path in the diff.
