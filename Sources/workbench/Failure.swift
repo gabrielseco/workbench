@@ -78,7 +78,7 @@ extension ShipError {
             .pushTargetMissing, .noPullRequest:
             .refused
         case .invalidName: .usage
-        case .remoteUnreachable, .gitFailed, .ghFailed: .failed
+        case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind: .failed
         }
     }
 }

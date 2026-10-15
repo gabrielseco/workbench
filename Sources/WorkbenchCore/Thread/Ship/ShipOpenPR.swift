@@ -44,6 +44,10 @@ extension ThreadService {
         let outcome: ShipPRResult.Outcome
         let pr: FoundPR
         if let found {
+            // Recording a head that is not ours would make cleanup refuse this thread for good.
+            if plan.updatesExistingBranch, let theirs = found.head, theirs != plan.head {
+                throw ShipError.pullRequestBehind(pr: theirs)
+            }
             outcome = .existing
             pr = found
         } else {

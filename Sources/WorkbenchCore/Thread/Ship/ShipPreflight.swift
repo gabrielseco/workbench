@@ -26,6 +26,7 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case pushTargetMissing(String)
     case branchMoved(branch: String, sha: String)
     case noPullRequest(String)
+    case pullRequestBehind(pr: String)
 
     public var description: String {
         switch self {
@@ -76,6 +77,9 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .noPullRequest(let branch):
             "origin has \(branch) but no open pull request uses it, and shipping a thread that continues a branch "
                 + "never opens one. Nothing was recorded."
+        case .pullRequestBehind(let pr):
+            "GitHub still shows the pull request at \(pr.prefix(12)), not at the commit that was pushed, so it was not "
+                + "recorded. Run `workbench ship` again in a moment; nothing is pushed twice."
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }

@@ -92,6 +92,30 @@ private func runShip(_ arguments: [String], fx: RunnerFixture, gh: FakeGH) async
         #expect(opened.data["url"]?.stringValue == "https://github.com/o/r/pull/12")
     }
 
+    @Test func aPullRequestStillShowingAnOlderHeadIsNotRecordedAndTheRetryWorks() async throws {
+        let fx = try await RunnerFixture()
+        let thread = try await acceptedUpdateThread(fx)
+        let gh = try FakeGH(in: fx)
+        let head = try await shipOut(["rev-parse", "HEAD"], thread.worktree, fx)
+        let stale = String(repeating: "b", count: 40)
+        try openPR(gh, head: stale)
+
+        _ = try await fx.service.shipPush(id: thread.id, gh: gh.runner)
+        do {
+            _ = try await fx.service.shipOpenPR(id: thread.id, gh: gh.runner)
+            Issue.record("expected a refusal")
+        } catch let error as ShipError {
+            #expect(error == .pullRequestBehind(pr: stale))
+        }
+        #expect(!(try fx.kinds(thread.id)).contains("pr.opened"))
+
+        try openPR(gh, head: head)
+        let result = try await fx.service.shipOpenPR(id: thread.id, gh: gh.runner)
+        #expect(result.outcome == .existing)
+        #expect(try fx.events(thread.id).last { $0.kind == .prOpened }?.data["head_sha"]?.stringValue == head)
+        #expect(await fx.service.cleanShipped(id: thread.id, gh: gh.runner) == .removed(path: thread.worktree.path))
+    }
+
     @Test func withoutAnOpenPullRequestNothingIsPushedCreatedOrRecorded() async throws {
         let fx = try await RunnerFixture()
         let thread = try await acceptedUpdateThread(fx)
