@@ -172,7 +172,7 @@ public enum PRBodyBuilder {
 
     /// Tracks a fenced code block: up to three spaces of indent, three or more backticks or tildes, and a
     /// closing fence of the same character that is at least as long and carries nothing else.
-    private static func nextFence(after open: (char: Character, length: Int)?, line: String)
+    static func nextFence(after open: (char: Character, length: Int)?, line: String)
         -> (char: Character, length: Int)? {
         let indent = line.prefix { $0 == " " }.count
         guard indent <= 3 else { return open }
@@ -191,7 +191,7 @@ public enum PRBodyBuilder {
     }
 
     /// Lower-cased heading text for an ATX heading (`## Summary`), nil when the line is not one.
-    private static func headingName(_ line: String) -> String? {
+    static func headingName(_ line: String) -> String? {
         let hashes = line.prefix { $0 == "#" }
         guard (1...6).contains(hashes.count) else { return nil }
         let rest = line.dropFirst(hashes.count)

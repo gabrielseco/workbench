@@ -76,12 +76,14 @@ extension ThreadService {
         var base: String?
         /// The PR's own head commit, when `gh` reported one.
         var head: String?
+        /// The PR's current text, when `gh` reported it.
+        var text: PRText?
     }
 
     func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
         let args = [
             "pr", "list", "--head", branch, "--state", "open", "--limit", "10",
-            "--json", "number,url,headRefName,baseRefName,headRefOid",
+            "--json", "number,url,headRefName,baseRefName,headRefOid,title,body",
         ]
         let result = try await ghRun(args, runner: runner, worktree: worktree)
         guard result.succeeded else { throw ShipError.ghFailed(Self.shown(result, environment: runner.environment)) }
@@ -98,7 +100,10 @@ extension ThreadService {
             let head = (item["headRefOid"] as? String).flatMap {
                 $0.range(of: "^[0-9a-f]{40,64}$", options: .regularExpression) != nil ? $0 : nil
             }
-            return FoundPR(url: parsed.url, number: parsed.number, base: base, head: head)
+            let text = (item["title"] as? String).flatMap { title in
+                (item["body"] as? String).map { PRText(title: title, body: $0) }
+            }
+            return FoundPR(url: parsed.url, number: parsed.number, base: base, head: head, text: text)
         }
         return nil
     }
@@ -163,7 +168,7 @@ extension ThreadService {
         guard let parsed = Self.pullRequest(from: last) else {
             throw ShipError.ghFailed("`gh` printed no pull request URL, so it was not recorded")
         }
-        return FoundPR(url: parsed.url, number: parsed.number, base: nil, head: nil)
+        return FoundPR(url: parsed.url, number: parsed.number, base: nil, head: nil, text: nil)
     }
 
     private func ghRun(_ args: [String], runner: GitRunner, worktree: URL) async throws -> GitResult {
