@@ -3,13 +3,13 @@ import Testing
 
 @testable import WorkbenchCore
 
-private struct UpdateThread {
+struct UpdateThread {
     var id: String
     var worktree: URL
     var bare: URL
 }
 
-private func acceptedUpdateThread(_ fx: RunnerFixture) async throws -> UpdateThread {
+func acceptedUpdateThread(_ fx: RunnerFixture) async throws -> UpdateThread {
     let bare = try await originWithBranch(fx)
     let id = try await approvedUpdateThread(fx)
     _ = try await fx.runner(id).run(fx.options())
@@ -19,7 +19,7 @@ private func acceptedUpdateThread(_ fx: RunnerFixture) async throws -> UpdateThr
     return UpdateThread(id: id, worktree: worktree, bare: bare)
 }
 
-private func openPR(_ gh: FakeGH, branch: String = "feature/pr", head: String = String(repeating: "a", count: 40)) throws {
+func openPR(_ gh: FakeGH, branch: String = "feature/pr", head: String = String(repeating: "a", count: 40)) throws {
     try gh.put(
         "list",
         """
@@ -31,11 +31,14 @@ private func remoteRef(_ bare: URL, _ ref: String, _ fx: RunnerFixture) async th
     try await shipOut(["rev-parse", "-q", "--verify", ref], bare, fx)
 }
 
-private func runShip(_ arguments: [String], fx: RunnerFixture, gh: FakeGH) async throws -> (code: Int32?, text: String) {
-    let environment = [
+func runShip(
+    _ arguments: [String], fx: RunnerFixture, gh: FakeGH, extraEnvironment: [String: String] = [:]
+) async throws -> (code: Int32?, text: String) {
+    var environment = [
         "PATH": "\(gh.dir.path):/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName(),
         "GH_FAKE_DIR": gh.dir.path,
     ]
+    for (key, value) in extraEnvironment { environment[key] = value }
     var spawn = SpawnRequest(
         executable: WorkbenchBinary.executable, arguments: ["ship"] + arguments, environment: environment,
         workingDirectory: fx.repo, timeout: 120)

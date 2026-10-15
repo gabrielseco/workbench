@@ -2,7 +2,7 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `ship [id] [--yes] [--no-describe]`: push the accepted thread's branch and open its pull request. The
+    /// `ship [id] [--yes] [--no-describe] [--refresh-description]`: push the accepted thread's branch and open its pull request. The
     /// title and description are written by a read-only Claude turn from the goal, the diff and the check;
     /// `--no-describe` (or a failed turn) uses the goal-based body. Asks first, because it publishes, and
     /// shows what it will publish; running it again after any failure resumes where it stopped.
@@ -12,6 +12,7 @@ extension Commands {
         let watch = a.flag("--watch", "-w")
         let keepWorktree = a.flag("--keep-worktree")
         let noDescribe = a.flag("--no-describe")
+        let refreshText = a.flag("--refresh-description")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
         let named = a.positional()
@@ -70,6 +71,8 @@ extension Commands {
                 out("no readable .workbench/config.toml; using the goal-based description")
             }
         }
+        var refresh: PRRefreshProposal?
+        if plan.updatesExistingBranch && !noDescribe { refresh = try await proposeRefresh(plan: plan, ctx: ctx) }
         if !plan.updatesExistingBranch {
             do {
                 let preview = try await ctx.service.prBody(
@@ -95,14 +98,27 @@ extension Commands {
             throw CLIError.refused("not shipping: there is no terminal to ask on. Pass --yes to confirm.")
         }
 
+        let applyRefresh = refresh != nil && askRefresh(yes: yes, flag: refreshText, interactive: interactive)
+        if refresh != nil && !applyRefresh {
+            out("the pull request text is left as is\(yes ? "; pass --refresh-description to update it" : "")")
+        }
+
         do {
             let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
             let pushedName = plan.updatesExistingBranch ? plan.remoteBranch : plan.branch
             out(pushed.outcome == .pushed ? "pushed \(pushedName)" : "origin already has \(pushedName)")
             let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan, description: description)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
+            var refreshFailure: ShipError?
+            if applyRefresh, let refresh {
+                do {
+                    try await ctx.service.applyPRRefresh(id: id, plan: plan, proposal: refresh, gh: gh)
+                    out("updated the pull request title and description")
+                } catch let error as ShipError { refreshFailure = error }
+            }
             if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
+            if let refreshFailure { return refuse(refreshFailure) }
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)

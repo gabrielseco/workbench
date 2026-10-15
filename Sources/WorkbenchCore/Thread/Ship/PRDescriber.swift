@@ -136,7 +136,7 @@ public enum PRDescriber {
     }
 
     /// The outermost JSON object in `text`; models sometimes wrap it in a fence or a sentence.
-    private static func object(from text: String) -> [String: Any]? {
+    static func object(from text: String) -> [String: Any]? {
         guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else { return nil }
         let slice = String(text[start...end])
         return (try? JSONSerialization.jsonObject(with: Data(slice.utf8))) as? [String: Any]

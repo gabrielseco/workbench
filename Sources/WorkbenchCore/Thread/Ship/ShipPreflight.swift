@@ -27,6 +27,8 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case branchMoved(branch: String, sha: String)
     case noPullRequest(String)
     case pullRequestBehind(pr: String)
+    case pullRequestTextChanged
+    case ghEditFailed(String)
 
     public var description: String {
         switch self {
@@ -80,6 +82,12 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .pullRequestBehind(let pr):
             "GitHub still shows the pull request at \(pr.prefix(12)), not at the commit that was pushed, so it was not "
                 + "recorded. Run `workbench ship` again in a moment; nothing is pushed twice."
+        case .pullRequestTextChanged:
+            "the pull request's title or description changed after the proposed update was made from it, so "
+                + "nothing was edited. Run `workbench ship` again to see a new proposal."
+        case .ghEditFailed(let why):
+            "`gh` could not update the pull request text: \(why) The branch was pushed and the pull request is "
+                + "recorded; edit its title and description by hand."
         case .pushRejected(let why):
             "origin did not accept the push, so nothing was shipped and the thread is still accepted: \(why)"
         }
@@ -108,6 +116,16 @@ public struct ShipPlan: Sendable, Equatable {
     /// The URL of `origin` with any credentials removed, safe to print and to record.
     public var origin: String
     public var remote: Remote
+    /// The open pull request a thread that continues a branch will update; nil for any other thread.
+    public var pullRequest: ExistingPR?
+
+    /// An open pull request as `gh` reported it.
+    public struct ExistingPR: Sendable, Equatable {
+        public var number: Int
+        public var url: String
+        /// Nil when `gh` did not return the text.
+        public var text: PRText?
+    }
 
     /// True when the thread continues an existing branch, so ship pushes to it and records its open pull
     /// request instead of creating a new branch and a new pull request.
@@ -192,18 +210,20 @@ extension ThreadService {
 
         let remote = try await remoteState(
             branch: remoteBranch, head: head, worktree: worktree, updating: pushTo != nil)
+        var pullRequest: ShipPlan.ExistingPR?
         if pushTo != nil {
             // Before any push: a branch without an open pull request is refused with nothing changed.
             var environment = gh.environment
             environment["GH_REPO"] = nil
             let reader = GitRunner(executable: gh.executable, environment: environment, timeout: Self.prTimeout)
-            if try await existingPR(branch: remoteBranch, runner: reader, worktree: worktree) == nil {
+            guard let found = try await existingPR(branch: remoteBranch, runner: reader, worktree: worktree) else {
                 throw ShipError.noPullRequest(remoteBranch)
             }
+            pullRequest = ShipPlan.ExistingPR(number: found.number, url: found.url, text: found.text)
         }
         return ShipPlan(
             id: id, worktree: worktree, branch: branch, remoteBranch: remoteBranch, base: base, head: head,
-            origin: origin, remote: remote)
+            origin: origin, remote: remote, pullRequest: pullRequest)
     }
 
     /// Reads `origin`'s copy of the branch. No fetch: a commit that is not in this repository cannot be an

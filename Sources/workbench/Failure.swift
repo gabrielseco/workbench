@@ -75,10 +75,10 @@ extension ShipError {
         case .pushRejected, .remoteDiverged, .branchMoved: .pushRejected
         case .running, .worktreeMissing, .wrongBranch, .uncommitted, .noOrigin, .ghMissing, .ghNotAuthenticated,
             .notPushed, .changedSinceShown, .changedAfterPush, .goalUnreadable, .pushDestinationDiffers, .notShipped,
-            .pushTargetMissing, .noPullRequest:
+            .pushTargetMissing, .noPullRequest, .pullRequestTextChanged:
             .refused
         case .invalidName: .usage
-        case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind: .failed
+        case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind, .ghEditFailed: .failed
         }
     }
 }

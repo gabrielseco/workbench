@@ -33,6 +33,15 @@ struct FakeGH {
               if grep -q '"fail"' "$f"; then exit 1; fi
               exit 0 ;;
             "pr list") if [ -f "$d/list" ]; then cat "$d/list"; else echo '[]'; fi; exit 0 ;;
+            "pr edit")
+              prev=""
+              for a in "$@"; do
+                if [ "$prev" = "--body-file" ]; then cp "$a" "$d/edit_body"; fi
+                case "$a" in --title=*) echo "${a#--title=}" > "$d/edit_title" ;; esac
+                prev="$a"
+              done
+              if [ -f "$d/edit_fail" ]; then cat "$d/edit_fail" >&2; exit 1; fi
+              exit 0 ;;
             "pr create")
               prev=""
               for a in "$@"; do
