@@ -20,6 +20,7 @@ Take current changes to open, reviewed PR(s). **Never merge** — stop once PRs 
 ### 3. Commit
 - Stage everything (or only files the user named) — never `git add` unrelated leftovers; check `git status` first.
 - Conventional commit (`type(scope): subject`, imperative, ≤72 chars; see "Commits and PR titles" in `AGENTS.md`), body if needed, HEREDOC, plus the Co-Authored-By / attribution footer your agent's guidance asks for, if any.
+- Before pushing, check the diff as `AGENTS.md` ("Shipping a change", step 2) says: `swiftlint lint --quiet` on the changed `.swift` files and `swift test --filter` on the suites that cover them. Not `scripts/check.sh`; CI runs that.
 - Never force push or skip hooks.
 
 ### 4. Push and open the PR
@@ -34,7 +35,7 @@ Take current changes to open, reviewed PR(s). **Never merge** — stop once PRs 
 
 ### 6. CI checks
 - Watch CI to completion: `gh pr checks <n> --watch`. Do this after step 5's fixes are pushed, so it reflects the final state, not a run that's about to be superseded.
-- Any red check tied to this change (lint, type-check, tests, build) → pull the failure log (`gh run view <run-id> --log-failed`, from the check's URL), fix it, verify locally with the relevant command (`scripts/check.sh`), commit, push, and re-watch.
+- Any red check tied to this change (lint, type-check, tests, build) → pull the failure log (`gh run view <run-id> --log-failed`, from the check's URL), fix it, verify locally the same way as step 3 (swiftlint on the changed files, `swift test --filter` on the failing suite; never `scripts/check.sh`), commit, push, and re-watch.
 - Repeat until green or until a failure isn't yours to fix (flaky infra job, unrelated pre-existing failure on `main`, something needing the user's input) — then stop looping and report it clearly instead of spinning.
 - Don't treat a merely slow/pending deploy-preview job as a failure; only act on checks that actually finished red.
 

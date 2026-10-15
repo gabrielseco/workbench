@@ -7,12 +7,13 @@ description: Review a GitHub pull request on the Workbench repo against its actu
 
 Diff-scoped review as a senior engineer on this codebase would do it. Scale depth to the diff: a docs fix
 gets a quick pass, anything touching `Process/`, `EventLog/`, `Git/`, `Worktree/` or `Thread/` gets the
-full list. Don't re-flag what `scripts/check.sh` already enforces; flag only a suppression of it.
+full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag only a suppression of it.
 
 ## Step 1 — Load context
 - `gh pr view <n> --json number,title,body,headRefName,baseRefName,statusCheckRollup`, `gh pr diff <n>`,
   `gh pr checks <n>`. If CI failed, report why first. If it has not run and the branch is checked out,
-  run `scripts/check.sh`.
+  run `swiftlint lint --quiet` on the changed files and `swift test --filter` on their suites (`AGENTS.md`,
+  "Shipping a change" step 2); the full `scripts/check.sh` is CI's.
 - Read each changed file in full, not just hunks: whether an error path still writes its end record is
   invisible in a diff. Read `AGENTS.md`, and for the phase in question its plan under `docs/plan/` and
   the spec under `docs/spec/`.

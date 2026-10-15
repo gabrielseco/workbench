@@ -32,10 +32,17 @@ Every code change ends in a PR, via the `deliver` skill or by hand. One PR per t
 list the tasks.
 
 1. Branch from `origin/main`. Work in a git worktree, not in a checkout someone else is using.
-2. Before pushing, run the tests for what you touched (`swift test --filter <suite>`) and
-   `swiftlint lint --quiet`; CI runs the full `scripts/check.sh` and the soak, so don't repeat them locally
-   unless you changed something that crosses areas. Add tests for what you add, including the failure cases
-   the phase plan lists.
+2. Before pushing, check the diff and nothing else, the same way every time:
+   ```bash
+   files=$(git diff --name-only origin/main...HEAD)          # what this branch changes
+   swiftlint lint --quiet $(echo "$files" | grep '\.swift$')  # lint the changed Swift files
+   swift test --filter "<suite>|<suite>"                     # the suites for those files
+   ```
+   The suites are the test files that cover the changed files: a changed `Sources/…/Foo.swift` maps to the
+   `Tests/…/Foo*Tests.swift` that names it (`grep -l Foo Tests/WorkbenchCoreTests/*.swift` when the name does
+   not match), and a changed test file is its own suite. Docs-only changes need neither. Do not run
+   `scripts/check.sh` or the soak locally: CI runs them. Add tests for what you add, including the failure
+   cases the phase plan lists.
 3. Commit messages and the PR title follow Conventional Commits (below).
 4. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
