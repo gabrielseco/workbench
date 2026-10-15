@@ -7,16 +7,23 @@ public struct PRBody: Sendable, Equatable {
 }
 
 /// Builds a PR title and body from the goal and the latest check outcome. Pure: no git, no files, no log.
-/// The text comes from the approved goal, never from what Claude wrote afterwards, and the check is shown
-/// as pass or fail only, so its output (which may hold paths or secrets) cannot reach a page others read.
+/// Without a `description` the text comes from the approved goal alone. With one (the describing turn's
+/// words, see `PRDescriber`) its title and summary replace the goal's request, but the criteria table and
+/// the check line are still derived here from the real check, never taken from the model. The check is
+/// shown as pass or fail only, so its output (which may hold paths or secrets) cannot reach a page others
+/// read.
 public enum PRBodyBuilder {
     public static let titleLimit = 72
 
     /// - Parameters:
     ///   - template: the repository's PR template text, nil when it has none.
     ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
-    public static func build(goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil) -> PRBody {
-        let request = scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
+    public static func build(
+        goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil, description: PRDescription? = nil
+    ) -> PRBody {
+        let request =
+            description.map { described($0) }
+            ?? scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
         let checkLine = checkLine(check)
         var criteria = criteriaList(goal.criteria)
         if !goal.criteria.isEmpty {
@@ -38,7 +45,23 @@ public enum PRBodyBuilder {
             body = sections.joined(separator: "\n\n")
         }
         // The template is the repository's text, which can carry paths too.
-        return PRBody(title: title(goal.title), body: scrub(body) + "\n")
+        return PRBody(title: title(description?.title ?? goal.title), body: scrub(body) + "\n")
+    }
+
+    /// The model's summary, then what a reviewer should look at.
+    static func described(_ description: PRDescription) -> String {
+        var parts = [scrub(description.summary).trimmingCharacters(in: .whitespacesAndNewlines)]
+        if !description.decisions.isEmpty {
+            parts.append("### Decisions to review\n\n" + bullets(description.decisions))
+        }
+        if !description.deviations.isEmpty {
+            parts.append("### Differences from the goal\n\n" + bullets(description.deviations))
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    private static func bullets(_ items: [String]) -> String {
+        items.map { "- " + oneLine(scrub($0)) }.joined(separator: "\n")
     }
 
     // MARK: Title

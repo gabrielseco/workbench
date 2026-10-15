@@ -14,9 +14,12 @@ private struct Shipped {
     var text: String { (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n") }
 }
 
-private func ship(_ arguments: [String], fx: RunnerFixture, gh: FakeGH?, withGH: Bool = true) async throws -> Shipped {
+private func ship(
+    _ arguments: [String], fx: RunnerFixture, gh: FakeGH?, withGH: Bool = true, extraEnvironment: [String: String] = [:]
+) async throws -> Shipped {
     let path = (withGH && gh != nil ? "\(gh!.dir.path):" : "") + "/usr/bin:/bin"
     var environment = ["PATH": path, "HOME": NSHomeDirectory(), "USER": NSUserName()]
+    for (key, value) in extraEnvironment { environment[key] = value }
     if let gh { environment["GH_FAKE_DIR"] = gh.dir.path }
     var spawn = SpawnRequest(
         executable: WorkbenchBinary.executable, arguments: ["ship"] + arguments, environment: environment,
@@ -54,6 +57,71 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(again.code == 11, "\(again.text)")
         #expect(again.lines.last == "https://github.com/o/r/pull/12")
         #expect(gh.count("pr create") == 1)
+    }
+
+    @Test func theDescriptionIsShownBeforeShippingAndUsedForThePR() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        let answer = fx.repo.deletingLastPathComponent().appendingPathComponent("answer-\(UUID().uuidString).json")
+        try #"{"title": "feat(a): add hello", "summary": "Adds a greeting to a.txt.", "decisions": ["One file."]}"#
+            .write(to: answer, atomically: true, encoding: .utf8)
+
+        let result = try await ship(
+            ["--yes"], fx: fx, gh: gh, extraEnvironment: ["FAKE_CLAUDE": "answer=\(answer.path)"])
+        #expect(result.code == 0, "\(result.text)")
+        #expect(result.text.contains("title:   feat(a): add hello"))
+        let shownAt = try #require(result.lines.firstIndex { $0.contains("Adds a greeting to a.txt.") })
+        let openedAt = try #require(result.lines.firstIndex { $0 == "opened the pull request" })
+        #expect(shownAt < openedAt)
+        let create = try #require(gh.calls.first { $0.hasPrefix("pr create") })
+        #expect(create.contains("--title=feat(a): add hello"))
+        #expect(try #require(gh.read("body")).contains("### Decisions to review"))
+        let described = try fx.events(id).filter { $0.kind == .prDescribed }
+        #expect(described.count == 1 && described[0].data["ok"] == true)
+    }
+
+    @Test func aFailedDescriptionFallsBackToTheGoalBodyAndStillShips() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+
+        // The stand-in answers with prose, not the JSON object.
+        let result = try await ship(["--yes"], fx: fx, gh: gh)
+        #expect(result.code == 0, "\(result.text)")
+        #expect(result.text.contains("could not describe the change"))
+        let create = try #require(gh.calls.first { $0.hasPrefix("pr create") })
+        #expect(create.contains("--title=work"))
+        let described = try fx.events(id).filter { $0.kind == .prDescribed }
+        #expect(described.count == 1 && described[0].data["ok"] == false)
+    }
+
+    @Test func noDescribeSkipsTheTurnEntirely() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+
+        let result = try await ship(["--yes", "--no-describe"], fx: fx, gh: gh)
+        #expect(result.code == 0, "\(result.text)")
+        #expect(!result.text.contains("describing") && !result.text.contains("could not describe"))
+        #expect(try fx.events(id).filter { $0.kind == .prDescribed }.isEmpty)
+        #expect(gh.count("pr create") == 1)
+    }
+
+    @Test func anAlreadyShippedThreadIsNotDescribedAgain() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        _ = try await ship(["--yes"], fx: fx, gh: gh)
+        let before = try fx.events(id).filter { $0.kind == .prDescribed }.count
+
+        let again = try await ship(["--yes", id], fx: fx, gh: gh)
+        #expect(again.code == 11, "\(again.text)")
+        #expect(try fx.events(id).filter { $0.kind == .prDescribed }.count == before)
     }
 
     @Test func withoutATerminalOrYesItShowsThePlanAndPushesNothing() async throws {
