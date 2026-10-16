@@ -10,8 +10,11 @@ public enum ShipCleanup: Sendable, Equatable {
 
 extension ThreadService {
     /// Removes a shipped thread's worktree when nothing could be lost: it is on `workbench/<id>`, clean
-    /// (ignored files count), at the commit `pr.opened` recorded, that commit is what `origin` has, and no
+    /// (nothing uncommitted), at the commit `pr.opened` recorded, that commit is what `origin` has, and no
     /// run is active. Never forces. The branch is kept. Records `worktree.removed` and nothing else.
+    ///
+    /// "Clean" means no change git would report: an ignored file does not keep it, since a worktree Workbench made
+    /// holds only what its setup, check, verify step or run produced. The event names what was ignored in it.
     ///
     /// `requireOrigin: false` is for a pull request that is already merged or closed: origin has usually
     /// dropped the branch by then, and the caller has checked the PR's head is the shipped commit.
@@ -58,14 +61,13 @@ extension ThreadService {
             guard let result = try? await git.run(args, in: worktree), result.succeeded else { return nil }
             return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        /// Ignored files do not count: git already knows what the repository ignores, and a worktree Workbench
+        /// made holds only what a setup, check, verify step or run produced there. Anything not ignored does.
         func untidy() async -> String? {
-            guard let status = await read(["status", "--porcelain", "--ignored", "--untracked-files=all"]) else {
+            guard let status = await read(["status", "--porcelain", "--untracked-files=all"]) else {
                 return "git could not read its state"
             }
-            let disposable = (try? Config.load(from: project.configURL))?.disposablePaths ?? []
-            let blocking = Self.blockingStatus(status, disposable: disposable)
-            guard let first = blocking.first else { return nil }
-            return "it has files that are not committed or are ignored (\(first)); nothing was removed"
+            return Self.statusProblem(status)
         }
         // The slow, networked question first; everything about the worktree is looked at after it, so that
         // what is removed is what was just inspected.
@@ -89,37 +91,41 @@ extension ThreadService {
         if let why = await untidy() { return .kept(why) }
 
         if dryRun { return .removed(path: worktree.path) }
+        let ignored = await ignoredEntries(in: worktree)
         do {
             try await manager.remove(threadID: id, force: false)
         } catch {
             return .kept("git would not remove it: \(Self.withoutCredentials("\(error)"))")
         }
-        do { try await recordRemoval(id: id, head: head, swept: swept) } catch {
+        do { try await recordRemoval(id: id, head: head, swept: swept, ignored: ignored) } catch {
             return .kept("the worktree is removed but the log could not be written (\(error)); run ship again to record it")
         }
         return .removed(path: worktree.path)
     }
 
-    /// The lines of `git status --porcelain --ignored` that stop a worktree being removed: everything except an
-    /// ignored path (`!!`) that is, or is inside, one of the config's `disposable_paths`.
-    ///
-    /// Status that reached the runner's output limit may have lost its tail, where an ignored file outside the
-    /// list could be, so it blocks: nothing is deleted on a listing that might be incomplete.
-    static func blockingStatus(_ status: String, disposable: [String]) -> [String] {
+    /// Why a `git status --porcelain` listing keeps the worktree, nil when it is empty. A listing that reached
+    /// the runner's output limit may have lost its tail, so it blocks too.
+    static func statusProblem(_ status: String) -> String? {
+        guard !status.isEmpty else { return nil }
         if status.utf8.count >= GitRunner.outputLimit - 4 {
-            return ["!! (the status is too long to check, so it may hide a file that is not disposable)"]
+            return "its status is too long to check in full; nothing was removed"
         }
-        return status.split(separator: "\n").map(String.init).filter { line in
-            guard line.hasPrefix("!! ") else { return true }
-            var path = String(line.dropFirst(3))
-            if path.hasSuffix("/") { path.removeLast() }
-            if path.hasPrefix("\"") { return true }  // quoted: an unusual name is not assumed disposable
-            return !disposable.contains { path == $0 || path.hasPrefix($0 + "/") }
-        }
+        let first = status.split(separator: "\n").first.map(String.init) ?? ""
+        return "it has files that are not committed (\(first)); nothing was removed"
+    }
+
+    /// The ignored entries in the worktree, one per top-level path, for the record of what removing it deletes.
+    /// At most `limit`; the count says how many more.
+    func ignoredEntries(in worktree: URL, limit: Int = 20) async -> (names: [String], more: Int) {
+        let result = try? await git.run(["status", "--porcelain", "--ignored"], in: worktree)
+        let lines = (result?.stdout ?? "").split(separator: "\n").map(String.init).filter { $0.hasPrefix("!! ") }
+        return (lines.prefix(limit).map { String($0.dropFirst(3)) }, max(0, lines.count - limit))
     }
 
     /// Appends `worktree.removed` unless another run already did: the log is read again under its lock.
-    private func recordRemoval(id: String, head: String, swept: [Int32]) async throws {
+    private func recordRemoval(
+        id: String, head: String, swept: [Int32], ignored: (names: [String], more: Int) = ([], 0)
+    ) async throws {
         try await withLog(id) { log in
             if !swept.isEmpty {
                 _ = try await log.append(
@@ -127,7 +133,10 @@ extension ThreadService {
             }
             let now = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
             guard !now.contains(where: { $0.kind == .worktreeRemoved }) else { return }
-            try await log.append(.worktreeRemoved, data: ["reason": "shipped", "head_sha": .string(head)])
+            var data: [String: JSONValue] = ["reason": "shipped", "head_sha": .string(head)]
+            if !ignored.names.isEmpty { data["ignored"] = .array(ignored.names.map { .string($0) }) }
+            if ignored.more > 0 { data["ignored_more"] = .int(ignored.more) }
+            try await log.append(.worktreeRemoved, data: .object(data))
         }
     }
 

@@ -81,16 +81,10 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
             #expect(!(try fx.events(id).contains { $0.kind == .worktreeRemoved }), Comment(rawValue: label))
         }
 
-        // An untracked file, then an ignored one.
+        // An untracked file.
         try "x".write(to: worktree.appendingPathComponent("loose.txt"), atomically: true, encoding: .utf8)
         try await kept("untracked")
         try FileManager.default.removeItem(at: worktree.appendingPathComponent("loose.txt"))
-        let exclude = try await shipOut(["rev-parse", "--git-path", "info/exclude"], worktree, fx)
-        let excludeURL = exclude.hasPrefix("/") ? URL(fileURLWithPath: exclude) : worktree.appendingPathComponent(exclude)
-        try "*.cache\n".write(to: excludeURL, atomically: true, encoding: .utf8)
-        try "x".write(to: worktree.appendingPathComponent("a.cache"), atomically: true, encoding: .utf8)
-        try await kept("ignored")
-        try FileManager.default.removeItem(at: worktree.appendingPathComponent("a.cache"))
 
         // Newer work than what was shipped.
         try "more\n".write(to: worktree.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
@@ -274,5 +268,67 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         #expect(later.code == 11, Comment(rawValue: later.text))
         #expect(later.text.contains("removed the worktree"))
         #expect(!FileManager.default.fileExists(atPath: worktree.path))
+    }
+}
+
+@Suite struct IgnoredFilesTests {
+    private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> (id: String, worktree: URL) {
+        let (id, worktree) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        return (id, worktree)
+    }
+
+    private func ignore(_ patterns: String, in worktree: URL, _ fx: RunnerFixture) async throws {
+        let exclude = try await shipOut(["rev-parse", "--git-path", "info/exclude"], worktree, fx)
+        let url = exclude.hasPrefix("/") ? URL(fileURLWithPath: exclude) : worktree.appendingPathComponent(exclude)
+        try patterns.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @Test func ignoredFilesDoNotKeepAWorktreeAndTheEventNamesThem() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, worktree) = try await shipped(fx, gh)
+        try await ignore("node_modules/\n*.cache\n", in: worktree, fx)
+        let fm = FileManager.default
+        try fm.createDirectory(at: worktree.appendingPathComponent("node_modules/pkg"), withIntermediateDirectories: true)
+        try "x".write(to: worktree.appendingPathComponent("node_modules/pkg/i.js"), atomically: true, encoding: .utf8)
+        try "x".write(to: worktree.appendingPathComponent("a.cache"), atomically: true, encoding: .utf8)
+
+        #expect(await fx.service.cleanShipped(id: id, gh: gh.runner, dryRun: true) == .removed(path: worktree.path))
+        #expect(await fx.service.cleanShipped(id: id, gh: gh.runner) == .removed(path: worktree.path))
+        #expect(!fm.fileExists(atPath: worktree.path))
+        let event = try #require(try fx.events(id).last { $0.kind == .worktreeRemoved })
+        guard case .array(let listed)? = event.data["ignored"] else {
+            Issue.record("the event names what was ignored")
+            return
+        }
+        #expect(Set(listed.compactMap(\.stringValue)) == ["a.cache", "node_modules/"])
+        #expect(event.data["ignored_more"] == nil)
+    }
+
+    @Test func anUntrackedFileBesideIgnoredOnesStillKeepsTheWorktree() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, worktree) = try await shipped(fx, gh)
+        try await ignore("node_modules/\n", in: worktree, fx)
+        try FileManager.default.createDirectory(
+            at: worktree.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        try "x".write(to: worktree.appendingPathComponent("node_modules/i.js"), atomically: true, encoding: .utf8)
+        try "mine".write(to: worktree.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+        guard case .kept(let why) = await fx.service.cleanShipped(id: id, gh: gh.runner) else {
+            Issue.record("an untracked file must keep the worktree")
+            return
+        }
+        #expect(why.contains("notes.txt"))
+    }
+
+    @Test func aStatusThatMayHaveBeenCutShortBlocksRemoval() {
+        let line = "?? some/deep/path/file.js\n"
+        let long = String(repeating: line, count: GitRunner.outputLimit / line.utf8.count + 1)
+        #expect(ThreadService.statusProblem(long)?.contains("too long") == true)
+        #expect(ThreadService.statusProblem(line)?.contains("some/deep/path/file.js") == true)
+        #expect(ThreadService.statusProblem("") == nil)
     }
 }
