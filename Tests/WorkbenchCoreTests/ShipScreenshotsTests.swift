@@ -8,7 +8,7 @@ private struct FakeShots {
     let dir: URL
     let runner: GitRunner
 
-    init(in fx: RunnerFixture, failing: Bool = false, badPath: Bool = false) throws {
+    init(in fx: RunnerFixture, failing: Bool = false, badPath: Bool = false, ghRepo: String? = nil) throws {
         dir = fx.repo.deletingLastPathComponent().appendingPathComponent("shots-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("out"), withIntermediateDirectories: true)
         let script = dir.appendingPathComponent("pr-shots")
@@ -16,12 +16,24 @@ private struct FakeShots {
             #!/bin/sh
             echo "$(pwd -P): $@" >> "\(dir.path)/calls"
             case "$1" in
-            path) \(badPath ? "echo relative.png" : "echo \"\(dir.path)/out/branch-$2-sha.png\"") ;;
-            pr) \(failing ? "echo 'no store configured' >&2; exit 1" : "exit 0") ;;
+            path) \(badPath ? "echo relative.png" : "echo \"$PR_SHOTS_DIR/proj/branch-$2-sha.png\"") ;;
+            pr)
+              echo "gh_repo=${GH_REPO:-unset}" > "\(dir.path)/env"
+              ls "$PR_SHOTS_DIR/proj" > "\(dir.path)/listing"
+              cp "$PR_SHOTS_DIR/proj/"*.png "\(dir.path)/out/" 2>/dev/null
+              \(failing ? "echo 'no store configured' >&2; exit 1" : "exit 0") ;;
             esac
             """.write(to: script, atomically: true, encoding: .utf8)
         chmod(script.path, 0o755)
-        runner = GitRunner(executable: script, environment: ["PATH": "/usr/bin:/bin"], timeout: 10)
+        var env = ["PATH": "/usr/bin:/bin"]
+        if let ghRepo { env["GH_REPO"] = ghRepo }
+        runner = GitRunner(executable: script, environment: env, timeout: 10)
+    }
+
+    var seenEnv: String { (try? String(contentsOf: dir.appendingPathComponent("env"), encoding: .utf8)) ?? "" }
+    var listing: [String] {
+        ((try? String(contentsOf: dir.appendingPathComponent("listing"), encoding: .utf8)) ?? "")
+            .split(separator: "\n").map(String.init)
     }
 
     var calls: [String] {
@@ -57,7 +69,7 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         let shipped = try await shippedThread(["home.png": "pixels", "notes.txt": "x", "verdict.json": "{}"])
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
         let tool = try FakeShots(in: fx)
-        let result = await fx.service.shipScreenshots(id: id, plan: plan, number: 12, tool: tool.runner)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
 
         #expect(result == .attached(count: 1))
         #expect(tool.shot("home") == "pixels", "copied to where `pr-shots path home` said")
@@ -69,11 +81,53 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(event.data["files"] == ["home.png"])
     }
 
+    @Test func onlyTheRecordedFilesAreInTheToolsFolderAndGHRepoIsDropped() async throws {
+        let shipped = try await shippedThread(["home.png": "pixels"])
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let tool = try FakeShots(in: fx, ghRepo: "someone/else")
+        _ = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+        #expect(tool.listing == ["branch-home-sha.png"], "an older screenshot elsewhere is not in the upload")
+        #expect(tool.seenEnv == "gh_repo=unset\n", "GH_REPO would point `gh pr edit` at another repository")
+    }
+
+    @Test func aWorktreeConfigDifferentFromTheProjectsStopsTheUpload() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        try #"{"store":"s3","bucket":"public-bucket"}"#.write(
+            to: plan.worktree.appendingPathComponent(".pr-shots.json"), atomically: true, encoding: .utf8)
+        let tool = try FakeShots(in: fx)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner)
+        guard case .skipped(let why) = result else {
+            Issue.record("expected skipped, got \(result)")
+            return
+        }
+        #expect(why.contains(".pr-shots.json") && why.contains("ship --screenshots"))
+        #expect(tool.calls.isEmpty)
+
+        // The same file in the project checkout is the person's own choice.
+        try #"{"store":"s3","bucket":"public-bucket"}"#.write(
+            to: fx.repo.appendingPathComponent(".pr-shots.json"), atomically: true, encoding: .utf8)
+        #expect(
+            await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner)
+                == .attached(count: 1))
+    }
+
+    @Test func aPathOutsideTheToolsFolderIsNotWrittenTo() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let tool = try FakeShots(in: fx, badPath: true)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner)
+        guard case .skipped = result else {
+            Issue.record("expected skipped, got \(result)")
+            return
+        }
+    }
+
     @Test func noScreenshotsMeansNothingIsRunOrSaid() async throws {
         let shipped = try await shippedThread(["notes.txt": "x"])
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
         let tool = try FakeShots(in: fx)
-        #expect(await fx.service.shipScreenshots(id: id, plan: plan, number: 1, tool: tool.runner) == .none)
+        #expect(await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner) == .none)
         #expect(tool.calls.isEmpty)
     }
 
@@ -84,13 +138,13 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
             id: id, worktree: worktree, branch: "b", remoteBranch: "b", base: "main", head: "abc", origin: "o",
             remote: .absent)
         let tool = try FakeShots(in: fx)
-        #expect(await fx.service.shipScreenshots(id: id, plan: plan, number: 1, tool: tool.runner) == .none)
+        #expect(await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner) == .none)
     }
 
     @Test func aMissingToolIsANoteNotAnError() async throws {
         let shipped = try await shippedThread()
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
-        let result = await fx.service.shipScreenshots(id: id, plan: plan, number: 1, tool: nil)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: nil)
         guard case .skipped(let why) = result else {
             Issue.record("expected skipped, got \(result)")
             return
@@ -103,7 +157,7 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         let shipped = try await shippedThread()
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
         let tool = try FakeShots(in: fx, failing: true)
-        let result = await fx.service.shipScreenshots(id: id, plan: plan, number: 5, tool: tool.runner)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 5, tool: tool.runner)
         guard case .skipped(let why) = result else {
             Issue.record("expected skipped, got \(result)")
             return
@@ -116,7 +170,7 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         let shipped = try await shippedThread()
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
         let tool = try FakeShots(in: fx, badPath: true)
-        let result = await fx.service.shipScreenshots(id: id, plan: plan, number: 5, tool: tool.runner)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 5, tool: tool.runner)
         guard case .skipped(let why) = result else {
             Issue.record("expected skipped, got \(result)")
             return
@@ -132,7 +186,51 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         let shot = try #require(events.last { $0.kind == .proofAdded }?.data["path"]?.stringValue)
         try FileManager.default.removeItem(at: fx.project.threadDirectory(id).appendingPathComponent(shot))
         let tool = try FakeShots(in: fx)
-        #expect(await fx.service.shipScreenshots(id: id, plan: plan, number: 1, tool: tool.runner) == .none)
+        #expect(await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner) == .none)
         #expect(tool.calls.isEmpty)
+    }
+}
+
+@Suite struct ShipScreenshotsRetryTests {
+    private func run(_ arguments: [String], in fx: RunnerFixture) async throws -> (code: Int32?, text: String) {
+        var spawn = SpawnRequest(
+            executable: WorkbenchBinary.executable, arguments: arguments,
+            environment: ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName()],
+            workingDirectory: fx.repo, timeout: 120)
+        spawn.snapshotInterval = 3600
+        var lines: [String] = []
+        var exit: ProcessExit?
+        for await event in try ProcessRunner.start(spawn).events {
+            if case .line(let line) = event { lines.append(line) }
+            if case .exited(let e) = event { exit = e }
+        }
+        var code: Int32?
+        if case .exited(let c)? = exit?.termination { code = c }
+        return (code, lines.joined(separator: "\n") + (exit?.stderrTail ?? ""))
+    }
+
+    @Test func retryingNeedsAPullRequest() async throws {
+        let shipped = try await shippedThread()
+        let result = try await run(["ship", shipped.id, "--screenshots"], in: shipped.fx)
+        #expect(result.code != 0)
+        #expect(result.text.contains("no pull request yet"), "\(result.text)")
+    }
+
+    @Test func retryingTellsWhyTheyAreStillNotAttached() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id) = (shipped.fx, shipped.id)
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        try await log.append(
+            .prOpened,
+            data: [
+                "url": "https://github.com/o/r/pull/12", "number": 12, "branch": "b", "base": "main",
+                "head_sha": "abc",
+            ])
+        await log.close()
+        // `pr-shots` is not on the test's PATH.
+        let result = try await run(["ship", id, "--screenshots"], in: fx)
+        #expect(result.code == 1, "\(result.text)")
+        #expect(result.text.contains("`pr-shots` is not on PATH"), "\(result.text)")
+        #expect(result.text.contains("workbench ship --screenshots"), "the worktree is kept for another try")
     }
 }

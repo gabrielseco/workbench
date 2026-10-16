@@ -51,11 +51,14 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   person looks at it. `approve` and `run` refuse such a proof when the project has no `verify_command`
   (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **`ship` puts the screenshots in the pull request.** After the PR exists, the top-level `*.png` files of the
-  latest verify step (recorded, and still there as recorded) are copied to the names `pr-shots path <name>`
-  gives and `pr-shots pr <number>` writes the `## Screenshots` section. `pr-shots` runs in the thread's
-  worktree on Workbench's own environment (plus the person's `gh` login and `PR_SHOTS_*`/`AWS_*`/`CLOUDFLARE_*`
-  settings), never in the model's. It is a note, not an error, when the tool is missing or fails; the PR is
-  open either way. `--no-screenshots` skips it. At most 20 files.
+  latest verify step (recorded, and still there as recorded) are copied into a fresh folder that is the
+  tool's whole screenshot folder (`PR_SHOTS_DIR`, so no older screenshot is uploaded), under the names
+  `pr-shots path <name>` gives, and `pr-shots pr <number>` writes the `## Screenshots` section. `pr-shots`
+  runs in the thread's worktree on Workbench's own environment (plus the person's `gh` login and
+  `PR_SHOTS_*`/`AWS_*`/`CLOUDFLARE_*` settings), never the model's, with `GH_REPO` dropped. Because the model
+  can write in the worktree, a `.pr-shots.json` there that differs from the project checkout's stops the
+  upload with a note. It is a note, not an error, when the tool is missing or fails: the PR is open, the
+  worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
   unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a
   status and a summary line (`Criteria: 1 passed · 0 failed · 4 for you to check`). Workbench runs one
