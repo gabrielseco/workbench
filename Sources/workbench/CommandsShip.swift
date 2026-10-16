@@ -12,6 +12,8 @@ extension Commands {
         let watch = a.flag("--watch", "-w")
         let keepWorktree = a.flag("--keep-worktree")
         let noDescribe = a.flag("--no-describe")
+        let noScreenshots = a.flag("--no-screenshots")
+        let screenshotsOnly = a.flag("--screenshots")
         let refreshText = a.flag("--refresh-description")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
@@ -19,6 +21,7 @@ extension Commands {
         try a.requireEmpty()
         let limits = try watchLimits(watch: watch, minutes: minutes, seconds: seconds)
         let ctx = try await Context.load()
+        if screenshotsOnly { return try await retryScreenshots(named, ctx: ctx) }
         let gh = try? GitRunner.discover(tool: "gh")
 
         let id: String
@@ -116,13 +119,50 @@ extension Commands {
                     out("updated the pull request title and description")
                 } catch let error as ShipError { refreshFailure = error }
             }
-            if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
+            var attached = true
+            if !noScreenshots {
+                attached = await attachScreenshots(id: id, worktree: plan.worktree, number: pr.number, ctx: ctx)
+            }
+            // Kept when the screenshots did not go up, so `ship --screenshots` can try again.
+            if !keepWorktree, attached { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
             if let refreshFailure { return refuse(refreshFailure) }
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
         }
+    }
+
+    /// Puts the verify step's screenshots in the pull request through `pr-shots`. A note on failure: the PR is open.
+    /// Returns false when they were not attached, so the worktree is kept for a retry.
+    @discardableResult
+    private static func attachScreenshots(id: String, worktree: URL, number: Int, ctx: Context) async -> Bool {
+        let tool = try? GitRunner.discover(tool: "pr-shots", timeout: 180)
+        switch await ctx.service.shipScreenshots(id: id, worktree: worktree, number: number, tool: tool) {
+        case .none: return true
+        case .attached(let count):
+            out("put \(count) screenshot\(count == 1 ? "" : "s") in the pull request")
+            return true
+        case .skipped(let why):
+            out("note: \(why)")
+            out("kept the worktree; `workbench ship --screenshots` tries again")
+            return false
+        }
+    }
+
+    /// `ship --screenshots`: for a thread that is already shipped, try putting its screenshots in the PR again.
+    private static func retryScreenshots(_ named: String?, ctx: Context) async throws -> Int32 {
+        let id = try ctx.threadIDForViewing(named)
+        guard let opened = prOpenedEvent(id, ctx: ctx), let number = opened.data["number"]?.intValue else {
+            return refuse(.notAccepted("this thread has no pull request yet; run `workbench ship`"))
+        }
+        let worktree = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).path(for: id)
+        guard FileManager.default.fileExists(atPath: worktree.path) else {
+            out("the worktree is gone, so `pr-shots` has no branch to name the screenshots by")
+            return 1
+        }
+        let attached = await attachScreenshots(id: id, worktree: worktree, number: number, ctx: ctx)
+        return attached ? 0 : 1
     }
 
     /// Removes the shipped thread's worktree when nothing could be lost, and says what happened. A worktree

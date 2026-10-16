@@ -28,13 +28,16 @@ let usage = """
       status [id] [--all]        where the thread stands; --all: one line per thread
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
-      ship [id] [--yes] [--no-describe] [--refresh-description] [--keep-worktree] [--watch|-w [--timeout <min>] [--interval <s>]]
+      ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
+           [--watch|-w [--timeout <min>] [--interval <s>]]
                                  push the accepted branch and open its pull request; asks first, after
                                  showing the title and body (written by a read-only Claude turn from the
                                  goal, diff and check; --no-describe uses the goal's text);
                                  for a thread from goal new --update it proposes edits to the PR's own
                                  title and sections and applies them only on a second yes, or with
                                  --refresh-description; --no-describe skips the proposal;
+                                 screenshots the verify step left are put in the PR with `pr-shots`, if it
+                                 is installed (--no-screenshots skips it; --screenshots tries again for a shipped thread);
                                  --watch then follows the CI checks (read-only)
                                  exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
                                  13 a check failed, 14 no result in time

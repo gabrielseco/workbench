@@ -54,7 +54,13 @@ public struct GitRunner: Sendable {
         // `SSH_AUTH_SOCK` is the person's own agent: a push or `ls-remote` over ssh needs it, and this
         // environment is Workbench's, never the model's.
         let keep = ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL", "SSH_AUTH_SOCK"]
-        let keepPrefixes = tool == "gh" ? ["LC_", "GH_", "GITHUB_", "XDG_CONFIG"] : ["LC_"]
+        let keepPrefixes: [String]
+        switch tool {
+        case "gh": keepPrefixes = ["LC_", "GH_", "GITHUB_", "XDG_CONFIG"]
+        // The uploader uses the person's own gh login and store keys; this runs for `ship`, never for the model.
+        case "pr-shots": keepPrefixes = ["LC_", "GH_", "GITHUB_", "XDG_CONFIG", "PR_SHOTS_", "AWS_", "CLOUDFLARE_"]
+        default: keepPrefixes = ["LC_"]
+        }
         var env = parent.filter { entry in
             keep.contains(entry.key) || keepPrefixes.contains { entry.key.hasPrefix($0) }
         }
