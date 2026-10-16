@@ -102,6 +102,20 @@ public struct ReviewReport: Sendable, Equatable {
             lines.append("Check      none ran")
         }
 
+        if let verify = review.verify {
+            var text = "Verify     \(verify.result)"
+            if let code = verify.exitCode { text += " (exit \(code))" }
+            text += "  turn \(verify.turn)"
+            if let ms = verify.durationMs { text += "  \(ms / 1000)s" }
+            if let ref = verify.outputRef { text += "  log: \(ref)" }
+            lines.append(text)
+            if verify.proof.isEmpty {
+                lines.append("  no proof files")
+            } else {
+                for file in verify.proof { lines.append("  \(file.path)  \(file.bytes) bytes") }
+            }
+        }
+
         if review.deniedTools.isEmpty {
             lines.append("Denied     none")
         } else {

@@ -22,6 +22,8 @@ public struct TurnReport: Sendable, Equatable {
     public var summary: String?
     /// The project's check as Workbench ran it after this turn, nil when none ran.
     public var check: CheckReport?
+    /// The project's verify step as Workbench ran it after this turn's check, nil when none ran.
+    public var verify: VerifyReport?
 }
 
 public enum RunNotice: Sendable {
@@ -33,6 +35,8 @@ public enum RunNotice: Sendable {
     case turnEnded(TurnReport)
     case checkStarted(turn: Int, command: String)
     case checkRan(CheckReport)
+    case verifyStarted(turn: Int, command: String)
+    case verifyEnded(VerifyReport)
     case setupStarted(command: String)
     case setupRan(SetupReport)
     /// Something worth a line that is not an error: local edits left out, a base behind its origin.
@@ -48,6 +52,8 @@ public struct RunOptions: Sendable {
     public var checkTimeoutOverride: TimeInterval?
     /// Replaces the setup command's timeout (`SetupRunner.defaultTimeout`). For tests.
     public var setupTimeoutOverride: TimeInterval?
+    /// Replaces the verify step's timeout (`verify_timeout_min`). For tests.
+    public var verifyTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
     /// Kept so scripts that pass `--allow-dirty` still work; a dirty checkout no longer blocks a run.
     public var allowDirty = false
@@ -153,9 +159,7 @@ public actor ThreadRunner {
         if let recovered = try await log.recoverOrphanedTurn() {
             notify(.recoveredOrphanedTurn(recovered.turn))
         }
-        if let recovered = try await log.recoverOrphanedCheck() {
-            notify(.recoveredOrphanedCheck(recovered.turn))
-        }
+        try await recoverOrphanedChecks(log: log)
         if worktreeManager.exists(threadID) {
             let swept = OrphanSweeper.sweep(inside: worktreeManager.path(for: threadID))
             if !swept.isEmpty {
@@ -274,6 +278,8 @@ public actor ThreadRunner {
             let canFallBack = index < attempts.count - 1
             if canFallBack, result.report.result == .failed, !result.sawOutput, !stopRequested { continue }
             report?.check = try await runCheck(
+                after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
+            report?.verify = try await runVerify(
                 after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
             break
         }
@@ -496,6 +502,35 @@ extension ThreadRunner {
             turn: report.turn, outputURL: project.checkOutputURL(threadID, turn: report.turn), log: log
         ) { [self] process in await attach(process) }
         notify(.checkRan(ran))
+        return ran
+    }
+
+    /// Closes a check or verify step left open by a runner that died.
+    func recoverOrphanedChecks(log: EventLogWriter) async throws {
+        if let recovered = try await log.recoverOrphanedCheck() { notify(.recoveredOrphanedCheck(recovered.turn)) }
+        _ = try await log.recoverOrphanedVerify()
+    }
+
+    // MARK: The verify step
+
+    /// The project's verify command, run here so that the evidence is Workbench's and not Claude's claim. Only
+    /// after a turn that succeeded: there is nothing to show for a turn that did not finish.
+    private func runVerify(
+        after report: TurnReport, config: Config, goal: Goal, worktree: URL, log: EventLogWriter, options: RunOptions
+    ) async throws -> VerifyReport? {
+        guard let command = config.verifyCommand, report.result == .succeeded, !stopRequested else { return nil }
+        let runner = VerifyRunner(
+            command: command, worktree: worktree, environment: config.childEnvironment(from: options.parentEnvironment),
+            timeout: options.verifyTimeoutOverride ?? TimeInterval(config.verifyTimeoutMin) * 60,
+            killGrace: options.killGrace, threadID: threadID, goalPath: project.goalURL(threadID).path)
+        notify(.verifyStarted(turn: report.turn, command: command))
+        defer { currentRun = nil }
+        let ran = try await runner.run(
+            turn: report.turn, proofDirectory: project.proofDirectory(threadID, turn: report.turn),
+            threadDirectory: project.threadDirectory(threadID),
+            outputURL: project.verifyOutputURL(threadID, turn: report.turn), log: log
+        ) { [self] process in await attach(process) }
+        notify(.verifyEnded(ran))
         return ran
     }
 

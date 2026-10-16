@@ -36,8 +36,11 @@ extension Commands {
                 written += 1
             }
             guard follow else { return }
-            let checks = (try? Config.load(from: ctx.project.configURL))?.checkCommand != nil
-            var sawStart = contents.openTurn != nil || contents.openCheck != nil
+            let config = try? Config.load(from: ctx.project.configURL)
+            let checks = config?.checkCommand != nil
+            let verifies = config?.verifyCommand != nil
+            var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
+            var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
             var seen = contents.events.count
             while true {
                 try await Task.sleep(nanoseconds: 300_000_000)
@@ -47,12 +50,12 @@ extension Commands {
                 written = lines.count
                 for event in contents.events.dropFirst(seen) {
                     if event.kind == .turnStarted { sawStart = true }
-                    let result = event.data["result"]?.stringValue
-                    let checkFollows = checks && result != "stopped" && result != "interrupted"
-                    if event.kind == .turnEnded, sawStart, !checkFollows { return }
-                    if event.kind == .checkRan, sawStart { return }
-                    // A setup that did not pass ends the run before any turn: nothing else will come.
-                    if event.kind == .setupRan, result != "passed" { return }
+                    if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
+                    let done = LogFormatter.followEnds(
+                        event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded)
+                    if done {
+                        return
+                    }
                 }
                 seen = contents.events.count
             }
@@ -68,15 +71,18 @@ extension Commands {
         var printed = 0
         var contents = try EventLogReader.read(at: url)
         // Already in the middle of a turn or of its check: follow until that ends.
-        let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil
+        let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
         for event in contents.events {
             show(event)
             printed += 1
         }
         guard follow else { return }
 
-        // A turn is followed to the end of its check, when one will run.
-        let checks = (try? Config.load(from: ctx.project.configURL))?.checkCommand != nil
+        // A turn is followed to the end of its check and of its verify step, when they will run.
+        let config = try? Config.load(from: ctx.project.configURL)
+        let checks = config?.checkCommand != nil
+        let verifies = config?.verifyCommand != nil
+        var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn
         while true {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -84,12 +90,12 @@ extension Commands {
             for event in contents.events.dropFirst(printed) {
                 show(event)
                 if event.kind == .turnStarted { sawStart = true }
-                let result = event.data["result"]?.stringValue
-                let checkFollows = checks && result != "stopped" && result != "interrupted"
-                if event.kind == .turnEnded, sawStart, !checkFollows { return }
-                if event.kind == .checkRan, sawStart { return }
-                // A setup that did not pass ends the run before any turn: nothing else will come.
-                if event.kind == .setupRan, result != "passed" { return }
+                if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
+                let done = LogFormatter.followEnds(
+                    event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded)
+                if done {
+                    return
+                }
             }
             printed = contents.events.count
         }
@@ -155,6 +161,12 @@ extension Commands {
             out("check:     turn \(open) open, \(note)")
         } else if let check = state.lastCheck {
             out("check:     \(check)")
+        }
+        if let open = state.openVerify {
+            let note = running ? "running" : "NOT running: will be recorded as interrupted on next run"
+            out("verify:    turn \(open) open, \(note)")
+        } else if let verify = state.review.verify {
+            out("verify:    \(verify.result)  (\(verify.proof.count) proof file(s))")
         }
         if state.openTurn != nil {
             for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
