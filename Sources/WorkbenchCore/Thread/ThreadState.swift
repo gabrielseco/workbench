@@ -38,6 +38,14 @@ public struct Review: Sendable, Equatable {
         public var proof: [ProofFile]
     }
 
+    /// The latest `judge.ran`: the advisory judge's verdict for a turn, or why there was none.
+    public struct Judge: Sendable, Equatable {
+        public var turn: Int
+        public var verdict: JudgeVerdict?
+        public var costUSD: Double?
+        public var failure: String?
+    }
+
     public struct Note: Sendable, Equatable {
         /// The follow-up turn the note started.
         public var turn: Int
@@ -67,6 +75,8 @@ public struct Review: Sendable, Equatable {
     public var check: Check?
     /// The latest completed verify step, nil when none has run.
     public var verify: Verify?
+    /// The latest judge run, nil when none has run. Advisory.
+    public var judge: Judge?
     public var notes: [Note]
     public var deniedTools: [DeniedTool]
 }
@@ -163,6 +173,32 @@ public struct ThreadState: Sendable, Equatable {
 
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
 
+    /// A `judge.ran` event as the review shows it. Entries that do not read as a verdict are left out, so a
+    /// damaged line shows as a run without one rather than as a verdict that was never given.
+    private static func judgeRun(_ event: Event) -> Review.Judge {
+        let cost: Double? =
+            switch event.data["cost_usd"] {
+            case .double(let d)?: d
+            case .int(let i)?: Double(i)
+            default: nil
+            }
+        guard event.data["ok"] == true, case .array(let entries)? = event.data["criteria"] else {
+            return Review.Judge(
+                turn: event.turn, verdict: nil, costUSD: cost,
+                failure: event.data["reason"]?.stringValue ?? "no verdict")
+        }
+        let criteria = entries.compactMap { entry -> JudgeCriterion? in
+            guard let id = entry["id"]?.stringValue, case .bool(let met)? = entry["met"] else { return nil }
+            var evidence: [String] = []
+            if case .array(let items)? = entry["evidence"] { evidence = items.compactMap(\.stringValue) }
+            return JudgeCriterion(id: id, met: met, evidence: evidence)
+        }
+        var concerns: [String] = []
+        if case .array(let items)? = event.data["concerns"] { concerns = items.compactMap(\.stringValue) }
+        return Review.Judge(
+            turn: event.turn, verdict: JudgeVerdict(criteria: criteria, concerns: concerns), costUSD: cost, failure: nil)
+    }
+
     /// The verify step's events: `proof.added` lines gather until `verify.ended` closes the step.
     private static func applyVerify(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
         switch event.kind {
@@ -194,7 +230,7 @@ public struct ThreadState: Sendable, Equatable {
         var state = ThreadState(
             id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, openVerify: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
-            review: Review(status: .empty, turnResult: nil, check: nil, verify: nil, notes: [], deniedTools: []),
+            review: Review(status: .empty, turnResult: nil, check: nil, verify: nil, judge: nil, notes: [], deniedTools: []),
             progress: Progress())
         var noteIsLatest = false
         var pendingProof: [ProofFile] = []
@@ -234,6 +270,8 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
                 Self.applyVerify(event, to: &state, pending: &pendingProof)
+            case .judgeRan:
+                state.review.judge = Self.judgeRun(event)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.

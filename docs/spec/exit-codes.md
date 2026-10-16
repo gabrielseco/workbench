@@ -107,6 +107,16 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `usage` | wrong command line |
 | 7 | `not-found` | no such thread, event or patch path; with `--json`, also when there are no threads at all |
 
+### `judge`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | a verdict was recorded and printed |
+| 1 | `failed` | no verdict this time: no `claude`, a timeout, a budget stop, or an answer that was not usable (recorded, with the reason) |
+| 2 | `usage` | wrong command line, or a `--model` or `--budget` that is not valid |
+| 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), or a run is live |
+| 7 | `not-found` | the thread named does not exist |
+
 ### `accept`
 
 `-m` only applies when something is left to commit; work the agent already committed keeps its messages.

@@ -189,6 +189,20 @@ extension Commands {
         } else {
             verify = .null
         }
+        let judge: JSONValue
+        if let j = review.judge {
+            judge = [
+                "turn": .int(j.turn), "ok": .bool(j.verdict != nil), "stale": .bool(j.turn != state.lastTurn),
+                "cost_usd": j.costUSD.map { .double($0) } ?? .null, "failure": j.failure.map { .string($0) } ?? .null,
+                "criteria": .array(
+                    (j.verdict?.criteria ?? []).map {
+                        ["id": .string($0.id), "met": .bool($0.met), "evidence": .array($0.evidence.map { .string($0) })]
+                    }),
+                "concerns": .array((j.verdict?.concerns ?? []).map { .string($0) }),
+            ]
+        } else {
+            judge = .null
+        }
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
@@ -209,7 +223,7 @@ extension Commands {
                         "file": status.file.map { .string($0) } ?? .null,
                     ]
                 }),
-            "diff": diff, "check": check, "verify": verify,
+            "diff": diff, "check": check, "verify": verify, "judge": judge,
             "denied_tools": .array(
                 review.deniedTools.map {
                     [
