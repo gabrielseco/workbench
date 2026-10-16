@@ -94,7 +94,10 @@ extension Commands {
                 return .stop(fail(.failed, "the last review (round \(record.round)) has no verdict, and \(error)"))
             }
             // The answer on record is only the answer for the commit it looked at.
-            if let tip = await ctx.service.pullRequestBranchTip(id: id), tip != record.headSHA {
+            guard let tip = await ctx.service.pullRequestBranchTip(id: id) else {
+                throw CLIError.message("origin could not be read, so the answer on record cannot be checked against the branch.")
+            }
+            if tip != record.headSHA {
                 throw CLIError.refused(
                     "the branch has moved since round \(record.round) reviewed it, and \(error) "
                         + "Raise max_rounds in [pr_review] to review the new commits.")
@@ -116,6 +119,10 @@ extension Commands {
         do {
             child = try await ctx.service.startFollowUp(parent: parent, findings: findings, reviewRound: round, config: config)
         } catch let error as FollowUpError {
+            if case .tooMany = error {
+                out("\(error)")
+                return .stop(FailureKind.findings.code)
+            }
             throw CLIError.refused("\(error)")
         }
         out("round \(round) found things to fix: follow-up thread \(child) started on the same branch")

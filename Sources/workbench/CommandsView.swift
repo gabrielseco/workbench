@@ -200,7 +200,7 @@ extension Commands {
             // How it ended: the decision once there is one, else where the thread stands.
             var line = state.decision ?? statusString(state.review.status)
             if let result = state.lastResult { line += " (last turn \(result))" }
-            let follows = state.lineage.map { "  (follows \($0.parent))" } ?? ""
+            let follows = state.lineage.map { "  (follows \($0.parent), round \($0.round))" } ?? ""
             out(String(format: "%@  %@  $%.2f%@", state.id, line, state.totalCostUSD, follows))
         }
     }

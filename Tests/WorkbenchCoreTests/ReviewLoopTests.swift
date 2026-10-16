@@ -151,6 +151,35 @@ private func recordShipped(_ child: String, _ r: ReviewedPR) async throws {
         #expect(r.codex.runs == 2)
     }
 
+    @Test func aRoundThatStartedAndNeverFinishedIsTheLatestNotAnOlderVerdict() async throws {
+        let r = try await loopFixture(maxRounds: 3)
+        try r.codex.put("answer", "fine\nVERDICT: CLEAN")
+        _ = try await r.round()
+        #expect(r.fx.service.latestPRReview(id: r.id)?.verdict == .clean)
+
+        // A manual `pr-review --again` that was killed before it could record how it ended.
+        let log = try EventLogWriter.open(at: r.fx.project.eventsURL(r.id))
+        try await log.append(.prReviewStarted, data: ["round": 2, "pr": 12, "head_sha": .string(r.head)])
+        await log.close()
+
+        let latest = try #require(r.fx.service.latestPRReview(id: r.id))
+        #expect(latest.round == 2 && !latest.ok && latest.verdict == nil, "the clean round 1 must not stand in for it")
+    }
+
+    @Test func nothingBuysMoreFollowUpsThanMaxRoundsAllowsNotEvenByAbandoningOne() async throws {
+        let r = try await loopFixture(maxRounds: 2)
+        let first = try await r.fx.service.startFollowUp(parent: r.id, findings: "one", reviewRound: 1, config: r.config)
+        try await r.fx.service.abandon(id: first)
+        do {
+            _ = try await r.fx.service.startFollowUp(parent: r.id, findings: "one", reviewRound: 1, config: r.config)
+            Issue.record("expected the limit")
+        } catch let error as FollowUpError {
+            #expect(error == .tooMany(used: 1, max: 2))
+            #expect("\(error)".contains("at most 1") && "\(error)".contains("max_rounds"))
+        }
+        #expect(ThreadStore(project: r.fx.project).followUps(of: r.id).count == 1)
+    }
+
     @Test func aRefusedReviewCanBeResumedFromTheRecord() async throws {
         let r = try await loopFixture()
         try r.codex.put("answer", "1. bug here\nVERDICT: FIX")

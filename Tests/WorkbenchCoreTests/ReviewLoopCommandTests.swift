@@ -163,6 +163,32 @@ private let clean = "Nothing left.\nVERDICT: CLEAN"
         #expect(r.codex.runs == 1)
     }
 
+    @Test func startingAgainAfterAbandoningAFollowUpDoesNotBuyAnotherOne() async throws {
+        let (r, gh) = try await loopPR(maxRounds: 2, answers: [fix1, fix1])
+        let first = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh, claude: "stream-events=0")
+        #expect(first.code == 15, "\(first.text)")
+        let kid = try #require(ThreadStore(project: r.fx.project).followUps(of: r.id).first).id
+        try await r.fx.service.abandon(id: kid)
+
+        let again = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        #expect(again.code == 15, "\(again.text)")
+        #expect(again.text.contains("already has 1 review follow-up"), "\(again.text)")
+        #expect(ThreadStore(project: r.fx.project).followUps(of: r.id).count == 1, "no second follow-up")
+        #expect(r.codex.runs == 1)
+    }
+
+    @Test func anAnswerOnRecordIsNotUsedWhenOriginCannotConfirmTheBranch() async throws {
+        let (r, gh) = try await loopPR(maxRounds: 1, answers: [clean])
+        #expect(try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh).code == 0)
+        let away = r.bare.deletingLastPathComponent().appendingPathComponent("gone-\(UUID().uuidString)")
+        try FileManager.default.moveItem(at: r.bare, to: away)
+        defer { try? FileManager.default.moveItem(at: away, to: r.bare) }
+
+        let again = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        #expect(again.code != 0, "an old clean must not be reported when the branch cannot be read: \(again.text)")
+        #expect(!again.text.contains("review is clean"))
+    }
+
     @Test func aFailedLastReviewIsStillAFailureWhenTheLoopIsStartedAgain() async throws {
         let (r, gh) = try await loopPR(maxRounds: 1, answers: ["no verdict at all"])
         let first = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)

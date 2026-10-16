@@ -85,9 +85,14 @@ public enum ReviewLoop {
 
 public enum FollowUpError: Error, Equatable, Sendable, CustomStringConvertible {
     case noPullRequest(String)
+    case tooMany(used: Int, max: Int)
 
     public var description: String {
         switch self {
+        case .tooMany(let used, let max):
+            "this pull request already has \(used) review follow-up\(used == 1 ? "" : "s"), the most max_rounds allows "
+                + "(\(max) review\(max == 1 ? "" : "s") means at most \(max - 1)). Look at them with `workbench status`, "
+                + "or raise max_rounds in [pr_review]."
         case .noPullRequest(let id): "thread \(id) has no recorded pull request, so there is no branch to follow up on."
         }
     }
@@ -115,7 +120,11 @@ extension ThreadService {
         else { throw FollowUpError.noPullRequest(parent) }
         let store = ThreadStore(project: project)
         let root = store.rootID(of: parent)
-        let round = store.followUps(of: root).count + 1
+        // The printed ceiling holds across restarts: abandoning a follow-up does not buy another.
+        let used = store.followUps(of: root).count
+        let allowed = max(0, config.prReview.maxRounds - 1)
+        if used >= allowed { throw FollowUpError.tooMany(used: used, max: config.prReview.maxRounds) }
+        let round = used + 1
         let id = try await newThread(
             name: ReviewLoop.followUpName(root: root, round: round), updating: branch, config: config,
             lineage: ThreadLineage(parent: parent, root: root, round: round),
@@ -139,11 +148,25 @@ extension ThreadService {
         }
     }
 
-    /// The review rounds recorded for `pr` in any thread of the family, oldest first.
+    /// The review rounds recorded for `pr` in any thread of the family, oldest first. A round that started and never
+    /// recorded how it ended is there too, as a round without a verdict, so it cannot be skipped in favour of an older one.
     func prReviewRecords(family: [String], pr: Int) -> [PRReviewRecord] {
         var records: [(ts: String, record: PRReviewRecord)] = []
         for thread in family {
             let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
+            let finished = Set(
+                events.filter { $0.kind == .prReviewFinished && $0.data["pr"]?.intValue == pr }
+                    .compactMap { $0.data["round"]?.intValue })
+            for event in events where event.kind == .prReviewStarted && event.data["pr"]?.intValue == pr {
+                guard let round = event.data["round"]?.intValue, !finished.contains(round) else { continue }
+                records.append(
+                    (
+                        event.ts,
+                        PRReviewRecord(
+                            thread: thread, round: round, pr: pr, ok: false, verdict: nil,
+                            headSHA: event.data["head_sha"]?.stringValue, findingsPath: nil)
+                    ))
+            }
             for event in events where event.kind == .prReviewFinished && event.data["pr"]?.intValue == pr {
                 let verdict = event.data["verdict"]?.stringValue.flatMap(PRReviewVerdict.init(rawValue:))
                 records.append(
