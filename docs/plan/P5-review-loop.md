@@ -18,7 +18,7 @@ live in `WorkbenchCore`.
    reviewer failed / no verdict / could not fetch, `30` round cap reached. Anything else is a failure.
 3. **Reviewing the wrong commit wastes a round.** Right after a push, GitHub's `pull/<n>/head` ref *and*
    the API's `headRefOid` both lag. Three of the first four rounds in #325 reviewed the commit before the
-   latest push. The fix that held: wait until `pull/<n>/head` equals `git ls-remote origin <head branch>`,
+   latest push. The fix that held was to review the branch itself as `git ls-remote origin <head branch>` gives it, not GitHub's mirror of it,
    and make the reviewer diff the checkout (`git diff origin/main...HEAD`), never `gh pr diff`.
 4. **Findings must survive a restart.** Each round's findings are stored (`<key>.round-<n>.txt`) and the
    cap prints the last ones, so "report the open findings" is possible after the session is gone.
@@ -42,8 +42,10 @@ max_rounds = 3
 
 The reviewer is Codex, built in, all of it in Swift through `Spawner` (no shell script to copy per project):
 
-- Fetches `pull/<n>/head` into a throwaway detached worktree once it equals `git ls-remote origin <branch>`
-  (constraint 3), and gives Codex the checkout plus `git diff <base>...HEAD`, never `gh pr diff`.
+- Fetches the PR's branch from origin (`git ls-remote origin refs/heads/<branch>`, correct the moment a push
+  lands) into a throwaway detached worktree, and gives Codex the checkout plus the diff against the base, never
+  `gh pr diff`. GitHub's `pull/<n>/head` and API are not read: they lag a push (constraint 3), the branch does not,
+  and Workbench runs on the machine that pushed it.
 - Prompt: the thread's approved goal file as the spec (criteria judged one by one), the project instructions
   Workbench already reads (`AGENTS.md`), the optional `checklist`, and the output contract: findings most
   severe first, each with a failure scenario, ending in exactly `VERDICT: CLEAN` or `VERDICT: FIX`.
@@ -60,7 +62,7 @@ The reviewer is Codex, built in, all of it in Swift through `Spawner` (no shell 
   `pr_review.finished {round, pr, head_sha, ok, verdict, reason, findings_path, transcript_path}` after.
   Findings are stored under the thread's folder (`pr-review/round-<n>.findings.md`).
 - Exit codes: the old script's 0/10/20/30 were its own contract. In the CLI `0` is clean, `15` (new, `findings`)
-  is `VERDICT: FIX`, `1` is a round with no verdict (the reviewer failed, GitHub did not catch up, no verdict
+  is `VERDICT: FIX`, `1` is a round with no verdict (the reviewer failed, the branch moved as the round began, no verdict
   line), `6` is a refusal including the cap. 10-14 belong to `ship`.
 - `review --json` gets a `pr_review` key: `{round, pr, ok, verdict, stale, head_sha, findings_path, failure}`
   (`stale` when the branch has moved since the round). Specs: `docs/spec/{exit-codes,event-log,cli-json,goal-file}.md`.

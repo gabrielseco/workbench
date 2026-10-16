@@ -30,9 +30,6 @@ struct PRReviewInput: Sendable, Equatable {
 public enum PRReview {
     /// One Codex run is ended, tree and all, after this long.
     public static let timeout: TimeInterval = 20 * 60
-    /// How long to wait for GitHub's `pull/<n>/head` to catch up with the branch after a push.
-    public static let headWait: TimeInterval = 90
-    public static let headPoll: TimeInterval = 3
     /// Tries when Codex says its model is at capacity.
     public static let attempts = 3
     public static let answerLimit = 256 << 10

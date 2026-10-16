@@ -87,24 +87,19 @@ struct ReviewedPR {
     var config: Config
 
     func round(
-        again: Bool = false, timeout: TimeInterval = 30, headWait: TimeInterval = 5,
+        again: Bool = false, timeout: TimeInterval = 30,
         environment: [String: String]? = nil, codexPath: String? = nil, backoff: TimeInterval = 0,
         stopRequested: @escaping @Sendable () -> Bool = { false }, attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         try await fx.service.prReview(
             id: id, config: config, again: again, codexPath: codexPath ?? codex.path,
-            environment: environment ?? codex.environment(), timeout: timeout, headWait: headWait, headPoll: 0.05,
+            environment: environment ?? codex.environment(), timeout: timeout,
             capacityBackoff: { _ in backoff }, stopRequested: stopRequested, attach: attach)
     }
 
     var finished: [Event] { (try? fx.events(id).filter { $0.kind == .prReviewFinished }) ?? [] }
     var started: [Event] { (try? fx.events(id).filter { $0.kind == .prReviewStarted }) ?? [] }
     var folder: URL { fx.project.threadDirectory(id).appendingPathComponent("pr-review") }
-
-    /// GitHub's `pull/12/head` on the bare origin.
-    func pointPullHead(at sha: String) async throws {
-        _ = try await fx.git.run(["update-ref", "refs/pull/12/head", sha], in: bare)
-    }
 
     /// No throwaway checkout is left, as a directory or as a registered worktree.
     func expectNoLeftovers(sourceLocation: SourceLocation = #_sourceLocation) async throws {
@@ -115,7 +110,7 @@ struct ReviewedPR {
     }
 }
 
-/// A shipped thread (`pr.opened` recorded as PR 12), with `pull/12/head` on the origin at the pushed tip.
+/// A shipped thread (`pr.opened` recorded as PR 12), with its branch pushed to the origin.
 func reviewedPR(extraConfig: String = "", answer: String? = "All good.\nVERDICT: CLEAN\n") async throws -> ReviewedPR {
     let fx = try await RunnerFixture(extraConfig: extraConfig)
     let gh = try FakeGH(in: fx)
@@ -124,7 +119,6 @@ func reviewedPR(extraConfig: String = "", answer: String? = "All good.\nVERDICT:
     _ = try await fx.service.shipPush(id: id, gh: gh.runner)
     _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
     let head = try await shipOut(["rev-parse", "HEAD"], worktree, fx)
-    _ = try await fx.git.run(["update-ref", "refs/pull/12/head", head], in: bare)
     let codex = try FakeCodex(in: fx)
     if let answer { try codex.put("answer", answer) }
     return ReviewedPR(fx: fx, id: id, bare: bare, head: head, codex: codex, config: try Config.load(from: fx.project.configURL))

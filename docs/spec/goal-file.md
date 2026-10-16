@@ -75,9 +75,9 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   `accept` or `ship` do, and a thread that has no verdict is as reviewable as before.
 - **`workbench pr-review` is Codex reviewing the shipped pull request.** Workbench starts `codex exec -s read-only`
   itself (`codex` on PATH; no script to keep per project) on a throwaway checkout of the pull request's head, under
-  the thread's `pr-review/` folder, removed on every ending. It first waits (90 s) until GitHub's `pull/<n>/head`
-  and the branch on origin name the same commit, because right after a push both lag and a review of the commit before
-  the latest push wastes the round. Codex is given a brief in a file (the argument only points at it): the thread's
+  the thread's `pr-review/` folder, removed on every ending. It reviews the branch as `origin` has it,
+  fetched at the start of the round: that is the pull request's head the moment a push lands, whereas GitHub's own
+  `pull/<n>/head` and API lag behind a push, so they are not read and nothing waits for them. Codex is given a brief in a file (the argument only points at it): the thread's
   goal with its numbered criteria, `AGENTS.md` (else `CLAUDE.md`) at the base unless `project_instructions = false`,
   the optional `[pr_review] checklist` read from the pull request's head, the diff as a file (cut at 400 KiB;
   never `gh pr diff`) and the rule that the answer ends in exactly `VERDICT: CLEAN` or `VERDICT: FIX`. The base is

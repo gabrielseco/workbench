@@ -16,7 +16,6 @@ import Testing
         _ = try await r.fx.git.run(["commit", "-q", "-m", "docs: checklist"], in: worktree)
         let head = try await shipOut(["rev-parse", "HEAD"], worktree, r.fx)
         _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
-        try await r.pointPullHead(at: head)
 
         let result = try await r.round()
         #expect(result.warnings.isEmpty)
@@ -40,7 +39,6 @@ import Testing
         _ = try await r.fx.git.run(["add", "-A"], in: worktree)
         _ = try await r.fx.git.run(["commit", "-q", "-m", "docs: checklist"], in: worktree)
         _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
-        try await r.pointPullHead(at: try await shipOut(["rev-parse", "HEAD"], worktree, r.fx))
 
         _ = try await r.round()
         let brief = try #require(r.codex.read("brief_1"))

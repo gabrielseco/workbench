@@ -305,49 +305,24 @@ import Testing
         #expect(r.codex.runs == 0 && r.started.isEmpty)
     }
 
-    // MARK: the wrong commit
+    // MARK: the right commit
 
-    @Test func theReviewWaitsUntilThePullHeadCatchesUpWithTheBranch() async throws {
+    @Test func theBranchOnOriginIsReviewedAtOnceWithoutWaitingForGitHub() async throws {
         let r = try await reviewedPR()
-        // GitHub still shows the commit before the latest push.
-        let parent = try await shipOut(["rev-parse", "main"], r.fx.repo, r.fx)
-        try await r.pointPullHead(at: parent)
-        let catchUp = Task {
-            try await Task.sleep(nanoseconds: 400_000_000)
-            try await r.pointPullHead(at: r.head)
-        }
-        let result = try await r.round(headWait: 20)
-        _ = try await catchUp.value
-        #expect(result.verdict == .clean && result.headSHA == r.head)
-        #expect(r.codex.runs == 1)
-        #expect(r.codex.read("brief_1")?.contains(r.head) == true, "the branch's commit was reviewed, not the lagging one")
-    }
+        // A fix is pushed after the pull request was opened. GitHub's own pull ref is not even there to lag.
+        let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+        try "more\n".write(to: worktree.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        _ = try await r.fx.git.run(["add", "-A"], in: worktree)
+        _ = try await r.fx.git.run(["commit", "-q", "-m", "fix: more"], in: worktree)
+        _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
+        let pushed = try await shipOut(["rev-parse", "HEAD"], worktree, r.fx)
+        #expect(pushed != r.head)
 
-    @Test func aPullHeadThatNeverCatchesUpFailsTheRoundWithoutStartingCodex() async throws {
-        let r = try await reviewedPR()
-        try await r.pointPullHead(at: try await shipOut(["rev-parse", "main"], r.fx.repo, r.fx))
-        let result = try await r.round(headWait: 0.3)
-        #expect(result.verdict == nil && result.failure?.contains("did not match the branch") == true)
-        #expect(r.codex.runs == 0)
-        #expect(r.started.count == 1 && r.finished.count == 1)
-        #expect(r.finished.first?.data["transcript_path"] == nil, "no transcript was written, so none is recorded")
-        try await r.expectNoLeftovers()
-    }
-
-    @Test func stoppingDuringTheWaitForGitHubEndsTheRoundAtOnce() async throws {
-        let r = try await reviewedPR()
-        try await r.pointPullHead(at: try await shipOut(["rev-parse", "main"], r.fx.repo, r.fx))
-        let stop = StopFlag()
-        Task {
-            try await Task.sleep(nanoseconds: 300_000_000)
-            stop.raise()
-        }
         let started = Date()
-        let result = try await r.round(headWait: 60, stopRequested: { stop.isRaised })
-        #expect(result.failure == "the review was stopped" && r.codex.runs == 0)
-        #expect(Date().timeIntervalSince(started) < 30, "it did not keep polling for the full minute")
-        #expect(r.finished.count == 1)
-        try await r.expectNoLeftovers()
+        let result = try await r.round()
+        #expect(result.headSHA == pushed && result.verdict == .clean)
+        #expect(r.codex.read("brief_1")?.contains(pushed) == true && r.codex.read("diff_1")?.contains("+more") == true)
+        #expect(Date().timeIntervalSince(started) < 30)
     }
 
     @Test func stoppingDuringTheCapacityBackoffDoesNotStartAnotherTry() async throws {

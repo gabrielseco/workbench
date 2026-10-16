@@ -13,19 +13,18 @@ extension ThreadService {
     ///   - codexPath: `codex` by name (looked up on PATH) or by path.
     ///   - capacityBackoff: seconds to wait after the nth "at capacity" answer.
     ///   - attach: called with each running `codex`, so the caller can stop it (Ctrl-C).
-    ///   - stopRequested: polled while waiting for GitHub and between tries, so a stop also ends the parts of a round
+    ///   - stopRequested: polled between tries and before `codex` starts, so a stop also ends the parts of a round
     ///     that run no `codex`.
     public func prReview(
         id: String, config: Config, again: Bool = false, codexPath: String = "codex",
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = PRReview.timeout,
-        headWait: TimeInterval = PRReview.headWait, headPoll: TimeInterval = PRReview.headPoll,
         capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
         stopRequested: @escaping @Sendable () -> Bool = { false },
         attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let settings = PRReviewSettings(
-            codexPath: codexPath, environment: environment, timeout: timeout, headWait: headWait, headPoll: headPoll,
+            codexPath: codexPath, environment: environment, timeout: timeout,
             capacityBackoff: capacityBackoff, stopRequested: stopRequested)
         do {
             return try await withLog(id) { log in
@@ -100,13 +99,9 @@ extension ThreadService {
     private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome()
         let paths = round.paths
-        let sha: String
-        switch await waitForPullHead(round) {
-        case .failure(let reason): return outcome.failed(reason)
-        case .success(let value): sha = value
-        }
+        let sha = round.tip
         round.reviewedSHA = sha
-        if let reason = await fetchPullHead(round, sha: sha) { return outcome.failed(reason) }
+        if let reason = await fetchBranch(round) { return outcome.failed(reason) }
         switch await pinBase(round) {
         case .failure(let reason): return outcome.failed(reason)
         case .success(let value): round.baseSHA = value
@@ -231,43 +226,19 @@ extension ThreadService {
         return sha
     }
 
-    /// GitHub's `pull/<n>/head` and the branch both lag right after a push, and a review of the commit before the
-    /// latest push wastes the round: wait until they name the same commit.
-    private func waitForPullHead(_ round: PRReviewRound) async -> Result<String, PRReviewFailure> {
-        let deadline = Date().addingTimeInterval(round.settings.headWait)
-        var seen = "no answer from origin"
-        while true {
-            if round.settings.stopRequested() { return .failure(PRReviewFailure("the review was stopped")) }
-            let branch = try? await git.run(["ls-remote", "origin", "refs/heads/\(round.branch)"], in: project.root)
-            let pull = try? await git.run(["ls-remote", "origin", "refs/pull/\(round.pr)/head"], in: project.root)
-            if let branch, let pull, branch.succeeded, pull.succeeded {
-                let tip = Self.firstSHA(branch.stdout)
-                let head = Self.firstSHA(pull.stdout)
-                if let tip, tip == head { return .success(tip) }
-                seen = "\(round.branch) is at \(tip.map { String($0.prefix(12)) } ?? "nothing"), "
-                    + "pull/\(round.pr)/head at \(head.map { String($0.prefix(12)) } ?? "nothing")"
-            } else {
-                seen = "origin could not be read"
-            }
-            if Date() >= deadline { break }
-            _ = await Self.sleep(max(0.01, round.settings.headPoll), stop: round.settings.stopRequested)
-        }
-        return .failure(
-            PRReviewFailure(
-                "GitHub's pull request head did not match the branch within \(Int(round.settings.headWait))s "
-                    + "(\(seen)); nothing was reviewed. Try again in a moment."))
-    }
-
-    private func fetchPullHead(_ round: PRReviewRound, sha: String) async -> String? {
+    /// Brings the pull request's branch into this repository and checks it is still the commit the round began with.
+    /// The branch on origin is the pull request's head the moment a push lands; GitHub's own `pull/<n>/head` and its API
+    /// lag behind it, so they are not read.
+    private func fetchBranch(_ round: PRReviewRound) async -> String? {
         let fetch = try? await git.run(
-            ["fetch", "--quiet", "--no-tags", "origin", "refs/pull/\(round.pr)/head"], in: project.root)
+            ["fetch", "--quiet", "--no-tags", "origin", "refs/heads/\(round.branch)"], in: project.root)
         guard let fetch, fetch.succeeded else {
             let why = Self.withoutCredentials(fetch?.stderr.firstLine ?? "git failed")
-            return "the pull request head could not be fetched: \(why)"
+            return "the pull request's branch could not be fetched: \(why)"
         }
         let head = try? await git.run(["rev-parse", "--verify", "FETCH_HEAD^{commit}"], in: project.root)
-        guard let head, head.succeeded, head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == sha else {
-            return "the fetched pull request head is not the commit that was waited for; nothing was reviewed"
+        guard let head, head.succeeded, Self.firstSHA(head.stdout) == round.tip else {
+            return "the branch moved while the review was starting; nothing was reviewed. Run it again."
         }
         return nil
     }
@@ -440,8 +411,6 @@ struct PRReviewSettings: Sendable {
     var codexPath: String
     var environment: [String: String]
     var timeout: TimeInterval
-    var headWait: TimeInterval
-    var headPoll: TimeInterval
     var capacityBackoff: @Sendable (Int) -> TimeInterval
     var stopRequested: @Sendable () -> Bool
 }
@@ -475,7 +444,7 @@ struct PRReviewRound: Sendable {
     var paths: PRReviewPaths
     var config: Config
     var settings: PRReviewSettings
-    /// The commit that was actually reviewed, once GitHub's head and the branch agreed.
+    /// The commit that was reviewed: the branch tip on origin when the round began.
     var reviewedSHA: String?
     /// The base branch's commit the diff and the instructions come from.
     var baseSHA: String?
