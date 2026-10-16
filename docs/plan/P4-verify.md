@@ -145,6 +145,6 @@ Docs travel with the code.
 
 ## Open questions
 
-- Does the child inherit the terminal's Screen Recording grant when `workbench` is run from iTerm? Task 5.
+- Does the child inherit the terminal's Screen Recording grant when `workbench` is run from iTerm? Task 5. **Not measured yet**: run `scripts/probe-screen-recording.sh` as the `verify_command` of a scratch project (`app_type = "desktop"`) and record the answer here.
 - One `verify_command` per project, or per criterion? Start with one; the goal file names the pages.
 - Should the verifier see the images, or only text evidence? Leaning: include images, keep it advisory.

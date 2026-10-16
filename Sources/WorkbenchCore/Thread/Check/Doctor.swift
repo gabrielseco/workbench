@@ -98,8 +98,14 @@ public struct DoctorReport: Sendable, Equatable {
             }
     }
 
+    /// A step ended by a stop, or was skipped because one arrived between steps.
     public var wasStopped: Bool {
-        [setup, check, verify].contains { if case .stopped = $0.outcome { true } else { false } }
+        [setup, check, verify].contains {
+            switch $0.outcome {
+            case .stopped, .skipped("interrupted"): true
+            default: false
+            }
+        }
     }
 }
 

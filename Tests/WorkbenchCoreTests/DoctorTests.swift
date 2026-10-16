@@ -330,6 +330,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let script = try CheckScript()
         let (fx, _) = try await fixture(
             verify: """
+                set -e
                 printf 'png' > "$WORKBENCH_PROOF_DIR/home.png"
                 test "$WORKBENCH_THREAD" = doctor && test -n "$WORKBENCH_PORT" && test -f "$WORKBENCH_GOAL"
                 test -d "$WORKBENCH_PROOF_DIR" && pwd > "\(script.path("cwd"))"
@@ -403,6 +404,19 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let afterCheck = try await Doctor(project: b.project, git: b.git).run(base: "main", options: options())
         #expect(afterCheck.verify.outcome == .skipped("check did not pass") && !afterCheck.passed)
         #expect(!scriptB.exists("verify.sh.ran"))
+    }
+
+    @Test func aStopBetweenStepsIsAStopNotAFailure() {
+        func step(_ outcome: DoctorStep.Outcome) -> DoctorStep {
+            DoctorStep(command: "x", outcome: outcome, tail: "", hint: "")
+        }
+        let report = DoctorReport(
+            base: "main", claudePath: "claude", bashAvailable: true, setup: step(.passed), check: step(.passed),
+            verify: step(.skipped("interrupted")))
+        #expect(report.wasStopped && !report.passed)
+        var other = report
+        other.verify = step(.skipped("check did not pass"))
+        #expect(!other.wasStopped)
     }
 
     @Test func noVerifyCommandIsNotAFailure() async throws {
