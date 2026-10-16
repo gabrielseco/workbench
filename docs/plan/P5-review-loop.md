@@ -72,18 +72,35 @@ The reviewer is Codex, built in, all of it in Swift through `Spawner` (no shell 
 **Status: task 1 is built** (`Sources/WorkbenchCore/Thread/PRReview/`, `Sources/workbench/CommandsPRReview.swift`).
 Use it on a few real PRs before starting step 2; `scripts/codex-review.sh` stays until then.
 
-### 2. `workbench ship --review-loop` (or `[pr_review] auto = true`)
+### 2. `workbench ship --review-loop`
 
-After the PR is open (or after a push to an existing one): run `pr-review`. On `FIX`:
+**Built as chained follow-up threads, not turns on the shipped thread.** A shipped thread is `accepted`, which is
+terminal (the runner and `send-back` refuse it, and `ship` removed its worktree). So each `FIX` round starts a new
+thread on the same branch, the `goal new --update` flow done for you, and the shipped thread stays finished.
 
-1. write the findings to `prompts/` as the next turn's feedback (the `send-back` path, same budget rules);
-2. run the turn and its `check_command`; a failing check stops the loop and says so;
-3. push to the same branch (`push_to`), wait for the branch tip as in constraint 3, review again.
+After the PR is open (or on a thread that already shipped: it starts at the review), run `pr-review`. On `FIX`, while
+`max_rounds` allows another review:
 
-Stops on clean, on `max_rounds`, on a failed check, on an exhausted budget, or on a reviewer failure; it
-prints which, and never merges. The goal stays approved: findings are turns on the same goal, not edits
-(its hash is untouched). Workbench appends a `## Review rounds` note outside the hashed sections, which the
-PR description generator can read.
+1. start a follow-up thread (`<root name>-review-<n>`) whose goal Workbench writes and approves: the findings,
+   quoted line by line so they cannot reshape the goal, as the request; "each finding is fixed or the final message
+   says why not" and the project's check as criteria;
+2. run it and its `check_command`; a failing check stops the loop (13), a follow-up that changed nothing stops it (15);
+3. show the diff and **ask before pushing** (`--yes` skips the question; with no terminal and no `--yes` nothing is
+   started), accept and ship it (a plain update of the PR's branch), and review the new tip.
+
+Stops on clean (0), on `max_rounds` with findings left (15), on a failed check (13), on a stopped / timed-out / over
+budget turn (3 / 4 / 5), on a reviewer failure or a failed turn (1), or on a no (0); it prints which, and never merges.
+The ceiling is printed up front: at most `max_rounds - 1` follow-ups of up to the default budget each.
+
+**Why threads and not nesting.** The follow-up records `parent`, `root` and `round` on `thread.created`; `status` and
+`review` show the tree, and the round cap is counted over the whole tree (by `root`), so a follow-up cannot reset it.
+The app (P3) can draw follow-ups as sub-threads under the thread they follow. They are not nested at run time: a
+parent that stayed active while a child ran would break "one active thread".
+
+Left out for now: `[pr_review] auto = true`, `--confirm-each`, the `## Review rounds` note in the goal (the follow-up
+goals carry the findings and `ship --refresh-description` updates the PR text).
+
+**Status: built** (`Sources/workbench/CommandsReviewLoop.swift`, `Sources/WorkbenchCore/Thread/ReviewLoop/`).
 
 ### 3. Tests
 

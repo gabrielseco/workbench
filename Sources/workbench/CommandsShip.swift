@@ -15,11 +15,13 @@ extension Commands {
         let noScreenshots = a.flag("--no-screenshots")
         let screenshotsOnly = a.flag("--screenshots")
         let refreshText = a.flag("--refresh-description")
+        let wantsLoop = a.flag("--review-loop")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
         let named = a.positional()
         try a.requireEmpty()
         let limits = try watchLimits(watch: watch, minutes: minutes, seconds: seconds)
+        try checkLoopFlags(wantsLoop: wantsLoop, watch: watch, screenshotsOnly: screenshotsOnly, yes: yes)
         let ctx = try await Context.load()
         if screenshotsOnly { return try await retryScreenshots(named, ctx: ctx) }
         let gh = try? GitRunner.discover(tool: "gh")
@@ -30,6 +32,10 @@ extension Commands {
         } catch let error as ShipError {
             // With --watch a thread that is already shipped is simply followed.
             // An id that was named is never swapped for another thread.
+            if wantsLoop, named == nil, let shipped = latestShipped(ctx: ctx) {
+                out("\(shipped) is already shipped; starting at the review")
+                return try await reviewLoop(from: shipped, ctx: ctx, yes: yes)
+            }
             guard watch, named == nil, let shipped = latestShipped(ctx: ctx) else { return refuse(error) }
             return await follow(id: shipped, ctx: ctx, gh: gh, limits: limits)
         }
@@ -40,6 +46,10 @@ extension Commands {
         do { plan = try await ctx.service.shipPreflight(id: id, gh: gh) } catch let error as ShipError {
             // A shipped thread whose worktree is still there gets it removed now, under the same rules.
             if case .alreadyShipped = error, !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
+            if wantsLoop, case .alreadyShipped = error {
+                out("\(id) is already shipped; starting at the review")
+                return try await reviewLoop(from: id, ctx: ctx, yes: yes)
+            }
             return refuse(error)
         }
         out("thread:  \(plan.id)")
@@ -127,9 +137,20 @@ extension Commands {
             if !keepWorktree, attached { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
             if let refreshFailure { return refuse(refreshFailure) }
+            if wantsLoop { return try await reviewLoop(from: id, ctx: ctx, yes: yes) }
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
+        }
+    }
+
+    /// `--review-loop` asks before every push, so it needs someone to ask (or `--yes`) before anything is spent.
+    private static func checkLoopFlags(wantsLoop: Bool, watch: Bool, screenshotsOnly: Bool, yes: Bool) throws {
+        guard wantsLoop else { return }
+        if watch || screenshotsOnly { throw CLIError.usage("--review-loop cannot be combined with --watch or --screenshots") }
+        if !yes && isatty(STDIN_FILENO) != 1 {
+            throw CLIError.refused(
+                "not starting the review loop: there is no terminal to ask on. Pass --yes to confirm each push.")
         }
     }
 

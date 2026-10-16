@@ -46,9 +46,36 @@ extension Commands {
                         "ended": state.decision.map { .string($0) } ?? .null,
                         "last_result": state.lastResult.map { .string($0) } ?? .null,
                         "turns": .int(state.lastTurn), "cost_usd": .double(state.totalCostUSD),
+                        "parent": state.lineage.map { .string($0.parent) } ?? .null,
+                        "root": state.lineage.map { .string($0.root) } ?? .null,
+                        "round": state.lineage.map { .int($0.round) } ?? .null,
                     ]
                 }),
         ]
+    }
+
+    /// Where a review follow-up came from: `{parent, root, round}`, null for a thread someone started.
+    static func lineageJSON(_ state: ThreadState) -> JSONValue {
+        guard let lineage = state.lineage else { return .null }
+        return ["parent": .string(lineage.parent), "root": .string(lineage.root), "round": .int(lineage.round)]
+    }
+
+    /// The follow-ups that name this thread as their parent, each with how it stands.
+    static func followUpsJSON(id: String, ctx: Context) -> JSONValue {
+        .array(
+            children(of: id, ctx: ctx).map { child in
+                [
+                    "thread": .string(child.id), "round": .int(child.lineage?.round ?? 0),
+                    "status": .string(statusString(child.review.status)),
+                    "ended": child.decision.map { .string($0) } ?? .null,
+                    "last_result": child.lastResult.map { .string($0) } ?? .null,
+                    "cost_usd": .double(child.totalCostUSD),
+                ]
+            })
+    }
+
+    static func children(of id: String, ctx: Context) -> [ThreadState] {
+        ctx.store.followUps(of: ctx.store.rootID(of: id)).filter { $0.lineage?.parent == id }
     }
 
     private static func noteJSON(_ notes: [Review.Note]) -> JSONValue {
@@ -87,6 +114,7 @@ extension Commands {
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
+            "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: id, ctx: ctx),
             "goal": goalValue, "turns": .int(state.lastTurn),
             "open_turn": state.openTurn.map { .int($0) } ?? .null,
             "running": .bool(ctx.service.runnerPID(id: id) != nil),
@@ -219,6 +247,7 @@ extension Commands {
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(state.id), "status": .string(statusString(review.status)),
+            "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: state.id, ctx: ctx),
             "ended": decision, "title": report.title.map { .string($0) } ?? .null,
             "approval": report.approval.map { .string($0) } ?? .null,
             "goal_problem": report.goalProblem.map { .string($0) } ?? .null, "turns": .int(state.lastTurn),

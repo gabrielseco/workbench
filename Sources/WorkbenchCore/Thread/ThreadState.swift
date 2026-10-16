@@ -165,6 +165,17 @@ extension Progress {
     }
 }
 
+/// Where a review follow-up thread came from, as its `thread.created` recorded it. The tree is derived from these
+/// links; nothing stores it twice.
+public struct ThreadLineage: Sendable, Equatable {
+    /// The thread this one follows (itself a follow-up from the second round on).
+    public var parent: String
+    /// The thread that opened the pull request.
+    public var root: String
+    /// 1 for the first follow-up of the root, 2 for the next.
+    public var round: Int
+}
+
 /// What the log says about a thread, derived each time it is asked for. Nothing here is stored twice.
 public struct ThreadState: Sendable, Equatable {
     public var id: String
@@ -183,10 +194,20 @@ public struct ThreadState: Sendable, Equatable {
     public var review: Review
     /// What the latest turn has done so far; for `status`, which asks "working or stuck".
     public var progress: Progress
+    /// Set for a review follow-up, nil for a thread someone started.
+    public var lineage: ThreadLineage?
 
     public var isActive: Bool { decision == nil }
 
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
+
+    /// The `parent`, `root` and `round` of a follow-up's `thread.created`, nil when any is missing or not a thread id.
+    private static func lineage(_ event: Event) -> ThreadLineage? {
+        guard let parent = event.data["parent"]?.stringValue, let root = event.data["root"]?.stringValue,
+            let round = event.data["round"]?.intValue, SafeNames.isThreadID(parent), SafeNames.isThreadID(root)
+        else { return nil }
+        return ThreadLineage(parent: parent, root: root, round: round)
+    }
 
     /// A `pr_review.started` or `pr_review.finished` event as the review shows it. A round that only started is
     /// replaced by the `finished` that follows; if none does, it was cut off.
@@ -273,6 +294,7 @@ public struct ThreadState: Sendable, Equatable {
             switch event.kind {
             case .threadCreated:
                 state.createdAt = event.ts
+                state.lineage = Self.lineage(event)
             case .turnStarted:
                 state.lastTurn = max(state.lastTurn, event.turn)
                 state.openTurn = event.turn

@@ -21,7 +21,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 
 | kind | When | data (essential fields) |
 |---|---|---|
-| `thread.created` | once | `repo`, `base`, `worktree`, `branch` |
+| `thread.created` | once | `repo`, `base`, `worktree`, `branch`, and for a review follow-up `parent`, `root`, `round` |
 | `goal.saved` | goal changed | `status`, `hash` |
 | `goal.approved` | approve | `hash`, `budget_usd` |
 | `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref` |
@@ -63,7 +63,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 
 | kind | data |
 |---|---|
-| `thread.created` | `repo`, `base`, `worktree`, `branch` |
+| `thread.created` | `repo`, `base`, `worktree`, `branch`. A follow-up that `ship --review-loop` made also has `parent` (the thread it follows; itself a follow-up from the second round on), `root` (the thread that opened the pull request) and `round` (1 for the root's first follow-up, 2 for the next). Creating a follow-up writes nothing to the parent's log (reviews of the pull request are recorded in whichever thread ran them): the tree of follow-ups is derived from these three fields, and `status`/`review` show it. The follow-up's `pr_review.*` rounds continue the numbering of the whole tree, and `max_rounds` counts the `pr_review.started` events of every thread with the same `root` for the same pull request |
 | `goal.saved` | `status`, `hash` (null for a new draft) |
 | `goal.approved` | `hash`, `budget_usd` |
 | `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off |

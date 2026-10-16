@@ -24,6 +24,7 @@ import Foundation
 //   dump=<file>           write argv, environment, cwd, open descriptors and stdin state as JSON
 //   answer=<file>         with `--output-format json` (one object, not a stream) answer with this file's text
 //                         as the `result`, then exit; `exit=<n>` still applies
+//   write=<path>          add a line to this file (relative to the working directory) each run, so a turn leaves a diff
 //   sessions=<dir>        emulate session bookkeeping: --session-id twice, or --resume of an unknown id,
 //                         exits 1 with no output (the first is spike S4; the second message is a guess)
 
@@ -141,6 +142,14 @@ if argument(after: "--output-format", in: args) == "json" {
             "session_id": sessionID, "total_cost_usd": 0.001,
         ]) + "\n")
     exit(Int32(d.int("exit") ?? 0))
+}
+
+// MARK: work done in the working directory
+
+if let path = d.string("write") {
+    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(path)
+    let old = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    try? (old + "fixed \(UUID().uuidString)\n").write(to: url, atomically: true, encoding: .utf8)
 }
 
 // MARK: the turn

@@ -95,6 +95,18 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   stored in the thread's folder and printed; `review` shows the round and says when the branch has moved since. The
   review needs only the pull request, not the thread's worktree, so it works after `ship` removed it. Nothing is posted
   to the pull request and nothing changes what `accept` or `ship` do.
+- **`workbench ship --review-loop` turns each round of findings into a follow-up thread.** After the pull request is
+  open (or on a thread that already shipped: it starts at the review) it runs `pr-review`. On `VERDICT: FIX`, and
+  while `max_rounds` allows another review, it makes a new thread on the same branch (`goal new --update`, named
+  `<root name>-review-<n>`), writes its goal itself and approves it: the request holds the findings, quoted line by line
+  (so a heading, `---`, a criterion line or a fence in them cannot change the goal), cut at 16 KiB; the criteria are
+  "each finding is fixed, or the final message says why it does not apply" and, when `check_command` is set, that the check
+  passes. The shipped thread is not touched and stays `accepted`; the follow-up records its `parent`, `root` and `round`
+  on `thread.created`, so a UI can show it under the thread it follows. The follow-up runs like any thread. If its check fails the
+  loop stops (13); if it changed nothing it stops (15) and pushes nothing. Otherwise the diff is shown and you are
+  asked before the push (`--yes` skips the question; with no terminal and no `--yes` nothing is started); it is
+  then accepted (only what was shown: a change made while the question waited is refused) and shipped like any update of a pull request, and the new tip is reviewed. Started again, the loop reuses an earlier review's answer only for the commit that review looked at: a branch that moved after the last allowed review is refused (6), and a last review without a verdict is exit 1 again. The ceiling is known up
+  front and printed: at most `max_rounds - 1` follow-ups of up to the default budget each. It never merges.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
   unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a
   status and a summary line (`Criteria: 1 passed · 0 failed · 4 for you to check`). Workbench runs one

@@ -339,7 +339,7 @@ enum Commands {
         return try await runTurn(ctx: ctx, id: id, options: options)
     }
 
-    private static func runTurn(ctx: Context, id: String, options: RunOptions) async throws -> Int32 {
+    static func runTurn(ctx: Context, id: String, options: RunOptions) async throws -> Int32 {
 
         let runner = ThreadRunner(project: ctx.project, threadID: id, git: ctx.git) { notice in
             switch notice {

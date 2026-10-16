@@ -156,6 +156,18 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 13 | `check-failed` | `--watch` (`-w`): a check failed or was cancelled |
 | 14 | `no-result` | `--watch` (`-w`): checks were still running at the time limit, or none appeared within two minutes |
 
+With `--review-loop` (not with `--watch`) the same command goes on after the pull request is open, and its exit code is how the loop stopped:
+
+| Code | Kind | The loop stopped because |
+|---|---|---|
+| 0 |  | the review is clean, or the person answered no before a push (`nothing pushed` is printed and the follow-up waits for them) |
+| 1 | `failed` | the reviewer gave no verdict (no `codex`, a crash, no `VERDICT:` line), or a follow-up's turn failed |
+| 2 | `usage` | `--review-loop` with `--watch` or `--screenshots` |
+| 3, 4, 5 | `stopped`, `timed-out`, `budget-exceeded` | Ctrl-C ended the review or the follow-up's turn, or the turn timed out or went over its budget |
+| 6 | `refused` | there is no terminal to ask on and no `--yes` (nothing is spent), or `pr-review` refused (no pull request, a run is live) |
+| 13 | `check-failed` | the follow-up's check did not pass; nothing was pushed and the follow-up is left awaiting review |
+| 15 | `findings` | findings are left: `max_rounds` is reached with the last review still `VERDICT: FIX`, or a follow-up changed nothing so the findings were not acted on |
+
 ### `clean`
 
 | Code | Kind | When |

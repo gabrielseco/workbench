@@ -47,9 +47,13 @@ struct FakeCodex {
               while :; do sleep 1; done
             fi
             if [ -f "$d/leave_child" ]; then
-              perl -e 'use POSIX qw(setsid); my $p = fork();
-                if ($p == 0) { setsid(); close STDOUT; close STDERR; exec "sleep", "120"; }
-                open(F, ">", $ARGV[0]); print F "$p\\n"; close F;' "$d/child_pid"
+              perl -e 'use POSIX qw(setsid); my $a = fork();
+                if ($a == 0) {
+                  setsid(); my $b = fork();
+                  if ($b == 0) { close STDOUT; close STDERR; exec "sleep", "120"; }
+                  open(F, ">", $ARGV[0]); print F "$b\\n"; close F; exit 0;
+                }
+                waitpid($a, 0);' "$d/child_pid"
             fi
             if [ -f "$d/flood" ]; then yes "0123456789012345678901234567890123456789" | head -c 6000000; fi
             if [ -f "$d/big" ] && [ -n "$out" ]; then
