@@ -137,7 +137,7 @@ struct VerifyRunner {
 
     /// The regular files under `proofDirectory`, sorted by name. Symlinks and anything else are left out, so
     /// the command cannot point the record at a file elsewhere on disk. Bounded in entries, bytes and time;
-    /// whatever is not listed is counted in `omitted`.
+    /// whatever is not listed is counted in `omitted` (past the entry or time limit, at least that many).
     static func collect(
         proofDirectory: URL, threadDirectory: URL, maxEntries: Int = maxEntries, maxFileBytes: Int = maxFileBytes,
         maxTotalBytes: Int = maxTotalBytes, budget: TimeInterval = collectBudget
@@ -154,8 +154,9 @@ struct VerifyRunner {
         for case let url as URL in walker {
             looked += 1
             if looked > maxEntries || Date() > deadline {
+                // Stop walking: the rest is not looked at, so it cannot be counted. `omitted` is "at least".
                 omitted += 1
-                continue
+                break
             }
             guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
                 values.isSymbolicLink != true, values.isRegularFile == true

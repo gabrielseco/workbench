@@ -124,6 +124,11 @@ public enum LogFormatter {
         return flat.count > 100 ? String(flat.prefix(100)) + "..." : flat
     }
 
+    /// Whether the newest turn in the log ended `succeeded`; where `log -f` starts when it joins a run midway.
+    public static func latestTurnSucceeded(_ events: [Event]) -> Bool {
+        events.last { $0.kind == .turnEnded }?.data["result"]?.stringValue == "succeeded"
+    }
+
     /// Whether `log -f` has seen everything this run will write. A turn is followed to the end of its check,
     /// then, when it succeeded and a verify step is configured, to the end of that.
     public static func followEnds(_ event: Event, sawStart: Bool, checks: Bool, verifies: Bool, turnSucceeded: Bool) -> Bool {

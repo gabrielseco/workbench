@@ -271,11 +271,18 @@ extension RunnerFixture {
 
         let fewEntries = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread, maxEntries: 2)
         #expect(fewEntries.files.count <= 2)
-        #expect(fewEntries.omitted >= 2)
+        #expect(fewEntries.omitted >= 1)
+
+        let many = proof.deletingLastPathComponent().appendingPathComponent("many")
+        try FileManager.default.createDirectory(at: many, withIntermediateDirectories: true)
+        for i in 0..<40 { try Data([1]).write(to: many.appendingPathComponent("f\(i).png")) }
+        let capped = VerifyRunner.collect(proofDirectory: many, threadDirectory: thread, maxEntries: 10)
+        #expect(capped.files.count <= 10, "the walk stops at the entry limit")
+        #expect(capped.omitted >= 1)
 
         let noTime = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread, budget: -1)
         #expect(noTime.files.isEmpty)
-        #expect(noTime.omitted >= 4)
+        #expect(noTime.omitted >= 1)
     }
 }
 
@@ -303,6 +310,13 @@ extension RunnerFixture {
         #expect(ends(.checkRan, "failed", checks: true, verifies: true, succeeded: false))
         #expect(ends(.checkRan, "stopped", checks: true, verifies: true))
         #expect(ends(.turnEnded, "stopped", verifies: true, succeeded: false))
+    }
+
+    @Test func joiningAtAnOpenCheckKnowsTheTurnSucceeded() {
+        func turnEnded(_ result: String) -> Event { event(.turnEnded, result) }
+        #expect(LogFormatter.latestTurnSucceeded([turnEnded("failed"), turnEnded("succeeded")]))
+        #expect(!LogFormatter.latestTurnSucceeded([turnEnded("succeeded"), turnEnded("failed")]))
+        #expect(!LogFormatter.latestTurnSucceeded([]))
     }
 
     @Test func withoutAVerifyStepNothingChanges() {

@@ -39,7 +39,7 @@ extension Commands {
             let config = try? Config.load(from: ctx.project.configURL)
             let checks = config?.checkCommand != nil
             let verifies = config?.verifyCommand != nil
-            var turnSucceeded = false
+            var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
             var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
             var seen = contents.events.count
             while true {
@@ -82,7 +82,7 @@ extension Commands {
         let config = try? Config.load(from: ctx.project.configURL)
         let checks = config?.checkCommand != nil
         let verifies = config?.verifyCommand != nil
-        var turnSucceeded = false
+        var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn
         while true {
             try await Task.sleep(nanoseconds: 300_000_000)
