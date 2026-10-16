@@ -46,6 +46,8 @@ private func runLoop(
         ],
         workingDirectory: r.fx.repo, timeout: 300)
     spawn.snapshotInterval = 3600
+    // Ctrl-C is a graceful shutdown (sweep, remove the checkout, record): on a loaded machine it needs more than 5 s.
+    spawn.killGrace = 90
     let process = try ProcessRunner.start(spawn)
     attach(process)
     var lines: [String] = []
@@ -106,6 +108,68 @@ private let clean = "Nothing left.\nVERDICT: CLEAN"
         #expect(childStarted?.data["round"]?.intValue == 2 && childStarted?.data["head_sha"]?.stringValue == after)
         let goal = try String(contentsOf: r.fx.project.goalURL(child), encoding: .utf8)
         #expect(goal.contains("> 1. A.swift:3 crashes on empty input"))
+    }
+
+    @Test func twoRoundsOfFindingsMakeAChainOfFollowUpsAndStayUnderTheSameRoot() async throws {
+        let (r, gh) = try await loopPR(answers: [fix1, fix1, clean])
+        let run = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        #expect(run.code == 0 && run.text.contains("the review is clean after 3 rounds"), "\(run.text)")
+        let kids = ThreadStore(project: r.fx.project).followUps(of: r.id)
+        #expect(kids.count == 2 && kids.allSatisfy { $0.decision == "accepted" })
+        #expect(kids[0].lineage == ThreadLineage(parent: r.id, root: r.id, round: 1))
+        #expect(kids[1].lineage == ThreadLineage(parent: kids[0].id, root: r.id, round: 2), "the second follows the first")
+        #expect(r.codex.runs == 3)
+        let rounds = try r.fx.events(kids[1].id).filter { $0.kind == .prReviewStarted }.compactMap { $0.data["round"]?.intValue }
+        #expect(rounds == [3], "numbering continues across the tree")
+        let tree = try await runLoop(["status", kids[0].id], r, gh: gh)
+        #expect(tree.text.contains("follows:   \(r.id)"), "\(tree.text)")
+        #expect(tree.text.contains("round 2  \(kids[1].id)  accepted"), "\(tree.text)")
+    }
+
+    @Test func aThreadThatWasNotShippedYetIsShippedAndThenReviewed() async throws {
+        let fx = try await RunnerFixture(extraConfig: "check_command = \"true\"\n[pr_review]\nmax_rounds = 3\n")
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let codex = try FakeCodex(in: fx)
+        try codex.put("answer", clean)
+        let config = try Config.load(from: fx.project.configURL)
+        let r = ReviewedPR(fx: fx, id: id, bare: bare, head: "", codex: codex, config: config)
+        let gh = try writeLoopGH(r)
+
+        let run = try await runLoop(["ship", id, "--review-loop", "--yes", "--no-describe"], r, gh: gh)
+        #expect(run.code == 0, "\(run.text)")
+        #expect(run.text.contains("pushed workbench/\(id)") && run.text.contains("the review is clean after 1 round"))
+        let kinds = try fx.kinds(id)
+        let opened = try #require(kinds.firstIndex(of: "pr.opened"))
+        let review = try #require(kinds.firstIndex(of: "pr_review.started"))
+        #expect(review > opened, "the review came after the pull request was recorded")
+    }
+
+    @Test func aBranchThatMovedAfterTheLastAllowedReviewIsNotReportedClean() async throws {
+        let (r, gh) = try await loopPR(maxRounds: 1, answers: [clean])
+        #expect(try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh).code == 0)
+
+        // Someone pushes more commits; the only allowed review looked at the commit before.
+        let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+        _ = try await r.fx.git.run(["worktree", "add", "-q", worktree.path, "workbench/\(r.id)"], in: r.fx.repo)
+        try "later\n".write(to: worktree.appendingPathComponent("later.txt"), atomically: true, encoding: .utf8)
+        _ = try await r.fx.git.run(["add", "-A"], in: worktree)
+        _ = try await r.fx.git.run(["commit", "-q", "-m", "more"], in: worktree)
+        _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
+
+        let again = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        #expect(again.code == 6, "\(again.text)")
+        #expect(again.text.contains("the branch has moved since round 1") && !again.text.contains("review is clean"))
+        #expect(r.codex.runs == 1)
+    }
+
+    @Test func aFailedLastReviewIsStillAFailureWhenTheLoopIsStartedAgain() async throws {
+        let (r, gh) = try await loopPR(maxRounds: 1, answers: ["no verdict at all"])
+        let first = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        let second = try await runLoop(["ship", r.id, "--review-loop", "--yes"], r, gh: gh)
+        #expect(first.code == 1 && second.code == 1, "\(first.code ?? -1) then \(second.code ?? -1): \(second.text)")
+        #expect(second.text.contains("has no verdict"))
+        #expect(r.codex.runs == 1)
     }
 
     @Test func findingsLeftAtTheCapExitFifteenWithoutAnotherFollowUp() async throws {

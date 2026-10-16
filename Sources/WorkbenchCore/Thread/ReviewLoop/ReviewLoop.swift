@@ -167,6 +167,15 @@ extension ThreadService {
         return prReviewRecords(family: family(of: id), pr: pr).last
     }
 
+    /// The commit `origin` has for this thread's pull request branch right now, nil when it cannot be read.
+    public func pullRequestBranchTip(id: String) async -> String? {
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        guard let branch = events.last(where: { $0.kind == .prOpened })?.data["branch"]?.stringValue,
+            SafeNames.isBranchName(branch)
+        else { return nil }
+        return try? await originBranchTip(branch)
+    }
+
     /// What Codex wrote in a round, from the file the record names.
     public func prReviewFindings(_ record: PRReviewRecord) -> String? {
         guard let path = record.findingsPath, path.hasPrefix("pr-review/"), !path.contains("..") else { return nil }

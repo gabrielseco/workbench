@@ -95,6 +95,12 @@ private func recordShipped(_ child: String, _ r: ReviewedPR) async throws {
         #expect(file.goal.pushTo == "workbench/\(r.id)", "it updates the pull request's branch")
         #expect(file.goal.criteria.map(\.id) == ["c1", "c2"], "the findings cannot add or change a criterion")
         #expect(file.goal.criteria[1].proof == "true")
+        // Every other section is exactly what Workbench wrote; the findings are only in the request, as quoted lines.
+        #expect(file.goal.outOfScope == ReviewLoop.body(findings: hostile, reviewRound: 1, checkCommand: "true").outOfScope)
+        let expected = ReviewLoop.body(findings: "", reviewRound: 1, checkCommand: "true")
+        #expect(file.goal.criteria.map(\.text) == expected.criteria.map(\.text))
+        #expect(file.goal.request.contains("> $(touch /tmp/pwned) `id` ; rm -rf ~") && file.goal.request.contains("> ---"))
+        #expect(file.goal.approvedHash == file.goal.contentHash)
         #expect(try r.fx.kinds(child).contains("goal.approved"))
     }
 

@@ -215,7 +215,7 @@ extension ThreadService {
     // MARK: Git
 
     /// The commit `origin` has for a branch.
-    private func originBranchTip(_ branch: String) async throws -> String {
+    func originBranchTip(_ branch: String) async throws -> String {
         let result: GitResult
         do { result = try await git.run(["ls-remote", "origin", "refs/heads/\(branch)"], in: project.root) } catch {
             throw PRReviewRefusal.originUnreadable("\(error)")

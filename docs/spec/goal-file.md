@@ -105,7 +105,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   on `thread.created`, so a UI can show it under the thread it follows. The follow-up runs like any thread. If its check fails the
   loop stops (13); if it changed nothing it stops (15) and pushes nothing. Otherwise the diff is shown and you are
   asked before the push (`--yes` skips the question; with no terminal and no `--yes` nothing is started); it is
-  then accepted and shipped like any update of a pull request, and the new tip is reviewed. The ceiling is known up
+  then accepted (only what was shown: a change made while the question waited is refused) and shipped like any update of a pull request, and the new tip is reviewed. Started again, the loop reuses an earlier review's answer only for the commit that review looked at: a branch that moved after the last allowed review is refused (6), and a last review without a verdict is exit 1 again. The ceiling is known up
   front and printed: at most `max_rounds - 1` follow-ups of up to the default budget each. It never merges.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
   unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a

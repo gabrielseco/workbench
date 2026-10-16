@@ -66,7 +66,7 @@ extension Commands {
             result = try await ctx.service.prReview(
                 id: id, config: config, stopRequested: { holder.isStopRequested }, attach: { holder.attach($0) })
         } catch let error as PRReviewRefusal {
-            return try resume(after: error, id: id, ctx: ctx, config: config)
+            return try await resume(after: error, id: id, ctx: ctx, config: config)
         }
         for warning in result.warnings { out("note: \(warning)") }
         if holder.isStopRequested { return .stop(fail(.stopped, "the review was stopped.")) }
@@ -84,12 +84,22 @@ extension Commands {
 
     /// A review that was refused because the branch was already reviewed, or the cap was reached, still has an answer on
     /// record: use it, so a loop can pick up where an earlier one stopped.
-    private static func resume(after error: PRReviewRefusal, id: String, ctx: Context, config: Config) throws -> LoopReview {
+    private static func resume(
+        after error: PRReviewRefusal, id: String, ctx: Context, config: Config
+    ) async throws -> LoopReview {
         switch error {
         case .alreadyReviewed, .capReached:
-            guard let record = ctx.service.latestPRReview(id: id), record.ok, let verdict = record.verdict,
-                let text = ctx.service.prReviewFindings(record)
-            else { throw CLIError.refused("\(error)") }
+            guard let record = ctx.service.latestPRReview(id: id) else { throw CLIError.refused("\(error)") }
+            guard record.ok, let verdict = record.verdict else {
+                return .stop(fail(.failed, "the last review (round \(record.round)) has no verdict, and \(error)"))
+            }
+            // The answer on record is only the answer for the commit it looked at.
+            if let tip = await ctx.service.pullRequestBranchTip(id: id), tip != record.headSHA {
+                throw CLIError.refused(
+                    "the branch has moved since round \(record.round) reviewed it, and \(error) "
+                        + "Raise max_rounds in [pr_review] to review the new commits.")
+            }
+            guard let text = ctx.service.prReviewFindings(record) else { throw CLIError.refused("\(error)") }
             out("\(error)")
             if verdict == .clean { return .clean(round: record.round) }
             return .findings(round: record.round, text: text, last: record.round >= config.prReview.maxRounds)
@@ -124,7 +134,8 @@ extension Commands {
             }
         }
 
-        do { _ = try await ctx.service.acceptPlan(id: child) } catch ThreadServiceError.nothingToAccept {
+        let plan: AcceptPlan
+        do { plan = try await ctx.service.acceptPlan(id: child) } catch ThreadServiceError.nothingToAccept {
             out("the follow-up changed nothing, so the findings were not acted on and nothing is pushed.")
             out("\(child) is left as it is: `workbench review` to look, `workbench abandon` to drop it")
             return .stop(FailureKind.findings.code)
@@ -149,7 +160,8 @@ extension Commands {
         }
 
         do {
-            try await ctx.service.accept(id: child, message: "fix: address review round \(round)")
+            // What was shown is what is committed: edits made while the question waited are refused.
+            try await ctx.service.accept(id: child, message: "fix: address review round \(round)", shown: plan)
         } catch let error as ThreadServiceError {
             throw CLIError.refused("\(error)")
         }

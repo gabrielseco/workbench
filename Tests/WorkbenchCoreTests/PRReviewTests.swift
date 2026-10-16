@@ -232,22 +232,21 @@ import Testing
         // The tree and the `codex` of a round whose process was killed.
         let tree = r.folder.appendingPathComponent("round-7.tree")
         _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, r.head], in: r.fx.repo)
-        // A `codex` whose parent is gone: forked into its own session and left, as a killed round leaves it.
-        let spawn = SpawnRequest(
-            executable: URL(fileURLWithPath: "/usr/bin/perl"),
-            arguments: [
-                "-e",
-                "use POSIX qw(setsid); my $p = fork(); if ($p == 0) { setsid(); close STDOUT; close STDERR; "
-                    + "exec 'sleep', '120'; } select(undef, undef, undef, 0.5); print \"$p\\n\";",
-            ],
-            environment: [:], workingDirectory: tree, timeout: 30)
-        var printed: [String] = []
-        for await event in try ProcessRunner.start(spawn).events {
-            if case .line(let line) = event { printed.append(line) }
+        // A `codex` whose parent is gone: left running in the folder, as a killed round leaves it.
+        let null = open("/dev/null", O_WRONLY)
+        defer { close(null) }
+        let sh = try Spawner.spawn(
+            executable: "/bin/sh", arguments: ["-c", "exec sleep 300 &"], environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: tree.path, stdout: null, stderr: null)
+        var status: Int32 = 0
+        waitpid(sh, &status, 0)
+        var found: ProcessMember?
+        _ = await pollUntil {
+            found = OrphanSweeper.orphans(inside: r.folder).first
+            return found != nil
         }
-        let stray = try #require(Int32(printed.first ?? ""))
+        let stray = try #require(found, "the helper process should be orphaned and found by its cwd").pid
         defer { kill(stray, SIGKILL) }
-        #expect(kill(stray, 0) == 0)
 
         do {
             _ = try await r.round()
