@@ -103,7 +103,7 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
    timeout, killed mid-verify, empty proof dir, a dev-server grandchild left running.
 2. **Screenshot proof** (a: parser, `review`, `--json`, PR table: done. b: `ship` attaching through `pr-shots`: done). Parser, `review` and `--json`, spec, "missing" never "met". `ship` attaches the
    screenshots through `pr-shots pr` (or says it is not installed).
-3. **expense-tracker pilot.** `.workbench/config.toml` and `scripts/verify.sh` in that repo; one real small UI
+3. **expense-tracker pilot** (done 2026-10-16: a throwaway label change, goal to review with a screenshot, `$0.0038` on haiku; see friction #42 to #44; `ship` against a real PR was not run). `.workbench/config.toml` and `scripts/verify.sh` in that repo; one real small UI
    task from goal to PR with screenshots in the description. Record what broke in `FRICTION.md`.
 4. **Verifier turn.** Prompt builder (reuse expense-tracker's `verifier` agent text as the starting point),
    strict `verdict.json` schema, read-only tool set, budget, failure shown, advisory.
