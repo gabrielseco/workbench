@@ -9,7 +9,7 @@ public enum PromptBuilder {
         + "commit in this worktree and stop there."
 
     public static func firstPrompt(
-        goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil
+        goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
@@ -33,6 +33,17 @@ public enum PromptBuilder {
                 (one test target or file) instead of the full check each time. The full check is \
                 `\(check)`: Workbench runs it itself when you finish, and that run is what the reviewer \
                 sees. Run it yourself at most once, at the end, to be sure.
+
+                """
+        }
+        if verifies, goal.criteria.contains(where: { ScreenshotProof.name(in: $0.proof) != nil }) {
+            out += """
+
+                ## Verification
+
+                After you finish, Workbench runs the project's verify step itself. Criteria whose proof is \
+                `screenshot: <name>` are captured by it, so you do not need to take those screenshots, and \
+                you should not report them as unverified: say whether the change you made should satisfy them.
 
                 """
         }
