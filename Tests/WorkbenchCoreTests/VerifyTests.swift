@@ -145,11 +145,22 @@ extension RunnerFixture {
     }
 
     @Test func aServerAToolDetachedIsSweptBecauseItsWorkingDirectoryIsTheWorktree() async throws {
-        // `verify-ui` starts its server in a new session and exits, so it is no descendant of the step.
+        // `verify-ui` starts its server in a new session and exits, so it is no descendant of the step. A double
+        // fork gets it re-parented to launchd within a moment; the step then idles for several snapshots of the
+        // process tree, none of which can see it. (If a snapshot caught it in that first moment, the runner's own
+        // tree sweep kills it instead, so either counter proves the server did not outlive the step.)
         let script = try CheckScript()
         let body = """
-            /usr/bin/python3 -c 'import subprocess; p = subprocess.Popen(["sleep", "300"], start_new_session=True); \
-            open("\(script.path("server"))", "w").write(str(p.pid))'
+            /usr/bin/python3 -c '
+            import os, sys
+            if os.fork() == 0:
+                os.setsid()
+                if os.fork() == 0:
+                    open("\(script.path("server"))", "w").write(str(os.getpid()))
+                    os.execvp("sleep", ["sleep", "300"])
+                os._exit(0)
+            '
+            sleep 1
             exit 0
             """
         let fx = try await verifyFixture(script, body: body)
@@ -160,7 +171,8 @@ extension RunnerFixture {
         defer { kill(server, SIGKILL) }
         #expect(await FakeClaude.waitUntilGone(server), "a detached server does not outlive the verify step")
         let ended = try #require(try fx.verifyEnds(id).first)
-        #expect((ended.data["swept_orphans"]?.intValue ?? 0) >= 1)
+        let swept = (ended.data["swept_orphans"]?.intValue ?? 0) + (ended.data["swept_processes"]?.intValue ?? 0)
+        #expect(swept >= 1, "the cleanup is recorded")
     }
 
     @Test func aSymlinkInTheProofDirectoryIsNotRecorded() async throws {
