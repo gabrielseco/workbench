@@ -8,8 +8,11 @@ public struct ProofWarning: Sendable, Equatable {
     public var reason: String
     /// The `[tools] allowed` entry that would permit it, when adding one would.
     public var suggestion: String?
+    /// A `screenshot:` proof that nothing in the project can produce, rather than a command.
+    public var isScreenshot = false
 
     public var line: String {
+        if isScreenshot { return "[\(criterion)] proof is `\(command)`, but \(reason)" }
         var text = "[\(criterion)] proof names `\(command)`, which a run cannot execute: \(reason)"
         if let suggestion { text += ". Add \"\(suggestion)\" to [tools] allowed, or change the proof" }
         return text
@@ -38,6 +41,15 @@ public enum ProofCommands {
         var out: [ProofWarning] = []
         var seen = Set<String>()
         for criterion in goal.criteria {
+            if let name = ScreenshotProof.name(in: criterion.proof), config.verifyCommand == nil {
+                out.append(
+                    ProofWarning(
+                        criterion: criterion.id, command: "screenshot: \(name)",
+                        reason: "the project has no verify_command, so nothing will produce \(name).png: "
+                            + "set it in .workbench/config.toml, or change the proof",
+                        suggestion: nil, isScreenshot: true))
+                continue
+            }
             for span in spans(in: criterion.proof).flatMap(parts(of:)) {
                 guard let first = span.split(separator: " ").first.map(String.init),
                     known.contains(first) || isRepositoryPath(first),

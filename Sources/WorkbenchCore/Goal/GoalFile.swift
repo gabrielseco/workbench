@@ -271,6 +271,12 @@ public struct GoalFile: Sendable, Equatable {
         func finish() {
             guard let p = pending else { return }
             if let proof = p.proof, !proof.isEmpty {
+                if ScreenshotProof.isMalformed(proof) {
+                    add(
+                        .malformedScreenshotProof, p.line,
+                        "criterion [\(p.id)]: a screenshot proof is 'screenshot: <name>' with a name of letters, "
+                            + "digits, '.', '_' or '-' (the file is <name>.png)")
+                }
                 done.append(Criterion(id: p.id, text: p.text, proof: proof))
             } else {
                 add(.criterionWithoutProof, p.line, "criterion [\(p.id)] has no '- proof:' line")

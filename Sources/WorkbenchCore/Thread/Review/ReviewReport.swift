@@ -17,9 +17,13 @@ public struct ReviewReport: Sendable, Equatable {
     /// Why the goal file could not be read; the criteria are then unknown, not empty.
     public var goalProblem: String?
     public var diff: Diff
+    /// The thread's directory, to check that a recorded proof file is still there; nil skips the check.
+    public var threadDirectory: URL?
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
-        CriteriaStatus.evaluate(criteria: criteria, check: state.review.check, lastTurn: state.lastTurn)
+        CriteriaStatus.evaluate(
+            criteria: criteria, check: state.review.check, lastTurn: state.lastTurn, verify: state.review.verify,
+            proofAvailable: { [threadDirectory] file in threadDirectory.map(file.isAvailable(in:)) ?? true })
     }
 
     public var status: ReviewStatus { state.review.status }
@@ -216,7 +220,8 @@ public struct ReviewLoader: Sendable {
         }
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
-            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored))
+            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
+            threadDirectory: project.threadDirectory(id))
     }
 
     /// One file's patch, by its path in the diff.
