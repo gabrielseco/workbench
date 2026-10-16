@@ -40,6 +40,39 @@ public struct ReviewReport: Sendable, Equatable {
         }
     }
 
+    /// The advisory judge's part of the report: nothing when it has not run. It stands beside the criteria and the
+    /// check, and where it disagrees with one of them that is said, not resolved.
+    public func judgeLines() -> [String] {
+        guard let judge = state.review.judge else { return [] }
+        let stale = judge.turn == state.lastTurn ? "" : " (turn \(judge.turn); the latest turn is \(state.lastTurn))"
+        let cost = judge.costUSD.map { String(format: " · $%.4f", $0) } ?? ""
+        guard let verdict = judge.verdict else {
+            return ["Judge      no verdict\(stale): \(judge.failure ?? "unknown")"]
+        }
+        var lines = ["Judge      advisory · turn \(judge.turn)\(cost)\(stale)"]
+        for entry in verdict.criteria {
+            let first = entry.evidence.first.map { "  " + $0 } ?? ""
+            lines.append("  [\(entry.id)] \(entry.met ? "met    " : "not met")\(first)")
+            for more in entry.evidence.dropFirst() { lines.append("                 \(more)") }
+        }
+        for line in disagreements(verdict) { lines.append("  differs: \(line)") }
+        for concern in verdict.concerns { lines.append("  concern: \(concern)") }
+        return lines
+    }
+
+    /// Where the judge says the opposite of something Workbench itself established.
+    func disagreements(_ verdict: JudgeVerdict) -> [String] {
+        let statuses = Dictionary(uniqueKeysWithValues: criterionStatuses.map { ($0.id, $0.state) })
+        return verdict.criteria.compactMap { entry in
+            switch (statuses[entry.id], entry.met) {
+            case (.passed?, false): "[\(entry.id)] the check passed, the judge says not met"
+            case (.failed?, true): "[\(entry.id)] the check failed, the judge says met"
+            case (.missing?, true): "[\(entry.id)] the screenshot is missing, the judge says met"
+            default: nil
+            }
+        }
+    }
+
     /// Lines for the terminal, without colour or a trailing newline.
     public func render() -> [String] {
         var lines: [String] = []
@@ -119,6 +152,8 @@ public struct ReviewReport: Sendable, Equatable {
                 for file in verify.proof { lines.append("  \(file.path)  \(file.bytes) bytes") }
             }
         }
+
+        lines.append(contentsOf: judgeLines())
 
         if review.deniedTools.isEmpty {
             lines.append("Denied     none")

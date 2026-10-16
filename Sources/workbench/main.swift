@@ -27,6 +27,10 @@ let usage = """
       log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
       status [id] [--all]        where the thread stands; --all: one line per thread
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      judge [id] [--again] [--model <name>] [--budget <usd>]
+                                 ask a second, read-only Claude run whether the check, the verify step, its
+                                 screenshots and the diff show each criterion holds; advisory, shown by review
+                                 beside your own checks, never changes accept or ship; once per turn unless --again
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
            [--watch|-w [--timeout <min>] [--interval <s>]]
@@ -70,7 +74,7 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 // commands may use it.
 // An option's value that happens to read `--json` is a value, not the flag.
 let valueOptions: Set = [
-    "--feedback", "-f", "-m", "--message", "--budget", "--base", "--update", "--patch", "--seq", "--timeout",
+    "--feedback", "-f", "-m", "--message", "--budget", "--model", "--base", "--update", "--patch", "--seq", "--timeout",
     "--interval", "--in", "--seed",
 ]
 if let at = arguments.indices.first(where: {
@@ -115,6 +119,8 @@ do {
         try await Commands.status(Array(arguments.dropFirst()))
     case "review":
         try await Commands.review(Array(arguments.dropFirst()))
+    case "judge":
+        exit(try await Commands.judge(Array(arguments.dropFirst())))
     case "accept":
         try await Commands.accept(Array(arguments.dropFirst()))
     case "ship":
