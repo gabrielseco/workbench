@@ -255,8 +255,9 @@ public struct Config: Sendable, Equatable {
         let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
         if trimmed.isEmpty || trimmed == "." { return "must name a path inside the worktree" }
         if trimmed.hasPrefix("/") { return "must be relative to the worktree" }
-        if trimmed.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == ".." || $0.isEmpty }) {
-            return "must not contain '..' or empty parts"
+        let parts = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+        if parts.contains(where: { $0 == ".." || $0 == "." || $0.isEmpty }) {
+            return "must not contain '.', '..' or empty parts"
         }
         if trimmed == ".git" || trimmed.hasPrefix(".git/") { return "must not be inside .git" }
         return nil

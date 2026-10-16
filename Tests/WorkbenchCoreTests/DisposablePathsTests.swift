@@ -19,12 +19,21 @@ import Testing
         #expect(ThreadService.blockingStatus("!! \"odd name\"\n", disposable: ["odd name"]).count == 1)
     }
 
+    @Test func aStatusThatMayHaveBeenCutShortBlocksRemoval() {
+        // Every retained line is disposable; what the cut dropped could be anything.
+        let line = "!! node_modules/some/deep/path/file.js\n"
+        let long = String(repeating: line, count: GitRunner.outputLimit / line.utf8.count + 1)
+        #expect(long.utf8.count >= GitRunner.outputLimit)
+        #expect(ThreadService.blockingStatus(long, disposable: ["node_modules"]).count == 1)
+        #expect(ThreadService.blockingStatus(line, disposable: ["node_modules"]).isEmpty, "a short one still passes")
+    }
+
     @Test func theKeyIsParsedAndMustStayInsideTheWorktree() throws {
         let base = "[tools]\navailable = [\"Read\"]\n"
         let config = try Config.parse("disposable_paths = [\"node_modules\", \".cache/build/\"]\n" + base)
         #expect(config.disposablePaths == ["node_modules", ".cache/build"])
         #expect(try Config.parse(base).disposablePaths.isEmpty)
-        for bad in ["/etc", "../x", "a/../b", "", ".", ".git", ".git/hooks", "a//b"] {
+        for bad in ["/etc", "../x", "a/../b", "", ".", "./.", "./.git", "a/./b", ".git", ".git/hooks", "a//b"] {
             #expect(throws: ConfigError.self, "\(bad)") {
                 try Config.parse("disposable_paths = [\"\(bad)\"]\n" + base)
             }

@@ -102,8 +102,14 @@ extension ThreadService {
 
     /// The lines of `git status --porcelain --ignored` that stop a worktree being removed: everything except an
     /// ignored path (`!!`) that is, or is inside, one of the config's `disposable_paths`.
+    ///
+    /// Status that reached the runner's output limit may have lost its tail, where an ignored file outside the
+    /// list could be, so it blocks: nothing is deleted on a listing that might be incomplete.
     static func blockingStatus(_ status: String, disposable: [String]) -> [String] {
-        status.split(separator: "\n").map(String.init).filter { line in
+        if status.utf8.count >= GitRunner.outputLimit - 4 {
+            return ["!! (the status is too long to check, so it may hide a file that is not disposable)"]
+        }
+        return status.split(separator: "\n").map(String.init).filter { line in
             guard line.hasPrefix("!! ") else { return true }
             var path = String(line.dropFirst(3))
             if path.hasSuffix("/") { path.removeLast() }
