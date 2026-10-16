@@ -89,6 +89,10 @@ struct VerifyRunner {
             try? Data("\(reason)\n".utf8).write(to: outputURL)
         }
 
+        // A tool may start its server in a new session and exit (`verify-ui` does), which leaves it re-parented
+        // to launchd and out of the process tree the runner swept. Its working directory is still the worktree.
+        let detached = OrphanSweeper.sweep(inside: worktree)
+
         var code: Int32?
         var signal: Int32?
         switch outcome.exit?.termination {
@@ -120,6 +124,7 @@ struct VerifyRunner {
             "output_truncated": .bool(report.outputTruncated), "proof_files": .int(files.count),
         ]
         if omitted > 0 { data["proof_omitted"] = .int(omitted) }
+        if !detached.isEmpty { data["swept_orphans"] = .int(detached.count) }
         if let exit = outcome.exit {
             if exit.escalatedToKill { data["escalated_to_kill"] = true }
             if exit.sweptProcesses > 0 { data["swept_processes"] = .int(exit.sweptProcesses) }

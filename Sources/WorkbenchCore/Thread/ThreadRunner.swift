@@ -249,7 +249,7 @@ public actor ThreadRunner {
                 loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: baseCommit)
             }
             prompt = PromptBuilder.firstPrompt(
-                goal: goal, checkCommand: config.checkCommand, instructions: loaded)
+                goal: goal, checkCommand: config.checkCommand, instructions: loaded, verifies: config.verifyCommand != nil)
             instructions = loaded?.eventData ?? .null
         }
 

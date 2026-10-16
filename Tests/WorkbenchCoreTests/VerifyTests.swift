@@ -144,6 +144,37 @@ extension RunnerFixture {
         #expect(await FakeClaude.waitUntilGone(server), "nothing the verify step started outlives it")
     }
 
+    @Test func aServerAToolDetachedIsSweptBecauseItsWorkingDirectoryIsTheWorktree() async throws {
+        // `verify-ui` starts its server in a new session and exits, so it is no descendant of the step. A double
+        // fork gets it re-parented to launchd within a moment; the step then idles for several snapshots of the
+        // process tree, none of which can see it. (If a snapshot caught it in that first moment, the runner's own
+        // tree sweep kills it instead, so either counter proves the server did not outlive the step.)
+        let script = try CheckScript()
+        let body = """
+            /usr/bin/python3 -c '
+            import os, sys
+            if os.fork() == 0:
+                os.setsid()
+                if os.fork() == 0:
+                    open("\(script.path("server"))", "w").write(str(os.getpid()))
+                    os.execvp("sleep", ["sleep", "300"])
+                os._exit(0)
+            '
+            sleep 1
+            exit 0
+            """
+        let fx = try await verifyFixture(script, body: body)
+        let id = try await fx.approvedThread()
+        let report = try await fx.runner(id).run(fx.options())
+        #expect(report.verify?.result == .passed)
+        let server = try script.pid("server")
+        defer { kill(server, SIGKILL) }
+        #expect(await FakeClaude.waitUntilGone(server), "a detached server does not outlive the verify step")
+        let ended = try #require(try fx.verifyEnds(id).first)
+        let swept = (ended.data["swept_orphans"]?.intValue ?? 0) + (ended.data["swept_processes"]?.intValue ?? 0)
+        #expect(swept >= 1, "the cleanup is recorded")
+    }
+
     @Test func aSymlinkInTheProofDirectoryIsNotRecorded() async throws {
         let script = try CheckScript()
         let secret = script.path("secret.txt")
@@ -323,6 +354,49 @@ extension RunnerFixture {
         #expect(ends(.turnEnded, "succeeded"))
         #expect(!ends(.turnEnded, "succeeded", checks: true))
         #expect(ends(.checkRan, "passed", checks: true))
+    }
+}
+
+@Suite struct VerifyPromptTests {
+    private func goal(_ proof: String) throws -> Goal {
+        let text = """
+            ---
+            id: g-1
+            title: T
+            base: main
+            budget_usd: 1
+            turn_timeout_min: 5
+            ---
+
+            ## Request
+
+            Do it.
+
+            ## Criteria
+
+            - [c1] It shows.
+              - proof: \(proof)
+
+            ## Out of scope
+
+            - Nothing.
+            """
+        return try GoalFile.parse(text).goal
+    }
+
+    @Test func claudeIsToldWhichCriteriaTheVerifyStepCovers() throws {
+        let prompt = PromptBuilder.firstPrompt(
+            goal: try goal("screenshot: home"), checkCommand: nil, verifies: true)
+        #expect(prompt.contains("## Verification"))
+        #expect(prompt.contains("`screenshot: <name>`"))
+        #expect(prompt.contains("do not need to take"))
+    }
+
+    @Test func nothingIsAddedWithoutAVerifyStepOrAScreenshotCriterion() throws {
+        let shot = try goal("screenshot: home")
+        #expect(!PromptBuilder.firstPrompt(goal: shot, checkCommand: nil, verifies: false).contains("Verification"))
+        let other = try goal("`swift test` passes")
+        #expect(!PromptBuilder.firstPrompt(goal: other, checkCommand: nil, verifies: true).contains("Verification"))
     }
 }
 

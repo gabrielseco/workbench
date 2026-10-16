@@ -185,7 +185,10 @@ Notes:
   needs more than the tool set allows (a browser, a built app): the command is the project's own, and Claude
   is not given those tools. It writes screenshots and, optionally, a `verdict.json` into the proof directory;
   `review` lists them and the event log records each with its hash. Its result is shown, never counted as a
-  criterion met. See [event-log.md](event-log.md) for the events.
+  criterion met. See [event-log.md](event-log.md) for the events. After the step, any process left running in
+  the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
+  runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
+  says the verify step captures those, so Claude does not report them as unverified.
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
   the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds
