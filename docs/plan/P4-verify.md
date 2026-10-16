@@ -106,7 +106,7 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
 3. **expense-tracker pilot** (done 2026-10-16: a throwaway label change, goal to review with a screenshot, `$0.0038` on haiku; see friction #42 to #44; `ship` against a real PR was not run). `.workbench/config.toml` and `scripts/verify.sh` in that repo; one real small UI
    task from goal to PR with screenshots in the description. Record what broke in `FRICTION.md`.
 4. **Verifier turn** (done as `workbench judge`: `Thread/Judge/`; not `verify --judge`, since it is its own command with its own once-per-turn rule). Prompt builder (reuse expense-tracker's `verifier` agent text as the starting point),
-   strict `verdict.json` schema, read-only tool set, budget, failure shown, advisory.
+   strict verdict schema (the verdict is recorded in the `judge.ran` event, the log being the source of truth, not in a `verdict.json`), read-only tool set, budget, failure shown, advisory.
 5. **`doctor` checks verify.** Runs `verify_command` in the throwaway worktree, reports duration, files, and a
    missing Screen Recording grant as a clear failure. Writes down whether the child inherits the terminal's
    permissions.

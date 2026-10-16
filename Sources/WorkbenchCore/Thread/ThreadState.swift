@@ -270,6 +270,11 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
                 Self.applyVerify(event, to: &state, pending: &pendingProof)
+            case .judgeStarted:
+                // Replaced by the `judge.ran` that follows; if none does, the judge was cut off.
+                state.review.judge = Review.Judge(
+                    turn: event.turn, verdict: nil, costUSD: nil,
+                    failure: "started and never recorded a result (still running, or it was interrupted)")
             case .judgeRan:
                 state.review.judge = Self.judgeRun(event)
             case .threadNote:

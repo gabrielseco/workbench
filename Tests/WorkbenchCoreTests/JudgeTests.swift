@@ -282,6 +282,54 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         #expect(argv.contains("loose-notes.txt"), "untracked files are named")
     }
 
+    @Test func itSeesTheSameWorkReviewDoesWhenTheThreadMergedANewerBase() async throws {
+        let j = try await judged()
+        let fx = j.fx
+        try "main change\n".write(to: fx.repo.appendingPathComponent("main-only.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "newer main"], in: fx.repo)
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(j.id)
+        let merged = try await fx.git.run(["merge", "-q", "--no-edit", "main"], in: worktree)
+        #expect(merged.succeeded, "\(merged.stderr)")
+
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
+        _ = try await fx.service.judge(id: j.id, config: j.config, environment: env)
+        let argv = try String(contentsOfFile: dump, encoding: .utf8)
+        #expect(argv.contains("main-only.txt"), "the diff runs from the commit the worktree was cut from, as review's does")
+        #expect(argv.contains("hello"))
+    }
+
+    @Test func aJudgeThatStartedAndLeftNoResultShowsAsInterruptedAndDoesNotCountAsJudged() async throws {
+        let j = try await judged()
+        do {
+            let log = try EventLogWriter.open(at: j.fx.project.eventsURL(j.id))
+            try await log.append(.judgeStarted, turn: 1, data: ["argv": []])
+            await log.close()  // killed here
+        }
+        let state = ThreadState.derive(from: try j.fx.events(j.id), id: j.id)
+        #expect(state.review.judge?.verdict == nil)
+        #expect(state.review.judge?.failure?.contains("never recorded a result") == true)
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))")
+        let result = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
+        #expect(result.verdict != nil, "an attempt without a result does not use up the turn")
+        let after = ThreadState.derive(from: try j.fx.events(j.id), id: j.id)
+        #expect(after.review.judge?.verdict != nil)
+    }
+
+    @Test func whileJudgingThisProcessHoldsTheThreadAndLetsGoAfterwards() async throws {
+        let j = try await judged()
+        let service = j.fx.service
+        let id = j.id
+        let seen = LockedBox<Int32?>(nil)
+        _ = try await service.judge(
+            id: id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", oneCriterion))"),
+            attach: { _ in seen.set(service.runnerPID(id: id)) })
+        #expect(seen.get() == getpid(), "`stop` and a second command can see who holds the thread")
+        #expect(service.runnerPID(id: id) == nil)
+        #expect(!FileManager.default.fileExists(atPath: j.fx.project.runnerURL(id).path))
+    }
+
     @Test func twoJudgesCannotSpendOnTheSameTurnAtOnce() async throws {
         let j = try await judged()
         let held = try EventLogWriter.open(at: j.fx.project.eventsURL(j.id))
@@ -361,4 +409,12 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         #expect(lines.contains { $0.contains("differs: [c1] the check passed, the judge says not met") })
         #expect(lines.contains { $0.contains("concern: one thing") })
     }
+}
+
+private final class LockedBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: T
+    init(_ value: T) { self.value = value }
+    func set(_ new: T) { lock.withLock { value = new } }
+    func get() -> T { lock.withLock { value } }
 }

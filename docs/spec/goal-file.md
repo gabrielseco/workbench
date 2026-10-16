@@ -60,8 +60,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   upload with a note. It is a note, not an error, when the tool is missing or fails: the PR is open, the
   worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
-  work against the base (the worktree as `review` shows it, committed or not, cut at 120 KB, with untracked
-  files named), the check (with the end of its output when it did not
+  work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,
+  with untracked files named), the check (with the end of its output when it did not
   pass), what the verify step left and, with screenshots, `Read` on them in the folder they are in
   (`--restricted` makes that the only place it can read); with none it has no tools. It answers with one
   JSON object: per criterion `{id, met, evidence}`, and `concerns`. The answer is accepted only if it names

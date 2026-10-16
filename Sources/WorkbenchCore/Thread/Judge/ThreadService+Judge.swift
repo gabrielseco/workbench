@@ -77,7 +77,8 @@ extension ThreadService {
             goal = try GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
         } catch { throw JudgeRefusal.goalUnreadable("\(error)") }
 
-        guard let work = await judgedWork(id: id, base: goal.base) else {
+        let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
+        guard let work = await judgedWork(id: id, base: recordedBase ?? goal.base, recorded: recordedBase != nil) else {
             return try await recordJudge(log, turn: turn, failure: "the diff could not be read", argv: [])
         }
         let cut = work.diff.utf8.count > Judge.diffLimit
@@ -104,6 +105,13 @@ extension ThreadService {
             return try await recordJudge(
                 log, turn: turn, failure: JudgeError.claudeNotFound(config.claudePath).description, argv: shown)
         }
+        // The attempt is on record before anything is spent, and this process is the thread's live holder while it
+        // runs (`stop` reaches it, a run or another judge is refused). A `claude` a killed judge left behind is
+        // found by its working directory and ended before the next one starts.
+        OrphanSweeper.sweep(inside: folder)
+        try await log.append(.judgeStarted, turn: turn, data: ["argv": .array(shown.map { .string($0) })])
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
         var request = SpawnRequest(
             executable: claude, arguments: arguments, environment: config.childEnvironment(from: environment),
             workingDirectory: folder, timeout: timeout)
@@ -133,6 +141,16 @@ extension ThreadService {
         }
     }
 
+    /// Marks this process as the one using the thread, in the file `runnerPID` reads.
+    private func writeHolderMarker(_ id: String) throws {
+        let member = ProcessTree.member(for: getpid())
+        let info: [String: Any] = [
+            "pid": getpid(), "started_seconds": member?.startSeconds ?? 0, "started_micros": member?.startMicros ?? 0,
+        ]
+        try JSONSerialization.data(withJSONObject: info, options: [.sortedKeys])
+            .write(to: project.runnerURL(id), options: .atomic)
+    }
+
     /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
     static func judgeProcessProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
         guard let exit else { return "claude did not report how it ended" }
@@ -152,18 +170,23 @@ extension ThreadService {
     /// What the judge is shown of the work: the worktree against the commit it left the base at, so committed
     /// and uncommitted changes to tracked files both count, as in `review`, plus the names of untracked files.
     /// Without a worktree (shipped), the branch against the base.
-    private func judgedWork(id: String, base: String) async -> (diff: String, untracked: [String])? {
+    private func judgedWork(id: String, base: String, recorded: Bool) async -> (diff: String, untracked: [String])? {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else {
-            let diff = try? await git.run(
-                ["diff", "--no-ext-diff", "--no-color", "\(base)...\(WorktreeManager.branch(for: id))"], in: project.root)
+            let range = recorded ? "\(base)..\(WorktreeManager.branch(for: id))" : "\(base)...\(WorktreeManager.branch(for: id))"
+            let diff = try? await git.run(["diff", "--no-ext-diff", "--no-color", range], in: project.root)
             guard let diff, diff.succeeded else { return nil }
             return (diff.stdout, [])
         }
         let worktree = manager.path(for: id)
-        guard let mergeBase = try? await git.run(["merge-base", base, "HEAD"], in: worktree), mergeBase.succeeded
-        else { return nil }
-        let from = mergeBase.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The commit the worktree was cut from, as `review` uses, so both see the same work even after the base
+        // branch has moved on. Only a thread that predates that record falls back to the branch's merge base.
+        var from = base
+        if !recorded {
+            guard let mergeBase = try? await git.run(["merge-base", base, "HEAD"], in: worktree), mergeBase.succeeded
+            else { return nil }
+            from = mergeBase.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         let diff = try? await git.run(["diff", "--no-ext-diff", "--no-color", from], in: worktree)
         guard let diff, diff.succeeded else { return nil }
         let others = try? await git.run(["ls-files", "--others", "--exclude-standard"], in: worktree)
