@@ -206,6 +206,6 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
             Int(row.split(separator: "|")[0].trimmingCharacters(in: .whitespaces))
         }
         #expect(codes.count == Set(codes).count, "a code appears twice: \(codes)")
-        #expect(Set(codes) == [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14])
+        #expect(Set(codes) == [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 15])
     }
 }

@@ -46,6 +46,19 @@ public struct Review: Sendable, Equatable {
         public var failure: String?
     }
 
+    /// The latest `pr_review.*` event: Codex's review of the shipped pull request, or why a round has no verdict.
+    public struct PRReview: Sendable, Equatable {
+        public var round: Int
+        public var pr: Int?
+        /// The commit of the pull request that was reviewed.
+        public var headSHA: String?
+        /// `clean` or `fix`; nil when the round has no verdict.
+        public var verdict: String?
+        public var failure: String?
+        /// Relative to the thread's directory.
+        public var findingsPath: String?
+    }
+
     public struct Note: Sendable, Equatable {
         /// The follow-up turn the note started.
         public var turn: Int
@@ -79,6 +92,8 @@ public struct Review: Sendable, Equatable {
     public var judge: Judge?
     public var notes: [Note]
     public var deniedTools: [DeniedTool]
+    /// The latest pull request review round, nil when none has run.
+    public var prReview: PRReview?
 }
 
 /// How far the latest turn has got, from the log alone. Nothing is stored; `status` derives it per call.
@@ -173,6 +188,24 @@ public struct ThreadState: Sendable, Equatable {
 
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
 
+    /// A `pr_review.started` or `pr_review.finished` event as the review shows it. A round that only started is
+    /// replaced by the `finished` that follows; if none does, it was cut off.
+    private static func prReviewRound(_ event: Event) -> Review.PRReview {
+        if event.kind == .prReviewStarted {
+            return Review.PRReview(
+                round: event.data["round"]?.intValue ?? 0, pr: event.data["pr"]?.intValue,
+                headSHA: event.data["head_sha"]?.stringValue, verdict: nil,
+                failure: "started and never recorded a result (still running, or it was interrupted)", findingsPath: nil)
+        }
+        let verdict = event.data["verdict"]?.stringValue
+        let ok = event.data["ok"] == true && (verdict == "clean" || verdict == "fix")
+        return Review.PRReview(
+            round: event.data["round"]?.intValue ?? 0, pr: event.data["pr"]?.intValue,
+            headSHA: event.data["head_sha"]?.stringValue, verdict: ok ? verdict : nil,
+            failure: ok ? nil : safeLine(event.data["reason"]?.stringValue ?? "no reason recorded", limit: 300),
+            findingsPath: event.data["findings_path"]?.stringValue)
+    }
+
     /// A `judge.ran` event as the review shows it. Entries that do not read as a verdict are left out, so a
     /// damaged line shows as a run without one rather than as a verdict that was never given.
     private static func judgeRun(_ event: Event) -> Review.Judge {
@@ -230,7 +263,9 @@ public struct ThreadState: Sendable, Equatable {
         var state = ThreadState(
             id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, openVerify: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
-            review: Review(status: .empty, turnResult: nil, check: nil, verify: nil, judge: nil, notes: [], deniedTools: []),
+            review: Review(
+                status: .empty, turnResult: nil, check: nil, verify: nil, judge: nil, notes: [], deniedTools: [],
+                prReview: nil),
             progress: Progress())
         var noteIsLatest = false
         var pendingProof: [ProofFile] = []
@@ -277,6 +312,8 @@ public struct ThreadState: Sendable, Equatable {
                     failure: "started and never recorded a result (still running, or it was interrupted)")
             case .judgeRan:
                 state.review.judge = Self.judgeRun(event)
+            case .prReviewStarted, .prReviewFinished:
+                state.review.prReview = Self.prReviewRound(event)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.

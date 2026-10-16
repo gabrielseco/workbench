@@ -203,6 +203,17 @@ extension Commands {
         } else {
             judge = .null
         }
+        let prReview: JSONValue
+        if let r = review.prReview {
+            prReview = [
+                "round": .int(r.round), "pr": r.pr.map { .int($0) } ?? .null, "verdict": r.verdict.map { .string($0) } ?? .null,
+                "ok": .bool(r.verdict != nil), "stale": .bool(report.prReviewIsStale),
+                "head_sha": r.headSHA.map { .string($0) } ?? .null, "findings_path": r.findingsPath.map { .string($0) } ?? .null,
+                "failure": r.failure.map { .string($0) } ?? .null,
+            ]
+        } else {
+            prReview = .null
+        }
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
@@ -224,6 +235,7 @@ extension Commands {
                     ]
                 }),
             "diff": diff, "check": check, "verify": verify, "judge": judge,
+            "pr_review": prReview,
             "denied_tools": .array(
                 review.deniedTools.map {
                     [

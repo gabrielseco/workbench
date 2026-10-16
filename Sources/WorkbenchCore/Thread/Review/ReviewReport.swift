@@ -19,6 +19,8 @@ public struct ReviewReport: Sendable, Equatable {
     public var diff: Diff
     /// The thread's directory, to check that a recorded proof file is still there; nil skips the check.
     public var threadDirectory: URL?
+    /// Where the thread's branch is now, nil when it is not known (no local branch).
+    public var branchTip: String?
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
@@ -38,6 +40,27 @@ public struct ReviewReport: Sendable, Equatable {
         case .sentBack: "feedback is recorded and the next turn has not started. Run `workbench run`."
         case .decided(let decision): "nothing to decide: this thread was \(decision)."
         }
+    }
+
+    /// True when the branch has moved since the latest pull request review round looked at it.
+    public var prReviewIsStale: Bool {
+        guard let round = state.review.prReview, let reviewed = round.headSHA, let tip = branchTip else { return false }
+        return reviewed != tip
+    }
+
+    /// The pull request review's part of the report: nothing when no round has run.
+    public func prReviewLines() -> [String] {
+        guard let round = state.review.prReview else { return [] }
+        let stale = prReviewIsStale ? " · stale: the branch has moved since" : ""
+        let sha = round.headSHA.map { " · \($0.prefix(7))" } ?? ""
+        var lines: [String]
+        if let verdict = round.verdict {
+            lines = ["PR review  round \(round.round) · \(verdict == "clean" ? "clean" : "findings to fix")\(sha)\(stale)"]
+        } else {
+            lines = ["PR review  round \(round.round) · no verdict\(sha)\(stale): \(round.failure ?? "unknown")"]
+        }
+        if let path = round.findingsPath { lines.append("  findings: \(path)") }
+        return lines
     }
 
     /// The advisory judge's part of the report: nothing when it has not run. It stands beside the criteria and the
@@ -154,6 +177,7 @@ public struct ReviewReport: Sendable, Equatable {
         }
 
         lines.append(contentsOf: judgeLines())
+        lines.append(contentsOf: prReviewLines())
 
         if review.deniedTools.isEmpty {
             lines.append("Denied     none")
@@ -256,7 +280,15 @@ public struct ReviewLoader: Sendable {
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
-            threadDirectory: project.threadDirectory(id))
+            threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id))
+    }
+
+    /// Where `workbench/<id>` is, nil when the branch does not exist.
+    private func branchTip(_ id: String) async -> String? {
+        let result = try? await git.run(
+            ["rev-parse", "--verify", "--quiet", "refs/heads/\(WorktreeManager.branch(for: id))"], in: project.root)
+        guard let result, result.succeeded else { return nil }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// One file's patch, by its path in the diff.

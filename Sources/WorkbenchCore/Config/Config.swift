@@ -16,6 +16,35 @@ public enum AppType: String, Sendable, Equatable, CaseIterable {
     case desktop
 }
 
+/// `[pr_review]`: the Codex review of a shipped pull request (docs/plan/P5-review-loop.md).
+public struct PRReviewConfig: Sendable, Equatable {
+    public static let defaultMaxRounds = 3
+    public static let maxRoundsCeiling = 10
+
+    /// A repo-relative file of this project's review invariants, read from the pull request's head and added
+    /// to the prompt.
+    public var checklist: String?
+    /// Reviews of one pull request; Workbench counts them from its own log.
+    public var maxRounds: Int = PRReviewConfig.defaultMaxRounds
+
+    public init(checklist: String? = nil, maxRounds: Int = PRReviewConfig.defaultMaxRounds) {
+        self.checklist = checklist
+        self.maxRounds = maxRounds
+    }
+
+    /// Why a checklist path cannot be used, nil when it can: it ends up in a path under a checkout.
+    static func checklistProblem(_ path: String) -> String? {
+        if path.isEmpty || path.contains("\0") || path.contains("\n") || path.contains("\r") {
+            return "must be a file path"
+        }
+        if path.hasPrefix("/") || path.hasPrefix("~") || path.hasPrefix("-") { return "must be a path inside the repository" }
+        if path.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == ".." || $0.isEmpty }) {
+            return "must be a path inside the repository (no '..' or empty parts)"
+        }
+        return nil
+    }
+}
+
 public struct Config: Sendable, Equatable {
     public static let defaultClaudePath = "claude"
     public static let defaultBudgetUSD: Decimal = 5
@@ -53,6 +82,7 @@ public struct Config: Sendable, Equatable {
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
     public var envPass: [String]
     public var tools: ToolSet
+    public var prReview: PRReviewConfig = PRReviewConfig()
 
     /// `allowed` plus the check command, which Claude must be able to run.
     public var effectiveAllowedTools: [String] {
@@ -91,13 +121,14 @@ public struct Config: Sendable, Equatable {
             "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
+        let prReviewKeys: Set<String> = ["checklist", "max_rounds"]
 
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) {
-            if name != "" && name != "tools" {
+            if name != "" && name != "tools" && name != "pr_review" {
                 fail(.unknownTable, table.line, "unknown table [\(name)]")
                 continue
             }
-            let known = name == "" ? rootKeys : toolKeys
+            let known = name == "" ? rootKeys : name == "tools" ? toolKeys : prReviewKeys
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !known.contains(key) {
                 let location = name == "" ? "" : " in [\(name)]"
                 fail(.unknownKey, entry.line, "unknown key '\(key)'\(location)")
@@ -209,6 +240,8 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        let prReview = prReviewSettings(document, fail: fail)
+
         var envPass: [String] = []
         if let (values, line) = strings("", "env_pass") {
             for name in values where name.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) == nil {
@@ -252,7 +285,37 @@ public struct Config: Sendable, Equatable {
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
             verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
             defaultBudgetUSD: budget,
-            envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
+            envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
+            prReview: prReview)
+    }
+
+    /// `[pr_review]`: the checklist path and the round cap, each checked on its own.
+    private static func prReviewSettings(
+        _ document: TOMLDocument, fail: (ConfigProblem.Code, Int?, String) -> Void
+    ) -> PRReviewConfig {
+        var settings = PRReviewConfig()
+        let entries = document.tables["pr_review"]?.entries ?? [:]
+        if let entry = entries["checklist"] {
+            if case .string(let path) = entry.value {
+                if let reason = PRReviewConfig.checklistProblem(path) {
+                    fail(.invalidValue, entry.line, "'checklist' \(reason)")
+                } else {
+                    settings.checklist = path
+                }
+            } else {
+                fail(.wrongType, entry.line, "'checklist' must be a string, found \(entry.value.typeName)")
+            }
+        }
+        if let entry = entries["max_rounds"] {
+            if case .int(let n) = entry.value, (1...PRReviewConfig.maxRoundsCeiling).contains(n) {
+                settings.maxRounds = n
+            } else {
+                fail(
+                    .invalidValue, entry.line,
+                    "'max_rounds' must be a whole number from 1 to \(PRReviewConfig.maxRoundsCeiling)")
+            }
+        }
+        return settings
     }
 
     private static func verifyMinutes(_ value: TOMLValue) -> Int? {
@@ -314,6 +377,10 @@ public struct Config: Sendable, Equatable {
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
+
+        # [pr_review]                      # `workbench pr-review`: Codex reviews the shipped pull request
+        # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head
+        # max_rounds = 3                   # reviews of one pull request, counted from the event log (1 to 10)
 
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).

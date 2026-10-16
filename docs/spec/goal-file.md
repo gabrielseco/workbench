@@ -73,6 +73,28 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   is refused as busy instead of spending on the same turn, and Ctrl-C stops it and records why. `review` shows it as a `Judge` block beside the criteria and the
   check, and says where it disagrees with one of them (it does not resolve it). It never changes what
   `accept` or `ship` do, and a thread that has no verdict is as reviewable as before.
+- **`workbench pr-review` is Codex reviewing the shipped pull request.** Workbench starts `codex exec -s read-only`
+  itself (`codex` on PATH; no script to keep per project) on a throwaway checkout of the pull request's head, under
+  the thread's `pr-review/` folder, removed on every ending. It reviews the branch as `origin` has it,
+  fetched at the start of the round: that is the pull request's head the moment a push lands, whereas GitHub's own
+  `pull/<n>/head` and API lag behind a push, so they are not read and nothing waits for them. Codex is given a brief in a file (the argument only points at it): the thread's
+  goal with its numbered criteria, `AGENTS.md` (else `CLAUDE.md`) at the base unless `project_instructions = false`,
+  the optional `[pr_review] checklist` read from the pull request's head, the diff as a file (cut at 400 KiB;
+  never `gh pr diff`) and the rule that the answer ends in exactly `VERDICT: CLEAN` or `VERDICT: FIX`. The base is
+  fetched from origin for the round (so a stale `origin/<base>` cannot change the diff or the instructions) and
+  pinned as one commit, which the brief also gives as the `git diff <base>...<head>` to re-read any part. A goal or
+  checklist over 32 KiB is cut with a line in the brief saying where the rest is, never quietly. Workbench
+  parses the verdict line itself: a missing, repeated or ambiguous one, or an answer over 256 KiB (whose last line
+  cannot be trusted), is a failed round, never clean. It runs in
+  Codex's own minimal environment (its login and `CODEX_*`/`OPENAI_*`, not the project's `env_pass`), for at most 20 minutes, and
+  retries three times when the model is at capacity. Ctrl-C ends the whole round, also while it waits for GitHub or
+  sits out a retry. A round that was killed leaves its `codex` and checkout behind; the next `pr-review` ends them
+  first, before any refusal, and every round ends anything `codex` left running in its own session before the
+  checkout is removed. The round is on record before it starts and ends in exactly one `pr_review.finished`; `max_rounds` (default 3) counts the `pr_review.started` events of this pull request, so
+  only the log can reset it and `--again` (re-review a branch that has not moved) never lifts it. The findings are
+  stored in the thread's folder and printed; `review` shows the round and says when the branch has moved since. The
+  review needs only the pull request, not the thread's worktree, so it works after `ship` removed it. Nothing is posted
+  to the pull request and nothing changes what `accept` or `ship` do.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
   unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a
   status and a summary line (`Criteria: 1 passed · 0 failed · 4 for you to check`). Workbench runs one
@@ -156,6 +178,9 @@ default_budget_usd = 5.00               # used when drafting a goal
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
+# [pr_review]                           # `workbench pr-review`: Codex reviews the shipped pull request
+# checklist = "docs/REVIEW.md"          # optional: this project's review invariants, read from the PR head
+# max_rounds = 3                        # reviews of one pull request, counted from the event log (1 to 10)
 
 [tools]
 available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]

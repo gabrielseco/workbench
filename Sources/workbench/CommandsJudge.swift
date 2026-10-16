@@ -2,7 +2,7 @@ import Foundation
 import WorkbenchCore
 
 /// The running `claude`, reachable from a signal handler; a stop that arrives before it has started is kept.
-private final class RunHolder: @unchecked Sendable {
+final class RunHolder: @unchecked Sendable {
     private let lock = NSLock()
     private var run: ProcessRun?
     private var stopRequested = false
@@ -13,6 +13,12 @@ private final class RunHolder: @unchecked Sendable {
         let stop = stopRequested
         lock.unlock()
         if stop { new.stop() }
+    }
+
+    var isStopRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopRequested
     }
 
     func stop() {
