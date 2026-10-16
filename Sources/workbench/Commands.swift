@@ -202,7 +202,7 @@ enum Commands {
         printDoctor(report)
         if let problem = report.cleanupProblem { return fail(.failed, problem) }
         if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
-        return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
+        return report.passed ? 0 : fail(.failed, "the declared setup, check or verify did not pass")
     }
 
     private static func printDoctor(_ report: DoctorReport) {
@@ -234,6 +234,9 @@ enum Commands {
         }
         show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
         show("check:", report.check, undeclared: "turns will end with no check evidence")
+        show("verify:", report.verify, undeclared: "turns will end with no screenshots or other proof")
+        for file in report.verifyFiles { out("  proof: \(file.name) (\(file.bytes) bytes)") }
+        if let warning = report.verifyWarning { out("  warning: \(warning)") }
     }
 
     static func goalNew(_ args: [String]) async throws {

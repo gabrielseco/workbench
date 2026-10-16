@@ -12,17 +12,20 @@ private func options(_ extra: [String: String] = [:], grace: TimeInterval = 2) -
         ].merging(extra) { $1 }
     o.setupTimeout = 30
     o.checkTimeout = 30
+    o.verifyTimeout = 30
+    o.screenRecordingGranted = { true }
     o.killGrace = grace
     return o
 }
 
-private func fixture(setup: String? = nil, check: String? = nil, extra: String = "") async throws -> (
+private func fixture(setup: String? = nil, check: String? = nil, verify: String? = nil, extra: String = "") async throws -> (
     RunnerFixture, CheckScript
 ) {
     let script = try CheckScript()
     var lines: [String] = []
     if let setup { lines.append("setup_command = \"\(try script.write(setup, name: "setup.sh"))\"") }
     if let check { lines.append("check_command = \"\(try script.write(check, name: "check.sh"))\"") }
+    if let verify { lines.append("verify_command = \"\(try script.write(verify, name: "verify.sh"))\"") }
     lines.append(extra)
     return (try await RunnerFixture(extraConfig: lines.joined(separator: "\n")), script)
 }
@@ -319,5 +322,142 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let (open, _) = try await fixture(check: "true")
         let fine = try await Doctor(project: open.project, git: open.git).run(base: "main", options: options())
         #expect(!fine.checkDenied)
+    }
+}
+
+@Suite struct DoctorVerifyTests {
+    @Test func aPassingVerifyReportsItsFilesAndTheContract() async throws {
+        let script = try CheckScript()
+        let (fx, _) = try await fixture(
+            verify: """
+                printf 'png' > "$WORKBENCH_PROOF_DIR/home.png"
+                test "$WORKBENCH_THREAD" = doctor && test -n "$WORKBENCH_PORT" && test -f "$WORKBENCH_GOAL"
+                test -d "$WORKBENCH_PROOF_DIR" && pwd > "\(script.path("cwd"))"
+                """)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(report.passed)
+        #expect(report.verify.outcome == .passed)
+        #expect(report.verify.durationMs != nil)
+        #expect(report.verifyFiles.map(\.name) == ["home.png"] && report.verifyFiles.first?.bytes == 3)
+        #expect(report.verifyWarning == nil)
+        let cwd = try String(contentsOfFile: script.path("cwd"), encoding: .utf8)
+        #expect(cwd.contains("worktrees/doctor"), "it ran in the throwaway worktree")
+        #expect(!FileManager.default.fileExists(atPath: fx.project.threadsDirectory.appendingPathComponent("doctor").path))
+        try await expectClean(fx)
+    }
+
+    @Test func aFailingVerifyShowsItsOutput() async throws {
+        let (fx, _) = try await fixture(verify: "echo 'no browser'\nexit 4")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(!report.passed)
+        #expect(report.verify.outcome == .failed(how: "failed (exit 4)"))
+        #expect(report.verify.tail.contains("no browser"))
+        try await expectClean(fx)
+    }
+
+    @Test func aVerifyThatHangsTimesOutAndItsServerDoesNotOutliveIt() async throws {
+        let script = try CheckScript()
+        let body = """
+            /usr/bin/python3 -c '
+            import os
+            if os.fork() == 0:
+                os.setsid()
+                if os.fork() == 0:
+                    open("\(script.path("server"))", "w").write(str(os.getpid()))
+                    os.execvp("sleep", ["sleep", "300"])
+                os._exit(0)
+            '
+            while [ ! -s "\(script.path("server"))" ]; do sleep 0.1; done
+            sleep 60
+            """
+        let (fx, _) = try await fixture(verify: body)
+        var o = options(grace: 0.5)
+        o.verifyTimeout = 3
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+
+        #expect(report.verify.outcome == .timedOut && !report.passed, "\(report.verify)")
+        let server = try script.pid("server")
+        defer { kill(server, SIGKILL) }
+        #expect(await FakeClaude.waitUntilGone(server), "a detached server does not outlive doctor")
+        try await expectClean(fx)
+    }
+
+    @Test func aVerifyThatWritesNothingPassesWithAWarning() async throws {
+        let (fx, _) = try await fixture(verify: "true")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(report.passed && report.verify.outcome == .passed)
+        #expect(report.verifyFiles.isEmpty)
+        #expect(report.verifyWarning?.contains("WORKBENCH_PROOF_DIR") == true)
+    }
+
+    @Test func verifyIsSkippedWhenSetupOrCheckDidNotPass() async throws {
+        let (a, scriptA) = try await fixture(setup: "exit 1", verify: "touch \"$0.ran\"")
+        let afterSetup = try await Doctor(project: a.project, git: a.git).run(base: "main", options: options())
+        #expect(afterSetup.verify.outcome == .skipped("setup did not pass"))
+        #expect(!scriptA.exists("verify.sh.ran"))
+
+        let (b, scriptB) = try await fixture(check: "exit 1", verify: "touch \"$0.ran\"")
+        let afterCheck = try await Doctor(project: b.project, git: b.git).run(base: "main", options: options())
+        #expect(afterCheck.verify.outcome == .skipped("check did not pass") && !afterCheck.passed)
+        #expect(!scriptB.exists("verify.sh.ran"))
+    }
+
+    @Test func noVerifyCommandIsNotAFailure() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed && report.verify.outcome == .notDeclared && report.verify.command == nil)
+    }
+
+    @Test func aVerifyAloneIsEnoughToRunDoctor() async throws {
+        let (fx, _) = try await fixture(verify: "true")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.verify.outcome == .passed && report.setup.outcome == .notDeclared)
+    }
+
+    @Test func aDesktopAppWithoutScreenRecordingFailsBeforeVerifyRuns() async throws {
+        let (fx, script) = try await fixture(verify: "touch \"$0.ran\"", extra: "app_type = \"desktop\"")
+        var o = options(["TERM_PROGRAM": "iTerm.app"])
+        o.screenRecordingGranted = { false }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+
+        #expect(!report.passed && report.appType == .desktop)
+        guard case .failed(let how) = report.verify.outcome else {
+            Issue.record("not failed")
+            return
+        }
+        #expect(how.contains("Screen Recording") && how.contains("iTerm.app"))
+        #expect(report.verify.hint.contains("Privacy & Security"))
+        #expect(!script.exists("verify.sh.ran"))
+        try await expectClean(fx)
+    }
+
+    @Test func aDesktopAppWithTheGrantRunsVerify() async throws {
+        let (fx, script) = try await fixture(verify: "touch \"$0.ran\"", extra: "app_type = \"desktop\"")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.verify.outcome == .passed && script.exists("verify.sh.ran"))
+    }
+
+    @Test(arguments: ["app_type = \"web\"", ""])
+    func webAndUnsetNeverAskForScreenRecording(extra: String) async throws {
+        let (fx, script) = try await fixture(verify: "touch \"$0.ran\"", extra: extra)
+        var o = options()
+        o.screenRecordingGranted = { false }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+        #expect(report.passed && script.exists("verify.sh.ran") && report.appType == .web)
+    }
+
+    @Test func stoppingDuringVerifyEndsItAndRemovesTheWorktree() async throws {
+        let (fx, script) = try await fixture(verify: "trap '' TERM\ntouch \"$0.started\"\nsleep 60")
+        let doctor = Doctor(project: fx.project, git: fx.git)
+        let task = Task { try await doctor.run(base: "main", options: options(grace: 0.5)) }
+        #expect(await script.waitFor("verify.sh.started"))
+        doctor.stop()
+        let report = try await task.value
+
+        #expect(report.wasStopped && report.verify.outcome == .stopped)
+        try await expectClean(fx)
     }
 }

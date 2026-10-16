@@ -117,6 +117,20 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(config.envPass.isEmpty)
     }
 
+    @Test func appTypeIsWebOrDesktopAndDefaultsToWeb() throws {
+        let tools = "[tools]\navailable = [\"Read\"]\n"
+        #expect(try Config.parse(tools).appType == .web)
+        #expect(try Config.parse("app_type = \"web\"\n" + tools).appType == .web)
+        #expect(try Config.parse("app_type = \"desktop\"\n" + tools).appType == .desktop)
+        do {
+            _ = try Config.parse("app_type = \"mobile\"\n" + tools)
+            Issue.record("expected a problem")
+        } catch let error as ConfigError {
+            let text = "\(error)"
+            #expect(text.contains("app_type") && text.contains("\"web\"") && text.contains("\"desktop\""), "\(text)")
+        }
+    }
+
     @Test func theExampleConfigParses() throws {
         let config = try Config.parse(Config.exampleTOML)
         #expect(config.tools.available.contains("Bash"))

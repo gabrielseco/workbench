@@ -11,6 +11,11 @@ public struct ToolSet: Sendable, Equatable {
 }
 
 /// `.workbench/config.toml`.
+public enum AppType: String, Sendable, Equatable, CaseIterable {
+    case web
+    case desktop
+}
+
 public struct Config: Sendable, Equatable {
     public static let defaultClaudePath = "claude"
     public static let defaultBudgetUSD: Decimal = 5
@@ -40,6 +45,9 @@ public struct Config: Sendable, Equatable {
     /// The verify step is killed, tree and all, after this many minutes.
     public var verifyTimeoutMin: Int = Config.defaultVerifyTimeoutMin
     public static let defaultVerifyTimeoutMin = 10
+    /// What the project's verify step drives. `desktop` needs Screen Recording, which `doctor` checks first;
+    /// the verify command itself still owns its tooling.
+    public var appType: AppType = .web
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
@@ -79,7 +87,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min",
+            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min", "app_type",
             "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
@@ -181,6 +189,16 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        var appType = AppType.web
+        if let (value, line) = string("", "app_type") {
+            if let parsed = AppType(rawValue: value) {
+                appType = parsed
+            } else {
+                let allowed = AppType.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+                fail(.invalidValue, line, "'app_type' must be \(allowed)")
+            }
+        }
+
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
             switch entry.value {
@@ -232,7 +250,7 @@ public struct Config: Sendable, Equatable {
         return Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
-            verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin,
+            verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
     }
@@ -292,6 +310,7 @@ public struct Config: Sendable, Equatable {
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
         # verify_timeout_min = 10          # the verify step is killed after this long
+        # app_type = "web"                 # "desktop" if verify captures the screen: doctor checks Screen Recording
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]

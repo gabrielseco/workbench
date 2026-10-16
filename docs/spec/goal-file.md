@@ -148,6 +148,7 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
 # verify_command = "scripts/verify.sh"  # optional; run after each successful turn's check, writes evidence to $WORKBENCH_PROOF_DIR
 # verify_timeout_min = 10               # the verify step is killed, tree and all, after this long
+# app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
@@ -226,6 +227,13 @@ Notes:
   (exit 1) that names the command to remove it by hand.
   A step the config leaves out is reported, not failed; the check is skipped when a declared setup did not
   pass. Exit 0 when everything declared passed, 1 when a step did not, 3 when stopped (`exit-codes.md`).
+  A declared `verify_command` runs last, only after setup and check passed, through the same runner a thread
+  uses (its `verify_timeout_min`, the proof-directory/port/thread/goal variables, the tree and detached-server
+  sweep); `WORKBENCH_GOAL` points at a stub, and the files it wrote are listed. A pass that wrote no files is a
+  warning, not a failure. With `app_type = "desktop"`, doctor first checks that the process running it may
+  record the screen (`CGPreflightScreenCaptureAccess`), and if not, fails without running the verify and names
+  the Settings pane. `web` (the default) and an unset key are never checked; the verify command still owns its
+  own tooling.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

@@ -107,7 +107,8 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
    task from goal to PR with screenshots in the description. Record what broke in `FRICTION.md`.
 4. **Verifier turn** (done as `workbench judge`: `Thread/Judge/`; not `verify --judge`, since it is its own command with its own once-per-turn rule). Prompt builder (reuse expense-tracker's `verifier` agent text as the starting point),
    strict verdict schema (the verdict is recorded in the `judge.ran` event, the log being the source of truth, not in a `verdict.json`), read-only tool set, budget, failure shown, advisory.
-5. **`doctor` checks verify.** Runs `verify_command` in the throwaway worktree, reports duration, files, and a
+5. **`doctor` checks verify** (built: `Doctor.swift`, `app_type = "web" | "desktop"`. Still open: measuring by hand whether the
+   child inherits the terminal's grant, with `scripts/probe-screen-recording.sh`). Runs `verify_command` in the throwaway worktree, reports duration, files, and a
    missing Screen Recording grant as a clear failure. Writes down whether the child inherits the terminal's
    permissions.
 6. **Triage pilot.** Verify script, app-swap policy (a separate throwaway bundle that does not touch the

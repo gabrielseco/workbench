@@ -43,8 +43,8 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 
 | Code | Kind | When |
 |---|---|---|
-| 0 |  | the declared setup and check passed |
-| 1 | `failed` | the setup or check did not pass, or its worktree could not be removed |
+| 0 |  | the declared setup, check and verify passed |
+| 1 | `failed` | the setup, check or verify did not pass, or Screen Recording is missing for a desktop app, or its worktree could not be removed |
 | 2 | `usage`, `invalid-config` | wrong command line or config |
 | 3 | `stopped` | stopped by Ctrl-C |
 | 6 | `refused` | a thread is still active, another doctor is running, or there is no config |
