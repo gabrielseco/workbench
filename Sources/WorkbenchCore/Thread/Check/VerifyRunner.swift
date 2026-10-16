@@ -127,37 +127,72 @@ struct VerifyRunner {
         try fm.createDirectory(at: url, withIntermediateDirectories: true)
     }
 
+    /// Most directory entries looked at, so a command that makes millions of files cannot hold the log.
+    static let maxEntries = 5_000
+    /// Largest file that is hashed, and the most bytes hashed in all. Past either, a file is counted, not listed.
+    static let maxFileBytes = 64 << 20
+    static let maxTotalBytes = 512 << 20
+    /// Collecting is bounded in time too: it runs while the log is locked and `verify.ended` is still to come.
+    static let collectBudget: TimeInterval = 30
+
     /// The regular files under `proofDirectory`, sorted by name. Symlinks and anything else are left out, so
-    /// the command cannot point the record at a file elsewhere on disk.
-    static func collect(proofDirectory: URL, threadDirectory: URL) -> (files: [ProofFile], omitted: Int) {
-        let fm = FileManager.default
-        let root = proofDirectory.resolvingSymlinksInPath().path
+    /// the command cannot point the record at a file elsewhere on disk. Bounded in entries, bytes and time;
+    /// whatever is not listed is counted in `omitted`.
+    static func collect(
+        proofDirectory: URL, threadDirectory: URL, maxEntries: Int = maxEntries, maxFileBytes: Int = maxFileBytes,
+        maxTotalBytes: Int = maxTotalBytes, budget: TimeInterval = collectBudget
+    ) -> (files: [ProofFile], omitted: Int) {
+        let deadline = Date().addingTimeInterval(budget)
         guard
-            let walker = fm.enumerator(
+            let walker = FileManager.default.enumerator(
                 at: proofDirectory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
                 options: [])
         else { return ([], 0) }
-        var paths: [URL] = []
+        var paths: [(url: URL, size: Int)] = []
+        var omitted = 0
+        var looked = 0
         for case let url as URL in walker {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+            looked += 1
+            if looked > maxEntries || Date() > deadline {
+                omitted += 1
+                continue
+            }
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
                 values.isSymbolicLink != true, values.isRegularFile == true
             else { continue }
-            paths.append(url)
+            paths.append((url, values.fileSize ?? 0))
         }
-        paths.sort { $0.path < $1.path }
+        paths.sort { $0.url.path < $1.url.path }
         var files: [ProofFile] = []
-        for url in paths.prefix(maxFiles) {
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { continue }
-            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            let full = url.resolvingSymlinksInPath().path
-            let name = full.hasPrefix(root + "/") ? String(full.dropFirst(root.count + 1)) : url.lastPathComponent
+        var total = 0
+        for (url, size) in paths {
+            guard files.count < maxFiles, size <= maxFileBytes, total + size <= maxTotalBytes, Date() <= deadline,
+                let digest = sha256(of: url, limit: maxFileBytes)
+            else {
+                omitted += 1
+                continue
+            }
+            total += digest.bytes
             files.append(
                 ProofFile(
-                    name: name,
-                    path: relative(url, to: threadDirectory),
-                    sha256: digest, bytes: data.count))
+                    name: relative(url, to: proofDirectory), path: relative(url, to: threadDirectory),
+                    sha256: digest.hex, bytes: digest.bytes))
         }
-        return (files, max(0, paths.count - maxFiles))
+        return (files, omitted)
+    }
+
+    /// The hash of a file read in chunks, so a large one is never held in memory; nil if it grows past `limit`.
+    static func sha256(of url: URL, limit: Int) -> (hex: String, bytes: Int)? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        var bytes = 0
+        while let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            bytes += chunk.count
+            if bytes > limit { return nil }
+            hasher.update(data: chunk)
+        }
+        return (hasher.finalize().map { String(format: "%02x", $0) }.joined(), bytes)
     }
 
     private static func relative(_ url: URL, to base: URL) -> String {

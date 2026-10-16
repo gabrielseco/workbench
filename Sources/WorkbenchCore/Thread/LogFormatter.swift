@@ -123,4 +123,20 @@ public enum LogFormatter {
         let flat = s.replacingOccurrences(of: "\n", with: " ")
         return flat.count > 100 ? String(flat.prefix(100)) + "..." : flat
     }
+
+    /// Whether `log -f` has seen everything this run will write. A turn is followed to the end of its check,
+    /// then, when it succeeded and a verify step is configured, to the end of that.
+    public static func followEnds(_ event: Event, sawStart: Bool, checks: Bool, verifies: Bool, turnSucceeded: Bool) -> Bool {
+        let result = event.data["result"]?.stringValue
+        let stopped = result == "stopped" || result == "interrupted"
+        let verifyFollows = verifies && turnSucceeded
+        switch event.kind {
+        case .turnEnded: return sawStart && !(checks && !stopped) && !verifyFollows
+        case .checkRan: return sawStart && !(verifyFollows && !stopped)
+        case .verifyEnded: return sawStart
+        // A setup that did not pass ends the run before any turn: nothing else will come.
+        case .setupRan: return result != "passed"
+        default: return false
+        }
+    }
 }

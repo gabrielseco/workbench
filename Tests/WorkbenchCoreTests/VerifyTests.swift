@@ -53,8 +53,7 @@ extension RunnerFixture {
         let png = try #require(proof.first { $0.data["name"]?.stringValue == "home.png" })
         #expect(png.data["path"]?.stringValue == "proof/turn-1/home.png")
         #expect(png.data["bytes"]?.intValue == 4)
-        // sha256 of "shot"
-        #expect(png.data["sha256"]?.stringValue?.count == 64)
+        #expect(png.data["sha256"]?.stringValue == "8dccea5217902053b636f0e105c590eb30db4280b8a7a51806110f7ff7b5177e")
 
         let ended = try #require(try fx.verifyEnds(id).first)
         #expect(ended.data["result"]?.stringValue == "passed")
@@ -179,21 +178,137 @@ extension RunnerFixture {
         #expect(FileManager.default.fileExists(atPath: fx.project.proofDirectory(id, turn: 2).path))
     }
 
-    @Test func aVerifyLeftOpenByADeadRunnerIsClosedOnTheNextRun() async throws {
-        let fx = try await RunnerFixture()
+    @Test func aVerifyLeftOpenByADeadRunnerIsClosedByTheNextRunBeforeItsFirstTurn() async throws {
+        let script = try CheckScript()
+        let fx = try await verifyFixture(script, body: "printf x > \"$WORKBENCH_PROOF_DIR/a.png\"")
         let id = try await fx.approvedThread()
-        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
-        try await log.append(.verifyStarted, turn: 1, data: ["command": "x"])
-        await log.close()
+        do {
+            let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+            try await log.append(.turnStarted, turn: 1, data: ["session_id": "x", "resume": false])
+            try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+            try await log.append(.verifyStarted, turn: 1, data: ["command": "x"])
+            await log.close()  // the runner "dies" during the verify step
+        }
         #expect(try fx.contents(id).openVerify == 1)
 
-        let reopened = try EventLogWriter.open(at: fx.project.eventsURL(id))
-        _ = try await reopened.recoverOrphanedVerify()
-        await reopened.close()
-        let last = try #require(try fx.events(id).last)
-        #expect(last.kind == .verifyEnded)
-        #expect(last.data["result"]?.stringValue == "interrupted")
+        let report = try await fx.runner(id).run(fx.options(feedback: "again"))
+        #expect(report.verify?.result == .passed)
+        let kinds = try fx.kinds(id)
+        let recovered = try #require(try fx.events(id).first { $0.kind == .verifyEnded })
+        #expect(recovered.data["result"]?.stringValue == "interrupted")
+        #expect(recovered.data["synthetic"] == true)
+        #expect(try #require(kinds.firstIndex(of: "verify.ended")) < (try #require(kinds.lastIndex(of: "turn.started"))))
         #expect(try fx.contents(id).openVerify == nil)
+        #expect(try fx.contents(id).isHealthy)
+    }
+
+    @Test func aSuccessfulVerifyThatWritesNothingHasAnEmptyProofList() async throws {
+        let script = try CheckScript()
+        let fx = try await verifyFixture(script, body: "echo nothing to show")
+        let id = try await fx.approvedThread()
+        let report = try await fx.runner(id).run(fx.options())
+        #expect(report.verify?.result == .passed)
+        #expect(report.verify?.proof.isEmpty == true)
+        #expect(try fx.verifyEnds(id).first?.data["proof_files"]?.intValue == 0)
+    }
+
+    @Test func aStopBeforeTheVerifyStartsMeansItDoesNotRun() async throws {
+        let script = try CheckScript()
+        let fx = try await verifyFixture(script, body: "touch \(script.path("ran"))")
+        let id = try await fx.approvedThread()
+        let runner = fx.runner(id)
+        async let report = runner.run(fx.options("hang-after=2", timeout: 30))
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        await runner.stop()
+        let result = try await report
+        #expect(result.result == .stopped)
+        #expect(result.verify == nil)
+        #expect(!script.exists("ran"))
+    }
+
+    @Test func aVerifyThatIgnoresSIGTERMIsKilledWithItsChildren() async throws {
+        let script = try CheckScript()
+        let body = """
+            trap '' TERM
+            sleep 300 &
+            echo $! > \(script.path("child"))
+            while :; do sleep 1; done
+            """
+        let fx = try await verifyFixture(script, body: body)
+        let id = try await fx.approvedThread()
+        var options = fx.options(grace: 1)
+        options.verifyTimeoutOverride = 3
+        let report = try await fx.runner(id).run(options)
+        #expect(report.verify?.result == .timedOut)
+        let child = try script.pid("child")
+        defer { kill(child, SIGKILL) }
+        #expect(await FakeClaude.waitUntilGone(child))
+        #expect(try fx.verifyEnds(id).first?.data["escalated_to_kill"] == true)
+    }
+
+    @Test func collectingProofIsBoundedInEntriesFileSizeAndTotalBytes() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-proof-\(UUID().uuidString)")
+        let thread = dir.appendingPathComponent("thread")
+        let proof = thread.appendingPathComponent("proof/turn-1")
+        try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for (name, size) in [("a.png", 10), ("b.png", 10), ("big.png", 100), ("c.png", 10)] {
+            try Data(repeating: 1, count: size).write(to: proof.appendingPathComponent(name))
+        }
+
+        let all = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread)
+        #expect(all.files.map(\.name) == ["a.png", "b.png", "big.png", "c.png"])
+        #expect(all.files.first?.path == "proof/turn-1/a.png")
+
+        let bigSkipped = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread, maxFileBytes: 50)
+        #expect(bigSkipped.files.map(\.name) == ["a.png", "b.png", "c.png"])
+        #expect(bigSkipped.omitted == 1)
+
+        let totalCapped = VerifyRunner.collect(
+            proofDirectory: proof, threadDirectory: thread, maxFileBytes: 50, maxTotalBytes: 20)
+        #expect(totalCapped.files.map(\.name) == ["a.png", "b.png"])
+        #expect(totalCapped.omitted == 2)
+
+        let fewEntries = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread, maxEntries: 2)
+        #expect(fewEntries.files.count <= 2)
+        #expect(fewEntries.omitted >= 2)
+
+        let noTime = VerifyRunner.collect(proofDirectory: proof, threadDirectory: thread, budget: -1)
+        #expect(noTime.files.isEmpty)
+        #expect(noTime.omitted >= 4)
+    }
+}
+
+@Suite struct LogFollowTests {
+    private func event(_ kind: EventKind, _ result: String? = nil) -> Event {
+        Event(seq: 1, ts: "t", turn: 1, kind: kind, data: result.map { ["result": .string($0)] } ?? [:])
+    }
+
+    private func ends(
+        _ kind: EventKind, _ result: String? = nil, checks: Bool = false, verifies: Bool = false,
+        succeeded: Bool = true
+    ) -> Bool {
+        LogFormatter.followEnds(
+            event(kind, result), sawStart: true, checks: checks, verifies: verifies, turnSucceeded: succeeded)
+    }
+
+    @Test func followingWaitsForTheVerifyStepOfASuccessfulTurn() {
+        #expect(!ends(.turnEnded, "succeeded", checks: true, verifies: true))
+        #expect(!ends(.checkRan, "passed", checks: true, verifies: true))
+        #expect(ends(.verifyEnded, "passed", checks: true, verifies: true))
+        #expect(!ends(.turnEnded, "succeeded", verifies: true), "no check: the verify step still follows the turn")
+    }
+
+    @Test func aTurnThatDidNotSucceedOrWasStoppedEndsAtItsCheckOrItself() {
+        #expect(ends(.checkRan, "failed", checks: true, verifies: true, succeeded: false))
+        #expect(ends(.checkRan, "stopped", checks: true, verifies: true))
+        #expect(ends(.turnEnded, "stopped", verifies: true, succeeded: false))
+    }
+
+    @Test func withoutAVerifyStepNothingChanges() {
+        #expect(ends(.turnEnded, "succeeded"))
+        #expect(!ends(.turnEnded, "succeeded", checks: true))
+        #expect(ends(.checkRan, "passed", checks: true))
     }
 }
 
