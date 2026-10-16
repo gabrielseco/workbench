@@ -34,6 +34,12 @@ public struct Config: Sendable, Equatable {
     /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
     /// `claude`, so it is not added to the allowed tools.
     public var setupCommand: String?
+    /// Run by Workbench after a successful turn's check to produce evidence (screenshots, a verdict) in the
+    /// proof directory. Never offered to `claude`, so it is not added to the allowed tools.
+    public var verifyCommand: String?
+    /// The verify step is killed, tree and all, after this many minutes.
+    public var verifyTimeoutMin: Int = Config.defaultVerifyTimeoutMin
+    public static let defaultVerifyTimeoutMin = 10
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
@@ -64,6 +70,7 @@ public struct Config: Sendable, Equatable {
         return try parse(text)
     }
 
+    // swiftlint:disable:next function_body_length
     public static func parse(_ text: String) throws -> Config {
         let (document, syntaxProblems) = TOMLSubset.parse(text)
         var problems = syntaxProblems
@@ -72,8 +79,8 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "setup_command", "default_budget_usd", "env_pass", "model", "safe_mode",
-            "project_instructions",
+            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min",
+            "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -164,6 +171,15 @@ public struct Config: Sendable, Equatable {
         }
         let checkCommand = command("check_command")
         let setupCommand = command("setup_command")
+        let verifyCommand = command("verify_command")
+        var verifyTimeoutMin = defaultVerifyTimeoutMin
+        if let entry = document.tables[""]?.entries["verify_timeout_min"] {
+            if let minutes = Self.verifyMinutes(entry.value) {
+                verifyTimeoutMin = minutes
+            } else {
+                fail(.invalidValue, entry.line, "'verify_timeout_min' must be a whole number of minutes from 1 to 240")
+            }
+        }
 
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
@@ -216,8 +232,14 @@ public struct Config: Sendable, Equatable {
         return Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
+            verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
+    }
+
+    private static func verifyMinutes(_ value: TOMLValue) -> Int? {
+        if case .int(let n) = value, (1...240).contains(n) { return n }
+        return nil
     }
 
     private static func sorted(_ problems: [ConfigProblem]) -> [ConfigProblem] {
@@ -268,6 +290,8 @@ public struct Config: Sendable, Equatable {
         # model = "opus"                   # --model for every turn; a goal's `model` wins; unset = the CLI default
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
+        # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
+        # verify_timeout_min = 10          # the verify step is killed after this long
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]

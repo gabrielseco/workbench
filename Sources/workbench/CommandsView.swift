@@ -156,6 +156,12 @@ extension Commands {
         } else if let check = state.lastCheck {
             out("check:     \(check)")
         }
+        if let open = state.openVerify {
+            let note = running ? "running" : "NOT running: will be recorded as interrupted on next run"
+            out("verify:    turn \(open) open, \(note)")
+        } else if let verify = state.review.verify {
+            out("verify:    \(verify.result)  (\(verify.proof.count) proof file(s))")
+        }
         if state.openTurn != nil {
             for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
         }

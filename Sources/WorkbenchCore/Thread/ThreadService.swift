@@ -192,6 +192,7 @@ public struct ThreadService: Sendable {
         try await withLog(id) { log in
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
+            _ = try await log.recoverOrphanedVerify()
             try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
         }
     }
@@ -242,6 +243,7 @@ public struct ThreadService: Sendable {
         try await withLog(id) { log in
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
+            _ = try await log.recoverOrphanedVerify()
             if manager.exists(id) {
                 // Children the dead runner left in the worktree would outlive it, and no later run sweeps it.
                 let swept = OrphanSweeper.sweep(inside: manager.path(for: id))
@@ -346,6 +348,7 @@ public struct ThreadService: Sendable {
             if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
+            _ = try await log.recoverOrphanedVerify()
             // A child the dead runner left behind could still be writing files while they are committed.
             let swept = OrphanSweeper.sweep(inside: worktree)
             if !swept.isEmpty {

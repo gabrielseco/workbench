@@ -95,6 +95,10 @@ extension Commands {
                 "open_turn": state.openCheck.map { .int($0) } ?? .null,
                 "last": state.lastCheck.map { .string($0) } ?? .null,
             ],
+            "verify": [
+                "open_turn": state.openVerify.map { .int($0) } ?? .null,
+                "last": state.review.verify.map { .string($0.result) } ?? .null,
+            ],
             "cost_usd": .double(state.totalCostUSD), "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
         ]
@@ -169,6 +173,22 @@ extension Commands {
         } else {
             check = .null
         }
+        let verify: JSONValue
+        if let v = review.verify {
+            verify = [
+                "turn": .int(v.turn), "result": .string(v.result), "exit_code": v.exitCode.map { .int($0) } ?? .null,
+                "duration_ms": v.durationMs.map { .int($0) } ?? .null,
+                "proof": .array(
+                    v.proof.map {
+                        [
+                            "name": .string($0.name), "path": .string($0.path), "sha256": .string($0.sha256),
+                            "bytes": .int($0.bytes),
+                        ]
+                    }),
+            ]
+        } else {
+            verify = .null
+        }
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
@@ -188,7 +208,7 @@ extension Commands {
                         "note": status.note.map { .string($0) } ?? .null,
                     ]
                 }),
-            "diff": diff, "check": check,
+            "diff": diff, "check": check, "verify": verify,
             "denied_tools": .array(
                 review.deniedTools.map {
                     [

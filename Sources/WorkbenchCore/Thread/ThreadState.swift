@@ -27,6 +27,17 @@ public struct Review: Sendable, Equatable {
         public var command: String?
     }
 
+    /// The verify step of a turn, as `verify.ended` and its `proof.added` events recorded it.
+    public struct Verify: Sendable, Equatable {
+        public var turn: Int
+        public var result: String
+        public var exitCode: Int?
+        public var durationMs: Int?
+        public var outputRef: String?
+        public var command: String?
+        public var proof: [ProofFile]
+    }
+
     public struct Note: Sendable, Equatable {
         /// The follow-up turn the note started.
         public var turn: Int
@@ -54,6 +65,8 @@ public struct Review: Sendable, Equatable {
     public var turnResult: String?
     /// The latest completed check, nil when none has run.
     public var check: Check?
+    /// The latest completed verify step, nil when none has run.
+    public var verify: Verify?
     public var notes: [Note]
     public var deniedTools: [DeniedTool]
 }
@@ -134,6 +147,7 @@ public struct ThreadState: Sendable, Equatable {
     public var lastTurn: Int
     public var openTurn: Int?
     public var openCheck: Int?
+    public var openVerify: Int?
     /// The latest check's `result`, nil when no check has run.
     public var lastCheck: String?
     /// `accepted`, `discarded` or `abandoned` once the thread has ended.
@@ -149,14 +163,41 @@ public struct ThreadState: Sendable, Equatable {
 
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
 
+    /// The verify step's events: `proof.added` lines gather until `verify.ended` closes the step.
+    private static func applyVerify(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
+        switch event.kind {
+        case .verifyStarted:
+            state.openVerify = event.turn
+            pending = []
+            state.progress.note(event.ts, "verify started")
+        case .proofAdded:
+            guard let name = event.data["name"]?.stringValue, let path = event.data["path"]?.stringValue else { return }
+            pending.append(
+                ProofFile(
+                    name: name, path: path, sha256: event.data["sha256"]?.stringValue ?? "",
+                    bytes: event.data["bytes"]?.intValue ?? 0))
+        default:
+            if state.openVerify == event.turn { state.openVerify = nil }
+            state.progress.note(event.ts, "verify \(event.data["result"]?.stringValue ?? "ran")")
+            if let result = event.data["result"]?.stringValue {
+                state.review.verify = Review.Verify(
+                    turn: event.turn, result: result, exitCode: event.data["exit_code"]?.intValue,
+                    durationMs: event.data["duration_ms"]?.intValue, outputRef: event.data["output_ref"]?.stringValue,
+                    command: event.data["command"]?.stringValue, proof: pending)
+            }
+            pending = []
+        }
+    }
+
     /// A pure function of the events: no file, git or clock. Unknown kinds and unknown decisions are ignored.
     public static func derive(from events: [Event], id: String) -> ThreadState {
         var state = ThreadState(
-            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil, decision: nil,
-            lastResult: nil, totalCostUSD: 0, sessionID: nil,
-            review: Review(status: .empty, turnResult: nil, check: nil, notes: [], deniedTools: []),
+            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, openVerify: nil, lastCheck: nil,
+            decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
+            review: Review(status: .empty, turnResult: nil, check: nil, verify: nil, notes: [], deniedTools: []),
             progress: Progress())
         var noteIsLatest = false
+        var pendingProof: [ProofFile] = []
         for event in events {
             switch event.kind {
             case .threadCreated:
@@ -191,6 +232,8 @@ public struct ThreadState: Sendable, Equatable {
                         outputRef: event.data["output_ref"]?.stringValue,
                         command: event.data["command"]?.stringValue)
                 }
+            case .verifyStarted, .proofAdded, .verifyEnded:
+                Self.applyVerify(event, to: &state, pending: &pendingProof)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.
@@ -226,7 +269,7 @@ public struct ThreadState: Sendable, Equatable {
         state.review.turnResult = state.lastResult
         if let decision = state.decision {
             state.review.status = .decided(decision)
-        } else if state.openTurn != nil || state.openCheck != nil {
+        } else if state.openTurn != nil || state.openCheck != nil || state.openVerify != nil {
             state.review.status = .running
         } else if state.lastTurn == 0 {
             state.review.status = .empty

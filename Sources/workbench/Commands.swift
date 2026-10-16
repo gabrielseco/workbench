@@ -365,6 +365,12 @@ enum Commands {
             case .setupRan(let setup):
                 out("setup \(setup.result.rawValue)  \(setup.durationMs / 1000)s"
                     + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(setup.outputRef).path))")
+            case .verifyStarted(_, let command):
+                out("verify started: \(command)")
+            case .verifyEnded(let verify):
+                out("verify \(verify.result.rawValue)  \(verify.durationMs / 1000)s  \(verify.proof.count) proof file(s)"
+                    + (verify.outputTruncated ? "  output truncated" : "")
+                    + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(verify.outputRef).path))")
             case .checkStarted(_, let command):
                 out("check started: \(command)")
             case .checkRan(let check):

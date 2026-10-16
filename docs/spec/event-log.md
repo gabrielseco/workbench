@@ -38,7 +38,9 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `pr.refreshed` | `workbench ship` proposed (`stage: proposed`) or applied (`stage: applied`) an update to the text of the pull request a thread continues | `stage`, `ok`, `number`, `title_changed`, `sections` (headings), `argv` and `reason` when a proposal failed |
 | `worktree.removed` | `workbench ship` removed the worktree of a shipped thread (P2.5) | `reason` (`shipped`), `head_sha` |
 | `branch.removed` | `workbench clean` deleted the local branch of a shipped thread whose pull request ended | `reason` (`merged`, `closed`), `head_sha` |
-| `proof.added` | evidence recorded (later) | `criterion`, `type`, `path` |
+| `verify.started` | the project's `verify_command` is about to run, after the turn's check | `command`, `proof_ref`, `port` |
+| `proof.added` | a file the verify step left in its proof directory, one per file, before `verify.ended` | `name`, `path`, `sha256`, `bytes` |
+| `verify.ended` | the verify step ended; exactly once per `verify.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated`, `proof_files` |
 
 ## Invariants (tested)
 
@@ -49,6 +51,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
+6. Every `verify.started` is followed by exactly one `verify.ended`, recovered the same way. Unlike the others
+   this is not enforced when appending: a stray `verify.ended` is ignored, not an error.
 
 ## Fields the runner writes
 
@@ -64,6 +68,9 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `turn.ended` | `result`, `exit_code`, `signal`, `duration_ms`, `session_id`, `permission_denials`, and when present `cost_usd`, `cause` (`natural`, `stopped`, `timedOut`), `escalated_to_kill`, `swept_processes`, `output_truncated`, `drain_timed_out`, `lost`, `stderr_tail` (at most 2000 characters), `error`, `synthetic` |
 | `check.started` | `command`: `check_command` from the config, as written there. `turn` is the turn it follows |
 | `check.ran` | `command`, `result` (`passed`, `failed`, `timed_out`, `stopped`, `interrupted`), `exit_code`, `signal` (null when not applicable), `duration_ms`, `output_ref` (`checks/turn-N.log`, relative to the thread directory), `output_truncated`, and when present `escalated_to_kill`, `swept_processes`, `lost`, `error`, `synthetic`. A synthetic one has only `result`, `synthetic` and a null `exit_code` |
+| `verify.started` | `command`: `verify_command` as written. `proof_ref` (`proof/turn-N`, relative to the thread directory), `port`: the free TCP port handed to the command as `WORKBENCH_PORT` (null if none could be found). Written for a turn that `succeeded`, after its `check.ran`; absent when `verify_command` is unset |
+| `proof.added` | `name` (path under the proof directory), `path` (relative to the thread directory), `sha256`, `bytes`. Only regular files: a symlink is left out so the record cannot point elsewhere on disk. At most 200 per run; the rest are counted in `verify.ended.proof_omitted`. Written whatever the verify result, since a failed run's partial evidence is still shown |
+| `verify.ended` | `command`, `result` (`passed`, `failed`, `timed_out`, `stopped`, `interrupted`), `exit_code`, `signal`, `duration_ms`, `output_ref` (`verify/turn-N.log`), `output_truncated`, `proof_files`, and when present `proof_omitted`, `escalated_to_kill`, `swept_processes`, `lost`, `error`, `synthetic`. A synthetic one has only `result`, `synthetic` and a null `exit_code`. `passed` means only that the command exited 0; no criterion is met because of it |
 | `setup.ran` | `command`: `setup_command` as written, turn 0. `result` (`passed`, `failed`, `timed_out`, `stopped`), `exit_code`, `signal`, `duration_ms`, `output_ref` (`setup.log`, relative to the thread directory), `output_truncated`, and when present `escalated_to_kill`, `swept_processes`, `lost`, `error`. Written once after `worktree.created` and before the first `turn.started`; absent when `setup_command` is unset. A thread whose latest `setup.ran` is not `passed` has not started: the next `run` runs it again, and no turn is written until it passes |
 | `worktree.removed` | `reason` (`shipped`) and `head_sha`, the commit the worktree was at, which is the one `pr.opened` recorded and `origin` has. Written by `workbench ship` after it checked the worktree was on `workbench/<id>`, clean (ignored files included) and at that commit, with no live runner; `git worktree remove` is never forced and the branch is kept. `workbench clean` writes the same event for a worktree `--keep-worktree` left, once the pull request is merged (or closed, with `--closed`), and also when the worktree is already gone but the event was never written; it then skips the `origin` check because origin has usually dropped the branch |
 | `branch.removed` | `reason` (`merged`, `closed`) and `head_sha`. Written by `workbench clean --yes` after `git branch -D workbench/<id>`, only when GitHub's head for the recorded PR number, the `pr.opened` `head_sha` and the local branch tip are the same commit, and the delete is one compare-and-delete (`git update-ref -d <ref> <sha>`) so a commit landing in between is not lost. Absent when the branch was kept |
@@ -107,6 +114,12 @@ Implemented in `Sources/WorkbenchCore/Thread/Check/CheckRunner.swift`, called by
   written to the output file.
 - **Stop.** `workbench stop` during a check stops the command and records `stopped`. A stop that arrives
   after the turn ended and before the check started means no check runs.
+- **The verify step** runs through the same machinery as the check (one bounded child, merged streams, the
+  process tree swept on every exit, the minimal environment) and adds a contract: the command is run in the
+  worktree with `WORKBENCH_PROOF_DIR` (an empty directory, `proof/turn-N` in the thread folder),
+  `WORKBENCH_PORT` (a free port), `WORKBENCH_THREAD` and `WORKBENCH_GOAL` (the path of `goal.md`) set. It is
+  killed after `verify_timeout_min` (default 10). It is not run when the turn did not `succeed`, or after a stop.
+  A failing verify does not change the turn's result and does not block `accept` or `ship`.
 - **Orphaned checks** are state, not damage. `recoverOrphanedCheck()` appends
   `check.ran {result: "interrupted", synthetic: true}` for the open check, in the same place an orphaned
   turn is recovered (the start of the next run, and `abandon`). The command it left running is found by

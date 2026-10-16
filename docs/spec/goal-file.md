@@ -116,6 +116,8 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 
 ```toml
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
+# verify_command = "scripts/verify.sh"  # optional; run after each successful turn's check, writes evidence to $WORKBENCH_PROOF_DIR
+# verify_timeout_min = 10               # the verify step is killed, tree and all, after this long
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
@@ -161,6 +163,13 @@ Notes:
   any turn is spent; the worktree is kept and the next `run` tries it again. What it writes into the
   worktree is untracked there: keep installs in ignored paths (`deps/`, `node_modules/`), or they show up
   in the diff.
+- **`verify_command` is run by Workbench, not offered to the model.** Validated like `check_command` and run
+  after a successful turn's check, with the check's machinery and environment plus `WORKBENCH_PROOF_DIR`,
+  `WORKBENCH_PORT`, `WORKBENCH_THREAD` and `WORKBENCH_GOAL`. It is the answer to a project whose evidence
+  needs more than the tool set allows (a browser, a built app): the command is the project's own, and Claude
+  is not given those tools. It writes screenshots and, optionally, a `verdict.json` into the proof directory;
+  `review` lists them and the event log records each with its hash. Its result is shown, never counted as a
+  criterion met. See [event-log.md](event-log.md) for the events.
 - **The child environment is an allowlist**: `PATH HOME USER LOGNAME SHELL LANG TMPDIR TERM
   CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
   them `claude` reports "Not logged in" even though the config dir is set. `SSH_AUTH_SOCK` and every token

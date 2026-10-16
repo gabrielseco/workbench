@@ -98,7 +98,7 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
 
 ## Tasks
 
-1. **`verify_command` step.** Config key and validation, env contract, bounded run with tree sweep, events,
+1. **`verify_command` step** (done: `Thread/Check/VerifyRunner.swift`). Config key and validation, env contract, bounded run with tree sweep, events,
    `status` shows "verifying", `review` lists the proof files. Fake-claude tests: passing verify, failing verify,
    timeout, killed mid-verify, empty proof dir, a dev-server grandchild left running.
 2. **Screenshot proof.** Parser, `review` and `--json`, spec, "missing" never "met". `ship` attaches the
