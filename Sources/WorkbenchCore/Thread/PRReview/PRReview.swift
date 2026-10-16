@@ -12,6 +12,8 @@ struct PRReviewInput: Sendable, Equatable {
     var branch: String
     var base: String
     var headSHA: String
+    /// The commit of `base` the diff is taken against, fetched from origin for this round.
+    var baseSHA: String
     /// The goal file as the thread has it: the request and the numbered criteria the change was written against.
     var goal: String
     /// `AGENTS.md` (else `CLAUDE.md`) at the base, nil when the project has none or the config turns it off.
@@ -70,8 +72,8 @@ public enum PRReview {
         let lines = answer.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard let last = lines.last else { return nil }
-        let markers = Set(lines.filter { $0 == cleanLine || $0 == fixLine })
-        guard markers.count == 1, markers.contains(last) else { return nil }
+        let markers = lines.filter { $0 == cleanLine || $0 == fixLine }
+        guard markers.count == 1, markers[0] == last else { return nil }
         return last == cleanLine ? .clean : .fix
     }
 
@@ -100,7 +102,8 @@ public enum PRReview {
             "",
             "The change, as a diff against its base, is saved at \(input.diffPath). Read that file; it is the "
                 + "whole change."
-                + (input.diffTruncated ? " It was cut at \(diffLimit / 1024) KiB: read the rest from the checkout." : ""),
+                + (input.diffTruncated ? " It was cut at \(diffLimit / 1024) KiB." : "")
+                + " To read any part of the change again, run `git diff \(input.baseSHA)...\(input.headSHA)` in the checkout.",
             "",
             "## What the change was written against",
             "",

@@ -21,7 +21,8 @@ extension Commands {
         defer { signals.forEach { $0.cancel() } }
         let result: PRReviewResult
         do {
-            result = try await ctx.service.prReview(id: id, config: config, again: again, attach: { holder.attach($0) })
+            result = try await ctx.service.prReview(
+                id: id, config: config, again: again, stopRequested: { holder.isStopRequested }, attach: { holder.attach($0) })
         } catch let error as PRReviewRefusal {
             switch error {
             case .originUnreadable: throw CLIError.message("\(error)")

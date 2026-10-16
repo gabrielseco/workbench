@@ -15,6 +15,12 @@ final class RunHolder: @unchecked Sendable {
         if stop { new.stop() }
     }
 
+    var isStopRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopRequested
+    }
+
     func stop() {
         lock.lock()
         stopRequested = true

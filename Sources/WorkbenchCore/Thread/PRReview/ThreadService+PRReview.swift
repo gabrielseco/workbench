@@ -13,20 +13,24 @@ extension ThreadService {
     ///   - codexPath: `codex` by name (looked up on PATH) or by path.
     ///   - capacityBackoff: seconds to wait after the nth "at capacity" answer.
     ///   - attach: called with each running `codex`, so the caller can stop it (Ctrl-C).
+    ///   - stopRequested: polled while waiting for GitHub and between tries, so a stop also ends the parts of a round
+    ///     that run no `codex`.
     public func prReview(
         id: String, config: Config, again: Bool = false, codexPath: String = "codex",
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = PRReview.timeout,
         headWait: TimeInterval = PRReview.headWait, headPoll: TimeInterval = PRReview.headPoll,
         capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
+        stopRequested: @escaping @Sendable () -> Bool = { false },
         attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let settings = PRReviewSettings(
             codexPath: codexPath, environment: environment, timeout: timeout, headWait: headWait, headPoll: headPoll,
-            capacityBackoff: capacityBackoff)
+            capacityBackoff: capacityBackoff, stopRequested: stopRequested)
         do {
             return try await withLog(id) { log in
-                try await self.prReviewLocked(id: id, log: log, config: config, again: again, settings: settings, attach: attach)
+                try await self.prReviewLocked(
+                    id: id, log: log, config: config, again: again, settings: settings, attach: attach)
             }
         } catch EventLogError.alreadyOpen { throw PRReviewRefusal.busy }
     }
@@ -35,6 +39,9 @@ extension ThreadService {
         id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
         attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PRReviewResult {
+        // A round that was killed leaves its `codex` and its checkout behind. This process holds the thread's log, so
+        // none of them is live: end them now, before any refusal can leave them for good.
+        await recoverLeftovers(in: project.threadDirectory(id).appendingPathComponent("pr-review"))
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -80,10 +87,12 @@ extension ThreadService {
         await removeTree(paths)
         let findings = outcome.findings
         let findingsPath = findings == nil ? nil : "pr-review/\(paths.answer.lastPathComponent)"
+        let transcript =
+            FileManager.default.fileExists(atPath: paths.transcript.path)
+            ? "pr-review/\(paths.transcript.lastPathComponent)" : nil
         return try await recordRound(
             log, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, outcome: outcome,
-            sha: context.reviewedSHA ?? tip, findingsPath: findingsPath,
-            transcript: "pr-review/\(paths.transcript.lastPathComponent)")
+            sha: context.reviewedSHA ?? tip, findingsPath: findingsPath, transcript: transcript)
     }
 
     // MARK: A round
@@ -98,29 +107,30 @@ extension ThreadService {
         }
         round.reviewedSHA = sha
         if let reason = await fetchPullHead(round, sha: sha) { return outcome.failed(reason) }
+        switch await pinBase(round) {
+        case .failure(let reason): return outcome.failed(reason)
+        case .success(let value): round.baseSHA = value
+        }
+        guard let baseSHA = round.baseSHA else { return outcome.failed("the base commit is not known") }
 
-        OrphanSweeper.sweep(inside: paths.folder)
         let add = try? await git.run(["worktree", "add", "--detach", paths.tree.path, sha], in: project.root)
         guard let add, add.succeeded else {
             return outcome.failed("the checkout of the pull request could not be made: \(add?.stderr.firstLine ?? "git failed")")
         }
         let diffText: String
         let truncated: Bool
-        switch await diff(round, sha: sha) {
+        switch await diff(baseSHA: baseSHA, sha: sha) {
         case .failure(let reason): return outcome.failed(reason)
         case .success(let value): (diffText, truncated) = value
         }
         try? diffText.write(to: paths.diff, atomically: true, encoding: .utf8)
 
         var input = PRReviewInput(
-            pr: round.pr, branch: round.branch, base: round.base, headSHA: sha,
+            pr: round.pr, branch: round.branch, base: round.base, headSHA: sha, baseSHA: baseSHA,
             goal: Self.cut(round.goal, PRReview.goalLimit), instructions: nil, checklist: nil, checklistPath: nil,
             diffPath: paths.diff.path, diffTruncated: truncated)
         if round.config.projectInstructions {
-            let baseRef = await baseReference(round)
-            if let baseRef {
-                input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseRef)?.text
-            }
+            input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseSHA)?.text
         }
         if let path = round.config.prReview.checklist {
             if let text = Self.readChecklist(path, in: paths.tree) {
@@ -137,12 +147,18 @@ extension ThreadService {
         guard let codex = ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"])
         else { return outcome.failed("`\(round.settings.codexPath)` was not found: install Codex or put it on PATH") }
 
+        if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
         let transcript = await runCodex(
             codex, round: round, attach: attach,
             argv: PRReview.arguments(tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path))
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
         if let problem = transcript.problem { return outcome.failed(problem, answer: Self.readAnswer(paths.answer)) }
 
+        if Self.answerSize(paths.answer) > PRReview.answerLimit {
+            return outcome.failed(
+                "the answer is larger than \(PRReview.answerLimit / 1024) KiB, so its last line cannot be trusted; "
+                    + "it was not accepted", answer: Self.readAnswer(paths.answer))
+        }
         guard let answer = Self.readAnswer(paths.answer) else {
             return outcome.failed("codex ended without writing an answer")
         }
@@ -161,6 +177,7 @@ extension ThreadService {
     ) async -> (text: String, problem: String?) {
         var transcript = ""
         for attempt in 1...PRReview.attempts {
+            if round.settings.stopRequested() { return (transcript, "the review was stopped") }
             try? FileManager.default.removeItem(at: round.paths.answer)
             var request = SpawnRequest(
                 executable: codex, arguments: argv, environment: PRReview.environment(from: round.settings.environment),
@@ -187,7 +204,8 @@ extension ThreadService {
             let answer = Self.readAnswer(round.paths.answer)
             if answer == nil, PRReview.atCapacity(tail) || PRReview.atCapacity(lines.joined(separator: "\n")) {
                 if attempt < PRReview.attempts {
-                    try? await Task.sleep(nanoseconds: UInt64(max(0, round.settings.capacityBackoff(attempt)) * 1e9))
+                    let stopped = await Self.sleep(round.settings.capacityBackoff(attempt), stop: round.settings.stopRequested)
+                    if stopped { return (transcript, "the review was stopped") }
                     continue
                 }
                 return (transcript, "codex's model was at capacity \(PRReview.attempts) times; no review. Try again later.")
@@ -218,6 +236,7 @@ extension ThreadService {
         let deadline = Date().addingTimeInterval(round.settings.headWait)
         var seen = "no answer from origin"
         while true {
+            if round.settings.stopRequested() { return .failure(PRReviewFailure("the review was stopped")) }
             let branch = try? await git.run(["ls-remote", "origin", "refs/heads/\(round.branch)"], in: project.root)
             let pull = try? await git.run(["ls-remote", "origin", "refs/pull/\(round.pr)/head"], in: project.root)
             if let branch, let pull, branch.succeeded, pull.succeeded {
@@ -230,7 +249,7 @@ extension ThreadService {
                 seen = "origin could not be read"
             }
             if Date() >= deadline { break }
-            try? await Task.sleep(nanoseconds: UInt64(max(0.01, round.settings.headPoll) * 1e9))
+            _ = await Self.sleep(max(0.01, round.settings.headPoll), stop: round.settings.stopRequested)
         }
         return .failure(
             PRReviewFailure(
@@ -252,29 +271,57 @@ extension ThreadService {
         return nil
     }
 
-    /// What the pull request is compared with: `origin/<base>` as it is now, else the commit the thread was cut from.
-    private func baseReference(_ round: PRReviewRound) async -> String? {
-        let remote = "origin/\(round.base)"
-        if let check = try? await git.run(["rev-parse", "--verify", "--quiet", "\(remote)^{commit}"], in: project.root),
-            check.succeeded { return remote }
-        if let recorded = round.recordedBase, recorded.range(of: #"^[0-9a-f]{7,64}$"#, options: .regularExpression) != nil {
-            return recorded
+    /// The commit of the base branch the pull request is compared with, fetched now so that the diff and the project
+    /// instructions are the ones GitHub shows and not those of a stale `origin/<base>`. When origin no longer has the
+    /// branch, the commit the thread was cut from.
+    private func pinBase(_ round: PRReviewRound) async -> Result<String, PRReviewFailure> {
+        guard let remote = try? await git.run(["ls-remote", "origin", "refs/heads/\(round.base)"], in: project.root),
+            remote.succeeded
+        else { return .failure(PRReviewFailure("origin could not be read, so the base branch is not known")) }
+        if Self.firstSHA(remote.stdout) != nil {
+            let fetch = try? await git.run(
+                ["fetch", "--quiet", "--no-tags", "origin", "refs/heads/\(round.base)"], in: project.root)
+            let head = try? await git.run(["rev-parse", "--verify", "FETCH_HEAD^{commit}"], in: project.root)
+            guard let fetch, fetch.succeeded, let head, head.succeeded,
+                let sha = Self.firstSHA(head.stdout)
+            else {
+                let why = Self.withoutCredentials(fetch?.stderr.firstLine ?? "git failed")
+                return .failure(PRReviewFailure("the base branch \(round.base) could not be fetched: \(why)"))
+            }
+            return .success(sha)
         }
-        return nil
+        let fullSHA = #"^[0-9a-f]{40}([0-9a-f]{24})?$"#
+        if let recorded = round.recordedBase, recorded.range(of: fullSHA, options: .regularExpression) != nil {
+            return .success(recorded)
+        }
+        return .failure(
+            PRReviewFailure("origin has no \(round.base) and no base commit is recorded: no diff can be made"))
     }
 
-    private func diff(_ round: PRReviewRound, sha: String) async -> Result<(String, Bool), PRReviewFailure> {
-        guard let base = await baseReference(round) else {
-            return .failure(
-                PRReviewFailure("origin/\(round.base) is not known here and no base commit is recorded: no diff can be made"))
-        }
-        let result = try? await git.run(["diff", "--no-ext-diff", "--no-color", "\(base)...\(sha)"], in: project.root)
+    private func diff(baseSHA: String, sha: String) async -> Result<(String, Bool), PRReviewFailure> {
+        let result = try? await git.run(["diff", "--no-ext-diff", "--no-color", "\(baseSHA)...\(sha)"], in: project.root)
         guard let result, result.succeeded else {
             let why = result?.stderr.firstLine ?? "git failed"
             return .failure(PRReviewFailure("the diff of the pull request could not be read: \(why)"))
         }
         let cut = result.stdout.utf8.count > PRReview.diffLimit
         return .success((cut ? Self.cut(result.stdout, PRReview.diffLimit) : result.stdout, cut))
+    }
+
+    /// Ends what an earlier, killed round left: a `codex` still running in the folder, a registered checkout, a saved diff.
+    private func recoverLeftovers(in folder: URL) async {
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
+        OrphanSweeper.sweep(inside: folder)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in names where name.hasPrefix("round-") && name.hasSuffix(".tree") {
+            let tree = folder.appendingPathComponent(name)
+            _ = try? await git.run(["worktree", "remove", "--force", tree.path], in: project.root)
+            try? FileManager.default.removeItem(at: tree)
+        }
+        for name in names where name.hasPrefix("round-") && name.hasSuffix(".diff.patch") {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
+        _ = try? await git.run(["worktree", "prune"], in: project.root)
     }
 
     /// Removes the throwaway checkout and the saved diff. Never forced on anything but its own folder.
@@ -291,13 +338,14 @@ extension ThreadService {
 
     private func recordRound(
         _ log: EventLogWriter, turn: Int, round: Int, pr: Int, maxRounds: Int, outcome: PRReviewOutcome, sha: String,
-        findingsPath: String?, transcript: String
+        findingsPath: String?, transcript: String?
     ) async throws -> PRReviewResult {
         let reason = outcome.failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
         var data: [String: JSONValue] = [
             "round": .int(round), "pr": .int(pr), "head_sha": .string(sha), "ok": .bool(outcome.verdict != nil),
-            "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null, "transcript_path": .string(transcript),
+            "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null,
         ]
+        if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
         try await log.append(.prReviewFinished, turn: turn, data: .object(data))
@@ -331,6 +379,20 @@ extension ThreadService {
             sha.range(of: #"^[0-9a-f]{40}([0-9a-f]{24})?$"#, options: .regularExpression) != nil
         else { return nil }
         return String(sha)
+    }
+
+    /// Sleeps in short slices so a stop is noticed; true when one was requested.
+    static func sleep(_ seconds: TimeInterval, stop: @Sendable () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(max(0, seconds))
+        while Date() < deadline {
+            if stop() { return true }
+            try? await Task.sleep(nanoseconds: UInt64(min(0.1, max(0.005, deadline.timeIntervalSinceNow)) * 1e9))
+        }
+        return stop()
+    }
+
+    static func answerSize(_ url: URL) -> Int {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
     }
 
     static func cut(_ text: String, _ limit: Int) -> String {
@@ -370,6 +432,7 @@ struct PRReviewSettings: Sendable {
     var headWait: TimeInterval
     var headPoll: TimeInterval
     var capacityBackoff: @Sendable (Int) -> TimeInterval
+    var stopRequested: @Sendable () -> Bool
 }
 
 struct PRReviewPaths: Sendable {
@@ -403,6 +466,8 @@ struct PRReviewRound: Sendable {
     var settings: PRReviewSettings
     /// The commit that was actually reviewed, once GitHub's head and the branch agreed.
     var reviewedSHA: String?
+    /// The base branch's commit the diff and the instructions come from.
+    var baseSHA: String?
 }
 
 struct PRReviewFailure: Error, Sendable {

@@ -79,12 +79,16 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   and the branch on origin name the same commit, because right after a push both lag and a review of the commit before
   the latest push wastes the round. Codex is given a brief in a file (the argument only points at it): the thread's
   goal with its numbered criteria, `AGENTS.md` (else `CLAUDE.md`) at the base unless `project_instructions = false`,
-  the optional `[pr_review] checklist` read from the pull request's head, the diff against `origin/<base>` as a
-  file (cut at 400 KiB; never `gh pr diff`) and the rule that the answer ends in exactly `VERDICT: CLEAN` or
-  `VERDICT: FIX`. Workbench parses that line itself; a missing or ambiguous one is a failed round, never clean. It runs in
+  the optional `[pr_review] checklist` read from the pull request's head, the diff as a file (cut at 400 KiB;
+  never `gh pr diff`) and the rule that the answer ends in exactly `VERDICT: CLEAN` or `VERDICT: FIX`. The base is
+  fetched from origin for the round (so a stale `origin/<base>` cannot change the diff or the instructions) and
+  pinned as one commit, which the brief also gives as the `git diff <base>...<head>` to re-read any part. Workbench
+  parses the verdict line itself: a missing, repeated or ambiguous one, or an answer over 256 KiB (whose last line
+  cannot be trusted), is a failed round, never clean. It runs in
   Codex's own minimal environment (its login and `CODEX_*`/`OPENAI_*`, not the project's `env_pass`), for at most 20 minutes, and
-  retries three times when the model is at capacity. The round is on record before it starts and ends in exactly
-  one `pr_review.finished`; `max_rounds` (default 3) counts the `pr_review.started` events of this pull request, so
+  retries three times when the model is at capacity. Ctrl-C ends the whole round, also while it waits for GitHub or
+  sits out a retry. A round that was killed leaves its `codex` and checkout behind; the next `pr-review` ends them
+  first, before any refusal. The round is on record before it starts and ends in exactly one `pr_review.finished`; `max_rounds` (default 3) counts the `pr_review.started` events of this pull request, so
   only the log can reset it and `--again` (re-review a branch that has not moved) never lifts it. The findings are
   stored in the thread's folder and printed; `review` shows the round and says when the branch has moved since. The
   review needs only the pull request, not the thread's worktree, so it works after `ship` removed it. Nothing is posted

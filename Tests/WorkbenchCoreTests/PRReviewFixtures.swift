@@ -9,6 +9,7 @@ import Testing
 ///   capacity_until        runs up to this number say "at capacity" and exit 1
 ///   hang                  runs forever; ignore_term makes it ignore SIGTERM first
 ///   crash                 exits 70
+///   big                   writes a 300 KB answer that ends in VERDICT: CLEAN
 ///   flood                 writes 6 MB to stdout before answering
 struct FakeCodex {
     let dir: URL
@@ -45,6 +46,10 @@ struct FakeCodex {
               while :; do sleep 1; done
             fi
             if [ -f "$d/flood" ]; then yes "0123456789012345678901234567890123456789" | head -c 6000000; fi
+            if [ -f "$d/big" ] && [ -n "$out" ]; then
+              { yes "0123456789012345678901234567890123456789" | head -c 300000; echo; echo "VERDICT: CLEAN"; } > "$out"
+              exit 0
+            fi
             if [ -f "$d/crash" ]; then echo "boom: it fell over" >&2; exit 70; fi
             a="$d/answer_$n"; [ -f "$a" ] || a="$d/answer"
             if [ -f "$a" ] && [ -n "$out" ]; then cat "$a" > "$out"; fi
@@ -77,13 +82,13 @@ struct ReviewedPR {
 
     func round(
         again: Bool = false, timeout: TimeInterval = 30, headWait: TimeInterval = 5,
-        environment: [String: String]? = nil, codexPath: String? = nil,
-        attach: @Sendable (ProcessRun) -> Void = { _ in }
+        environment: [String: String]? = nil, codexPath: String? = nil, backoff: TimeInterval = 0,
+        stopRequested: @escaping @Sendable () -> Bool = { false }, attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         try await fx.service.prReview(
             id: id, config: config, again: again, codexPath: codexPath ?? codex.path,
             environment: environment ?? codex.environment(), timeout: timeout, headWait: headWait, headPoll: 0.05,
-            capacityBackoff: { _ in 0 }, attach: attach)
+            capacityBackoff: { _ in backoff }, stopRequested: stopRequested, attach: attach)
     }
 
     var finished: [Event] { (try? fx.events(id).filter { $0.kind == .prReviewFinished }) ?? [] }
@@ -117,4 +122,12 @@ func reviewedPR(extraConfig: String = "", answer: String? = "All good.\nVERDICT:
     let codex = try FakeCodex(in: fx)
     if let answer { try codex.put("answer", answer) }
     return ReviewedPR(fx: fx, id: id, bare: bare, head: head, codex: codex, config: try Config.load(from: fx.project.configURL))
+}
+
+/// A flag one task raises and the review polls.
+final class StopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var raised = false
+    func raise() { lock.withLock { raised = true } }
+    var isRaised: Bool { lock.withLock { raised } }
 }
