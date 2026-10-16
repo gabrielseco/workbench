@@ -17,6 +17,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P2](P2-review.md) | Review | `workbench review` shows diff and check results; accept, send back, discard | S |
 | [P2.5](P2.5-ship.md) | Ship | `workbench ship` pushes an accepted thread and opens its PR; Claude never holds credentials | S |
 | [P2.6](P2.6-harden.md) | Harden | `setup_command`, a `status` that says working or stuck, thread ids on `status` and `log`; the probe's fixes | S |
+| [P4](P4-verify.md) | Verify | `verify_command` runs in the background and a thread ends with screenshots, a recorded result and an advisory verdict; piloted on expense-tracker, then Triage | M |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
