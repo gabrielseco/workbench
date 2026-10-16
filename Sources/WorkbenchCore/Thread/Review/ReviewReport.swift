@@ -19,7 +19,8 @@ public struct ReviewReport: Sendable, Equatable {
     public var diff: Diff
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
-        CriteriaStatus.evaluate(criteria: criteria, check: state.review.check, lastTurn: state.lastTurn)
+        CriteriaStatus.evaluate(
+            criteria: criteria, check: state.review.check, lastTurn: state.lastTurn, verify: state.review.verify)
     }
 
     public var status: ReviewStatus { state.review.status }

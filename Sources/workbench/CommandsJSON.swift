@@ -206,6 +206,7 @@ extension Commands {
                         "proof": .string(criterion.proof), "status": .string(status.state.rawValue),
                         "commands": .array(status.commands.map { .string($0) }),
                         "note": status.note.map { .string($0) } ?? .null,
+                        "file": status.file.map { .string($0) } ?? .null,
                     ]
                 }),
             "diff": diff, "check": check, "verify": verify,

@@ -5,6 +5,10 @@ import Foundation
 public struct CriterionStatus: Sendable, Equatable {
     public enum State: String, Sendable, Equatable {
         case passed, failed, manual
+        /// A screenshot proof whose file the latest verify step left: for a person to look at, not a pass.
+        case evidence
+        /// A screenshot proof with no such file. Never read as met.
+        case missing
     }
 
     public var id: String
@@ -15,6 +19,8 @@ public struct CriterionStatus: Sendable, Equatable {
     public var note: String?
     /// The proof as written, for a row that has no command to show.
     public var proof: String
+    /// The recorded file that backs an `evidence` row, relative to the thread directory.
+    public var file: String?
 
     /// What a person sees in the first column.
     public var label: String {
@@ -22,6 +28,8 @@ public struct CriterionStatus: Sendable, Equatable {
         case .passed: "✔ passed"
         case .failed: "✘ failed"
         case .manual: "you check"
+        case .evidence: "see screenshot"
+        case .missing: "✘ missing"
         }
     }
 }
@@ -31,8 +39,13 @@ public enum CriteriaStatus {
     ///   - check: the latest completed check, nil when none ran. Its recorded `command` is what a proof
     ///     is matched against, so a config changed since the run cannot turn a result into someone else's.
     ///   - lastTurn: the newest turn; a check from an earlier turn says nothing about the current work.
-    public static func evaluate(criteria: [Criterion], check: Review.Check?, lastTurn: Int) -> [CriterionStatus] {
+    public static func evaluate(
+        criteria: [Criterion], check: Review.Check?, lastTurn: Int, verify: Review.Verify? = nil
+    ) -> [CriterionStatus] {
         criteria.map { criterion in
+            if let name = ScreenshotProof.name(in: criterion.proof) {
+                return screenshot(criterion, name: name, verify: verify, lastTurn: lastTurn)
+            }
             let spans = ProofCommands.spans(in: criterion.proof)
             var status = CriterionStatus(
                 id: criterion.id, state: .manual, commands: spans, note: nil, proof: criterion.proof)
@@ -59,12 +72,39 @@ public enum CriteriaStatus {
         }
     }
 
+    /// A screenshot is shown when the latest verify step, run after the latest turn, left `<name>.png`.
+    static func screenshot(_ criterion: Criterion, name: String, verify: Review.Verify?, lastTurn: Int) -> CriterionStatus {
+        var status = CriterionStatus(
+            id: criterion.id, state: .missing, commands: [], note: nil, proof: criterion.proof)
+        let wanted = ScreenshotProof.fileName(for: name)
+        guard let verify else {
+            status.note = "no verify step has run, so \(wanted) was not produced"
+            return status
+        }
+        guard verify.turn == lastTurn else {
+            status.note = "the verify step ran after turn \(verify.turn), not the latest turn \(lastTurn)"
+            return status
+        }
+        guard let file = verify.proof.first(where: { $0.name == wanted }) else {
+            status.note = "no \(wanted) in the verify step's proof (turn \(verify.turn))"
+            return status
+        }
+        status.state = .evidence
+        status.file = file.path
+        status.note = "verify \(verify.result.replacingOccurrences(of: "_", with: " ")), turn \(verify.turn)"
+        return status
+    }
+
     /// `Criteria: 1 passed · 0 failed · 4 for you to check`, plus a word when no check backs a verdict.
     public static func summary(_ statuses: [CriterionStatus], check: Review.Check?) -> String {
         let passed = statuses.filter { $0.state == .passed }.count
         let failed = statuses.filter { $0.state == .failed }.count
-        let manual = statuses.count - passed - failed
+        let evidence = statuses.filter { $0.state == .evidence }.count
+        let missing = statuses.filter { $0.state == .missing }.count
+        let manual = statuses.count - passed - failed - evidence - missing
         var text = "Criteria: \(passed) passed · \(failed) failed · \(manual) for you to check"
+        if evidence > 0 { text += " · \(evidence) with a screenshot" }
+        if missing > 0 { text += " · \(missing) missing" }
         if check == nil { text += " (check did not run)" }
         return text
     }
@@ -95,6 +135,8 @@ extension CriteriaStatus {
             var row = "  [\(status.id)] \(status.label)"
             if status.state != .manual, let note = status.note { row += "  (\(note))" }
             lines.append(row)
+            if status.state == .evidence, let file = status.file { lines.append("         \(file)") }
+            if status.state == .missing, let note = status.note { lines.append("         \(note)") }
             if status.state == .manual {
                 if let note = status.note { lines.append("         \(note)") }
                 if status.commands.isEmpty {
@@ -118,6 +160,10 @@ extension CriteriaStatus {
             switch status.state {
             case .passed, .failed:
                 todo = "Workbench's check run" + (status.note.map { " (\($0))" } ?? "")
+            case .evidence:
+                todo = "look at the screenshot" + (status.note.map { " (\(cell($0)))" } ?? "")
+            case .missing:
+                todo = "no screenshot" + (status.note.map { ": \(cell($0))" } ?? "")
             case .manual:
                 var parts = status.commands.map { "`\(cell($0))`" }
                 if parts.isEmpty { parts = [cell(status.proof)] }

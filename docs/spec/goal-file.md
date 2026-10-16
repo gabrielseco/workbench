@@ -43,6 +43,13 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown.
   `proof` is free text for now; typed proofs (`check:`, `screenshot:`, `diff:`) are described in
   [`later/proof.md`](../later/proof.md).
+- **A screenshot proof is `proof: screenshot: <name>`.** `<name>` is one token of letters, digits, `.`, `_`
+  and `-` (at most 64, not starting with a symbol); a malformed one is a goal error. It is satisfied by
+  `<name>.png` at the top of the proof directory of the latest verify step, run after the latest turn (see
+  `verify_command` below). `review` shows `see screenshot` and the file, or `✘ missing` with the reason: no
+  verify step, a verify step from an earlier turn, or no such file. A screenshot is never `passed`: a
+  person looks at it. `approve` and `run` refuse such a proof when the project has no `verify_command`
+  (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is
   unchanged: criteria with their proofs, for a person to tick. Beside it, a table gives each criterion a
   status and a summary line (`Criteria: 1 passed · 0 failed · 4 for you to check`). Workbench runs one

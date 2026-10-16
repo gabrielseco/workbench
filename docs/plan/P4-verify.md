@@ -101,7 +101,7 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
 1. **`verify_command` step** (done: `Thread/Check/VerifyRunner.swift`). Config key and validation, env contract, bounded run with tree sweep, events,
    `status` shows "verifying", `review` lists the proof files. Fake-claude tests: passing verify, failing verify,
    timeout, killed mid-verify, empty proof dir, a dev-server grandchild left running.
-2. **Screenshot proof.** Parser, `review` and `--json`, spec, "missing" never "met". `ship` attaches the
+2. **Screenshot proof** (a: parser, `review`, `--json`, PR table: done. b: `ship` attaching through `pr-shots`: next). Parser, `review` and `--json`, spec, "missing" never "met". `ship` attaches the
    screenshots through `pr-shots pr` (or says it is not installed).
 3. **expense-tracker pilot.** `.workbench/config.toml` and `scripts/verify.sh` in that repo; one real small UI
    task from goal to PR with screenshots in the description. Record what broke in `FRICTION.md`.
