@@ -62,8 +62,9 @@ extension ThreadService {
             guard let status = await read(["status", "--porcelain", "--ignored", "--untracked-files=all"]) else {
                 return "git could not read its state"
             }
-            guard !status.isEmpty else { return nil }
-            let first = status.split(separator: "\n").first.map(String.init) ?? ""
+            let disposable = (try? Config.load(from: project.configURL))?.disposablePaths ?? []
+            let blocking = Self.blockingStatus(status, disposable: disposable)
+            guard let first = blocking.first else { return nil }
             return "it has files that are not committed or are ignored (\(first)); nothing was removed"
         }
         // The slow, networked question first; everything about the worktree is looked at after it, so that
@@ -97,6 +98,18 @@ extension ThreadService {
             return .kept("the worktree is removed but the log could not be written (\(error)); run ship again to record it")
         }
         return .removed(path: worktree.path)
+    }
+
+    /// The lines of `git status --porcelain --ignored` that stop a worktree being removed: everything except an
+    /// ignored path (`!!`) that is, or is inside, one of the config's `disposable_paths`.
+    static func blockingStatus(_ status: String, disposable: [String]) -> [String] {
+        status.split(separator: "\n").map(String.init).filter { line in
+            guard line.hasPrefix("!! ") else { return true }
+            var path = String(line.dropFirst(3))
+            if path.hasSuffix("/") { path.removeLast() }
+            if path.hasPrefix("\"") { return true }  // quoted: an unusual name is not assumed disposable
+            return !disposable.contains { path == $0 || path.hasPrefix($0 + "/") }
+        }
     }
 
     /// Appends `worktree.removed` unless another run already did: the log is read again under its lock.

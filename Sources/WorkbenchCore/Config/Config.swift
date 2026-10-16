@@ -39,6 +39,10 @@ public struct Config: Sendable, Equatable {
     public var verifyCommand: String?
     /// The verify step is killed, tree and all, after this many minutes.
     public var verifyTimeoutMin: Int = Config.defaultVerifyTimeoutMin
+    /// Ignored paths in a worktree (relative, a file or a directory) that `ship` may remove along with it: what
+    /// `setup_command` and `verify_command` leave behind (`node_modules`, a build directory). Any other ignored
+    /// file still keeps the worktree, since it could be something the person wants.
+    public var disposablePaths: [String] = []
     public static let defaultVerifyTimeoutMin = 10
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
@@ -79,7 +83,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min",
+            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min", "disposable_paths",
             "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
@@ -181,6 +185,14 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        var disposablePaths: [String] = []
+        if let (values, line) = strings("", "disposable_paths") {
+            for path in values where Config.disposablePathProblem(path) != nil {
+                fail(.invalidValue, line, "'disposable_paths' entry '\(path)' \(Config.disposablePathProblem(path) ?? "")")
+            }
+            disposablePaths = values.map { $0.hasSuffix("/") ? String($0.dropLast()) : $0 }
+        }
+
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
             switch entry.value {
@@ -233,8 +245,21 @@ public struct Config: Sendable, Equatable {
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
             verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin,
+            disposablePaths: disposablePaths,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied))
+    }
+
+    /// A relative path inside the worktree: no `..`, no leading `/`, nothing empty, and not the whole tree.
+    static func disposablePathProblem(_ path: String) -> String? {
+        let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
+        if trimmed.isEmpty || trimmed == "." { return "must name a path inside the worktree" }
+        if trimmed.hasPrefix("/") { return "must be relative to the worktree" }
+        if trimmed.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == ".." || $0.isEmpty }) {
+            return "must not contain '..' or empty parts"
+        }
+        if trimmed == ".git" || trimmed.hasPrefix(".git/") { return "must not be inside .git" }
+        return nil
     }
 
     private static func verifyMinutes(_ value: TOMLValue) -> Int? {
@@ -292,6 +317,7 @@ public struct Config: Sendable, Equatable {
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
         # verify_timeout_min = 10          # the verify step is killed after this long
+        # disposable_paths = ["node_modules"]  # ignored paths `ship` may delete with the worktree (setup/verify output)
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
