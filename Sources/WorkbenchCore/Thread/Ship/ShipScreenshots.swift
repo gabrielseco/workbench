@@ -51,6 +51,7 @@ extension ThreadService {
         environment["PR_SHOTS_DIR"] = folder.path
         let runner = GitRunner(executable: tool.executable, environment: environment, timeout: tool.timeout)
 
+        var copied: [String] = []
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             for shot in shots {
@@ -67,6 +68,16 @@ extension ThreadService {
                 try FileManager.default.createDirectory(
                     at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try FileManager.default.copyItem(at: threadDirectory.appendingPathComponent(shot.path), to: target)
+                copied.append(target.path)
+            }
+            // `pr-shots pr` leaves out a file it files under a longer branch name (`feat-a` vs `feat-a-b`) and
+            // still exits 0. What it lists is what it would upload.
+            let listed = try await runner.run(["list"], in: worktree)
+            let included = Set(listed.stdout.split(separator: "\n").map { String($0) })
+            guard listed.succeeded, copied.allSatisfy({ included.contains($0) }) else {
+                return .skipped(
+                    "`pr-shots` would leave some screenshots out, usually because another local branch's name "
+                        + "starts with this one's; nothing was uploaded")
             }
             let published = try await runner.run(["pr", String(number)], in: worktree)
             guard published.succeeded else {

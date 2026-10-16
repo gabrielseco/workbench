@@ -8,7 +8,10 @@ private struct FakeShots {
     let dir: URL
     let runner: GitRunner
 
-    init(in fx: RunnerFixture, failing: Bool = false, badPath: Bool = false, ghRepo: String? = nil) throws {
+    init(
+        in fx: RunnerFixture, failing: Bool = false, badPath: Bool = false, ghRepo: String? = nil,
+        hidesFromList: Bool = false
+    ) throws {
         dir = fx.repo.deletingLastPathComponent().appendingPathComponent("shots-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("out"), withIntermediateDirectories: true)
         let script = dir.appendingPathComponent("pr-shots")
@@ -17,6 +20,7 @@ private struct FakeShots {
             echo "$(pwd -P): $@" >> "\(dir.path)/calls"
             case "$1" in
             path) \(badPath ? "echo relative.png" : "echo \"$PR_SHOTS_DIR/proj/branch-$2-sha.png\"") ;;
+            list) \(hidesFromList ? "exit 0" : "ls \"$PR_SHOTS_DIR\"/proj/*.png") ;;
             pr)
               echo "gh_repo=${GH_REPO:-unset}" > "\(dir.path)/env"
               ls "$PR_SHOTS_DIR/proj" > "\(dir.path)/listing"
@@ -73,7 +77,8 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
 
         #expect(result == .attached(count: 1))
         #expect(tool.shot("home") == "pixels", "copied to where `pr-shots path home` said")
-        #expect(tool.calls.map { $0.split(separator: ":", maxSplits: 1).last.map(String.init) } == [" path home", " pr 12"])
+        let asked = tool.calls.map { $0.split(separator: ":", maxSplits: 1).last.map(String.init) }
+        #expect(asked == [" path home", " list", " pr 12"])
         let here = OrphanSweeper.realPath(plan.worktree)
         #expect(tool.calls.allSatisfy { $0.hasPrefix(here + ":") }, "run in the thread's worktree: \(tool.calls)")
         let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
@@ -110,6 +115,20 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(
             await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner)
                 == .attached(count: 1))
+    }
+
+    @Test func aFileTheToolWouldLeaveOutIsNotReportedAsAttached() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let tool = try FakeShots(in: fx, hidesFromList: true)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 1, tool: tool.runner)
+        guard case .skipped(let why) = result else {
+            Issue.record("expected skipped, got \(result)")
+            return
+        }
+        #expect(why.contains("leave some screenshots out"))
+        #expect(!tool.calls.contains { $0.hasSuffix(" pr 1") }, "nothing was uploaded")
+        #expect(try !fx.events(id).contains { $0.kind == .proofPublished })
     }
 
     @Test func aPathOutsideTheToolsFolderIsNotWrittenTo() async throws {
