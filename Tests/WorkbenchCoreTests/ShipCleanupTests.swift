@@ -331,4 +331,16 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         #expect(ThreadService.statusProblem(line)?.contains("some/deep/path/file.js") == true)
         #expect(ThreadService.statusProblem("") == nil)
     }
+
+    @Test func theIgnoredInventoryIsBoundedAndSaysWhenItIsIncomplete() {
+        let many = (0..<25).map { "!! dir\($0)/" }.joined(separator: "\n") + "\n M a.txt\n"
+        let inventory = ThreadService.inventory(of: many)
+        #expect(inventory.names.count == 20 && inventory.more == 5 && inventory.complete)
+        #expect(inventory.names.first == "dir0/")
+
+        let line = "!! some/deep/path/file.js\n"
+        let cut = String(repeating: line, count: GitRunner.outputLimit / line.utf8.count + 1)
+        #expect(!ThreadService.inventory(of: cut).complete)
+        #expect(ThreadService.IgnoredInventory(complete: false).names.isEmpty)
+    }
 }

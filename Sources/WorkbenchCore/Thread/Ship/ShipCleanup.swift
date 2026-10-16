@@ -114,17 +114,32 @@ extension ThreadService {
         return "it has files that are not committed (\(first)); nothing was removed"
     }
 
-    /// The ignored entries in the worktree, one per top-level path, for the record of what removing it deletes.
-    /// At most `limit`; the count says how many more.
-    func ignoredEntries(in worktree: URL, limit: Int = 20) async -> (names: [String], more: Int) {
-        let result = try? await git.run(["status", "--porcelain", "--ignored"], in: worktree)
-        let lines = (result?.stdout ?? "").split(separator: "\n").map(String.init).filter { $0.hasPrefix("!! ") }
-        return (lines.prefix(limit).map { String($0.dropFirst(3)) }, max(0, lines.count - limit))
+    /// What the removal deletes that git ignores, for the record: one entry per top-level path, at most `limit`.
+    /// The listing is informative, not a gate (ignored files are disposable), so a command that fails or a
+    /// listing cut at the output limit is recorded as incomplete instead of stopping the removal.
+    struct IgnoredInventory: Equatable {
+        var names: [String] = []
+        var more = 0
+        var complete = true
+    }
+
+    func ignoredEntries(in worktree: URL, limit: Int = 20) async -> IgnoredInventory {
+        guard let result = try? await git.run(["status", "--porcelain", "--ignored"], in: worktree), result.succeeded else {
+            return IgnoredInventory(complete: false)
+        }
+        return Self.inventory(of: result.stdout, limit: limit)
+    }
+
+    static func inventory(of status: String, limit: Int = 20) -> IgnoredInventory {
+        let lines = status.split(separator: "\n").map(String.init).filter { $0.hasPrefix("!! ") }
+        return IgnoredInventory(
+            names: lines.prefix(limit).map { String($0.dropFirst(3)) }, more: max(0, lines.count - limit),
+            complete: status.utf8.count < GitRunner.outputLimit - 4)
     }
 
     /// Appends `worktree.removed` unless another run already did: the log is read again under its lock.
     private func recordRemoval(
-        id: String, head: String, swept: [Int32], ignored: (names: [String], more: Int) = ([], 0)
+        id: String, head: String, swept: [Int32], ignored: IgnoredInventory = IgnoredInventory()
     ) async throws {
         try await withLog(id) { log in
             if !swept.isEmpty {
@@ -136,6 +151,7 @@ extension ThreadService {
             var data: [String: JSONValue] = ["reason": "shipped", "head_sha": .string(head)]
             if !ignored.names.isEmpty { data["ignored"] = .array(ignored.names.map { .string($0) }) }
             if ignored.more > 0 { data["ignored_more"] = .int(ignored.more) }
+            if !ignored.complete { data["ignored_incomplete"] = true }
             try await log.append(.worktreeRemoved, data: .object(data))
         }
     }
