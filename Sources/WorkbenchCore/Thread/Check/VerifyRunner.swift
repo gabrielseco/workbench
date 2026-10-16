@@ -11,6 +11,18 @@ public struct ProofFile: Sendable, Equatable {
     public var bytes: Int
 }
 
+extension ProofFile {
+    /// Whether the file recorded in the log is still there as recorded: a regular file (not a link), readable,
+    /// and the size it had. The log is the inventory; this is the check before anything is shown as viewable.
+    public func isAvailable(in threadDirectory: URL) -> Bool {
+        let url = threadDirectory.appendingPathComponent(path)
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+            values.isRegularFile == true, values.isSymbolicLink != true, values.fileSize == bytes
+        else { return false }
+        return FileManager.default.isReadableFile(atPath: url.path)
+    }
+}
+
 public struct VerifyReport: Sendable, Equatable {
     public var turn: Int
     public var command: String

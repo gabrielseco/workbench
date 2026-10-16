@@ -131,6 +131,41 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
     }
 }
 
+@Suite struct ScreenshotProofFileTests {
+    @Test func aRecordedFileThatIsGoneOrChangedIsMissingNotEvidence() throws {
+        let thread = FileManager.default.temporaryDirectory.appendingPathComponent("wb-thread-\(UUID().uuidString)")
+        let dir = thread.appendingPathComponent("proof/turn-1")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: thread) }
+        let file = dir.appendingPathComponent("home.png")
+        try Data("abc".utf8).write(to: file)
+        let v = verify(files: ["home.png"])  // recorded as 3 bytes
+
+        func report() -> ReviewReport {
+            ReviewReport(
+                state: ThreadState.derive(from: [], id: "t"), title: "T", criteria: [crit("screenshot: home")],
+                approval: "approved", goalProblem: nil, diff: .unavailable(reason: "x"), threadDirectory: thread)
+        }
+        func eval(_ available: (ProofFile) -> Bool) -> CriterionStatus {
+            CriteriaStatus.evaluate(
+                criteria: [crit("screenshot: home")], check: nil, lastTurn: 1, verify: v, proofAvailable: available)[0]
+        }
+        #expect(eval { $0.isAvailable(in: thread) }.state == .evidence)
+
+        try Data("abcd".utf8).write(to: file)  // changed since it was recorded
+        let changed = eval { $0.isAvailable(in: thread) }
+        #expect(changed.state == .missing)
+        #expect(changed.note?.contains("gone, unreadable or changed") == true)
+
+        try FileManager.default.removeItem(at: file)
+        #expect(eval { $0.isAvailable(in: thread) }.state == .missing)
+
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: URL(fileURLWithPath: "/etc/hosts"))
+        #expect(eval { $0.isAvailable(in: thread) }.state == .missing, "a link is not the recorded file")
+        _ = report()
+    }
+}
+
 @Suite struct ScreenshotProofFromTheLogTests {
     @Test func theLogsVerifyEventsDecideWhetherTheScreenshotIsThere() {
         func event(_ seq: Int, _ kind: EventKind, _ data: JSONValue) -> Event {

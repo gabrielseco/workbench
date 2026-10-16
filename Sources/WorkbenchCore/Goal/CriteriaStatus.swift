@@ -40,11 +40,13 @@ public enum CriteriaStatus {
     ///     is matched against, so a config changed since the run cannot turn a result into someone else's.
     ///   - lastTurn: the newest turn; a check from an earlier turn says nothing about the current work.
     public static func evaluate(
-        criteria: [Criterion], check: Review.Check?, lastTurn: Int, verify: Review.Verify? = nil
+        criteria: [Criterion], check: Review.Check?, lastTurn: Int, verify: Review.Verify? = nil,
+        proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> [CriterionStatus] {
         criteria.map { criterion in
             if let name = ScreenshotProof.name(in: criterion.proof) {
-                return screenshot(criterion, name: name, verify: verify, lastTurn: lastTurn)
+                return screenshot(
+                    criterion, name: name, verify: verify, lastTurn: lastTurn, available: proofAvailable)
             }
             let spans = ProofCommands.spans(in: criterion.proof)
             var status = CriterionStatus(
@@ -73,7 +75,9 @@ public enum CriteriaStatus {
     }
 
     /// A screenshot is shown when the latest verify step, run after the latest turn, left `<name>.png`.
-    static func screenshot(_ criterion: Criterion, name: String, verify: Review.Verify?, lastTurn: Int) -> CriterionStatus {
+    static func screenshot(
+        _ criterion: Criterion, name: String, verify: Review.Verify?, lastTurn: Int, available: (ProofFile) -> Bool
+    ) -> CriterionStatus {
         var status = CriterionStatus(
             id: criterion.id, state: .missing, commands: [], note: nil, proof: criterion.proof)
         let wanted = ScreenshotProof.fileName(for: name)
@@ -87,6 +91,10 @@ public enum CriteriaStatus {
         }
         guard let file = verify.proof.first(where: { $0.name == wanted }) else {
             status.note = "no \(wanted) in the verify step's proof (turn \(verify.turn))"
+            return status
+        }
+        guard available(file) else {
+            status.note = "\(wanted) was recorded in turn \(verify.turn), but the file is gone, unreadable or changed"
             return status
         }
         status.state = .evidence

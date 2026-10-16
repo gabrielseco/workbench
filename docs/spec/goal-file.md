@@ -47,7 +47,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   and `-` (at most 64, not starting with a symbol); a malformed one is a goal error. It is satisfied by
   `<name>.png` at the top of the proof directory of the latest verify step, run after the latest turn (see
   `verify_command` below). `review` shows `see screenshot` and the file, or `✘ missing` with the reason: no
-  verify step, a verify step from an earlier turn, or no such file. A screenshot is never `passed`: a
+  verify step, a verify step from an earlier turn, no such file, or a recorded file that is gone, unreadable, a link or a different size than recorded. A screenshot is never `passed`: a
   person looks at it. `approve` and `run` refuse such a proof when the project has no `verify_command`
   (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is

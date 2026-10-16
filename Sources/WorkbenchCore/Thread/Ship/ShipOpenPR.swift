@@ -143,7 +143,8 @@ extension ThreadService {
         let state = ThreadState.derive(from: events, id: plan.id)
         var body = PRBodyBuilder.build(
             goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn,
-            description: description, verify: state.review.verify)
+            description: description, verify: state.review.verify,
+            proofAvailable: { [dir = project.threadDirectory(plan.id)] in $0.isAvailable(in: dir) })
         // What is published must not carry a credential that was pasted into the goal or the template.
         body.title = Self.withoutCredentials(body.title, environment: environment)
         body.body = Self.withoutCredentials(body.body, environment: environment)
