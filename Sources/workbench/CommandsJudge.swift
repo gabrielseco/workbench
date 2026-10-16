@@ -1,6 +1,29 @@
 import Foundation
 import WorkbenchCore
 
+/// The running `claude`, reachable from a signal handler; a stop that arrives before it has started is kept.
+private final class RunHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var run: ProcessRun?
+    private var stopRequested = false
+
+    func attach(_ new: ProcessRun) {
+        lock.lock()
+        run = new
+        let stop = stopRequested
+        lock.unlock()
+        if stop { new.stop() }
+    }
+
+    func stop() {
+        lock.lock()
+        stopRequested = true
+        let current = run
+        lock.unlock()
+        current?.stop()
+    }
+}
+
 extension Commands {
     /// `judge [id] [--again] [--model <name>] [--budget <usd>]`: ask a second, read-only Claude run whether the
     /// evidence (the check, the verify step, its screenshots and the diff) shows each criterion holds. Advisory:
@@ -25,9 +48,14 @@ extension Commands {
         let id = try ctx.threadIDForViewing(named)
         let config = try Config.load(from: ctx.project.configURL)
         out("judging \(id) (advisory; read-only, up to $\(NSDecimalNumber(decimal: budget).stringValue))...")
+        // Ctrl-C stops the judge's `claude` instead of leaving it running on its own budget.
+        let holder = RunHolder()
+        let signals = installStopHandlers(what: "the judge") { holder.stop() }
+        defer { signals.forEach { $0.cancel() } }
         let result: JudgeResult
         do {
-            result = try await ctx.service.judge(id: id, config: config, again: again, budget: budget, model: model)
+            result = try await ctx.service.judge(
+                id: id, config: config, again: again, budget: budget, model: model, attach: { holder.attach($0) })
         } catch let error as JudgeRefusal {
             if case .invalidModel = error { throw CLIError.usage("\(error)") }
             throw CLIError.refused("\(error)")

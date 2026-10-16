@@ -43,6 +43,8 @@ public struct JudgeInput: Sendable, Equatable {
     public var screenshots: [String]
     /// The newest turn, so a check or verify from an earlier one can be called stale.
     public var lastTurn: Int
+    /// Files in the worktree that git does not track, so not in the diff. Names only.
+    public var untracked: [String] = []
 }
 
 /// The request to the judge and the reading of its answer. Pure: no process, no files.
@@ -91,6 +93,10 @@ public enum Judge {
         }
         let cut = input.diffTruncated ? "\n\n(the diff was cut at \(diffLimit) bytes)" : ""
         parts.append("## Diff against the base\n\n```diff\n\(input.diff)\n```\(cut)")
+        if !input.untracked.isEmpty {
+            parts.append(
+                "## Untracked files (not in the diff)\n\n" + input.untracked.map { "- \(oneLine($0))" }.joined(separator: "\n"))
+        }
         return PRBodyBuilder.scrub(parts.joined(separator: "\n\n"))
     }
 
@@ -154,10 +160,11 @@ public enum Judge {
                 throw JudgeError.invalidOutput("an entry names a criterion the goal does not have")
             }
             guard seen.insert(id).inserted else { throw JudgeError.invalidOutput("[\(id)] appears twice") }
-            guard let met = entry["met"] as? Bool else { throw JudgeError.invalidOutput("[\(id)] has no true or false 'met'") }
-            let raw = entry["evidence"] ?? []
-            guard let evidence = raw as? [String] else {
-                throw JudgeError.invalidOutput("[\(id)] evidence is not a list of strings")
+            guard let met = jsonBool(entry["met"]) else {
+                throw JudgeError.invalidOutput("[\(id)] has no true or false 'met'")
+            }
+            guard let evidence = entry["evidence"] as? [String] else {
+                throw JudgeError.invalidOutput("[\(id)] has no list of strings 'evidence'")
             }
             verdicts.append(
                 JudgeCriterion(
@@ -169,14 +176,19 @@ public enum Judge {
         guard missing.isEmpty else {
             throw JudgeError.invalidOutput("no verdict for " + missing.map { "[\($0)]" }.joined(separator: ", "))
         }
-        var concerns: [String] = []
-        if let raw = json["concerns"] {
-            guard let list = raw as? [String] else { throw JudgeError.invalidOutput("concerns is not a list of strings") }
-            concerns = list.map(oneLine).filter { !$0.isEmpty }.prefix(concernLimit).map { String($0.prefix(evidenceLimit)) }
+        guard let list = json["concerns"] as? [String] else {
+            throw JudgeError.invalidOutput("no list of strings 'concerns'")
         }
+        let concerns = list.map(oneLine).filter { !$0.isEmpty }.prefix(concernLimit).map { String($0.prefix(evidenceLimit)) }
         let order = Dictionary(uniqueKeysWithValues: criteria.enumerated().map { ($1.id, $0) })
         verdicts.sort { (order[$0.id] ?? 0) < (order[$1.id] ?? 0) }
         return (JudgeVerdict(criteria: verdicts, concerns: concerns), (outer["total_cost_usd"] as? NSNumber)?.doubleValue)
+    }
+
+    /// A JSON `true` or `false`, and not the number 1 or 0 that Foundation would also bridge to a Bool.
+    static func jsonBool(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
     }
 
     static func oneLine(_ text: String) -> String {

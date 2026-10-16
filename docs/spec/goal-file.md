@@ -60,14 +60,17 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   upload with a note. It is a note, not an error, when the tool is missing or fails: the PR is open, the
   worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
-  committed diff against the base (cut at 120 KB), the check (with the end of its output when it did not
+  work against the base (the worktree as `review` shows it, committed or not, cut at 120 KB, with untracked
+  files named), the check (with the end of its output when it did not
   pass), what the verify step left and, with screenshots, `Read` on them in the folder they are in
   (`--restricted` makes that the only place it can read); with none it has no tools. It answers with one
   JSON object: per criterion `{id, met, evidence}`, and `concerns`. The answer is accepted only if it names
-  every criterion once and no other; anything else is recorded as a failed run. It is told to mark a
+  every criterion once and no other, with real JSON booleans and both lists present; anything else is recorded
+  as a failed run. It is told to mark a
   criterion not met only for an evidenced violation of its literal text and to put doubt in `concerns`. It runs
   once per turn unless `--again`, has its own budget (default $0.50, `--budget`) and a 5 minute limit, and
-  `--model` picks a cheaper model for it. `review` shows it as a `Judge` block beside the criteria and the
+  `--model` picks a cheaper model for it. The thread's log is held while it runs, so a second judge or a run
+  is refused as busy instead of spending on the same turn, and Ctrl-C stops it and records why. `review` shows it as a `Judge` block beside the criteria and the
   check, and says where it disagrees with one of them (it does not resolve it). It never changes what
   `accept` or `ship` do, and a thread that has no verdict is as reviewable as before.
 - **Review says who verifies each criterion.** The checklist (`workbench review`, the PR description) is

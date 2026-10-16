@@ -27,7 +27,7 @@ private let good = """
         #expect(parsed.verdict.criteria[0].evidence == ["The card reads Received this month."])
         #expect(parsed.verdict.concerns == ["The filtered label was left alone."])
         #expect(parsed.costUSD == 0.0123)
-        let swapped = #"{"criteria":[{"id":"c2","met":true},{"id":"c1","met":true}]}"#
+        let swapped = #"{"criteria":[{"id":"c2","met":true,"evidence":[]},{"id":"c1","met":true,"evidence":[]}],"concerns":[]}"#
         let reordered = try Judge.parse(output: output(swapped), criteria: criteria("c1", "c2"))
         #expect(reordered.verdict.criteria.map(\.id) == ["c1", "c2"])
     }
@@ -37,17 +37,26 @@ private let good = """
         #expect(try Judge.parse(output: output(wrapped), criteria: criteria("c1", "c2")).verdict.criteria.count == 2)
     }
 
+    private static func answer(_ entries: String..., tail: String = ", \"concerns\": []") -> String {
+        "{\"criteria\": [" + entries.joined(separator: ", ") + "]" + tail + "}"
+    }
+
+    private static func entry(_ id: String, met: String = "true", evidence: String = ", \"evidence\": []") -> String {
+        "{\"id\": \"\(id)\", \"met\": \(met)\(evidence)}"
+    }
+
     @Test(arguments: [
         ("not json at all", "not a JSON object"),
-        ("{\"criteria\": [{\"id\": \"c1\", \"met\": true}]}", "no verdict for [c2]"),
-        ("{\"criteria\": [{\"id\": \"c9\", \"met\": true}, {\"id\": \"c1\", \"met\": true}, {\"id\": \"c2\", \"met\": true}]}",
-            "does not have"),
-        ("{\"criteria\": [{\"id\": \"c1\", \"met\": true}, {\"id\": \"c1\", \"met\": true}, {\"id\": \"c2\", \"met\": true}]}",
-            "twice"),
-        ("{\"criteria\": [{\"id\": \"c1\", \"met\": \"yes\"}, {\"id\": \"c2\", \"met\": true}]}", "true or false"),
-        ("{\"criteria\": [{\"id\": \"c1\", \"met\": true, \"evidence\": \"a\"}, {\"id\": \"c2\", \"met\": true}]}", "evidence"),
+        (answer(entry("c1")), "no verdict for [c2]"),
+        (answer(entry("c9"), entry("c1"), entry("c2")), "does not have"),
+        (answer(entry("c1"), entry("c1"), entry("c2")), "twice"),
+        (answer(entry("c1", met: "\"yes\""), entry("c2")), "true or false"),
+        (answer(entry("c1", met: "1"), entry("c2", met: "0")), "true or false"),
+        (answer(entry("c1", evidence: ""), entry("c2")), "'evidence'"),
+        (answer(entry("c1", evidence: ", \"evidence\": \"a\""), entry("c2")), "'evidence'"),
         ("{\"criteria\": \"all\"}", "no list of criteria"),
-        ("{\"criteria\": [{\"id\": \"c1\", \"met\": true}, {\"id\": \"c2\", \"met\": true}], \"concerns\": \"x\"}", "concerns"),
+        (answer(entry("c1"), entry("c2"), tail: ", \"concerns\": \"x\""), "'concerns'"),
+        (answer(entry("c1"), entry("c2"), tail: ""), "'concerns'"),
     ])
     func anUnusableAnswerIsRefusedWithAReason(answer: String, why: String) {
         do {
@@ -227,7 +236,7 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
 
     @Test(arguments: [
         ("not json", "", "not a JSON object"),
-        (#"{"criteria": []}"#, "", "no verdict for [c1]"),
+        (#"{"criteria": [], "concerns": []}"#, "", "no verdict for [c1]"),
         (oneCriterion, "exit=1", "status 1"),
     ])
     func aFailedJudgeIsRecordedWithItsReasonAndLeavesTheThreadAlone(answer: String, exit: String, why: String) async throws {
@@ -257,6 +266,48 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         #expect(argv.contains("home.png"), "the prompt lists the screenshot")
         let folder = OrphanSweeper.realPath(j.fx.project.proofDirectory(j.id, turn: 1))
         #expect(argv.contains(folder), "it runs where the screenshots are")
+    }
+
+    @Test func itSeesUncommittedWorkAndNamesUntrackedFiles() async throws {
+        let j = try await judged()
+        let worktree = j.fx.project.worktreesDirectory.appendingPathComponent(j.id)
+        try "one\nhello\nUNCOMMITTED-LINE\n".write(
+            to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try "x".write(to: worktree.appendingPathComponent("loose-notes.txt"), atomically: true, encoding: .utf8)
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
+        _ = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
+        let argv = try String(contentsOfFile: dump, encoding: .utf8)
+        #expect(argv.contains("UNCOMMITTED-LINE"), "the judge sees what review shows, not only the commits")
+        #expect(argv.contains("loose-notes.txt"), "untracked files are named")
+    }
+
+    @Test func twoJudgesCannotSpendOnTheSameTurnAtOnce() async throws {
+        let j = try await judged()
+        let held = try EventLogWriter.open(at: j.fx.project.eventsURL(j.id))
+        do {
+            _ = try await j.fx.service.judge(
+                id: j.id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", oneCriterion))"))
+            Issue.record("expected the thread to be busy")
+        } catch let error as JudgeRefusal { #expect(error == .busy) }
+        await held.close()
+    }
+
+    @Test func stoppingEndsTheJudgeAndRecordsWhy() async throws {
+        let j = try await judged()
+        let result = try await j.fx.service.judge(
+            id: j.id, config: j.config, environment: j.environment("hang-after=1"),
+            attach: { run in
+                Task {
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                    run.stop()
+                }
+            })
+        #expect(result.verdict == nil)
+        #expect(result.failure?.contains("stopped") == true, "\(result.failure ?? "")")
+        let event = try #require(try j.fx.events(j.id).last)
+        #expect(event.kind == .judgeRan && event.data["ok"] == false)
+        #expect(try j.fx.contents(j.id).isHealthy)
     }
 
     @Test func itRefusesWithoutATurnWhileARunIsLiveAndWithABadModel() async throws {

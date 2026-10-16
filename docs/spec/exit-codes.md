@@ -114,7 +114,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 0 |  | a verdict was recorded and printed |
 | 1 | `failed` | no verdict this time: no `claude`, a timeout, a budget stop, or an answer that was not usable (recorded, with the reason) |
 | 2 | `usage` | wrong command line, or a `--model` or `--budget` that is not valid |
-| 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), or a run is live |
+| 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), a run is live, or another command holds the thread (a second judge, a send-back) |
 | 7 | `not-found` | the thread named does not exist |
 
 ### `accept`

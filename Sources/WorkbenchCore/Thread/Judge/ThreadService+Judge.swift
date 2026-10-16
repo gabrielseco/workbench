@@ -15,6 +15,7 @@ public enum JudgeRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     case alreadyJudged(turn: Int)
     case goalUnreadable(String)
     case invalidModel(String)
+    case busy
 
     public var description: String {
         switch self {
@@ -23,6 +24,7 @@ public enum JudgeRefusal: Error, Equatable, Sendable, CustomStringConvertible {
             "turn \(turn) was judged already (`workbench review` shows it). Pass --again to ask once more."
         case .goalUnreadable(let why): "the goal could not be read: \(why)"
         case .invalidModel: "--model needs a model name or alias like \"haiku\""
+        case .busy: "another command is using this thread (a run, a send-back or another judge); try again when it ends."
         }
     }
 }
@@ -31,19 +33,38 @@ extension ThreadService {
     /// Most screenshots the judge is shown, and the largest it is shown.
     static let judgeScreenshotLimit = 8
     static let judgeScreenshotBytes = 5 << 20
+    static let judgeUntrackedLimit = 20
 
     /// Runs the advisory judge on the latest turn and records `judge.ran`, with the verdict or the reason there
-    /// is none. Read-only and separate from the work: its own session and budget, no `numbered turn`, tools
+    /// is none. Read-only and separate from the work: its own session and budget, no numbered turn, tools
     /// limited to `Read` on the screenshots (or none), and nothing in Workbench acts on what it says.
     ///
-    /// It looks at the committed work (`base...workbench/<id>`), the check, the verify step and the screenshots
-    /// the verify step left. It runs once per turn unless `again` is set, because it costs money.
+    /// The thread's log is held from the once-per-turn check to the record, so two judges, or a judge and a
+    /// run, cannot both spend money on the same turn: the second is refused as `busy`. It sees what `review`
+    /// shows: the work in the worktree against where it left the base (committed or not; untracked files are
+    /// named), the check, the verify step and the screenshots the verify step left.
+    ///
+    /// - Parameter attach: called with the running `claude`, so the caller can stop it (Ctrl-C).
     public func judge(
         id: String, config: Config, again: Bool = false, budget: Decimal = Judge.budgetUSD, model: String? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = Judge.timeout
+        environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = Judge.timeout,
+        attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> JudgeResult {
         if let model, !SafeNames.isModelName(model) { throw JudgeRefusal.invalidModel(model) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        do {
+            return try await withLog(id) { log in
+                try await self.judgeLocked(
+                    id: id, log: log, config: config, again: again, budget: budget, model: model,
+                    environment: environment, timeout: timeout, attach: attach)
+            }
+        } catch EventLogError.alreadyOpen { throw JudgeRefusal.busy }
+    }
+
+    private func judgeLocked(
+        id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
+        environment: [String: String], timeout: TimeInterval, attach: @Sendable (ProcessRun) -> Void
+    ) async throws -> JudgeResult {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard state.lastTurn > 0 else { throw JudgeRefusal.noTurn }
@@ -56,13 +77,11 @@ extension ThreadService {
             goal = try GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
         } catch { throw JudgeRefusal.goalUnreadable("\(error)") }
 
-        let branch = WorktreeManager.branch(for: id)
-        let diff = try? await git.run(["diff", "--no-ext-diff", "--no-color", "\(goal.base)...\(branch)"], in: project.root)
-        guard let diff, diff.succeeded else {
-            return try await recordJudge(id, turn: turn, failure: "the diff could not be read", argv: [])
+        guard let work = await judgedWork(id: id, base: goal.base) else {
+            return try await recordJudge(log, turn: turn, failure: "the diff could not be read", argv: [])
         }
-        let cut = diff.stdout.utf8.count > Judge.diffLimit
-        let diffText = cut ? String(decoding: diff.stdout.utf8.prefix(Judge.diffLimit), as: UTF8.self) : diff.stdout
+        let cut = work.diff.utf8.count > Judge.diffLimit
+        let diffText = cut ? String(decoding: work.diff.utf8.prefix(Judge.diffLimit), as: UTF8.self) : work.diff
 
         let check = state.review.check
         var checkOutput: String?
@@ -75,7 +94,7 @@ extension ThreadService {
         let (screenshots, folder) = judgeScreenshots(id: id, verify: verify, lastTurn: turn)
         let input = JudgeInput(
             goal: goal, diff: diffText, diffTruncated: cut, check: check, checkOutput: checkOutput, verify: verify,
-            screenshots: screenshots, lastTurn: turn)
+            screenshots: screenshots, lastTurn: turn, untracked: work.untracked)
         let arguments = Judge.arguments(
             config: config, prompt: Judge.prompt(for: input), withScreenshots: !screenshots.isEmpty, budget: budget,
             model: model)
@@ -83,23 +102,73 @@ extension ThreadService {
 
         guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
             return try await recordJudge(
-                id, turn: turn, failure: JudgeError.claudeNotFound(config.claudePath).description, argv: shown)
+                log, turn: turn, failure: JudgeError.claudeNotFound(config.claudePath).description, argv: shown)
         }
-        let runner = GitRunner(
-            executable: claude, environment: config.childEnvironment(from: environment), timeout: timeout)
-        let result: GitResult
-        do { result = try await runner.run(arguments, in: folder) } catch GitError.timedOut(_, let seconds) {
-            return try await recordJudge(id, turn: turn, failure: "claude did not answer within \(Int(seconds))s", argv: shown)
-        } catch { return try await recordJudge(id, turn: turn, failure: "claude could not be started", argv: shown) }
-        guard result.succeeded else {
-            return try await recordJudge(id, turn: turn, failure: "claude exited with status \(result.status)", argv: shown)
+        var request = SpawnRequest(
+            executable: claude, arguments: arguments, environment: config.childEnvironment(from: environment),
+            workingDirectory: folder, timeout: timeout)
+        request.maxLineBytes = 1 << 20
+        let run: ProcessRun
+        do { run = try ProcessRunner.start(request) } catch {
+            return try await recordJudge(log, turn: turn, failure: "claude could not be started", argv: shown)
+        }
+        attach(run)
+        var lines: [String] = []
+        var exit: ProcessExit?
+        for await event in run.events {
+            switch event {
+            case .line(let line): lines.append(line)
+            case .exited(let e): exit = e
+            case .started, .oversizedLine: break
+            }
+        }
+        if let why = Self.judgeProcessProblem(exit, timeout: timeout) {
+            return try await recordJudge(log, turn: turn, failure: why, argv: shown)
         }
         do {
-            let parsed = try Judge.parse(output: result.stdout, criteria: goal.criteria)
-            return try await recordJudge(id, turn: turn, verdict: parsed.verdict, cost: parsed.costUSD, argv: shown)
+            let parsed = try Judge.parse(output: lines.joined(separator: "\n"), criteria: goal.criteria)
+            return try await recordJudge(log, turn: turn, verdict: parsed.verdict, cost: parsed.costUSD, argv: shown)
         } catch {
-            return try await recordJudge(id, turn: turn, failure: "\(error)", argv: shown)
+            return try await recordJudge(log, turn: turn, failure: "\(error)", argv: shown)
         }
+    }
+
+    /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
+    static func judgeProcessProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
+        guard let exit else { return "claude did not report how it ended" }
+        switch exit.cause {
+        case .stopped: return "the judge was stopped"
+        case .timedOut: return "claude did not answer within \(Int(timeout))s"
+        case .natural: break
+        }
+        switch exit.termination {
+        case .exited(0): return nil
+        case .exited(let code): return "claude exited with status \(code)"
+        case .signaled(let signal): return "claude was ended by signal \(signal)"
+        case .lost: return "claude ended in a way that was not recorded"
+        }
+    }
+
+    /// What the judge is shown of the work: the worktree against the commit it left the base at, so committed
+    /// and uncommitted changes to tracked files both count, as in `review`, plus the names of untracked files.
+    /// Without a worktree (shipped), the branch against the base.
+    private func judgedWork(id: String, base: String) async -> (diff: String, untracked: [String])? {
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        guard manager.exists(id) else {
+            let diff = try? await git.run(
+                ["diff", "--no-ext-diff", "--no-color", "\(base)...\(WorktreeManager.branch(for: id))"], in: project.root)
+            guard let diff, diff.succeeded else { return nil }
+            return (diff.stdout, [])
+        }
+        let worktree = manager.path(for: id)
+        guard let mergeBase = try? await git.run(["merge-base", base, "HEAD"], in: worktree), mergeBase.succeeded
+        else { return nil }
+        let from = mergeBase.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let diff = try? await git.run(["diff", "--no-ext-diff", "--no-color", from], in: worktree)
+        guard let diff, diff.succeeded else { return nil }
+        let others = try? await git.run(["ls-files", "--others", "--exclude-standard"], in: worktree)
+        let names = (others?.stdout ?? "").split(separator: "\n").map(String.init).prefix(Self.judgeUntrackedLimit)
+        return (diff.stdout, Array(names))
     }
 
     /// The screenshots of the verify step of the latest turn that are still there as recorded, as names relative
@@ -116,7 +185,7 @@ extension ThreadService {
     }
 
     private func recordJudge(
-        _ id: String, turn: Int, verdict: JudgeVerdict? = nil, cost: Double? = nil, failure: String? = nil,
+        _ log: EventLogWriter, turn: Int, verdict: JudgeVerdict? = nil, cost: Double? = nil, failure: String? = nil,
         argv: [String]
     ) async throws -> JudgeResult {
         var data: [String: JSONValue] = [
@@ -132,7 +201,7 @@ extension ThreadService {
         }
         let reason = failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
         if let reason { data["reason"] = .string(reason) }
-        try await withLog(id) { log in try await log.append(.judgeRan, turn: turn, data: .object(data)) }
+        try await log.append(.judgeRan, turn: turn, data: .object(data))
         return JudgeResult(turn: turn, verdict: verdict, costUSD: cost, failure: reason)
     }
 }
