@@ -358,7 +358,17 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         try await expectClean(fx)
     }
 
-    @Test func aVerifyThatHangsTimesOutAndItsServerDoesNotOutliveIt() async throws {
+    @Test func aVerifyThatHangsTimesOut() async throws {
+        let (fx, _) = try await fixture(verify: "sleep 60")
+        var o = options(grace: 0.5)
+        o.verifyTimeout = 2
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+
+        #expect(report.verify.outcome == .timedOut && !report.passed, "\(report.verify)")
+        try await expectClean(fx)
+    }
+
+    @Test func aServerTheVerifyDetachedDoesNotOutliveDoctor() async throws {
         let script = try CheckScript()
         let body = """
             /usr/bin/python3 -c '
@@ -371,14 +381,11 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
                 os._exit(0)
             '
             while [ ! -s "\(script.path("server"))" ]; do sleep 0.1; done
-            sleep 60
             """
         let (fx, _) = try await fixture(verify: body)
-        var o = options(grace: 0.5)
-        o.verifyTimeout = 20
-        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
 
-        #expect(report.verify.outcome == .timedOut && !report.passed, "\(report.verify)")
+        #expect(report.verify.outcome == .passed)
         let server = try script.pid("server")
         defer { kill(server, SIGKILL) }
         #expect(await FakeClaude.waitUntilGone(server), "a detached server does not outlive doctor")
