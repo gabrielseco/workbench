@@ -127,7 +127,8 @@ extension ThreadService {
 
         var input = PRReviewInput(
             pr: round.pr, branch: round.branch, base: round.base, headSHA: sha, baseSHA: baseSHA,
-            goal: Self.cut(round.goal, PRReview.goalLimit), instructions: nil, checklist: nil, checklistPath: nil,
+            goal: Self.bounded(round.goal, limit: PRReview.goalLimit, rest: project.goalURL(round.id).path),
+            instructions: nil, checklist: nil, checklistPath: nil,
             diffPath: paths.diff.path, diffTruncated: truncated)
         if round.config.projectInstructions {
             input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseSHA)?.text
@@ -326,6 +327,9 @@ extension ThreadService {
 
     /// Removes the throwaway checkout and the saved diff. Never forced on anything but its own folder.
     private func removeTree(_ paths: PRReviewPaths) async {
+        // A child Codex started in a new session and left can outlive the runner's own sweep; find it by its working
+        // directory while the checkout is still there.
+        OrphanSweeper.sweep(inside: paths.folder)
         if FileManager.default.fileExists(atPath: paths.tree.path) {
             _ = try? await git.run(["worktree", "remove", "--force", paths.tree.path], in: project.root)
             try? FileManager.default.removeItem(at: paths.tree)
@@ -408,6 +412,13 @@ extension ThreadService {
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
     }
 
+    /// `text` cut at `limit` bytes, with a line saying so and where to read the rest: a cut the reviewer is not told
+    /// about could hide the criteria that matter.
+    static func bounded(_ text: String, limit: Int, rest: String) -> String {
+        guard text.utf8.count > limit else { return text }
+        return cut(text, limit) + "\n[cut here at \(limit / 1024) KiB: the rest is at \(rest)]"
+    }
+
     /// The checklist from the pull request's checkout: a regular file that stays inside it, bounded.
     static func readChecklist(_ path: String, in tree: URL) -> String? {
         let root = tree.resolvingSymlinksInPath().path
@@ -418,8 +429,8 @@ extension ThreadService {
             let handle = try? FileHandle(forReadingFrom: file)
         else { return nil }
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: PRReview.checklistLimit) else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        guard let data = try? handle.read(upToCount: PRReview.checklistLimit + 1) else { return nil }
+        return bounded(String(decoding: data, as: UTF8.self), limit: PRReview.checklistLimit, rest: "\(path) in the checkout")
     }
 }
 

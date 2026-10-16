@@ -9,6 +9,7 @@ import Testing
 ///   capacity_until        runs up to this number say "at capacity" and exit 1
 ///   hang                  runs forever; ignore_term makes it ignore SIGTERM first
 ///   crash                 exits 70
+///   leave_child           leaves a child in its own session, running, then answers
 ///   big                   writes a 300 KB answer that ends in VERDICT: CLEAN
 ///   flood                 writes 6 MB to stdout before answering
 struct FakeCodex {
@@ -44,6 +45,11 @@ struct FakeCodex {
             if [ -f "$d/hang" ]; then
               if [ -f "$d/ignore_term" ]; then trap '' TERM; fi
               while :; do sleep 1; done
+            fi
+            if [ -f "$d/leave_child" ]; then
+              perl -e 'use POSIX qw(setsid); my $p = fork();
+                if ($p == 0) { setsid(); close STDOUT; close STDERR; exec "sleep", "120"; }
+                open(F, ">", $ARGV[0]); print F "$p\\n"; close F;' "$d/child_pid"
             fi
             if [ -f "$d/flood" ]; then yes "0123456789012345678901234567890123456789" | head -c 6000000; fi
             if [ -f "$d/big" ] && [ -n "$out" ]; then

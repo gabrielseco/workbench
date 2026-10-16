@@ -69,6 +69,17 @@ import Testing
         #expect(size < PRReview.transcriptLimit + (64 << 10), "kept \(size) bytes of a 6 MB flood")
     }
 
+    @Test func aChildCodexLeftInAnotherSessionIsEndedBeforeTheCheckoutGoes() async throws {
+        let r = try await reviewedPR()
+        try r.codex.put("leave_child", "")
+        let result = try await r.round()
+        #expect(result.verdict == .clean)
+        let pid = try #require(Int32(r.codex.read("child_pid")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
+        defer { kill(pid, SIGKILL) }
+        #expect(await pollUntil { kill(pid, 0) != 0 }, "the child that outlived codex was swept")
+        try await r.expectNoLeftovers()
+    }
+
     @Test func stoppingEndsTheReviewAndRecordsWhy() async throws {
         let r = try await reviewedPR()
         try r.codex.put("hang", "")

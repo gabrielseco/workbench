@@ -82,13 +82,15 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   the optional `[pr_review] checklist` read from the pull request's head, the diff as a file (cut at 400 KiB;
   never `gh pr diff`) and the rule that the answer ends in exactly `VERDICT: CLEAN` or `VERDICT: FIX`. The base is
   fetched from origin for the round (so a stale `origin/<base>` cannot change the diff or the instructions) and
-  pinned as one commit, which the brief also gives as the `git diff <base>...<head>` to re-read any part. Workbench
+  pinned as one commit, which the brief also gives as the `git diff <base>...<head>` to re-read any part. A goal or
+  checklist over 32 KiB is cut with a line in the brief saying where the rest is, never quietly. Workbench
   parses the verdict line itself: a missing, repeated or ambiguous one, or an answer over 256 KiB (whose last line
   cannot be trusted), is a failed round, never clean. It runs in
   Codex's own minimal environment (its login and `CODEX_*`/`OPENAI_*`, not the project's `env_pass`), for at most 20 minutes, and
   retries three times when the model is at capacity. Ctrl-C ends the whole round, also while it waits for GitHub or
   sits out a retry. A round that was killed leaves its `codex` and checkout behind; the next `pr-review` ends them
-  first, before any refusal. The round is on record before it starts and ends in exactly one `pr_review.finished`; `max_rounds` (default 3) counts the `pr_review.started` events of this pull request, so
+  first, before any refusal, and every round ends anything `codex` left running in its own session before the
+  checkout is removed. The round is on record before it starts and ends in exactly one `pr_review.finished`; `max_rounds` (default 3) counts the `pr_review.started` events of this pull request, so
   only the log can reset it and `--again` (re-review a branch that has not moved) never lifts it. The findings are
   stored in the thread's folder and printed; `review` shows the round and says when the branch has moved since. The
   review needs only the pull request, not the thread's worktree, so it works after `ship` removed it. Nothing is posted
