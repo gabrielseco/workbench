@@ -375,7 +375,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
             """
         let (fx, _) = try await fixture(verify: body)
         var o = options(grace: 0.5)
-        o.verifyTimeout = 3
+        o.verifyTimeout = 20
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
 
         #expect(report.verify.outcome == .timedOut && !report.passed, "\(report.verify)")
