@@ -37,7 +37,7 @@ let usage = """
                                  exit 0 clean, 15 findings to fix, 1 no verdict this time, 6 refused
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
-           [--watch|-w [--timeout <min>] [--interval <s>]]
+           [--watch|-w [--timeout <min>] [--interval <s>]] [--review-loop]
                                  push the accepted branch and open its pull request; asks first, after
                                  showing the title and body (written by a read-only Claude turn from the
                                  goal, diff and check; --no-describe uses the goal's text);
@@ -46,7 +46,10 @@ let usage = """
                                  --refresh-description; --no-describe skips the proposal;
                                  screenshots the verify step left are put in the PR with `pr-shots`, if it
                                  is installed (--no-screenshots skips it; --screenshots tries again for a shipped thread);
-                                 --watch then follows the CI checks (read-only)
+                                 --watch then follows the CI checks (read-only);
+                                 --review-loop then has Codex review the pull request and, for each finding round,
+                                 starts a follow-up thread on the same branch, runs it and its check, asks before
+                                 pushing it (--yes skips that) and reviews again, up to max_rounds; never merges
                                  exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
                                  13 a check failed, 14 no result in time
       clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is

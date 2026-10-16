@@ -48,7 +48,9 @@ extension ThreadService {
             let base = opened.data["base"]?.stringValue, SafeNames.isBranchName(branch), SafeNames.isBranchName(base)
         else { throw PRReviewRefusal.noPullRequest }
 
-        let rounds = events.filter { $0.kind == .prReviewStarted && $0.data["pr"]?.intValue == pr }.count
+        // Counted over the whole tree of follow-up threads of this pull request, so starting a follow-up cannot reset it.
+        let family = self.family(of: id)
+        let rounds = prReviewStartedCount(family: family, pr: pr)
         let maxRounds = config.prReview.maxRounds
         if rounds >= maxRounds { throw PRReviewRefusal.capReached(pr: pr, rounds: rounds, max: maxRounds) }
 
@@ -57,9 +59,8 @@ extension ThreadService {
             throw PRReviewRefusal.goalUnreadable("\(error.localizedDescription)")
         }
         let tip = try await originBranchTip(branch)
-        if !again, let last = events.last(where: { $0.kind == .prReviewFinished && $0.data["pr"]?.intValue == pr }),
-            last.data["ok"] == true, last.data["head_sha"]?.stringValue == tip {
-            throw PRReviewRefusal.alreadyReviewed(round: last.data["round"]?.intValue ?? rounds)
+        if !again, let last = prReviewRecords(family: family, pr: pr).last, last.ok, last.headSHA == tip {
+            throw PRReviewRefusal.alreadyReviewed(round: last.round)
         }
 
         let round = rounds + 1

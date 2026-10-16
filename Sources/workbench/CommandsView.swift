@@ -126,6 +126,7 @@ extension Commands {
         }
         let state = ctx.store.state(of: id)
         out("thread:    \(id)\(state.isActive ? "" : "  (ended: \(state.decision ?? "?"))")")
+        for line in lineageLines(state, ctx: ctx) { out(line) }
 
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {
             do {
@@ -199,8 +200,26 @@ extension Commands {
             // How it ended: the decision once there is one, else where the thread stands.
             var line = state.decision ?? statusString(state.review.status)
             if let result = state.lastResult { line += " (last turn \(result))" }
-            out(String(format: "%@  %@  $%.2f", state.id, line, state.totalCostUSD))
+            let follows = state.lineage.map { "  (follows \($0.parent))" } ?? ""
+            out(String(format: "%@  %@  $%.2f%@", state.id, line, state.totalCostUSD, follows))
         }
+    }
+
+    /// Where a review follow-up came from, and the follow-ups a thread has: the tree `ship --review-loop` builds.
+    static func lineageLines(_ state: ThreadState, ctx: Context) -> [String] {
+        var lines: [String] = []
+        if let lineage = state.lineage {
+            lines.append("follows:   \(lineage.parent)  (review follow-up \(lineage.round) of \(lineage.root))")
+        }
+        let kids = children(of: state.id, ctx: ctx)
+        if !kids.isEmpty {
+            lines.append("follow-ups: \(kids.count) from the review loop")
+            for kid in kids {
+                let how = kid.decision ?? statusString(kid.review.status)
+                lines.append(String(format: "  round %d  %@  %@  $%.2f", kid.lineage?.round ?? 0, kid.id, how, kid.totalCostUSD))
+            }
+        }
+        return lines
     }
 
     /// The goal's per-turn limit in seconds, nil when the goal cannot be read.
@@ -241,6 +260,7 @@ extension Commands {
             return
         }
         for line in report.render() { out(line) }
+        for line in lineageLines(report.state, ctx: ctx) { out(line) }
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx) {
             out("")

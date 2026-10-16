@@ -38,6 +38,16 @@ public struct ThreadStore: Sendable {
         return ThreadState.derive(from: events, id: id)
     }
 
+    /// The thread that opened the pull request this thread belongs to: itself, unless it is a review follow-up.
+    public func rootID(of id: String) -> String { state(of: id).lineage?.root ?? id }
+
+    /// The follow-ups of `root`, in the order they were made.
+    public func followUps(of root: String) -> [ThreadState] {
+        threadIDs().map { state(of: $0) }
+            .filter { $0.lineage?.root == root }
+            .sorted { ($0.lineage?.round ?? 0, $0.id) < ($1.lineage?.round ?? 0, $1.id) }
+    }
+
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
     /// ambiguous, the newest wins; `create` refuses to make a second, so this should be one.
     public func activeThreadID() -> String? {

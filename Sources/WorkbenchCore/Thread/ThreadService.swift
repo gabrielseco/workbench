@@ -83,7 +83,8 @@ public struct ThreadService: Sendable {
     /// Creates the thread directory, a draft goal to fill in and the first events. Refuses while another
     /// thread is active.
     public func newThread(
-        name: String, base: String? = nil, updating: String? = nil, config: Config? = nil
+        name: String, base: String? = nil, updating: String? = nil, config: Config? = nil,
+        lineage: ThreadLineage? = nil, body: GoalBody? = nil
     ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
         if let updating {
@@ -108,7 +109,7 @@ public struct ThreadService: Sendable {
         let budget = NSDecimalNumber(decimal: config?.defaultBudgetUSD ?? Config.defaultBudgetUSD).stringValue
         let title = name.replacingOccurrences(of: "-", with: " ")
 
-        let text = """
+        let header = """
             ---
             id: \(id)
             title: \(title)
@@ -119,30 +120,24 @@ public struct ThreadService: Sendable {
             # model: opus   (optional; unset = the config's model, else the claude CLI default)
             ---
 
-            ## Request
 
-            TODO(workbench): say what should change, in a few sentences.
-
-            ## Criteria
-
-            - [c1] TODO(workbench): something that can be checked.
-              - proof: TODO(workbench): how it will be shown (a test, a command, a screenshot).
-
-            ## Out of scope
-
-            - TODO(workbench): what must not change.
             """
+        let text = header + (body ?? GoalBody.placeholders).rendered
         try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
+        var created: [String: JSONValue] = [
+            "repo": .string(project.root.path), "base": .string(baseBranch),
+            "worktree": .string(manager.path(for: id).path),
+            "branch": .string(WorktreeManager.branch(for: id)),
+        ]
+        if let lineage {
+            created["parent"] = .string(lineage.parent)
+            created["root"] = .string(lineage.root)
+            created["round"] = .int(lineage.round)
+        }
         try await withLog(id) { log in
-            try await log.append(
-                .threadCreated,
-                data: [
-                    "repo": .string(project.root.path), "base": .string(baseBranch),
-                    "worktree": .string(manager.path(for: id).path),
-                    "branch": .string(WorktreeManager.branch(for: id)),
-                ])
+            try await log.append(.threadCreated, data: .object(created))
             try await log.append(.goalSaved, data: ["status": "draft", "hash": .null])
         }
         return id

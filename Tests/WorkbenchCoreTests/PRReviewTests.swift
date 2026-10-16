@@ -238,7 +238,7 @@ import Testing
             arguments: [
                 "-e",
                 "use POSIX qw(setsid); my $p = fork(); if ($p == 0) { setsid(); close STDOUT; close STDERR; "
-                    + "exec 'sleep', '120'; } print \"$p\\n\";",
+                    + "exec 'sleep', '120'; } select(undef, undef, undef, 0.5); print \"$p\\n\";",
             ],
             environment: [:], workingDirectory: tree, timeout: 30)
         var printed: [String] = []

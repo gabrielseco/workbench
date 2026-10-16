@@ -9,8 +9,12 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, notes, base_gap, worktree, progress
 
+- `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
+  made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
+- `follow_ups`: the follow-ups that name this thread as their parent, `{thread, round, status, ended, last_result,
+  cost_usd}` each; empty when there are none. `review` has both keys too. Derived from `thread.created`, never stored.
 - `ended`: `accepted`, `discarded`, `abandoned`, or null while the thread is active.
 - `goal`: null when there is no goal file; else `title`, `approval` (`approved`, `draft`, `stale`,
   `invalid`), `base`, `budget_usd`, `turn_timeout_min`, `problems` (lines, for `invalid`).
@@ -24,7 +28,7 @@ status keys: v, thread, ended, goal, turns, open_turn, running, last_result, che
   60 s old or more. `cost_usd` does not include the open turn: `claude` reports cost only in the result line.
 
 `workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
-cost_usd}` (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
+cost_usd, parent, root, round}` (the last three null unless it is a review follow-up) (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
 runs and queues nothing.
 
 ## review
@@ -32,7 +36,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, base, worktree, criteria, diff, check, verify, judge, pr_review, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, base, worktree, criteria, diff, check, verify, judge, pr_review, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
