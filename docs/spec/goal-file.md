@@ -186,6 +186,11 @@ Notes:
   is not given those tools. It writes screenshots and, optionally, a `verdict.json` into the proof directory;
   `review` lists them and the event log records each with its hash. Its result is shown, never counted as a
   criterion met. See [event-log.md](event-log.md) for the events.
+- **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
+  it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
+  the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds
+  only what its `setup_command`, check, `verify_command` or run produced (`node_modules`, a build directory,
+  a verify login file). `worktree.removed` names what was ignored in it, so the record shows what went.
 - **The child environment is an allowlist**: `PATH HOME USER LOGNAME SHELL LANG TMPDIR TERM
   CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
   them `claude` reports "Not logged in" even though the config dir is set. `SSH_AUTH_SOCK` and every token
