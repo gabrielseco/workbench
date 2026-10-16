@@ -40,6 +40,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `branch.removed` | `workbench clean` deleted the local branch of a shipped thread whose pull request ended | `reason` (`merged`, `closed`), `head_sha` |
 | `verify.started` | the project's `verify_command` is about to run, after the turn's check | `command`, `proof_ref`, `port` |
 | `proof.added` | a file the verify step left in its proof directory, one per file, before `verify.ended` | `name`, `path`, `sha256`, `bytes` |
+| `proof.published` | `workbench ship` put the latest verify step's screenshots in the pull request through `pr-shots` | `number`, `files`, `tool` |
 | `verify.ended` | the verify step ended; exactly once per `verify.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated`, `proof_files` |
 
 ## Invariants (tested)

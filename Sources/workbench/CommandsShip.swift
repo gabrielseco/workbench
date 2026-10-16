@@ -12,6 +12,7 @@ extension Commands {
         let watch = a.flag("--watch", "-w")
         let keepWorktree = a.flag("--keep-worktree")
         let noDescribe = a.flag("--no-describe")
+        let noScreenshots = a.flag("--no-screenshots")
         let refreshText = a.flag("--refresh-description")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
@@ -116,12 +117,23 @@ extension Commands {
                     out("updated the pull request title and description")
                 } catch let error as ShipError { refreshFailure = error }
             }
+            if !noScreenshots { await attachScreenshots(id: id, plan: plan, number: pr.number, ctx: ctx) }
             if !keepWorktree { await cleanUp(id: id, ctx: ctx, gh: gh) }
             out(pr.url)
             if let refreshFailure { return refuse(refreshFailure) }
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
+        }
+    }
+
+    /// Puts the verify step's screenshots in the pull request through `pr-shots`. A note on failure: the PR is open.
+    private static func attachScreenshots(id: String, plan: ShipPlan, number: Int, ctx: Context) async {
+        let tool = try? GitRunner.discover(tool: "pr-shots", timeout: 180)
+        switch await ctx.service.shipScreenshots(id: id, plan: plan, number: number, tool: tool) {
+        case .none: break
+        case .attached(let count): out("put \(count) screenshot\(count == 1 ? "" : "s") in the pull request")
+        case .skipped(let why): out("note: \(why)")
         }
     }
 
