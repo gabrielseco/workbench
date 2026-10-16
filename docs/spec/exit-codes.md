@@ -18,6 +18,7 @@ A code means one thing everywhere; the table says what. What each command can re
 | 12 | `push-rejected` | `ship`: origin rejected the push. |
 | 13 | `check-failed` | `ship --watch`: a check failed. |
 | 14 | `no-result` | `ship --watch`: no result in time. |
+| 15 | `findings` | `pr-review`: the reviewer found something to fix. |
 
 ## By command
 
@@ -116,6 +117,17 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `usage` | wrong command line, or a `--model` or `--budget` that is not valid |
 | 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), a run is live, or another command holds the thread (a second judge, a send-back) |
 | 7 | `not-found` | the thread named does not exist |
+
+### `pr-review`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | the review ended `VERDICT: CLEAN` (recorded, findings printed) |
+| 1 | `failed` | no verdict this round: no `codex`, GitHub's pull request head did not catch up with the branch, Codex was at capacity three times, crashed, timed out, was stopped, or its answer did not end in exactly one `VERDICT:` line (recorded, with the reason; it counts as a round). Also: origin could not be read |
+| 2 | `usage` | wrong command line, or a `[pr_review]` config that is not valid |
+| 6 | `refused` | nothing was spawned or recorded: the thread has no recorded pull request, `max_rounds` reviews of this pull request already ran (`--again` does not lift that), the branch was reviewed as it is (`--again` asks once more), origin no longer has the branch, a run is live, or another command holds the thread (a judge, another review) |
+| 7 | `not-found` | the thread named does not exist |
+| 15 | `findings` | the review ended `VERDICT: FIX`: the findings are printed and recorded |
 
 ### `accept`
 

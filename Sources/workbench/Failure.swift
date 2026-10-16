@@ -15,6 +15,7 @@ enum FailureKind: String {
     case pushRejected = "push-rejected"
     case checkFailed = "check-failed"
     case noResult = "no-result"
+    case findings
     case stopped
     case timedOut = "timed-out"
     case budgetExceeded = "budget-exceeded"
@@ -33,6 +34,7 @@ enum FailureKind: String {
         case .pushRejected: 12
         case .checkFailed: 13
         case .noResult: 14
+        case .findings: 15
         }
     }
 }

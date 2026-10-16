@@ -52,12 +52,23 @@ The reviewer is Codex, built in, all of it in Swift through `Spawner` (no shell 
   backoff, then exits `20` and says so.
 - The transcript and the extracted findings are stored under the thread's folder (constraint 4).
 
-- Refuses when the thread has no PR yet (`pr.opened` missing), a run is live, or `max_rounds` reviews
-  already ran for this PR (exit code for "cap reached"); `--again` does not lift the cap.
-- Events: `pr_review.started {round, pr}` before anything runs, `pr_review.finished {round, verdict,
-  exit_code, findings_path}`. Findings are stored under the thread's folder.
-- `review --json` gets a `pr_review` key: `{round, verdict, stale, findings_path}` (`stale` when the branch
-  has moved since the round). Exit codes and event shapes go in `docs/spec/{exit-codes,event-log,cli-json}.md`.
+- Refuses (exit 6, nothing spawned or recorded) when the thread has no PR yet (`pr.opened` missing), a run,
+  judge or another review holds the thread, `max_rounds` reviews already ran for this PR (`--again` does not
+  lift the cap), or the branch was already reviewed as it is (`--again` asks once more). A round that fails
+  counts: the count is the number of `pr_review.started` events for this PR, so only the log can reset it.
+- Events: `pr_review.started {round, pr, head_sha, argv}` before anything is fetched or run,
+  `pr_review.finished {round, pr, head_sha, ok, verdict, reason, findings_path, transcript_path}` after.
+  Findings are stored under the thread's folder (`pr-review/round-<n>.findings.md`).
+- Exit codes: the old script's 0/10/20/30 were its own contract. In the CLI `0` is clean, `15` (new, `findings`)
+  is `VERDICT: FIX`, `1` is a round with no verdict (the reviewer failed, GitHub did not catch up, no verdict
+  line), `6` is a refusal including the cap. 10-14 belong to `ship`.
+- `review --json` gets a `pr_review` key: `{round, pr, ok, verdict, stale, head_sha, findings_path, failure}`
+  (`stale` when the branch has moved since the round). Specs: `docs/spec/{exit-codes,event-log,cli-json,goal-file}.md`.
+- Codex gets its review text through a file: `Spawner` fixes stdin to `/dev/null`, so the argument is a one-line
+  pointer to `pr-review/round-<n>.brief.md` and the answer comes back through `codex exec -o`.
+
+**Status: task 1 is built** (`Sources/WorkbenchCore/Thread/PRReview/`, `Sources/workbench/CommandsPRReview.swift`).
+Use it on a few real PRs before starting step 2; `scripts/codex-review.sh` stays until then.
 
 ### 2. `workbench ship --review-loop` (or `[pr_review] auto = true`)
 

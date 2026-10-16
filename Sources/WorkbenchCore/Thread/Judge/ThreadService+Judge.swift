@@ -142,7 +142,7 @@ extension ThreadService {
     }
 
     /// Marks this process as the one using the thread, in the file `runnerPID` reads.
-    private func writeHolderMarker(_ id: String) throws {
+    func writeHolderMarker(_ id: String) throws {
         let member = ProcessTree.member(for: getpid())
         let info: [String: Any] = [
             "pid": getpid(), "started_seconds": member?.startSeconds ?? 0, "started_micros": member?.startMicros ?? 0,

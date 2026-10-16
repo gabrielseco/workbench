@@ -31,6 +31,10 @@ let usage = """
                                  ask a second, read-only Claude run whether the check, the verify step, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
                                  beside your own checks, never changes accept or ship; once per turn unless --again
+      pr-review [id] [--again]   after ship: Codex reviews the pull request, read-only, in a throwaway checkout
+                                 of its head; prints the findings and records the round (shown by review);
+                                 at most max_rounds ([pr_review]) per pull request, --again does not lift that
+                                 exit 0 clean, 15 findings to fix, 1 no verdict this time, 6 refused
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
            [--watch|-w [--timeout <min>] [--interval <s>]]
@@ -121,6 +125,8 @@ do {
         try await Commands.review(Array(arguments.dropFirst()))
     case "judge":
         exit(try await Commands.judge(Array(arguments.dropFirst())))
+    case "pr-review":
+        exit(try await Commands.prReview(Array(arguments.dropFirst())))
     case "accept":
         try await Commands.accept(Array(arguments.dropFirst()))
     case "ship":
