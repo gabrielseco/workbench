@@ -58,10 +58,11 @@ gh pr diff "$pr" > "$work/diff.patch" || exit 1
 
 mkdir -p .workbench/reviews
 log=".workbench/reviews/pr-$pr-${sha:0:7}.txt"
-# "Selected model is at capacity" happens and passes; try again before giving up.
+# "Selected model is at capacity" happens and passes; try again before giving up. Only when there is no answer:
+# the log also holds every file Codex read, and this repo's own code and docs contain that phrase.
 for attempt in 1 2 3; do
     codex exec -s read-only -C "$tree" - < "$work/prompt.md" > "$log" 2>&1
-    grep -q "model is at capacity" "$log" || break
+    grep -q "model is at capacity" "$log" && ! grep -q '^codex$' "$log" || break
     echo "codex: model at capacity (attempt $attempt of 3)" >&2
     sleep $((attempt * 20))
 done
