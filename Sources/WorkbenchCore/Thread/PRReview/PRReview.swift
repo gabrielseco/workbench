@@ -24,8 +24,8 @@ struct PRReviewInput: Sendable, Equatable {
     var diffPath: String
     var diffTruncated: Bool
     /// The stage's own rubric, from its `skill` or `prompt` file; nil for the built-in report instructions.
-    var rubric: String? = nil
-    var rubricPath: String? = nil
+    var rubric: String?
+    var rubricPath: String?
 }
 
 /// The reviewer: Codex, run read-only on the pull request's head in a throwaway checkout, started by

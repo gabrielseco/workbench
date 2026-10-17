@@ -132,7 +132,9 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
     @Test func aSkillsRubricSectionIsTheRubric() throws {
         let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
-        let text = "# Skill\n\n## Steps\n\nRun swift build.\n\n## Rubric\n\n- flag every force unwrap\n\n## Posting\n\ngh pr comment\n"
+        let text =
+            "# Skill\n\n## Steps\n\nRun swift build.\n\n## Rubric\n\n- flag every force unwrap\n\n"
+            + "## Posting\n\ngh pr comment\n"
         #expect(skill.rubric(from: text) == "- flag every force unwrap")
     }
 
@@ -144,9 +146,10 @@ private func problems(_ section: String) -> [ConfigProblem] {
     }
 
     @Test func aPromptFileIsUsedWholeAndAnEmptyRubricIsNone() throws {
-        let prompt = try stage("[review.stage.pr-review]\nprompt = \"docs/REVIEW-PR.md\"\n")
-        #expect(prompt.rubric(from: "## Rubric\nonly this?\n## Other\nand this\n") == "## Rubric\nonly this?\n## Other\nand this\n")
-        #expect(prompt.rubric(from: " \n\n") == nil)
+        let promptStage = try stage("[review.stage.pr-review]\nprompt = \"docs/REVIEW-PR.md\"\n")
+        let file = "## Rubric\nonly this?\n## Other\nand this\n"
+        #expect(promptStage.rubric(from: file) == file)
+        #expect(promptStage.rubric(from: " \n\n") == nil)
         let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
         #expect(skill.rubric(from: "## Rubric\n\n## Next\n") == nil)
     }
