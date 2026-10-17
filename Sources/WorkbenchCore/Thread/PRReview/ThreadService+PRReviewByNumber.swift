@@ -23,17 +23,23 @@ extension ThreadService {
         stopRequested: @escaping @Sendable () -> Bool = { false },
         attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
+        // `gh` reads the repository of the directory it runs in, which is where origin is fetched from. A `GH_REPO` in
+        // the person's shell would point it at another one.
+        let gh = GitRunner(
+            executable: gh.executable, environment: gh.environment.filter { $0.key != "GH_REPO" }, timeout: gh.timeout)
         let info = try await pullRequestInfo(number, gh: gh)
         let tip = try await originBranchTip(info.branch)
-        let folder = project.workbenchDirectory
-            .appendingPathComponent("reviews/pr-\(number)-\(tip.prefix(7))", isDirectory: true)
+        let reviews = project.workbenchDirectory.appendingPathComponent("reviews", isDirectory: true)
+        // A review that was killed left its checkout and maybe its `codex` behind, for this commit or an older one:
+        // end them before anything is refused or started. A folder whose lock is held belongs to a live review.
+        await recoverPullRequestLeftovers(number, in: reviews)
+        let folder = reviews.appendingPathComponent("pr-\(number)-\(tip.prefix(7))", isDirectory: true)
         let paths = PRReviewPaths(folder: folder, round: 1)
+        guard let lock = FolderLock(folder: folder) else { throw PRReviewRefusal.busy }
+        defer { lock.release() }
         if !again, FileManager.default.fileExists(atPath: paths.answer.path) {
             throw PRReviewRefusal.alreadyReviewed(round: 1)
         }
-        // A review that was killed left its checkout behind; end it before making this one.
-        await removeTree(paths)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let settings = PRReviewSettings(
             codexPath: codexPath, environment: environment, timeout: timeout,
@@ -52,6 +58,21 @@ extension ThreadService {
         return PRReviewResult(
             round: 1, pr: number, maxRounds: 0, headSHA: round.reviewedSHA ?? tip, verdict: outcome.verdict,
             failure: reason, findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
+    }
+
+    /// Ends what a killed review of pull request `number` left in any of its commit folders, skipping a folder a
+    /// live review holds.
+    func recoverPullRequestLeftovers(_ number: Int, in reviews: URL) async {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: reviews.path)) ?? []
+        for name in names where name.hasPrefix("pr-\(number)-") {
+            let folder = reviews.appendingPathComponent(name, isDirectory: true)
+            var isFolder: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isFolder), isFolder.boolValue,
+                let lock = FolderLock(folder: folder)
+            else { continue }
+            defer { lock.release() }
+            await removeTree(PRReviewPaths(folder: folder, round: 1))
+        }
     }
 
     /// The pull request's branch, base and text, refused unless it is open and its branch is on origin.
@@ -78,4 +99,34 @@ extension ThreadService {
             branch: branch, base: base, title: PRBodyBuilder.scrub(object["title"] as? String ?? ""),
             body: PRBodyBuilder.scrub(object["body"] as? String ?? ""))
     }
+}
+
+/// An exclusive, non-blocking lock on a review folder, held while a review of that commit runs. It is the kernel's
+/// `flock`, so a review that is killed releases it and no stale lock needs clearing.
+final class FolderLock: @unchecked Sendable {
+    // The descriptor is set once in `init` and closed once by `release`; nothing else touches it.
+    private var descriptor: Int32
+
+    /// Nil when another review holds the lock or the folder cannot be made.
+    init?(folder: URL) {
+        guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else {
+            return nil
+        }
+        let fd = open(folder.appendingPathComponent(".lock").path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else { return nil }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            return nil
+        }
+        descriptor = fd
+    }
+
+    func release() {
+        guard descriptor >= 0 else { return }
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+        descriptor = -1
+    }
+
+    deinit { release() }
 }
