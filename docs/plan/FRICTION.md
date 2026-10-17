@@ -80,14 +80,17 @@ Two threads on Triage (`scripts/verify.sh`, then the Bot finding order, both end
 review) worked end to end. What got in the way is rows 50 to 62. Before running more threads on the other tabs
 (merge conflict, CI failing and so on), fix in this order; each is its own PR (`AGENTS.md`):
 
-1. **PRs that read well (S each).** #50 (`--` before the prompt), #51 (title retry or cut), #52 (fallback body),
-   #53 (retry a description, default the id). Every shipped thread hits #51 and #52; #50 unblocks the design stage.
-2. **Verify you can trust (M).** #54 (`doctor` names a screenshot), #57 (steps in the goal, an allowlist), #58
-   (select a row, appearance, several screenshots), #59 (data that is not the user's), #60 (`bash -n`).
-3. **The design review runs (M).** #55 (stage `inputs` honoured: `docs/DESIGN.md` and the proof), which needs #50
-   and #58. Then the loop over stages.
+Done: #50, #51, #54, #55 (file inputs), #63, and #59 was dropped. What is left:
+
+1. **PRs that read well (S each).** #52 (fallback body), #53 (retry a description, default the id). #51 removed the
+   usual cause of a failed description, so both wait until a thread hits another one.
+2. **Verify you can trust (M).** #57 (steps in the goal, an allowlist), #58 (select a row, several screenshots; the
+   owner uses dark mode only, so the design rubric can drop light mode), #60 (`bash -n`).
+3. **The design review runs (M).** #55's file inputs are in; what is left is the loop over stages and a design
+   stage that has the screenshots it asks for (#58).
 4. **Cheap and useful alongside.** #56 (tests count as passed), #61 (`pr-review --pr <n>`), #62 (the uploader's
-   cache file). #56 changes what a person reads in `review`, so it should wait for the first batch of real tasks.
+   cache file), #64 (a per-stage reviewer model). #56 changes what a person reads in `review`, so it should wait
+   for the first batch of real tasks.
 
 This is separate from [P9](P9-agent-providers.md), which must pass before P3 starts: none of the rows above waits
 for it, and P9's execution contracts do not replace them.
