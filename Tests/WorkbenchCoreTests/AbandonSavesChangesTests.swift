@@ -128,7 +128,9 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         let patch = FileManager.default.temporaryDirectory.appendingPathComponent("p-\(UUID().uuidString).patch")
         defer { try? FileManager.default.removeItem(at: patch) }
 
-        _ = try await WorktreePatch.save(worktree: worktree, to: patch, git: fx.git, attributesFrom: nil)
+        _ = try await WorktreePatch.save(
+            worktree: worktree, to: patch, stagedTo: patch.appendingPathExtension("staged"), git: fx.git,
+            attributesFrom: nil)
 
         #expect(try await fx.git.run(["rev-parse", "HEAD"], in: worktree).stdout == before)
         let status = try await fx.git.run(["status", "--porcelain"], in: worktree).stdout
@@ -202,7 +204,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         defer { try? FileManager.default.removeItem(at: patch) }
 
         let saved = try #require(try await WorktreePatch.save(
-            worktree: worktree, to: patch, git: fx.git, attributesFrom: nil))
+            worktree: worktree, to: patch, stagedTo: patch.appendingPathExtension("staged"), git: fx.git, attributesFrom: nil))
         let same = await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil)
         #expect(same?.tree == saved.tree)
 
@@ -226,7 +228,33 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         #expect(try fx.events(id).last?.kind != .reviewDecision, "the thread is still active")
     }
 
-    @Test func aStagedFileMissingFromTheWorkingTreeRefusesInsteadOfLosingIt() async throws {
+    private func stagedPatchURL(_ id: String, _ fx: RunnerFixture) -> URL {
+        fx.project.threadDirectory(id).appendingPathComponent(ThreadService.abandonStagedPatchName)
+    }
+
+    @Test func aStagedVersionThatWasEditedAgainIsKeptInASecondPatch() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("version A\n", "tracked.txt", in: worktree)
+        _ = try await fx.git.run(["add", "tracked.txt"], in: worktree)
+        try write("version B\n", "tracked.txt", in: worktree)
+
+        let saved = try #require(try await fx.service.abandon(id: id))
+
+        let staged = try #require(saved.staged, "the index held something the working tree does not")
+        #expect(staged.url == stagedPatchURL(id, fx))
+        let working = try await apply(saved.url, to: id, fx)
+        defer { try? FileManager.default.removeItem(at: working) }
+        #expect(try String(contentsOf: working.appendingPathComponent("tracked.txt"), encoding: .utf8) == "version B\n")
+        let index = try await apply(staged.url, to: id, fx)
+        defer { try? FileManager.default.removeItem(at: index) }
+        #expect(try String(contentsOf: index.appendingPathComponent("tracked.txt"), encoding: .utf8) == "version A\n")
+        let event = try #require(try fx.events(id).last { $0.kind == .abandonSaved })
+        #expect(event.data["staged_path"]?.stringValue == "abandon-staged.patch")
+        #expect(event.data["staged_sha256"]?.stringValue == staged.sha256)
+    }
+
+    @Test func aFileStagedAsAddedAndThenDeletedFromDiskIsKeptInTheSecondPatch() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await workedThread(fx)
         try write("only in the index\n", "staged-only.txt", in: worktree)
@@ -234,15 +262,86 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         try FileManager.default.removeItem(at: worktree.appendingPathComponent("staged-only.txt"))
         try write("changed\n", "tracked.txt", in: worktree)
 
-        do {
-            _ = try await fx.service.abandon(id: id)
-            Issue.record("expected a refusal: the staged content is in no patch")
-        } catch let error as ThreadServiceError {
-            #expect(error.description.contains("staged-only.txt"), "names the file: \(error)")
-        }
+        let saved = try #require(try await fx.service.abandon(id: id))
 
-        #expect(FileManager.default.fileExists(atPath: worktree.path))
-        #expect(try await fx.git.run(["ls-files", "--stage", "staged-only.txt"], in: worktree).stdout.contains("staged-only"))
+        let staged = try #require(saved.staged)
+        let index = try await apply(staged.url, to: id, fx)
+        defer { try? FileManager.default.removeItem(at: index) }
+        #expect(
+            try String(contentsOf: index.appendingPathComponent("staged-only.txt"), encoding: .utf8)
+                == "only in the index\n")
+    }
+
+    @Test func aStagedRenameThenDeletedFromDiskIsKept() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        _ = try await fx.git.run(["mv", "tracked.txt", "renamed.txt"], in: worktree)
+        try FileManager.default.removeItem(at: worktree.appendingPathComponent("renamed.txt"))
+
+        let saved = try #require(try await fx.service.abandon(id: id))
+
+        let staged = try #require(saved.staged)
+        let index = try await apply(staged.url, to: id, fx)
+        defer { try? FileManager.default.removeItem(at: index) }
+        #expect(FileManager.default.fileExists(atPath: index.appendingPathComponent("renamed.txt").path))
+    }
+
+    @Test func noSecondPatchWhenTheIndexMatchesTheWorkingTree() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("staged and left alone\n", "staged.txt", in: worktree)
+        _ = try await fx.git.run(["add", "staged.txt"], in: worktree)
+        try write("loose\n", "loose.txt", in: worktree)
+
+        let saved = try #require(try await fx.service.abandon(id: id))
+
+        #expect(saved.staged == nil, "everything staged is already what the working tree holds")
+        #expect(!FileManager.default.fileExists(atPath: stagedPatchURL(id, fx).path))
+    }
+
+    @Test func theAbandonIsOnRecordBeforeTheWorktreeGoesSoARetryAfterACrashKeepsIt() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("loose\n", "loose.txt", in: worktree)
+        let stuck = worktree.appendingPathComponent("stuck")
+        try FileManager.default.createDirectory(at: stuck, withIntermediateDirectories: true)
+        try write("x\n", "stuck/file.txt", in: worktree)
+        _ = try await fx.git.run(["add", "stuck/file.txt"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "stuck"], in: worktree)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: stuck.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stuck.path) }
+
+        await #expect(throws: (any Error).self) { try await fx.service.abandon(id: id) }
+
+        let events = try fx.events(id)
+        #expect(events.contains { $0.kind == .abandonSaved }, "recorded before the removal that failed")
+        #expect(events.last?.kind != .reviewDecision, "still active, so a retry can finish")
+    }
+
+    @Test func childrenTheRunnerLeftInTheWorktreeAreSweptBeforeTheChangesAreSaved() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("loose\n", "loose.txt", in: worktree)
+        let null = open("/dev/null", O_WRONLY)
+        defer { close(null) }
+        let sh = try Spawner.spawn(
+            executable: "/bin/sh", arguments: ["-c", "exec sleep 300 &"], environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: worktree.path, stdout: null, stderr: null)
+        var status: Int32 = 0
+        waitpid(sh, &status, 0)
+        var orphan: ProcessMember?
+        let deadline = Date().addingTimeInterval(Patience.limit)
+        while orphan == nil, Date() < deadline {
+            orphan = OrphanSweeper.orphans(inside: worktree).first
+            if orphan == nil { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        let member = try #require(orphan, "the helper should be orphaned and found by its cwd")
+        defer { kill(member.pid, SIGKILL) }
+
+        _ = try await fx.service.abandon(id: id)
+
+        #expect(await FakeClaude.waitUntilGone(member.pid))
+        #expect(try fx.kinds(id).contains("orphans.swept"))
     }
 
     @Test func theLogLockIsHeldForTheWholeAbandonSoANewRunCannotLoseItsWorktree() async throws {
