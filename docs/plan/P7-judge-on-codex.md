@@ -1,7 +1,16 @@
 # P7: The judge runs on Codex
 
-Status: plan, nothing built. Written 2026-10-17. Follows [P4](P4-verify.md) (`workbench judge`), [P5](P5-review-loop.md)
-(Codex as the reviewer) and [P6](P6-review-stages.md) (review stages).
+Status: superseded, nothing built. Written 2026-10-17. Retained as the historical motivation for
+independent evaluation; [P9: Agent providers](P9-agent-providers.md) replaces this implementation plan.
+
+P9 extracts shared provider adapters for run, judge and automated review instead of a Codex-only
+runner. It permits any compatible provider at each responsibility, including the same provider with
+independent contexts. It preserves the existing Claude judge default for compatibility; the default
+Codex switch, `[judge] reviewer` schema and forced vendor split proposed below are not adopted.
+P9 carries forward the judge contract, advisory failure behaviour, images and timeout/retry tests.
+Follow P9 for implementation, configuration and the prerequisite gate before SwiftUI.
+
+The remainder records the original unbuilt proposal, not current or planned configuration.
 
 ## The idea
 

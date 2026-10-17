@@ -6,7 +6,7 @@ integration all come later, and only after the single-thread loop is boringly re
 The thing we are building:
 
 ```
-you write a goal → you approve it → Claude works in a worktree → you see diff + checks → accept / send back / discard
+you write a goal → you approve it → agent works in a worktree → you see diff + checks → accept / send back / discard
 ```
 
 Phases, in order. Each ends with a demo you can run, not just merged code.
@@ -21,9 +21,13 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P4](P4-verify.md) | Verify | `verify_command` runs in the background and a thread ends with screenshots, a recorded result and an advisory verdict; piloted on expense-tracker, then Triage | M |
 | [P5](P5-review-loop.md) | Review loop | `workbench pr-review` runs a second reviewer on the shipped PR; `ship --review-loop` feeds its findings back as turns until clean or a cap | S |
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order; task 1 (config, `ReviewStage`, doctor) and task 2 (`review-stage <name>`, `proof`, `applies_to`) built | M |
-| [P7](P7-judge-on-codex.md) | Judge on Codex | `workbench judge` runs on Codex, so the AI that wrote the diff does not grade it; `run` stays on Claude, reviews stay on Codex | S |
+| [P7](P7-judge-on-codex.md) | Judge on Codex (superseded) | unbuilt fixed-provider proposal replaced by P9; current judge remains on Claude | — |
 | [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
+| [P9](P9-agent-providers.md) | Agent providers | planned: independently select providers/models for run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
+
+**P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,
+conflicting provider-selection design. P8 remains independent check-performance work.
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
 What got in the way while using Workbench on itself is kept in [`FRICTION.md`](FRICTION.md).
@@ -76,11 +80,26 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 |---|---|---|---|---|
 | D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided |
 | D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | **decided**: Swift holds (P1 soak) |
-| D2 | Permissions | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
-| D3 | Process model | **One process per turn.** First turn `--session-id`, every later spawn `--resume`, stdin `/dev/null`. Verified in S4 | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
+| D2 | Permissions (current Claude adapter; generalized in P9) | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
+| D3 | Process model | **One process per turn/attempt**, stdin `/dev/null`. Claude uses first-turn `--session-id` then `--resume` (S4); P9 makes native session support optional and provider-qualified | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
 | D4 | Goal format | Markdown with YAML front matter, see [`spec/goal-file.md`](../spec/goal-file.md) | JSON (worse to write and review by hand) | P1 |
 | D5 | Event log | JSON lines, append-only, see [`spec/event-log.md`](../spec/event-log.md) | SQLite (heavier, harder to inspect) | P1 |
 | D6 | Where data lives | Everything under the repo's `.workbench/` (gitignored): `threads/<id>/`, `worktrees/<id>/`, `config.toml`. One project means no global store | `~/Library/Application Support/` (needed again once there are many projects) | P1 |
+
+### Provider decisions (P9, proposed until implemented)
+
+- **D7 — Responsibilities and providers:** run, judge and automated review own their prompts, policy,
+  inputs and validators; adapters own CLI/protocol translation over the existing process layer. No
+  general workflow engine. Same-provider evaluations use independent sessions; vendor diversity is optional.
+- **D8 — Capability boundary:** native controls must enforce the requested permissions. Unsupported
+  combinations fail explicitly; no silent provider fallback or weaker policy. Unknown cost is not zero,
+  and removing a hard dollar cap requires explicit spending approval.
+- **D9 — Compatibility:** retain Claude run/judge and Codex review defaults. Preserve historical logs
+  and state transitions; add normalized activity and attempt recovery before the app depends on them.
+
+[P9](P9-agent-providers.md) defines configuration, contracts, migration and the measurable gates. D2
+remains the current Claude policy; P9 extends it through tested native provider controls, not a new
+Workbench permission engine. Historical phase documents describe their original implementation.
 
 ### D1 gate: passed
 
@@ -106,8 +125,10 @@ can hang, crash, ignore SIGTERM and leave children in other process groups.
 ## Glossary
 
 - **Goal**: the approved task description and criteria for a thread.
-- **Thread**: a goal, a worktree, a Claude session and an event log. Exactly one is active.
-- **Turn**: one `claude` process run: a prompt in, a stream of events out, exit.
+- **Thread**: a goal, a worktree and an event log, with a coding session when supported (currently Claude). Exactly one is active.
+- **Turn**: one coding execution: a prompt in, activity out, terminal result (currently a `claude` process).
+- **Provider** (P9): the adapter for an agent CLI, independent of the responsibility it executes.
+- **Review stage**: a named automated read-only review rubric from P6; distinct from the local `review` display and human decision.
 - **Run result**: the terminal record of a turn (`succeeded`, `failed`, `stopped`, `timed_out`,
   `budget_exceeded`, `interrupted`).
 - **Check**: the project's own command (tests, lint), run by Workbench after a turn.

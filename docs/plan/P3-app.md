@@ -1,9 +1,12 @@
 # P3: App
 
-**Outcome:** one macOS window where you write a goal, approve it, watch Claude work, review the result and
-decide. You complete a real task end to end without the terminal.
+**Outcome:** one macOS window where you write a goal, approve it, watch the configured coding agent
+work, review the result and decide. You complete a real task end to end without the terminal.
 
-**Depends on:** P2 accepted. The app links `WorkbenchCore` and adds no process logic.
+**Depends on:** P2 accepted and [P9: Agent providers](P9-agent-providers.md)'s acceptance gate complete.
+Do not start SwiftUI development before run, judge and automated review have validated interchangeable
+providers, normalized activity and interruption recovery. The app links `WorkbenchCore` and adds no
+process or provider logic. P9 does not change the workflow's approval or human decision gates.
 
 ## Scope
 
@@ -37,7 +40,10 @@ and crash recovery is free.
 - Assistant text (streamed).
 - Tool uses collapsed to one line (`Edit Sources/Sync.swift`, `Bash swift test`), expandable.
 - Denied tool uses highlighted: they explain why a run stalled.
-- Status bar: turn number, elapsed, cost so far, stop button.
+- Status bar: turn number, elapsed, provider/model, cost when reported (otherwise unknown), stop button.
+- Consume P9 normalized activity; support providers that report only final text or no tool activity.
+- Display resolved stage providers/models and capability errors through core services; provider selection
+  uses P9 configuration and coding approval rules, not UI-specific invocation code.
 - A "Raw log" disclosure that shows lines verbatim.
 
 ### Layout
@@ -64,11 +70,14 @@ A single column is enough. A sidebar comes back when there is more than one thin
 5. **Live activity view.** Event grouping, streaming text, collapsed tools, denied highlighting.
 6. **Review view.** Diff, checks, criteria, decision bar (from P2).
 7. **Failure and empty states.** No project, no thread, goal invalid, run failed (reason shown), interrupted
-   (offer re-run), `claude` not found.
+   (offer re-run), configured provider not found, unsupported capability and evaluation failure with an
+   actionable reason.
 8. **Polish.** ⌘N new thread, ⌘↩ approve/run, ⌘. stop. VoiceOver labels on icon buttons.
 
 ## Acceptance criteria
 
+- [ ] P9's provider, compatibility and reliability gate has passed before app development starts.
+- [ ] A mixed-provider task and a provider with no text streaming display correctly through core contracts.
 - [ ] From a clean install: pick a repo, write a goal, approve, run, watch, review, accept, with no terminal.
 - [ ] Quit mid-run and relaunch: the thread shows `interrupted` with the log intact; re-run works.
 - [ ] Stop returns the UI to a usable state in under 6 seconds, including with a stuck child.
@@ -93,4 +102,4 @@ app, send a follow-up, review, accept.
 
 ## Open questions
 
-- Should Claude draft the goal from a rough sentence (a read-only turn)? Leaning: later; P3 is you writing it.
+- Should an agent draft the goal from a rough sentence (a read-only turn)? Leaning: later; P3 is you writing it.
