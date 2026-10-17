@@ -18,11 +18,12 @@ swiftlint lint --quiet                   # just the lint (brew install swiftlint
 WORKBENCH_SOAK=1 swift test --filter SoakTests   # the soak, CI runs it as its own step
 swift build                              # builds `workbench` and the `fake-claude` test double
 scripts/soak-real.py                     # real `claude` runs; costs money, run by hand
+bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on this repo (verify-cli skill); costs money, by hand
 ```
 
 ## Skills
 
-Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`). Agents that don't read that directory
+Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`). Agents that don't read that directory
 natively can open the `SKILL.md` and follow it. Claude Code reads them through the symlinks in
 `.claude/skills/`; when adding a skill, add its symlink there too:
 `ln -s ../../.agents/skills/<name> .claude/skills/<name>`.
