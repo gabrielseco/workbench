@@ -193,7 +193,7 @@ default_budget_usd = 5.00               # used when drafting a goal
 # [pr_review]                           # `workbench pr-review`: Codex reviews the shipped pull request
 # checklist = "docs/REVIEW.md"          # optional: this project's review invariants, read from the PR head
 # max_rounds = 3                        # reviews of one pull request, counted from the event log (1 to 10)
-# [review]                              # P6: the review stages, in order (only pr-review runs so far)
+# [review]                              # P6: the review stages, in order (the loop runs only pr-review so far)
 # stages = ["pr-review", "design"]      # default ["pr-review"]
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
@@ -250,7 +250,8 @@ Notes:
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's
   directory. In a stage table `skill`, `prompt`, `checklist` and `inputs` paths stay inside the repository,
-  `skill` and `prompt` exclude each other, `reviewer` is `codex` (default) or `claude`, `inputs` entries are
+  `skill` and `prompt` exclude each other, `reviewer` is `codex` or absent (`"claude"` is refused: review
+  stages run on Codex, the second AI that checks what Claude wrote), `inputs` entries are
   `diff`, `goal`, `proof` or a file path (with a `/` or an extension, so a misspelt keyword is refused), and
   `max_rounds` is 1 to 10. `[pr_review]` is the `pr-review` stage's table under its P5 name, with only
   `checklist` and `max_rounds`; it and `[review.stage.pr-review]` together are refused. A stage table not
@@ -258,8 +259,15 @@ Notes:
   when a stage's `skill` or `prompt` file is missing. A round reads the `skill` or `prompt` file from the
   pull request's checkout and puts its rubric in the brief in place of the built-in report instructions (a
   skill's `## Rubric` section when it has one, else the whole skill under a header saying to ignore steps that
-  build, run or post; a prompt file whole); when that file is missing or empty the round fails. So far the
-  runner reads only these, `checklist` and `max_rounds`; a round of a stage that sets more says so in a note.
+  build, run or post; a prompt file whole); when that file is missing or empty the round fails.
+  `workbench review-stage <name>` runs one round of a listed stage (`pr-review` is `workbench pr-review`).
+  `proof` attaches the top-level `*.png` files of the thread's latest verify step to the Codex run (`-i`, at
+  most 20) and lists their paths in the brief; with no verify step, one from before the latest turn, or no
+  PNG left, the round fails, never passes, and `doctor` warns when such a stage has no `verify_command`.
+  `applies_to` globs (`**` any run of folders, `*` within one name) are matched against the files the pull
+  request changes; a stage other than `pr-review` that matches none is recorded as skipped and runs nothing.
+  Other `inputs` (a file path, or leaving out `diff` or `goal`) and `applies_to` on `pr-review` are not read
+  yet; a round of a stage that sets them says so in a note.
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
   the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds

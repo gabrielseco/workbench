@@ -102,10 +102,11 @@ extension ThreadService {
         if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
 
         // A skip spends no round, so it writes no `started`; when the changed files cannot be read the round runs.
-        if !stage.isPRReview, !stage.config.appliesTo.isEmpty, let files = await changedFiles(context),
-            !stage.applies(to: files)
-        {
-            return try await recordSkip(log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+        if !stage.isPRReview, !stage.config.appliesTo.isEmpty, let files = await changedFiles(context) {
+            if !stage.applies(to: files) {
+                return try await recordSkip(
+                    log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+            }
         }
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)

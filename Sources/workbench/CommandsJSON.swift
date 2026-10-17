@@ -246,7 +246,11 @@ extension Commands {
         let stages = (try? Config.load(from: ctx.project.configURL))?.review ?? ReviewConfig()
         let reviewStages: [JSONValue] = ctx.service.latestReviewStages(id: state.id, review: stages).map { name, r in
             let verdict: JSONValue =
-                if r?.skipped == true { .string(ReviewStage.skippedVerdict) } else { r?.verdict.map { .string($0.rawValue) } ?? .null }
+                if r?.skipped == true {
+                    .string(ReviewStage.skippedVerdict)
+                } else {
+                    r?.verdict.map { .string($0.rawValue) } ?? .null
+                }
             let stale = if let reviewed = r?.headSHA, let tip = report.branchTip { reviewed != tip } else { false }
             return [
                 "name": .string(name), "round": r.map { .int($0.round) } ?? .null, "verdict": verdict,

@@ -107,7 +107,8 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
 
 @Suite struct ReviewStageReviewerTests {
     private func load(_ table: String) throws -> Config {
-        try Config.parse("[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n\(table)\n[tools]\navailable = [\"Read\"]\n")
+        try Config.parse(
+            "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n\(table)\n[tools]\navailable = [\"Read\"]\n")
     }
 
     @Test func claudeIsRefusedAtConfigLoad() {
@@ -322,7 +323,8 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
     }
 
     @Test func aProofStageWithAVerifyCommandHasNoWarning() throws {
-        let config = try Config.parse(stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]") + "[tools]\navailable = [\"Read\"]\n")
+        let config = try Config.parse(
+            stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]") + "[tools]\navailable = [\"Read\"]\n")
         let root = FileManager.default.temporaryDirectory
         #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifyCommand: true).isEmpty)
         #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifyCommand: false).count == 1)
