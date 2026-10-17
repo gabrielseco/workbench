@@ -60,7 +60,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
 
     @Test func aByHandProofIsNotCheckedAgainstTheAllowlist() throws {
         let g = try goalText(
-            "- [c1] Nothing is left over.\n  - proof (by hand): after a hand run `git branch` shows no leftover branch")
+            "- [c1] Nothing is left over.\n  - proof (by hand): after a hand run `scripts/verify.sh --all` shows no leftovers")
         #expect(g.criteria[0].byHand)
         #expect(ProofCommands.warnings(goal: g, config: try config(allowed: ["Read"])).isEmpty)
     }

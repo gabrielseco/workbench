@@ -107,7 +107,7 @@ private func draft(_ fx: RunnerFixture, proof command: String, byHand: Bool = fa
 
     @Test func aByHandProofIsAcceptedByApproveAndRunWithoutTheFlag() async throws {
         let fx = try await RunnerFixture()
-        let id = try await draft(fx, proof: "git branch", byHand: true)
+        let id = try await draft(fx, proof: "scripts/verify.sh --all", byHand: true)
         let approved = try await cli(["goal", "approve"], in: fx)
         #expect(approved.code == 0, "\(approved.text)")
         #expect(!approved.text.contains("warning"))
