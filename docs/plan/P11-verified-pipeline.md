@@ -93,7 +93,7 @@ The loop is not built before these join problems are fixed, each its own PR:
 
 | Task | Result | Gate |
 |---|---|---|
-| 0.1 Proof knows its commit (row 2) | the head on `verify.started` and `proof.added`; `pr-shots` is given that commit; `ship` and the publish refuse a mismatch | tests: commit after verify then ship, proof at head, an old log reads "unknown" |
+| 0.1 Proof knows its commit (row 2) **(built, #114)** | the commit and tree on `verify.started` and `proof.added`; `ship` skips the screenshots when the committed tree is not the proof's, or when the pull request's branch on `origin` is not this thread's head; `review` says current, stale or unknown | tests: commit after verify then ship, proof at head, a moved PR branch, an old log reads "unknown", a worktree filter is not run |
 | 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout | the existing stage tests plus a thread with no `pr.opened` |
 | 0.3 Judge concerns reach the PR (row 5) | the judge's `concerns` (and the proof's pixel size, row 10) are given to it and written, bounded, into the PR description under the criteria | `ship` fixtures: with concerns, without, over the limit |
 | 0.4 Triage fixture state (rows 6, 7, 9 and 10) | `verify.sh` can launch with a fixed PR list, no Keychain read and a fixed window size, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary and no Keychain dialog and a window no part of which is cut. **Window size and the Keychain prompt: done in Triage #72. Still open: the fixed PR list and the second capture** |
@@ -134,6 +134,10 @@ follow-up mechanism; phase 0 is unchanged, because those are joins a document ca
    they ran at. A proof whose commit is not the thread's head is *stale*: `review` says so, the judge and design
    stage refuse to read it, and `ship` / the publish step refuse to publish it. Nothing re-takes it silently; the
    loop re-runs verify.
+   *Built as:* stale is decided by the **tree** (everything in the worktree, committed or not), not the commit, so
+   an amend or a rebase that keeps the content does not discard a screenshot; the commit is recorded for the reader.
+   `pr-shots` names its file by the branch head when it publishes, which the freshness check has just shown holds the
+   same tree, so it is not given the commit.
 3. **A failed verify goes back to the model.** The verify step's result, its log and which criteria's screenshots
    are missing become a follow-up request. A criterion with a `proof: screenshot: <name>` and no file at the head
    is "missing", never "met" (P4).

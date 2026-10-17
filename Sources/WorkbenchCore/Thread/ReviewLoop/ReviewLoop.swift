@@ -210,11 +210,17 @@ extension ThreadService {
 
     /// The commit `origin` has for this thread's pull request branch right now, nil when it cannot be read.
     public func pullRequestBranchTip(id: String) async -> String? {
+        guard let branch = recordedPullRequestBranch(id: id) else { return nil }
+        return try? await originBranchTip(branch)
+    }
+
+    /// The branch `pr.opened` recorded for this thread, nil when none was or its name is not one git is given.
+    func recordedPullRequestBranch(id: String) -> String? {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let branch = events.last(where: { $0.kind == .prOpened })?.data["branch"]?.stringValue,
             SafeNames.isBranchName(branch)
         else { return nil }
-        return try? await originBranchTip(branch)
+        return branch
     }
 
     /// What Codex wrote in a round, from the file the record names.

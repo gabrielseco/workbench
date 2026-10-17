@@ -61,7 +61,11 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
     let script = try CheckScript()
     let verify = try script.write(writes, name: "verify.sh")
     let fx = try await RunnerFixture(extraConfig: "verify_command = \"\(verify)\"")
-    let (id, worktree) = try await acceptedThread(fx)
+    // The turn itself changes the work, as a real one does, so verify sees the work that is then accepted.
+    let id = try await fx.approvedThread()
+    _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+    try await fx.service.accept(id: id, message: "chore: work")
     let plan = ShipPlan(
         id: id, worktree: worktree, branch: "workbench/\(id)", remoteBranch: "workbench/\(id)", base: "main",
         head: "abc", origin: "o", remote: .absent)
@@ -251,5 +255,98 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(result.code == 1, "\(result.text)")
         #expect(result.text.contains("`pr-shots` is not on PATH"), "\(result.text)")
         #expect(result.text.contains("workbench ship --screenshots"), "the worktree is kept for another try")
+    }
+}
+
+@Suite struct ShipScreenshotsFreshnessTests {
+    @Test func aCommitAfterVerifyKeepsTheScreenshotsOutOfThePullRequest() async throws {
+        let shipped = try await shippedThread()
+        let fx = shipped.fx
+        // The work moves on after the screenshots were taken.
+        try "changed after verify\n".write(
+            to: shipped.plan.worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "later"], in: shipped.plan.worktree)
+        let tool = try FakeShots(in: fx)
+
+        let result = await fx.service.shipScreenshots(
+            id: shipped.id, worktree: shipped.plan.worktree, number: 12, tool: tool.runner)
+
+        guard case .skipped(let why) = result else { Issue.record("expected skipped, got \(result)"); return }
+        #expect(why.contains("work has changed since"))
+        #expect(why.contains("ship --screenshots"))
+        #expect(tool.calls.isEmpty)
+        #expect(try fx.events(shipped.id).allSatisfy { $0.kind != .proofPublished })
+    }
+
+    @Test func screenshotsTakenAtTheShippedWorkAreAttached() async throws {
+        let shipped = try await shippedThread()
+        let tool = try FakeShots(in: shipped.fx)
+        let result = await shipped.fx.service.shipScreenshots(
+            id: shipped.id, worktree: shipped.plan.worktree, number: 12, tool: tool.runner)
+        #expect(result == .attached(count: 1))
+    }
+
+    @Test func aPullRequestBranchThatMovedOnIsNotGivenTheseScreenshots() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let branch = "workbench/\(id)"
+        let root = fx.repo.deletingLastPathComponent()
+        let bare = root.appendingPathComponent("origin-\(UUID().uuidString).git")
+        _ = try await fx.git.run(["init", "-q", "--bare", bare.path], in: fx.repo)
+        _ = try await fx.git.run(["remote", "add", "origin", bare.path], in: fx.repo)
+        _ = try await fx.git.run(["push", "-q", "origin", branch], in: plan.worktree)
+        _ = try await fx.service.withLog(id) { log in
+            try await log.append(.prOpened, data: ["branch": .string(branch), "number": 12])
+        }
+        let tool = try FakeShots(in: fx)
+
+        // Origin has the work the screenshots were taken at: attached.
+        #expect(
+            await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+                == .attached(count: 1))
+
+        // A follow-up pushes to the same pull request from another clone; this thread's worktree is as it was.
+        let clone = root.appendingPathComponent("clone-\(UUID().uuidString)")
+        _ = try await fx.git.run(["clone", "-q", "--branch", branch, bare.path, clone.path], in: root)
+        try "follow-up\n".write(to: clone.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "follow-up"], in: clone)
+        _ = try await fx.git.run(["push", "-q", "origin", branch], in: clone)
+        let later = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+        guard case .skipped(let why) = later else { Issue.record("expected skipped, got \(later)"); return }
+        #expect(why.contains("branch is at"))
+        #expect(tool.calls.count == 3)  // only the first call's `path`, `list` and `pr`
+    }
+
+    @Test func aPullRequestWhoseBranchCannotBeReadOnOriginGetsNoScreenshots() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        // The log says a pull request was opened, and this repository has no origin to ask.
+        _ = try await fx.service.withLog(id) { log in
+            try await log.append(.prOpened, data: ["branch": .string("workbench/\(id)"), "number": 12])
+        }
+        let tool = try FakeShots(in: fx)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+        guard case .skipped(let why) = result else { Issue.record("expected skipped, got \(result)"); return }
+        #expect(why.contains("could not be read"))
+        #expect(tool.calls.isEmpty)
+    }
+
+    @Test func reviewStillSaysCurrentOrStaleAfterShipRemovedTheWorktree() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let loader = ReviewLoader(project: fx.project, git: fx.git)
+        #expect(await loader.load(id: id).proofFreshness == .current)
+
+        _ = try await fx.git.run(["worktree", "remove", "--force", plan.worktree.path], in: fx.repo)
+        #expect(!FileManager.default.fileExists(atPath: plan.worktree.path))
+        #expect(await loader.load(id: id).proofFreshness == .current)
+
+        // The branch moves on after the proof: the retained branch shows it.
+        let other = fx.repo.deletingLastPathComponent().appendingPathComponent("later-\(UUID().uuidString)")
+        _ = try await fx.git.run(["worktree", "add", "-q", other.path, "workbench/\(id)"], in: fx.repo)
+        try "later\n".write(to: other.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "later"], in: other)
+        _ = try await fx.git.run(["worktree", "remove", "--force", other.path], in: fx.repo)
+        #expect(await loader.load(id: id).proofFreshness == .stale)
     }
 }
