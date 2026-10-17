@@ -352,9 +352,14 @@ public final class Doctor: @unchecked Sendable {
         environment: [String: String], options: Options, log: EventLogWriter
     ) async throws -> DoctorReport {
         var report = initial
-        // A stub for WORKBENCH_GOAL, so a verify that reads which pages to capture has a file to open.
+        // A stub for WORKBENCH_GOAL, so a verify that reads which pages to capture has a file to open. With
+        // `doctor_screenshot` it names that screenshot, as a real goal's `proof: screenshot:` would.
         let goal = scratch.appendingPathComponent("goal.md")
-        try Data("# doctor\n\nA throwaway goal: doctor has no task.\n".utf8).write(to: goal)
+        var stub = "# doctor\n\nA throwaway goal: doctor has no task.\n"
+        if let name = config.doctorScreenshot {
+            stub += "\n## Criteria\n\n- [c1] doctor\n  - proof: screenshot: \(name)\n"
+        }
+        try Data(stub.utf8).write(to: goal)
         let output = scratch.appendingPathComponent("verify.log")
         let proof = scratch.appendingPathComponent("proof")
         let ran = try await VerifyRunner(
@@ -368,8 +373,16 @@ public final class Doctor: @unchecked Sendable {
         report.verify = Self.step(
             command: command, result: ran.result, how: how, durationMs: ran.durationMs, output: output, hint: "")
         report.verifyFiles = ran.proof
-        if ran.result == .passed, ran.proof.isEmpty {
+        let named = config.doctorScreenshot.map(ScreenshotProof.fileName(for:))
+        if ran.result == .passed, let named, !ran.proof.contains(where: { $0.name == named }) {
+            // The step exited 0 without the screenshot a goal would ask for: that is what doctor is here to say.
+            report.verify = DoctorStep(
+                command: command, outcome: .failed(how: "passed, but wrote no \(named)"),
+                durationMs: ran.durationMs, tail: SetupRunner.tail(of: output),
+                hint: "doctor_screenshot asks verify for \(named) in WORKBENCH_PROOF_DIR")
+        } else if ran.result == .passed, ran.proof.isEmpty {
             report.verifyWarning = "wrote no files to WORKBENCH_PROOF_DIR: nothing would be shown as proof"
+                + (config.doctorScreenshot == nil ? " (set doctor_screenshot to have doctor ask verify for one)" : "")
         }
         return report
     }

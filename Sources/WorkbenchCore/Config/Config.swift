@@ -77,6 +77,10 @@ public struct Config: Sendable, Equatable {
     /// What the project's verify step drives. `desktop` needs Screen Recording, which `doctor` checks first;
     /// the verify command itself still owns its tooling.
     public var appType: AppType = .web
+    /// The screenshot `doctor` asks the verify step for, as a goal's `proof: screenshot: <name>` would. Without it
+    /// `doctor` gives verify a goal that names none, and a verify that captures only what a goal names passes
+    /// having done nothing.
+    public var doctorScreenshot: String?
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
@@ -123,6 +127,7 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min", "app_type",
+            "doctor_screenshot",
             "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
@@ -225,6 +230,19 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        func screenshotName() -> String? {
+            guard let (value, line) = string("", "doctor_screenshot") else { return nil }
+            guard ScreenshotProof.isValidName(value) else {
+                fail(
+                    .invalidValue, line,
+                    "'doctor_screenshot' must be one token of letters, digits, '.', '_' and '-' (at most 64): "
+                        + "the name of a screenshot proof")
+                return nil
+            }
+            return value
+        }
+        let doctorScreenshot = screenshotName()
+
         var appType = AppType.web
         if let (value, line) = string("", "app_type") {
             if let parsed = AppType(rawValue: value) {
@@ -289,7 +307,7 @@ public struct Config: Sendable, Equatable {
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
             verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
-            defaultBudgetUSD: budget,
+            doctorScreenshot: doctorScreenshot, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review)
     }
@@ -350,6 +368,7 @@ public struct Config: Sendable, Equatable {
         # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
         # verify_timeout_min = 10          # the verify step is killed after this long
         # app_type = "web"                 # "desktop" if verify captures the screen: doctor checks Screen Recording
+        # doctor_screenshot = "launch"     # doctor asks verify for this screenshot, so it proves verify captures one
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]

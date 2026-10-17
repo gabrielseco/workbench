@@ -401,6 +401,45 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         #expect(report.verifyWarning?.contains("WORKBENCH_PROOF_DIR") == true)
     }
 
+    // A verify that captures only what the goal names exits 0 having done nothing when doctor's goal names none
+    // (Triage's scripts/verify.sh: "nothing to capture"). doctor_screenshot makes doctor ask for one.
+    private static let verifyWritingWhatTheGoalNames = """
+        sed -n 's/^ *- *proof: *screenshot: *\\([A-Za-z0-9._-]*\\).*/\\1/p' "$WORKBENCH_GOAL" | while read -r n; do
+          printf 'png' > "$WORKBENCH_PROOF_DIR/$n.png"
+        done
+        """
+
+    @Test func doctorScreenshotNamesAScreenshotInTheGoalAndAVerifyThatWritesItPasses() async throws {
+        let (fx, _) = try await fixture(
+            verify: Self.verifyWritingWhatTheGoalNames, extra: "doctor_screenshot = \"launch\"")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(report.passed, "\(report.verify)")
+        #expect(report.verifyFiles.map(\.name) == ["launch.png"])
+        #expect(report.verifyWarning == nil)
+    }
+
+    @Test func aVerifyThatExitsZeroWithoutTheNamedScreenshotFailsDoctor() async throws {
+        let (fx, _) = try await fixture(verify: "true", extra: "doctor_screenshot = \"launch\"")
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(!report.passed)
+        guard case .failed(let how) = report.verify.outcome else {
+            Issue.record("verify was \(report.verify.outcome)")
+            return
+        }
+        #expect(how.contains("launch.png"), "\(how)")
+        #expect(report.verify.hint.contains("doctor_screenshot"))
+    }
+
+    @Test func withoutDoctorScreenshotAnEmptyVerifyStillWarnsAndSaysHowToAskForOne() async throws {
+        let (fx, _) = try await fixture(verify: Self.verifyWritingWhatTheGoalNames)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+
+        #expect(report.passed && report.verifyFiles.isEmpty)
+        #expect(report.verifyWarning?.contains("doctor_screenshot") == true, "\(report.verifyWarning ?? "")")
+    }
+
     @Test func verifyIsSkippedWhenSetupOrCheckDidNotPass() async throws {
         let (a, scriptA) = try await fixture(setup: "exit 1", verify: "touch \"$0.ran\"")
         let afterSetup = try await Doctor(project: a.project, git: a.git).run(base: "main", options: options())

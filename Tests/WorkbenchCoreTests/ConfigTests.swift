@@ -140,6 +140,20 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         }
     }
 
+    @Test func doctorScreenshotIsOneScreenshotNameOrNothing() throws {
+        let tools = "[tools]\navailable = [\"Read\"]\n"
+        #expect(try Config.parse(tools).doctorScreenshot == nil)
+        #expect(try Config.parse("doctor_screenshot = \"launch\"\n" + tools).doctorScreenshot == "launch")
+        for bad in ["", "../x", "a/b", "has space", "-lead", String(repeating: "a", count: 65)] {
+            do {
+                _ = try Config.parse("doctor_screenshot = \"\(bad)\"\n" + tools)
+                Issue.record("'\(bad)' loaded")
+            } catch let error as ConfigError {
+                #expect("\(error)".contains("doctor_screenshot"), "\(error)")
+            }
+        }
+    }
+
     @Test func theExampleConfigParses() throws {
         let config = try Config.parse(Config.exampleTOML)
         #expect(config.tools.available.contains("Bash"))

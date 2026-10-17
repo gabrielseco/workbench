@@ -183,6 +183,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # verify_command = "scripts/verify.sh"  # optional; run after each successful turn's check, writes evidence to $WORKBENCH_PROOF_DIR
 # verify_timeout_min = 10               # the verify step is killed, tree and all, after this long
 # app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording
+# doctor_screenshot = "launch"          # doctor asks verify for this screenshot, as a goal's `proof: screenshot: launch` would
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
@@ -297,7 +298,9 @@ Notes:
   A declared `verify_command` runs last, only after setup and check passed, through the same runner a thread
   uses (its `verify_timeout_min`, the proof-directory/port/thread/goal variables, the tree and detached-server
   sweep); `WORKBENCH_GOAL` points at a stub, and the files it wrote are listed. A pass that wrote no files is a
-  warning, not a failure. With `app_type = "desktop"`, doctor first checks that the process running it may
+  warning, not a failure, and the warning says how to ask for one. With `doctor_screenshot = "<name>"` the stub
+  names that screenshot as a criterion's `proof: screenshot: <name>`, and a verify that passes without writing
+  `<name>.png` fails doctor: a verify that captures only what a goal names would otherwise pass having done nothing. With `app_type = "desktop"`, doctor first checks that the process running it may
   record the screen (`CGPreflightScreenCaptureAccess`), and if not, fails without running the verify and names
   the Settings pane. `web` (the default) and an unset key are never checked; the verify command still owns its
   own tooling.
