@@ -108,7 +108,9 @@ extension ThreadService {
         }
 
         let round = rounds + 1
-        let paths = PRReviewPaths(folder: project.threadDirectory(id).appendingPathComponent(stage.folder), round: round)
+        let paths = PRReviewPaths(
+            folder: project.threadDirectory(id).appendingPathComponent(stage.folder), round: round,
+            tag: pr == PRReview.noPullRequest ? "-branch" : "")
         let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
         var context = PRReviewRound(
             id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal,
@@ -397,7 +399,8 @@ extension ThreadService {
     /// The NUL-separated files the pull request changes against its base, nil when git could not be asked. Without
     /// rename detection, so a file moved out of a matching path is listed by its old path too.
     private func changedFiles(_ round: PRReviewRound) async -> GitResult? {
-        guard await fetchBranch(round) == nil, case .success(let baseSHA) = await pinBase(round) else { return nil }
+        if round.pr != PRReview.noPullRequest, await fetchBranch(round) != nil { return nil }
+        guard case .success(let baseSHA) = await pinBase(round) else { return nil }
         return try? await git.run(
             ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
     }
@@ -525,13 +528,14 @@ struct PRReviewPaths: Sendable {
     var answer: URL
     var transcript: URL
 
-    init(folder: URL, round: Int) {
+    /// `tag` keeps the files of rounds counted apart (before and after the pull request) from sharing a name.
+    init(folder: URL, round: Int, tag: String = "") {
         self.folder = folder
-        tree = folder.appendingPathComponent("round-\(round).tree")
-        brief = folder.appendingPathComponent("round-\(round).brief.md")
-        diff = folder.appendingPathComponent("round-\(round).diff.patch")
-        answer = folder.appendingPathComponent("round-\(round).findings.md")
-        transcript = folder.appendingPathComponent("round-\(round).transcript.txt")
+        tree = folder.appendingPathComponent("round-\(round)\(tag).tree")
+        brief = folder.appendingPathComponent("round-\(round)\(tag).brief.md")
+        diff = folder.appendingPathComponent("round-\(round)\(tag).diff.patch")
+        answer = folder.appendingPathComponent("round-\(round)\(tag).findings.md")
+        transcript = folder.appendingPathComponent("round-\(round)\(tag).transcript.txt")
     }
 }
 

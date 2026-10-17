@@ -242,6 +242,45 @@ import Testing
         } catch let error as PRReviewRefusal { #expect(error == .alreadyReviewed(round: 1)) }
     }
 
+    @Test func aStageBeforeThePullRequestSkipsOnItsAppliesToWithoutOrigin() async throws {
+        let fx = try await RunnerFixture(
+            extraConfig: "\n[review]\nstages = [\"pr-review\", \"design\"]\n"
+                + "[review.stage.design]\napplies_to = [\"nothing/**\"]\n")
+        let (id, _) = try await acceptedThread(fx)
+        let codex = try FakeCodex(in: fx)
+        let config = try Config.load(from: fx.project.configURL)
+
+        let result = try await fx.service.reviewStage(
+            named: "design", id: id, config: config, codexPath: codex.path, environment: codex.environment())
+
+        #expect(result.skipped?.contains("nothing/**") == true && result.verdict == nil, "\(result)")
+        #expect(codex.runs == 0)
+    }
+
+    @Test func aRoundBeforeThePullRequestKeepsItsFilesWhenTheOneAfterIsRoundOneToo() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        let codex = try FakeCodex(in: fx)
+        try codex.put("answer", "Before.\nVERDICT: CLEAN\n")
+        let config = try Config.load(from: fx.project.configURL)
+        let folder = fx.project.threadDirectory(id).appendingPathComponent("pr-review")
+        _ = try await fx.service.prReview(
+            id: id, config: config, codexPath: codex.path, environment: codex.environment())
+
+        _ = try await addOrigin(fx)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        try codex.put("answer", "After.\nVERDICT: CLEAN\n")
+        let after = try await fx.service.prReview(
+            id: id, config: config, codexPath: codex.path, environment: codex.environment())
+
+        #expect(after.round == 1 && after.pr != PRReview.noPullRequest)
+        let before = try String(contentsOf: folder.appendingPathComponent("round-1-branch.findings.md"), encoding: .utf8)
+        let later = try String(contentsOf: folder.appendingPathComponent("round-1.findings.md"), encoding: .utf8)
+        #expect(before.contains("Before.") && later.contains("After."))
+    }
+
     @Test func aLiveRunOrAnotherCommandHoldingTheThreadRefusesAndSpawnsNothing() async throws {
         let r = try await reviewedPR()
         let held = try EventLogWriter.open(at: r.fx.project.eventsURL(r.id))
