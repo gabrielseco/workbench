@@ -18,9 +18,9 @@ if ! git rev-parse --verify -q "$base^{commit}" >/dev/null; then
     echo "error: base '$base' is not a commit here (git fetch origin main, or pass a base)" >&2
     exit 1
 fi
-committed=$(git diff --name-only "$base"...HEAD) || { echo "error: git diff against $base failed" >&2; exit 1; }
-uncommitted=$(git diff --name-only HEAD) || { echo "error: git diff HEAD failed" >&2; exit 1; }
-untracked=$(git ls-files --others --exclude-standard) || { echo "error: git ls-files failed" >&2; exit 1; }
+committed=$(git -c core.quotepath=off diff --name-only "$base"...HEAD) || { echo "error: git diff against $base failed" >&2; exit 1; }
+uncommitted=$(git -c core.quotepath=off diff --name-only HEAD) || { echo "error: git diff HEAD failed" >&2; exit 1; }
+untracked=$(git -c core.quotepath=off ls-files --others --exclude-standard) || { echo "error: git ls-files failed" >&2; exit 1; }
 # Deleted files stay in `changed`: they still decide what to check (a removed type can break what remains).
 changed=$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | grep . | sort -u)
 
@@ -29,8 +29,15 @@ if [ -z "$changed" ]; then
     exit 0
 fi
 
+# The word-splitting below cannot carry a path with whitespace: do the full check rather than skip it.
+if echo "$changed" | grep -q '[[:space:]]'; then
+    echo "==> A changed path contains whitespace: full check"
+    [ "$plan" = 1 ] && { echo "run: scripts/check.sh"; exit 0; }
+    exec scripts/check.sh
+fi
+
 # A change to the package or the check scripts can affect everything: do the full check.
-if echo "$changed" | grep -Eq '^(Package\.swift|Package\.resolved|\.swiftlint\.yml|scripts/check\.sh|scripts/check-banned-apis\.sh|\.github/workflows/)'; then
+if echo "$changed" | grep -Eq '^(Package\.swift|Package\.resolved|\.swiftlint\.yml|scripts/check\.sh|scripts/check-changed\.sh|scripts/check-banned-apis\.sh|\.github/workflows/)'; then
     echo "==> Package, lint config, check scripts or CI changed: full check"
     [ "$plan" = 1 ] && { echo "run: scripts/check.sh"; exit 0; }
     exec scripts/check.sh
@@ -88,6 +95,7 @@ fi
 [ -n "$unmapped" ] && echo "==> No tests found for:$unmapped (built, not tested)"
 if [ -n "$filter" ]; then echo "==> Test suites: $filter"; else echo "==> No test suites mapped"; fi
 if [ "$plan" = 1 ]; then
+    echo "run: scripts/check-banned-apis.sh"
     [ -n "$swift_files" ] && echo "run: swiftlint lint --quiet <changed files>"
     if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: swift build"; fi
     exit 0
@@ -106,12 +114,12 @@ step() {
 }
 
 step 'Banned process APIs' scripts/check-banned-apis.sh
-if ! command -v swiftlint >/dev/null 2>&1; then
-    echo "error: SwiftLint is missing (brew install swiftlint)" >&2
-    exit 1
-fi
-# shellcheck disable=SC2086  # one argument per changed file; Swift paths here have no spaces
 if [ -n "$swift_files" ]; then
+    if ! command -v swiftlint >/dev/null 2>&1; then
+        echo "error: SwiftLint is missing (brew install swiftlint)" >&2
+        exit 1
+    fi
+    # shellcheck disable=SC2086  # one argument per changed file; whitespace in paths took the full-check branch above
     step 'SwiftLint' swiftlint lint --quiet $swift_files
 fi
 if [ -n "$filter" ]; then

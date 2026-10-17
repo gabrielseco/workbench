@@ -30,11 +30,13 @@ import Testing
             try text.write(to: url, atomically: true, encoding: .utf8)
         }
 
-        func sh(_ arguments: [String], executable: String = "/bin/sh") async throws -> [String] {
+        func sh(
+            _ arguments: [String], executable: String = "/bin/sh", path: String = "/usr/bin:/bin"
+        ) async throws -> [String] {
             var spawn = SpawnRequest(
                 executable: URL(fileURLWithPath: executable), arguments: arguments,
                 environment: [
-                    "PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "GIT_CONFIG_GLOBAL": "/dev/null",
+                    "PATH": path, "HOME": NSHomeDirectory(), "GIT_CONFIG_GLOBAL": "/dev/null",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t",
                 ],
@@ -154,5 +156,85 @@ import Testing
         _ = try await repo.sh(["commit", "-qam", "change"], executable: "/usr/bin/git")
         let out = try await repo.sh(["scripts/check-changed.sh", "--plan", "HEAD~1"]).joined(separator: "\n")
         #expect(out.contains("swift test --filter \"FooMoreTests|FooTests\""), "\(out)")
+    }
+
+    @Test func aChangeToTheScriptItselfForcesTheFullCheck() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        let script = try String(contentsOf: repo.dir.appendingPathComponent("scripts/check-changed.sh"), encoding: .utf8)
+        try repo.write("scripts/check-changed.sh", script + "# edited\n")
+        let plan = try await repo.plan()
+        #expect(plan.contains("run: scripts/check.sh"), "\(plan)")
+    }
+
+    @Test func aPathWithWhitespaceForcesTheFullCheck() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/My File.swift", "struct MyFile {}\n")
+        let plan = try await repo.plan()
+        #expect(plan.contains("whitespace: full check"), "\(plan)")
+    }
+
+    @Test func aNonASCIIFilenameIsStillSeen() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Café.swift", "struct Cafe {}\n")
+        let plan = try await repo.plan()
+        #expect(plan.contains("Lint: 1 changed Swift file"), "\(plan)")
+    }
+
+    // MARK: execution, with stand-ins for swiftlint and swift
+
+    /// Stand-in tools on PATH that append their arguments to `calls.log`; `fail` names one that exits 1.
+    private func stubbed(_ repo: Repo, fail: String? = nil) throws -> String {
+        for tool in ["swiftlint", "swift"] {
+            let code = fail == tool ? 1 : 0
+            try repo.write("stubs/\(tool)", "#!/bin/sh\necho \"\(tool) $*\" >> \"$PWD/calls.log\"\nexit \(code)\n")
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: repo.dir.appendingPathComponent("stubs/\(tool)").path)
+        }
+        try repo.write("scripts/check-banned-apis.sh", "#!/bin/sh\necho \"banned-apis\" >> \"$PWD/calls.log\"\n")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: repo.dir.appendingPathComponent("scripts/check-banned-apis.sh").path)
+        return repo.dir.appendingPathComponent("stubs").path + ":/usr/bin:/bin"
+    }
+
+    private func calls(_ repo: Repo) throws -> [String] {
+        let log = try String(contentsOf: repo.dir.appendingPathComponent("calls.log"), encoding: .utf8)
+        return log.split(separator: "\n").map(String.init)
+    }
+
+    @Test func runningItLintsTheChangedFilesThenTestsTheirSuites() async throws {
+        let repo = try Repo()
+        let path = try stubbed(repo)
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1"], path: path)
+        #expect(out.last?.contains("Changed-file checks passed") == true, "\(out)")
+        #expect(
+            try calls(repo) == [
+                "banned-apis", "swiftlint lint --quiet Sources/Core/Foo.swift",
+                "swift test --filter FooMoreTests|FooTests",
+            ])
+    }
+
+    @Test func aFailingLintStopsBeforeTheTests() async throws {
+        let repo = try Repo()
+        let path = try stubbed(repo, fail: "swiftlint")
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1; echo exit=$?"], path: path)
+        #expect(out.contains("exit=1"), "\(out)")
+        #expect(try calls(repo).contains { $0.hasPrefix("swift test") } == false)
+    }
+
+    @Test func aFailingTestFailsTheCheck() async throws {
+        let repo = try Repo()
+        let path = try stubbed(repo, fail: "swift")
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1; echo exit=$?"], path: path)
+        #expect(out.contains("exit=1"), "\(out)")
     }
 }
