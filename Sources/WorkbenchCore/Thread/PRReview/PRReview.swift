@@ -187,9 +187,15 @@ public enum PRReviewRefusal: Error, Equatable, Sendable, CustomStringConvertible
     case busy
     case unknownStage(String, listed: [String])
     case stageCapReached(stage: String, pr: Int, rounds: Int, max: Int)
+    case pullRequestUnreadable(Int, String)
+    case notReviewable(Int, String)
 
     public var description: String {
         switch self {
+        case .pullRequestUnreadable(let number, let why):
+            "pull request #\(number) could not be read with `gh`: \(why)"
+        case .notReviewable(let number, let why):
+            "pull request #\(number) is not one `workbench pr-review --pr` reviews: \(why)"
         case .unknownStage(let name, let listed):
             "there is no review stage '\(name)' in review.stages (it lists \(listed.joined(separator: ", "))). "
                 + "Add it to [review] stages and give it a [review.stage.\(name)] table."
