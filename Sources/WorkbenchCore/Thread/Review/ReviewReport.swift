@@ -21,6 +21,8 @@ public struct ReviewReport: Sendable, Equatable {
     public var threadDirectory: URL?
     /// Where the thread's branch is now, nil when it is not known (no local branch).
     public var branchTip: String?
+    /// Whether the verify step's proof still describes the worktree; nil when there is no proof to judge.
+    public var proofFreshness: ProofFreshness?
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
@@ -39,6 +41,15 @@ public struct ReviewReport: Sendable, Equatable {
         case .awaitingReview: "accept | send-back \"<note>\" | discard"
         case .sentBack: "feedback is recorded and the next turn has not started. Run `workbench run`."
         case .decided(let decision): "nothing to decide: this thread was \(decision)."
+        }
+    }
+
+    static func freshnessText(_ freshness: ProofFreshness, commit: String?) -> String {
+        let at = commit.map { " at \($0.prefix(7))" } ?? ""
+        switch freshness {
+        case .current: return "proof taken\(at): still describes the work"
+        case .stale: return "proof taken\(at): STALE, the work changed after it; run verify again"
+        case .unknown: return "proof taken\(at): cannot tell whether the work changed (no tree recorded or not readable)"
         }
     }
 
@@ -172,6 +183,7 @@ public struct ReviewReport: Sendable, Equatable {
             if verify.proof.isEmpty {
                 lines.append("  no proof files")
             } else {
+                if let freshness = proofFreshness { lines.append("  " + Self.freshnessText(freshness, commit: verify.commit)) }
                 for file in verify.proof { lines.append("  \(file.path)  \(file.bytes) bytes") }
             }
         }
@@ -280,7 +292,24 @@ public struct ReviewLoader: Sendable {
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
-            threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id))
+            threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id),
+            proofFreshness: await proofFreshness(state))
+    }
+
+    /// Nil unless the latest verify step left proof; then whether the worktree still matches what it saw.
+    private func proofFreshness(_ state: ThreadState) async -> ProofFreshness? {
+        guard let verify = state.review.verify, !verify.proof.isEmpty else { return nil }
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        // After `ship` the worktree is gone and the branch is what is left: the committed work is what was shipped.
+        guard manager.exists(state.id) else {
+            guard let tip = await branchTip(state.id) else { return ProofFreshness.of(recordedTree: verify.tree, current: nil) }
+            return ProofFreshness.of(
+                recordedTree: verify.tree, current: await ProofIdentity.committed(ref: tip, in: project.root, git: git))
+        }
+        return ProofFreshness.of(
+            recordedTree: verify.tree,
+            current: await ProofIdentity.of(
+                worktree: manager.path(for: state.id), git: git, attributesFrom: recordedBase(state.id)))
     }
 
     /// Where `workbench/<id>` is, nil when the branch does not exist.

@@ -26,6 +26,11 @@ enum SafeNames {
         isBranchName(s) && !["main", "master", "trunk", "develop", "head"].contains(s.lowercased())
     }
 
+    /// A full commit id (40 or 64 hex digits), as `worktree.created` records it.
+    static func isCommitSHA(_ s: String) -> Bool {
+        s.range(of: #"^([0-9a-f]{40}|[0-9a-f]{64})$"#, options: .regularExpression) != nil
+    }
+
     /// A branch or ref name we are willing to pass to git: no leading `-`, no `..`, no whitespace.
     static func isBranchName(_ s: String) -> Bool {
         s.range(of: #"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"#, options: .regularExpression) != nil

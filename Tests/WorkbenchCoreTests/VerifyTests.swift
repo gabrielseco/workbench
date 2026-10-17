@@ -71,6 +71,28 @@ extension RunnerFixture {
         #expect(notices.all.contains { if case .verifyEnded(let v) = $0 { v.proof.count == 2 } else { false } })
     }
 
+    @Test func theStepRecordsTheCommitAndTreeItRanAtOnStartAndOnEveryProofFile() async throws {
+        let script = try CheckScript()
+        let body = "printf a > \"$WORKBENCH_PROOF_DIR/a.png\"\nprintf b > \"$WORKBENCH_PROOF_DIR/b.png\""
+        let fx = try await verifyFixture(script, body: body)
+        let id = try await fx.approvedThread()
+        // The turn's own change is in the tree verify saw, committed or not.
+        _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        let now = try #require(await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil))
+        let started = try #require(try fx.events(id).first { $0.kind == .verifyStarted })
+        #expect(started.data["commit"]?.stringValue == now.commit)
+        #expect(started.data["tree"]?.stringValue == now.tree)
+        let proof = try fx.proofEvents(id)
+        #expect(proof.count == 2)
+        for event in proof {
+            #expect(event.data["commit"]?.stringValue == now.commit)
+            #expect(event.data["tree"]?.stringValue == now.tree)
+        }
+        let verify = try #require(ThreadStore(project: fx.project).state(of: id).review.verify)
+        #expect(verify.tree == now.tree)
+    }
+
     @Test func aFailingVerifyIsRecordedAndKeepsWhatItWrote() async throws {
         let script = try CheckScript()
         let fx = try await verifyFixture(

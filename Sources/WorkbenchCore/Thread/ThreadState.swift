@@ -36,6 +36,10 @@ public struct Review: Sendable, Equatable {
         public var outputRef: String?
         public var command: String?
         public var proof: [ProofFile]
+
+        /// The commit and tree the proof was taken at; every file of a step shares them.
+        public var commit: String? { proof.lazy.compactMap(\.commit).first }
+        public var tree: String? { proof.lazy.compactMap(\.tree).first }
     }
 
     /// The latest `judge.ran`: the advisory judge's verdict for a turn, or why there was none.
@@ -265,7 +269,8 @@ public struct ThreadState: Sendable, Equatable {
             pending.append(
                 ProofFile(
                     name: name, path: path, sha256: event.data["sha256"]?.stringValue ?? "",
-                    bytes: event.data["bytes"]?.intValue ?? 0))
+                    bytes: event.data["bytes"]?.intValue ?? 0, commit: event.data["commit"]?.stringValue,
+                    tree: event.data["tree"]?.stringValue))
         default:
             if state.openVerify == event.turn { state.openVerify = nil }
             state.progress.note(event.ts, "verify \(event.data["result"]?.stringValue ?? "ran")")
