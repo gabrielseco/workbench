@@ -250,13 +250,17 @@ func answer(_ json: String) -> String {
         #expect(throws: PRDescribeError.self) { try PRRefresher.parse(output: answer(json), current: current) }
     }
 
-    @Test func aTitleOverTheLimitIsRefusedUnlessItIsTheCurrentOne() throws {
+    @Test func aNewTitleOverTheLimitIsCutAndTheCurrentOneIsLeftAlone() throws {
         let long = String(repeating: "x", count: PRBodyBuilder.titleLimit + 5)
         let current = PRText(title: long, body: sampleBody)
-        #expect(throws: PRDescribeError.self) {
-            try PRRefresher.parse(output: answer(#"{"title": "\#(long)y", "sections": {}}"#), current: current)
-        }
         let same = try PRRefresher.parse(output: answer(#"{"title": "\#(long)", "sections": {}}"#), current: current)
         #expect(same.title == long && same.sections.isEmpty)
+
+        let words = "chore(contracts): bump the pinned schema versions for five countries and refresh the canary pins"
+        let cut = try PRRefresher.parse(
+            output: answer(#"{"title": "\#(words)", "sections": {}}"#),
+            current: PRText(title: "chore: bump five countries", body: sampleBody))
+        #expect(cut.title.count <= PRBodyBuilder.titleLimit && words.hasPrefix(cut.title + " "), "\(cut.title)")
+        #expect(cut.title != "chore: bump five countries")
     }
 }
