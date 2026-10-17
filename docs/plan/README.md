@@ -17,6 +17,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P2](P2-review.md) | Review | `workbench review` shows diff and check results; accept, send back, discard | S |
 | [P2.5](P2.5-ship.md) | Ship | `workbench ship` pushes an accepted thread and opens its PR; Claude never holds credentials | S |
 | [P2.6](P2.6-harden.md) | Harden | `setup_command`, a `status` that says working or stuck, thread ids on `status` and `log`; the probe's fixes | S |
+| [P2.7](P2.7-pr-sections.md) | PR sections | `ship` fills the template's Why from the goal and What changed from the diff, so no section is left empty | S |
 | [P4](P4-verify.md) | Verify | `verify_command` runs in the background and a thread ends with screenshots, a recorded result and an advisory verdict; piloted on expense-tracker, then Triage | M |
 | [P5](P5-review-loop.md) | Review loop | `workbench pr-review` runs a second reviewer on the shipped PR; `ship --review-loop` feeds its findings back as turns until clean or a cap | S |
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order | M |
