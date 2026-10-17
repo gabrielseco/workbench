@@ -147,6 +147,64 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         #expect(try fx.contents(id).isHealthy)
     }
 
+    @Test func aCutNumstatIsNeverPublishedAsTheWholeChange() {
+        let whole = GitResult(status: 0, stdout: "3\t1\ta.txt\0", stderr: "")
+        #expect(ThreadService.changes(from: whole).map(\.path) == ["a.txt"])
+        var cut = whole
+        cut.outputTruncated = true
+        #expect(ThreadService.changes(from: cut).isEmpty, "a partial list would be stated as complete")
+        #expect(ThreadService.changes(from: GitResult(status: 128, stdout: "3\t1\ta.txt\0", stderr: "")).isEmpty)
+        #expect(ThreadService.changes(from: nil).isEmpty)
+    }
+
+    @Test func theOpenedPRFillsWhatChangedFromTheBranchesDiff() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let templatePath = fx.repo.appendingPathComponent(".github/pull_request_template.md")
+        try FileManager.default.createDirectory(
+            at: templatePath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let template = """
+            ## Summary
+
+            <!-- what -->
+
+            ## Why
+
+            <!-- why -->
+
+            ## What changed
+
+            <details>
+            <summary>Files and behaviour</summary>
+
+            <!-- per area -->
+
+            </details>
+
+            ## Testing
+
+            - [ ] checked
+            """
+        try (template + "\n").write(to: templatePath, atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "template"], in: fx.repo)
+
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "one\nhello\n".write(to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try "new\n".write(to: worktree.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        try await fx.service.accept(id: id, message: "chore: work")
+        _ = try await addOrigin(fx)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+        let body = try #require(gh.read("body"))
+        #expect(body.contains("## What changed\n\n<details>\n<summary>Files and behaviour (2 files"), "\(body)")
+        #expect(body.contains("- `a.txt`  +") && body.contains("- `b.txt`  +1 \u{2212}0"), "\(body)")
+        #expect(!body.contains("<!-- per area -->"))
+    }
+
     @Test func theBodyIsTheBuilderWithTheTemplateFromTheBaseCommit() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

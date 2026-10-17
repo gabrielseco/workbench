@@ -4,6 +4,8 @@ public struct GitResult: Sendable, Equatable {
     public var status: Int32
     public var stdout: String
     public var stderr: String
+    /// `stdout` or `stderr` hit `GitRunner.outputLimit` and was cut. A caller that publishes what it parsed must check this.
+    public var outputTruncated = false
 
     public var succeeded: Bool { status == 0 }
 }
@@ -109,18 +111,20 @@ public struct GitRunner: Sendable {
         case .signaled(let signal): status = 128 + signal
         case .lost: status = -1
         }
-        return GitResult(status: status, stdout: Self.read(outFile), stderr: Self.read(errFile))
+        let out = Self.read(outFile), err = Self.read(errFile)
+        return GitResult(
+            status: status, stdout: out.text, stderr: err.text, outputTruncated: out.truncated || err.truncated)
     }
 
     private static func scratchFile() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("wb-git-\(UUID().uuidString)")
     }
 
-    private static func read(_ url: URL) -> String {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
+    private static func read(_ url: URL) -> (text: String, truncated: Bool) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return ("", false) }
         defer { try? handle.close() }
-        let data = (try? handle.read(upToCount: outputLimit)) ?? Data()
-        return String(decoding: data, as: UTF8.self)
+        let data = (try? handle.read(upToCount: outputLimit + 1)) ?? Data()
+        return (String(decoding: data.prefix(outputLimit), as: UTF8.self), data.count > outputLimit)
     }
 }
 
