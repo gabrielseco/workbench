@@ -32,7 +32,8 @@ public enum PromptBuilder {
                 While you work, check what you changed with the narrowest command you are allowed to run \
                 (one test target or file) instead of the full check each time. The full check is \
                 `\(check)`: Workbench runs it itself when you finish, and that run is what the reviewer \
-                sees. Run it yourself at most once, at the end, to be sure.
+                sees, so you do not need to run it. If you want its result first, run it once, and \
+                run it again only if you changed something after that run.
 
                 """
         }

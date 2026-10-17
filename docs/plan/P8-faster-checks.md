@@ -1,6 +1,6 @@
 # P8: Faster checks inside a thread
 
-Status: plan; tasks 1 (measure) and 2 (tighter mapping) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
+Status: plan; tasks 1 (measure), 2 (tighter mapping) and 3 and 4 (say it, one check) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
 each turn) and the diff-scoped `scripts/check-changed.sh` (#86).
 
 ## What was measured
@@ -63,13 +63,15 @@ Times are read from the event log's timestamps. The causes below were not measur
    own named suites. When more than a set number of suites (default 15) would run, print which files caused it and
    run the named ones plus a full `swift build --build-tests`, leaving the wide run to CI. `--quick` runs lint and
    only the name-matched suites.
-3. **Say it in the goal (S).** The goal template's last criterion reads "the changed files lint clean and their
-   suites pass (`scripts/check-changed.sh`, run once at the end)", and the first prompt tells Claude to use
-   `swift test --filter` on the suites it touched while working. The allowlist already permits both.
-4. **One authoritative check (S).** Decide whether Claude's last run and Workbench's post-turn run are both needed.
-   Workbench's run is the recorded one, so the proposal is: Claude may run the narrow filter freely, but treats
-   `check-changed.sh` as Workbench's job unless it has changed something after the last run. Needs a prompt change
-   and a look at how often a failing post-turn check then costs a whole `send-back`.
+3. **Say it in the goal (S). Built as spec guidance.** There is no goal template in code (goals are written by hand or
+   by an agent), so the rule lives in `docs/spec/goal-file.md`: write the check criterion as "the changed files lint
+   clean and their suites pass" and let `check_command` prove it, because a criterion that names the full check makes
+   a run execute it inside its turn (friction #47). The prompt already tells a run to use the narrowest command it
+   is allowed; the project's allowlist is what gives it `swift test --filter`.
+4. **One authoritative check (S). Built.** Workbench's post-turn run is the recorded one, so the "Checking your work"
+   section now says a run need not run `check_command`; if it does, once, and again only after changing something.
+   Not measured yet: how often a failing post-turn check then costs a `send-back`. After task 2 the check takes
+   seconds on a core change, so the cost of Claude running it once is also small; read it off the next few threads.
 
 ## Tests
 

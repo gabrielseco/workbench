@@ -222,7 +222,9 @@ Notes:
   `--restricted` they would not be: spike S3 showed they can write anywhere on disk.
 - **While working, a run is told to prefer the narrowest check it is allowed.** The "Checking your work"
   section of the first prompt says the full `check_command` is run by Workbench when the turn ends, and that
-  the run itself should use it at most once, at the end. Allowing a narrow test command in `[tools]`
+  the run need not run it: if it does, once, and again only after changing something. A criterion that names the
+  full check ("`scripts/check.sh` passes") makes a run do exactly that inside its turn, so write it as "the changed
+  files lint clean and their suites pass" and let the project's `check_command` prove it. Allowing a narrow test command in `[tools]`
   (for Swift: `Bash(swift build:*)`, `Bash(swift test --filter:*)`) is what gives it a fast loop.
 - **The check command is a literal prefix.** `check_command = "scripts/check.sh"` becomes
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
