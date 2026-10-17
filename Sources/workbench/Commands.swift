@@ -244,14 +244,18 @@ enum Commands {
         var a = Arguments(args)
         let base = try a.value("--base")
         let updating = try a.value("--update")
+        let from = try a.value("--from")
         guard let name = a.positional() else {
-            throw CLIError.usage("usage: workbench goal new <name> [--base <branch> | --update <branch>]")
+            throw CLIError.usage(
+                "usage: workbench goal new <name> [--base <branch> | --update <branch>] [--from <goal-file>]")
         }
         try a.requireEmpty()
+        let body = try from.map { try ThreadService.goalBody(copying: URL(fileURLWithPath: $0)) }
 
         let ctx = try await Context.load()
         let config = try? Config.load(from: ctx.project.configURL)
-        let id = try await ctx.service.newThread(name: name, base: base, updating: updating, config: config)
+        let id = try await ctx.service.newThread(
+            name: name, base: base, updating: updating, config: config, body: body)
         out("created \(id)")
         out("edit:    \(ctx.project.goalURL(id).path)")
         out("then:    workbench goal approve")

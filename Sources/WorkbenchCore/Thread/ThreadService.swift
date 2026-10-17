@@ -17,9 +17,15 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case changedSinceAcceptShown
     case invalidPushTarget(String)
     case updateWithBase
+    case copySourceMissing(String)
+    case copySourceTooLarge(String)
+    case noFreeID(String)
 
     public var description: String {
         switch self {
+        case .copySourceMissing(let path): "no goal file to copy at \(path)"
+        case .copySourceTooLarge(let path): "\(path) is too large to be a goal file"
+        case .noFreeID(let id): "could not find a free id for '\(id)'; try another name"
         case .invalidPushTarget(let name):
             "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
         case .updateWithBase:
@@ -54,11 +60,17 @@ public struct ThreadService: Sendable {
     public let project: Project
     public let git: GitRunner
     public let now: @Sendable () -> Date
+    /// Four lower-case hex digits that tell a repeated goal's id from the first run's; injectable for tests.
+    public let idSuffix: @Sendable () -> String
 
-    public init(project: Project, git: GitRunner, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        project: Project, git: GitRunner, now: @escaping @Sendable () -> Date = { Date() },
+        idSuffix: @escaping @Sendable () -> String = { String(format: "%04x", UInt16.random(in: .min ... .max)) }
+    ) {
         self.project = project
         self.git = git
         self.now = now
+        self.idSuffix = idSuffix
     }
 
     private var store: ThreadStore { ThreadStore(project: project) }
@@ -94,8 +106,7 @@ public struct ThreadService: Sendable {
             try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(updating)
         }
         let day = DateFormatter.dayStamp.string(from: now())
-        let id = "g-\(day)-\(name)"
-        try store.create(id: id)
+        let id = try await createThreadDirectory(for: "g-\(day)-\(name)")
 
         let baseBranch: String
         if let updating {
