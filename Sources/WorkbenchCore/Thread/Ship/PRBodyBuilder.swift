@@ -20,7 +20,7 @@ public enum PRBodyBuilder {
     ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
     public static func build(
         goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil, description: PRDescription? = nil,
-        verify: Review.Verify? = nil, proofAvailable: (ProofFile) -> Bool = { _ in true }
+        verify: Review.Verify? = nil, changes: [FileChange] = [], proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> PRBody {
         let request =
             description.map { described($0) }
@@ -39,7 +39,9 @@ public enum PRBodyBuilder {
 
         let body: String
         if let template, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            body = fill(template: template, summary: request, why: planTask(in: request), testing: testing)
+            body = fill(
+                template: template, summary: request, why: why(goal: goal, description: description),
+                changes: changesSection(changes), testing: testing)
         } else {
             var sections = ["## Summary\n\n" + request]
             if !criteria.isEmpty { sections.append("## Criteria\n\n" + criteria) }
@@ -108,6 +110,44 @@ public enum PRBodyBuilder {
         }.joined(separator: "\n")
     }
 
+    /// The `Why` section: the model's short `why` followed by the goal's `(Plan: …)` line; without a `why`, the plan
+    /// line alone, else (when a model wrote the Summary) the first paragraph of what was asked. The plan line is
+    /// read from the goal, never from the described text.
+    static func why(goal: Goal, description: PRDescription?) -> String? {
+        let task = planTask(in: goal.request)
+        // The model's one or two sentences, then the plan reference when the goal names one.
+        if let said = description.map({ scrub($0.why).trimmingCharacters(in: .whitespacesAndNewlines) }), !said.isEmpty {
+            return task.map { said + "\n\n" + $0 } ?? said
+        }
+        if let task { return task }
+        guard description != nil else { return nil }
+        let first = scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: "\n\n").first ?? ""
+        let text = first.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    static let changesLimit = 40
+
+    /// `What changed`, from the diff and not from the model: one line per file inside the template's `<details>`.
+    static func changesSection(_ changes: [FileChange]) -> String? {
+        guard !changes.isEmpty else { return nil }
+        let rows = changes.prefix(changesLimit).map { change -> String in
+            let name = change.oldPath.map { "`\(oneLine($0))` → `\(oneLine(change.path))`" } ?? "`\(oneLine(change.path))`"
+            guard !change.isBinary, let added = change.additions, let deleted = change.deletions else {
+                return "- \(name)  binary"
+            }
+            return "- \(name)  +\(added) −\(deleted)"
+        }
+        var lines = Array(rows)
+        if changes.count > changesLimit { lines.append("- and \(changes.count - changesLimit) more files") }
+        let added = changes.reduce(0) { $0 + ($1.additions ?? 0) }
+        let deleted = changes.reduce(0) { $0 + ($1.deletions ?? 0) }
+        let total = "\(changes.count) file\(changes.count == 1 ? "" : "s")  +\(added) −\(deleted)"
+        return "<details>\n<summary>Files and behaviour (\(total))</summary>\n\n" + lines.joined(separator: "\n")
+            + "\n\n</details>"
+    }
+
     /// The `(Plan: …)` line a goal may carry, without its wrapper.
     static func planTask(in request: String) -> String? {
         for raw in request.split(whereSeparator: \.isNewline) {
@@ -124,9 +164,9 @@ public enum PRBodyBuilder {
 
     // MARK: Template
 
-    /// Keeps the template's headings in order. `Summary`, `Why`/`Context` and `Testing` are filled; any other
+    /// Keeps the template's headings in order. `Summary`, `Why`/`Context`, `What changed` and `Testing` are filled; any other
     /// section keeps the template's own text. HTML comments are instructions to the author and are dropped.
-    static func fill(template: String, summary: String, why: String?, testing: String) -> String {
+    static func fill(template: String, summary: String, why: String?, changes: String? = nil, testing: String) -> String {
         let text = template.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: "", options: .regularExpression)
 
@@ -162,6 +202,7 @@ public enum PRBodyBuilder {
                 case "summary": content = summary
                 case "testing": content = testing
                 case "why", "context": if let why { content = why }
+                case "what changed": if let changes { content = changes }
                 default: break
                 }
                 parts.append(content.isEmpty ? heading : heading + "\n\n" + content)

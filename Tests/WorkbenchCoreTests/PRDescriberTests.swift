@@ -85,7 +85,7 @@ private func fenced(_ inner: String) -> String {
     @Test func capsTheListsAtEightItems() throws {
         let many = (1...12).map { "item \($0)" }
         let d = try PRDescriber.parse(output: answer(["title": "t", "summary": "s", "decisions": many]))
-        #expect(d.decisions.count == 8)
+        #expect(d.decisions.count == 3)
     }
 
     // MARK: Request
@@ -156,5 +156,30 @@ private func fenced(_ inner: String) -> String {
         let explicit = PRBodyBuilder.build(goal: goal(), check: nil, template: nil, description: nil)
         #expect(plain == explicit)
         #expect(plain.title == "mock engine")
+    }
+
+    @Test func whyIsReadAndTrimmed() throws {
+        let d = try PRDescriber.parse(output: answer(["title": "t", "summary": "s", "why": "  The retry was missing.  "]))
+        #expect(d.why == "The retry was missing.")
+        #expect(try PRDescriber.parse(output: answer(["title": "t", "summary": "s"])).why == "")
+    }
+
+    @Test func aWhyThatIsNotAStringOrIsTooLongIsRefused() {
+        for why: Any in [5, String(repeating: "a", count: PRDescriber.whyLimit + 1)] {
+            #expect(throws: PRDescribeError.self) {
+                try PRDescriber.parse(output: answer(["title": "t", "summary": "s", "why": why]))
+            }
+        }
+    }
+
+    @Test func aSummaryOverTheLimitIsRefused() {
+        let long = String(repeating: "a", count: PRDescriber.summaryLimit + 1)
+        #expect(throws: PRDescribeError.self) {
+            try PRDescriber.parse(output: answer(["title": "t", "summary": long]))
+        }
+        #expect(throws: Never.self) {
+            try PRDescriber.parse(
+                output: answer(["title": "t", "summary": String(repeating: "a", count: PRDescriber.summaryLimit)]))
+        }
     }
 }

@@ -141,9 +141,15 @@ extension ThreadService {
             }
         }
         let state = ThreadState.derive(from: events, id: plan.id)
+        // Read from the repository's refs, so it works once the worktree is gone. A diff that cannot be read
+        // leaves the section as the template has it; it never stops the PR.
+        let numstat = try? await git.run(
+            ["diff", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", "\(plan.base)...\(plan.head)", "--"],
+            in: project.root)
+        let changes = numstat?.succeeded == true ? DiffProvider.parseNumstat(numstat?.stdout ?? "") : []
         var body = PRBodyBuilder.build(
             goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn,
-            description: description, verify: state.review.verify,
+            description: description, verify: state.review.verify, changes: changes,
             proofAvailable: { [dir = project.threadDirectory(plan.id)] in $0.isAvailable(in: dir) })
         // What is published must not carry a credential that was pasted into the goal or the template.
         body.title = Self.withoutCredentials(body.title, environment: environment)
