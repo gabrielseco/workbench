@@ -31,6 +31,9 @@ let usage = """
                                  ask a second, read-only Claude run whether the check, the verify step, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
                                  beside your own checks, never changes accept or ship; once per turn unless --again
+      pr-review --pr <n> [--spec <file>] [--again]
+                                 the same review for a pull request no thread made (one written by hand): its own
+                                 text is the goal, or the file; kept under .workbench/reviews/, no rounds counted
       pr-review [id] [--again]   after ship: Codex reviews the pull request, read-only, in a throwaway checkout
                                  of its head; prints the findings and records the round (shown by review);
                                  at most max_rounds ([pr_review]) per pull request, --again does not lift that

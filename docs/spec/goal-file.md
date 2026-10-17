@@ -95,6 +95,17 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   stored in the thread's folder and printed; `review` shows the round and says when the branch has moved since. The
   review needs only the pull request, not the thread's worktree, so it works after `ship` removed it. Nothing is posted
   to the pull request and nothing changes what `accept` or `ship` do.
+- **`workbench pr-review --pr <n> [--spec <file>]` is the same review for a pull request no thread made.** A pull
+  request written by hand has no goal file and no event log, so: `gh pr view` gives its branch, base, title and
+  description (open pull requests from this repository only; a fork, a closed one or a branch name that is not safe
+  for git is refused), and the title and description, or the `--spec` file (text, at most 64 KiB), are the goal in
+  the brief. The round is the thread's own (`runRound`): the checkout of the branch as origin has it, the base
+  pinned, the diff in a file, read-only Codex, a verdict line or a failure. Nothing is written to a log and no round is
+  counted, so there is no cap; the findings, the brief and the transcript are kept under
+  `.workbench/reviews/pr-<n>-<sha7>/`, and a branch that has not moved there is refused unless `--again`. One such
+  review at a time per project (a lock the kernel drops with the process, so the next is `busy` and never stale); it
+  first ends what a killed one left, for any pull request. `gh` is told origin's repository (`--repo`) when origin is
+  a GitHub URL, and `GH_REPO` is dropped from its environment. Exit codes are the thread review's.
 - **`workbench ship --review-loop` turns each round of findings into a follow-up thread.** After the pull request is
   open (or on a thread that already shipped: it starts at the review) it runs `pr-review`. On `VERDICT: FIX`, and
   while `max_rounds` allows another review, it makes a new thread on the same branch (`goal new --update`, named

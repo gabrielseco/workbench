@@ -97,8 +97,8 @@ extension ThreadService {
         let paths = PRReviewPaths(folder: project.threadDirectory(id).appendingPathComponent(stage.folder), round: round)
         let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
         var context = PRReviewRound(
-            id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal, tip: tip,
-            paths: paths, config: config, settings: settings)
+            id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal,
+            goalRest: project.goalURL(id).path, tip: tip, paths: paths, config: config, settings: settings)
         if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
 
         // A skip spends no round, so it writes no `started`; when the changed files cannot be read whole the round runs.
@@ -142,7 +142,7 @@ extension ThreadService {
 
     // MARK: A round
 
-    private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
+    func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome(warnings: round.warnings)
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
@@ -175,7 +175,7 @@ extension ThreadService {
 
         var input = PRReviewInput(
             pr: round.pr, branch: round.branch, base: round.base, headSHA: sha, baseSHA: baseSHA,
-            goal: Self.bounded(round.goal, limit: PRReview.goalLimit, rest: project.goalURL(round.id).path),
+            goal: Self.bounded(round.goal, limit: PRReview.goalLimit, rest: round.goalRest),
             instructions: nil, checklist: nil, checklistPath: nil,
             diffPath: paths.diff.path, diffTruncated: truncated, proof: proof)
         if round.config.projectInstructions {
@@ -351,7 +351,7 @@ extension ThreadService {
     }
 
     /// Removes the throwaway checkout and the saved diff. Never forced on anything but its own folder.
-    private func removeTree(_ paths: PRReviewPaths) async {
+    func removeTree(_ paths: PRReviewPaths) async {
         // A child Codex started in a new session and left can outlive the runner's own sweep; find it by its working
         // directory while the checkout is still there.
         OrphanSweeper.sweep(inside: paths.folder)
@@ -552,6 +552,8 @@ struct PRReviewRound: Sendable {
     var base: String
     var recordedBase: String?
     var goal: String
+    /// Where the rest of `goal` is, said in the brief when the goal is cut: its file, or the pull request.
+    var goalRest: String
     var tip: String
     var paths: PRReviewPaths
     var config: Config
