@@ -265,7 +265,7 @@ Notes:
   most 20) and lists their paths in the brief; with no verify step, one from before the latest turn, or no
   PNG left, the round fails, never passes, and `doctor` warns when such a stage has no `verify_command`.
   `applies_to` globs (`**` any run of folders, `*` within one name) are matched against the files the pull
-  request changes; a stage, `pr-review` included, that matches none is recorded as skipped and runs nothing.
+  request changes (a renamed file counts by its old path and its new one); a stage, `pr-review` included, that matches none is recorded as skipped and runs nothing.
   An empty list (the default) always runs, and so does a round whose list of changed files git could not give
   whole, with a note saying so. Other `inputs` (a file path, or leaving out `diff` or `goal`) are not read
   yet; a round of a stage that sets them says so in a note.

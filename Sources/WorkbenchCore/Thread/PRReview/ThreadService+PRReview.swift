@@ -64,9 +64,9 @@ extension ThreadService {
         _ stage: ReviewStage, id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
         attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PRReviewResult {
-        // A round that was killed leaves its `codex` and its checkout behind. This process holds the thread's log, so
-        // none of them is live: end them now, before any refusal can leave them for good.
-        await recoverLeftovers(in: project.threadDirectory(id).appendingPathComponent(stage.folder))
+        // A round that was killed leaves its `codex` and its checkout behind, in any stage's folder. This process holds
+        // the thread's log, so none of them is live: end them now, before any refusal can leave them for good.
+        await recoverStageLeftovers(id: id, review: config.review)
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -343,22 +343,6 @@ extension ThreadService {
         return .success((cut ? Self.cut(result.stdout, PRReview.diffLimit) : result.stdout, cut))
     }
 
-    /// Ends what an earlier, killed round left: a `codex` still running in the folder, a registered checkout, a saved diff.
-    private func recoverLeftovers(in folder: URL) async {
-        guard FileManager.default.fileExists(atPath: folder.path) else { return }
-        OrphanSweeper.sweep(inside: folder)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        for name in names where name.hasPrefix("round-") && name.hasSuffix(".tree") {
-            let tree = folder.appendingPathComponent(name)
-            _ = try? await git.run(["worktree", "remove", "--force", tree.path], in: project.root)
-            try? FileManager.default.removeItem(at: tree)
-        }
-        for name in names where name.hasPrefix("round-") && name.hasSuffix(".diff.patch") {
-            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
-        }
-        _ = try? await git.run(["worktree", "prune"], in: project.root)
-    }
-
     /// Removes the throwaway checkout and the saved diff. Never forced on anything but its own folder.
     private func removeTree(_ paths: PRReviewPaths) async {
         // A child Codex started in a new session and left can outlive the runner's own sweep; find it by its working
@@ -412,10 +396,12 @@ extension ThreadService {
 
     // MARK: Inputs
 
-    /// The NUL-separated files the pull request changes against its base, nil when git could not be asked.
+    /// The NUL-separated files the pull request changes against its base, nil when git could not be asked. Without
+    /// rename detection, so a file moved out of a matching path is listed by its old path too.
     private func changedFiles(_ round: PRReviewRound) async -> GitResult? {
         guard await fetchBranch(round) == nil, case .success(let baseSHA) = await pinBase(round) else { return nil }
-        return try? await git.run(["diff", "--no-ext-diff", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
+        return try? await git.run(
+            ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
     }
 
     /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify

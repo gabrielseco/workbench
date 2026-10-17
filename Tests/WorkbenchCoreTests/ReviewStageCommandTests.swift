@@ -72,6 +72,35 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
         #expect(r.started.first?.data["stage"] == nil, "pr_review.* events are unchanged")
         #expect(stageEvents(r, .reviewStageStarted, stage: "pr-review").isEmpty)
     }
+
+    @Test func anotherStagesKilledRoundIsEndedBeforeThisStagesReviewerStarts() async throws {
+        let r = try await reviewedPR(extraConfig: stagesConfig())
+        // The tree and the `codex` of a design round whose process was killed.
+        let design = r.fx.project.threadDirectory(r.id).appendingPathComponent("design")
+        let tree = design.appendingPathComponent("round-1.tree")
+        _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, r.head], in: r.fx.repo)
+        let null = open("/dev/null", O_WRONLY)
+        defer { close(null) }
+        let sh = try Spawner.spawn(
+            executable: "/bin/sh", arguments: ["-c", "exec sleep 300 &"], environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: tree.path, stdout: null, stderr: null)
+        var status: Int32 = 0
+        waitpid(sh, &status, 0)
+        var found: ProcessMember?
+        _ = await pollUntil {
+            found = OrphanSweeper.orphans(inside: design).first
+            return found != nil
+        }
+        let stray = try #require(found, "the helper process should be orphaned and found by its cwd").pid
+        defer { kill(stray, SIGKILL) }
+
+        let result = try await runStage("pr-review", r)
+        #expect(result.verdict == .clean, "\(result)")
+        #expect(await pollUntil { kill(stray, 0) != 0 }, "design's stray codex was ended")
+        #expect(!FileManager.default.fileExists(atPath: tree.path), "design's checkout was removed")
+        #expect(r.codex.runs == 1 && r.started.count == 1 && r.finished.count == 1)
+        try await r.expectNoLeftovers()
+    }
 }
 
 // MARK: round caps
@@ -227,6 +256,31 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
         ]
         for (pattern, path) in yes { #expect(ReviewStage.glob(pattern, matches: path), "\(pattern) ~ \(path)") }
         for (pattern, path) in no { #expect(!ReviewStage.glob(pattern, matches: path), "\(pattern) !~ \(path)") }
+    }
+
+    @Test func aRenameOutOfAMatchingPathRunsTheStage() async throws {
+        let r = try await reviewedPR(extraConfig: stagesConfig("applies_to = [\"Sources/**\"]"))
+        // Sources/a.swift is on the base; the pull request only moves it out.
+        let sources = r.fx.repo.appendingPathComponent("Sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        try "let a = 1\n".write(to: sources.appendingPathComponent("a.swift"), atomically: true, encoding: .utf8)
+        let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+        try FileManager.default.createDirectory(at: worktree.appendingPathComponent("Archive"), withIntermediateDirectories: true)
+        for (args, dir) in [
+            (["add", "Sources/a.swift"], r.fx.repo), (["commit", "-q", "-m", "feat: a"], r.fx.repo),
+            (["push", "-q", "origin", "HEAD:refs/heads/main"], r.fx.repo), (["merge", "-q", "--no-edit", "main"], worktree),
+            (["mv", "Sources/a.swift", "Archive/a.swift"], worktree), (["commit", "-q", "-m", "chore: archive"], worktree),
+            (["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], worktree),
+        ] as [([String], URL)] {
+            let result = try await r.fx.git.run(args, in: dir)
+            #expect(result.succeeded, "\(args): \(result.stderr)")
+        }
+        let renamed = try await r.fx.git.run(["diff", "--name-status", "-M", "main...HEAD"], in: worktree).stdout
+        #expect(renamed.contains("R100"), "git sees a rename: \(renamed)")
+
+        let result = try await runStage("design", r)
+        #expect(result.skipped == nil && result.verdict == .clean, "\(result)")
+        #expect(r.codex.runs == 1 && stageEvents(r, .reviewStageStarted).count == 1)
     }
 
     @Test func pullRequestReviewMatchingNoChangedFileIsSkipped() async throws {
