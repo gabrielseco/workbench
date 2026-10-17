@@ -36,12 +36,17 @@ public enum PRBodyBuilder {
                 + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }
         }
         let testing = [checkLine, criteria].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        // `ship` attaches the latest verify step's PNGs after the PR exists.
+        let hasScreenshots =
+            verify.map { $0.turn == (lastTurn ?? check?.turn ?? 0) } == true
+            && verify?.proof.contains { $0.name.hasSuffix(".png") && proofAvailable($0) } == true
 
         let body: String
         if let template, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             body = fill(
                 template: template, summary: request, why: why(goal: goal, description: description),
-                changes: changesSection(changes), testing: testing)
+                changes: changesSection(changes), testing: testing,
+                screenshots: hasScreenshots)
         } else {
             var sections = ["## Summary\n\n" + request]
             if !criteria.isEmpty { sections.append("## Criteria\n\n" + criteria) }
@@ -165,8 +170,13 @@ public enum PRBodyBuilder {
     // MARK: Template
 
     /// Keeps the template's headings in order. `Summary`, `Why`/`Context`, `What changed` and `Testing` are filled; any other
-    /// section keeps the template's own text. HTML comments are instructions to the author and are dropped.
-    static func fill(template: String, summary: String, why: String?, changes: String? = nil, testing: String) -> String {
+    /// section keeps the template's own text, except `Screenshots`: the template's table of placeholders is left out when
+    /// there are none to attach, else replaced by a placeholder `pr-shots` takes over in place.
+    /// HTML comments are instructions to the author and are dropped.
+    static func fill(
+        template: String, summary: String, why: String?, changes: String? = nil, testing: String,
+        screenshots: Bool = true
+    ) -> String {
         let text = template.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: "", options: .regularExpression)
 
@@ -196,6 +206,7 @@ public enum PRBodyBuilder {
 
         var parts: [String] = []
         for section in sections {
+            if !screenshots, section.heading.flatMap(headingName) == "screenshots" { continue }
             var content = trimBlankLines(section.lines)
             if let heading = section.heading {
                 switch headingName(heading) {
@@ -203,6 +214,7 @@ public enum PRBodyBuilder {
                 case "testing": content = testing
                 case "why", "context": if let why { content = why }
                 case "what changed": if let changes { content = changes }
+                case "screenshots": content = "None yet."
                 default: break
                 }
                 parts.append(content.isEmpty ? heading : heading + "\n\n" + content)
