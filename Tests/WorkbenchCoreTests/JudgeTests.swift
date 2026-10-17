@@ -85,7 +85,8 @@ private let good = """
 
 @Suite struct JudgeRequestTests {
     private func input(
-        screenshots: [String] = [], check: Review.Check? = nil, verify: Review.Verify? = nil, lastTurn: Int = 1
+        screenshots: [String] = [], sizes: [String: PNGSize] = [:], check: Review.Check? = nil,
+        verify: Review.Verify? = nil, lastTurn: Int = 1
     ) throws -> JudgeInput {
         let text = """
             ---
@@ -112,7 +113,7 @@ private let good = """
         let goal = try GoalFile.parse(text).goal
         return JudgeInput(
             goal: goal, diff: "+new", diffTruncated: false, check: check, checkOutput: nil, verify: verify,
-            screenshots: screenshots, lastTurn: lastTurn)
+            screenshots: screenshots, screenshotSizes: sizes, lastTurn: lastTurn)
     }
 
     @Test func thePromptCarriesTheGoalTheEvidenceAndTheRules() throws {
@@ -129,6 +130,22 @@ private let good = """
         #expect(prompt.contains("Other labels."))
         #expect(prompt.contains("evidenced violation"), "the rule that keeps it from failing on a hunch")
         #expect(prompt.contains("The project's check did not run."))
+    }
+
+    @Test func aScreenshotsPixelSizeIsGivenToTheJudge() throws {
+        let sizes = ["a.png": PNGSize(width: 2000, height: 1304)]
+        let sized = Judge.prompt(for: try input(screenshots: ["a.png", "b.png"], sizes: sizes))
+        #expect(sized.contains("- a.png (2000 × 1304 px)"))
+        #expect(sized.contains("- b.png\n"), "a size that could not be read is left out")
+        #expect(sized.contains("cut off or too small"))
+    }
+
+    @Test func aPNGHeaderIsReadAndAnythingElseIsNot() {
+        var header = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13]) + Data("IHDR".utf8)
+        header += Data([0, 0, 0x07, 0xD0, 0, 0, 0x05, 0x18])
+        #expect(PNGSize.parse(header) == PNGSize(width: 2000, height: 1304))
+        #expect(PNGSize.parse(Data("not a png at all, just text".utf8)) == nil)
+        #expect(PNGSize.parse(header.prefix(20)) == nil)
     }
 
     @Test func anOlderCheckOrVerifyIsCalledStale() throws {

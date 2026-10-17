@@ -89,6 +89,21 @@ import Testing
         #expect(!PRReview.prompt(for: input).contains("## File:"))
     }
 
+    @Test func theProofListGivesEachPNGsPixelSize() throws {
+        let png = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: png) }
+        let header = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13]) + Data("IHDR".utf8)
+            + Data([0, 0, 0x07, 0xD0, 0, 0, 0x05, 0x18])
+        try header.write(to: png)
+        var input = PRReviewInput(
+            pr: 12, branch: "workbench/g", base: "main", headSHA: "abc1234", baseSHA: "def5678", goal: "goal",
+            instructions: nil, checklist: nil, checklistPath: nil, diffPath: "/t/d.patch", diffTruncated: false)
+        input.proof = [png.path, "/missing/one.png"]
+        let brief = PRReview.prompt(for: input)
+        #expect(brief.contains("- \(png.path) (2000 × 1304 px)"))
+        #expect(brief.contains("- /missing/one.png\n") || brief.hasSuffix("- /missing/one.png"), "unreadable: no size")
+    }
+
     @Test func codexSeesTheMinimalEnvironmentAndItsOwnLogin() {
         let parent = [
             "PATH": "/bin", "HOME": "/h", "CODEX_HOME": "/c", "OPENAI_API_KEY": "k", "LC_ALL": "C", "GITHUB_TOKEN": "t",

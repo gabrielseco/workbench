@@ -41,6 +41,8 @@ public struct JudgeInput: Sendable, Equatable {
     public var verify: Review.Verify?
     /// Screenshot file names, relative to the judge's working directory, that it may look at.
     public var screenshots: [String]
+    /// Pixel size of a screenshot by file name, when it could be read, so a clipped capture can be named.
+    public var screenshotSizes: [String: PNGSize] = [:]
     /// The newest turn, so a check or verify from an earlier one can be called stale.
     public var lastTurn: Int
     /// Files in the worktree that git does not track, so not in the diff. Names only.
@@ -89,7 +91,10 @@ public enum Judge {
         } else {
             parts.append(
                 "## Screenshots\n\nOpen these with Read (they are in your working directory):\n\n"
-                    + input.screenshots.map { "- \($0)" }.joined(separator: "\n"))
+                    + input.screenshots.map { name in
+                        input.screenshotSizes[name].map { "- \(name) (\($0.width) × \($0.height) px)" } ?? "- \(name)"
+                    }.joined(separator: "\n")
+                    + "\n\nIf a capture looks cut off or too small to read, say so in \"concerns\".")
         }
         let cut = input.diffTruncated ? "\n\n(the diff was cut at \(diffLimit) bytes)" : ""
         parts.append("## Diff against the base\n\n```diff\n\(input.diff)\n```\(cut)")
@@ -193,5 +198,29 @@ public enum Judge {
 
     static func oneLine(_ text: String) -> String {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+}
+
+/// Width and height of a PNG, read from its header.
+public struct PNGSize: Sendable, Equatable {
+    public var width: Int
+    public var height: Int
+
+    /// The 8-byte signature, then the `IHDR` chunk: 4 bytes of length, its name, width, height (big endian).
+    public static func parse(_ head: Data) -> PNGSize? {
+        let bytes = [UInt8](head.prefix(24))
+        let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        guard bytes.count == 24, Array(bytes[0..<8]) == signature, Array(bytes[12..<16]) == Array("IHDR".utf8) else {
+            return nil
+        }
+        func value(_ at: Int) -> Int { bytes[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
+        let width = value(16), height = value(20)
+        return width > 0 && height > 0 ? PNGSize(width: width, height: height) : nil
+    }
+
+    public static func read(at url: URL) -> PNGSize? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 24)).flatMap(parse)
     }
 }
