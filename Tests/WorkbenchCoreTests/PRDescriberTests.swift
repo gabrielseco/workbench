@@ -64,12 +64,26 @@ private func fenced(_ inner: String) -> String {
         ["summary": "s"],
         ["title": "", "summary": "s"],
         ["title": "line one\nline two", "summary": "s"],
-        ["title": String(repeating: "a", count: 73), "summary": "s"],
         ["title": "t"],
         ["title": "t", "summary": "   "],
     ])
     func rejectsAnUnusableTitleOrSummary(object: [String: String]) {
         #expect(throws: PRDescribeError.self) { try PRDescriber.parse(output: answer(object)) }
+    }
+
+    @Test func anOverLongTitleIsCutAtAWordNotRefused() throws {
+        let long = "feat(inbox): order bot findings first for your own PRs and hide the fix actions on others' PRs"
+        #expect(long.count > PRDescriber.titleLimit)
+        let d = try PRDescriber.parse(output: answer(["title": long, "summary": "the summary", "why": "the why"]))
+        #expect(d.title.count <= PRDescriber.titleLimit)
+        #expect(d.title.hasPrefix("feat(inbox): order bot findings"))
+        #expect(long.hasPrefix(d.title + " "), "cut between words: \(d.title)")
+        #expect(d.summary == "the summary" && d.why == "the why", "the rest of the answer is kept")
+    }
+
+    @Test func aLongTitleWithNoSpaceIsCutAtTheLimit() throws {
+        let d = try PRDescriber.parse(output: answer(["title": String(repeating: "a", count: 73), "summary": "s"]))
+        #expect(d.title.count == PRDescriber.titleLimit)
     }
 
     @Test func rejectsListsThatAreNotStrings() {

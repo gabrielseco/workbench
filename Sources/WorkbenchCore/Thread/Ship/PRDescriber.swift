@@ -127,12 +127,11 @@ public enum PRDescriber {
         guard let json = object(from: text) else { throw PRDescribeError.invalidOutput("the answer is not a JSON object") }
 
         guard let rawTitle = json["title"] as? String else { throw PRDescribeError.invalidOutput("no title") }
-        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { throw PRDescribeError.invalidOutput("empty title") }
-        guard !title.contains(where: \.isNewline) else { throw PRDescribeError.invalidOutput("the title has a newline") }
-        guard title.count <= titleLimit else {
-            throw PRDescribeError.invalidOutput("the title is \(title.count) characters, over \(titleLimit)")
-        }
+        let given = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !given.isEmpty else { throw PRDescribeError.invalidOutput("empty title") }
+        guard !given.contains(where: \.isNewline) else { throw PRDescribeError.invalidOutput("the title has a newline") }
+        // An over-long title is cut at a word, not refused: one field must not cost the pull request its description.
+        let title = given.count <= titleLimit ? given : PRBodyBuilder.title(given)
         guard let rawSummary = json["summary"] as? String,
             !rawSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { throw PRDescribeError.invalidOutput("no summary") }

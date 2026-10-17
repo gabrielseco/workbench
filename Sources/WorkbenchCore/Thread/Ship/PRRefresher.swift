@@ -76,13 +76,11 @@ public enum PRRefresher {
         }
 
         guard let rawTitle = json["title"] as? String else { throw PRDescribeError.invalidOutput("no title") }
-        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { throw PRDescribeError.invalidOutput("empty title") }
-        guard !title.contains(where: \.isNewline) else { throw PRDescribeError.invalidOutput("the title has a newline") }
-        // A title that was already longer is fine as long as it is left alone.
-        guard title == current.title || title.count <= PRBodyBuilder.titleLimit else {
-            throw PRDescribeError.invalidOutput("the title is \(title.count) characters, over \(PRBodyBuilder.titleLimit)")
-        }
+        let given = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !given.isEmpty else { throw PRDescribeError.invalidOutput("empty title") }
+        guard !given.contains(where: \.isNewline) else { throw PRDescribeError.invalidOutput("the title has a newline") }
+        // A title that was already longer is fine as long as it is left alone; a new one is cut at a word, not refused.
+        let title = given == current.title || given.count <= PRBodyBuilder.titleLimit ? given : PRBodyBuilder.title(given)
 
         let editable = Dictionary(
             PRBodyRefresher.editable(in: current.body).map { ($0.name, $0.content) }, uniquingKeysWith: { first, _ in first })
