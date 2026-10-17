@@ -33,7 +33,23 @@ struct FakeCodex {
               [ "$prev" = "-C" ] && tree="$a"
               prev="$a"; last="$a"
             done
-            brief=$(printf '%s' "$last" | sed -n 's/^Read the review brief at \\(.*\\) and follow it exactly\\..*/\\1/p')
+            # Like the real CLI: -i takes every file up to the next flag or `--`, so a prompt right after it is lost.
+            prompt=""; prev=""; img=0; dd=0
+            for a in "$@"; do
+              if [ $dd = 1 ]; then prompt="$a"; continue; fi
+              if [ "$a" = "--" ]; then dd=1; img=0; prev=""; continue; fi
+              case "$prev" in -s|-C|-o|-m|--color) prev=""; continue ;; esac
+              case "$a" in
+                -i|--image) img=1 ;;
+                -s|-C|-o|-m|--color) img=0; prev="$a" ;;
+                -*) img=0 ;;
+                *) [ $img = 1 ] || prompt="$a" ;;
+              esac
+            done
+            if [ -z "$prompt" ]; then
+              echo "Reading prompt from stdin..." >&2; echo "No prompt provided via stdin." >&2; exit 1
+            fi
+            brief=$(printf '%s' "$prompt" | sed -n 's/^Read the review brief at \\(.*\\) and follow it exactly\\..*/\\1/p')
             cp "$brief" "$d/brief_$n" 2>/dev/null
             diff=$(sed -n 's/.*saved at \\(.*\\)\\. Read that file.*/\\1/p' "$brief" | head -1)
             cp "$diff" "$d/diff_$n" 2>/dev/null

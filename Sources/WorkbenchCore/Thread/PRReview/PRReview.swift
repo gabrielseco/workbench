@@ -65,6 +65,8 @@ public enum PRReview {
     static func arguments(tree: String, answer: String, brief: String, images: [String] = []) -> [String] {
         ["exec", "-s", "read-only", "-C", tree, "--color", "never", "--ephemeral", "-o", answer]
             + images.flatMap { ["-i", $0] }
+            // `-i` takes a list of files: without `--` the prompt is read as one more image and Codex finds none.
+            + ["--"]
             + [
                 "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
                     + "files and do not post anything anywhere.",
