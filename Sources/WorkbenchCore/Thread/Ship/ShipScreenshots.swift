@@ -42,6 +42,15 @@ extension ThreadService {
             return .skipped("\(shots.count) screenshots is more than the \(Self.maxScreenshots) a pull request takes")
         }
         if let problem = Self.configProblem(worktree: worktree, checkout: project.root) { return .skipped(problem) }
+        // A screenshot is about the work as it was when verify ran. What was committed since then is a different
+        // change, so its screenshots are not put in the pull request. Files not committed are not shipped.
+        let current = await ProofIdentity.committed(worktree: worktree, git: git)
+        if ProofFreshness.of(recordedTree: verify.tree, current: current) == .stale {
+            let at = verify.commit.map { " at \($0.prefix(7))" } ?? ""
+            return .skipped(
+                "screenshots not attached: they were taken\(at) and the work has changed since. "
+                    + "Run the turn's verify again, then `workbench ship --screenshots`")
+        }
 
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("wb-shots-\(UUID().uuidString)", isDirectory: true).resolvingSymlinksInPath()

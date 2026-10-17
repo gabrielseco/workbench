@@ -522,7 +522,8 @@ extension ThreadRunner {
         let runner = VerifyRunner(
             command: command, worktree: worktree, environment: config.childEnvironment(from: options.parentEnvironment),
             timeout: options.verifyTimeoutOverride ?? TimeInterval(config.verifyTimeoutMin) * 60,
-            killGrace: options.killGrace, threadID: threadID, goalPath: project.goalURL(threadID).path)
+            killGrace: options.killGrace, threadID: threadID, goalPath: project.goalURL(threadID).path,
+            identity: await ProofIdentity.of(worktree: worktree, git: git))
         notify(.verifyStarted(turn: report.turn, command: command))
         defer { currentRun = nil }
         let ran = try await runner.run(

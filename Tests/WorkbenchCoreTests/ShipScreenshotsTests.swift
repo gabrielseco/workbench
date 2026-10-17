@@ -61,7 +61,11 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
     let script = try CheckScript()
     let verify = try script.write(writes, name: "verify.sh")
     let fx = try await RunnerFixture(extraConfig: "verify_command = \"\(verify)\"")
-    let (id, worktree) = try await acceptedThread(fx)
+    // The turn itself changes the work, as a real one does, so verify sees the work that is then accepted.
+    let id = try await fx.approvedThread()
+    _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+    try await fx.service.accept(id: id, message: "chore: work")
     let plan = ShipPlan(
         id: id, worktree: worktree, branch: "workbench/\(id)", remoteBranch: "workbench/\(id)", base: "main",
         head: "abc", origin: "o", remote: .absent)
@@ -251,5 +255,34 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(result.code == 1, "\(result.text)")
         #expect(result.text.contains("`pr-shots` is not on PATH"), "\(result.text)")
         #expect(result.text.contains("workbench ship --screenshots"), "the worktree is kept for another try")
+    }
+}
+
+@Suite struct ShipScreenshotsFreshnessTests {
+    @Test func aCommitAfterVerifyKeepsTheScreenshotsOutOfThePullRequest() async throws {
+        let shipped = try await shippedThread()
+        let fx = shipped.fx
+        // The work moves on after the screenshots were taken.
+        try "changed after verify\n".write(
+            to: shipped.plan.worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "later"], in: shipped.plan.worktree)
+        let tool = try FakeShots(in: fx)
+
+        let result = await fx.service.shipScreenshots(
+            id: shipped.id, worktree: shipped.plan.worktree, number: 12, tool: tool.runner)
+
+        guard case .skipped(let why) = result else { Issue.record("expected skipped, got \(result)"); return }
+        #expect(why.contains("work has changed since"))
+        #expect(why.contains("ship --screenshots"))
+        #expect(tool.calls.isEmpty)
+        #expect(try fx.events(shipped.id).allSatisfy { $0.kind != .proofPublished })
+    }
+
+    @Test func screenshotsTakenAtTheShippedWorkAreAttached() async throws {
+        let shipped = try await shippedThread()
+        let tool = try FakeShots(in: shipped.fx)
+        let result = await shipped.fx.service.shipScreenshots(
+            id: shipped.id, worktree: shipped.plan.worktree, number: 12, tool: tool.runner)
+        #expect(result == .attached(count: 1))
     }
 }

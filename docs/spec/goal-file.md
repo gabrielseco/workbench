@@ -57,7 +57,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   runs in the thread's worktree on Workbench's own environment (plus the person's `gh` login and
   `PR_SHOTS_*`/`AWS_*`/`CLOUDFLARE_*` settings), never the model's, with `GH_REPO` dropped. Because the model
   can write in the worktree, a `.pr-shots.json` there that differs from the project checkout's stops the
-  upload with a note. It is a note, not an error, when the tool is missing or fails: the PR is open, the
+  upload with a note. A proof belongs to the work it was taken at: when the tree the verify step recorded is not the
+  tree of what was committed (the work changed after verify), nothing is uploaded and the note says so; a log with
+  no tree recorded is "unknown" and uploads as before. `review` prints the same verdict (`current`, `stale`,
+  `unknown`) under the proof files, and `--json` has it as `verify.proof_freshness`. It is a note, not an error, when the tool is missing or fails: the PR is open, the
   worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
   work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,

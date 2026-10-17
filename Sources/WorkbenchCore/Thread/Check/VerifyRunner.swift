@@ -9,6 +9,9 @@ public struct ProofFile: Sendable, Equatable {
     public var path: String
     public var sha256: String
     public var bytes: Int
+    /// The commit and tree the worktree held when the verify step ran (`ProofIdentity`), nil in an older log.
+    public var commit: String?
+    public var tree: String?
 }
 
 extension ProofFile {
@@ -54,6 +57,8 @@ struct VerifyRunner {
     var killGrace: TimeInterval
     var threadID: String
     var goalPath: String
+    /// What the worktree held as the step started, recorded on `verify.started` and every `proof.added`.
+    var identity: ProofIdentity?
 
     func run(
         turn: Int, proofDirectory: URL, threadDirectory: URL, outputURL: URL, log: EventLogWriter,
@@ -67,6 +72,8 @@ struct VerifyRunner {
             data: [
                 "command": .string(command), "proof_ref": .string(proofRef),
                 "port": port.map { .int($0) } ?? .null,
+                "commit": identity.map { .string($0.commit) } ?? .null,
+                "tree": identity.map { .string($0.tree) } ?? .null,
             ])
         let started = Date()
 
@@ -103,12 +110,15 @@ struct VerifyRunner {
         let result = CheckRunner.finalResult(CheckRunner.classify(outcome.exit), error: outcome.error)
 
         let (files, omitted) = Self.collect(proofDirectory: proofDirectory, threadDirectory: threadDirectory)
-        for file in files {
+        for var file in files {
+            file.commit = identity?.commit
+            file.tree = identity?.tree
             try await log.append(
                 .proofAdded, turn: turn,
                 data: [
                     "name": .string(file.name), "path": .string(file.path), "sha256": .string(file.sha256),
-                    "bytes": .int(file.bytes),
+                    "bytes": .int(file.bytes), "commit": file.commit.map { .string($0) } ?? .null,
+                    "tree": file.tree.map { .string($0) } ?? .null,
                 ])
         }
 

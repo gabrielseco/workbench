@@ -206,6 +206,8 @@ extension Commands {
             verify = [
                 "turn": .int(v.turn), "result": .string(v.result), "exit_code": v.exitCode.map { .int($0) } ?? .null,
                 "duration_ms": v.durationMs.map { .int($0) } ?? .null,
+                "commit": v.commit.map { .string($0) } ?? .null, "tree": v.tree.map { .string($0) } ?? .null,
+                "proof_freshness": report.proofFreshness.map { .string($0.rawValue) } ?? .null,
                 "proof": .array(
                     v.proof.map {
                         [
