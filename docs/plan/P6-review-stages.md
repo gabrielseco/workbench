@@ -1,6 +1,6 @@
 # P6: Review stages
 
-Status: plan, nothing built. Written 2026-10-17. Builds on [P5](P5-review-loop.md) (`pr-review`, `ship --review-loop`)
+Status: task 1 built. Written 2026-10-17. Builds on [P5](P5-review-loop.md) (`pr-review`, `ship --review-loop`)
 and [P4](P4-verify.md) (`verify_command`, screenshot proof).
 
 `pr-review` is one reviewer with one job: is this PR correct? Projects also have other questions, such as "does the
@@ -90,6 +90,8 @@ being written for the stage named `pr-review` so existing logs and `review --jso
    of, with no change in behaviour or events. Config parsing and validation for `review.stages` and
    `[review.stage.<name>]` (including a `pr-review` override and the missing-`pr-review` warning), `doctor`
    checks. Specs: `docs/spec/{event-log,cli-json,exit-codes}.md`, `docs/plan` index row.
+   **Status: built** (`Sources/WorkbenchCore/Config/ReviewConfig.swift`,
+   `Sources/WorkbenchCore/Thread/PRReview/ReviewStage.swift`).
 2. **`review-stage <name>` and the inputs.** `proof` input (images are passed to the reviewer, so a reviewer that
    cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping, the rubric extraction
    rule.

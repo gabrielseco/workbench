@@ -237,6 +237,7 @@ enum Commands {
         show("verify:", report.verify, undeclared: "turns will end with no screenshots or other proof")
         for file in report.verifyFiles { out("  proof: \(file.name) (\(file.bytes) bytes)") }
         if let warning = report.verifyWarning { out("  warning: \(warning)") }
+        for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
     }
 
     static func goalNew(_ args: [String]) async throws {

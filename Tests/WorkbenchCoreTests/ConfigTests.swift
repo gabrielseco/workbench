@@ -67,7 +67,9 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
 
     @Test(arguments: [
         ("a.b = 1", ConfigProblem.Code.unsupportedSyntax),
-        ("[a.b]", .unsupportedSyntax),
+        ("[a..b]", .unsupportedSyntax),
+        ("[\"a\".b]", .unsupportedSyntax),
+        ("[a.]", .unsupportedSyntax),
         ("[[a]]", .unsupportedSyntax),
         ("x = { a = 1 }", .unsupportedSyntax),
         ("x = \"\"\"\nmulti\n\"\"\"", .unsupportedSyntax),
@@ -81,6 +83,13 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
     func rejectsWhatItDoesNotSupport(text: String, code: ConfigProblem.Code) {
         let (_, problems) = TOMLSubset.parse(text)
         #expect(problems.first?.code == code, "\(text) -> \(problems)")
+    }
+
+    @Test func aDottedHeaderIsOneTableNamedAsWritten() {
+        let (doc, problems) = TOMLSubset.parse("[review.stage.pr-review]\nmax_rounds = 2\n")
+        #expect(problems.isEmpty)
+        #expect(doc.tables["review.stage.pr-review"]?.entries["max_rounds"]?.value == .int(2))
+        #expect(doc.tables["review"] == nil)
     }
 
     @Test func multilineStringBodyDoesNotCascade() {

@@ -44,7 +44,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 
 | Code | Kind | When |
 |---|---|---|
-| 0 |  | the declared setup, check and verify passed |
+| 0 |  | the declared setup, check and verify passed (review-stage warnings never change the code) |
 | 1 | `failed` | the setup, check or verify did not pass, or Screen Recording is missing for a desktop app, or its worktree could not be removed |
 | 2 | `usage`, `invalid-config` | wrong command line or config |
 | 3 | `stopped` | stopped by Ctrl-C |
@@ -124,7 +124,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 |---|---|---|
 | 0 |  | the review ended `VERDICT: CLEAN` (recorded, findings printed) |
 | 1 | `failed` | no verdict this round: no `codex`, the branch moved while the review was starting, Codex was at capacity three times, crashed, timed out, was stopped, or its answer did not end in exactly one `VERDICT:` line (recorded, with the reason; it counts as a round). Also: origin could not be read |
-| 2 | `usage` | wrong command line, or a `[pr_review]` config that is not valid |
+| 2 | `usage` | wrong command line, or a `[pr_review]`, `[review]` or `[review.stage.<name>]` config that is not valid |
 | 6 | `refused` | nothing was spawned or recorded: the thread has no recorded pull request, `max_rounds` reviews of this pull request already ran (`--again` does not lift that), the branch was reviewed as it is (`--again` asks once more), origin no longer has the branch, a run is live, or another command holds the thread (a judge, another review) |
 | 7 | `not-found` | the thread named does not exist |
 | 15 | `findings` | the review ended `VERDICT: FIX`: the findings are printed and recorded |

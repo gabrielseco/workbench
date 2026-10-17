@@ -83,6 +83,8 @@ public struct DoctorReport: Sendable, Equatable {
     /// Something worth knowing about a verify that passed (it wrote no files).
     public var verifyWarning: String?
     public var appType: AppType = .web
+    /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
+    public var reviewWarnings: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
     public var cleanupProblem: String?
 
@@ -188,6 +190,7 @@ public final class Doctor: @unchecked Sendable {
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""),
             verify: DoctorStep(command: config.verifyCommand, outcome: .notDeclared, tail: "", hint: ""),
             appType: config.appType)
+        report.reviewWarnings = Self.reviewWarnings(config.review, root: project.root)
         guard config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil else {
             return report
         }
@@ -229,6 +232,30 @@ public final class Doctor: @unchecked Sendable {
         report = try result.get()
         report.cleanupProblem = cleanupProblem
         return report
+    }
+
+    /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a table
+    /// no list names. The project knows its own pipeline, so each is said and none is refused.
+    static func reviewWarnings(_ review: ReviewConfig, root: URL) -> [String] {
+        var warnings: [String] = []
+        if !review.stages.contains(ReviewConfig.prReviewStage) {
+            warnings.append(
+                "review.stages does not list \(ReviewConfig.prReviewStage): no correctness review will run in the loop")
+        }
+        for name in review.stages {
+            guard let stage = review.stage(name), let rubric = stage.rubric else { continue }
+            let key = stage.skill != nil ? "skill" : "prompt"
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(
+                atPath: root.appendingPathComponent(rubric).path, isDirectory: &isDirectory)
+            if !exists || isDirectory.boolValue {
+                warnings.append("the \(name) stage's \(key) \(rubric) is not a file in this checkout")
+            }
+        }
+        for name in review.unlistedTables {
+            warnings.append("[review.stage.\(name)] is not listed in review.stages, so it is ignored")
+        }
+        return warnings
     }
 
     private func removeLeftover(_ manager: WorktreeManager) async throws {
