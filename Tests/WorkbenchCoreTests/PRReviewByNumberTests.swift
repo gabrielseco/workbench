@@ -8,6 +8,9 @@ private struct FakeViewGH {
     let runner: GitRunner
     let dir: URL
 
+    /// The arguments `gh` was run with.
+    var seenArgs: String { (try? String(contentsOf: dir.appendingPathComponent("args"), encoding: .utf8)) ?? "" }
+
     /// What `GH_REPO` was when `gh` ran.
     var seenRepo: String { (try? String(contentsOf: dir.appendingPathComponent("repo"), encoding: .utf8)) ?? "" }
 
@@ -19,6 +22,7 @@ private struct FakeViewGH {
         try """
             #!/bin/sh
             echo "${GH_REPO:-unset}" > "\(dir.path)/repo"
+            echo "$@" > "\(dir.path)/args"
             \(fails ? "echo 'HTTP 404: not found' >&2; exit 1" : "cat <<'EOF'\n\(answer)\nEOF")
             """.write(to: script, atomically: true, encoding: .utf8)
         chmod(script.path, 0o755)
@@ -129,22 +133,28 @@ private struct FakeViewGH {
         #expect(r.codex.runs == 0)
     }
 
-    @Test func aLiveReviewOfTheSameCommitIsNotDisturbedAndTheNextOneIsRefusedAsBusy() async throws {
+    @Test func aLiveReviewInTheProjectIsNotDisturbedAndTheNextOneIsRefusedAsBusy() async throws {
         let r = try await reviewedPR()
-        let held = try #require(FolderLock(folder: kept(r)), "the first review takes the lock")
+        let reviews = r.fx.project.workbenchDirectory.appendingPathComponent("reviews")
+        let tree = reviews.appendingPathComponent("pr-9-ccccccc/round-1.tree")
+        try FileManager.default.createDirectory(at: tree.deletingLastPathComponent(), withIntermediateDirectories: true)
+        _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, r.head], in: r.fx.repo)
+        let held = try #require(FolderLock(folder: reviews), "the first review takes the project's lock")
         do {
             _ = try await review(r, gh: FakeViewGH(in: r))
-            Issue.record("a second review ran while the first held the commit")
+            Issue.record("a second review ran while another held the project")
         } catch let error as PRReviewRefusal {
             #expect(error == .busy)
         }
         #expect(r.codex.runs == 0)
+        #expect(FileManager.default.fileExists(atPath: tree.path), "the live review's checkout is not removed")
         held.release()
         let result = try await review(r, gh: FakeViewGH(in: r))
-        #expect(result.verdict == .clean, "the lock is released with the review: \(result.failure ?? "")")
+        #expect(result.verdict == .clean, "the lock goes with the review: \(result.failure ?? "")")
+        #expect(!FileManager.default.fileExists(atPath: tree.path), "with no live review the leftover is ended")
     }
 
-    @Test func whatAKilledReviewLeftBehindIsEndedFirstEvenForAnOlderCommitOrBeforeARefusal() async throws {
+    @Test func whatAKilledReviewLeftBehindIsEndedBeforeAnyRefusalOrAnyGhCall() async throws {
         let r = try await reviewedPR()
         let reviews = r.fx.project.workbenchDirectory.appendingPathComponent("reviews")
         func leave(_ folder: String) async throws -> URL {
@@ -158,27 +168,43 @@ private struct FakeViewGH {
         try "an answer from the killed run\n".write(
             to: kept(r).appendingPathComponent("round-1.findings.md"), atomically: true, encoding: .utf8)
 
+        // gh cannot answer (a closed PR, a lost network): the leftovers are still ended.
         do {
-            _ = try await review(r, gh: FakeViewGH(in: r))
-            Issue.record("a commit with an answer was reviewed again")
-        } catch let error as PRReviewRefusal {
-            #expect(error == .alreadyReviewed(round: 1))
+            _ = try await review(r, gh: FakeViewGH(in: r, fails: true))
+            Issue.record("a review ran without the pull request")
+        } catch is PRReviewRefusal {
         }
         let list = try await r.fx.git.run(["worktree", "list", "--porcelain"], in: r.fx.repo).stdout
         #expect(!FileManager.default.fileExists(atPath: older.path) && !FileManager.default.fileExists(atPath: current.path))
         #expect(!list.contains("round-1.tree"), "no registered checkout is left: \(list)")
     }
 
-    @Test func aFolderAnotherLiveReviewHoldsIsLeftAlone() async throws {
+    @Test(arguments: [
+        ("git@github.com:acme/widgets.git", "acme/widgets"), ("https://github.com/acme/widgets", "acme/widgets"),
+        ("https://github.com/acme/widgets.git", "acme/widgets"), ("ssh://git@github.com/acme/widgets.git", "acme/widgets"),
+        ("https://ghe.example.com/acme/widgets.git", "ghe.example.com/acme/widgets"),
+        ("git@ghe.example.com:acme/widgets", "ghe.example.com/acme/widgets"),
+    ])
+    func originURLsNameTheirRepository(url: String, name: String) {
+        #expect(ThreadService.repositoryName(ofOrigin: url) == name)
+    }
+
+    @Test(arguments: [
+        "/var/folders/x/origin.git", "../origin.git", "file:///tmp/origin.git", "https://github.com/acme",
+        "https://github.com/acme/widgets/extra", "git@github.com:/acme/widgets", "", "https://github.com/a b/c",
+    ])
+    func anythingElseNamesNoRepositoryAndGhIsLeftToWork(url: String) {
+        #expect(ThreadService.repositoryName(ofOrigin: url) == nil, "\(url)")
+    }
+
+    @Test func ghIsToldTheRepositoryOriginIsWhenOriginIsAGitHubURLAndLeftAloneOtherwise() async throws {
         let r = try await reviewedPR()
-        let reviews = r.fx.project.workbenchDirectory.appendingPathComponent("reviews")
-        let tree = reviews.appendingPathComponent("pr-12-bbbbbbb/round-1.tree")
-        try FileManager.default.createDirectory(at: tree.deletingLastPathComponent(), withIntermediateDirectories: true)
-        _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, r.head], in: r.fx.repo)
-        let live = try #require(FolderLock(folder: tree.deletingLastPathComponent()))
-        _ = try await review(r, gh: FakeViewGH(in: r))
-        #expect(FileManager.default.fileExists(atPath: tree.path), "a live review's checkout is not removed")
-        live.release()
+        let named = try FakeViewGH(in: r)
+        _ = try await r.fx.service.pullRequestInfo(12, gh: named.runner, originURL: "git@github.com:acme/widgets.git")
+        #expect(named.seenArgs.contains("--repo acme/widgets"), "\(named.seenArgs)")
+        let local = try FakeViewGH(in: r)
+        _ = try await r.fx.service.pullRequestInfo(12, gh: local.runner, originURL: "/var/folders/x/origin.git")
+        #expect(!local.seenArgs.contains("--repo"), "\(local.seenArgs)")
     }
 
     @Test func aGHRepoInTheEnvironmentDoesNotPointGhAtAnotherRepository() async throws {

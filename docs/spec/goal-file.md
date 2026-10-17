@@ -102,8 +102,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   the brief. The round is the thread's own (`runRound`): the checkout of the branch as origin has it, the base
   pinned, the diff in a file, read-only Codex, a verdict line or a failure. Nothing is written to a log and no round is
   counted, so there is no cap; the findings, the brief and the transcript are kept under
-  `.workbench/reviews/pr-<n>-<sha7>/`, and a branch that has not moved there is refused unless `--again`. Exit codes
-  are the thread review's.
+  `.workbench/reviews/pr-<n>-<sha7>/`, and a branch that has not moved there is refused unless `--again`. One such
+  review at a time per project (a lock the kernel drops with the process, so the next is `busy` and never stale); it
+  first ends what a killed one left, for any pull request. `gh` is told origin's repository (`--repo`) when origin is
+  a GitHub URL, and `GH_REPO` is dropped from its environment. Exit codes are the thread review's.
 - **`workbench ship --review-loop` turns each round of findings into a follow-up thread.** After the pull request is
   open (or on a thread that already shipped: it starts at the review) it runs `pr-review`. On `VERDICT: FIX`, and
   while `max_rounds` allows another review, it makes a new thread on the same branch (`goal new --update`, named

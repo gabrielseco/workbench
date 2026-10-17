@@ -27,16 +27,20 @@ extension ThreadService {
         // the person's shell would point it at another one.
         let gh = GitRunner(
             executable: gh.executable, environment: gh.environment.filter { $0.key != "GH_REPO" }, timeout: gh.timeout)
+        let reviews = project.workbenchDirectory.appendingPathComponent("reviews", isDirectory: true)
+        // One review at a time in a project, as for threads: reviews share this repository's `FETCH_HEAD`, and a
+        // killed one's leftovers cannot be told from a live one's without a holder. The kernel drops the lock with
+        // the process, so there is never a stale one.
+        guard let lock = FolderLock(folder: reviews) else { throw PRReviewRefusal.busy }
+        defer { lock.release() }
+        // What a killed review left, for any pull request or commit: ended before anything is read or refused.
+        await recoverPullRequestLeftovers(in: reviews)
+
         let info = try await pullRequestInfo(number, gh: gh)
         let tip = try await originBranchTip(info.branch)
-        let reviews = project.workbenchDirectory.appendingPathComponent("reviews", isDirectory: true)
-        // A review that was killed left its checkout and maybe its `codex` behind, for this commit or an older one:
-        // end them before anything is refused or started. A folder whose lock is held belongs to a live review.
-        await recoverPullRequestLeftovers(number, in: reviews)
         let folder = reviews.appendingPathComponent("pr-\(number)-\(tip.prefix(7))", isDirectory: true)
         let paths = PRReviewPaths(folder: folder, round: 1)
-        guard let lock = FolderLock(folder: folder) else { throw PRReviewRefusal.busy }
-        defer { lock.release() }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if !again, FileManager.default.fileExists(atPath: paths.answer.path) {
             throw PRReviewRefusal.alreadyReviewed(round: 1)
         }
@@ -60,25 +64,48 @@ extension ThreadService {
             failure: reason, findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
     }
 
-    /// Ends what a killed review of pull request `number` left in any of its commit folders, skipping a folder a
-    /// live review holds.
-    func recoverPullRequestLeftovers(_ number: Int, in reviews: URL) async {
+    /// Ends what a killed review left in any pull request's folder. Called with the reviews lock held, so none is live.
+    func recoverPullRequestLeftovers(in reviews: URL) async {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: reviews.path)) ?? []
-        for name in names where name.hasPrefix("pr-\(number)-") {
+        for name in names where name.hasPrefix("pr-") {
             let folder = reviews.appendingPathComponent(name, isDirectory: true)
             var isFolder: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isFolder), isFolder.boolValue,
-                let lock = FolderLock(folder: folder)
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isFolder), isFolder.boolValue
             else { continue }
-            defer { lock.release() }
             await removeTree(PRReviewPaths(folder: folder, round: 1))
         }
     }
 
+    /// `owner/name` of origin when it is a GitHub URL (`git@github.com:o/n.git`, `https://github.com/o/n`), with the
+    /// host in front when it is not github.com; nil for anything else, such as a local path.
+    static func repositoryName(ofOrigin url: String) -> String? {
+        let text = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host: String
+        var path: String
+        if let match = text.wholeMatch(of: #/[A-Za-z0-9._-]+@([A-Za-z0-9.-]+):([^/].*)/#) {
+            (host, path) = (String(match.1), String(match.2))
+        } else if let match = text.wholeMatch(of: #/(?:https|ssh)://(?:[^@/]+@)?([A-Za-z0-9.-]+)(?::[0-9]+)?/(.+)/#) {
+            (host, path) = (String(match.1), String(match.2))
+        } else {
+            return nil
+        }
+        if path.hasSuffix(".git") { path.removeLast(4) }
+        let parts = path.split(separator: "/").map(String.init)
+        guard parts.count == 2, parts.allSatisfy({ $0.wholeMatch(of: #/[A-Za-z0-9._-]+/#) != nil }) else { return nil }
+        return (host == "github.com" ? "" : host + "/") + parts.joined(separator: "/")
+    }
+
     /// The pull request's branch, base and text, refused unless it is open and its branch is on origin.
-    func pullRequestInfo(_ number: Int, gh: GitRunner) async throws -> PullRequestInfo {
+    func pullRequestInfo(_ number: Int, gh: GitRunner, originURL: String? = nil) async throws -> PullRequestInfo {
         let fields = "headRefName,baseRefName,title,body,state,isCrossRepository"
-        let result = try? await gh.run(["pr", "view", String(number), "--json", fields], in: project.root)
+        // Said outright when origin is a GitHub URL, so a `gh` default for another remote cannot answer for it.
+        var url = originURL
+        if url == nil, let origin = try? await git.run(["remote", "get-url", "origin"], in: project.root), origin.succeeded {
+            url = origin.stdout
+        }
+        let repo = url.flatMap { Self.repositoryName(ofOrigin: $0) }
+        let repoArgs = repo.map { ["--repo", $0] } ?? []
+        let result = try? await gh.run(["pr", "view", String(number), "--json", fields] + repoArgs, in: project.root)
         guard let result, result.succeeded,
             let object = (try? JSONSerialization.jsonObject(with: Data(result.stdout.utf8))) as? [String: Any],
             let branch = object["headRefName"] as? String, let base = object["baseRefName"] as? String
