@@ -7,6 +7,12 @@ public enum PRReviewVerdict: String, Sendable, Equatable {
 }
 
 /// Everything the brief for the reviewer is built from. Text only: nothing here is read by Codex from the log.
+/// A repository file a stage's `inputs` names, read from the pull request's checkout.
+struct PRReviewFile: Sendable, Equatable {
+    var path: String
+    var text: String
+}
+
 struct PRReviewInput: Sendable, Equatable {
     var pr: Int
     var branch: String
@@ -28,6 +34,8 @@ struct PRReviewInput: Sendable, Equatable {
     var rubricPath: String?
     /// The verify step's screenshots, absolute paths, each also attached to the Codex run as an image.
     var proof: [String] = []
+    /// The files the stage's `inputs` names, in order, each already bounded.
+    var files: [PRReviewFile] = []
 }
 
 /// The reviewer: Codex, run read-only on the pull request's head in a throwaway checkout, started by
@@ -124,6 +132,12 @@ public enum PRReview {
         if let checklist = input.checklist {
             lines += [
                 "", "## This project's review checklist (\(input.checklistPath ?? "checklist"))", "", fenced(checklist),
+            ]
+        }
+        for file in input.files {
+            lines += [
+                "", "## File: \(file.path)", "", "The stage's inputs name this file; read it as part of the review.", "",
+                fenced(file.text),
             ]
         }
         if !input.proof.isEmpty {

@@ -156,7 +156,6 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
             let config = try load(table)
             let stage = try #require(ReviewStage.named("design", config: config))
             #expect(stage.config.reviewer == .codex)
-            #expect(stage.notYetUsedWarning == nil, "\(table)")
         }
     }
 }

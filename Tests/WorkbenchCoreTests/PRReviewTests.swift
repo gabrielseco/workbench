@@ -77,6 +77,18 @@ import Testing
         #expect(dashes != nil && dashes! > args.lastIndex(of: "-i") ?? 0, "every image comes before the --")
     }
 
+    @Test func aFileInputIsFencedUnderItsPathAndCannotCloseTheFence() {
+        var input = PRReviewInput(
+            pr: 12, branch: "workbench/g", base: "main", headSHA: "abc1234", baseSHA: "def5678", goal: "goal",
+            instructions: nil, checklist: nil, checklistPath: nil, diffPath: "/t/round-1.diff.patch", diffTruncated: false)
+        input.files = [PRReviewFile(path: "docs/DESIGN.md", text: "rule\n```\nnot the end\n```\n")]
+        let brief = PRReview.prompt(for: input)
+        #expect(brief.contains("## File: docs/DESIGN.md"))
+        #expect(brief.contains("````\nrule\n```\nnot the end\n```\n````"), "fenced by a longer fence")
+        input.files = []
+        #expect(!PRReview.prompt(for: input).contains("## File:"))
+    }
+
     @Test func codexSeesTheMinimalEnvironmentAndItsOwnLogin() {
         let parent = [
             "PATH": "/bin", "HOME": "/h", "CODEX_HOME": "/c", "OPENAI_API_KEY": "k", "LC_ALL": "C", "GITHUB_TOKEN": "t",

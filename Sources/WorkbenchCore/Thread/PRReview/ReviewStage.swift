@@ -83,14 +83,6 @@ public struct ReviewStage: Sendable, Equatable {
         return section.isEmpty ? nil : section
     }
 
-    /// What the stage's table asks for that this version does not do yet, said once per round rather than ignored.
-    var notYetUsedWarning: String? {
-        let keys = config.notYetUsed
-        guard !keys.isEmpty else { return nil }
-        return "the \(name) stage sets \(keys.joined(separator: ", ")), which this version does not use yet; "
-            + "the built-in Codex review ran"
-    }
-
     /// What `applies_to` decides from the pull request's `git diff --name-only -z` (nil when git could not run).
     enum Applies: Equatable {
         case run

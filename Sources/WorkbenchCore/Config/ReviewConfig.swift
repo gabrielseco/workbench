@@ -56,10 +56,12 @@ public struct ReviewStageConfig: Sendable, Equatable {
     /// The file the stage's rubric comes from, if it has one of its own.
     public var rubric: String? { skill ?? prompt }
 
-    /// What the table sets that the runner does not act on yet, so a round can say so instead of ignoring it.
-    var notYetUsed: [String] {
-        // `proof` is attached; the brief always carries the diff and the goal, and reads no other file yet.
-        inputs.filter { $0 != .proof } != ReviewStageInput.defaults ? ["inputs"] : []
+    /// The most files a stage may read: each goes whole into the brief, up to `PRReview.checklistLimit`.
+    public static let maxFileInputs = 8
+
+    /// The repository files `inputs` names, in order, read from the pull request's checkout into the brief.
+    public var fileInputs: [String] {
+        inputs.compactMap { if case .path(let path) = $0 { path } else { nil } }
     }
 
     /// Whether the stage reads the verify step's proof.
@@ -253,6 +255,10 @@ extension ReviewConfig {
                 if !inputs.contains(input) { inputs.append(input) }
             }
             if values.isEmpty { fail(.invalidValue, line, "'inputs' must list at least one input") }
+            let files = inputs.filter { if case .path = $0 { true } else { false } }.count
+            if files > ReviewStageConfig.maxFileInputs {
+                fail(.invalidValue, line, "'inputs' names \(files) files; at most \(ReviewStageConfig.maxFileInputs) are read")
+            }
             stage.inputs = inputs
         }
         if let (values, line) = strings("applies_to") {

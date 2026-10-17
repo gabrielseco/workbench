@@ -144,7 +144,6 @@ extension ThreadService {
 
     private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome(warnings: round.warnings)
-        if let warning = round.stage.notYetUsedWarning { outcome.warnings.append(warning) }
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
         switch round.proof {
@@ -189,6 +188,14 @@ extension ThreadService {
             } else {
                 outcome.warnings.append("the checklist \(path) is not a readable file in the pull request; reviewed without it")
             }
+        }
+        for path in round.stage.config.fileInputs {
+            // A file the stage was told to read and cannot: a CLEAN would not mean what the project asked for.
+            guard let text = Self.readChecklist(path, in: paths.tree) else {
+                return outcome.failed(
+                    "the \(round.stage.name) stage reads \(path), which is not a readable file in the pull request")
+            }
+            input.files.append(PRReviewFile(path: path, text: text))
         }
         if let path = round.stage.config.rubric {
             // Without the rubric the project asked for, a CLEAN would not mean what it should.
