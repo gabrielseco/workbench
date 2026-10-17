@@ -37,6 +37,39 @@ Any `FIX` or "not met" starts a follow-up turn (P5's mechanism: the finding is t
 is the criteria). After it is pushed the loop returns to **check**, so every fix is re-checked and re-verified
 before anything else sees it. A cap on rounds and on spend ends the loop and says what is still open.
 
+## Phase 0: a manual pass, and what it found
+
+Before writing the runner, the loop was run by hand with today's commands on a real Triage task: *Everything is
+ordered with the viewer's own pull requests first, newest created first* (Triage PR #71, 2026-10-17). Commands, in
+order: `goal new`, `goal approve`, `run`, `review`, `judge`, `review-stage design`, `accept`, `ship`,
+`review-stage design`, `pr-review`. Numbers: the turn took 85 s and $0.37, the check 12 s, verify 35 s, the judge
+$0.10. The judge, the design stage and `pr-review` all answered met / CLEAN, and the PR description carried the
+screenshot, the criteria table and the check result. So the steps work; what drifted from the plan is the joins.
+
+| # | What the plan assumed | What happened | Fix |
+|---|---|---|---|
+| 1 | The design stage runs before `ship` | `review-stage design` before `ship`: "refused: this thread has no recorded pull request. Run `workbench ship` first". It only runs on a PR | Stages take the thread's branch and worktree when there is no PR (friction row 61 is the same gap for `pr-review`) |
+| 2 | A proof belongs to a commit | `proof.added` has name, path, bytes and sha256, no commit. `pr-shots` names the file by the branch head *when it publishes* (`...-972aa0f.png`), not when it was taken | Record the head at `verify.started`; publish refuses a proof whose commit is not the head (task 1) |
+| 3 | The runner picks the next step | Nine commands, each with its output read by hand, and nothing says which comes next except a hint after some | The runner (task 6) |
+| 4 | A fix after the PR is re-verified | `ship` removes the worktree once the PR is open (`--keep-worktree` keeps it), so a later verify needs a follow-up thread's own worktree | Say it in the runner: a fix is always a follow-up thread; `--keep-worktree` is not needed |
+| 5 | The judge catches a proof that does not show the criterion | It answered `met` on all five, and wrote as concerns that the screenshot shows only the viewer's own PRs, so the order of the others' is never seen, and that no test covers `visibleItems` using the order. The design stage said the same. A gate on `met: false` would never have fired | The judge's output gets a `proof_complete` per criterion; `false` is a not-met in the loop (task 4). Open question below |
+| 6 | The screenshot can show an ordering | It was the owner's live data, a window clipped at the sidebar, and it cannot show a boundary between own and others' PRs | Triage side: a fixture state for verify (a fixed list of PRs), and a second named screenshot per ordering goal |
+| 7 | The design stage has a before and a minimum-size capture | It had one screenshot ("no before or minimum-size capture was supplied") | Triage side: the goal names the captures; the P6 pilot's dark and minimum-size shots are not in `verify.sh` |
+| 8 | The model can run a narrow test | It was denied `sed -i ... && swift test --filter ...`: the allowlist is per command and a compound is refused. It went on with the full check | Minor: say in `doctor` that a compound command is refused; Triage can allow the two commands separately |
+
+## Phase 0 tasks
+
+The loop is not built before these join problems are fixed, each its own PR:
+
+| Task | Result | Gate |
+|---|---|---|
+| 0.1 Proof knows its commit (row 2) | the head on `verify.started` and `proof.added`; `pr-shots` is given that commit; `ship` and the publish refuse a mismatch | tests: commit after verify then ship, proof at head, an old log reads "unknown" |
+| 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout | the existing stage tests plus a thread with no `pr.opened` |
+| 0.3 Judge says when the proof is partial (row 5) | `proof_complete` per criterion in the JSON; `review` prints it; a bad answer is a failed run as today | judge fixtures: complete, partial, missing field |
+| 0.4 Triage fixture state (rows 6 and 7) | `verify.sh` can launch with a fixed PR list, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary |
+
+Rows 3, 4 and 8 are covered by the runner and by notes in `doctor`.
+
 ## Decisions
 
 1. **Verify, judge and design run before the PR.** For a project whose app starts in seconds (a Mac app, a mocked
@@ -124,7 +157,7 @@ Each task is its own PR, in this order.
 
 | Task | Result | Gate |
 |---|---|---|
-| 1. Proof knows its commit | the `commit` field, the stale check, `review` prints it; `ship` refuses a stale proof | tests: commit after verify then ship; proof at head; no commit recorded in an old log reads as "unknown", not stale |
+| 1. Proof knows its commit (phase 0.1) | the `commit` field, the stale check, `review` prints it; `ship` refuses a stale proof | tests: commit after verify then ship; proof at head; no commit recorded in an old log reads as "unknown", not stale |
 | 2. Failed verify goes back | a verify failure or a missing named screenshot becomes a follow-up request | tests with the fake claude and a verify script that fails, passes, and leaves no file |
 | 3. P10 verifier (config, doctor, turn) | `[verifier]`, `workbench verifier`; P10 tasks 1 and 2 | P10's failure list |
 | 4. Judge as a gate | `judge --gate`; not met with evidence becomes a request, concerns do not | a judge fixture for met, not met, concern only, bad JSON |
@@ -170,6 +203,9 @@ per item? (2) middle list only, or Everything and the repository views too? (3) 
 
 - **Cost of the loop.** Each round is a coding turn, the check, a verifier turn ($1), a judge ($0.50) and design.
   The cap defaults are guesses; task 9 measures them.
+- **Is `proof_complete: false` a not-met?** The judge was told to mark not met only for an evidenced violation of the
+  literal text. A proof that cannot show half the criterion is not a violation, so the loop would need a rule that it is
+  treated as one, or that it asks for another capture. Phase 0.3 decides it on fixtures.
 - **Does `judge` need its own model?** `--model` already picks a cheaper one; whether the gate should default to it
   is for task 4.
 - **`accept`.** With the loop clean the owner's decision is the merge. `accept` stays as the recorded decision on a
