@@ -102,14 +102,14 @@ extension ThreadService {
         if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
 
         // A skip spends no round, so it writes no `started`; when the changed files cannot be read whole the round runs.
-        if !stage.config.appliesTo.isEmpty {
-            switch stage.applies(listing: await changedFiles(context)) {
-            case .run: break
-            case .skip:
-                return try await recordSkip(
-                    log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
-            case .unknown(let why): context.warnings.append("applies_to was not checked: \(why); the review ran")
-            }
+        let applies: ReviewStage.Applies =
+            stage.config.appliesTo.isEmpty ? .run : stage.applies(listing: await changedFiles(context))
+        switch applies {
+        case .run: break
+        case .skip:
+            return try await recordSkip(
+                log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+        case .unknown(let why): context.warnings.append("applies_to was not checked: \(why); the review ran")
         }
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
@@ -415,8 +415,7 @@ extension ThreadService {
     /// The NUL-separated files the pull request changes against its base, nil when git could not be asked.
     private func changedFiles(_ round: PRReviewRound) async -> GitResult? {
         guard await fetchBranch(round) == nil, case .success(let baseSHA) = await pinBase(round) else { return nil }
-        return try? await git.run(
-            ["diff", "--no-ext-diff", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
+        return try? await git.run(["diff", "--no-ext-diff", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
     }
 
     /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify
@@ -570,7 +569,6 @@ struct PRReviewRound: Sendable {
     var baseSHA: String?
     /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
     var proof: Result<[String], PRReviewFailure>?
-    /// Said with the round's result, whatever it is.
     var warnings: [String] = []
 }
 
