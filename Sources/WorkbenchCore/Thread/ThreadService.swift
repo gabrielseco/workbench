@@ -20,11 +20,15 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case copySourceMissing(String)
     case copySourceTooLarge(String)
     case noFreeID(String)
+    case abandonNotSaved(String)
 
     public var description: String {
         switch self {
         case .copySourceMissing(let path): "no goal file to copy at \(path)"
         case .copySourceTooLarge(let path): "\(path) is too large to be a goal file"
+        case .abandonNotSaved(let why):
+            "not abandoned: \(why). Nothing was removed. Commit what you want to keep, or `workbench discard` "
+                + "throws it away after listing it."
         case .noFreeID(let id): "could not find a free id for '\(id)'; try another name"
         case .invalidPushTarget(let name):
             "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
@@ -184,23 +188,6 @@ public struct ThreadService: Sendable {
                 ])
         }
         return approved
-    }
-
-    // MARK: Abandon
-
-    /// Ends the thread without accepting its work: records the decision and removes the worktree. The branch
-    /// is kept, so nothing the model committed is lost.
-    public func abandon(id: String, force: Bool = false) async throws {
-        if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
-        let manager = WorktreeManager(repoRoot: project.root, git: git)
-        if manager.exists(id) { try await manager.remove(threadID: id, force: force) }
-
-        try await withLog(id) { log in
-            _ = try await log.recoverOrphanedTurn()
-            _ = try await log.recoverOrphanedCheck()
-            _ = try await log.recoverOrphanedVerify()
-            try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
-        }
     }
 
     // MARK: Discard

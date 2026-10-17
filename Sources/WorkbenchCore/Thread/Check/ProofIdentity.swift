@@ -45,7 +45,7 @@ public struct ProofIdentity: Sendable, Equatable {
 extension ProofIdentity {
     /// Where attributes are read from: `base` when it names a commit, else the repository's empty tree. Nil only
     /// when even that cannot be found, in which case the caller must not compute a tree.
-    private static func attributeSource(_ base: String?, worktree: URL, git: GitRunner) async -> String? {
+    static func attributeSource(_ base: String?, worktree: URL, git: GitRunner) async -> String? {
         if let base, SafeNames.isCommitSHA(base) { return base }
         guard let empty = try? await git.run(["hash-object", "-t", "tree", "--stdin"], in: worktree), empty.succeeded
         else { return nil }
