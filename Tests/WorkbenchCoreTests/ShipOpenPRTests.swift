@@ -459,3 +459,23 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         #expect(!(gh.read("body") ?? "").contains(fx.repo.path))
     }
 }
+
+@Suite struct ShipOpenPRJudgeTests {
+    @Test func theLatestJudgesConcernsAreInThePRBody() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let pushed = try await pushedThread(fx, gh.runner)
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(pushed.id))
+        let turn = ThreadStore(project: fx.project).state(of: pushed.id).lastTurn
+        _ = try await log.append(
+            .judgeRan, turn: turn,
+            data: [
+                "ok": true, "criteria": [], "concerns": ["No test calls visibleItems with the order."],
+            ])
+        await log.close()
+
+        _ = try await fx.service.shipOpenPR(id: pushed.id, gh: gh.runner)
+        let body = try #require(gh.read("body"))
+        #expect(body.contains("### Judge concerns") && body.contains("- No test calls visibleItems with the order."))
+    }
+}

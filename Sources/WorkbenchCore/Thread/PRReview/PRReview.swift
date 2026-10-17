@@ -150,7 +150,10 @@ public enum PRReview {
                 "Screenshots the project's verify step took of this change; each is attached to this run as an image.",
                 "",
             ]
-            lines += input.proof.map { "- \($0)" }
+            // The size lets the reviewer name a capture that is clipped or too small to read.
+            lines += input.proof.map { path in
+                PNGSize.read(at: URL(fileURLWithPath: path)).map { "- \(path) (\($0.width) × \($0.height) px)" } ?? "- \(path)"
+            }
         }
         if let rubric = input.rubric {
             lines += ["", "## Rubric (\(input.rubricPath ?? "rubric"))", "", "Review against this rubric.", "", fenced(rubric)]
