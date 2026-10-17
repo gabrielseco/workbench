@@ -190,7 +190,8 @@ public final class Doctor: @unchecked Sendable {
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""),
             verify: DoctorStep(command: config.verifyCommand, outcome: .notDeclared, tail: "", hint: ""),
             appType: config.appType)
-        report.reviewWarnings = Self.reviewWarnings(config.review, root: project.root)
+        report.reviewWarnings = Self.reviewWarnings(
+            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil)
         guard config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil else {
             return report
         }
@@ -234,15 +235,20 @@ public final class Doctor: @unchecked Sendable {
         return report
     }
 
-    /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a table
-    /// no list names. The project knows its own pipeline, so each is said and none is refused.
-    static func reviewWarnings(_ review: ReviewConfig, root: URL) -> [String] {
+    /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a stage
+    /// that reads proof with no verify step to leave any, a table no list names. The project knows its own pipeline,
+    /// so each is said and none is refused.
+    static func reviewWarnings(_ review: ReviewConfig, root: URL, hasVerifyCommand: Bool) -> [String] {
         var warnings: [String] = []
         if !review.stages.contains(ReviewConfig.prReviewStage) {
             warnings.append(
                 "review.stages does not list \(ReviewConfig.prReviewStage): no correctness review will run in the loop")
         }
         for name in review.stages {
+            if review.stage(name)?.needsProof == true, !hasVerifyCommand {
+                warnings.append(
+                    "the \(name) stage reads proof, and there is no verify_command to leave any: its rounds will fail")
+            }
             guard let stage = review.stage(name), let rubric = stage.rubric else { continue }
             let key = stage.skill != nil ? "skill" : "prompt"
             var isDirectory: ObjCBool = false

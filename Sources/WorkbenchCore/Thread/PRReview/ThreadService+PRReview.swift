@@ -28,6 +28,24 @@ extension ThreadService {
         return try await reviewStage(.prReview(config), id: id, config: config, again: again, settings: settings, attach: attach)
     }
 
+    /// Runs one round of the stage `name` of `review.stages`, as `prReview` does for `pr-review` (which it is for
+    /// that name). Refused with `unknownStage` for a name the list does not have.
+    public func reviewStage(
+        named name: String, id: String, config: Config, again: Bool = false, codexPath: String = "codex",
+        environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = PRReview.timeout,
+        capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
+        stopRequested: @escaping @Sendable () -> Bool = { false },
+        attach: @Sendable (ProcessRun) -> Void = { _ in }
+    ) async throws -> PRReviewResult {
+        guard let stage = ReviewStage.named(name, config: config) else {
+            throw PRReviewRefusal.unknownStage(name, listed: config.review.stages)
+        }
+        let settings = PRReviewSettings(
+            codexPath: codexPath, environment: environment, timeout: timeout,
+            capacityBackoff: capacityBackoff, stopRequested: stopRequested)
+        return try await reviewStage(stage, id: id, config: config, again: again, settings: settings, attach: attach)
+    }
+
     /// Runs one round of `stage` on the thread's pull request; `prReview` is this for the `pr-review` stage.
     func reviewStage(
         _ stage: ReviewStage, id: String, config: Config, again: Bool, settings: PRReviewSettings,
@@ -60,7 +78,11 @@ extension ThreadService {
         let family = self.family(of: id)
         let rounds = reviewStartedCount(stage.events, family: family, pr: pr)
         let maxRounds = stage.config.maxRounds
-        if rounds >= maxRounds { throw PRReviewRefusal.capReached(pr: pr, rounds: rounds, max: maxRounds) }
+        if rounds >= maxRounds {
+            throw stage.isPRReview
+                ? PRReviewRefusal.capReached(pr: pr, rounds: rounds, max: maxRounds)
+                : PRReviewRefusal.stageCapReached(stage: stage.name, pr: pr, rounds: rounds, max: maxRounds)
+        }
 
         let goal: String
         do { goal = try String(contentsOf: project.goalURL(id), encoding: .utf8) } catch {
@@ -73,24 +95,35 @@ extension ThreadService {
 
         let round = rounds + 1
         let paths = PRReviewPaths(folder: project.threadDirectory(id).appendingPathComponent(stage.folder), round: round)
-        try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
-        let argv = PRReview.arguments(tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path)
         let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
-
-        // The attempt is on record before anything is spent, and this process is the thread's live holder while it
-        // runs (`stop` reaches it; a run or another review is refused).
-        try await log.append(
-            stage.events.started, turn: state.lastTurn,
-            data: [
-                "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
-                "argv": .array(PRDescriber.displayArguments(argv).map { .string($0) }),
-            ])
-        try? writeHolderMarker(id)
-        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
-
         var context = PRReviewRound(
             id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal, tip: tip,
             paths: paths, config: config, settings: settings)
+        if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
+
+        // A skip spends no round, so it writes no `started`; when the changed files cannot be read the round runs.
+        if !stage.isPRReview, !stage.config.appliesTo.isEmpty, let files = await changedFiles(context),
+            !stage.applies(to: files)
+        {
+            return try await recordSkip(log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+        }
+
+        try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
+        let argv = PRReview.arguments(
+            tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path,
+            images: (try? context.proof?.get()) ?? [])
+
+        // The attempt is on record before anything is spent, and this process is the thread's live holder while it
+        // runs (`stop` reaches it; a run or another review is refused).
+        var started: [String: JSONValue] = [
+            "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
+            "argv": .array(PRDescriber.displayArguments(argv).map { .string($0) }),
+        ]
+        if let name = stage.events.stage { started["stage"] = .string(name) }
+        try await log.append(stage.events.started, turn: state.lastTurn, data: .object(started))
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+
         let outcome = await runRound(&context, attach: attach)
         await removeTree(paths)
         let findings = outcome.findings
@@ -108,6 +141,13 @@ extension ThreadService {
     private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome()
         if let warning = round.stage.notYetUsedWarning { outcome.warnings.append(warning) }
+        // A stage that asked for proof and has none must not pass on the diff alone.
+        var proof: [String] = []
+        switch round.proof {
+        case .failure(let reason): return outcome.failed(reason)
+        case .success(let files): proof = files
+        case nil: break
+        }
         let paths = round.paths
         let sha = round.tip
         round.reviewedSHA = sha
@@ -134,7 +174,7 @@ extension ThreadService {
             pr: round.pr, branch: round.branch, base: round.base, headSHA: sha, baseSHA: baseSHA,
             goal: Self.bounded(round.goal, limit: PRReview.goalLimit, rest: project.goalURL(round.id).path),
             instructions: nil, checklist: nil, checklistPath: nil,
-            diffPath: paths.diff.path, diffTruncated: truncated)
+            diffPath: paths.diff.path, diffTruncated: truncated, proof: proof)
         if round.config.projectInstructions {
             input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseSHA)?.text
         }
@@ -164,7 +204,8 @@ extension ThreadService {
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
         let transcript = await runCodex(
             codex, round: round, attach: attach,
-            argv: PRReview.arguments(tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path))
+            argv: PRReview.arguments(
+                tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path, images: proof))
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
         if let problem = transcript.problem { return outcome.failed(problem, answer: Self.readAnswer(paths.answer)) }
 
@@ -341,10 +382,68 @@ extension ThreadService {
         if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
+        if let name = stage.events.stage { data["stage"] = .string(name) }
         try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
             round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: outcome.verdict, failure: reason,
             findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
+    }
+
+    /// A stage whose `applies_to` matches none of the changed files: on record as `skipped`, `ok: false`, never a pass.
+    private func recordSkip(
+        _ log: EventLogWriter, stage: ReviewStage, turn: Int, round: Int, pr: Int, maxRounds: Int, sha: String
+    ) async throws -> PRReviewResult {
+        let globs = stage.config.appliesTo.joined(separator: ", ")
+        let reason = "the diff touches no path matching applies_to (\(globs))"
+        try await log.append(
+            stage.events.finished, turn: turn,
+            data: [
+                "stage": .string(stage.name), "round": .int(round), "pr": .int(pr), "head_sha": .string(sha),
+                "ok": .bool(false), "verdict": .string(ReviewStage.skippedVerdict), "reason": .string(reason),
+            ])
+        return PRReviewResult(
+            round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: nil, failure: nil, findingsPath: nil,
+            findings: nil, warnings: [], skipped: reason)
+    }
+
+    // MARK: Inputs
+
+    /// The files the pull request changes against its base, nil when they cannot be read.
+    private func changedFiles(_ round: PRReviewRound) async -> [String]? {
+        guard await fetchBranch(round) == nil, case .success(let baseSHA) = await pinBase(round) else { return nil }
+        let result = try? await git.run(
+            ["diff", "--no-ext-diff", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
+        guard let result, result.succeeded else { return nil }
+        return result.stdout.split(separator: "\0").map(String.init).filter { !$0.isEmpty }
+    }
+
+    /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify
+    /// step of the latest turn counts, as an older one shows code the pull request may no longer have.
+    func stageProof(_ stage: ReviewStage, state: ThreadState, id: String) -> Result<[String], PRReviewFailure> {
+        guard let verify = state.review.verify else {
+            return .failure(
+                PRReviewFailure(
+                    "the \(stage.name) stage reads proof, and this thread has no verify step on record "
+                        + "(set verify_command and run a turn)"))
+        }
+        guard verify.turn == state.lastTurn else {
+            return .failure(
+                PRReviewFailure(
+                    "the \(stage.name) stage reads proof, and the latest verify step is of turn \(verify.turn), before "
+                        + "the latest turn \(state.lastTurn): its screenshots may not show this change"))
+        }
+        let folder = project.threadDirectory(id)
+        let files = verify.proof
+            .filter { !$0.name.contains("/") && $0.name.lowercased().hasSuffix(".png") && $0.isAvailable(in: folder) }
+            .prefix(PRReview.proofLimit)
+            .map { folder.appendingPathComponent($0.path).path }
+        guard !files.isEmpty else {
+            return .failure(
+                PRReviewFailure(
+                    "the \(stage.name) stage reads proof, and the verify step of turn \(verify.turn) left no PNG in "
+                        + "\(Project.proofRef(turn: verify.turn))/"))
+        }
+        return .success(Array(files))
     }
 
     // MARK: Small helpers
@@ -467,6 +566,8 @@ struct PRReviewRound: Sendable {
     var reviewedSHA: String?
     /// The base branch's commit the diff and the instructions come from.
     var baseSHA: String?
+    /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
+    var proof: Result<[String], PRReviewFailure>?
 }
 
 struct PRReviewFailure: Error, Sendable {

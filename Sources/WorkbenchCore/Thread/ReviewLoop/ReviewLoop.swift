@@ -108,6 +108,8 @@ public struct PRReviewRecord: Sendable, Equatable {
     public var headSHA: String?
     /// Relative to `thread`'s directory.
     public var findingsPath: String?
+    /// The stage did not run: no changed path matched its `applies_to`.
+    public var skipped = false
 }
 
 extension ThreadService {
@@ -144,7 +146,8 @@ extension ThreadService {
     func reviewStartedCount(_ kinds: ReviewStage.Events, family: [String], pr: Int) -> Int {
         family.reduce(0) { total, thread in
             let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
-            return total + events.filter { $0.kind == kinds.started && $0.data["pr"]?.intValue == pr }.count
+            return total
+                + events.filter { $0.kind == kinds.started && kinds.owns($0) && $0.data["pr"]?.intValue == pr }.count
         }
     }
 
@@ -153,11 +156,12 @@ extension ThreadService {
     func reviewRecords(_ kinds: ReviewStage.Events, family: [String], pr: Int) -> [PRReviewRecord] {
         var records: [(ts: String, record: PRReviewRecord)] = []
         for thread in family {
-            let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
+            let events = ((try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? [])
+                .filter { kinds.owns($0) && $0.data["pr"]?.intValue == pr }
+            // A skip has no `started` and spends no round, so it cannot close a started round of the same number.
             let finished = Set(
-                events.filter { $0.kind == kinds.finished && $0.data["pr"]?.intValue == pr }
-                    .compactMap { $0.data["round"]?.intValue })
-            for event in events where event.kind == kinds.started && event.data["pr"]?.intValue == pr {
+                events.filter { $0.kind == kinds.finished && !Self.isSkip($0) }.compactMap { $0.data["round"]?.intValue })
+            for event in events where event.kind == kinds.started {
                 guard let round = event.data["round"]?.intValue, !finished.contains(round) else { continue }
                 records.append(
                     (
@@ -167,7 +171,7 @@ extension ThreadService {
                             headSHA: event.data["head_sha"]?.stringValue, findingsPath: nil)
                     ))
             }
-            for event in events where event.kind == kinds.finished && event.data["pr"]?.intValue == pr {
+            for event in events where event.kind == kinds.finished {
                 let verdict = event.data["verdict"]?.stringValue.flatMap(PRReviewVerdict.init(rawValue:))
                 records.append(
                     (
@@ -176,11 +180,25 @@ extension ThreadService {
                             thread: thread, round: event.data["round"]?.intValue ?? 0, pr: pr,
                             ok: event.data["ok"] == true && verdict != nil, verdict: verdict,
                             headSHA: event.data["head_sha"]?.stringValue,
-                            findingsPath: event.data["findings_path"]?.stringValue)
+                            findingsPath: event.data["findings_path"]?.stringValue, skipped: Self.isSkip(event))
                     ))
             }
         }
         return records.sorted { ($0.record.round, $0.ts) < ($1.record.round, $1.ts) }.map(\.record)
+    }
+
+    static func isSkip(_ event: Event) -> Bool { event.data["verdict"]?.stringValue == ReviewStage.skippedVerdict }
+
+    /// The latest round of each stage of `review.stages` for this thread's pull request, in the list's order; nil for
+    /// a stage that has none. Empty when the thread has no pull request.
+    public func latestReviewStages(id: String, review: ReviewConfig) -> [(name: String, record: PRReviewRecord?)] {
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        guard let pr = events.last(where: { $0.kind == .prOpened })?.data["number"]?.intValue else { return [] }
+        let family = family(of: id)
+        return review.stages.map { name in
+            let kinds: ReviewStage.Events = name == ReviewConfig.prReviewStage ? .prReview : .stage(name)
+            return (name, reviewRecords(kinds, family: family, pr: pr).last)
+        }
     }
 
     /// The latest review round of this thread's pull request, from whichever thread of the family ran it.

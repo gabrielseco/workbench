@@ -1,9 +1,8 @@
 import Foundation
 
-/// Who reads the brief of a review stage.
+/// Who reads the brief of a review stage. Only Codex: the reviewer is a second AI, never the one that wrote the change.
 public enum ReviewerKind: String, Sendable, Equatable, CaseIterable {
     case codex
-    case claude
 }
 
 /// What a review stage may read: the diff against the base, the approved goal, the verify step's proof, or a file
@@ -59,12 +58,12 @@ public struct ReviewStageConfig: Sendable, Equatable {
 
     /// What the table sets that the runner does not act on yet, so a round can say so instead of ignoring it.
     var notYetUsed: [String] {
-        var keys: [String] = []
-        if reviewer != .codex { keys.append("reviewer") }
-        if inputs != ReviewStageInput.defaults { keys.append("inputs") }
-        if !appliesTo.isEmpty { keys.append("applies_to") }
-        return keys
+        // `proof` is attached; the brief always carries the diff and the goal, and reads no other file yet.
+        inputs.filter { $0 != .proof } != ReviewStageInput.defaults ? ["inputs"] : []
     }
+
+    /// Whether the stage reads the verify step's proof.
+    public var needsProof: Bool { inputs.contains(.proof) }
 }
 
 /// `[review]` and its `[review.stage.<name>]` tables: which review stages run, in what order, and how.
@@ -232,6 +231,11 @@ extension ReviewConfig {
         if keys.contains("reviewer"), let entry = table.entries["reviewer"] {
             if case .string(let value) = entry.value, let reviewer = ReviewerKind(rawValue: value) {
                 stage.reviewer = reviewer
+            } else if case .string("claude") = entry.value {
+                fail(
+                    .invalidValue, entry.line,
+                    "'reviewer' cannot be \"claude\": review stages run on Codex, the second AI that checks what "
+                        + "Claude wrote; remove the key or set it to \"codex\"")
             } else {
                 let allowed = ReviewerKind.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
                 fail(.invalidValue, entry.line, "'reviewer' must be \(allowed)")

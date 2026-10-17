@@ -34,7 +34,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
             [review.stage.design]
             skill = ".agents/skills/design-review/SKILL.md"
-            reviewer = "claude"
+            reviewer = "codex"
             inputs = ["diff", "goal", "proof", "docs/DESIGN.md"]
             applies_to = ["Sources/Triage/**", "Resources/**"]
             max_rounds = 2
@@ -43,7 +43,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
         let design = try #require(config.review.stage("design"))
         #expect(design.skill == ".agents/skills/design-review/SKILL.md" && design.prompt == nil)
         #expect(design.rubric == ".agents/skills/design-review/SKILL.md")
-        #expect(design.reviewer == .claude)
+        #expect(design.reviewer == .codex)
         #expect(design.inputs == [.diff, .goal, .proof, .path("docs/DESIGN.md")])
         #expect(design.appliesTo == ["Sources/Triage/**", "Resources/**"])
         #expect(design.maxRounds == 2)

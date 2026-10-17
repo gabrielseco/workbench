@@ -34,6 +34,8 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let judgeRan: EventKind = "judge.ran"
     public static let prReviewStarted: EventKind = "pr_review.started"
     public static let prReviewFinished: EventKind = "pr_review.finished"
+    public static let reviewStageStarted: EventKind = "review_stage.started"
+    public static let reviewStageFinished: EventKind = "review_stage.finished"
     public static let prOpened: EventKind = "pr.opened"
     public static let prDescribed: EventKind = "pr.described"
     public static let prRefreshed: EventKind = "pr.refreshed"

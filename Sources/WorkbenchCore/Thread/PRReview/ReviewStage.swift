@@ -2,14 +2,26 @@ import Foundation
 
 /// A review stage: a read-only reviewer over declared inputs whose answer ends in a verdict line
 /// (docs/plan/P6-review-stages.md). The runner in `ThreadService+PRReview.swift` runs a stage; `pr-review` is the
-/// first instance and, until stages get events of their own, the only one it can record.
+/// first instance and keeps its `pr_review.*` events, every other stage is recorded as `review_stage.*`.
 public struct ReviewStage: Sendable, Equatable {
     /// The events one round is recorded with.
     struct Events: Sendable, Equatable {
         var started: EventKind
         var finished: EventKind
+        /// The `stage` field the events carry, so stages that share the kinds count apart; nil for `pr_review.*`.
+        var stage: String?
 
-        static let prReview = Events(started: .prReviewStarted, finished: .prReviewFinished)
+        static let prReview = Events(started: .prReviewStarted, finished: .prReviewFinished, stage: nil)
+
+        static func stage(_ name: String) -> Events {
+            Events(started: .reviewStageStarted, finished: .reviewStageFinished, stage: name)
+        }
+
+        /// Whether `event` is a round of this stage, started or finished.
+        func owns(_ event: Event) -> Bool {
+            guard event.kind == started || event.kind == finished else { return false }
+            return stage == nil || event.data["stage"]?.stringValue == stage
+        }
     }
 
     public var name: String
@@ -20,10 +32,22 @@ public struct ReviewStage: Sendable, Equatable {
     /// start with it.
     var folder: String { name }
 
+    var isPRReview: Bool { name == ReviewConfig.prReviewStage }
+
+    /// The `verdict` a `finished` event records for a stage that did not run because no changed path matched.
+    public static let skippedVerdict = "skipped"
+
     /// `pr-review` as the config defines it: the built-in brief, with `[review.stage.pr-review]` (or `[pr_review]`)
     /// for its checklist and round cap.
     public static func prReview(_ config: Config) -> ReviewStage {
         ReviewStage(name: ReviewConfig.prReviewStage, config: config.review.prReview, events: .prReview)
+    }
+
+    /// The stage `name` of `review.stages`; `pr-review` also when it is not listed, as `workbench pr-review` runs it.
+    public static func named(_ name: String, config: Config) -> ReviewStage? {
+        if name == ReviewConfig.prReviewStage { return prReview(config) }
+        guard config.review.stages.contains(name), let stage = config.review.stage(name) else { return nil }
+        return ReviewStage(name: name, config: stage, events: .stage(name))
     }
 
     /// The brief for one round.
@@ -61,9 +85,42 @@ public struct ReviewStage: Sendable, Equatable {
 
     /// What the stage's table asks for that this version does not do yet, said once per round rather than ignored.
     var notYetUsedWarning: String? {
-        let keys = config.notYetUsed
+        var keys = config.notYetUsed
+        // A skipped pr-review would leave `ship --review-loop` without a verdict until the loop knows stages.
+        if isPRReview, !config.appliesTo.isEmpty { keys.append("applies_to") }
         guard !keys.isEmpty else { return nil }
         return "the \(name) stage sets \(keys.joined(separator: ", ")), which this version does not use yet; "
             + "the built-in Codex review ran"
+    }
+
+    /// Whether any of the files the pull request changes matches one of the stage's `applies_to` globs; an empty
+    /// list applies to every change.
+    func applies(to files: [String]) -> Bool {
+        config.appliesTo.isEmpty || files.contains { file in config.appliesTo.contains { Self.glob($0, matches: file) } }
+    }
+
+    /// `**` matches any run of path segments (also none), `*` any run of characters within one segment, `?` one.
+    static func glob(_ pattern: String, matches path: String) -> Bool {
+        match(Array(pattern.split(separator: "/", omittingEmptySubsequences: false)),
+              Array(path.split(separator: "/", omittingEmptySubsequences: false)))
+    }
+
+    private static func match(_ pattern: [Substring], _ path: [Substring]) -> Bool {
+        guard let head = pattern.first else { return path.isEmpty }
+        if head == "**" {
+            let rest = Array(pattern.dropFirst())
+            return (0...path.count).contains { match(rest, Array(path.dropFirst($0))) }
+        }
+        guard let segment = path.first, segmentMatches(Array(head), Array(segment)) else { return false }
+        return match(Array(pattern.dropFirst()), Array(path.dropFirst()))
+    }
+
+    private static func segmentMatches(_ pattern: [Character], _ text: [Character]) -> Bool {
+        guard let head = pattern.first else { return text.isEmpty }
+        switch head {
+        case "*": return (0...text.count).contains { segmentMatches(Array(pattern.dropFirst()), Array(text.dropFirst($0))) }
+        case "?": return !text.isEmpty && segmentMatches(Array(pattern.dropFirst()), Array(text.dropFirst()))
+        default: return text.first == head && segmentMatches(Array(pattern.dropFirst()), Array(text.dropFirst()))
+        }
     }
 }
