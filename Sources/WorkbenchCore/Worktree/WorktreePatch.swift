@@ -15,6 +15,8 @@ public enum WorktreePatchError: Error, Equatable, Sendable, CustomStringConverti
     case tooLarge(bytes: Int, limit: Int)
     case gitFailed(String)
     case writeFailed(String)
+    case stagedContentMissing([String])
+    case notApplicable(String)
 
     public var description: String {
         switch self {
@@ -22,6 +24,11 @@ public enum WorktreePatchError: Error, Equatable, Sendable, CustomStringConverti
             "the uncommitted changes are about \(bytes >> 20) MiB, over the \(limit >> 20) MiB Workbench saves"
         case .gitFailed(let message): "git could not describe the uncommitted changes: \(message)"
         case .writeFailed(let message): "the changes could not be saved: \(message)"
+        case .stagedContentMissing(let paths):
+            "staged content that is no longer in the working tree would be in no patch "
+                + "(\(paths.prefix(3).joined(separator: ", "))"
+                + (paths.count > 3 ? " and \(paths.count - 3) more" : "") + "): restore the file or unstage it"
+        case .notApplicable(let message): "the saved patch does not apply to the branch: \(message)"
         }
     }
 }
@@ -51,18 +58,32 @@ public enum WorktreePatch {
         let scratch = GitRunner(executable: git.executable, environment: environment, timeout: git.timeout)
 
         let head = try await run(git, ["rev-parse", "--verify", "--quiet", "HEAD"], worktree).trimmed
+
+        // Both checks read the worktree's own index and change nothing, and both come before anything is staged:
+        // `git add` stores each file it takes in the repository, which a worktree that cannot fit must not fill.
+        // A file staged as added or changed whose working copy is gone is in the index only, so no patch of the
+        // working tree holds it, and forced removal would destroy the index.
+        let missing = Set(
+            try await run(git, ["ls-files", "--deleted", "-z"], worktree).split(separator: "\0").map(String.init))
+        let staged = try await run(
+            git, ["diff", "--cached", "--name-only", "--diff-filter=AM", "-z", "--no-ext-diff", "HEAD", "--"],
+            worktree)
+        let lost = staged.split(separator: "\0").map(String.init).filter { missing.contains($0) }
+        guard lost.isEmpty else { throw WorktreePatchError.stagedContentMissing(lost.sorted()) }
+
+        let untracked = try await run(git, ["ls-files", "--others", "--exclude-standard", "-z"], worktree)
+        let changed = try await run(git, ["diff", "--name-only", "-z", "--no-ext-diff", "HEAD", "--"], worktree)
+        // New content is bounded here. A deleted or shortened file adds at most what the repository already holds.
+        let paths = Set((untracked + changed).split(separator: "\0").map(String.init))
+        let size = paths.reduce(0) { $0 + fileSize(worktree.appendingPathComponent($1)) }
+        guard size <= limit else { throw WorktreePatchError.tooLarge(bytes: size, limit: limit) }
+
         _ = try await run(scratch, ["read-tree", "HEAD"], worktree)
         _ = try await run(scratch, ["add", "-A"], worktree)
         let tree = try await run(scratch, ["write-tree"], worktree).trimmed
         let names = try await run(
             scratch, ["diff", "--cached", "--name-only", "-z", "--no-ext-diff", "HEAD", "--"], worktree)
-        let paths = names.split(separator: "\0").map(String.init)
-        guard !paths.isEmpty else { return nil }
-
-        // Before git writes anything: a patch is about as large as the files it holds, so a worktree that cannot
-        // fit is refused without filling the disk first.
-        let size = paths.reduce(0) { $0 + fileSize(worktree.appendingPathComponent($1)) }
-        guard size <= limit else { throw WorktreePatchError.tooLarge(bytes: size, limit: limit) }
+        guard !names.isEmpty else { return nil }
 
         let directory = destination.deletingLastPathComponent()
         let partial = directory.appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString)")
@@ -80,7 +101,8 @@ public enum WorktreePatch {
         _ = try await run(
             scratch,
             ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--no-color",
-             "--output=\(partial.path)", "HEAD", "--"], worktree)
+             "--src-prefix=a/", "--dst-prefix=b/", "--output=\(partial.path)", "HEAD", "--"], worktree)
+        try await requireApplies(partial, worktree: worktree, git: git)
         guard let digest = VerifyRunner.sha256(of: partial, limit: limit * 2) else {
             throw WorktreePatchError.tooLarge(bytes: fileSize(partial), limit: limit)
         }
@@ -94,6 +116,25 @@ public enum WorktreePatch {
             throw WorktreePatchError.writeFailed(error.localizedDescription)
         }
         return SavedPatch(url: destination, bytes: digest.bytes, sha256: digest.hex, tree: tree, head: head)
+    }
+
+    /// The patch must apply to `HEAD` before anything is removed on the strength of it: checked against a fresh
+    /// throwaway index, so no file is touched. `--src-prefix` and `--dst-prefix` above keep a `diff.noprefix` or
+    /// `diff.mnemonicPrefix` setting from writing paths that plain `git apply` cannot read.
+    private static func requireApplies(_ patch: URL, worktree: URL, git: GitRunner) async throws {
+        let index = FileManager.default.temporaryDirectory.appendingPathComponent("wb-check-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: index) }
+        var environment = git.environment
+        environment["GIT_INDEX_FILE"] = index.path
+        let scratch = GitRunner(executable: git.executable, environment: environment, timeout: git.timeout)
+        _ = try await run(scratch, ["read-tree", "HEAD"], worktree)
+        let result: GitResult
+        do { result = try await scratch.run(["apply", "--cached", "--check", patch.path], in: worktree) } catch {
+            throw WorktreePatchError.gitFailed("git apply \(error)")
+        }
+        guard result.succeeded else {
+            throw WorktreePatchError.notApplicable(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
     }
 
     private static func run(_ git: GitRunner, _ args: [String], _ directory: URL) async throws -> String {

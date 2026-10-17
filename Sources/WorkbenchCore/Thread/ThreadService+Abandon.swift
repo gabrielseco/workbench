@@ -12,26 +12,39 @@ extension ThreadService {
     /// still working in it. `force` lifts git's refusals for a worktree that had nothing to save.
     @discardableResult
     public func abandon(id: String, force: Bool = false) async throws -> SavedPatch? {
-        if let decision = ThreadStore(project: project).state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
-        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
-        let manager = WorktreeManager(repoRoot: project.root, git: git)
-        var saved: SavedPatch?
-        if manager.exists(id) {
-            let base = baseCommit(of: id)
-            saved = try await savePatch(id: id, manager: manager, base: base)
-            if let saved {
-                let now = await ProofIdentity.of(worktree: manager.path(for: id), git: git, attributesFrom: base)
-                guard now?.tree == saved.tree else {
-                    throw ThreadServiceError.abandonNotSaved(
-                        "the worktree changed while its changes were being saved")
-                }
-                try await manager.remove(threadID: id, force: true)
-            } else {
-                try await manager.remove(threadID: id, force: force)
-            }
-        }
+        try await abandon(id: id, force: force, afterSave: nil)
+    }
 
-        try await withLog(id) { log in
+    /// `afterSave` runs between the patch and the removal; only tests pass one, to write into the worktree there.
+    func abandon(id: String, force: Bool, afterSave: (@Sendable () async throws -> Void)?) async throws -> SavedPatch? {
+        if let decision = ThreadStore(project: project).state(of: id).decision {
+            throw ThreadServiceError.threadEnded(decision)
+        }
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        // The log's lock is held from the checks to the decision, as `judge` and `pr-review` do: a run that starts
+        // meanwhile cannot have its worktree removed from under it, and a second abandon waits or is refused.
+        return try await withLog(id) { log in
+            if let decision = ThreadStore(project: project).state(of: id).decision {
+                throw ThreadServiceError.threadEnded(decision)
+            }
+            if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+            let manager = WorktreeManager(repoRoot: project.root, git: git)
+            var saved: SavedPatch?
+            if manager.exists(id) {
+                let base = baseCommit(of: id)
+                saved = try await savePatch(id: id, manager: manager, base: base)
+                try await afterSave?()
+                if let saved {
+                    let now = await ProofIdentity.of(worktree: manager.path(for: id), git: git, attributesFrom: base)
+                    guard now?.tree == saved.tree else {
+                        throw ThreadServiceError.abandonNotSaved(
+                            "the worktree changed while its changes were being saved")
+                    }
+                    try await manager.remove(threadID: id, force: true)
+                } else {
+                    try await manager.remove(threadID: id, force: force)
+                }
+            }
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
             _ = try await log.recoverOrphanedVerify()
@@ -44,8 +57,8 @@ extension ThreadService {
                     ])
             }
             try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
+            return saved
         }
-        return saved
     }
 
     /// Where `abandon` keeps what was not committed, relative to the thread's folder.

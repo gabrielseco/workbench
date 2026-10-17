@@ -73,6 +73,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         #expect(event.data["sha256"]?.stringValue == saved.sha256)
         #expect(event.data["bytes"]?.intValue == saved.bytes)
         #expect(event.data["head"]?.stringValue == saved.head)
+        #expect(event.data["tree"]?.stringValue == saved.tree)
         #expect(events.last?.data["decision"]?.stringValue == "abandoned")
         #expect(try fx.contents(id).isHealthy)
     }
@@ -208,6 +209,85 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         try write("written after the save\n", "late.txt", in: worktree)
         let later = await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil)
         #expect(later?.tree != saved.tree)
+    }
+
+    @Test func aFileWrittenAfterTheSaveRefusesTheAbandonAndRemovesNothing() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("loose\n", "loose.txt", in: worktree)
+
+        await #expect(throws: ThreadServiceError.self) {
+            _ = try await fx.service.abandon(id: id, force: false) {
+                try "late\n".write(to: worktree.appendingPathComponent("late.txt"), atomically: true, encoding: .utf8)
+            }
+        }
+
+        #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent("late.txt").path))
+        #expect(try fx.events(id).last?.kind != .reviewDecision, "the thread is still active")
+    }
+
+    @Test func aStagedFileMissingFromTheWorkingTreeRefusesInsteadOfLosingIt() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("only in the index\n", "staged-only.txt", in: worktree)
+        _ = try await fx.git.run(["add", "staged-only.txt"], in: worktree)
+        try FileManager.default.removeItem(at: worktree.appendingPathComponent("staged-only.txt"))
+        try write("changed\n", "tracked.txt", in: worktree)
+
+        do {
+            _ = try await fx.service.abandon(id: id)
+            Issue.record("expected a refusal: the staged content is in no patch")
+        } catch let error as ThreadServiceError {
+            #expect(error.description.contains("staged-only.txt"), "names the file: \(error)")
+        }
+
+        #expect(FileManager.default.fileExists(atPath: worktree.path))
+        #expect(try await fx.git.run(["ls-files", "--stage", "staged-only.txt"], in: worktree).stdout.contains("staged-only"))
+    }
+
+    @Test func theLogLockIsHeldForTheWholeAbandonSoANewRunCannotLoseItsWorktree() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        try write("loose\n", "loose.txt", in: worktree)
+
+        try await fx.service.withLog(id) { _ in
+            await #expect(throws: (any Error).self) { try await fx.service.abandon(id: id) }
+        }
+
+        #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent("loose.txt").path))
+        #expect(try fx.events(id).last?.kind != .reviewDecision)
+    }
+
+    @Test func aHugeUntrackedFileIsRefusedBeforeGitStoresIt() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        let big = worktree.appendingPathComponent("big.bin")
+        FileManager.default.createFile(atPath: big.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: big)
+        try handle.truncate(atOffset: UInt64(WorktreePatch.sizeLimit + 1))
+        try handle.close()
+        func looseObjects() async throws -> String {
+            let out = try await fx.git.run(["count-objects", "-v"], in: fx.repo).stdout
+            return out.split(separator: "\n").first { $0.hasPrefix("count:") }.map(String.init) ?? out
+        }
+        let before = try await looseObjects()
+
+        await #expect(throws: ThreadServiceError.self) { try await fx.service.abandon(id: id) }
+
+        #expect(try await looseObjects() == before, "git add never ran on the oversized file")
+    }
+
+    @Test func aGitConfigWithNoPrefixStillGivesAPatchGitApplyTakes() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await workedThread(fx)
+        _ = try await fx.git.run(["config", "diff.noprefix", "true"], in: fx.repo)
+        try write("changed\n", "tracked.txt", in: worktree)
+
+        let saved = try #require(try await fx.service.abandon(id: id))
+
+        let checkout = try await apply(saved.url, to: id, fx)
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        #expect(try String(contentsOf: checkout.appendingPathComponent("tracked.txt"), encoding: .utf8) == "changed\n")
     }
 
     @Test func abandoningTwiceIsRefusedAndKeepsTheFirstPatch() async throws {
