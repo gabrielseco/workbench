@@ -146,7 +146,7 @@ extension ThreadService {
         let numstat = try? await git.run(
             ["diff", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", "\(plan.base)...\(plan.head)", "--"],
             in: project.root)
-        let changes = numstat?.succeeded == true ? DiffProvider.parseNumstat(numstat?.stdout ?? "") : []
+        let changes = Self.changes(from: numstat)
         var body = PRBodyBuilder.build(
             goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn,
             description: description, verify: state.review.verify, changes: changes,
@@ -155,6 +155,13 @@ extension ThreadService {
         body.title = Self.withoutCredentials(body.title, environment: environment)
         body.body = Self.withoutCredentials(body.body, environment: environment)
         return body
+    }
+
+    /// The changed files for the `What changed` section. Nothing when the diff could not be read or its output was cut
+    /// at `GitRunner.outputLimit`: a partial list would be published as if it were the whole change.
+    static func changes(from numstat: GitResult?) -> [FileChange] {
+        guard let numstat, numstat.succeeded, !numstat.outputTruncated else { return [] }
+        return DiffProvider.parseNumstat(numstat.stdout)
     }
 
     private func createPR(plan: ShipPlan, runner: GitRunner, description: PRDescription?) async throws -> FoundPR {

@@ -39,12 +39,23 @@ public struct ReviewStage: Sendable, Equatable {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         guard config.skill != nil else { return text }
         let lines = text.components(separatedBy: "\n")
-        let heading = { (line: String) in line.hasPrefix("# ") || line.hasPrefix("## ") }
-        guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Rubric" }) else {
-            return Self.skillHeader + "\n\n" + text
+        // A heading inside a fenced example is part of the example, not the start or end of a section.
+        var start: Int?
+        var end = lines.count
+        var fence: (char: Character, length: Int)?
+        for (index, line) in lines.enumerated() {
+            let wasFenced = fence != nil
+            fence = PRBodyBuilder.nextFence(after: fence, line: line)
+            if wasFenced || fence != nil { continue }
+            if start == nil {
+                if line.trimmingCharacters(in: .whitespaces) == "## Rubric" { start = index }
+            } else if line.hasPrefix("# ") || line.hasPrefix("## ") {
+                end = index
+                break
+            }
         }
-        let rest = lines[(start + 1)...]
-        let section = rest.prefix { !heading($0) }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let start else { return Self.skillHeader + "\n\n" + text }
+        let section = lines[(start + 1)..<end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return section.isEmpty ? nil : section
     }
 

@@ -91,6 +91,15 @@ private struct TestRepo {
         let result = try await sh.run(
             ["-c", "head -c 6000000 /dev/zero | tr '\\0' x"], in: URL(fileURLWithPath: "/tmp"))
         #expect(result.stdout.utf8.count == GitRunner.outputLimit)
+        #expect(result.outputTruncated, "a cut is reported, not silent")
+    }
+
+    @Test func outputUnderTheCapIsNotMarkedTruncated() async throws {
+        let sh = GitRunner(executable: URL(fileURLWithPath: "/bin/sh"), environment: ["PATH": "/usr/bin:/bin"])
+        let exact = try await sh.run(
+            ["-c", "head -c \(GitRunner.outputLimit) /dev/zero | tr '\\0' x"], in: URL(fileURLWithPath: "/tmp"))
+        #expect(exact.stdout.utf8.count == GitRunner.outputLimit && !exact.outputTruncated)
+        #expect(!(try await sh.run(["-c", "echo hi"], in: URL(fileURLWithPath: "/tmp"))).outputTruncated)
     }
 
     @Test func missingExecutableIsALaunchError() async {

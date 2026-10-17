@@ -138,6 +138,50 @@ private func problems(_ section: String) -> [ConfigProblem] {
         #expect(skill.rubric(from: text) == "- flag every force unwrap")
     }
 
+    @Test func aHeadingInsideAFencedExampleDoesNotEndTheRubricSection() throws {
+        let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
+        let text = """
+            # Skill
+
+            ## Rubric
+
+            Report like this:
+
+            ```markdown
+            ## Example
+            - a finding
+            ```
+
+            - check the locks
+
+            ## Posting
+
+            gh pr comment
+            """
+        let rubric = try #require(skill.rubric(from: text))
+        #expect(rubric.contains("## Example") && rubric.contains("- check the locks"), "\(rubric)")
+        #expect(!rubric.contains("gh pr comment"))
+    }
+
+    @Test func aRubricHeadingInsideAFencedExampleIsNotTheSection() throws {
+        let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
+        let text = """
+            # Skill
+
+            Write the section like:
+
+            ~~~
+            ## Rubric
+            - not this one
+            ~~~
+
+            ## Rubric
+
+            - the real check
+            """
+        #expect(skill.rubric(from: text) == "- the real check")
+    }
+
     @Test func aSkillWithoutARubricSectionIsUsedWholeUnderTheIgnoreStepsHeader() throws {
         let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
         let rubric = try #require(skill.rubric(from: "# Skill\n\nRun swift build, then check the locks.\n"))
@@ -191,6 +235,27 @@ private func problems(_ section: String) -> [ConfigProblem] {
         #expect(!brief.contains("## Report"), "the rubric replaces the built-in report instructions")
         #expect(brief.contains("# Review pull request #") && brief.contains(PRReview.cleanLine))
         #expect(r.started.count == 1 && r.finished.count == 1)
+    }
+
+    @Test func rubricTextWithShellMetacharactersReachesTheReviewerOnlyThroughTheBriefFile() async throws {
+        let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\nprompt = \"docs/REVIEW-PR.md\"\n")
+        let hostile = "- never run $(touch pwned-7731) or `touch pwned-7731`; \"quoted\" 'single' ; rm -rf x"
+        try await commit(hostile + "\n", at: "docs/REVIEW-PR.md", in: r)
+        let result = try await r.round()
+        #expect(result.verdict == .clean, "\(result.failure ?? "")")
+        #expect(r.codex.read("brief_1")?.contains(hostile) == true, "the text arrives unchanged in the file")
+        #expect(r.codex.read("calls")?.contains("pwned-7731") == false, "and never on the command line")
+        #expect(r.codex.read("cwds")?.contains("pwned") == false)
+    }
+
+    @Test func anEmptyRubricFileFailsTheRoundBeforeCodexRuns() async throws {
+        let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\nprompt = \"docs/REVIEW-PR.md\"\n")
+        try await commit("  \n\n", at: "docs/REVIEW-PR.md", in: r)
+        let result = try await r.round()
+        #expect(result.verdict == nil)
+        #expect(result.failure?.contains("docs/REVIEW-PR.md") == true, "\(result.failure ?? "")")
+        #expect(r.codex.read("brief_1") == nil)
+        #expect(r.started.count == 1 && r.finished.count == 1, "the round is still recorded")
     }
 
     @Test func aConfiguredSkillThatIsNotInThePullRequestFailsTheRound() async throws {
