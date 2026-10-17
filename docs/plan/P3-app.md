@@ -13,6 +13,7 @@ process or provider logic. P9 does not change the workflow's approval or human d
 In:
 - One window, one project (chosen once, remembered), one current thread.
 - Goal editor with draft/approved state and an explicit Approve button.
+- Optional goal proposal through P9's independently configured drafting provider/model; edit before approval.
 - Live view of a running turn, derived from the event log.
 - Run, stop, send back, accept, discard.
 - A short history of finished threads, read-only.
@@ -65,7 +66,8 @@ A single column is enough. A sidebar comes back when there is more than one thin
 1. **App shell.** SwiftUI target, window, project picker (choose a git repo once).
 2. **Store.** `@Observable` store over `WorkbenchCore`; subscribes to log appends; no process code in the app.
 3. **Goal editor.** Plain text with live validation, Approve disabled until valid, editing an approved goal
-   warns it returns to draft.
+   warns it returns to draft. Offer P9 goal drafting through core services, with proposal preview and
+   explicit application; choosing a drafting model never changes the coding model.
 4. **Run controls.** Run, Stop, send back. All async, non-blocking.
 5. **Live activity view.** Event grouping, streaming text, collapsed tools, denied highlighting.
 6. **Review view.** Diff, checks, criteria, decision bar (from P2).
@@ -102,4 +104,5 @@ app, send a follow-up, review, accept.
 
 ## Open questions
 
-- Should an agent draft the goal from a rough sentence (a read-only turn)? Leaning: later; P3 is you writing it.
+- How should the editor compare a generated proposal with an existing draft? The core drafting contract
+  is in P9; manual authoring and explicit approval remain available in every case.

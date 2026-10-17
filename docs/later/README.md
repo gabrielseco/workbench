@@ -5,6 +5,9 @@ attempt went wrong. Nothing here is started until the "well" gate in the [plan](
 One exception: the [portability](portability.md) *probe* (trying one non-Swift repo and writing down what
 breaks) comes after P2, before the app is designed. It builds nothing; fixing what it finds waits for the gate.
 
+Optional agent-assisted goal drafting has moved into [P9](../plan/P9-agent-providers.md), with its own
+provider/model selection and explicit human approval. It is no longer deferred until after the app.
+
 Order of likely return, each decided on its own once the previous is used daily:
 
 | Item | What it is | Notes |
@@ -15,5 +18,4 @@ Order of likely return, each decided on its own once the previous is used daily:
 | [Project setup](project-setup.md) | `workbench doctor`, a guided `init`, checks for small and large projects | The user declares the commands; Workbench only verifies them. No stack guessing. |
 | [Proof](proof.md) | Typed evidence per criterion, screenshots, optional verifier | Advisory only, never a mandatory gate. |
 | [Triage integration](triage-integration.md) | Start a thread from a PR, status badge | Only once Workbench is used daily. |
-| Goal drafting by Claude | A read-only turn that proposes the goal | You still approve. |
 | Profiles | Several named tool sets | One fixed set until the first real need. |

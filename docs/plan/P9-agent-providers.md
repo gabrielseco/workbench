@@ -6,17 +6,44 @@ behaviour; the specifications under `docs/spec/` still describe the shipped CLI.
 
 **Outcome:** `run`, `judge` and automated review each work through interchangeable providers, selected
 independently in config, while Workbench keeps its existing sequential workflow and reliability guarantees.
+Optional agent-assisted goal drafting has its own provider/model selection before approval; manual
+goal authoring remains available.
 
 ```
-Goal → Approve → Run → Judge → Review → Accept / Rerun
-                 │       │       │
-              provider provider provider
+Goal (manual or agent draft) → Approve → Run → Judge → Review → Accept / Rerun
+              │                         │       │       │
+           provider                  provider provider provider
 ```
 
 This is a responsibility diagram, not a new command order or state machine. Today `judge` is optional
 and advisory, `review` displays the local diff/checks, and automated `pr-review` / `review-stage` runs
 against a shipped PR. Those entry points, accept/ship gates and send-back behaviour stay as they are.
 Here **review execution** means the automated reviewer, not replacing the human's decision with an agent.
+
+### Goal drafting is independent of coding
+
+Choosing an agent to write code must not choose who writes the goal. For example, a user may prefer
+Sol for turning a rough request into a precise goal, and Opus for implementation. That is a user/model
+preference, not a hardcoded ranking: providers and models are configured separately for each job.
+The drafting provider may also be the coding provider with a different model, or the same model.
+
+Goal drafting is planned here, not currently implemented by `goal new` (which writes a template).
+Workbench prepares the rough request, declared read-only repository context and goal-file schema;
+the drafter returns a proposed title, request, criteria/proof and out-of-scope items. Orchestration
+validates the proposal using `GoalFile`/`Goal` rules and presents it as a draft for the person to edit.
+Workbench owns thread ids, base, coding provider/model, budgets and approval fields; generated text
+cannot change them, mark itself approved or start execution. A suggested coding model is only prose
+until the user explicitly selects it. The drafting model never becomes the goal's coding `model`.
+
+Drafting uses the same provider abstraction and enforced read-only policy, its own bounded deadline,
+output/spending limits and isolated context/session. It does not open a numbered coding turn, create
+a coding worktree or automatically approve a goal. Record draft attempts and their terminal outcomes
+in the thread's log, without enabling Run. Preserve manual drafting when no agent is configured.
+Use the current judge defaults ($0.50 where enforceable, 300 s) for drafting, with an explicit
+`agents.goal.allow_unpriced` opt-in when only the deadline can be enforced.
+A failed or cancelled proposal leaves the existing goal untouched; applying a replacement is explicit,
+returns any approved goal to draft and requires approval again. Provider/model provenance is retained
+with the proposal, separate from coding settings and approval. No automatic goal-drafting retries.
 
 ## Starting point
 
@@ -26,7 +53,7 @@ Here **review execution** means the automated reviewer, not replacing the human'
 | Session | `ThreadStore.session` stores a UUID and confirmation in `session.json`; `ThreadRunner` retries an unconfirmed resume without output as a fresh session | Provider-qualified opaque handles and an explicit no-session path; preserve the existing Claude recovery case |
 | Judge | `Thread/Judge/ThreadService+Judge.swift` prepares evidence and runs Claude; `Judge.swift` builds its prompt and unwraps Claude JSON before validating criteria | Separate provider envelope decoding from `JudgeVerdict` validation and tool-specific instructions |
 | Review | `Thread/PRReview/ReviewStage.swift`, `ReviewConfig.swift` define named stages, rubrics, proof and applicability; only Codex is allowed | Replace the fixed reviewer choice, extract Codex argv/answer-file decoding and capacity detection from `PRReview` and `ThreadService+PRReview` |
-| Lifecycle | `ProcessRunner`, `Spawner`, `ChildExitWatcher`, `OrphanSweeper` provide bounded output, exit watching, termination and tree cleanup | Reuse them for every adapter; extend attempt recording and orphan recovery to all three responsibilities |
+| Lifecycle | `ProcessRunner`, `Spawner`, `ChildExitWatcher`, `OrphanSweeper` provide bounded output, exit watching, termination and tree cleanup | Reuse them for every adapter; extend attempt recording and orphan recovery to all enabled responsibilities |
 | State and presentation | `ThreadState`, `LogFormatter`, CLI JSON and notices read Claude stream shapes and a single session id | Consume normalized activity for new runs; keep legacy replay |
 
 P6 tasks 1 and 2 are built; its loop-over-stages and complete declared-input handling are not assumed
@@ -37,7 +64,8 @@ P9 must not silently present those inputs as supported.
 
 Keep three layers in `WorkbenchCore`, with the CLI and later app calling the same services:
 
-1. **Stage orchestration:** existing `ThreadRunner` and `ThreadService` judge/review paths. They own
+1. **Stage orchestration:** existing `ThreadRunner` and `ThreadService` judge/review paths, plus a
+   small optional goal-drafting service. They own
    approved goals, input preparation, prompts/rubrics, permission requirements, limits, worktrees,
    locking, retry policy, events and stage result validation. Checks, verify, shipping and approvals
    remain Workbench operations. A provider never accepts, pushes or starts a follow-up itself.
@@ -53,7 +81,7 @@ Keep three layers in `WorkbenchCore`, with the CLI and later app calling the sam
 A finite lookup of built-in adapters is sufficient. No plugin loader, arbitrary shell-command provider,
 workflow graph, queue or general-purpose workflow engine. One project, one active thread, no concurrent
 agent calls. Adding Gemini CLI later should require an adapter, capability tests and config registration,
-not branches inside run/judge/review orchestration. Gemini is an extension target, not claimed built support.
+not branches inside goal/run/judge/review orchestration. Gemini is an extension target, not claimed built support.
 
 ### Provider abstraction
 
@@ -104,7 +132,7 @@ Validate the resolved stage request before spawning or spending money; `doctor` 
   from the approved goal, feedback, current diff/checks and prior summary. Record that continuation mode
   and truncation. Never claim the provider remembers omitted context.
 - Unknown cost is not zero. Existing `budget_usd` is a hard limit: refuse `run` on an adapter that cannot
-  enforce it unless the user explicitly approves an execution policy without a dollar cap. Evaluations
+  enforce it unless the user explicitly approves an execution policy without a dollar cap. Evaluations and goal drafting
   likewise require an explicit config opt-in to timeout-only spending when hard caps are unavailable.
   Neither timeout nor token reporting is described as an equivalent dollar cap.
   Compatibility exception: legacy Codex review keeps its existing timeout-only policy when no new
@@ -117,7 +145,7 @@ This plan does not prescribe unverified Codex coding or Gemini invocation flags.
 ### Sessions and provider changes
 
 A session handle is opaque and qualified by provider, purpose and compatible execution settings; it is
-not universally a UUID. Coding sessions may persist across turns; judge and review stay independent,
+not universally a UUID. Coding sessions may persist across turns; drafting, judge and review stay independent,
 one-shot evaluations with no access to the coding conversation. Same provider does not mean same session.
 
 A run-provider change starts a fresh session with prepared continuation context. Never pass a Claude id
@@ -143,6 +171,11 @@ executable = "claude"
 [providers.codex]
 executable = "codex"
 
+[agents.goal]
+provider = "codex"
+model = "<installed Sol model id>"  # illustrative: use the actual provider model id
+allow_unpriced = true
+
 [agents.run]
 provider = "claude"
 model = "opus"
@@ -166,13 +199,16 @@ inputs = ["diff", "goal", "proof"]
 
 The example's Gemini override is illustrative, not runnable in the initial two-provider milestone.
 `review.stages` still controls rubric order; it is not a list of providers. Every stage may choose the
-same provider, including all three responsibilities. Independent review is a separate invocation and
+same provider for drafting, run, judge and review. Independent review is a separate invocation and
 context, not a forced different vendor. Cross-provider review remains a user choice.
 
 Resolution rules:
 
 - No new config preserves current defaults: Claude coding, Claude judge, Codex automated review.
   P7's proposed change to default judging on Codex does not take effect implicitly.
+- Drafting: `agents.goal.provider` / `agents.goal.model`, then that provider's model default. With no
+  goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model
+  or root `model`; `agents.goal.allow_unpriced` explicitly permits timeout-only spending when needed.
 - Model precedence for coding: approved goal `model`, `agents.run.model`, legacy root `model`, provider
   default. Legacy root model applies only to legacy Claude selection; never send an alias such as
   `opus` to a different provider. An incompatible goal model must be changed and reapproved.
@@ -184,8 +220,8 @@ Resolution rules:
 - Legacy `claude_path`, tools, safe mode and `env_pass` keep their existing Claude meanings, never become
   generic argv. Legacy `[pr_review]` continues to configure the built-in stage. P6 `reviewer = "codex"`
   is a compatibility alias for that stage's provider; reject both keys together rather than guess.
-- `[providers.<id>].executable` overrides only the validated executable path/name, resolved without a shell. Model names,
-  stage names and all paths retain `SafeNames`/`Config` validation. Unknown providers, keys and invalid
+- `[providers.<id>].executable` overrides only the validated executable path/name, resolved without a
+  shell. Model names, stage names and all paths retain `SafeNames`/`Config` validation. Unknown providers, keys and invalid
   capability combinations fail clearly. Explicit choices never silently fall back to another provider.
 - Existing timeouts and stage limits remain the defaults. Timeout-only coding needs a new explicit
   approval-bearing policy in the goal schema; until that lands, non-dollar-cap providers cannot run a
@@ -193,10 +229,12 @@ Resolution rules:
 
 ## Execution contracts
 
-The adapters unwrap provider envelopes; the orchestration layer validates these existing contracts:
+The adapters unwrap provider envelopes; orchestration preserves the existing execution contracts
+and adds the draft-proposal contract:
 
 | Responsibility | Valid result | Failure/iteration behaviour |
 |---|---|---|
+| Goal draft | A proposed draft that passes `GoalFile`/`Goal` validation; host-controlled metadata excluded from agent authority | Invalid/failed/cancelled proposals preserve the previous goal; applying a valid proposal still requires human approval |
 | Run | `TurnReport` / `RunResult`: succeeded, failed, stopped, timed_out, budget_exceeded, interrupted; optional summary, usage and session | Preserve checks/verify sequencing, send-back rules and failure review; a success is execution completion, not proof the goal is met |
 | Judge | `JudgeVerdict`: every known criterion exactly once, real boolean `met`, bounded evidence and concerns | Keep current advisory semantics, including concerns for insufficient evidence; invalid/missing output means no verdict, with a reason and evidence reference |
 | Automated review | Existing bounded findings and exactly one final `VERDICT: CLEAN` or `VERDICT: FIX`, parsed identically for every provider | Missing/ambiguous verdict is failed evaluation; FIX findings feed the existing quoted follow-up request; skipped remains skipped, never clean |
@@ -224,12 +262,15 @@ must name the provider and retain original payload within documented limits. Do 
 and normalized activity into a reducer that counts it twice. Unknown usage/denial counts stay unknown.
 
 Add provider-attempt start/end records with stable ids, responsibility, optional named review stage,
-turn/round, provider/model and outcome. The enclosing stage owns them under the same log lock. A missing
+turn/round (none for drafting), provider/model and outcome. Draft attempts are thread-level events
+that complete without a coding `turn.started` or an approval event. Drafting adds paired
+`goal.draft.started` / `goal.draft.finished` records with proposal reference/provenance or failure; no
+approval transition is implied. The enclosing stage owns attempts under the same log lock. A missing
 executable/preflight refusal is recorded as a failed evaluation or refusal without pretending a process
 spawned; a launch failure after attempt start always closes the attempt. Stage terminal records still
 follow their existing contracts, with evaluation interruption recovery added below.
 
-Before any new work, recovery closes unfinished attempts and their enclosing turn/judge/review exactly
+Before any new work, recovery closes unfinished attempts and their enclosing draft/turn/judge/review exactly
 once as interrupted, sweeps their descendants and cleans their temporary checkout. Today turn/check/
 verify have synthetic recovery, while killed judge/review starts can remain visibly unfinished; P9 must
 close that gap without resetting review caps or declaring a pass. Old skipped reviews have no start
@@ -257,7 +298,7 @@ is part of this planning change.
 | 1. Prove adapter capabilities | Record supported Claude/Codex versions, invocation fixtures, coding confinement, read-only inspection, auth, images, sessions and spending controls | A capability matrix based on real probes, including attempted forbidden writes; unsupported pairs refused. Settle and specify explicit no-dollar-cap approval before enabling a provider without it |
 | 2. Extract current adapters | Claude run/judge and Codex review use the common request/execution boundary over `ProcessRunner` | Existing focused suites pass unchanged in meaning; legacy streams, verdicts, retry count, stop and worktree cleanup match fixtures; no CLI flags in stage orchestration |
 | 3. Config, activity and recovery | Independent selections, qualified sessions, normalized events, attempt lifecycle, doctor/CLI output and legacy migration | Old config/log fixtures replay; approval invalidation and provider switch tested; interrupted judge/review and all physical attempts close exactly once; no unsupported setting ignored |
-| 4. Enable the second provider per stage | Codex coding/judge and Claude automated review, subject to task 1 compatibility and explicit spending policy | Each of run/judge/review works with both Claude and Codex, same validators and read-only/isolated policies; provider choice changes config only |
+| 4. Enable the second provider per stage | Codex coding/judge, Claude automated review, and optional goal drafting through either provider, subject to task 1 compatibility and explicit spending policy | Each of goal drafting/run/judge/review works with both Claude and Codex, same validators and read-only/isolated policies; provider choice changes config only |
 | 5. Exercise the complete loop | Mixed-provider and same-provider demonstrations, failure injection and extended soak | All acceptance criteria below demonstrated; record versions, configs, results and friction before P3 starts |
 
 If a proposed provider cannot meet a stage's boundary in task 1, do not declare task 4 complete: choose
@@ -283,6 +324,8 @@ For both providers and every enabled responsibility, cover:
   Claude resume fallback, unsupported native sessions, incompatible handles and switching providers.
 - Identical valid/invalid judge and review answers through both envelopes, required-image refusal,
   attempts to write tracked/untracked/ignored repository files and to post/push, no credential crossover.
+- Draft proposal validation, malformed criteria, attempted approval/metadata injection, stop/failure
+  preserving the previous goal, explicit replacement invalidating approval, and drafting-model independence.
 - Same provider at all stages with distinct sessions; mixed providers, negative verdict then follow-up,
   explicit rerun after evaluation failure, approval/config changes, old configs and historical replay.
 
@@ -296,6 +339,8 @@ locally as part of each PR: follow `AGENTS.md`'s changed-file checks; CI owns th
 ## Acceptance criteria (gate for P3)
 
 - [ ] Run, judge and automated review each execute with at least two compatible providers.
+- [ ] Optional goal drafting works through two providers independently of coding provider/model, validates
+      proposed goals, preserves manual authoring and cannot bypass explicit approval.
 - [ ] Config alone selects provider and model independently, including named review overrides and the
       same provider for several responsibilities; changing providers never edits orchestration code.
 - [ ] A mixed-provider workflow completes approval, coding, judging, automated review and the existing
@@ -323,8 +368,9 @@ locally as part of each PR: follow `AGENTS.md`'s changed-file checks; CI owns th
 
 ## Demo
 
-Select Claude for run and Codex for judge/review; complete a task, including one negative verdict and
+Draft a goal through Codex with the user's chosen Sol model; edit and explicitly approve it.
+Select Claude with Opus for run and Codex for judge/review; complete a task, including one negative verdict and
 follow-up. Change config to Codex for run and Claude for judge/review with the necessary explicit
-spending approval, and repeat. Use the same provider for all three with isolated sessions. Stop a hung
+spending approval, and repeat. Use the same provider for drafting and all three execution responsibilities with isolated sessions. Stop a hung
 fake, kill the holder mid-evaluation, relaunch and rerun: show complete terminal records, cleanup and
 unchanged review caps. The SwiftUI app then consumes these contracts without provider-specific code.

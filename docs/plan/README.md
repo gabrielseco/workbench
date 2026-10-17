@@ -23,7 +23,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order; task 1 (config, `ReviewStage`, doctor) and task 2 (`review-stage <name>`, `proof`, `applies_to`) built | M |
 | [P7](P7-judge-on-codex.md) | Judge on Codex (superseded) | unbuilt fixed-provider proposal replaced by P9; current judge remains on Claude | — |
 | [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
-| [P9](P9-agent-providers.md) | Agent providers | planned: independently select providers/models for run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
+| [P9](P9-agent-providers.md) | Agent providers | planned: independently select providers/models for optional goal drafting, run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 **P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,
@@ -88,7 +88,7 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 
 ### Provider decisions (P9, proposed until implemented)
 
-- **D7 — Responsibilities and providers:** run, judge and automated review own their prompts, policy,
+- **D7 — Responsibilities and providers:** goal drafting, run, judge and automated review own their prompts, policy,
   inputs and validators; adapters own CLI/protocol translation over the existing process layer. No
   general workflow engine. Same-provider evaluations use independent sessions; vendor diversity is optional.
 - **D8 — Capability boundary:** native controls must enforce the requested permissions. Unsupported

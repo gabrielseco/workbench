@@ -15,7 +15,7 @@ screenshot proof and Triage integration are in [`docs/later/`](docs/later/README
 
 **Status:** the Swift package and CLI are built; the SwiftUI app is planned. Current coding and judging
 use Claude, automated review uses Codex. [P9: Agent providers](docs/plan/P9-agent-providers.md) plans
-independent provider/model selection at each responsibility and is required before SwiftUI development.
+independent provider/model selection for goal drafting and each execution responsibility and is required before SwiftUI development.
 Start at [`docs/plan/README.md`](docs/plan/README.md).
 
 ## Checking a change
