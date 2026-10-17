@@ -101,11 +101,14 @@ extension ThreadService {
             paths: paths, config: config, settings: settings)
         if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
 
-        // A skip spends no round, so it writes no `started`; when the changed files cannot be read the round runs.
-        if !stage.isPRReview, !stage.config.appliesTo.isEmpty, let files = await changedFiles(context) {
-            if !stage.applies(to: files) {
+        // A skip spends no round, so it writes no `started`; when the changed files cannot be read whole the round runs.
+        if !stage.config.appliesTo.isEmpty {
+            switch stage.applies(listing: await changedFiles(context)) {
+            case .run: break
+            case .skip:
                 return try await recordSkip(
                     log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+            case .unknown(let why): context.warnings.append("applies_to was not checked: \(why); the review ran")
             }
         }
 
@@ -140,7 +143,7 @@ extension ThreadService {
     // MARK: A round
 
     private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
-        var outcome = PRReviewOutcome()
+        var outcome = PRReviewOutcome(warnings: round.warnings)
         if let warning = round.stage.notYetUsedWarning { outcome.warnings.append(warning) }
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
@@ -396,12 +399,12 @@ extension ThreadService {
     ) async throws -> PRReviewResult {
         let globs = stage.config.appliesTo.joined(separator: ", ")
         let reason = "the diff touches no path matching applies_to (\(globs))"
-        try await log.append(
-            stage.events.finished, turn: turn,
-            data: [
-                "stage": .string(stage.name), "round": .int(round), "pr": .int(pr), "head_sha": .string(sha),
-                "ok": .bool(false), "verdict": .string(ReviewStage.skippedVerdict), "reason": .string(reason),
-            ])
+        var data: [String: JSONValue] = [
+            "round": .int(round), "pr": .int(pr), "head_sha": .string(sha),
+            "ok": .bool(false), "verdict": .string(ReviewStage.skippedVerdict), "reason": .string(reason),
+        ]
+        if let name = stage.events.stage { data["stage"] = .string(name) }
+        try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
             round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: nil, failure: nil, findingsPath: nil,
             findings: nil, warnings: [], skipped: reason)
@@ -409,13 +412,11 @@ extension ThreadService {
 
     // MARK: Inputs
 
-    /// The files the pull request changes against its base, nil when they cannot be read.
-    private func changedFiles(_ round: PRReviewRound) async -> [String]? {
+    /// The NUL-separated files the pull request changes against its base, nil when git could not be asked.
+    private func changedFiles(_ round: PRReviewRound) async -> GitResult? {
         guard await fetchBranch(round) == nil, case .success(let baseSHA) = await pinBase(round) else { return nil }
-        let result = try? await git.run(
+        return try? await git.run(
             ["diff", "--no-ext-diff", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
-        guard let result, result.succeeded else { return nil }
-        return result.stdout.split(separator: "\0").map(String.init).filter { !$0.isEmpty }
     }
 
     /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify
@@ -569,6 +570,8 @@ struct PRReviewRound: Sendable {
     var baseSHA: String?
     /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
     var proof: Result<[String], PRReviewFailure>?
+    /// Said with the round's result, whatever it is.
+    var warnings: [String] = []
 }
 
 struct PRReviewFailure: Error, Sendable {

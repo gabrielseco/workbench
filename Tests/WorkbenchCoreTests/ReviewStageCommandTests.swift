@@ -229,11 +229,45 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
         for (pattern, path) in no { #expect(!ReviewStage.glob(pattern, matches: path), "\(pattern) !~ \(path)") }
     }
 
-    @Test func pullRequestReviewIgnoresAppliesToAndSaysSo() async throws {
+    @Test func pullRequestReviewMatchingNoChangedFileIsSkipped() async throws {
         let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\napplies_to = [\"Sources/**\"]\n")
-        let result = try await runStage("pr-review", r)
-        #expect(result.skipped == nil && result.verdict == .clean)
-        #expect(result.warnings.first?.contains("applies_to") == true, "\(result.warnings)")
+        let result = try await r.round()
+        #expect(result.skipped?.contains("Sources/**") == true, "\(result)")
+        #expect(result.verdict == nil && result.failure == nil && result.warnings.isEmpty, "\(result)")
+        #expect(r.codex.runs == 0)
+        #expect(r.started.isEmpty, "a skip spends no round")
+        let end = try #require(r.finished.first)
+        #expect(end.data["verdict"]?.stringValue == "skipped" && end.data["ok"] == false)
+        #expect(end.data["stage"] == nil, "pr_review.* events carry no stage")
+    }
+
+    @Test(arguments: ["applies_to = [\"Sources/**\", \"*.txt\"]", "applies_to = []", ""])
+    func pullRequestReviewMatchingAChangedFileOrWithNoGlobsRuns(table: String) async throws {
+        let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\n\(table)\n")
+        let result = try await r.round()
+        #expect(result.skipped == nil && result.verdict == .clean, "\(table): \(result)")
+        #expect(result.warnings.isEmpty, "\(result.warnings)")
+        #expect(r.codex.runs == 1 && r.started.count == 1)
+    }
+
+    @Test func theAdversarialPatternFailsFast() {
+        let clock = ContinuousClock()
+        let start = clock.now
+        #expect(!ReviewStage.glob(String(repeating: "*a", count: 20) + "b", matches: String(repeating: "a", count: 100)))
+        #expect(!ReviewStage.glob(String(repeating: "**/a", count: 20) + "/b", matches: String(repeating: "a/", count: 100)))
+        #expect(clock.now - start < .milliseconds(500))
+    }
+
+    @Test func aCutOrFailedListOfChangedFilesNeverSkips() throws {
+        let config = try Config.parse(stagesConfig("applies_to = [\"Sources/**\"]") + "[tools]\navailable = [\"Read\"]\n")
+        let stage = try #require(ReviewStage.named("design", config: config))
+        let unmatched = "docs/a.md\0README.md\0"
+        #expect(stage.applies(listing: GitResult(status: 0, stdout: unmatched, stderr: "")) == .skip)
+        let cut = stage.applies(listing: GitResult(status: 0, stdout: unmatched, stderr: "", outputTruncated: true))
+        #expect(cut == .unknown("the list of changed files was cut at 4 MiB"))
+        let failed = stage.applies(listing: GitResult(status: 128, stdout: unmatched, stderr: "fatal: bad revision\n"))
+        #expect(failed == .unknown("the changed files could not be read (fatal: bad revision)"))
+        #expect(stage.applies(listing: nil) == .unknown("the changed files could not be read (git failed)"))
     }
 }
 
@@ -284,6 +318,14 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
         let run = try await runCLI(["review-stage", "design", r.id], r)
         #expect(run.code == 0, "\(run)")
         #expect(run.stdout.contains("design: skipped, the diff touches no matching path"), "\(run.stdout)")
+        #expect(r.codex.runs == 0)
+    }
+
+    @Test func aSkippedPRReviewExitsZero() async throws {
+        let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\napplies_to = [\"Sources/**\"]\n")
+        let run = try await runCLI(["pr-review", r.id], r)
+        #expect(run.code == 0, "\(run)")
+        #expect(run.stdout.contains("pr-review: skipped, the diff touches no matching path"), "\(run.stdout)")
         #expect(r.codex.runs == 0)
     }
 

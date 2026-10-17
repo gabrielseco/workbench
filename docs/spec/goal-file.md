@@ -265,8 +265,9 @@ Notes:
   most 20) and lists their paths in the brief; with no verify step, one from before the latest turn, or no
   PNG left, the round fails, never passes, and `doctor` warns when such a stage has no `verify_command`.
   `applies_to` globs (`**` any run of folders, `*` within one name) are matched against the files the pull
-  request changes; a stage other than `pr-review` that matches none is recorded as skipped and runs nothing.
-  Other `inputs` (a file path, or leaving out `diff` or `goal`) and `applies_to` on `pr-review` are not read
+  request changes; a stage, `pr-review` included, that matches none is recorded as skipped and runs nothing.
+  An empty list (the default) always runs, and so does a round whose list of changed files git could not give
+  whole, with a note saying so. Other `inputs` (a file path, or leaving out `diff` or `goal`) are not read
   yet; a round of a stage that sets them says so in a note.
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file

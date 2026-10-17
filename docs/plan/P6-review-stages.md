@@ -97,8 +97,9 @@ being written for the stage named `pr-review` so existing logs and `review --jso
    cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping.
    **Status: built.** Every stage runs on Codex (`codex exec -i <png>` per screenshot) and `reviewer = "claude"`
    is refused at config load. A skip writes only `review_stage.finished` (`verdict: "skipped"`) and spends no
-   round. `applies_to` on `pr-review` is not acted on yet (a note says so), so the loop never sees a skipped
-   `pr-review` before task 3.
+   round. `pr-review` honours `applies_to` too (a skip writes only `pr_review.finished`); what
+   `ship --review-loop` does with a skipped round is task 3. A list of changed files that git cut or could not
+   give never decides a skip: the round runs and says so.
 3. **Loop over stages.** Stage order, go back to the first stage after a follow-up, per-stage caps,
    skips recorded and printed.
 4. **Tests.** `fake-codex` and `fake-claude` scripted per stage: two stages both CLEAN; the second FIX then CLEAN
