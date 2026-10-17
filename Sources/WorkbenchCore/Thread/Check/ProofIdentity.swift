@@ -18,8 +18,10 @@ public struct ProofIdentity: Sendable, Equatable {
     ///
     /// `git add` runs a clean filter for a file its attributes name, and the model can write `.gitattributes`
     /// (or commit it) in the worktree. So the attributes are read from `attributesFrom`, the commit the thread was
-    /// cut from, and from an empty tree when that is not known: nothing the run wrote can choose a filter. The
-    /// filters the project's base commit names still run, as they do for `accept`.
+    /// cut from, and from an empty tree when that is not known: nothing the run wrote can choose a filter. A filter
+    /// the base commit selects still runs, as it does for `accept` and for the diff `review` already takes of the
+    /// worktree; if its command is a script inside the repository the run can edit it, which no attribute choice
+    /// here can prevent.
     public static func of(worktree: URL, git: GitRunner, attributesFrom base: String?) async -> ProofIdentity? {
         let index = FileManager.default.temporaryDirectory.appendingPathComponent("wb-index-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: index) }
@@ -55,8 +57,13 @@ extension ProofIdentity {
 extension ProofIdentity {
     /// `HEAD` and its tree, ignoring whatever else is in the worktree: what a push would carry.
     public static func committed(worktree: URL, git: GitRunner) async -> ProofIdentity? {
-        guard let result = try? await git.run(["rev-parse", "HEAD", "HEAD^{tree}"], in: worktree),
-            result.succeeded
+        await committed(ref: "HEAD", in: worktree, git: git)
+    }
+
+    /// A commit (a branch tip) and its tree, for a thread whose worktree is gone. `ref` is a commit id or `HEAD`.
+    public static func committed(ref: String, in directory: URL, git: GitRunner) async -> ProofIdentity? {
+        guard ref == "HEAD" || SafeNames.isCommitSHA(ref),
+            let result = try? await git.run(["rev-parse", ref, "\(ref)^{tree}"], in: directory), result.succeeded
         else { return nil }
         let lines = result.stdout.split(separator: "\n").map(String.init)
         guard lines.count == 2 else { return nil }

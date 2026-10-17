@@ -300,7 +300,12 @@ public struct ReviewLoader: Sendable {
     private func proofFreshness(_ state: ThreadState) async -> ProofFreshness? {
         guard let verify = state.review.verify, !verify.proof.isEmpty else { return nil }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
-        guard manager.exists(state.id) else { return ProofFreshness.of(recordedTree: verify.tree, current: nil) }
+        // After `ship` the worktree is gone and the branch is what is left: the committed work is what was shipped.
+        guard manager.exists(state.id) else {
+            guard let tip = await branchTip(state.id) else { return ProofFreshness.of(recordedTree: verify.tree, current: nil) }
+            return ProofFreshness.of(
+                recordedTree: verify.tree, current: await ProofIdentity.committed(ref: tip, in: project.root, git: git))
+        }
         return ProofFreshness.of(
             recordedTree: verify.tree,
             current: await ProofIdentity.of(

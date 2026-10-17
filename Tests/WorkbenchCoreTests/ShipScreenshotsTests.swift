@@ -316,4 +316,37 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(why.contains("branch is at"))
         #expect(tool.calls.count == 3)  // only the first call's `path`, `list` and `pr`
     }
+
+    @Test func aPullRequestWhoseBranchCannotBeReadOnOriginGetsNoScreenshots() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        // The log says a pull request was opened, and this repository has no origin to ask.
+        _ = try await fx.service.withLog(id) { log in
+            try await log.append(.prOpened, data: ["branch": .string("workbench/\(id)"), "number": 12])
+        }
+        let tool = try FakeShots(in: fx)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+        guard case .skipped(let why) = result else { Issue.record("expected skipped, got \(result)"); return }
+        #expect(why.contains("could not be read"))
+        #expect(tool.calls.isEmpty)
+    }
+
+    @Test func reviewStillSaysCurrentOrStaleAfterShipRemovedTheWorktree() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let loader = ReviewLoader(project: fx.project, git: fx.git)
+        #expect(await loader.load(id: id).proofFreshness == .current)
+
+        _ = try await fx.git.run(["worktree", "remove", "--force", plan.worktree.path], in: fx.repo)
+        #expect(!FileManager.default.fileExists(atPath: plan.worktree.path))
+        #expect(await loader.load(id: id).proofFreshness == .current)
+
+        // The branch moves on after the proof: the retained branch shows it.
+        let other = fx.repo.deletingLastPathComponent().appendingPathComponent("later-\(UUID().uuidString)")
+        _ = try await fx.git.run(["worktree", "add", "-q", other.path, "workbench/\(id)"], in: fx.repo)
+        try "later\n".write(to: other.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "later"], in: other)
+        _ = try await fx.git.run(["worktree", "remove", "--force", other.path], in: fx.repo)
+        #expect(await loader.load(id: id).proofFreshness == .stale)
+    }
 }

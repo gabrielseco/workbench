@@ -52,13 +52,21 @@ extension ThreadService {
                     + "Run the turn's verify again, then `workbench ship --screenshots`")
         }
         // The pull request is what the screenshots go into, and a follow-up may have pushed to its branch since
-        // this thread's worktree was left: what `origin` has now must be what was just checked. When origin cannot
-        // be read the answer is not known, and the check above is all there is.
-        if let current, let tip = await pullRequestBranchTip(id: id), tip != current.commit {
-            return .skipped(
-                "screenshots not attached: the pull request's branch is at \(tip.prefix(7)) and these screenshots "
-                    + "were taken\(at) on this thread's \(current.commit.prefix(7)). Verify the branch's current work, "
-                    + "then attach them from that thread")
+        // this thread's worktree was left: what `origin` has now must be what was just checked. A pull request
+        // this log recorded and an origin that cannot be read is not "fine": the uploader may reach GitHub where
+        // this could not, so nothing is published until the branch can be seen.
+        if let current, let branch = recordedPullRequestBranch(id: id) {
+            guard let tip = try? await originBranchTip(branch) else {
+                return .skipped(
+                    "screenshots not attached: origin's \(branch) could not be read, so it is not known that the "
+                        + "pull request is still at the work they were taken at. Run `workbench ship --screenshots` again")
+            }
+            if tip != current.commit {
+                return .skipped(
+                    "screenshots not attached: the pull request's branch is at \(tip.prefix(7)) and these screenshots "
+                        + "were taken\(at) on this thread's \(current.commit.prefix(7)). Verify the branch's current "
+                        + "work, then attach them from that thread")
+            }
         }
 
         let folder = FileManager.default.temporaryDirectory
