@@ -431,8 +431,13 @@ enum Commands {
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
-        try await ctx.service.abandon(id: id, force: force)
+        let saved = try await ctx.service.abandon(id: id, force: force)
         out("abandoned \(id); its branch workbench/\(id) is kept")
+        if let saved {
+            let kib = max(1, saved.bytes >> 10)
+            out("uncommitted changes saved to \(saved.url.path) (\(kib) KiB)")
+            out("restore them with `git apply` in a checkout of workbench/\(id) at \(saved.head.prefix(12))")
+        }
     }
 
     static func config() async throws {

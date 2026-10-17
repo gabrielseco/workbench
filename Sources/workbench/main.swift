@@ -62,7 +62,8 @@ let usage = """
       clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
                                  merged (or closed, with --closed); a dry run unless --yes
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
-      abandon [--force]          end the thread without accepting its work
+      abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
+                             are saved as abandon.patch in the thread folder first, the branch is kept
 
       --json on status, review and log; exit codes: docs/spec/exit-codes.md
 

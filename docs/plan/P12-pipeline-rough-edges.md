@@ -1,6 +1,6 @@
 # P12: Rough edges the sequential run found
 
-Status: plan, nothing built. Written 2026-10-17 from a second manual pass of the P11 loop (the same goal as
+Status: task 1 built; the rest is plan. Written 2026-10-17 from a second manual pass of the P11 loop (the same goal as
 Triage PR #71, run again as Triage PR #73). Follows [P11](P11-verified-pipeline.md); none of this blocks P11's tasks.
 
 ## What was run
@@ -55,7 +55,7 @@ Each its own PR.
 
 | Task | Result | Gate |
 |---|---|---|
-| 1. `abandon` saves, then removes | with changes in the worktree (modified, staged or untracked, not ignored files), `abandon` writes them as a patch under the thread's log folder, records `abandon.saved` with the path, size and sha256, then removes the worktree; `--force` is not needed. The branch is kept, as today. A patch over the size limit, or a write that fails, refuses and removes nothing, and says why | tests: modified file, staged file, untracked file, a binary file, a clean worktree (no patch), the log folder not writable (nothing removed), over the limit, the patch applies with `git apply` to the base |
+| 1. `abandon` saves, then removes **(built)** | with changes in the worktree (modified, staged or untracked, not ignored files), `abandon` writes them as a patch (`abandon.patch`) in the thread's folder, records `abandon.saved` with the path, size, sha256, tree and head, then removes the worktree; `--force` is not needed. The branch is kept, as today. A patch over the size limit (64 MiB of changed files), a write that fails, a tree that changed between the patch and the removal, or a live run refuses and removes nothing, and says why. Git refuses to remove a dirty worktree, so the removal after a save is forced; the tree recheck and the live-run refusal stand in for git's check | tests: modified file, staged file, untracked file, a binary file, a clean worktree (no patch), ignored files only, the thread folder not writable (nothing removed), over the limit, a live run, abandoning twice, the patch applies with `git apply` to a checkout of the branch tip (the patch is against `HEAD` of the worktree, not the base, since the model's commits stay on the branch) |
 | 2. Refusals that say what to do | `abandon`'s refusal for a worktree with changes becomes task 1; `discard`'s `--yes` message says there is no terminal; a refused `goal new` names the active thread and the three ways out | tests on each message |
 | 3. A result knows its commit | `judge.ended` and `stage.ended` record the head commit; `review` says current, stale or unknown for each, as it does for a proof; an old log reads "unknown", not stale | tests: result at head, a commit after it, an old log, a stage on a thread with no PR |
 | 4. A true `ship` preview | the preview lists the screenshots that will be added, or says there are none and why (`--no-screenshots`, stale proof) | tests: with a proof, without, with a stale one |
