@@ -106,11 +106,15 @@ public enum PRReview {
         return "\(fence)\n\(text.hasSuffix("\n") ? String(text.dropLast()) : text)\n\(fence)"
     }
 
+    /// The `pr` of a round on a thread that has not opened one: the branch is reviewed where it is, locally.
+    public static let noPullRequest = 0
+
     static func prompt(for input: PRReviewInput) -> String {
         var lines = [
-            "# Review pull request #\(input.pr)",
+            input.pr == noPullRequest ? "# Review the change on branch \(input.branch)" : "# Review pull request #\(input.pr)",
             "",
-            "You are reviewing a pull request of this repository. The working directory is a read-only checkout of "
+            "You are reviewing \(input.pr == noPullRequest ? "a change, not yet a pull request," : "a pull request") of this "
+                + "repository. The working directory is a read-only checkout of "
                 + "its head (\(input.headSHA)), branch \(input.branch), to be merged into \(input.base).",
             "Do not run builds or the test suite: read files and the diff only. Do not change files. Do not post "
                 + "anything anywhere. `gh` and the network are not available to you.",
