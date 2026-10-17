@@ -66,7 +66,8 @@ import Testing
         try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
         let plan = try await repo.plan()
         #expect(plan.contains("Lint: 1 changed Swift file"), "\(plan)")
-        #expect(plan.contains("swift test --filter \"FooMoreTests|FooTests\""), "\(plan)")
+        #expect(plan.contains("run: swift build --build-tests"), "\(plan)")
+        #expect(plan.contains("swift test --skip-build --filter \"FooMoreTests|FooTests\""), "\(plan)")
     }
 
     @Test func aChangedTestFileRunsItsOwnSuites() async throws {
@@ -74,7 +75,7 @@ import Testing
         try await repo.commitAll()
         try repo.write("Tests/CoreTests/FooTests.swift", "@Suite\nstruct FooTests {}\n@Suite struct Other {}\n")
         let plan = try await repo.plan()
-        #expect(plan.contains("swift test --filter \"FooTests|Other\""), "\(plan)")
+        #expect(plan.contains("swift test --skip-build --filter \"FooTests|Other\""), "\(plan)")
     }
 
     @Test func aSourceWithNoTestIsBuiltAndSaidSo() async throws {
@@ -93,7 +94,7 @@ import Testing
         try repo.write("Tests/CoreTests/NewTests.swift", "@Suite struct NewTests {}\n")
         let plan = try await repo.plan()
         #expect(plan.contains("Lint: 1 changed Swift file"), "\(plan)")
-        #expect(plan.contains("swift test --filter \"NewTests\""), "\(plan)")
+        #expect(plan.contains("swift test --skip-build --filter \"NewTests\""), "\(plan)")
     }
 
     @Test func docsOnlyChangesRunNothing() async throws {
@@ -155,7 +156,7 @@ import Testing
         try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
         _ = try await repo.sh(["commit", "-qam", "change"], executable: "/usr/bin/git")
         let out = try await repo.sh(["scripts/check-changed.sh", "--plan", "HEAD~1"]).joined(separator: "\n")
-        #expect(out.contains("swift test --filter \"FooMoreTests|FooTests\""), "\(out)")
+        #expect(out.contains("swift test --skip-build --filter \"FooMoreTests|FooTests\""), "\(out)")
     }
 
     @Test func aChangeToTheScriptItselfForcesTheFullCheck() async throws {
@@ -188,8 +189,11 @@ import Testing
     /// Stand-in tools on PATH that append their arguments to `calls.log`; `fail` names one that exits 1.
     private func stubbed(_ repo: Repo, fail: String? = nil) throws -> String {
         for tool in ["swiftlint", "swift"] {
+            // "swift test" fails only the test run, so the build before it passes.
             let code = fail == tool ? 1 : 0
-            try repo.write("stubs/\(tool)", "#!/bin/sh\necho \"\(tool) $*\" >> \"$PWD/calls.log\"\nexit \(code)\n")
+            let failsTest = tool == "swift" && fail == "swift test" ? "[ \"$1\" = test ] && exit 1\n" : ""
+            try repo.write(
+                "stubs/\(tool)", "#!/bin/sh\necho \"\(tool) $*\" >> \"$PWD/calls.log\"\n\(failsTest)exit \(code)\n")
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755], ofItemAtPath: repo.dir.appendingPathComponent("stubs/\(tool)").path)
         }
@@ -215,8 +219,22 @@ import Testing
         #expect(
             try calls(repo) == [
                 "banned-apis", "swiftlint lint --quiet Sources/Core/Foo.swift",
-                "swift test --filter FooMoreTests|FooTests",
+                "swift build --build-tests", "swift test --skip-build --filter FooMoreTests|FooTests",
             ])
+    }
+
+    @Test func aRunSaysHowManySuitesItChoseAndWhereTheTimeWent() async throws {
+        let repo = try Repo()
+        let path = try stubbed(repo)
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1"], path: path)
+            .joined(separator: "\n")
+        #expect(out.contains("Test suites (2): FooMoreTests|FooTests"), "\(out)")
+        #expect(out.contains("==> Timing, "), "\(out)")
+        for step in ["Banned process APIs", "SwiftLint", "Build tests", "Test"] {
+            #expect(out.contains("    \(step): "), "\(step) missing from the timing\n\(out)")
+        }
     }
 
     @Test func aFailingLintStopsBeforeTheTests() async throws {
@@ -231,11 +249,24 @@ import Testing
 
     @Test func aFailingTestFailsTheCheck() async throws {
         let repo = try Repo()
+        let path = try stubbed(repo, fail: "swift test")
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1; echo exit=$?"], path: path)
+        #expect(out.contains("exit=1"), "\(out)")
+        #expect(try calls(repo).contains { $0.hasPrefix("swift test") }, "the test run was never reached")
+        // The steps that passed keep their time in the failure output.
+        #expect(out.joined(separator: "\n").contains("    Build tests: "), "\(out)")
+    }
+
+    @Test func aFailingBuildFailsTheCheckBeforeTheTests() async throws {
+        let repo = try Repo()
         let path = try stubbed(repo, fail: "swift")
         try await repo.commitAll()
         try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
         let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1; echo exit=$?"], path: path)
         #expect(out.contains("exit=1"), "\(out)")
+        #expect(try calls(repo).contains { $0.hasPrefix("swift test") } == false)
     }
 
     @Test func aChangedTestHelperWithNoSuiteCompilesTheTestTargets() async throws {

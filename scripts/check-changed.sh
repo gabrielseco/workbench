@@ -98,11 +98,17 @@ else
     echo "==> Lint: nothing (the changed Swift files were deleted)"
 fi
 [ -n "$unmapped" ] && echo "==> No tests found for:$unmapped (built, not tested)"
-if [ -n "$filter" ]; then echo "==> Test suites: $filter"; else echo "==> No test suites mapped"; fi
+suite_count=$(echo "$filter" | tr '|' '\n' | grep -c .)
+if [ -n "$filter" ]; then echo "==> Test suites ($suite_count): $filter"; else echo "==> No test suites mapped"; fi
 if [ "$plan" = 1 ]; then
     echo "run: scripts/check-banned-apis.sh"
     [ -n "$swift_files" ] && echo "run: swiftlint lint --quiet <changed files>"
-    if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: $build"; fi
+    if [ -n "$filter" ]; then
+        echo "run: swift build --build-tests"
+        echo "run: swift test --skip-build --filter \"$filter\""
+    else
+        echo "run: $build"
+    fi
     exit 0
 fi
 
@@ -110,13 +116,21 @@ step() {
     name=$1
     shift
     echo "==> $name"
+    started=$(date +%s)
     "$@"
     code=$?
+    took=$(($(date +%s) - started))
+    timings="$timings
+    $name: ${took}s"
     if [ $code -ne 0 ]; then
-        echo "error: step '$name' failed (exit $code)" >&2
+        echo "error: step '$name' failed (exit $code) after ${took}s" >&2
+        echo "==> Timing, $(($(date +%s) - total_started))s so far (suites: $suite_count):$timings" >&2
         exit 1
     fi
 }
+
+timings=""
+total_started=$(date +%s)
 
 step 'Banned process APIs' scripts/check-banned-apis.sh
 if [ -n "$swift_files" ]; then
@@ -128,9 +142,12 @@ if [ -n "$swift_files" ]; then
     step 'SwiftLint' swiftlint lint --quiet $swift_files
 fi
 if [ -n "$filter" ]; then
-    step 'Test' swift test --filter "$filter"
+    # Built apart from the run, so the timing says what a build costs and what the tests cost.
+    step 'Build tests' swift build --build-tests
+    step 'Test' swift test --skip-build --filter "$filter"
 else
     # shellcheck disable=SC2086  # "$build" is a fixed command with flags
     step 'Build' $build
 fi
+echo "==> Timing, $(($(date +%s) - total_started))s in all (suites: $suite_count):$timings"
 echo "==> Changed-file checks passed (CI runs the full scripts/check.sh)"
