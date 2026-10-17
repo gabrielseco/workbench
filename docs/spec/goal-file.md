@@ -70,7 +70,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   JSON object: per criterion `{id, met, evidence}`, and `concerns`. The answer is accepted only if it names
   every criterion once and no other, with real JSON booleans and both lists present; anything else is recorded
   as a failed run. It is told to mark a
-  criterion not met only for an evidenced violation of its literal text and to put doubt in `concerns`. It runs
+  criterion not met only for an evidenced violation of its literal text and to put doubt in `concerns`. Each
+  screenshot is listed with its pixel size, so a clipped capture is named as a concern. When the verdict is for
+  the latest turn, `ship` writes its `concerns` (at most 5 of 300 characters, the rest counted) into the PR
+  description under the criteria table as `Judge concerns`; they never gate. It runs
   once per turn unless `--again`, has its own budget (default $0.50, `--budget`) and a 5 minute limit, and
   `--model` picks a cheaper model for it. The thread's log is held while it runs, so a second judge or a run
   is refused as busy instead of spending on the same turn, and Ctrl-C stops it and records why. `review` shows it as a `Judge` block beside the criteria and the

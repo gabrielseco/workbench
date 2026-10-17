@@ -150,6 +150,7 @@ extension ThreadService {
         var body = PRBodyBuilder.build(
             goal: goal, check: state.review.check, template: template, lastTurn: state.lastTurn,
             description: description, verify: state.review.verify, changes: changes,
+            judge: state.review.judge,
             proofAvailable: { [dir = project.threadDirectory(plan.id)] in $0.isAvailable(in: dir) })
         // What is published must not carry a credential that was pasted into the goal or the template.
         body.title = Self.withoutCredentials(body.title, environment: environment)

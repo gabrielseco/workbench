@@ -271,3 +271,52 @@ private let repoTemplate = """
         #expect(testing != nil && table != nil && testing!.lowerBound < table!.lowerBound, "\(body)")
     }
 }
+
+@Suite struct PRBodyJudgeConcernsTests {
+    private func judge(turn: Int = 1, concerns: [String], verdict: Bool = true) -> Review.Judge {
+        Review.Judge(
+            turn: turn, verdict: verdict ? JudgeVerdict(criteria: [], concerns: concerns) : nil, costUSD: nil,
+            failure: verdict ? nil : "claude could not be started")
+    }
+
+    private func body(_ judge: Review.Judge?, template: String? = nil) -> String {
+        PRBodyBuilder.build(
+            goal: goal(), check: check("passed"), template: template, lastTurn: 1, judge: judge
+        ).body
+    }
+
+    @Test func concernsComeAfterTheCriteriaTable() {
+        let text = body(judge(concerns: ["The screenshot shows only the viewer's own PRs."]))
+        let table = text.range(of: "| c1 |")
+        let concerns = text.range(of: "### Judge concerns")
+        #expect(table != nil && concerns != nil && table!.lowerBound < concerns!.lowerBound, "\(text)")
+        #expect(text.contains("- The screenshot shows only the viewer's own PRs."))
+    }
+
+    @Test func theyAreInsideTheTemplatesTestingSection() {
+        let text = body(judge(concerns: ["No test calls it."]), template: repoTemplate)
+        let testing = text.range(of: "## Testing")
+        let concerns = text.range(of: "### Judge concerns")
+        #expect(testing != nil && concerns != nil && testing!.lowerBound < concerns!.lowerBound, "\(text)")
+    }
+
+    @Test func noConcernsNoVerdictOrAnEarlierTurnAddsNothing() {
+        #expect(!body(judge(concerns: [])).contains("Judge concerns"))
+        #expect(!body(judge(concerns: ["x"], verdict: false)).contains("Judge concerns"))
+        #expect(!body(judge(turn: 0, concerns: ["x"])).contains("Judge concerns"), "a judge of an older turn")
+        #expect(!body(nil).contains("Judge concerns"))
+    }
+
+    @Test func theListAndEachLineAreBounded() {
+        let many = (1...8).map { "concern \($0) " + String(repeating: "w", count: 400) }
+        let text = body(judge(concerns: many))
+        #expect(text.components(separatedBy: "\n- concern ").count - 1 == PRBodyBuilder.concernsShown)
+        #expect(text.contains("- and 3 more"))
+        #expect(!text.contains(String(repeating: "w", count: 400)))
+    }
+
+    @Test func pathsAreScrubbed() {
+        let text = body(judge(concerns: ["See /Users/me/secret/dir/file.swift for it."]))
+        #expect(!text.contains("/Users/me"))
+    }
+}

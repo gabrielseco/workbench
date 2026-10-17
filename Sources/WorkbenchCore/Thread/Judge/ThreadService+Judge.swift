@@ -95,7 +95,12 @@ extension ThreadService {
         let (screenshots, folder) = judgeScreenshots(id: id, verify: verify, lastTurn: turn)
         let input = JudgeInput(
             goal: goal, diff: diffText, diffTruncated: cut, check: check, checkOutput: checkOutput, verify: verify,
-            screenshots: screenshots, lastTurn: turn, untracked: work.untracked)
+            screenshots: screenshots,
+            screenshotSizes: Dictionary(
+                uniqueKeysWithValues: screenshots.compactMap { name in
+                    PNGSize.read(at: folder.appendingPathComponent(name)).map { (name, $0) }
+                }),
+            lastTurn: turn, untracked: work.untracked)
         let arguments = Judge.arguments(
             config: config, prompt: Judge.prompt(for: input), withScreenshots: !screenshots.isEmpty, budget: budget,
             model: model)

@@ -20,7 +20,8 @@ public enum PRBodyBuilder {
     ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
     public static func build(
         goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil, description: PRDescription? = nil,
-        verify: Review.Verify? = nil, changes: [FileChange] = [], proofAvailable: (ProofFile) -> Bool = { _ in true }
+        verify: Review.Verify? = nil, changes: [FileChange] = [], judge: Review.Judge? = nil,
+        proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> PRBody {
         let request =
             description.map { described($0) }
@@ -35,7 +36,9 @@ public enum PRBodyBuilder {
             criteria += "\n\n" + CriteriaStatus.summary(statuses, check: check) + "\n\n"
                 + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }
         }
-        let testing = [checkLine, criteria].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        let lastTurnNumber = lastTurn ?? check?.turn ?? 0
+        let concerns = judgeConcerns(judge, lastTurn: lastTurnNumber)
+        let testing = [checkLine, criteria, concerns].filter { !$0.isEmpty }.joined(separator: "\n\n")
         // `ship` attaches the latest verify step's PNGs after the PR exists.
         let hasScreenshots =
             verify.map { $0.turn == (lastTurn ?? check?.turn ?? 0) } == true
@@ -50,11 +53,30 @@ public enum PRBodyBuilder {
         } else {
             var sections = ["## Summary\n\n" + request]
             if !criteria.isEmpty { sections.append("## Criteria\n\n" + criteria) }
+            if !concerns.isEmpty { sections.append(concerns) }
             sections.append("## Check\n\n" + checkLine)
             body = sections.joined(separator: "\n\n")
         }
         // The template is the repository's text, which can carry paths too.
         return PRBody(title: title(description?.title ?? goal.title), body: scrub(body) + "\n")
+    }
+
+    static let concernsShown = 5
+    static let concernLength = 300
+
+    /// The judge's concerns for the latest turn, under the criteria: what it doubted, for the person who reads the PR
+    /// before merging. Empty when there is no verdict, it is for an earlier turn, or it had none. Advisory, so it
+    /// is labelled and bounded; it is the judge's text and goes through `scrub` like the rest.
+    static func judgeConcerns(_ judge: Review.Judge?, lastTurn: Int) -> String {
+        guard let judge, judge.turn == lastTurn, let verdict = judge.verdict else { return "" }
+        let items = verdict.concerns.map { oneLine(scrub($0)) }.filter { !$0.isEmpty }
+        guard !items.isEmpty else { return "" }
+        var lines = items.prefix(concernsShown).map { "- " + String($0.prefix(concernLength)) }
+        if items.count > concernsShown {
+            lines.append("- and \(items.count - concernsShown) more (`workbench review` lists them)")
+        }
+        let lead = "### Judge concerns\n\nThe advisory judge doubted these; nothing acted on them.\n\n"
+        return lead + lines.joined(separator: "\n")
     }
 
     /// The model's summary, then what a reviewer should look at.
