@@ -89,12 +89,12 @@ being written for the stage named `pr-review` so existing logs and `review --jso
 1. **Generalise the runner.** Move `PRReview/` behind a `ReviewStage` type that `pr-review` is the first instance
    of, with no change in behaviour or events. Config parsing and validation for `review.stages` and
    `[review.stage.<name>]` (including a `pr-review` override and the missing-`pr-review` warning), `doctor`
-   checks. Specs: `docs/spec/{event-log,cli-json,exit-codes}.md`, `docs/plan` index row.
+   checks, and the rubric extraction rule so a `pr-review` `skill` override reaches the brief. Specs:
+   `docs/spec/{event-log,cli-json,exit-codes}.md`, `docs/plan` index row.
    **Status: built** (`Sources/WorkbenchCore/Config/ReviewConfig.swift`,
    `Sources/WorkbenchCore/Thread/PRReview/ReviewStage.swift`).
 2. **`review-stage <name>` and the inputs.** `proof` input (images are passed to the reviewer, so a reviewer that
-   cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping, the rubric extraction
-   rule.
+   cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping.
 3. **Loop over stages.** Stage order, go back to the first stage after a follow-up, per-stage caps,
    skips recorded and printed.
 4. **Tests.** `fake-codex` and `fake-claude` scripted per stage: two stages both CLEAN; the second FIX then CLEAN

@@ -23,6 +23,9 @@ struct PRReviewInput: Sendable, Equatable {
     /// Where the diff of the pull request against its base is saved, for Codex to read.
     var diffPath: String
     var diffTruncated: Bool
+    /// The stage's own rubric, from its `skill` or `prompt` file; nil for the built-in report instructions.
+    var rubric: String?
+    var rubricPath: String?
 }
 
 /// The reviewer: Codex, run read-only on the pull request's head in a throwaway checkout, started by
@@ -116,17 +119,23 @@ public enum PRReview {
                 "", "## This project's review checklist (\(input.checklistPath ?? "checklist"))", "", fenced(checklist),
             ]
         }
+        if let rubric = input.rubric {
+            lines += ["", "## Rubric (\(input.rubricPath ?? "rubric"))", "", "Review against this rubric.", "", fenced(rubric)]
+        } else {
+            lines += [
+                "",
+                "## Report",
+                "",
+                "Most severe first, each finding with a concrete failure scenario (inputs or state, then the wrong "
+                    + "result), and the file and line.",
+                "1. Each acceptance criterion: holds / does not hold / cannot tell. A test existing is not enough: "
+                    + "say whether it would fail without the behaviour.",
+                "2. Defects the change introduces: correctness, security, reliability, a missing test for a failure case.",
+                "3. Anything the goal asked for that is missing, and anything the change does that was not asked for.",
+                "Keep it under 90 lines and leave out anything that is not a finding.",
+            ]
+        }
         lines += [
-            "",
-            "## Report",
-            "",
-            "Most severe first, each finding with a concrete failure scenario (inputs or state, then the wrong "
-                + "result), and the file and line.",
-            "1. Each acceptance criterion: holds / does not hold / cannot tell. A test existing is not enough: say "
-                + "whether it would fail without the behaviour.",
-            "2. Defects the change introduces: correctness, security, reliability, a missing test for a failure case.",
-            "3. Anything the goal asked for that is missing, and anything the change does that was not asked for.",
-            "Keep it under 90 lines and leave out anything that is not a finding.",
             "",
             "## Last line",
             "",

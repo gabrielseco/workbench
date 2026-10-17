@@ -146,6 +146,14 @@ extension ThreadService {
                 outcome.warnings.append("the checklist \(path) is not a readable file in the pull request; reviewed without it")
             }
         }
+        if let path = round.stage.config.rubric {
+            // Without the rubric the project asked for, a CLEAN would not mean what it should.
+            guard let text = Self.readChecklist(path, in: paths.tree), let rubric = round.stage.rubric(from: text) else {
+                return outcome.failed("the rubric \(path) is not a readable, non-empty file in the pull request")
+            }
+            input.rubric = rubric
+            input.rubricPath = path
+        }
         do { try round.stage.brief(for: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }

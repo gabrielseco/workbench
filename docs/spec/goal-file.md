@@ -255,8 +255,11 @@ Notes:
   `max_rounds` is 1 to 10. `[pr_review]` is the `pr-review` stage's table under its P5 name, with only
   `checklist` and `max_rounds`; it and `[review.stage.pr-review]` together are refused. A stage table not
   listed in `stages` is ignored, and `doctor` says so; it also warns when `stages` leaves out `pr-review` and
-  when a stage's `skill` or `prompt` file is missing. So far the runner reads only `checklist` and
-  `max_rounds`; a round of a stage that sets more says so in a note.
+  when a stage's `skill` or `prompt` file is missing. A round reads the `skill` or `prompt` file from the
+  pull request's checkout and puts its rubric in the brief in place of the built-in report instructions (a
+  skill's `## Rubric` section when it has one, else the whole skill under a header saying to ignore steps that
+  build, run or post; a prompt file whole); when that file is missing or empty the round fails. So far the
+  runner reads only these, `checklist` and `max_rounds`; a round of a stage that sets more says so in a note.
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
   the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds
