@@ -5,6 +5,8 @@ import Foundation
 public struct PRDescription: Sendable, Equatable {
     public var title: String
     public var summary: String
+    /// One or two sentences on the problem or task; goes under the template's `Why`. Empty when not given.
+    public var why: String = ""
     /// Choices a reviewer should look at: where the work differs from what was assumed, and why.
     public var decisions: [String]
     /// Where the result departs from the goal.
@@ -44,7 +46,10 @@ public enum PRDescriber {
     public static let timeout: TimeInterval = 120
     public static let diffLimit = 120_000
     public static let titleLimit = PRBodyBuilder.titleLimit
-    static let itemLimit = 8
+    static let itemLimit = 3
+    /// What the prompt asks for, enforced on the answer: an over-long one is refused and `ship` uses the goal's text.
+    static let summaryLimit = 1_200
+    static let whyLimit = 400
 
     // MARK: Request
 
@@ -53,11 +58,18 @@ public enum PRDescriber {
             """
             You write the title and description of a pull request from the work that was actually done.
             You have no tools. Everything you may use is below. Reply with ONE JSON object and nothing else:
-            {"title": string, "summary": string, "decisions": [string], "deviations": [string]}
+            {"title": string, "summary": string, "why": string, "decisions": [string], "deviations": [string]}
+            The description is placed under the pull request template's headings. The list of changed files, the
+            criteria and the check result are added separately, so do not list files, names of functions or types,
+            or repeat the criteria.
             - title: Conventional Commits `type(scope): subject`, one line, at most \(titleLimit) characters.
-            - summary: what changed and why, in a few short paragraphs of markdown, as built, not as planned.
-            - decisions: choices a reviewer should check, each one sentence. [] when there are none.
-            - deviations: where the result differs from the goal, each one sentence. [] when there are none.
+            - summary: what the change does for a reader, in 2 to 4 sentences, at most \(summaryLimit) characters.
+              As built, not as planned.
+            - why: the problem or task behind it, in 1 or 2 sentences, at most \(whyLimit) characters. Take it
+              from the goal; do not repeat the summary.
+            - decisions: at most \(itemLimit) choices a reviewer should check, each one sentence. [] when there are none.
+            - deviations: at most \(itemLimit) places where the result differs from the goal, each one sentence.
+              [] when there are none.
             Do not claim a criterion passes or that checks ran; that is reported separately.
             Do not write file system paths of the machine this ran on.
             """
@@ -125,13 +137,25 @@ public enum PRDescriber {
             !rawSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { throw PRDescribeError.invalidOutput("no summary") }
 
+        guard rawSummary.trimmingCharacters(in: .whitespacesAndNewlines).count <= summaryLimit else {
+            throw PRDescribeError.invalidOutput("the summary is over \(summaryLimit) characters")
+        }
+        var why = ""
+        if let raw = json["why"] {
+            guard let text = raw as? String else { throw PRDescribeError.invalidOutput("why is not a string") }
+            why = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard why.count <= whyLimit else {
+                throw PRDescribeError.invalidOutput("the why is over \(whyLimit) characters")
+            }
+        }
+
         func list(_ key: String) throws -> [String] {
             guard let value = json[key] else { return [] }
             guard let items = value as? [String] else { throw PRDescribeError.invalidOutput("\(key) is not a list of strings") }
             return items.map(oneLine).filter { !$0.isEmpty }.prefix(itemLimit).map { $0 }
         }
         return PRDescription(
-            title: title, summary: rawSummary.trimmingCharacters(in: .whitespacesAndNewlines),
+            title: title, summary: rawSummary.trimmingCharacters(in: .whitespacesAndNewlines), why: why,
             decisions: try list("decisions"), deviations: try list("deviations"))
     }
 

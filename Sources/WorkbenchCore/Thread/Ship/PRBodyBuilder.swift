@@ -40,7 +40,7 @@ public enum PRBodyBuilder {
         let body: String
         if let template, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             body = fill(
-                template: template, summary: request, why: why(goal: goal, described: description != nil),
+                template: template, summary: request, why: why(goal: goal, description: description),
                 changes: changesSection(changes), testing: testing)
         } else {
             var sections = ["## Summary\n\n" + request]
@@ -110,11 +110,17 @@ public enum PRBodyBuilder {
         }.joined(separator: "\n")
     }
 
-    /// The `Why` section: the goal's `(Plan: …)` line, else (when a model wrote the Summary) the first paragraph of
-    /// what was asked. Read from the goal, never from the described text, which has no plan line.
-    static func why(goal: Goal, described: Bool) -> String? {
-        if let task = planTask(in: goal.request) { return task }
-        guard described else { return nil }
+    /// The `Why` section: the model's short `why` followed by the goal's `(Plan: …)` line; without a `why`, the plan
+    /// line alone, else (when a model wrote the Summary) the first paragraph of what was asked. The plan line is
+    /// read from the goal, never from the described text.
+    static func why(goal: Goal, description: PRDescription?) -> String? {
+        let task = planTask(in: goal.request)
+        // The model's one or two sentences, then the plan reference when the goal names one.
+        if let said = description.map({ scrub($0.why).trimmingCharacters(in: .whitespacesAndNewlines) }), !said.isEmpty {
+            return task.map { said + "\n\n" + $0 } ?? said
+        }
+        if let task { return task }
+        guard description != nil else { return nil }
         let first = scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: "\n\n").first ?? ""
         let text = first.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -58,6 +58,17 @@ private func section(_ name: String, in body: String) -> String {
         #expect(section("Summary", in: body).hasPrefix("The model's words."))
     }
 
+    @Test func theModelsWhyComesFirstThenThePlanReference() {
+        let said = PRDescription(
+            title: "feat: retry", summary: "S.", why: "Fetch gave up on the first 5xx.", decisions: [], deviations: [])
+        let g = goal(request: "Add retry.\n(Plan: docs/plan/P2.5-ship.md task 3)")
+        let body = PRBodyBuilder.build(goal: g, check: nil, template: template, description: said).body
+        #expect(
+            section("Why", in: body) == "Fetch gave up on the first 5xx.\n\ndocs/plan/P2.5-ship.md task 3", "\(body)")
+        let noPlan = PRBodyBuilder.build(goal: goal(request: "Add retry."), check: nil, template: template, description: said)
+        #expect(section("Why", in: noPlan.body) == "Fetch gave up on the first 5xx.")
+    }
+
     @Test func aDescribedBodyWithNoPlanLineUsesTheRequestsFirstParagraph() {
         let g = goal(request: "Add retry to fetch.\n\nSecond paragraph that stays out.")
         let body = PRBodyBuilder.build(goal: g, check: nil, template: template, description: described).body
