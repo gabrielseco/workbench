@@ -65,6 +65,18 @@ import Testing
         #expect(!args.contains("danger-full-access") && !args.contains("workspace-write"))
     }
 
+    @Test func theBriefPointerFollowsTheImagesAfterADoubleDash() {
+        // `codex exec -i` takes a list of files: a prompt right after it is read as one more image and Codex
+        // exits with "No prompt provided via stdin".
+        let args = PRReview.arguments(
+            tree: "/t/tree", answer: "/t/a.md", brief: "/t/brief.md", images: ["/p/one.png", "/p/two.png"])
+        #expect(args.last?.contains("/t/brief.md") == true)
+        #expect(args[args.count - 2] == "--", "\(args)")
+        #expect(args.filter { $0 == "-i" }.count == 2)
+        let dashes = args.firstIndex(of: "--")
+        #expect(dashes != nil && dashes! > args.lastIndex(of: "-i") ?? 0, "every image comes before the --")
+    }
+
     @Test func codexSeesTheMinimalEnvironmentAndItsOwnLogin() {
         let parent = [
             "PATH": "/bin", "HOME": "/h", "CODEX_HOME": "/c", "OPENAI_API_KEY": "k", "LC_ALL": "C", "GITHUB_TOKEN": "t",
