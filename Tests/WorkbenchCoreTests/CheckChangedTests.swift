@@ -184,6 +184,73 @@ import Testing
         #expect(plan.contains("Lint: 1 changed Swift file"), "\(plan)")
     }
 
+    // MARK: how wide a change is allowed to get (P8 task 2)
+
+    /// Foo has a test named after it; Bar and a core `GitRunner` have none, but two other test files mention each.
+    private func mentionedRepo() throws -> Repo {
+        let repo = try Repo()
+        try repo.write("Sources/WorkbenchCore/Git/GitRunner.swift", "struct GitRunner {}\n")
+        try repo.write(
+            "Tests/CoreTests/UsesBothTests.swift",
+            "@Suite struct UsesBothTests { let _ = Bar(); let _ = GitRunner() }\n")
+        try repo.write(
+            "Tests/CoreTests/AlsoUsesBothTests.swift",
+            "@Suite struct AlsoUsesBothTests { let _ = Bar(); let _ = GitRunner() }\n")
+        return repo
+    }
+
+    private func planWith(_ repo: Repo, _ options: String = "", env: String = "") async throws -> String {
+        try await repo.sh(["-c", "\(env) sh scripts/check-changed.sh --plan \(options) HEAD 2>&1"]).joined(separator: "\n")
+    }
+
+    @Test func aCoreFileIsNotMappedByWhoMentionsIt() async throws {
+        let repo = try mentionedRepo()
+        try await repo.commitAll()
+        try repo.write("Sources/WorkbenchCore/Git/GitRunner.swift", "struct GitRunner { var x = 1 }\n")
+        let plan = try await planWith(repo)
+        #expect(plan.contains("No tests found for: Sources/WorkbenchCore/Git/GitRunner.swift"), "\(plan)")
+        #expect(!plan.contains("UsesBothTests"), "\(plan)")
+    }
+
+    @Test func otherFilesStillMapToTheTestsThatMentionThem() async throws {
+        let repo = try mentionedRepo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Bar.swift", "struct Bar { var x = 1 }\n")
+        let plan = try await planWith(repo)
+        #expect(plan.contains("Test suites (2): AlsoUsesBothTests|UsesBothTests"), "\(plan)")
+    }
+
+    @Test func overTheLimitOnlyTheNamedSuitesRunAndTheFilesThatCausedItAreSaid() async throws {
+        let repo = try mentionedRepo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        try repo.write("Sources/Core/Bar.swift", "struct Bar { var x = 1 }\n")
+        let capped = try await planWith(repo, env: "CHECK_CHANGED_MAX_SUITES=3")
+        #expect(capped.contains("4 suites match, over the limit of 3"), "\(capped)")
+        #expect(capped.contains("Sources/Core/Bar.swift(2 files)"), "\(capped)")
+        #expect(capped.contains("Test suites (2): FooMoreTests|FooTests"), "\(capped)")
+    }
+
+    @Test func atTheLimitEverythingMatchedRuns() async throws {
+        let repo = try mentionedRepo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        try repo.write("Sources/Core/Bar.swift", "struct Bar { var x = 1 }\n")
+        let plan = try await planWith(repo, env: "CHECK_CHANGED_MAX_SUITES=4")
+        #expect(plan.contains("Test suites (4)"), "\(plan)")
+        #expect(!plan.contains("over the limit"), "\(plan)")
+    }
+
+    @Test func quickRunsOnlyTheSuitesNamedAfterTheChange() async throws {
+        let repo = try mentionedRepo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        try repo.write("Sources/Core/Bar.swift", "struct Bar { var x = 1 }\n")
+        let plan = try await planWith(repo, "--quick")
+        #expect(plan.contains("Test suites (2): FooMoreTests|FooTests"), "\(plan)")
+        #expect(plan.contains("No tests found for: Sources/Core/Bar.swift"), "\(plan)")
+    }
+
     // MARK: execution, with stand-ins for swiftlint and swift
 
     /// Stand-in tools on PATH that append their arguments to `calls.log`; `fail` names one that exits 1.

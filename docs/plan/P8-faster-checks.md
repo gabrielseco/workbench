@@ -1,6 +1,6 @@
 # P8: Faster checks inside a thread
 
-Status: plan; task 1 (measure) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
+Status: plan; tasks 1 (measure) and 2 (tighter mapping) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
 each turn) and the diff-scoped `scripts/check-changed.sh` (#86).
 
 ## What was measured
@@ -48,6 +48,8 @@ Times are read from the event log's timestamps. The causes below were not measur
 - **The wide run is CPU and process-spawn bound:** 65 s user, 117 s system, 286% CPU, with the machine already
   loaded. Suite count, not any one slow test, is the cost.
 - **Cause 4 is small:** an edit's incremental compile was 25 s once; with nothing to rebuild it is 1 s.
+- **After task 2:** the same seven files in `EventLog/` and `Git/` select 1 suite and take 5 s warm (was 58 suites,
+  63 to 87 s). The cost is that a core change is no longer tested against everything that uses it; CI is.
 - Cause 3 (the same check run several times) is multiplied by all of the above: at 60 to 90 s a wide run, four
   runs in a turn is the 7 minutes seen. Tasks 3 and 4 stand.
 
