@@ -140,24 +140,24 @@ extension ThreadService {
         return [root] + store.followUps(of: root).map(\.id)
     }
 
-    /// How many rounds were started for `pr` in any thread of the family, finished or not.
-    func prReviewStartedCount(family: [String], pr: Int) -> Int {
+    /// How many rounds of a stage were started for `pr` in any thread of the family, finished or not.
+    func reviewStartedCount(_ kinds: ReviewStage.Events, family: [String], pr: Int) -> Int {
         family.reduce(0) { total, thread in
             let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
-            return total + events.filter { $0.kind == .prReviewStarted && $0.data["pr"]?.intValue == pr }.count
+            return total + events.filter { $0.kind == kinds.started && $0.data["pr"]?.intValue == pr }.count
         }
     }
 
-    /// The review rounds recorded for `pr` in any thread of the family, oldest first. A round that started and never
+    /// A stage's rounds recorded for `pr` in any thread of the family, oldest first. A round that started and never
     /// recorded how it ended is there too, as a round without a verdict, so it cannot be skipped in favour of an older one.
-    func prReviewRecords(family: [String], pr: Int) -> [PRReviewRecord] {
+    func reviewRecords(_ kinds: ReviewStage.Events, family: [String], pr: Int) -> [PRReviewRecord] {
         var records: [(ts: String, record: PRReviewRecord)] = []
         for thread in family {
             let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
             let finished = Set(
-                events.filter { $0.kind == .prReviewFinished && $0.data["pr"]?.intValue == pr }
+                events.filter { $0.kind == kinds.finished && $0.data["pr"]?.intValue == pr }
                     .compactMap { $0.data["round"]?.intValue })
-            for event in events where event.kind == .prReviewStarted && event.data["pr"]?.intValue == pr {
+            for event in events where event.kind == kinds.started && event.data["pr"]?.intValue == pr {
                 guard let round = event.data["round"]?.intValue, !finished.contains(round) else { continue }
                 records.append(
                     (
@@ -167,7 +167,7 @@ extension ThreadService {
                             headSHA: event.data["head_sha"]?.stringValue, findingsPath: nil)
                     ))
             }
-            for event in events where event.kind == .prReviewFinished && event.data["pr"]?.intValue == pr {
+            for event in events where event.kind == kinds.finished && event.data["pr"]?.intValue == pr {
                 let verdict = event.data["verdict"]?.stringValue.flatMap(PRReviewVerdict.init(rawValue:))
                 records.append(
                     (
@@ -187,7 +187,7 @@ extension ThreadService {
     public func latestPRReview(id: String) -> PRReviewRecord? {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let pr = events.last(where: { $0.kind == .prOpened })?.data["number"]?.intValue else { return nil }
-        return prReviewRecords(family: family(of: id), pr: pr).last
+        return reviewRecords(.prReview, family: family(of: id), pr: pr).last
     }
 
     /// The commit `origin` has for this thread's pull request branch right now, nil when it cannot be read.

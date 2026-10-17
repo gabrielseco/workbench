@@ -193,6 +193,11 @@ default_budget_usd = 5.00               # used when drafting a goal
 # [pr_review]                           # `workbench pr-review`: Codex reviews the shipped pull request
 # checklist = "docs/REVIEW.md"          # optional: this project's review invariants, read from the PR head
 # max_rounds = 3                        # reviews of one pull request, counted from the event log (1 to 10)
+# [review]                              # P6: the review stages, in order (only pr-review runs so far)
+# stages = ["pr-review", "design"]      # default ["pr-review"]
+# [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
+# prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
+#                                       # inputs, applies_to, max_rounds
 
 [tools]
 available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
@@ -241,6 +246,17 @@ Notes:
   the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
   runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
   says the verify step captures those, so Claude does not report them as unverified.
+- **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
+  `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
+  name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's
+  directory. In a stage table `skill`, `prompt`, `checklist` and `inputs` paths stay inside the repository,
+  `skill` and `prompt` exclude each other, `reviewer` is `codex` (default) or `claude`, `inputs` entries are
+  `diff`, `goal`, `proof` or a file path (with a `/` or an extension, so a misspelt keyword is refused), and
+  `max_rounds` is 1 to 10. `[pr_review]` is the `pr-review` stage's table under its P5 name, with only
+  `checklist` and `max_rounds`; it and `[review.stage.pr-review]` together are refused. A stage table not
+  listed in `stages` is ignored, and `doctor` says so; it also warns when `stages` leaves out `pr-review` and
+  when a stage's `skill` or `prompt` file is missing. So far the runner reads only `checklist` and
+  `max_rounds`; a round of a stage that sets more says so in a note.
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
   the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds

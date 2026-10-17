@@ -82,7 +82,12 @@ public struct Config: Sendable, Equatable {
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
     public var envPass: [String]
     public var tools: ToolSet
-    public var prReview: PRReviewConfig = PRReviewConfig()
+    public var review: ReviewConfig = ReviewConfig()
+
+    /// The `pr-review` stage's checklist and round cap, from `[review.stage.pr-review]` or the older `[pr_review]`.
+    public var prReview: PRReviewConfig {
+        PRReviewConfig(checklist: review.prReview.checklist, maxRounds: review.prReview.maxRounds)
+    }
 
     /// `allowed` plus the check command, which Claude must be able to run.
     public var effectiveAllowedTools: [String] {
@@ -121,14 +126,14 @@ public struct Config: Sendable, Equatable {
             "default_budget_usd", "env_pass", "model", "safe_mode", "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
-        let prReviewKeys: Set<String> = ["checklist", "max_rounds"]
 
-        for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) {
-            if name != "" && name != "tools" && name != "pr_review" {
+        // The review tables check their own keys (ReviewConfig.parse).
+        for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !ReviewConfig.owns(table: name) {
+            if name != "" && name != "tools" {
                 fail(.unknownTable, table.line, "unknown table [\(name)]")
                 continue
             }
-            let known = name == "" ? rootKeys : name == "tools" ? toolKeys : prReviewKeys
+            let known = name == "" ? rootKeys : toolKeys
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !known.contains(key) {
                 let location = name == "" ? "" : " in [\(name)]"
                 fail(.unknownKey, entry.line, "unknown key '\(key)'\(location)")
@@ -240,7 +245,7 @@ public struct Config: Sendable, Equatable {
             }
         }
 
-        let prReview = prReviewSettings(document, fail: fail)
+        let review = ReviewConfig.parse(document, fail: fail)
 
         var envPass: [String] = []
         if let (values, line) = strings("", "env_pass") {
@@ -286,36 +291,7 @@ public struct Config: Sendable, Equatable {
             verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
-            prReview: prReview)
-    }
-
-    /// `[pr_review]`: the checklist path and the round cap, each checked on its own.
-    private static func prReviewSettings(
-        _ document: TOMLDocument, fail: (ConfigProblem.Code, Int?, String) -> Void
-    ) -> PRReviewConfig {
-        var settings = PRReviewConfig()
-        let entries = document.tables["pr_review"]?.entries ?? [:]
-        if let entry = entries["checklist"] {
-            if case .string(let path) = entry.value {
-                if let reason = PRReviewConfig.checklistProblem(path) {
-                    fail(.invalidValue, entry.line, "'checklist' \(reason)")
-                } else {
-                    settings.checklist = path
-                }
-            } else {
-                fail(.wrongType, entry.line, "'checklist' must be a string, found \(entry.value.typeName)")
-            }
-        }
-        if let entry = entries["max_rounds"] {
-            if case .int(let n) = entry.value, (1...PRReviewConfig.maxRoundsCeiling).contains(n) {
-                settings.maxRounds = n
-            } else {
-                fail(
-                    .invalidValue, entry.line,
-                    "'max_rounds' must be a whole number from 1 to \(PRReviewConfig.maxRoundsCeiling)")
-            }
-        }
-        return settings
+            review: review)
     }
 
     private static func verifyMinutes(_ value: TOMLValue) -> Int? {
@@ -381,6 +357,7 @@ public struct Config: Sendable, Equatable {
         # [pr_review]                      # `workbench pr-review`: Codex reviews the shipped pull request
         # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head
         # max_rounds = 3                   # reviews of one pull request, counted from the event log (1 to 10)
+        # (also accepted as [review.stage.pr-review]; `[review] stages = [...]` lists the review stages, in order)
 
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).

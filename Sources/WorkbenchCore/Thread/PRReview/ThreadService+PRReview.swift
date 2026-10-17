@@ -22,25 +22,34 @@ extension ThreadService {
         stopRequested: @escaping @Sendable () -> Bool = { false },
         attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRReviewResult {
-        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let settings = PRReviewSettings(
             codexPath: codexPath, environment: environment, timeout: timeout,
             capacityBackoff: capacityBackoff, stopRequested: stopRequested)
+        return try await reviewStage(.prReview(config), id: id, config: config, again: again, settings: settings, attach: attach)
+    }
+
+    /// Runs one round of `stage` on the thread's pull request; `prReview` is this for the `pr-review` stage.
+    func reviewStage(
+        _ stage: ReviewStage, id: String, config: Config, again: Bool, settings: PRReviewSettings,
+        attach: @Sendable (ProcessRun) -> Void
+    ) async throws -> PRReviewResult {
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         do {
             return try await withLog(id) { log in
-                try await self.prReviewLocked(
-                    id: id, log: log, config: config, again: again, settings: settings, attach: attach)
+                try await self.reviewStageLocked(
+                    stage, id: id, log: log, config: config, again: again, settings: settings, attach: attach)
             }
         } catch EventLogError.alreadyOpen { throw PRReviewRefusal.busy }
     }
 
-    private func prReviewLocked(
-        id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
+    // swiftlint:disable:next function_body_length
+    private func reviewStageLocked(
+        _ stage: ReviewStage, id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
         attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PRReviewResult {
         // A round that was killed leaves its `codex` and its checkout behind. This process holds the thread's log, so
         // none of them is live: end them now, before any refusal can leave them for good.
-        await recoverLeftovers(in: project.threadDirectory(id).appendingPathComponent("pr-review"))
+        await recoverLeftovers(in: project.threadDirectory(id).appendingPathComponent(stage.folder))
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -50,8 +59,8 @@ extension ThreadService {
 
         // Counted over the whole tree of follow-up threads of this pull request, so starting a follow-up cannot reset it.
         let family = self.family(of: id)
-        let rounds = prReviewStartedCount(family: family, pr: pr)
-        let maxRounds = config.prReview.maxRounds
+        let rounds = reviewStartedCount(stage.events, family: family, pr: pr)
+        let maxRounds = stage.config.maxRounds
         if rounds >= maxRounds { throw PRReviewRefusal.capReached(pr: pr, rounds: rounds, max: maxRounds) }
 
         let goal: String
@@ -59,12 +68,12 @@ extension ThreadService {
             throw PRReviewRefusal.goalUnreadable("\(error.localizedDescription)")
         }
         let tip = try await originBranchTip(branch)
-        if !again, let last = prReviewRecords(family: family, pr: pr).last, last.ok, last.headSHA == tip {
+        if !again, let last = reviewRecords(stage.events, family: family, pr: pr).last, last.ok, last.headSHA == tip {
             throw PRReviewRefusal.alreadyReviewed(round: last.round)
         }
 
         let round = rounds + 1
-        let paths = PRReviewPaths(folder: project.threadDirectory(id).appendingPathComponent("pr-review"), round: round)
+        let paths = PRReviewPaths(folder: project.threadDirectory(id).appendingPathComponent(stage.folder), round: round)
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
         let argv = PRReview.arguments(tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path)
         let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
@@ -72,7 +81,7 @@ extension ThreadService {
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it; a run or another review is refused).
         try await log.append(
-            .prReviewStarted, turn: state.lastTurn,
+            stage.events.started, turn: state.lastTurn,
             data: [
                 "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
                 "argv": .array(PRDescriber.displayArguments(argv).map { .string($0) }),
@@ -81,17 +90,17 @@ extension ThreadService {
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
 
         var context = PRReviewRound(
-            id: id, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal, tip: tip, paths: paths,
-            config: config, settings: settings)
+            id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal, tip: tip,
+            paths: paths, config: config, settings: settings)
         let outcome = await runRound(&context, attach: attach)
         await removeTree(paths)
         let findings = outcome.findings
-        let findingsPath = findings == nil ? nil : "pr-review/\(paths.answer.lastPathComponent)"
+        let findingsPath = findings == nil ? nil : "\(stage.folder)/\(paths.answer.lastPathComponent)"
         let transcript =
             FileManager.default.fileExists(atPath: paths.transcript.path)
-            ? "pr-review/\(paths.transcript.lastPathComponent)" : nil
+            ? "\(stage.folder)/\(paths.transcript.lastPathComponent)" : nil
         return try await recordRound(
-            log, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, outcome: outcome,
+            log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, outcome: outcome,
             sha: context.reviewedSHA ?? tip, findingsPath: findingsPath, transcript: transcript)
     }
 
@@ -99,6 +108,7 @@ extension ThreadService {
 
     private func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome()
+        if let warning = round.stage.notYetUsedWarning { outcome.warnings.append(warning) }
         let paths = round.paths
         let sha = round.tip
         round.reviewedSHA = sha
@@ -129,7 +139,7 @@ extension ThreadService {
         if round.config.projectInstructions {
             input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseSHA)?.text
         }
-        if let path = round.config.prReview.checklist {
+        if let path = round.stage.config.checklist {
             if let text = Self.readChecklist(path, in: paths.tree) {
                 input.checklist = text
                 input.checklistPath = path
@@ -137,7 +147,7 @@ extension ThreadService {
                 outcome.warnings.append("the checklist \(path) is not a readable file in the pull request; reviewed without it")
             }
         }
-        do { try PRReview.prompt(for: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
+        do { try round.stage.brief(for: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
@@ -313,8 +323,8 @@ extension ThreadService {
     // MARK: Record
 
     private func recordRound(
-        _ log: EventLogWriter, turn: Int, round: Int, pr: Int, maxRounds: Int, outcome: PRReviewOutcome, sha: String,
-        findingsPath: String?, transcript: String?
+        _ log: EventLogWriter, stage: ReviewStage, turn: Int, round: Int, pr: Int, maxRounds: Int,
+        outcome: PRReviewOutcome, sha: String, findingsPath: String?, transcript: String?
     ) async throws -> PRReviewResult {
         let reason = outcome.failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
         var data: [String: JSONValue] = [
@@ -324,7 +334,7 @@ extension ThreadService {
         if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
-        try await log.append(.prReviewFinished, turn: turn, data: .object(data))
+        try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
             round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: outcome.verdict, failure: reason,
             findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
@@ -436,6 +446,7 @@ struct PRReviewPaths: Sendable {
 
 struct PRReviewRound: Sendable {
     var id: String
+    var stage: ReviewStage
     var pr: Int
     var branch: String
     var base: String

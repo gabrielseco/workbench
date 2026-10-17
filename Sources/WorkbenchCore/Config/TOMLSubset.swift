@@ -34,9 +34,10 @@ struct TOMLDocument: Equatable, Sendable {
     var tables: [String: TOMLTable] = ["": TOMLTable(line: 0)]
 }
 
-/// A deliberately small TOML reader: `[table]` headers, `key = value`, strings (basic and literal), integers,
-/// decimals, booleans, and arrays of those, possibly spread over several lines. Anything else (dotted keys,
-/// inline tables, dates, multi-line strings, nested tables) is rejected with a clear message rather than
+/// A deliberately small TOML reader: `[table]` and `[a.b.c]` headers (each one flat table, named as written),
+/// `key = value`, strings (basic and literal), integers, decimals, booleans, and arrays of those, possibly spread
+/// over several lines. Anything else (dotted keys, inline tables, dates, multi-line strings, quoted table names) is
+/// rejected with a clear message rather than
 /// misread. The config is tiny and ours; a dependency would be the larger risk.
 enum TOMLSubset {
     static func parse(_ text: String) -> (document: TOMLDocument, problems: [ConfigProblem]) {
@@ -82,8 +83,9 @@ enum TOMLSubset {
                     continue
                 }
                 let name = String(stripped.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
-                guard name.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil else {
-                    fail(.unsupportedSyntax, number, "table name '\(name)' must be a plain name (no dots or quotes)")
+                // A dotted name stays one flat table (`review.stage.design`); the config decides which names it knows.
+                guard name.range(of: #"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$"#, options: .regularExpression) != nil else {
+                    fail(.unsupportedSyntax, number, "table name '\(name)' must be plain names joined by dots (no quotes)")
                     continue
                 }
                 if document.tables[name] != nil {
