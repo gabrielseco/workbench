@@ -214,7 +214,7 @@ public enum PRBodyBuilder {
                 case "testing": content = testing
                 case "why", "context": if let why { content = why }
                 case "what changed": if let changes { content = changes }
-                case "screenshots": content = "None yet."
+                case "screenshots": content = "None"
                 default: break
                 }
                 parts.append(content.isEmpty ? heading : heading + "\n\n" + content)

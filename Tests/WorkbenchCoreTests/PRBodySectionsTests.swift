@@ -82,6 +82,10 @@ private func verified(turn: Int, _ names: [String]) -> Review.Verify {
         let noPng = PRBodyBuilder.build(
             goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verify: verified(turn: 1, ["log.txt"])).body
         #expect(!noPng.contains("Screenshots"), "\(noPng)")
+        let gone = PRBodyBuilder.build(
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verify: verified(turn: 1, ["a.png"]),
+            proofAvailable: { _ in false }).body
+        #expect(!gone.contains("Screenshots"), "\(gone)")
         let stale = PRBodyBuilder.build(
             goal: g, check: nil, template: shotsTemplate, lastTurn: 2, verify: verified(turn: 1, ["a.png"])).body
         #expect(!stale.contains("Screenshots"), "\(stale)")
@@ -91,7 +95,7 @@ private func verified(turn: Int, _ names: [String]) -> Review.Verify {
         let body = PRBodyBuilder.build(
             goal: goal(request: "Add retry."), check: nil, template: shotsTemplate, lastTurn: 1,
             verify: verified(turn: 1, ["a.png"])).body
-        #expect(section("Screenshots", in: body) == "None yet.", "\(body)")
+        #expect(section("Screenshots", in: body) == "None", "\(body)")
         #expect(!body.contains("<here>"))
     }
 
