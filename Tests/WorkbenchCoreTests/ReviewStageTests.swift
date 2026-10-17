@@ -72,12 +72,14 @@ private func problems(_ section: String) -> [ConfigProblem] {
     }
 
     @Test(arguments: [
-        "[review]\nstages = []\n", "[review]\nstages = \"pr-review\"\n", "[review]\nstages = [\"pr-review\", \"pr-review\"]\n",
-        "[review]\nstages = [\"Design\"]\n", "[review]\nstages = [1]\n", "[review]\norder = [\"pr-review\"]\n",
+        "[review]\nstages = []\n", "[review]\nstages = \"pr-review\"\n",
+        "[review]\nstages = [\"pr-review\", \"pr-review\"]\n", "[review]\nstages = [\"Design\"]\n",
+        "[review]\nstages = [1]\n", "[review]\norder = [\"pr-review\"]\n",
         "[review.stage]\nskill = \"a.md\"\n", "[review.stage.a.b]\nskill = \"a.md\"\n", "[review.stage.Big]\n",
         "[review.design]\n", "[review.stage.x]\nreviewer = \"gpt\"\n", "[review.stage.x]\nskill = \"../outside.md\"\n",
-        "[review.stage.x]\nprompt = \"/etc/passwd\"\n", "[review.stage.x]\ninputs = []\n", "[review.stage.x]\ninputs = \"diff\"\n",
-        "[review.stage.x]\napplies_to = [\"/abs/**\"]\n", "[review.stage.x]\nmax_rounds = 0\n", "[review.stage.x]\ncommand = \"x\"\n",
+        "[review.stage.x]\nprompt = \"/etc/passwd\"\n", "[review.stage.x]\ninputs = []\n",
+        "[review.stage.x]\ninputs = \"diff\"\n", "[review.stage.x]\napplies_to = [\"/abs/**\"]\n",
+        "[review.stage.x]\nmax_rounds = 0\n", "[review.stage.x]\ncommand = \"x\"\n",
         "[pr_review]\nmax_rounds = 2\n[review.stage.pr-review]\nmax_rounds = 3\n",
     ])
     func aMalformedReviewTableIsRefused(section: String) {

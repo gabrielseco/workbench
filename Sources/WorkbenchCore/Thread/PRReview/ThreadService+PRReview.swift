@@ -42,7 +42,6 @@ extension ThreadService {
         } catch EventLogError.alreadyOpen { throw PRReviewRefusal.busy }
     }
 
-    // swiftlint:disable:next function_body_length
     private func reviewStageLocked(
         _ stage: ReviewStage, id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
         attach: @Sendable (ProcessRun) -> Void

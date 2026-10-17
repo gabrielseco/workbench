@@ -116,7 +116,6 @@ extension ReviewConfig {
         name == "review" || name == "pr_review" || name.hasPrefix(tablePrefix)
     }
 
-    // swiftlint:disable:next function_body_length
     static func parse(_ document: TOMLDocument, fail: Fail) -> ReviewConfig {
         var config = ReviewConfig()
         for (name, table) in document.tables.sorted(by: { $0.value.line < $1.value.line }) where owns(table: name) {
@@ -196,7 +195,6 @@ extension ReviewConfig {
         return names
     }
 
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private static func stageSettings(_ table: TOMLTable, into stage: inout ReviewStageConfig, keys: Set<String>, fail: Fail) {
         func path(_ key: String) -> String? {
             guard keys.contains(key), let entry = table.entries[key] else { return nil }
