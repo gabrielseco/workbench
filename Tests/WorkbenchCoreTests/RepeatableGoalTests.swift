@@ -90,6 +90,21 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         #expect(id == plain + "-feed")
     }
 
+    @Test func aLongNameStillGetsAValidSuffixOnARepeat() async throws {
+        let (_, service) = try await fixture(suffixes: ["beef"])
+        let day = try await service.newThread(name: "x")
+        try await service.abandon(id: day)
+        let prefix = String(day.dropLast(1))  // "g-<day>-"
+        let name = String(repeating: "n", count: 96 - prefix.count)  // a plain id of 96 characters
+        let first = try await service.newThread(name: name)
+        #expect(first.count == 96)
+        try await service.abandon(id: first)
+        let second = try await service.newThread(name: name)
+        #expect(SafeNames.isThreadID(second))
+        #expect(second.hasSuffix("-beef"))
+        #expect(second != first)
+    }
+
     @Test func itGivesUpWhenEverySuffixIsTaken() async throws {
         let (fx, service) = try await fixture(suffixes: ["dead"])
         let plain = try await leaveOnlyABranch(fx, service)
@@ -141,6 +156,21 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let (fx, _) = try await fixture(suffixes: ["cafe"])
         let url = try write(goalFile(criteria: ""), in: fx)
         #expect(throws: ThreadServiceError.self) { _ = try ThreadService.goalBody(copying: url) }
+    }
+
+    @Test func theCopiedCriterionKeepsItsText() async throws {
+        let (fx, _) = try await fixture(suffixes: ["cafe"])
+        let body = try ThreadService.goalBody(copying: try write(goalFile(), in: fx))
+        #expect(body.criteria == [GoalBody.Criterion(id: "c1", text: "It works.", proof: "swift test")])
+    }
+
+    @Test func aFifoIsRefusedWithoutBlocking() async throws {
+        let (fx, _) = try await fixture(suffixes: ["cafe"])
+        let url = fx.repo.appendingPathComponent("fifo.md")
+        #expect(mkfifo(url.path, 0o600) == 0)
+        #expect(throws: ThreadServiceError.copySourceMissing(url.path)) {
+            _ = try ThreadService.goalBody(copying: url)
+        }
     }
 
     @Test func aHugeFileIsRefused() async throws {
