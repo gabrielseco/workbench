@@ -21,6 +21,8 @@ public struct CriterionStatus: Sendable, Equatable {
     public var proof: String
     /// The recorded file that backs an `evidence` row, relative to the thread directory.
     public var file: String?
+    /// The proof is marked `(by hand)`: a person does it, and it is never passed.
+    public var byHand = false
 
     /// What a person sees in the first column.
     public var label: String {
@@ -44,6 +46,10 @@ public enum CriteriaStatus {
         proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> [CriterionStatus] {
         criteria.map { criterion in
+            if criterion.byHand {
+                return CriterionStatus(
+                    id: criterion.id, state: .manual, commands: [], note: nil, proof: criterion.proof, byHand: true)
+            }
             if let name = ScreenshotProof.name(in: criterion.proof) {
                 return screenshot(
                     criterion, name: name, verify: verify, lastTurn: lastTurn, available: proofAvailable)
@@ -147,7 +153,9 @@ extension CriteriaStatus {
             if status.state == .missing, let note = status.note { lines.append("         \(note)") }
             if status.state == .manual {
                 if let note = status.note { lines.append("         \(note)") }
-                if status.commands.isEmpty {
+                if status.byHand {
+                    lines.append("         by hand: \(status.proof)")
+                } else if status.commands.isEmpty {
                     lines.append("         see the proof above")
                 } else {
                     for command in status.commands { lines.append("         run: \(command)") }
@@ -174,7 +182,7 @@ extension CriteriaStatus {
                 todo = "no screenshot" + (status.note.map { ": \(cell($0))" } ?? "")
             case .manual:
                 var parts = status.commands.map { "`\(cell($0))`" }
-                if parts.isEmpty { parts = [cell(status.proof)] }
+                if parts.isEmpty { parts = [(status.byHand ? "by hand: " : "") + cell(status.proof)] }
                 if let note = status.note { parts.append("_\(cell(note))_") }
                 todo = parts.joined(separator: "<br>")
             }

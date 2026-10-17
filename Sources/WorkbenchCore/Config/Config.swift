@@ -364,7 +364,9 @@ public struct Config: Sendable, Equatable {
         available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
         # Allowed without asking. Anything not listed is denied automatically. A narrow test command lets a
         # run check what it changed without repeating the full check: for a Swift project add
-        # "Bash(swift build:*)" and "Bash(swift test --filter:*)".
+        # "Bash(swift build:*)" and "Bash(swift test --filter:*)". A goal that adds scripts or skills also
+        # needs "Bash(chmod +x scripts/:*)", "Bash(bash -n scripts/:*)" and
+        # "Bash(ln -s ../../.agents/skills/:*)"; each widens what a run may execute, so add them on purpose.
         allowed = [
           "Read", "Grep", "Glob", "Edit", "Write",
           "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)",

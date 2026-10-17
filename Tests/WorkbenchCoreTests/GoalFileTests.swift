@@ -256,6 +256,25 @@ private let fixedDate = Date(timeIntervalSince1970: 1_791_835_800)  // any insta
         #expect(codes(draftGoal + "\n\n## Request\n\nagain\n") == [.duplicateSection])
     }
 
+    @Test func aByHandProofIsParsedAndKeptInTheFileText() throws {
+        let text = draftGoal.replacingOccurrences(
+            of: "  - proof: unit test with injected clock", with: "  - proof (by hand): look at the output\n    and compare")
+        let file = try GoalFile.parse(text)
+        #expect(file.goal.criteria.map(\.byHand) == [false, true])
+        #expect(file.goal.criteria[1].proof == "look at the output and compare")
+        #expect(file.text.contains("- proof (by hand):"))
+    }
+
+    @Test func aMalformedProofMarkerIsAGoalError() {
+        for marker in ["proof (by hands):", "proof (manual):", "proof (by hand)", "proof ():"] {
+            let text = draftGoal.replacingOccurrences(of: "- proof: unit test with injected clock", with: "- \(marker) x")
+            #expect(codes(text).contains(.malformedProofMarker), "\(marker)")
+        }
+        let empty = draftGoal.replacingOccurrences(
+            of: "- proof: unit test with injected clock", with: "- proof (by hand):")
+        #expect(codes(empty) == [.criterionWithoutProof])
+    }
+
     @Test func allProblemsAreReportedTogetherInFileOrder() {
         let text = draftGoal
             .replacingOccurrences(of: "budget_usd: 5.00", with: "budget_usd: -1")

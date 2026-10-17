@@ -6,6 +6,7 @@ public struct GoalBody: Sendable, Equatable {
         public var id: String
         public var text: String
         public var proof: String
+        public var byHand = false
     }
 
     public var request: String
@@ -26,7 +27,7 @@ public struct GoalBody: Sendable, Equatable {
         var lines = ["## Request", "", request, "", "## Criteria", ""]
         for criterion in criteria {
             lines.append("- [\(criterion.id)] \(criterion.text)")
-            lines.append("  - proof: \(criterion.proof)")
+            lines.append("  - \(criterion.byHand ? "proof (by hand)" : "proof"): \(criterion.proof)")
         }
         lines += ["", "## Out of scope", ""]
         lines += outOfScope.map { "- \($0)" }

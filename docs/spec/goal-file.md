@@ -43,6 +43,11 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown.
   `proof` is free text for now; typed proofs (`check:`, `screenshot:`, `diff:`) are described in
   [`later/proof.md`](../later/proof.md).
+- **A proof a person does is `- proof (by hand): <text>`.** It is not read for commands, so `approve` and
+  `run` never refuse it and need no `--allow-unrunnable-proofs`. `review` shows it as `you check` with
+  `by hand: <text>`, and it is never `passed`, even when it names the check. The marker is part of the goal
+  text, so the approval hash covers it and approving records nothing extra. Any other `- proof (...)` form
+  is a goal error.
 - **A screenshot proof is `proof: screenshot: <name>`.** `<name>` is one token of letters, digits, `.`, `_`
   and `-` (at most 64, not starting with a symbol); a malformed one is a goal error. It is satisfied by
   `<name>.png` at the top of the proof directory of the latest verify step, run after the latest turn (see
@@ -173,11 +178,11 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   tool set would not let a run execute: denied by a `[tools] denied` pattern, absent from `allowed` (the entry that would permit it is
   named), or `Bash` not available. A span counts as a command when its first word is an executable the
   tool set already names or a path under `./`, `scripts/` or `bin/`, so code identifiers in backticks are
-  left alone. A span joined with `&&`, `||`, `;` or `|` is judged part by part. `check_command` counts as
+  left alone; a path ending in `/` is a directory in prose, not a command. A span joined with `&&`, `||`, `;` or `|` is judged part by part. `check_command` counts as
   allowed. The config is not in the hash, so `run` and `send-back` check again against the config as it is
   then and refuse before a turn is spent. `--allow-unrunnable-proofs` (on `goal approve`, `run`,
   `send-back`) goes ahead anyway, for a proof that only looks like a command; `approve` then prints the
-  warnings.
+  warnings. A proof marked `(by hand)` is skipped by this check.
 - **Errors are collected**, in file order, with line numbers, so one pass fixes the file.
 - **Approval state** is derived on every read, never trusted from the file:
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`

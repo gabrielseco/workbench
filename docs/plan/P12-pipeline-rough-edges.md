@@ -1,6 +1,6 @@
 # P12: Rough edges the sequential run found
 
-Status: task 1 built; the rest is plan. Written 2026-10-17 from a second manual pass of the P11 loop (the same goal as
+Status: tasks 1, 8 and 9 built; the rest is plan. Written 2026-10-17 from a second manual pass of the P11 loop (the same goal as
 Triage PR #71, run again as Triage PR #73). Follows [P11](P11-verified-pipeline.md); none of this blocks P11's tasks.
 
 ## What was run
@@ -62,6 +62,8 @@ Each its own PR.
 | 5. Named tests in `review` | for a criterion whose proof names tests, `review` looks for their names in the check log and says "seen in the check log" or "not seen"; it never marks the criterion passed | tests: seen, not seen, no log; wording is a hint, not a verdict |
 | 6. Wording without a PR | the design stage and `pr-review` say "the thread's branch" when no PR is recorded | the existing stage tests with a thread with no `pr.opened` |
 | 7. No heredoc writes | the first prompt's tool note says a denied `Bash` file write is redone with `Write` or `Edit`, or the allowlist is explained in `doctor` | a prompt fixture; `doctor` prints the note |
+| 8. Narrow entries for script and skill tasks **(built)** | the config template's comment names `Bash(chmod +x scripts/:*)`, `Bash(bash -n scripts/:*)` and `Bash(ln -s ../../.agents/skills/:*)`; no default is widened, and a project's untracked `.workbench/config.toml` is the owner's to change | none: a comment in the template |
+| 9. A proof done by hand **(built)** | `- proof (by hand): <text>` is skipped by the unrunnable-proof check on `approve` and `run`, shown by `review` as `you check` / `by hand: <text>`, never passed; the marker is in the goal text, so the hash covers it. A path ending in `/` is no longer taken for a command. Any other `- proof (...)` is a goal error | tests: by-hand proof naming a denied command approved and run without the flag, a normal proof still refused, a directory path, `review` rendering, a malformed marker |
 
 ## Out of scope
 

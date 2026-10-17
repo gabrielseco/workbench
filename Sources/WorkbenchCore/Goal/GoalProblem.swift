@@ -16,6 +16,7 @@ public struct GoalProblem: Error, Equatable, Sendable, CustomStringConvertible {
         case duplicateCriterionID
         case criterionWithoutProof
         case malformedScreenshotProof
+        case malformedProofMarker
         case unrecognizedLine
     }
 

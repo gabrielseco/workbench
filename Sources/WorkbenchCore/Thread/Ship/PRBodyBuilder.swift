@@ -132,7 +132,7 @@ public enum PRBodyBuilder {
         criteria.map { c in
             var item = "- [ ] " + oneLine(scrub(c.text))
             let proof = oneLine(scrub(c.proof))
-            if !proof.isEmpty { item += "\n  - proven by: " + proof }
+            if !proof.isEmpty { item += "\n  - " + (c.byHand ? "to check by hand: " : "proven by: ") + proof }
             return item
         }.joined(separator: "\n")
     }

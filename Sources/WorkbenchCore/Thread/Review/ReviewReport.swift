@@ -129,7 +129,7 @@ public struct ReviewReport: Sendable, Equatable {
         } else {
             for c in criteria {
                 lines.append("  [\(c.id)] ☐ \(c.text)")
-                if !c.proof.isEmpty { lines.append("         proof: \(c.proof)") }
+                if !c.proof.isEmpty { lines.append("         \(c.proofKey): \(c.proof)") }
             }
             // Beside the checklist, not instead of it: which of these Workbench proved and which are yours.
             let statuses = criterionStatuses
