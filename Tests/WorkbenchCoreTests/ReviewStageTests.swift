@@ -119,8 +119,36 @@ private func problems(_ section: String) -> [ConfigProblem] {
     @Test func onlyWhatTheRunnerDoesNotUseYetIsWarnedAbout() throws {
         #expect(ReviewStage.prReview(try parse("")).notYetUsedWarning == nil)
         #expect(ReviewStage.prReview(try parse("[review.stage.pr-review]\nchecklist = \"a.md\"\n")).notYetUsedWarning == nil)
-        let skill = ReviewStage.prReview(try parse("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n"))
-        #expect(skill.notYetUsedWarning?.contains("sets skill,") == true, "\(skill.notYetUsedWarning ?? "")")
+        #expect(ReviewStage.prReview(try parse("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")).notYetUsedWarning == nil)
+        let inputs = ReviewStage.prReview(try parse("[review.stage.pr-review]\ninputs = [\"diff\"]\n"))
+        #expect(inputs.notYetUsedWarning?.contains("sets inputs,") == true, "\(inputs.notYetUsedWarning ?? "")")
+    }
+}
+
+// MARK: the rubric
+
+@Suite struct ReviewStageRubricTests {
+    private func stage(_ section: String) throws -> ReviewStage { ReviewStage.prReview(try parse(section)) }
+
+    @Test func aSkillsRubricSectionIsTheRubric() throws {
+        let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
+        let text = "# Skill\n\n## Steps\n\nRun swift build.\n\n## Rubric\n\n- flag every force unwrap\n\n## Posting\n\ngh pr comment\n"
+        #expect(skill.rubric(from: text) == "- flag every force unwrap")
+    }
+
+    @Test func aSkillWithoutARubricSectionIsUsedWholeUnderTheIgnoreStepsHeader() throws {
+        let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
+        let rubric = try #require(skill.rubric(from: "# Skill\n\nRun swift build, then check the locks.\n"))
+        #expect(rubric.hasPrefix(ReviewStage.skillHeader))
+        #expect(rubric.contains("Run swift build, then check the locks."))
+    }
+
+    @Test func aPromptFileIsUsedWholeAndAnEmptyRubricIsNone() throws {
+        let prompt = try stage("[review.stage.pr-review]\nprompt = \"docs/REVIEW-PR.md\"\n")
+        #expect(prompt.rubric(from: "## Rubric\nonly this?\n## Other\nand this\n") == "## Rubric\nonly this?\n## Other\nand this\n")
+        #expect(prompt.rubric(from: " \n\n") == nil)
+        let skill = try stage("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")
+        #expect(skill.rubric(from: "## Rubric\n\n## Next\n") == nil)
     }
 }
 
@@ -146,12 +174,38 @@ private func problems(_ section: String) -> [ConfigProblem] {
         }
     }
 
-    @Test func aSkillTheRunnerCannotUseYetIsSaidAndTheBuiltInReviewRuns() async throws {
+    @Test func aConfiguredSkillsRubricReachesTheBriefInPlaceOfTheBuiltInReport() async throws {
+        let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\nskill = \".agents/skills/pr-review/SKILL.md\"\n")
+        try await commit(
+            "# PR review\n\n## Steps\n\nPost the findings with gh.\n\n## Rubric\n\n- every lock is named zebra-7731\n",
+            at: ".agents/skills/pr-review/SKILL.md", in: r)
+        let result = try await r.round()
+        #expect(result.verdict == .clean && result.warnings.isEmpty, "\(result.warnings)")
+        let brief = try #require(r.codex.read("brief_1"))
+        #expect(brief.contains("## Rubric (.agents/skills/pr-review/SKILL.md)"))
+        #expect(brief.contains("- every lock is named zebra-7731"))
+        #expect(!brief.contains("Post the findings with gh."), "only the rubric section")
+        #expect(!brief.contains("## Report"), "the rubric replaces the built-in report instructions")
+        #expect(brief.contains("# Review pull request #") && brief.contains(PRReview.cleanLine))
+        #expect(r.started.count == 1 && r.finished.count == 1)
+    }
+
+    @Test func aConfiguredSkillThatIsNotInThePullRequestFailsTheRound() async throws {
         let r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\nskill = \".agents/skills/pr-review/SKILL.md\"\n")
         let result = try await r.round()
-        #expect(result.verdict == .clean)
-        #expect(result.warnings.contains { $0.contains("skill") && $0.contains("built-in") }, "\(result.warnings)")
-        #expect(r.codex.read("brief_1")?.contains("# Review pull request #") == true)
+        #expect(result.verdict == nil)
+        #expect(result.failure?.contains(".agents/skills/pr-review/SKILL.md") == true, "\(result.failure ?? "")")
+        #expect(r.codex.read("brief_1") == nil, "Codex is not run without the rubric")
+    }
+
+    private func commit(_ text: String, at path: String, in r: ReviewedPR) async throws {
+        let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+        let url = worktree.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        _ = try await r.fx.git.run(["add", "-A"], in: worktree)
+        _ = try await r.fx.git.run(["commit", "-q", "-m", "docs: rubric"], in: worktree)
+        _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
     }
 }
 

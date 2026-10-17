@@ -60,8 +60,6 @@ public struct ReviewStageConfig: Sendable, Equatable {
     /// What the table sets that the runner does not act on yet, so a round can say so instead of ignoring it.
     var notYetUsed: [String] {
         var keys: [String] = []
-        if skill != nil { keys.append("skill") }
-        if prompt != nil { keys.append("prompt") }
         if reviewer != .codex { keys.append("reviewer") }
         if inputs != ReviewStageInput.defaults { keys.append("inputs") }
         if !appliesTo.isEmpty { keys.append("applies_to") }
