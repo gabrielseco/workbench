@@ -43,7 +43,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `proof.published` | `workbench ship` put the latest verify step's screenshots in the pull request through `pr-shots` | `number`, `files`, `tool` |
 | `judge.started` | `workbench judge` is about to start the advisory judge on the latest turn; the attempt is on record before anything is spent | `argv` |
 | `judge.ran` | `workbench judge` asked the advisory judge about the latest turn; one per run, whatever came of it | `ok`, `criteria`, `concerns`, `cost_usd`, `reason`, `argv` |
-| `pr_review.started` | `workbench pr-review` is about to review the thread's pull request; the round is on record before anything is spent | `round`, `pr`, `head_sha`, `argv` |
+| `pr_review.started` | `workbench pr-review` is about to review the thread's pull request; the round is on record before anything is spent | `round`, `pr` (0 when the thread has no pull request yet: the stage reviews the thread's own branch against the commit it was cut from), `head_sha`, `argv` |
 | `pr_review.finished` | the round ended, whatever came of it; one per `pr_review.started`. Also written alone for a skip, as `review_stage.finished` describes (without `stage`) | `round`, `pr`, `head_sha`, `ok`, `verdict`, `reason`, `findings_path`, `transcript_path` |
 | `review_stage.started` | `workbench review-stage <name>` is about to review the pull request as a stage other than `pr-review` | `stage`, `round`, `pr`, `head_sha`, `argv` |
 | `review_stage.finished` | that round ended, whatever came of it, or the stage was skipped | `stage`, `round`, `pr`, `head_sha`, `ok`, `verdict`, `reason`, `findings_path`, `transcript_path` |

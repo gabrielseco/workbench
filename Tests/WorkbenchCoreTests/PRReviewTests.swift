@@ -215,6 +215,33 @@ import Testing
         #expect(!(try fx.kinds(id)).contains { $0.hasPrefix("pr_review") })
     }
 
+    @Test func aThreadWithNoPullRequestIsReviewedOnItsOwnBranchWithoutOrigin() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await acceptedThread(fx)
+        let head = try await shipOut(["rev-parse", "HEAD"], worktree, fx)
+        let codex = try FakeCodex(in: fx)
+        try codex.put("answer", "All good.\nVERDICT: CLEAN\n")
+        let config = try Config.load(from: fx.project.configURL)
+        #expect(!(try fx.kinds(id)).contains("pr.opened"))
+
+        let result = try await fx.service.reviewStage(
+            named: "pr-review", id: id, config: config, codexPath: codex.path, environment: codex.environment())
+
+        #expect(result.verdict == .clean && result.pr == PRReview.noPullRequest && result.headSHA == head)
+        let started = try #require(try fx.events(id).first { $0.kind.rawValue == "pr_review.started" })
+        #expect(started.data["pr"]?.intValue == 0 && started.data["head_sha"]?.stringValue == head)
+        let brief = try #require(codex.read("brief_1"))
+        #expect(brief.contains("# Review the change on branch workbench/") && !brief.contains("pull request #0"))
+        #expect(codex.read("tree_1")?.contains("a.txt") == true, "the checkout held the branch's files")
+        #expect(fx.service.runnerPID(id: id) == nil)
+
+        do {
+            _ = try await fx.service.prReview(
+                id: id, config: config, codexPath: codex.path, environment: codex.environment())
+            Issue.record("expected the same head to be refused")
+        } catch let error as PRReviewRefusal { #expect(error == .alreadyReviewed(round: 1)) }
+    }
+
     @Test func aLiveRunOrAnotherCommandHoldingTheThreadRefusesAndSpawnsNothing() async throws {
         let r = try await reviewedPR()
         let held = try EventLogWriter.open(at: r.fx.project.eventsURL(r.id))

@@ -131,7 +131,8 @@ extension Commands {
             return 0
         }
         let label =
-            (isPRReview ? "" : "\(name) ") + "round \(result.round) of \(result.maxRounds), pull request #\(result.pr)"
+            (isPRReview ? "" : "\(name) ") + "round \(result.round) of \(result.maxRounds), "
+            + (result.pr == PRReview.noPullRequest ? "the thread's branch" : "pull request #\(result.pr)")
         guard let verdict = result.verdict else {
             if let findings = result.findings { out(""); out(findings) }
             out("no verdict for \(label): \(result.failure ?? "unknown")")

@@ -69,10 +69,24 @@ extension ThreadService {
         await recoverStageLeftovers(id: id, review: config.review)
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
-        guard let opened = events.last(where: { $0.kind == .prOpened }),
-            let pr = opened.data["number"]?.intValue, let branch = opened.data["branch"]?.stringValue,
-            let base = opened.data["base"]?.stringValue, SafeNames.isBranchName(branch), SafeNames.isBranchName(base)
-        else { throw PRReviewRefusal.noPullRequest }
+        let pr: Int
+        let branch: String
+        let base: String
+        if let opened = events.last(where: { $0.kind == .prOpened }) {
+            guard let number = opened.data["number"]?.intValue, let openedBranch = opened.data["branch"]?.stringValue,
+                let openedBase = opened.data["base"]?.stringValue, SafeNames.isBranchName(openedBranch),
+                SafeNames.isBranchName(openedBase)
+            else { throw PRReviewRefusal.noPullRequest }
+            (pr, branch, base) = (number, openedBranch, openedBase)
+        } else {
+            // No pull request yet: the stage reviews the thread's own branch, counted under pr 0.
+            guard let own = events.last(where: { $0.kind == .worktreeCreated })?.data["branch"]?.stringValue,
+                SafeNames.isBranchName(own),
+                let goalBase = (try? GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)))?.goal.base,
+                SafeNames.isBranchName(goalBase)
+            else { throw PRReviewRefusal.noPullRequest }
+            (pr, branch, base) = (PRReview.noPullRequest, own, goalBase)
+        }
 
         // Counted over the whole tree of follow-up threads of this pull request, so starting a follow-up cannot reset it.
         let family = self.family(of: id)
@@ -88,7 +102,7 @@ extension ThreadService {
         do { goal = try String(contentsOf: project.goalURL(id), encoding: .utf8) } catch {
             throw PRReviewRefusal.goalUnreadable("\(error.localizedDescription)")
         }
-        let tip = try await originBranchTip(branch)
+        let tip = pr == PRReview.noPullRequest ? try await localBranchTip(branch) : try await originBranchTip(branch)
         if !again, let last = reviewRecords(stage.events, family: family, pr: pr).last, last.ok, last.headSHA == tip {
             throw PRReviewRefusal.alreadyReviewed(round: last.round)
         }
@@ -154,7 +168,7 @@ extension ThreadService {
         let paths = round.paths
         let sha = round.tip
         round.reviewedSHA = sha
-        if let reason = await fetchBranch(round) { return outcome.failed(reason) }
+        if round.pr != PRReview.noPullRequest, let reason = await fetchBranch(round) { return outcome.failed(reason) }
         switch await pinBase(round) {
         case .failure(let reason): return outcome.failed(reason)
         case .success(let value): round.baseSHA = value
@@ -283,40 +297,18 @@ extension ThreadService {
 
     // MARK: Git
 
-    /// The commit `origin` has for a branch.
-    func originBranchTip(_ branch: String) async throws -> String {
-        let result: GitResult
-        do { result = try await git.run(["ls-remote", "origin", "refs/heads/\(branch)"], in: project.root) } catch {
-            throw PRReviewRefusal.originUnreadable("\(error)")
-        }
-        guard result.succeeded else {
-            throw PRReviewRefusal.originUnreadable(Self.withoutCredentials(result.stderr.firstLine))
-        }
-        guard let sha = Self.firstSHA(result.stdout) else { throw PRReviewRefusal.branchGone(branch) }
-        return sha
-    }
-
-    /// Brings the pull request's branch into this repository and checks it is still the commit the round began with.
-    /// The branch on origin is the pull request's head the moment a push lands; GitHub's own `pull/<n>/head` and its API
-    /// lag behind it, so they are not read.
-    private func fetchBranch(_ round: PRReviewRound) async -> String? {
-        let fetch = try? await git.run(
-            ["fetch", "--quiet", "--no-tags", "origin", "refs/heads/\(round.branch)"], in: project.root)
-        guard let fetch, fetch.succeeded else {
-            let why = Self.withoutCredentials(fetch?.stderr.firstLine ?? "git failed")
-            return "the pull request's branch could not be fetched: \(why)"
-        }
-        let head = try? await git.run(["rev-parse", "--verify", "FETCH_HEAD^{commit}"], in: project.root)
-        guard let head, head.succeeded, Self.firstSHA(head.stdout) == round.tip else {
-            return "the branch moved while the review was starting; nothing was reviewed. Run it again."
-        }
-        return nil
-    }
-
     /// The commit of the base branch the pull request is compared with, fetched now so that the diff and the project
     /// instructions are the ones GitHub shows and not those of a stale `origin/<base>`. When origin no longer has the
     /// branch, the commit the thread was cut from.
     private func pinBase(_ round: PRReviewRound) async -> Result<String, PRReviewFailure> {
+        let fullSHA = #"^[0-9a-f]{40}([0-9a-f]{24})?$"#
+        if round.pr == PRReview.noPullRequest {
+            // Nothing is on origin to compare with: the diff is against the commit the thread was cut from.
+            if let recorded = round.recordedBase, recorded.range(of: fullSHA, options: .regularExpression) != nil {
+                return .success(recorded)
+            }
+            return .failure(PRReviewFailure("no base commit is recorded for this thread: no diff can be made"))
+        }
         guard let remote = try? await git.run(["ls-remote", "origin", "refs/heads/\(round.base)"], in: project.root),
             remote.succeeded
         else { return .failure(PRReviewFailure("origin could not be read, so the base branch is not known")) }
@@ -332,7 +324,6 @@ extension ThreadService {
             }
             return .success(sha)
         }
-        let fullSHA = #"^[0-9a-f]{40}([0-9a-f]{24})?$"#
         if let recorded = round.recordedBase, recorded.range(of: fullSHA, options: .regularExpression) != nil {
             return .success(recorded)
         }
@@ -587,7 +578,7 @@ struct PRReviewOutcome: Sendable {
     mutating func failed(_ reason: PRReviewFailure) -> PRReviewOutcome { failed(reason.reason) }
 }
 
-private extension String {
+extension String {
     /// The first non-empty line, for a one-line reason.
     var firstLine: String {
         split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
