@@ -172,7 +172,7 @@ import Testing
         try await repo.commitAll()
         try repo.write("Sources/Core/My File.swift", "struct MyFile {}\n")
         let plan = try await repo.plan()
-        #expect(plan.contains("whitespace: full check"), "\(plan)")
+        #expect(plan.contains("whitespace or needs quoting: full check"), "\(plan)")
     }
 
     @Test func aNonASCIIFilenameIsStillSeen() async throws {
@@ -236,5 +236,23 @@ import Testing
         try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
         let out = try await repo.sh(["-c", "sh scripts/check-changed.sh HEAD 2>&1; echo exit=$?"], path: path)
         #expect(out.contains("exit=1"), "\(out)")
+    }
+
+    @Test func aChangedTestHelperWithNoSuiteCompilesTheTestTargets() async throws {
+        let repo = try Repo()
+        try repo.write("Tests/CoreTests/Helper.swift", "struct Helper {}\n")
+        try await repo.commitAll()
+        try repo.write("Tests/CoreTests/Helper.swift", "struct Helper { var x = 1 }\n")
+        let plan = try await repo.plan()
+        #expect(plan.contains("run: swift build --build-tests"), "\(plan)")
+        #expect(!plan.contains("swift test"), "\(plan)")
+    }
+
+    @Test func aPathGitQuotesForcesTheFullCheck() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Tab\tName.swift", "struct TabName {}\n")
+        let plan = try await repo.plan()
+        #expect(plan.contains("run: scripts/check.sh"), "\(plan)")
     }
 }

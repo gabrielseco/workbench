@@ -30,8 +30,9 @@ if [ -z "$changed" ]; then
 fi
 
 # The word-splitting below cannot carry a path with whitespace: do the full check rather than skip it.
-if echo "$changed" | grep -q '[[:space:]]'; then
-    echo "==> A changed path contains whitespace: full check"
+# Git quotes paths with a tab, newline or quote even with quotepath off, so a leading quote counts too.
+if echo "$changed" | grep -Eq '^"|[[:space:]]'; then
+    echo "==> A changed path contains whitespace or needs quoting: full check"
     [ "$plan" = 1 ] && { echo "run: scripts/check.sh"; exit 0; }
     exec scripts/check.sh
 fi
@@ -85,6 +86,10 @@ for t in $(echo $test_files | tr ' ' '\n' | sort -u); do
 done
 filter=$(echo $suites | tr ' ' '\n' | sort -u | grep . | paste -sd '|' -)
 
+# With no suite to filter on, still compile the test targets when a test file changed (a helper has no @Suite).
+build="swift build"
+if echo "$swift_changed" | grep -q '^Tests/'; then build="swift build --build-tests"; fi
+
 # Lint only what still exists.
 swift_files=$(echo "$swift_changed" | while read -r f; do [ -f "$f" ] && echo "$f"; done)
 if [ -n "$swift_files" ]; then
@@ -97,7 +102,7 @@ if [ -n "$filter" ]; then echo "==> Test suites: $filter"; else echo "==> No tes
 if [ "$plan" = 1 ]; then
     echo "run: scripts/check-banned-apis.sh"
     [ -n "$swift_files" ] && echo "run: swiftlint lint --quiet <changed files>"
-    if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: swift build"; fi
+    if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: $build"; fi
     exit 0
 fi
 
@@ -125,6 +130,7 @@ fi
 if [ -n "$filter" ]; then
     step 'Test' swift test --filter "$filter"
 else
-    step 'Build' swift build
+    # shellcheck disable=SC2086  # "$build" is a fixed command with flags
+    step 'Build' $build
 fi
 echo "==> Changed-file checks passed (CI runs the full scripts/check.sh)"
