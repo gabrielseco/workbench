@@ -27,6 +27,29 @@ import Testing
         #expect(missing.warnings.first?.contains("docs/NOPE.md") == true)
     }
 
+    @Test func aFileTheStageNamesIsReadFromTheHeadAndAMissingOneFailsTheRound() async throws {
+        let table = "[review.stage.pr-review]\ninputs = [\"diff\", \"goal\", \"docs/DESIGN.md\"]\n"
+        let r = try await reviewedPR(extraConfig: table)
+        let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+        try FileManager.default.createDirectory(at: worktree.appendingPathComponent("docs"), withIntermediateDirectories: true)
+        try "Design rule: dark first\n".write(
+            to: worktree.appendingPathComponent("docs/DESIGN.md"), atomically: true, encoding: .utf8)
+        _ = try await r.fx.git.run(["add", "-A"], in: worktree)
+        _ = try await r.fx.git.run(["commit", "-q", "-m", "docs: design"], in: worktree)
+        _ = try await r.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/workbench/\(r.id)"], in: worktree)
+
+        let result = try await r.round()
+        #expect(result.verdict == .clean, "\(result.failure ?? "")")
+        let brief = try #require(r.codex.read("brief_1"))
+        #expect(brief.contains("## File: docs/DESIGN.md") && brief.contains("Design rule: dark first"), "\(brief)")
+
+        let other = try await reviewedPR(extraConfig: table)
+        let missing = try await other.round()
+        #expect(missing.verdict == nil, "a stage that cannot read its input must not pass")
+        #expect(missing.failure?.contains("docs/DESIGN.md") == true, "\(missing.failure ?? "")")
+        #expect(other.codex.runs == 0, "Codex is not started without the file")
+    }
+
     @Test func aGoalOrChecklistPastTheLimitSaysSoInsteadOfBeingCutQuietly() async throws {
         let r = try await reviewedPR(extraConfig: "[pr_review]\nchecklist = \"docs/REVIEW.md\"\n")
         let goalURL = r.fx.project.goalURL(r.id)

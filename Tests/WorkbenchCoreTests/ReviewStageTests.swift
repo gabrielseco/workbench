@@ -116,12 +116,15 @@ private func problems(_ section: String) -> [ConfigProblem] {
         #expect(review.stage("design")?.rubric == "docs/REVIEW-DESIGN.md")
     }
 
-    @Test func onlyWhatTheRunnerDoesNotUseYetIsWarnedAbout() throws {
-        #expect(ReviewStage.prReview(try parse("")).notYetUsedWarning == nil)
-        #expect(ReviewStage.prReview(try parse("[review.stage.pr-review]\nchecklist = \"a.md\"\n")).notYetUsedWarning == nil)
-        #expect(ReviewStage.prReview(try parse("[review.stage.pr-review]\nskill = \"a/SKILL.md\"\n")).notYetUsedWarning == nil)
-        let inputs = ReviewStage.prReview(try parse("[review.stage.pr-review]\ninputs = [\"diff\"]\n"))
-        #expect(inputs.notYetUsedWarning?.contains("sets inputs,") == true, "\(inputs.notYetUsedWarning ?? "")")
+    @Test func fileInputsAreListedInOrderAndAtMostEightAreRead() throws {
+        let config = try parse(
+            "[review.stage.pr-review]\ninputs = [\"diff\", \"docs/DESIGN.md\", \"goal\", \"docs/A.md\", \"proof\"]\n")
+        #expect(config.review.prReview.fileInputs == ["docs/DESIGN.md", "docs/A.md"])
+        #expect(try parse("").review.prReview.fileInputs.isEmpty)
+        let nine = (1...9).map { "\"docs/\($0).md\"" }.joined(separator: ", ")
+        #expect(throws: ConfigError.self) { try parse("[review.stage.pr-review]\ninputs = [\"diff\", \(nine)]\n") }
+        let eight = (1...8).map { "\"docs/\($0).md\"" }.joined(separator: ", ")
+        #expect(try parse("[review.stage.pr-review]\ninputs = [\"diff\", \(eight)]\n").review.prReview.fileInputs.count == 8)
     }
 }
 

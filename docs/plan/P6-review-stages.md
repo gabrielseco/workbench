@@ -52,7 +52,9 @@ max_rounds = 2
 - The old `[pr_review]` table (P5) keeps working as the table for the `pr-review` stage.
 - `inputs`: `diff` (against the base, from the checkout, never `gh pr diff`), `goal` (the approved goal file),
   `proof` (the files the verify step left, so screenshots), or a path in the repo. Anything else is refused at config
-  load.
+  load. A path is read from the pull request's checkout (the same bounded, symlink-safe reader as the rubric, 32 KiB
+  each, at most 8 per stage) and put whole in the brief under `## File: <path>`. A file that cannot be read fails the
+  round and Codex is not started, as a missing rubric or proof does.
 - `applies_to`: globs over the files the PR changes. A stage that matches none is **skipped and says so**
   ("design: skipped, the diff touches no matching path"). A skip is recorded as `skipped`, never as `CLEAN`.
 
@@ -102,7 +104,7 @@ being written for the stage named `pr-review` so existing logs and `review --jso
    **Status: built** (`Sources/WorkbenchCore/Config/ReviewConfig.swift`,
    `Sources/WorkbenchCore/Thread/PRReview/ReviewStage.swift`).
 2. **`review-stage <name>` and the inputs.** `proof` input (images are passed to the reviewer, so a reviewer that
-   cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping.
+   cannot read images is refused for a stage that asks for `proof`), file inputs, `applies_to` skipping.
    **Status: built.** Every stage runs on Codex (`codex exec -i <png>` per screenshot) and `reviewer = "claude"`
    is refused at config load. A skip writes only `review_stage.finished` (`verdict: "skipped"`) and spends no
    round. `pr-review` honours `applies_to` too (a skip writes only `pr_review.finished`); what

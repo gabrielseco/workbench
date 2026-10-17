@@ -56,9 +56,8 @@ with the proposal, separate from coding settings and approval. No automatic goal
 | Lifecycle | `ProcessRunner`, `Spawner`, `ChildExitWatcher`, `OrphanSweeper` provide bounded output, exit watching, termination and tree cleanup | Reuse them for every adapter; extend attempt recording and orphan recovery to all enabled responsibilities |
 | State and presentation | `ThreadState`, `LogFormatter`, CLI JSON and notices read Claude stream shapes and a single session id | Consume normalized activity for new runs; keep legacy replay |
 
-P6 tasks 1 and 2 are built; its loop-over-stages and complete declared-input handling are not assumed
-complete here. In particular, `ReviewStageConfig.notYetUsed` reports inputs the runner does not yet load.
-P9 must not silently present those inputs as supported.
+P6 tasks 1 and 2 are built; its loop-over-stages is not assumed complete here. The runner loads every declared input (the diff, the goal, `proof` images and up to 8 repository
+files); what is still missing is the loop over stages.
 
 ## Boundaries
 
