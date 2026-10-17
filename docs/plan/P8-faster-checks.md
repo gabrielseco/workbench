@@ -53,6 +53,14 @@ Times are read from the event log's timestamps. The causes below were not measur
   with few suites is unchanged. Extend `CheckChangedTests` (it already runs `--plan` in a throwaway repo).
 - The timing line and suite count appear in the output; `check.ended` data is unchanged for old logs.
 
+## A flaky test the checks keep hitting
+
+`ShipPreflightTests.aHungOriginEndsInATimeoutAndLeavesNoProcess` failed in the post-turn check of both P6 task 1 and
+P6 task 2 ("`git remote` / `git symbolic-ref` did not finish in 3s" where the test expects the `ls-remote` timeout)
+and passed on its own both times (17 of 17 in about 6 s). Under the load of a full run, the 3-second limit is hit by
+an earlier git step. Fix it in the test (a longer limit for the steps before the one under test, or fake only that
+step), because it turns a good thread's check into "failed" and the person has to rerun it by hand.
+
 ## Related, not part of this plan
 
 The same run showed which commands a thread is denied. Only narrow, in-repo commands belong in a default
