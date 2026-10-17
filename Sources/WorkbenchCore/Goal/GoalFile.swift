@@ -263,7 +263,7 @@ public struct GoalFile: Sendable, Equatable {
     private static func parseCriteria(
         _ section: Section, add: (GoalProblem.Code, Int?, String) -> Void
     ) -> [Criterion] {
-        struct Pending { var id: String; var text: String; var proof: String?; var line: Int }
+        struct Pending { var id: String; var text: String; var proof: String?; var byHand = false; var line: Int }
         var done: [Criterion] = []
         var pending: Pending?
         var ids = Set<String>()
@@ -271,13 +271,13 @@ public struct GoalFile: Sendable, Equatable {
         func finish() {
             guard let p = pending else { return }
             if let proof = p.proof, !proof.isEmpty {
-                if ScreenshotProof.isMalformed(proof) {
+                if !p.byHand, ScreenshotProof.isMalformed(proof) {
                     add(
                         .malformedScreenshotProof, p.line,
                         "criterion [\(p.id)]: a screenshot proof is 'screenshot: <name>' with a name of letters, "
                             + "digits, '.', '_' or '-' (the file is <name>.png)")
                 }
-                done.append(Criterion(id: p.id, text: p.text, proof: proof))
+                done.append(Criterion(id: p.id, text: p.text, proof: proof, byHand: p.byHand))
             } else {
                 add(.criterionWithoutProof, p.line, "criterion [\(p.id)] has no '- proof:' line")
             }
@@ -303,6 +303,13 @@ public struct GoalFile: Sendable, Equatable {
             } else if indented, let p = pending {
                 if let match = trimmed.wholeMatch(of: #/- proof:\s*(.*)/#) {
                     pending?.proof = String(match.1)
+                } else if let match = trimmed.wholeMatch(of: #/- proof \(by hand\):\s*(.*)/#) {
+                    pending?.proof = String(match.1)
+                    pending?.byHand = true
+                } else if trimmed.wholeMatch(of: #/- proof\s*\(.*/#) != nil {
+                    add(
+                        .malformedProofMarker, number,
+                        "criterion [\(p.id)]: the only marker is '- proof (by hand): ...', found '\(trimmed)'")
                 } else if trimmed.hasPrefix("- ") {
                     add(.unrecognizedLine, number, "expected '- proof: ...' under [\(p.id)], found '\(trimmed)'")
                 } else if pending?.proof == nil {

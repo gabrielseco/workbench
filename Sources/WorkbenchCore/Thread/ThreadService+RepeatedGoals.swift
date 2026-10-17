@@ -46,7 +46,7 @@ extension ThreadService {
         }
         return GoalBody(
             request: file.goal.request,
-            criteria: file.goal.criteria.map { GoalBody.Criterion(id: $0.id, text: $0.text, proof: $0.proof) },
+            criteria: file.goal.criteria.map { GoalBody.Criterion(id: $0.id, text: $0.text, proof: $0.proof, byHand: $0.byHand) },
             outOfScope: file.goal.outOfScope)
     }
 

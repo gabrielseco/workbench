@@ -40,7 +40,7 @@ public enum ProofCommands {
 
         var out: [ProofWarning] = []
         var seen = Set<String>()
-        for criterion in goal.criteria {
+        for criterion in goal.criteria where !criterion.byHand {
             if let name = ScreenshotProof.name(in: criterion.proof), config.verifyCommand == nil {
                 out.append(
                     ProofWarning(
@@ -90,7 +90,8 @@ public enum ProofCommands {
     }
 
     private static func isRepositoryPath(_ word: String) -> Bool {
-        word.hasPrefix("./") || word.hasPrefix("scripts/") || word.hasPrefix("bin/")
+        // A trailing slash is a directory named in prose, not something to execute.
+        !word.hasSuffix("/") && (word.hasPrefix("./") || word.hasPrefix("scripts/") || word.hasPrefix("bin/"))
     }
 
     private struct Pattern {

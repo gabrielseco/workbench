@@ -22,7 +22,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 }
 
 /// A draft thread whose proof names `command`, not yet approved.
-private func draft(_ fx: RunnerFixture, proof command: String) async throws -> String {
+private func draft(_ fx: RunnerFixture, proof command: String, byHand: Bool = false) async throws -> String {
     let id = try await fx.service.newThread(name: "work", base: "main")
     let url = fx.project.goalURL(id)
     var text = try String(contentsOf: url, encoding: .utf8)
@@ -33,6 +33,7 @@ private func draft(_ fx: RunnerFixture, proof command: String) async throws -> S
         ("TODO(workbench): what must not change.", "Do not touch other files."),
     ]
     for (placeholder, value) in fills { text = text.replacingOccurrences(of: placeholder, with: value) }
+    if byHand { text = text.replacingOccurrences(of: "- proof: `\(command)`", with: "- proof (by hand): `\(command)`") }
     try text.write(to: url, atomically: true, encoding: .utf8)
     return id
 }
@@ -102,6 +103,23 @@ private func draft(_ fx: RunnerFixture, proof command: String) async throws -> S
         options.allowUnrunnableProofs = true
         let report = try await fx.runner(id).run(options)
         #expect(report.result == .succeeded)
+    }
+
+    @Test func aByHandProofIsAcceptedByApproveAndRunWithoutTheFlag() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await draft(fx, proof: "git branch", byHand: true)
+        let approved = try await cli(["goal", "approve"], in: fx)
+        #expect(approved.code == 0, "\(approved.text)")
+        #expect(!approved.text.contains("warning"))
+        let report = try await fx.runner(id).run(fx.options())
+        #expect(report.result == .succeeded)
+    }
+
+    @Test func aNormalProofNamingTheSameCommandIsStillRefused() async throws {
+        let fx = try await RunnerFixture()
+        _ = try await draft(fx, proof: "scripts/verify.sh")
+        let result = try await cli(["goal", "approve"], in: fx)
+        #expect(result.code == 6, "\(result.text)")
     }
 
     @Test func aBrokenConfigStopsApprovalInsteadOfSkippingTheCheck() async throws {

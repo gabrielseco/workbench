@@ -6,7 +6,11 @@ import Testing
 private func goal(proofs: [String], outOfScope: String = "- Nothing else.") throws -> Goal {
     let criteria = proofs.enumerated().map { "- [c\($0.offset + 1)] Something holds.\n  - proof: \($0.element)" }
         .joined(separator: "\n")
-    return try GoalFile.parse(
+    return try goalText(criteria, outOfScope: outOfScope)
+}
+
+private func goalText(_ criteria: String, outOfScope: String = "- Nothing else.") throws -> Goal {
+    try GoalFile.parse(
         """
         ---
         id: g-2026-10-14-x
@@ -52,6 +56,19 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         #expect(warnings[0].command == "mix api.contract.check")
         #expect(warnings[0].suggestion == "Bash(mix api.contract.check:*)")
         #expect(warnings[0].line.contains("[tools] allowed"))
+    }
+
+    @Test func aByHandProofIsNotCheckedAgainstTheAllowlist() throws {
+        let g = try goalText(
+            "- [c1] Nothing is left over.\n  - proof (by hand): after a hand run `git branch` shows no leftover branch")
+        #expect(g.criteria[0].byHand)
+        #expect(ProofCommands.warnings(goal: g, config: try config(allowed: ["Read"])).isEmpty)
+    }
+
+    @Test func aDirectoryNamedInProseIsNotTakenForACommand() throws {
+        let g = try goal(proofs: ["`scripts/` holds the new script", "`./run.sh` works"])
+        let warnings = ProofCommands.warnings(goal: g, config: try config(allowed: ["Read"]))
+        #expect(warnings.map(\.command) == ["./run.sh"])
     }
 
     @Test func anAllowedCommandAndItsArgumentsAreFine() throws {

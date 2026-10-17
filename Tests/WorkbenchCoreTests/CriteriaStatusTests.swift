@@ -27,6 +27,15 @@ private func eval(_ proofs: [String], check: Review.Check? = nil, lastTurn: Int 
         #expect(failed[0].note?.contains("exit 2") == true)
     }
 
+    @Test func aByHandProofIsForAPersonEvenWhenItNamesTheCheck() {
+        let criteria = [Criterion(id: "c1", text: "t", proof: "`npm run ci` passes", byHand: true)]
+        let status = CriteriaStatus.evaluate(criteria: criteria, check: check("passed"), lastTurn: 1)
+        #expect(status[0].state == .manual && status[0].byHand)
+        let rendered = CriteriaStatus.render(status)
+        #expect(rendered.contains("         by hand: `npm run ci` passes"))
+        #expect(rendered[0].contains("you check"))
+    }
+
     @Test func aProofWithFurtherStepsStaysForAPerson() {
         let proofs = [
             "`npm run ci` passes; after adding a badly formatted line to a file, `npm run ci` exits non-zero",

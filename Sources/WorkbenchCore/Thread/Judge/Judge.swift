@@ -79,7 +79,7 @@ public enum Judge {
             """
         ]
         parts.append("## Goal: \(oneLine(input.goal.title))\n\n\(input.goal.request)")
-        let criteria = input.goal.criteria.map { "- [\($0.id)] \(oneLine($0.text))\n  - proof: \(oneLine($0.proof))" }
+        let criteria = input.goal.criteria.map { "- [\($0.id)] \(oneLine($0.text))\n  - \($0.proofKey): \(oneLine($0.proof))" }
         parts.append("## Criteria\n\n" + criteria.joined(separator: "\n"))
         if !input.goal.outOfScope.isEmpty {
             parts.append("## Out of scope\n\n" + input.goal.outOfScope.map { "- \(oneLine($0))" }.joined(separator: "\n"))

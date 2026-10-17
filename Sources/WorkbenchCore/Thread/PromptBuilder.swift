@@ -15,7 +15,7 @@ public enum PromptBuilder {
         out += "## Request\n\n\(goal.request)\n\n"
         out += "## Criteria\n\nThe work is done when every criterion holds. Each says how it will be shown.\n\n"
         for criterion in goal.criteria {
-            out += "- [\(criterion.id)] \(criterion.text)\n  - proof: \(criterion.proof)\n"
+            out += "- [\(criterion.id)] \(criterion.text)\n  - \(criterion.proofKey): \(criterion.proof)\n"
         }
         if !goal.outOfScope.isEmpty {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"

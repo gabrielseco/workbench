@@ -20,6 +20,11 @@ public struct Criterion: Sendable, Equatable {
     public var id: String
     public var text: String
     public var proof: String
+    /// `- proof (by hand):` in the goal: a person does it, so it is never checked against the allowlist or counted passed.
+    public var byHand = false
+
+    /// The goal-file key the proof was written under.
+    public var proofKey: String { byHand ? "proof (by hand)" : "proof" }
 }
 
 public struct Goal: Sendable, Equatable {

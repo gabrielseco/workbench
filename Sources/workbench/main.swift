@@ -20,7 +20,8 @@ let usage = """
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
       goal approve [id]          approve the goal; any later edit returns it to draft
                                  refused while a proof names a command a run cannot execute
-                                 (--allow-unrunnable-proofs to approve anyway; also on run, send-back)
+                                 (--allow-unrunnable-proofs to approve anyway; also on run, send-back;
+                                 a proof written "- proof (by hand): ..." is skipped)
       run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
                                  (local edits in your checkout are left out; --allow-dirty is ignored)
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
