@@ -1,17 +1,21 @@
 #!/bin/sh
 # check.sh for a thread: the same steps, on what the branch changed. Lints the changed Swift files and runs the
 # test suites that cover them (AGENTS.md, "Shipping a change"). CI still runs the full scripts/check.sh.
-#   scripts/check-changed.sh [--plan] [<base>]    base defaults to origin/main
+#   scripts/check-changed.sh [--plan] [--quick] [<base>]    base defaults to origin/main
 # --plan prints what would run and runs nothing.
+# --quick runs only the suites named after the changed files (no match by mention).
+# More than CHECK_CHANGED_MAX_SUITES (default 15) suites would run: only the named ones do, CI runs the rest.
 # Changed = committed since <base>, plus uncommitted and untracked, so it works before and after a commit.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
 plan=0
-if [ "${1:-}" = "--plan" ]; then
-    plan=1
+quick=0
+while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--quick" ]; do
+    [ "$1" = "--plan" ] && plan=1
+    [ "$1" = "--quick" ] && quick=1
     shift
-fi
+done
 base=${1:-origin/main}
 
 if ! git rev-parse --verify -q "$base^{commit}" >/dev/null; then
@@ -60,7 +64,13 @@ suites_in() {
     ' "$1"
 }
 
-test_files=""
+# A source file maps to the tests named after it. Only when none is named after it, the tests that mention its name
+# are used (a "grep match"), and not for the core folders everything uses: there that would select nearly every suite.
+wide_core='^Sources/WorkbenchCore/(Git|EventLog|Config|Process)/'
+max_suites=${CHECK_CHANGED_MAX_SUITES:-15}
+test_files=""     # changed test files and tests named after a changed source: always run
+grep_files=""     # tests that only mention a changed source: run unless there are too many or --quick
+grep_report=""
 unmapped=""
 for f in $swift_changed; do
     case $f in
@@ -68,23 +78,41 @@ for f in $swift_changed; do
     Sources/*)
         base_name=$(basename "$f" .swift)
         # Foo.swift, Foo+Bar.swift (Bar), CommandsBar.swift (Bar): tests are named after the part that says what it is.
+        names="$base_name ${base_name#*+} ${base_name#Commands}"
         found=""
-        for name in "$base_name" "${base_name#*+}" "${base_name#Commands}"; do
-            [ -z "$name" ] && continue
+        for name in $names; do
             found=$(ls Tests/*/"$name"*.swift 2>/dev/null)
-            [ -z "$found" ] && found=$(grep -rlw --include='*.swift' "$name" Tests 2>/dev/null)
             [ -n "$found" ] && break
         done
-        if [ -n "$found" ]; then test_files="$test_files $found"; else unmapped="$unmapped $f"; fi
+        if [ -n "$found" ]; then test_files="$test_files $found"; continue; fi
+        if [ "$quick" = 0 ] && ! echo "$f" | grep -Eq "$wide_core"; then
+            for name in $names; do
+                found=$(grep -rlw --include='*.swift' "$name" Tests 2>/dev/null)
+                [ -n "$found" ] && break
+            done
+        fi
+        if [ -n "$found" ]; then
+            grep_files="$grep_files $found"
+            grep_report="$grep_report $f($(echo "$found" | wc -l | tr -d ' ') files)"
+        else
+            unmapped="$unmapped $f"
+        fi
         ;;
     esac
 done
 
-suites=""
-for t in $(echo $test_files | tr ' ' '\n' | sort -u); do
-    suites="$suites $(suites_in "$t")"
-done
-filter=$(echo $suites | tr ' ' '\n' | sort -u | grep . | paste -sd '|' -)
+suites_of() {
+    for t in $(echo "$@" | tr ' ' '\n' | sort -u); do suites_in "$t"; done | sort -u | grep . | paste -sd '|' -
+}
+count_of() { echo "$1" | tr '|' '\n' | grep -c .; }
+
+filter=$(suites_of $test_files $grep_files)
+if [ "$(count_of "$filter")" -gt "$max_suites" ]; then
+    # Too wide to be fast feedback: keep the tests named after the change, say what was left out, leave the rest to CI.
+    echo "==> $(count_of "$filter") suites match, over the limit of $max_suites; running the named ones only." \
+        "Left to CI, matched through:$grep_report"
+    filter=$(suites_of $test_files)
+fi
 
 # With no suite to filter on, still compile the test targets when a test file changed (a helper has no @Suite).
 build="swift build"
@@ -98,11 +126,17 @@ else
     echo "==> Lint: nothing (the changed Swift files were deleted)"
 fi
 [ -n "$unmapped" ] && echo "==> No tests found for:$unmapped (built, not tested)"
-if [ -n "$filter" ]; then echo "==> Test suites: $filter"; else echo "==> No test suites mapped"; fi
+suite_count=$(echo "$filter" | tr '|' '\n' | grep -c .)
+if [ -n "$filter" ]; then echo "==> Test suites ($suite_count): $filter"; else echo "==> No test suites mapped"; fi
 if [ "$plan" = 1 ]; then
     echo "run: scripts/check-banned-apis.sh"
     [ -n "$swift_files" ] && echo "run: swiftlint lint --quiet <changed files>"
-    if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: $build"; fi
+    if [ -n "$filter" ]; then
+        echo "run: swift build --build-tests"
+        echo "run: swift test --skip-build --filter \"$filter\""
+    else
+        echo "run: $build"
+    fi
     exit 0
 fi
 
@@ -110,13 +144,21 @@ step() {
     name=$1
     shift
     echo "==> $name"
+    started=$(date +%s)
     "$@"
     code=$?
+    took=$(($(date +%s) - started))
+    timings="$timings
+    $name: ${took}s"
     if [ $code -ne 0 ]; then
-        echo "error: step '$name' failed (exit $code)" >&2
+        echo "error: step '$name' failed (exit $code) after ${took}s" >&2
+        echo "==> Timing, $(($(date +%s) - total_started))s so far (suites: $suite_count):$timings" >&2
         exit 1
     fi
 }
+
+timings=""
+total_started=$(date +%s)
 
 step 'Banned process APIs' scripts/check-banned-apis.sh
 if [ -n "$swift_files" ]; then
@@ -128,9 +170,12 @@ if [ -n "$swift_files" ]; then
     step 'SwiftLint' swiftlint lint --quiet $swift_files
 fi
 if [ -n "$filter" ]; then
-    step 'Test' swift test --filter "$filter"
+    # Built apart from the run, so the timing says what a build costs and what the tests cost.
+    step 'Build tests' swift build --build-tests
+    step 'Test' swift test --skip-build --filter "$filter"
 else
     # shellcheck disable=SC2086  # "$build" is a fixed command with flags
     step 'Build' $build
 fi
+echo "==> Timing, $(($(date +%s) - total_started))s in all (suites: $suite_count):$timings"
 echo "==> Changed-file checks passed (CI runs the full scripts/check.sh)"

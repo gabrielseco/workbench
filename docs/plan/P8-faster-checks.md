@@ -1,6 +1,6 @@
 # P8: Faster checks inside a thread
 
-Status: plan, nothing built. Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
+Status: plan; tasks 1 (measure), 2 (tighter mapping) and 3 and 4 (say it, one check) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
 each turn) and the diff-scoped `scripts/check-changed.sh` (#86).
 
 ## What was measured
@@ -29,29 +29,55 @@ Times are read from the event log's timestamps. The causes below were not measur
 3. **The same check runs more than once.** Claude runs it to get feedback, and Workbench runs it again at the end.
 4. **A cold first build** in a fresh worktree is part of the first run.
 
+## Measured (task 1, 2026-10-17, 11 cores, load average 17 from other work)
+
+`check-changed.sh` now prints each step's time and the suite count. Runs on this repo, base `HEAD`:
+
+| Change | Suites | Build | Tests | Total |
+|---|---|---|---|---|
+| `Config.swift` (cold edit, incremental compile) | 6 | 25 s | 1 s | 27 s |
+| `Config.swift` (warm) | 6 | 1 s | 2 s | 4 s |
+| 7 files under `EventLog/` and `Git/` | 58 of ~60 | warm | 63 to 87 s | 63 to 87 s |
+
+- **Cause 1 holds, for the wide types.** Seven files in two core folders select 58 suites, nearly the whole
+  project. Config selects 6. The cap in task 2 is the right fix.
+- **Cause 2 does not.** Each of the slow-looking suites runs alone in 4 to 8 s (`ShipPreflightTests` 6 s,
+  `ReviewStageRunnerTests` 3 s, `ShipOpenPRTests` 5 s, `PRReviewTests` 7 s). In the wide run the same tests report
+  80 s because every test starts at once and waits for CPU, so per-test times there say nothing. Serial
+  (`--no-parallel`) is 400 s, so parallelism already earns a lot.
+- **The wide run is CPU and process-spawn bound:** 65 s user, 117 s system, 286% CPU, with the machine already
+  loaded. Suite count, not any one slow test, is the cost.
+- **Cause 4 is small:** an edit's incremental compile was 25 s once; with nothing to rebuild it is 1 s.
+- **After task 2:** the same seven files in `EventLog/` and `Git/` select 1 suite and take 5 s warm (was 58 suites,
+  63 to 87 s). The cost is that a core change is no longer tested against everything that uses it; CI is.
+- Cause 3 (the same check run several times) is multiplied by all of the above: at 60 to 90 s a wide run, four
+  runs in a turn is the 7 minutes seen. Tasks 3 and 4 stand.
+
 ## What to build
 
-1. **Measure first (S).** Make `check-changed.sh` print its timing per step and the number of suites chosen, and have
-   Workbench's `check.ended` event carry the duration it already records (`check_ms`). One real turn's log then says
+1. **Measure first (S).** Make `check-changed.sh` print its timing per step and the number of suites chosen, (Workbench
+   already records the whole check's `duration_ms` on `check.ran`, so nothing changes there). One real turn's log then says
    which of the causes above holds. No behaviour change.
 2. **A tighter mapping (S).** Name match first; the type-name grep only when a source file has no name match, and
    never for a file under `Sources/WorkbenchCore/{Git,EventLog,Config,Process}` (widely used): those map to their
    own named suites. When more than a set number of suites (default 15) would run, print which files caused it and
    run the named ones plus a full `swift build --build-tests`, leaving the wide run to CI. `--quick` runs lint and
    only the name-matched suites.
-3. **Say it in the goal (S).** The goal template's last criterion reads "the changed files lint clean and their
-   suites pass (`scripts/check-changed.sh`, run once at the end)", and the first prompt tells Claude to use
-   `swift test --filter` on the suites it touched while working. The allowlist already permits both.
-4. **One authoritative check (S).** Decide whether Claude's last run and Workbench's post-turn run are both needed.
-   Workbench's run is the recorded one, so the proposal is: Claude may run the narrow filter freely, but treats
-   `check-changed.sh` as Workbench's job unless it has changed something after the last run. Needs a prompt change
-   and a look at how often a failing post-turn check then costs a whole `send-back`.
+3. **Say it in the goal (S). Built as spec guidance.** There is no goal template in code (goals are written by hand or
+   by an agent), so the rule lives in `docs/spec/goal-file.md`: write the check criterion as "the changed files lint
+   clean and their suites pass" and let `check_command` prove it, because a criterion that names the full check makes
+   a run execute it inside its turn (friction #47). The prompt already tells a run to use the narrowest command it
+   is allowed; the project's allowlist is what gives it `swift test --filter`.
+4. **One authoritative check (S). Built.** Workbench's post-turn run is the recorded one, so the "Checking your work"
+   section now says a run need not run `check_command`; if it does, once, and again only after changing something.
+   Not measured yet: how often a failing post-turn check then costs a `send-back`. After task 2 the check takes
+   seconds on a core change, so the cost of Claude running it once is also small; read it off the next few threads.
 
 ## Tests
 
 - The mapping: a core type's change picks its named suite only; the cap prints the files that caused it; a project
   with few suites is unchanged. Extend `CheckChangedTests` (it already runs `--plan` in a throwaway repo).
-- The timing line and suite count appear in the output; `check.ended` data is unchanged for old logs.
+- The timing line and suite count appear in the output; `check.ran` data is unchanged.
 
 ## A flaky test the checks keep hitting
 
