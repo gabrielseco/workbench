@@ -25,6 +25,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
 | [P9](P9-agent-providers.md) | Agent providers | planned: independently select providers/models for optional goal drafting, run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
 | [P10](P10-skill-verifier.md) | Skill verifier | planned: a verifier turn runs the project's own skill (read from the base commit, tools set by the project) to drive the app to the states a goal names and take the screenshots, instead of recipe files; independent of P9 | M |
+| [P11](P11-verified-pipeline.md) | Verified pipeline | planned: one loop (check, verify, judge, design, then `ship`, then `pr-review`) where a proof belongs to a commit, a failed step goes back to the model and any fix returns to check and verify; piloted on a small Triage feature | M |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 **P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,

@@ -2,7 +2,8 @@
 
 Status: plan, nothing built. Written 2026-10-17. Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
 proof, the judge), [P6](P6-review-stages.md) (reading a skill file as instructions) and the project-instructions
-loader (a file read from the base commit). [P9](P9-agent-providers.md) will decide which providers can run it.
+loader (a file read from the base commit). [P9](P9-agent-providers.md) will decide which providers can run it. 
+[P11](P11-verified-pipeline.md) runs it as the `verify` step of a pipeline, before `ship`, with the proof tied to a commit.
 
 ## Why
 
