@@ -285,4 +285,35 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
             id: shipped.id, worktree: shipped.plan.worktree, number: 12, tool: tool.runner)
         #expect(result == .attached(count: 1))
     }
+
+    @Test func aPullRequestBranchThatMovedOnIsNotGivenTheseScreenshots() async throws {
+        let shipped = try await shippedThread()
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let branch = "workbench/\(id)"
+        let root = fx.repo.deletingLastPathComponent()
+        let bare = root.appendingPathComponent("origin-\(UUID().uuidString).git")
+        _ = try await fx.git.run(["init", "-q", "--bare", bare.path], in: fx.repo)
+        _ = try await fx.git.run(["remote", "add", "origin", bare.path], in: fx.repo)
+        _ = try await fx.git.run(["push", "-q", "origin", branch], in: plan.worktree)
+        _ = try await fx.service.withLog(id) { log in
+            try await log.append(.prOpened, data: ["branch": .string(branch), "number": 12])
+        }
+        let tool = try FakeShots(in: fx)
+
+        // Origin has the work the screenshots were taken at: attached.
+        #expect(
+            await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+                == .attached(count: 1))
+
+        // A follow-up pushes to the same pull request from another clone; this thread's worktree is as it was.
+        let clone = root.appendingPathComponent("clone-\(UUID().uuidString)")
+        _ = try await fx.git.run(["clone", "-q", "--branch", branch, bare.path, clone.path], in: root)
+        try "follow-up\n".write(to: clone.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "follow-up"], in: clone)
+        _ = try await fx.git.run(["push", "-q", "origin", branch], in: clone)
+        let later = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 12, tool: tool.runner)
+        guard case .skipped(let why) = later else { Issue.record("expected skipped, got \(later)"); return }
+        #expect(why.contains("branch is at"))
+        #expect(tool.calls.count == 3)  // only the first call's `path`, `list` and `pr`
+    }
 }

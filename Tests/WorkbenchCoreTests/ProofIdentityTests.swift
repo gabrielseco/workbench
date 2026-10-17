@@ -18,7 +18,7 @@ import Testing
     @Test func aCleanWorktreeIsItsHeadCommitAndTree() async throws {
         let fx = try await RunnerFixture()
         let wt = try await worktree(fx)
-        let identity = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let identity = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         #expect(identity.commit == (try await head("HEAD", fx, in: wt)))
         #expect(identity.tree == (try await head("HEAD^{tree}", fx, in: wt)))
     }
@@ -26,9 +26,9 @@ import Testing
     @Test func aChangeToATrackedFileChangesTheTreeButNotTheCommit() async throws {
         let fx = try await RunnerFixture()
         let wt = try await worktree(fx)
-        let clean = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let clean = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         try "edited\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        let dirty = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let dirty = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         #expect(dirty.commit == clean.commit)
         #expect(dirty.tree != clean.tree)
     }
@@ -36,10 +36,10 @@ import Testing
     @Test func anUntrackedFileCountsAndTheWorktreesOwnIndexIsLeftAlone() async throws {
         let fx = try await RunnerFixture()
         let wt = try await worktree(fx)
-        let clean = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let clean = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         try "new\n".write(to: wt.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
         let before = try await fx.git.run(["status", "--porcelain"], in: wt).stdout
-        let withNew = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let withNew = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         let after = try await fx.git.run(["status", "--porcelain"], in: wt).stdout
         #expect(withNew.tree != clean.tree)
         #expect(before == after)
@@ -50,9 +50,9 @@ import Testing
         let fx = try await RunnerFixture()
         let wt = try await worktree(fx)
         try "edited\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        let uncommitted = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let uncommitted = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         _ = try await fx.git.run(["commit", "-qam", "work"], in: wt)
-        let committed = try #require(await ProofIdentity.of(worktree: wt, git: fx.git))
+        let committed = try #require(await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil))
         #expect(committed.commit != uncommitted.commit)
         #expect(committed.tree == uncommitted.tree)
         #expect(ProofFreshness.of(recordedTree: uncommitted.tree, current: committed) == .current)
@@ -68,12 +68,39 @@ import Testing
         #expect(before.tree == (try await head("HEAD^{tree}", fx, in: wt)))
     }
 
+    @Test func aFilterTheRunNamedInTheWorktreeIsNotExecutedToComputeTheIdentity() async throws {
+        let fx = try await RunnerFixture()
+        let wt = try await worktree(fx)
+        let marker = fx.repo.deletingLastPathComponent().appendingPathComponent("filter-ran-\(UUID().uuidString)")
+        let script = fx.repo.deletingLastPathComponent().appendingPathComponent("clean-\(UUID().uuidString).sh")
+        try "#!/bin/sh\necho ran >> \"\(marker.path)\"\ncat\n".write(to: script, atomically: true, encoding: .utf8)
+        chmod(script.path, 0o755)
+        _ = try await fx.git.run(["config", "filter.evil.clean", script.path], in: wt)
+        // What the run could write: an attribute naming the filter, and a change for it to apply to.
+        try "a.txt filter=evil\n".write(to: wt.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+        try "edited\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+
+        // The control: plain `git add` does run it, so the assertion below is about the fix and not about git.
+        let index = fx.repo.deletingLastPathComponent().appendingPathComponent("idx-\(UUID().uuidString)")
+        var env = fx.git.environment
+        env["GIT_INDEX_FILE"] = index.path
+        let plain = GitRunner(executable: fx.git.executable, environment: env, timeout: fx.git.timeout)
+        _ = try await plain.run(["read-tree", "HEAD"], in: wt)
+        _ = try await plain.run(["add", "-A"], in: wt)
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+        try FileManager.default.removeItem(at: marker)
+
+        let identity = await ProofIdentity.of(worktree: wt, git: fx.git, attributesFrom: nil)
+        #expect(identity != nil)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
     @Test func noCommitMeansNoIdentity() async throws {
         let fx = try await RunnerFixture()
         let empty = fx.repo.deletingLastPathComponent().appendingPathComponent("unborn-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
         _ = try await fx.git.run(["init", "-q"], in: empty)
-        #expect(await ProofIdentity.of(worktree: empty, git: fx.git) == nil)
+        #expect(await ProofIdentity.of(worktree: empty, git: fx.git, attributesFrom: nil) == nil)
         #expect(await ProofIdentity.committed(worktree: empty, git: fx.git) == nil)
     }
 }

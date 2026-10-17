@@ -45,11 +45,20 @@ extension ThreadService {
         // A screenshot is about the work as it was when verify ran. What was committed since then is a different
         // change, so its screenshots are not put in the pull request. Files not committed are not shipped.
         let current = await ProofIdentity.committed(worktree: worktree, git: git)
+        let at = verify.commit.map { " at \($0.prefix(7))" } ?? ""
         if ProofFreshness.of(recordedTree: verify.tree, current: current) == .stale {
-            let at = verify.commit.map { " at \($0.prefix(7))" } ?? ""
             return .skipped(
                 "screenshots not attached: they were taken\(at) and the work has changed since. "
                     + "Run the turn's verify again, then `workbench ship --screenshots`")
+        }
+        // The pull request is what the screenshots go into, and a follow-up may have pushed to its branch since
+        // this thread's worktree was left: what `origin` has now must be what was just checked. When origin cannot
+        // be read the answer is not known, and the check above is all there is.
+        if let current, let tip = await pullRequestBranchTip(id: id), tip != current.commit {
+            return .skipped(
+                "screenshots not attached: the pull request's branch is at \(tip.prefix(7)) and these screenshots "
+                    + "were taken\(at) on this thread's \(current.commit.prefix(7)). Verify the branch's current work, "
+                    + "then attach them from that thread")
         }
 
         let folder = FileManager.default.temporaryDirectory

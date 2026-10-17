@@ -302,7 +302,9 @@ public struct ReviewLoader: Sendable {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(state.id) else { return ProofFreshness.of(recordedTree: verify.tree, current: nil) }
         return ProofFreshness.of(
-            recordedTree: verify.tree, current: await ProofIdentity.of(worktree: manager.path(for: state.id), git: git))
+            recordedTree: verify.tree,
+            current: await ProofIdentity.of(
+                worktree: manager.path(for: state.id), git: git, attributesFrom: recordedBase(state.id)))
     }
 
     /// Where `workbench/<id>` is, nil when the branch does not exist.

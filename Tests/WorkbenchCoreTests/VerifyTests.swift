@@ -79,7 +79,7 @@ extension RunnerFixture {
         // The turn's own change is in the tree verify saw, committed or not.
         _ = try await fx.runner(id).run(fx.options("write=a.txt"))
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
-        let now = try #require(await ProofIdentity.of(worktree: worktree, git: fx.git))
+        let now = try #require(await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil))
         let started = try #require(try fx.events(id).first { $0.kind == .verifyStarted })
         #expect(started.data["commit"]?.stringValue == now.commit)
         #expect(started.data["tree"]?.stringValue == now.tree)
