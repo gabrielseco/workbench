@@ -37,6 +37,70 @@ Any `FIX` or "not met" starts a follow-up turn (P5's mechanism: the finding is t
 is the criteria). After it is pushed the loop returns to **check**, so every fix is re-checked and re-verified
 before anything else sees it. A cap on rounds and on spend ends the loop and says what is still open.
 
+## Phase 0: a manual pass, and what it found
+
+Before writing the runner, the loop was run by hand with today's commands on a real Triage task: *Everything is
+ordered with the viewer's own pull requests first, newest created first* (Triage PR #71, 2026-10-17). Commands, in
+order: `goal new`, `goal approve`, `run`, `review`, `judge`, `review-stage design`, `accept`, `ship`,
+`review-stage design`, `pr-review`. Numbers: the turn took 85 s and $0.37, the check 12 s, verify 35 s, the judge
+$0.10. The judge, the design stage and `pr-review` all answered met / CLEAN, and the PR description carried the
+screenshot, the criteria table and the check result. So the steps work; what drifted from the plan is the joins.
+
+| # | What the plan assumed | What happened | Fix |
+|---|---|---|---|
+| 1 | The design stage runs before `ship` | `review-stage design` before `ship`: "refused: this thread has no recorded pull request. Run `workbench ship` first". It only runs on a PR | Stages take the thread's branch and worktree when there is no PR (friction row 61 is the same gap for `pr-review`) |
+| 2 | A proof belongs to a commit | `proof.added` has name, path, bytes and sha256, no commit. `pr-shots` names the file by the branch head *when it publishes* (`...-972aa0f.png`), not when it was taken | Record the head at `verify.started`; publish refuses a proof whose commit is not the head (task 1) |
+| 3 | The runner picks the next step | Nine commands, each with its output read by hand, and nothing says which comes next except a hint after some | The runner (task 6) |
+| 4 | A fix after the PR is re-verified | `ship` removes the worktree once the PR is open (`--keep-worktree` keeps it), so a later verify needs a follow-up thread's own worktree | Say it in the runner: a fix is always a follow-up thread; `--keep-worktree` is not needed |
+| 5 | The judge catches a proof that does not show the criterion | It answered `met` on all five, and wrote as concerns that the screenshot shows only the viewer's own PRs, so the order of the others' is never seen, and that no test covers `visibleItems` using the order. The design stage said the same. A gate on `met: false` would never have fired | Not gated: a partial proof is for the person to see. The judge's concerns go into the PR description (task 0.3) |
+| 6 | The screenshot can show an ordering | It was the owner's live data, a window clipped at the sidebar, and it cannot show a boundary between own and others' PRs | Triage side: a fixture state for verify (a fixed list of PRs), and a second named screenshot per ordering goal |
+| 7 | The design stage has a before and a minimum-size capture | It had one screenshot ("no before or minimum-size capture was supplied") | Triage side: the goal names the captures; the P6 pilot's dark and minimum-size shots are not in `verify.sh` |
+| 8 | The model can run a narrow test | It was denied `sed -i ... && swift test --filter ...`: the allowlist is per command and a compound is refused. It went on with the full check | Minor: say in `doctor` that a compound command is refused; Triage can allow the two commands separately |
+| 9 | A verify run is silent | Building the app for verify makes macOS ask about the Keychain. `verify.sh` gives the build its own bundle id (`dev.rogal.triage.verify`) so it never touches the installed app, and the items the app reads (GitLab, Linear, Anthropic) belong to the installed app, so each is asked again for the new id. The script signs with "Triage Local Signing" so the answer can stick, but `security find-identity -p codesigning` lists it as `CSSMERR_TP_NOT_TRUSTED` with 0 valid identities. Not yet confirmed which item asks | Triage side: trust the certificate (`scripts/setup-signing.sh`), or have a verify build read no Keychain item (a `TRIAGE_VERIFY` mode that uses the fixture state and skips every secret). A run that waits on a dialog is a hang: verify's timeout ends it, but a person sees a prompt they did not start |
+| 10 | The screenshot is readable | The proof is the window as it opens: 2000 × 1304 px, about the app's minimum (`frame(minWidth: 1000, minHeight: 600)`). The sidebar labels are cut ("ng", "equest..."), the detail pane runs off the right edge, and only four items fit. `verify.sh` and `snap.sh` capture the window with `screencapture -l` and never set its size | Triage side: `verify.sh` sets the window to a fixed larger size (for example 1440 × 900) before the first capture, and the goal can name a second capture at the minimum size for the design stage. Workbench side: the judge and design reviewer are told the image's pixel size, so a clipped capture is named in their concerns |
+
+### What a partial proof is
+
+The judge says a criterion is `met` when the evidence it was given shows the criterion's literal text holds. A
+**partial proof** is evidence that is true but does not cover the whole criterion. On Triage PR #71 the criterion was
+"Everything lists the viewer's own pull requests before the others', newest created first in each group". The
+screenshot showed four PRs, all the viewer's, in descending number. What it shows is correct, and the first half is
+visible. The half that matters, own PRs *then* others', is never on screen, and the creation dates are not either,
+only inferred from the numbers. The judge said `met` and, in its concerns, said exactly that. The design stage and
+`pr-review` noticed the same and passed it too.
+
+Why it matters to the loop: a `met: false` gate only fires on a violation, and a partial proof is not one. It would
+pass every round while nothing shows the ordering. The same happens with a test that exists but never reaches the
+code (the judge's second concern: no test calls `visibleItems`).
+
+How the plan treats it (task 0.3): **it does not gate.** A partial proof is evidence the person can still use, and the
+owner reads the PR before merging, with the screenshot, the criteria and the concerns in front of them. A rule that
+sent every incomplete capture back to the model would add a round, a cost and a judgement ("is this clause shown?")
+the judge is not good at, to protect a step the owner does anyway. So:
+
+- The judge's `concerns` are printed in `review` as today **and written into the PR description** under the criteria
+  table (a short "Judge concerns" list, bounded), so what the judge doubted is on the page the owner reads.
+- The loop's rule stays one-sided: only `met: false` with evidence starts a follow-up turn.
+- The proof's size is still given to the judge and the design reviewer (row 10), so a clipped capture is named as a
+  concern, not left for the owner to notice.
+- Revisit only if the pilot's owner reads show a partial proof was missed in the PR: then a `proof_complete` field is
+  the next step, not the first.
+
+## Phase 0 tasks
+
+The loop is not built before these join problems are fixed, each its own PR:
+
+| Task | Result | Gate |
+|---|---|---|
+| 0.1 Proof knows its commit (row 2) | the head on `verify.started` and `proof.added`; `pr-shots` is given that commit; `ship` and the publish refuse a mismatch | tests: commit after verify then ship, proof at head, an old log reads "unknown" |
+| 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout | the existing stage tests plus a thread with no `pr.opened` |
+| 0.3 Judge concerns reach the PR (row 5) | the judge's `concerns` (and the proof's pixel size, row 10) are given to it and written, bounded, into the PR description under the criteria | `ship` fixtures: with concerns, without, over the limit |
+| 0.4 Triage fixture state (rows 6, 7, 9 and 10) | `verify.sh` can launch with a fixed PR list, no Keychain read and a fixed window size, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary and no Keychain dialog and a window no part of which is cut |
+| 0.5 Repeatable goals | `goal new <name>` picks `<name>-2`, `-3`, ... when the thread id or the branch `workbench/<id>` already exists, and prints the id it chose; `goal new <name> --from <goal-file>` copies the file's request, criteria and out of scope into a new draft (never its status, hash or id), so one goal can be run many times and compared (task 9) | tests: the same name twice in one day, a leftover branch with a free id, `--from` with a missing file, a file with no criteria, and a goal already approved elsewhere (comes in as a draft) |
+
+Rows 3, 4 and 8 are covered by the runner and by notes in `doctor`. Task 0.5 is not a row: it came from closing
+Triage PR #71 so the same goal could run again (`goal new` refuses a repeated name on the same day).
+
 ## Decisions
 
 1. **Verify, judge and design run before the PR.** For a project whose app starts in seconds (a Mac app, a mocked
@@ -124,7 +188,7 @@ Each task is its own PR, in this order.
 
 | Task | Result | Gate |
 |---|---|---|
-| 1. Proof knows its commit | the `commit` field, the stale check, `review` prints it; `ship` refuses a stale proof | tests: commit after verify then ship; proof at head; no commit recorded in an old log reads as "unknown", not stale |
+| 1. Proof knows its commit (phase 0.1) | the `commit` field, the stale check, `review` prints it; `ship` refuses a stale proof | tests: commit after verify then ship; proof at head; no commit recorded in an old log reads as "unknown", not stale |
 | 2. Failed verify goes back | a verify failure or a missing named screenshot becomes a follow-up request | tests with the fake claude and a verify script that fails, passes, and leaves no file |
 | 3. P10 verifier (config, doctor, turn) | `[verifier]`, `workbench verifier`; P10 tasks 1 and 2 | P10's failure list |
 | 4. Judge as a gate | `judge --gate`; not met with evidence becomes a request, concerns do not | a judge fixture for met, not met, concern only, bad JSON |
@@ -132,7 +196,7 @@ Each task is its own PR, in this order.
 | 6. `[pipeline]` and the runner | `before_ship`, `after_ship`, the return to check, the caps, resume after a restart | loop tests: each step's FIX, skipped, round cap, cost cap, stop mid-step, crash between steps |
 | 7. Triage setup | `verify-app.sh`, the `/verify` Workbench section (P10 task 4), `[pipeline]` in Triage's config, `docs/DESIGN.md` inputs | `doctor` clean in Triage; a recorded dry run |
 | 8. The pilot | one small Triage feature through the whole loop | a PR, below |
-| 9. Compare | the same goal five times with the recipe files and with the pipeline: cost, time, rounds, how often the screenshot shows the state | numbers in this file |
+| 9. Compare (uses 0.5) | the same goal five times with the recipe files and with the pipeline: cost, time, rounds, how often the screenshot shows the state | numbers in this file |
 
 ## Failure cases to test
 
