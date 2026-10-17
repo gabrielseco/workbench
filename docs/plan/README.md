@@ -22,6 +22,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P5](P5-review-loop.md) | Review loop | `workbench pr-review` runs a second reviewer on the shipped PR; `ship --review-loop` feeds its findings back as turns until clean or a cap | S |
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order; task 1 (config, `ReviewStage`, doctor) built | M |
 | [P7](P7-judge-on-codex.md) | Judge on Codex | `workbench judge` runs on Codex, so the AI that wrote the diff does not grade it; `run` stays on Claude, reviews stay on Codex | S |
+| [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
