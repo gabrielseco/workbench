@@ -96,8 +96,10 @@ The loop is not built before these join problems are fixed, each its own PR:
 | 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout | the existing stage tests plus a thread with no `pr.opened` |
 | 0.3 Judge concerns reach the PR (row 5) | the judge's `concerns` (and the proof's pixel size, row 10) are given to it and written, bounded, into the PR description under the criteria | `ship` fixtures: with concerns, without, over the limit |
 | 0.4 Triage fixture state (rows 6, 7, 9 and 10) | `verify.sh` can launch with a fixed PR list, no Keychain read and a fixed window size, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary and no Keychain dialog and a window no part of which is cut |
+| 0.5 Repeatable goals | `goal new <name>` picks `<name>-2`, `-3`, ... when the thread id or the branch `workbench/<id>` already exists, and prints the id it chose; `goal new <name> --from <goal-file>` copies the file's request, criteria and out of scope into a new draft (never its status, hash or id), so one goal can be run many times and compared (task 9) | tests: the same name twice in one day, a leftover branch with a free id, `--from` with a missing file, a file with no criteria, and a goal already approved elsewhere (comes in as a draft) |
 
-Rows 3, 4 and 8 are covered by the runner and by notes in `doctor`.
+Rows 3, 4 and 8 are covered by the runner and by notes in `doctor`. Task 0.5 is not a row: it came from closing
+Triage PR #71 so the same goal could run again (`goal new` refuses a repeated name on the same day).
 
 ## Decisions
 
@@ -194,7 +196,7 @@ Each task is its own PR, in this order.
 | 6. `[pipeline]` and the runner | `before_ship`, `after_ship`, the return to check, the caps, resume after a restart | loop tests: each step's FIX, skipped, round cap, cost cap, stop mid-step, crash between steps |
 | 7. Triage setup | `verify-app.sh`, the `/verify` Workbench section (P10 task 4), `[pipeline]` in Triage's config, `docs/DESIGN.md` inputs | `doctor` clean in Triage; a recorded dry run |
 | 8. The pilot | one small Triage feature through the whole loop | a PR, below |
-| 9. Compare | the same goal five times with the recipe files and with the pipeline: cost, time, rounds, how often the screenshot shows the state | numbers in this file |
+| 9. Compare (uses 0.5) | the same goal five times with the recipe files and with the pipeline: cost, time, rounds, how often the screenshot shows the state | numbers in this file |
 
 ## Failure cases to test
 
