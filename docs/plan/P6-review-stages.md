@@ -8,6 +8,14 @@ UI follow the design guide?" or "is the migration safe?", and today each one is 
 (Triage's `/design-review`). P6 makes `pr-review` one **review stage** among others and lets the project declare which
 stages run and in what order, so the loop reviews, fixes and re-reviews through all of them.
 
+## Relationship to P9
+
+The Codex-only reviewer and `reviewer = "claude"` rejection below describe the built tasks 1 and 2.
+[P9: Agent providers](P9-agent-providers.md) replaces that restriction with independently configured
+compatible providers and models, shared validators and enforced read-only policy. It retains P6's rubric
+order, proof requirements, skips and round accounting; it does not claim the remaining loop tasks built.
+P9 defines the future config and compatibility alias; the examples below remain the current P6 format.
+
 ## The rule
 
 - **The project declares its review stages and their order.** `review.stages` is an ordered list of names. Each

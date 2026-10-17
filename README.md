@@ -13,7 +13,10 @@ prototyped on its own first, and only then do we decide how the two talk to each
 **Scope, on purpose:** one project, one thread at a time. Do that well first; concurrency, many projects,
 screenshot proof and Triage integration are in [`docs/later/`](docs/later/README.md).
 
-**Status:** planning. No code yet. Start at [`docs/plan/README.md`](docs/plan/README.md).
+**Status:** the Swift package and CLI are built; the SwiftUI app is planned. Current coding and judging
+use Claude, automated review uses Codex. [P9: Agent providers](docs/plan/P9-agent-providers.md) plans
+independent provider/model selection for goal drafting and each execution responsibility and is required before SwiftUI development.
+Start at [`docs/plan/README.md`](docs/plan/README.md).
 
 ## Checking a change
 
