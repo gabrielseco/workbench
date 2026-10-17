@@ -14,11 +14,15 @@ if [ "${1:-}" = "--plan" ]; then
 fi
 base=${1:-origin/main}
 
-changed=$({
-    git diff --name-only "$base"...HEAD
-    git diff --name-only HEAD
-    git ls-files --others --exclude-standard
-} 2>/dev/null | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+if ! git rev-parse --verify -q "$base^{commit}" >/dev/null; then
+    echo "error: base '$base' is not a commit here (git fetch origin main, or pass a base)" >&2
+    exit 1
+fi
+committed=$(git diff --name-only "$base"...HEAD) || { echo "error: git diff against $base failed" >&2; exit 1; }
+uncommitted=$(git diff --name-only HEAD) || { echo "error: git diff HEAD failed" >&2; exit 1; }
+untracked=$(git ls-files --others --exclude-standard) || { echo "error: git ls-files failed" >&2; exit 1; }
+# Deleted files stay in `changed`: they still decide what to check (a removed type can break what remains).
+changed=$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | grep . | sort -u)
 
 if [ -z "$changed" ]; then
     echo "==> Nothing changed against $base"
@@ -32,8 +36,8 @@ if echo "$changed" | grep -Eq '^(Package\.swift|Package\.resolved|\.swiftlint\.y
     exec scripts/check.sh
 fi
 
-swift_files=$(echo "$changed" | grep '\.swift$')
-if [ -z "$swift_files" ]; then
+swift_changed=$(echo "$changed" | grep '\.swift$')
+if [ -z "$swift_changed" ]; then
     echo "==> No Swift files changed against $base: nothing to lint or test"
     exit 0
 fi
@@ -50,9 +54,9 @@ suites_in() {
 
 test_files=""
 unmapped=""
-for f in $swift_files; do
+for f in $swift_changed; do
     case $f in
-    Tests/*) test_files="$test_files $f" ;;
+    Tests/*) [ -f "$f" ] && test_files="$test_files $f" ;;
     Sources/*)
         base_name=$(basename "$f" .swift)
         # Foo.swift, Foo+Bar.swift (Bar), CommandsBar.swift (Bar): tests are named after the part that says what it is.
@@ -74,11 +78,17 @@ for t in $(echo $test_files | tr ' ' '\n' | sort -u); do
 done
 filter=$(echo $suites | tr ' ' '\n' | sort -u | grep . | paste -sd '|' -)
 
-echo "==> Lint: $(echo "$swift_files" | wc -l | tr -d ' ') changed Swift file(s)"
+# Lint only what still exists.
+swift_files=$(echo "$swift_changed" | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+if [ -n "$swift_files" ]; then
+    echo "==> Lint: $(echo "$swift_files" | wc -l | tr -d ' ') changed Swift file(s)"
+else
+    echo "==> Lint: nothing (the changed Swift files were deleted)"
+fi
 [ -n "$unmapped" ] && echo "==> No tests found for:$unmapped (built, not tested)"
 if [ -n "$filter" ]; then echo "==> Test suites: $filter"; else echo "==> No test suites mapped"; fi
 if [ "$plan" = 1 ]; then
-    echo "run: swiftlint lint --quiet <changed files>"
+    [ -n "$swift_files" ] && echo "run: swiftlint lint --quiet <changed files>"
     if [ -n "$filter" ]; then echo "run: swift test --filter \"$filter\""; else echo "run: swift build"; fi
     exit 0
 fi
@@ -101,7 +111,9 @@ if ! command -v swiftlint >/dev/null 2>&1; then
     exit 1
 fi
 # shellcheck disable=SC2086  # one argument per changed file; Swift paths here have no spaces
-step 'SwiftLint' swiftlint lint --quiet $swift_files
+if [ -n "$swift_files" ]; then
+    step 'SwiftLint' swiftlint lint --quiet $swift_files
+fi
 if [ -n "$filter" ]; then
     step 'Test' swift test --filter "$filter"
 else

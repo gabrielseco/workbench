@@ -118,4 +118,41 @@ import Testing
         let plan = try await repo.plan()
         #expect(plan.contains("run: scripts/check.sh"), "\(plan)")
     }
+
+    @Test func aBaseThatIsNotACommitFailsInsteadOfPassing() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        let out = try await repo.sh(["-c", "sh scripts/check-changed.sh --plan origin/main 2>&1; echo exit=$?"])
+            .joined(separator: "\n")
+        #expect(out.contains("is not a commit here"), "\(out)")
+        #expect(out.contains("exit=1"), "\(out)")
+    }
+
+    @Test func aDeletedSourceStillBuildsWhatRemains() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        try FileManager.default.removeItem(at: repo.dir.appendingPathComponent("Sources/Core/Bar.swift"))
+        let plan = try await repo.plan()
+        #expect(plan.contains("Lint: nothing"), "\(plan)")
+        #expect(plan.contains("run: swift build"), "\(plan)")
+        #expect(!plan.contains("Nothing changed"), "\(plan)")
+    }
+
+    @Test func aDeletedLintConfigStillForcesTheFullCheck() async throws {
+        let repo = try Repo()
+        try repo.write(".swiftlint.yml", "strict: true\n")
+        try await repo.commitAll()
+        try FileManager.default.removeItem(at: repo.dir.appendingPathComponent(".swiftlint.yml"))
+        let plan = try await repo.plan()
+        #expect(plan.contains("run: scripts/check.sh"), "\(plan)")
+    }
+
+    @Test func committedChangesCountAgainstTheBase() async throws {
+        let repo = try Repo()
+        try await repo.commitAll()
+        try repo.write("Sources/Core/Foo.swift", "struct Foo { var x = 1 }\n")
+        _ = try await repo.sh(["commit", "-qam", "change"], executable: "/usr/bin/git")
+        let out = try await repo.sh(["scripts/check-changed.sh", "--plan", "HEAD~1"]).joined(separator: "\n")
+        #expect(out.contains("swift test --filter \"FooMoreTests|FooTests\""), "\(out)")
+    }
 }
