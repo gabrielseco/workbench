@@ -26,6 +26,8 @@ struct PRReviewInput: Sendable, Equatable {
     /// The stage's own rubric, from its `skill` or `prompt` file; nil for the built-in report instructions.
     var rubric: String?
     var rubricPath: String?
+    /// The verify step's screenshots, absolute paths, each also attached to the Codex run as an image.
+    var proof: [String] = []
 }
 
 /// The reviewer: Codex, run read-only on the pull request's head in a throwaway checkout, started by
@@ -40,6 +42,8 @@ public enum PRReview {
     public static let diffLimit = 400 << 10
     public static let goalLimit = 32 << 10
     public static let checklistLimit = 32 << 10
+    /// Screenshots attached to one run, at most.
+    public static let proofLimit = 20
 
     public static let cleanLine = "VERDICT: CLEAN"
     public static let fixLine = "VERDICT: FIX"
@@ -58,12 +62,13 @@ public enum PRReview {
     }
 
     /// The command line. The review text is in the brief file, not here: argv only points at it.
-    static func arguments(tree: String, answer: String, brief: String) -> [String] {
-        [
-            "exec", "-s", "read-only", "-C", tree, "--color", "never", "--ephemeral", "-o", answer,
-            "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
-                + "files and do not post anything anywhere.",
-        ]
+    static func arguments(tree: String, answer: String, brief: String, images: [String] = []) -> [String] {
+        ["exec", "-s", "read-only", "-C", tree, "--color", "never", "--ephemeral", "-o", answer]
+            + images.flatMap { ["-i", $0] }
+            + [
+                "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
+                    + "files and do not post anything anywhere.",
+            ]
     }
 
     /// The verdict is the last non-empty line, exactly. A missing line, a different last line, or both verdicts
@@ -119,6 +124,14 @@ public enum PRReview {
                 "", "## This project's review checklist (\(input.checklistPath ?? "checklist"))", "", fenced(checklist),
             ]
         }
+        if !input.proof.isEmpty {
+            lines += [
+                "", "## Proof", "",
+                "Screenshots the project's verify step took of this change; each is attached to this run as an image.",
+                "",
+            ]
+            lines += input.proof.map { "- \($0)" }
+        }
         if let rubric = input.rubric {
             lines += ["", "## Rubric (\(input.rubricPath ?? "rubric"))", "", "Review against this rubric.", "", fenced(rubric)]
         } else {
@@ -156,9 +169,18 @@ public enum PRReviewRefusal: Error, Equatable, Sendable, CustomStringConvertible
     case branchGone(String)
     case goalUnreadable(String)
     case busy
+    case unknownStage(String, listed: [String])
+    case stageCapReached(stage: String, pr: Int, rounds: Int, max: Int)
 
     public var description: String {
         switch self {
+        case .unknownStage(let name, let listed):
+            "there is no review stage '\(name)' in review.stages (it lists \(listed.joined(separator: ", "))). "
+                + "Add it to [review] stages and give it a [review.stage.\(name)] table."
+        case .stageCapReached(let stage, let pr, let rounds, let max):
+            "the \(stage) stage reviewed pull request #\(pr) \(rounds) time\(rounds == 1 ? "" : "s") already "
+                + "(max_rounds is \(max)). Read the last findings with `workbench review`; raise `max_rounds` in "
+                + "[review.stage.\(stage)] to allow more."
         case .noPullRequest:
             "this thread has no recorded pull request. Run `workbench ship` first; the review is of that pull request."
         case .capReached(let pr, let rounds, let max):
@@ -190,4 +212,6 @@ public struct PRReviewResult: Sendable, Equatable {
     /// Codex's answer, as stored.
     public var findings: String?
     public var warnings: [String]
+    /// Why the stage did not run: its `applies_to` matches nothing the pull request changes. Never a pass.
+    public var skipped: String?
 }

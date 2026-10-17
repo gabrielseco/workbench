@@ -35,6 +35,9 @@ let usage = """
                                  of its head; prints the findings and records the round (shown by review);
                                  at most max_rounds ([pr_review]) per pull request, --again does not lift that
                                  exit 0 clean, 15 findings to fix, 1 no verdict this time, 6 refused
+      review-stage <name> [id] [--again]
+                                 the same for the stage <name> of review.stages (pr-review is `pr-review`), with its
+                                 own rounds; a stage whose applies_to matches no changed path is skipped (exit 0)
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
            [--watch|-w [--timeout <min>] [--interval <s>]] [--review-loop]
@@ -130,6 +133,8 @@ do {
         exit(try await Commands.judge(Array(arguments.dropFirst())))
     case "pr-review":
         exit(try await Commands.prReview(Array(arguments.dropFirst())))
+    case "review-stage":
+        exit(try await Commands.reviewStage(Array(arguments.dropFirst())))
     case "accept":
         try await Commands.accept(Array(arguments.dropFirst()))
     case "ship":

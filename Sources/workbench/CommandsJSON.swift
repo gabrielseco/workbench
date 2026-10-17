@@ -242,6 +242,22 @@ extension Commands {
         } else {
             prReview = .null
         }
+        // A config that does not load still shows the stage every project has.
+        let stages = (try? Config.load(from: ctx.project.configURL))?.review ?? ReviewConfig()
+        let reviewStages: [JSONValue] = ctx.service.latestReviewStages(id: state.id, review: stages).map { name, r in
+            let verdict: JSONValue =
+                if r?.skipped == true {
+                    .string(ReviewStage.skippedVerdict)
+                } else {
+                    r?.verdict.map { .string($0.rawValue) } ?? .null
+                }
+            let stale = if let reviewed = r?.headSHA, let tip = report.branchTip { reviewed != tip } else { false }
+            return [
+                "name": .string(name), "round": r.map { .int($0.round) } ?? .null, "verdict": verdict,
+                "stale": .bool(r != nil && stale), "skipped": .bool(r?.skipped == true),
+                "findings_path": r?.findingsPath.map { .string($0) } ?? .null,
+            ]
+        }
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
@@ -264,7 +280,7 @@ extension Commands {
                     ]
                 }),
             "diff": diff, "check": check, "verify": verify, "judge": judge,
-            "pr_review": prReview,
+            "pr_review": prReview, "review_stages": .array(reviewStages),
             "denied_tools": .array(
                 review.deniedTools.map {
                     [

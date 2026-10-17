@@ -1,6 +1,6 @@
 # P6: Review stages
 
-Status: task 1 built. Written 2026-10-17. Builds on [P5](P5-review-loop.md) (`pr-review`, `ship --review-loop`)
+Status: tasks 1 and 2 built. Written 2026-10-17. Builds on [P5](P5-review-loop.md) (`pr-review`, `ship --review-loop`)
 and [P4](P4-verify.md) (`verify_command`, screenshot proof).
 
 `pr-review` is one reviewer with one job: is this PR correct? Projects also have other questions, such as "does the
@@ -33,7 +33,7 @@ max_rounds = 3
 
 [review.stage.design]
 skill = ".agents/skills/design-review/SKILL.md"   # or: prompt = "docs/REVIEW-DESIGN.md"
-reviewer = "claude"                               # "claude" | "codex"; default codex, as pr-review
+reviewer = "codex"                                # the only reviewer; "claude" is refused at config load
 inputs = ["diff", "goal", "proof", "docs/DESIGN.md"]
 applies_to = ["Sources/Triage/**", "Resources/**"]
 max_rounds = 2
@@ -95,6 +95,11 @@ being written for the stage named `pr-review` so existing logs and `review --jso
    `Sources/WorkbenchCore/Thread/PRReview/ReviewStage.swift`).
 2. **`review-stage <name>` and the inputs.** `proof` input (images are passed to the reviewer, so a reviewer that
    cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping.
+   **Status: built.** Every stage runs on Codex (`codex exec -i <png>` per screenshot) and `reviewer = "claude"`
+   is refused at config load. A skip writes only `review_stage.finished` (`verdict: "skipped"`) and spends no
+   round. `pr-review` honours `applies_to` too (a skip writes only `pr_review.finished`); what
+   `ship --review-loop` does with a skipped round is task 3. A list of changed files that git cut or could not
+   give never decides a skip: the round runs and says so.
 3. **Loop over stages.** Stage order, go back to the first stage after a follow-up, per-stage caps,
    skips recorded and printed.
 4. **Tests.** `fake-codex` and `fake-claude` scripted per stage: two stages both CLEAN; the second FIX then CLEAN

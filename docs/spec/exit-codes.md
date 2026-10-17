@@ -18,7 +18,7 @@ A code means one thing everywhere; the table says what. What each command can re
 | 12 | `push-rejected` | `ship`: origin rejected the push. |
 | 13 | `check-failed` | `ship --watch`: a check failed. |
 | 14 | `no-result` | `ship --watch`: no result in time. |
-| 15 | `findings` | `pr-review`: the reviewer found something to fix. |
+| 15 | `findings` | `pr-review`, `review-stage`: the reviewer found something to fix. |
 
 ## By command
 
@@ -128,6 +128,18 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 6 | `refused` | nothing was spawned or recorded: the thread has no recorded pull request, `max_rounds` reviews of this pull request already ran (`--again` does not lift that), the branch was reviewed as it is (`--again` asks once more), origin no longer has the branch, a run is live, or another command holds the thread (a judge, another review) |
 | 7 | `not-found` | the thread named does not exist |
 | 15 | `findings` | the review ended `VERDICT: FIX`: the findings are printed and recorded |
+
+### `review-stage <name>`
+
+The same codes as `pr-review`, for one round of the stage `<name>` (`review-stage pr-review` is `pr-review`), with
+these differences:
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | the review ended `VERDICT: CLEAN`, or the stage was skipped because its `applies_to` matches no file the pull request changes (recorded as `skipped`, never as clean; no reviewer ran) |
+| 1 | `failed` | as `pr-review`, and also: the stage reads `proof` and the latest verify step left no PNG, is from before the latest turn, or never ran |
+| 2 | `usage` | no stage name, or the `pr-review` cases |
+| 6 | `refused` | `<name>` is not in `review.stages` (nothing runs), `max_rounds` of this stage already ran for this pull request (counted over its own rounds; `--again` does not lift that), or the `pr-review` cases |
 
 ### `accept`
 
