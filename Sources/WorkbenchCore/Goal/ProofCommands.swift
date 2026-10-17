@@ -104,6 +104,8 @@ public enum ProofCommands {
         func matches(_ command: String) -> Bool {
             if literal.isEmpty { return true }
             if !prefix { return command == literal }
+            // An entry ending in "/" is a directory: `chmod +x scripts/:*` covers `chmod +x scripts/a.sh`.
+            if literal.hasSuffix("/") { return command.hasPrefix(literal) }
             return command == literal || command.hasPrefix(literal + " ")
         }
     }

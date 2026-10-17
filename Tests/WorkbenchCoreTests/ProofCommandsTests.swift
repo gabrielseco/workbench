@@ -71,6 +71,17 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         #expect(warnings.map(\.command) == ["./run.sh"])
     }
 
+    @Test func aDirectoryEntryCoversTheFilesUnderIt() throws {
+        let g = try goal(proofs: [
+            "`chmod +x scripts/verify.sh` is run", "`bash -n scripts/verify.sh` exits 0",
+            "`ln -s ../../.agents/skills/x .claude/skills/x` exists", "`chmod +x bin/other.sh` is run",
+        ])
+        let c = try config(allowed: [
+            "Bash(chmod +x scripts/:*)", "Bash(bash -n scripts/:*)", "Bash(ln -s ../../.agents/skills/:*)",
+        ])
+        #expect(ProofCommands.warnings(goal: g, config: c).map(\.criterion) == ["c4"])
+    }
+
     @Test func anAllowedCommandAndItsArgumentsAreFine() throws {
         let g = try goal(proofs: ["`mix test test/api` passes", "`mix test` passes"])
         let c = try config(allowed: ["Bash(mix test:*)"])
