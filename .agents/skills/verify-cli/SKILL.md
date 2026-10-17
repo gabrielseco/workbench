@@ -25,8 +25,12 @@ bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 ```
 
+Before the pull request merges, run it from the branch: accept the thread, `git checkout workbench/<id>` in the main
+checkout (clean, no active thread) and set `VERIFY_CLI_FROM_BRANCH=1`. `HEAD` then only has to contain origin's
+`main`; the binary it builds and checks is the branch's. Go back with `git checkout main`.
+
 It refuses (exit 2) and changes nothing in the repository, its threads or branches when: it is not run in
-the main checkout, the checkout has local changes, `HEAD` or `origin/main` is not origin's `main`, a thread
+the main checkout, the checkout has local changes, `HEAD` is not origin's `main` (with `VERIFY_CLI_FROM_BRANCH=1`: does not contain it), `origin/main` is not origin's `main`, a thread
 is active here (one project, one active thread; end it with `abandon` or `discard` first), or
 `claude_path` resolves to nothing or to `fake-claude`. The only thing it does before refusing on those last
 two is `swift build --product workbench`, since the checks use the fresh binary.

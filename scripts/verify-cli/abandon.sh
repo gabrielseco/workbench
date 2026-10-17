@@ -1,6 +1,7 @@
 #!/bin/bash
 # verify-cli scenario for `workbench abandon` (P12 task 1), with the real `claude`, on this repository.
 #   bash scripts/verify-cli/abandon.sh      (in the main checkout, on a clean origin/main, no active thread)
+#   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/abandon.sh   (the same, on a branch that contains origin/main)
 # Builds .build/debug/workbench, runs one throwaway thread (goal new, goal approve, run), leaves its worktree
 # dirty in five ways, abandons it and prints PASS or FAIL per step. Exit 0 only when every step passed,
 # 1 when one failed, 2 when it refused to start (nothing changed).
@@ -74,7 +75,15 @@ cd "$ROOT" || die "cannot enter $ROOT"
 [ -z "$(git status --porcelain)" ] || die "the checkout has local changes (git status); commit or set them aside"
 remote_main=$(with_timeout "$T_GIT" git ls-remote origin refs/heads/main | cut -f1)
 [ -n "$remote_main" ] || die "could not read main from origin"
-[ "$(git rev-parse HEAD)" = "$remote_main" ] || die "HEAD is not origin's main ($remote_main); check it out first"
+if [ "${VERIFY_CLI_FROM_BRANCH:-0}" = 1 ]; then
+    # Before the merge: the branch under test, which must contain origin's main so the feature being checked is in.
+    git merge-base --is-ancestor "$remote_main" HEAD \
+        || die "VERIFY_CLI_FROM_BRANCH=1: HEAD ($(git rev-parse --short HEAD)) does not contain origin's main ($remote_main)"
+    echo "==> from branch $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD) (VERIFY_CLI_FROM_BRANCH=1)"
+else
+    [ "$(git rev-parse HEAD)" = "$remote_main" ] \
+        || die "HEAD is not origin's main ($remote_main); check it out, or VERIFY_CLI_FROM_BRANCH=1 to run from a branch that contains it"
+fi
 [ "$(git rev-parse -q --verify origin/main)" = "$remote_main" ] \
     || die "origin/main is behind origin; run git fetch origin main"
 
