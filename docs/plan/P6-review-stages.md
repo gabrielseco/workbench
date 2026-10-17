@@ -24,7 +24,6 @@ stages run and in what order, so the loop reviews, fixes and re-reviews through 
 ```toml
 [review]
 stages = ["pr-review", "design"]   # run in this order; default ["pr-review"]
-max_total_rounds = 5
 
 # Optional. A name with no table uses its built-in definition (only pr-review has one).
 [review.stage.pr-review]
@@ -69,9 +68,8 @@ transcript and findings stored in the thread folder, read-only.
 `ship --review-loop` runs the stages of `review.stages` in order. A stage starts only when the previous one is CLEAN or skipped. On `FIX`
 it starts a follow-up thread exactly as P5 does (findings quoted as the request, the project's check as criteria,
 ask before pushing). After a follow-up is pushed, the loop **goes back to the first stage** that has run, because a
-design fix can break correctness. Rounds are counted per stage over the whole thread tree (by `root`), and one
-overall ceiling, `review.max_total_rounds` (default 5), caps the loop however the stages interleave. The ceiling is
-printed up front, as in P5.
+design fix can break correctness. Rounds are counted per stage over the whole thread tree (by `root`), so a follow-up cannot reset a stage's count.
+There is no global cap: the loop runs at most the sum of the stages' `max_rounds`, which is printed up front, as in P5.
 
 ## CLI
 
@@ -95,10 +93,10 @@ being written for the stage named `pr-review` so existing logs and `review --jso
 2. **`review-stage <name>` and the inputs.** `proof` input (images are passed to the reviewer, so a reviewer that
    cannot read images is refused for a stage that asks for `proof`), `applies_to` skipping, the rubric extraction
    rule.
-3. **Loop over stages.** Stage order, go back to the first stage after a follow-up, per-stage and total caps,
+3. **Loop over stages.** Stage order, go back to the first stage after a follow-up, per-stage caps,
    skips recorded and printed.
 4. **Tests.** `fake-codex` and `fake-claude` scripted per stage: two stages both CLEAN; the second FIX then CLEAN
-   with the first re-run after the fix; a skipped stage; per-stage cap; the total cap; a stage that needs `proof`
+   with the first re-run after the fix; a skipped stage; per-stage cap (a stage at its cap stops the loop while others have rounds left); a stage that needs `proof`
    when the verify step left none (a failure, not a pass); a reviewer without image support asked for `proof`;
    rubric text with shell metacharacters reaches the reviewer only through a file; a malformed `review.stage` table or
    an unknown stage name rejected at config load; a list without `pr-review` warns and still runs; the default
