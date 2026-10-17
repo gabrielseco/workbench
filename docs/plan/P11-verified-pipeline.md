@@ -56,6 +56,31 @@ screenshot, the criteria table and the check result. So the steps work; what dri
 | 6 | The screenshot can show an ordering | It was the owner's live data, a window clipped at the sidebar, and it cannot show a boundary between own and others' PRs | Triage side: a fixture state for verify (a fixed list of PRs), and a second named screenshot per ordering goal |
 | 7 | The design stage has a before and a minimum-size capture | It had one screenshot ("no before or minimum-size capture was supplied") | Triage side: the goal names the captures; the P6 pilot's dark and minimum-size shots are not in `verify.sh` |
 | 8 | The model can run a narrow test | It was denied `sed -i ... && swift test --filter ...`: the allowlist is per command and a compound is refused. It went on with the full check | Minor: say in `doctor` that a compound command is refused; Triage can allow the two commands separately |
+| 9 | A verify run is silent | Building the app for verify makes macOS ask about the Keychain. `verify.sh` gives the build its own bundle id (`dev.rogal.triage.verify`) so it never touches the installed app, and the items the app reads (GitLab, Linear, Anthropic) belong to the installed app, so each is asked again for the new id. The script signs with "Triage Local Signing" so the answer can stick, but `security find-identity -p codesigning` lists it as `CSSMERR_TP_NOT_TRUSTED` with 0 valid identities. Not yet confirmed which item asks | Triage side: trust the certificate (`scripts/setup-signing.sh`), or have a verify build read no Keychain item (a `TRIAGE_VERIFY` mode that uses the fixture state and skips every secret). A run that waits on a dialog is a hang: verify's timeout ends it, but a person sees a prompt they did not start |
+
+### What a partial proof is
+
+The judge says a criterion is `met` when the evidence it was given shows the criterion's literal text holds. A
+**partial proof** is evidence that is true but does not cover the whole criterion. On Triage PR #71 the criterion was
+"Everything lists the viewer's own pull requests before the others', newest created first in each group". The
+screenshot showed four PRs, all the viewer's, in descending number. What it shows is correct, and the first half is
+visible. The half that matters, own PRs *then* others', is never on screen, and the creation dates are not either,
+only inferred from the numbers. The judge said `met` and, in its concerns, said exactly that. The design stage and
+`pr-review` noticed the same and passed it too.
+
+Why it matters to the loop: a `met: false` gate only fires on a violation, and a partial proof is not one. It would
+pass every round while nothing shows the ordering. The same happens with a test that exists but never reaches the
+code (the judge's second concern: no test calls `visibleItems`).
+
+How the plan treats it (task 0.3):
+
+- The judge answers each criterion with `met`, `evidence` and `proof_complete`. `proof_complete` is `true` only when
+  the evidence covers every clause of the criterion; a clause not shown is named in `missing`.
+- `met: true` with `proof_complete: false` is shown by `review` as "met, not shown: <missing>", never as a plain met.
+- In the loop it is a request back to the model, with the missing clause as the request: take another capture, or add
+  the test that reaches the code. It counts as a round and is capped like any other.
+- The rule stays one-sided: the judge marks `met: false` only for an evidenced violation and `proof_complete: false`
+  only for a named clause with nothing showing it; "I am not sure" stays in `concerns`.
 
 ## Phase 0 tasks
 
@@ -66,7 +91,7 @@ The loop is not built before these join problems are fixed, each its own PR:
 | 0.1 Proof knows its commit (row 2) | the head on `verify.started` and `proof.added`; `pr-shots` is given that commit; `ship` and the publish refuse a mismatch | tests: commit after verify then ship, proof at head, an old log reads "unknown" |
 | 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout | the existing stage tests plus a thread with no `pr.opened` |
 | 0.3 Judge says when the proof is partial (row 5) | `proof_complete` per criterion in the JSON; `review` prints it; a bad answer is a failed run as today | judge fixtures: complete, partial, missing field |
-| 0.4 Triage fixture state (rows 6 and 7) | `verify.sh` can launch with a fixed PR list, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary |
+| 0.4 Triage fixture state (rows 6, 7 and 9) | `verify.sh` can launch with a fixed PR list and no Keychain read, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary and no Keychain dialog |
 
 Rows 3, 4 and 8 are covered by the runner and by notes in `doctor`.
 
