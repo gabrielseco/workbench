@@ -25,12 +25,13 @@ and bound to its hash. A plan is not part of it and cannot change it.
 ```
 goal (write, check, approve)  ->  plan (read-only, own model)  ->  run (coding model, plan in the first prompt)
                                        |
-                                  you read it: `workbench plan show`; not liked: `plan --again`
+                          you read it: `plan show`; change it: `plan edit`; redo it: `plan --again`
 ```
 
 `workbench plan [id]` runs one read-only `claude -p` turn, **not a numbered coding turn**, as `judge` does. It reads
 the repository at the thread's base commit and ends with a short plan. The next `workbench run` puts the latest good
-plan into the first prompt. Nothing gates on the plan: a thread without one runs as today, and `run --no-plan`
+plan into the first prompt. There is no approval step: you read it if you want to, and edit it if it is wrong.
+Nothing gates on the plan: a thread without one runs as today, and `run --no-plan`
 skips one that exists.
 
 |  | plan (this phase) | judge (built) | run (built) |
@@ -70,6 +71,12 @@ skips one that exists.
 9. **The log is the state.** The plan text is a file (`plans/plan-N.md`, like `prompts/turn-N.md`) referenced from
    `plan.ended` with its sha256 and size; no second copy is stored in `session.json` or the goal.
 
+10. **A plan can be edited, and an edit is a new plan.** `plan edit` opens a copy of the latest plan in `$EDITOR`
+    and, on save, records it as the latest plan with `source: "edited"`; the generated one stays in the log. The
+    next `run` uses whichever is latest. An edit is bounded, scrubbed and bound to the goal hash and base commit
+    exactly like a generated plan, and an unchanged save records nothing. It costs nothing, runs no process, and
+    so has no `started`/`ended` pair.
+
 ## The seam for other providers
 
 The plan logic never builds a `claude` command itself. It calls one function:
@@ -92,7 +99,9 @@ turn are **not** moved onto it in this phase.
 ```
 
 `workbench plan [id] [--model M] [--budget USD] [--again]`, once per approved goal unless `--again`.
-`workbench plan show [id]` prints the latest plan and what it cost. `workbench run [--no-plan]`. `status` and
+`workbench plan show [id]` prints the latest plan, whether it was generated or edited, and what it cost.
+`workbench plan edit [id]` edits it by hand; `plan edit --from <file>` takes the text from a file, for scripts and
+for a plan written elsewhere (a different model, say). `workbench run [--no-plan]`. `status` and
 `review` show "planned (opus, $0.21)" or "no plan"; the thread's cost line includes the plan's cost, itemised.
 
 ## Events
@@ -100,7 +109,8 @@ turn are **not** moved onto it in this phase.
 `plan.started` (`argv` without the prompt, `base_commit`, `goal_hash`) and `plan.ended` (`ok`, `reason`,
 `cost_usd`, `duration_ms`, `plan_ref`, `sha256`, `bytes`, `truncated`, and `base_commit` and `goal_hash` again, so
 the end record can be validated alone and a reader never has to join the pair). Neither is a turn, so `turns` and the work
-session are unchanged. `run`'s first `turn.started` gains `plan: {sha256, bytes}` or `null`, so a run says whether
+session are unchanged. A hand edit is one event, `plan.edited` (`plan_ref`, `sha256`, `bytes`, `truncated`, `from_sha256`, `base_commit`,
+`goal_hash`), written by `workbench plan edit` while it holds the log. `run`'s first `turn.started` gains `plan: {sha256, bytes, source}` (`generated` or `edited`) or `null`, so a run says whether
 it had a plan. Spec in `docs/spec/event-log.md`, `--json` keys added never renamed.
 
 ## Tasks
@@ -110,7 +120,7 @@ it had a plan. Spec in `docs/spec/event-log.md`, `--json` keys added never renam
 | 1. Config, events, state | `plan_model`; `plan.started`/`plan.ended`; `ThreadState` derives "planned"; spec updated | config, event and state tests, including a log with a `plan.started` and no end |
 | 2. The turn | `ReadOnlyAgent` (Claude), the base-commit checkout, `workbench plan`, sweep, holder marker, recovery | fake-claude tests for every failure below |
 | 3. Into the run | `PromptBuilder.firstPrompt` takes a plan; stale-hash rule; `run --no-plan`; `turn.started.plan` | prompt snapshot tests; a changed goal means no injection |
-| 4. Show | `plan show`, `status`, `review`, cost line | CLI and `--json` fixtures |
+| 4. Show and edit | `plan show`, `plan edit` (`--from`), `plan.edited`, `status`, `review`, cost line | CLI and `--json` fixtures; an edit becomes the plan the next run uses |
 | 5. verify-cli | `scripts/verify-cli/plan.sh`: real `claude`, a throwaway thread, plan then run, using only workbench commands | a recorded PASS on this repository |
 | 6. Compare | the same three goals, each run: no plan on Sonnet, no plan on Opus, Opus plan then Sonnet; cost, turns to a green check, judge verdict | numbers in this file; then decide the default |
 
@@ -120,14 +130,15 @@ Hangs; crashes; ignores SIGTERM; leaves a child behind, also detached; killed mi
 unapproved; goal edited after approval; goal edited after the plan (stale, not injected); base commit missing;
 checkout cannot be made or removed; `claude` missing; budget stop; empty answer; plan over 16 KB; an answer with a
 credential or a machine path in it; the argv contains no `Bash`, `Edit` or `Write`; a second plan, a judge or a run
-while one runs; `run --no-plan`; `plan --again` replaces which plan the next run uses.
+while one runs; `run --no-plan`; `plan --again` replaces which plan the next run uses; an edit then a regenerate (the regenerated one is latest); an edit
+that is empty, unchanged, over 16 KB, or made after the goal changed; `$EDITOR` unset or failing; `plan edit` while a
+run or a plan is running.
 
 ## Open questions
 
-- **A gate or advice?** v1 injects the latest good plan with no approval step. A `plan approve` that the run
-  requires is easy to add and changes the loop from three commands to four; try it after task 6.
-- **Editing a plan by hand.** The stored file is hashed, so an edit is a new plan the owner wrote. Likely
-  `plan --from <file>`; left out until someone wants it.
+- **A gate later?** v1 has no approval step: the goal is already approved, the plan cannot change it, and the check,
+  judge and review still follow. If task 6 shows bad plans are common and costly, an opt-in `plan_approval = true`
+  (the run refuses until `plan approve`, bound to the plan's hash) is the likely answer, off by default.
 - **Does it pay for itself?** Task 6 decides. A planner that costs more than the retries it saves should not be
   the default, and the answer may differ for a one-file fix and a cross-cutting change.
 - **A different planner.** Whether another provider's model plans better is P9's `agents.plan`; the seam above is
