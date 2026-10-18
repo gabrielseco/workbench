@@ -145,8 +145,7 @@ extension DeniedCommandClassifier {
                 ? .caution("links to a path outside this directory") : .safe
         case "find": return findVerdict(args)
         case "sed":
-            return args.contains { $0.hasPrefix("-i") }
-                ? .caution("edits a file in place; the file tools do that") : .safe
+            return sedVerdict(args)
         case "swift":
             return ["build", "test"].contains(args.first ?? "")
                 ? .safe(prefix: 2) : .caution("swift \(args.first ?? "") is not a build or test")
@@ -161,7 +160,8 @@ extension DeniedCommandClassifier {
         }
         if interpreters.contains(command) {
             let syntaxCheck = ["bash", "sh", "zsh"].contains(command) && args.first == "-n" && args.count == 2
-            if syntaxCheck, !escapesWorktree(args[1]) { return .safe(prefix: 2) }
+            // No prefix: `bash -n:*` would also match `bash -n +n -c …`, which runs the command.
+            if syntaxCheck, !escapesWorktree(args[1]) { return .safe }
             return .caution("\(command) can run anything")
         }
         if readers.contains(command) { return readerVerdict(command, args) }
@@ -173,13 +173,23 @@ extension DeniedCommandClassifier {
         return .caution("\(command) is not a command Workbench knows")
     }
 
+    /// `sed -n 3,9p` prints lines. Any other script can write (`w file`), run (`e`) or edit in place (`-i`).
+    private static func sedVerdict(_ args: [String]) -> Verdict {
+        let printsLines =
+            args.first == "-n" && args.count >= 2
+            && args[1].range(of: #"^[0-9$]+(,[0-9$]+)?p$"#, options: .regularExpression) != nil
+        return printsLines ? .safe : .caution("sed can write files, run commands or edit in place")
+    }
+
     /// A command that only reads, unless an option or a second file name makes it write.
     private static func readerVerdict(_ command: String, _ args: [String]) -> Verdict {
         let writesOutput = command == "sort" && args.contains { $0.hasPrefix("-o") || $0.hasPrefix("--output") }
-        let uniqOutput = command == "uniq" && args.filter { !$0.hasPrefix("-") }.count > 1
-        if writesOutput, args.contains(where: { escapesWorktree(optionValue($0)) }) {
-            return .unsafe("sort writes a file outside the worktree")
-        }
+        let uniqOperands = command == "uniq" ? args.filter { !$0.hasPrefix("-") } : []
+        let uniqOutput = uniqOperands.count > 1
+        let outside =
+            writesOutput && args.contains(where: { escapesWorktree(optionValue($0)) })
+            || uniqOutput && escapesWorktree(uniqOperands[1])
+        if outside { return .unsafe("\(command) writes a file outside the worktree") }
         return writesOutput || uniqOutput ? .caution("\(command) writes the file it is given") : .safe
     }
 
