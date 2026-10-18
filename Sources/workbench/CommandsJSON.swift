@@ -288,6 +288,7 @@ extension Commands {
                     [
                         "turn": .int($0.turn), "tool": .string($0.tool), "seq": .int($0.seq),
                         "input": $0.input.map { .string($0) } ?? .null,
+                        "input_full": $0.fullInput.map { .string($0) } ?? .null,
                     ]
                 }),
             "notes": noteJSON(review.notes),

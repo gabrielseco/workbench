@@ -14,7 +14,9 @@ private func denial(_ tool: String, _ input: JSONValue? = nil, id: String? = nil
     return .object(fields)
 }
 
-private func state(_ lines: [(turn: Int, JSONValue)], end: String = "succeeded") -> ThreadState {
+private func state(
+    _ lines: [(turn: Int, JSONValue)], end: String = "succeeded", recorded full: [Int: JSONValue] = [:]
+) -> ThreadState {
     var events: [Event] = []
     func add(_ kind: EventKind, _ turn: Int, _ data: JSONValue) {
         events.append(Event(seq: events.count + 1, ts: "2026-10-14T10:00:00.000Z", turn: turn, kind: kind, data: data))
@@ -28,7 +30,9 @@ private func state(_ lines: [(turn: Int, JSONValue)], end: String = "succeeded")
         if let last = lines.last(where: { $0.turn == turn }), case .array(let items)? = last.1["permission_denials"] {
             recorded = items.count
         }
-        add(.turnEnded, turn, ["result": .string(end), "permission_denials": .int(recorded)])
+        var ended: [String: JSONValue] = ["result": .string(end), "permission_denials": .int(recorded)]
+        if let calls = full[turn] { ended["denials"] = calls }
+        add(.turnEnded, turn, .object(ended))
     }
     return ThreadState.derive(from: events, id: "t")
 }
@@ -49,6 +53,36 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(lines.contains { $0.hasPrefix("  Bash(git push origin main) ×2  turn 1, seq ") }, "\(lines)")
         #expect(lines.contains { $0.hasPrefix("  Write(/etc/hosts) ×1  turn 1, seq ") }, "\(lines)")
         #expect(lines.contains { $0.contains("workbench log t --seq") })
+    }
+
+    @Test func aLongDeniedCommandIsShownWholeUnderItsEntry() throws {
+        let command = "chmod +x scripts/verify-cli/abandon.sh && bash -n scripts/verify-cli/abandon.sh && echo syntax-ok; "
+            + "command -v shellcheck && shellcheck scripts/verify-cli/abandon.sh; scripts/verify-cli/abandon.sh"
+        let s = state(
+            [(1, result([denial("Bash", ["command": .string(command)])]))],
+            recorded: [1: [["tool": "Bash", "input": .string(command)]]])
+        #expect(s.review.deniedTools[0].fullInput == command)
+        let lines = rendered(s)
+        let at = try #require(lines.firstIndex { $0.contains("×1") })
+        let body = lines[(at + 1)...].prefix { $0.hasPrefix("      ") }
+        #expect(body.count >= 2, "\(lines)")
+        #expect(body.allSatisfy { $0.count <= 102 })
+        #expect(body.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ") == "Bash(\(command))")
+    }
+
+    @Test func aShortCommandIsNotRepeatedAndAnOldLogStillRenders() {
+        let call = result([denial("Bash", ["command": "git push origin main"])])
+        let short = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "git push origin main"]]])
+        #expect(!rendered(short).contains { $0.hasPrefix("      ") })
+        let old = state([(1, call)])
+        #expect(old.review.deniedTools[0].fullInput == nil)
+        #expect(rendered(old).contains { $0.hasPrefix("  Bash(git push origin main) ×1") })
+    }
+
+    @Test func fullInputsFromAnotherListAreNotAttached() {
+        let call = result([denial("Bash", ["command": "ls"]), denial("Bash", ["command": "pwd"])])
+        let s = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "something else entirely"]]])
+        #expect(s.review.deniedTools.allSatisfy { $0.fullInput == nil })
     }
 
     @Test func oddShapesStillShowTheToolAndNeverBreakTheLine() {
