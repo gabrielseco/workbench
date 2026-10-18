@@ -210,6 +210,7 @@ public struct ReviewReport: Sendable, Equatable {
                 }
             }
             lines.append("  open one with `workbench log \(state.id) --seq <n>`")
+            lines.append("  allow one with `workbench grant \(state.id)`")
             let stalled = ["stopped", "timed_out", "failed", "interrupted", "budget_exceeded"]
             if let result = review.turnResult, stalled.contains(result),
                 review.deniedTools.contains(where: { $0.turn == state.lastTurn }) {
