@@ -49,9 +49,14 @@ extension GrantPattern {
     /// The `[tools] denied` entry that covers `pattern`, nil when none does: the same pattern, a prefix rule
     /// (`Bash(git push:*)` covers `Bash(git push origin x)`), or the whole tool.
     public static func deniedBy(_ pattern: String, denied: [String]) -> String? {
+        coveringEntry(of: pattern, in: denied)
+    }
+
+    /// The entry of `rules` that covers `pattern`: the same pattern, a prefix rule, or the whole tool.
+    public static func coveringEntry(of pattern: String, in rules: [String]) -> String? {
         let (tool, content) = split(pattern)
         let target = content.hasSuffix(":*") ? String(content.dropLast(2)) : content
-        return denied.first { entry in
+        return rules.first { entry in
             if entry == pattern || entry == tool { return true }
             let (entryTool, entryContent) = split(entry)
             guard entryTool == tool, entryContent.hasSuffix(":*") else { return false }
