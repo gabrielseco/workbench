@@ -98,7 +98,8 @@ turn are **not** moved onto it in this phase.
 ## Events
 
 `plan.started` (`argv` without the prompt, `base_commit`, `goal_hash`) and `plan.ended` (`ok`, `reason`,
-`cost_usd`, `duration_ms`, `plan_ref`, `sha256`, `bytes`, `truncated`). Neither is a turn, so `turns` and the work
+`cost_usd`, `duration_ms`, `plan_ref`, `sha256`, `bytes`, `truncated`, and `base_commit` and `goal_hash` again, so
+the end record can be validated alone and a reader never has to join the pair). Neither is a turn, so `turns` and the work
 session are unchanged. `run`'s first `turn.started` gains `plan: {sha256, bytes}` or `null`, so a run says whether
 it had a plan. Spec in `docs/spec/event-log.md`, `--json` keys added never renamed.
 
