@@ -20,6 +20,17 @@ A code means one thing everywhere; the table says what. What each command can re
 | 14 | `no-result` | `ship --watch`: no result in time. |
 | 15 | `findings` | `pr-review`, `review-stage`: the reviewer found something to fix. |
 
+## Help
+
+`workbench help`, `workbench help <command>` and `workbench <command> --help` (or `-h`) print help on stdout and exit 0.
+Help needs no project, reads nothing and writes nothing. A command's help is its own entries in the usage block
+(`goal`, `grant` and `plan` have several forms; `help plan show` prints that form alone), then `changes:`,
+`example:`, `--json:` and `exit:` lines. `--help` or `-h` that is an option's value (`run --feedback --help`) is a value;
+`log -f` is a flag. `help <unknown>` is a `usage` error that lists the commands.
+
+A `usage` error stays one line on stderr (or one `error.message` with `--json`) and, for a known command, ends with that
+command's synopsis and `(workbench help <command>)`.
+
 ## By command
 
 One table per command: the codes it can return. Any command can also exit 1 for an unexpected failure

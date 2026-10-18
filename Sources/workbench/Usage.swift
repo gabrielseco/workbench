@@ -1,0 +1,85 @@
+import Foundation
+
+/// The text of `workbench help`. Each command's own help is cut from it (`Help`), so it is written once.
+let workbenchUsage = """
+    usage: workbench <command>
+
+    setup
+      new <name|path> [--in <dir>] [--seed <path>]... [--nested]
+                                 create a project: git repo on main with one empty commit, --seed copies into
+                                 vendor/, .workbench/config.toml. Location: a path, else --in, else projects_dir
+                                 in ~/.workbench/config.toml (also claude_path, model); refuses a
+                                 non-empty target and a place inside another repo unless --nested
+      init                       write .workbench/config.toml
+      config                     show the resolved config and the command a turn would run
+      doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing;
+                                 works before goal new and after goal approve, refused only while a run is live
+
+    one thread at a time
+      goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
+                                 --from <goal-file> copies its request, criteria and out of scope into the draft
+                                 --update <branch> continues that branch of origin (ship pushes to it and records its PR)
+      goal approve [id]          approve the goal; any later edit returns it to draft
+                                 refused while a proof names a command a run cannot execute
+                                 (--allow-unrunnable-proofs to approve anyway; also on run, send-back)
+      run                        run Claude on the approved goal in a worktree [--feedback "<text>"] [--no-plan]
+                                 (local edits in your checkout are left out; --allow-dirty is ignored)
+      send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
+      stop                       ask the running turn to stop cleanly
+      log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
+      status [id] [--all]        where the thread stands; --all: one line per thread
+      review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      grant [id]                 the commands a run was denied, numbered, rated safe / caution / unsafe, with what each
+                                 would allow; changes nothing
+      grant [id] <n> --once|--thread|--never  decide one: allow it for the next turn, for every later turn of this
+                                 thread, or never (stop offering it). 2.1 is the first part of a compound, which is
+                                 never granted whole. unsafe needs --allow-dangerous and is once only. A [tools]
+                                 denied entry still wins. Written to the log, not to the config.
+      judge [id] [--again] [--model <name>] [--budget <usd>]
+                                 ask a second, read-only Claude run whether the check, the verify step, its
+                                 screenshots and the diff show each criterion holds; advisory, shown by review
+                                 beside your own checks, never changes accept or ship; once per turn unless --again
+      plan [id] [--again] [--model <name>] [--budget <usd>]
+                                 a read-only Claude run reads the repository at the base commit against the
+                                 approved goal and writes the approach; saved under plans/ in the thread, once
+                                 per approved goal unless --again; the next run puts it in the first prompt
+      plan show [id]             the latest plan, who wrote it, what it cost and whether it fits the goal
+      plan edit [id] [--apply | --from <file>]
+                                 copy the plan to plans/draft.md to edit; --apply (or --from) makes the edit the plan
+      pr-review --pr <n> [--spec <file>] [--again]
+                                 the same review for a pull request no thread made (one written by hand): its own
+                                 text is the goal, or the file; kept under .workbench/reviews/, no rounds counted
+      pr-review [id] [--again]   after ship: Codex reviews the pull request, read-only, in a throwaway checkout
+                                 of its head; prints the findings and records the round (shown by review);
+                                 at most max_rounds ([pr_review]) per pull request, --again does not lift that
+                                 exit 0 clean, 15 findings to fix, 1 no verdict this time, 6 refused
+      review-stage <name> [id] [--again]
+                                 the same for the stage <name> of review.stages (pr-review is `pr-review`), with its
+                                 own rounds; a stage whose applies_to matches no changed path is skipped (exit 0)
+      accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
+      ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
+           [--watch|-w [--timeout <min>] [--interval <s>]] [--review-loop]
+                                 push the accepted branch and open its pull request; asks first, after
+                                 showing the title and body (written by a read-only Claude turn from the
+                                 goal, diff and check; --no-describe uses the goal's text);
+                                 for a thread from goal new --update it proposes edits to the PR's own
+                                 title and sections and applies them only on a second yes, or with
+                                 --refresh-description; --no-describe skips the proposal;
+                                 screenshots the verify step left are put in the PR with `pr-shots`, if it
+                                 is installed (--no-screenshots skips it; --screenshots tries again for a shipped thread);
+                                 --watch then follows the CI checks (read-only);
+                                 --review-loop then has Codex review the pull request and, for each finding round,
+                                 starts a follow-up thread on the same branch, runs it and its check, asks before
+                                 pushing it (--yes skips that) and reviews again, up to max_rounds; never merges
+                                 exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
+                                 13 a check failed, 14 no result in time
+      clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
+                                 merged (or closed, with --closed); a dry run unless --yes
+      discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
+      abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
+                             are saved as abandon.patch in the thread folder first, the branch is kept
+
+      --json on status, review, log and grant; exit codes: docs/spec/exit-codes.md
+
+      version
+    """

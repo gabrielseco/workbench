@@ -1,20 +1,22 @@
 ---
 name: verify-cli
-description: Check a just-merged Workbench feature by using it for real — build `.build/debug/workbench` and run one scenario script that drives a throwaway thread on this repository with the real `claude`, using only workbench commands, and reports PASS or FAIL per step. Use after a CLI feature merges ("verify abandon for real", "run the verify-cli scenario for <feature>"), or when adding the scenario for a new feature. Costs money; run by hand, never in CI.
+description: Check a Workbench feature by using it for real — build `.build/debug/workbench` and run one scenario script that drives a throwaway thread on this repository with the real `claude`, using only workbench commands, and reports PASS or FAIL per step. Use with every change to what a workbench command does, from its branch before the PR is ready ("verify abandon for real", "run the verify-cli scenario for <feature>"), or when adding the scenario for a new feature. Real-turn scenarios cost money; run by hand, never in CI.
 ---
 
 # verify-cli
 
-There is no UI yet, so a merged feature is checked the way a person would use it: Workbench runs on this
+There is no UI yet, so a feature is checked the way a person would use it: Workbench runs on this
 repository, with the real `claude` (never `fake-claude`), and the scenario uses workbench commands for the
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
-and the real CLI together, once, after the merge.
+and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) and `help` (P15 task 2).
 
 ## When to use it
 
-- After a pull request that changes what a workbench command does has merged, and `main` is checked out.
+- With every change to what a workbench command does (`AGENTS.md`, "Shipping a change", step 3): add or update the
+  scenario in the same PR and run it from the branch, normally and with `VERIFY_CLI_SABOTAGE=1`. It can also be run
+  on `main` after the merge.
 - Not for a target project's change (that is `verify_command`, P4 and P11), and not in CI.
 
 ## Running one
@@ -24,6 +26,7 @@ git checkout main && git pull --ff-only            # the main checkout, clean, a
 bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 VERIFY_CLI_MODEL=haiku by default
 bash scripts/verify-cli/grant.sh                   # two turns (the second is a send-back), each capped at the budget
 bash scripts/verify-cli/plan.sh                    # one plan turn and one coding turn, each capped at the budget
+bash scripts/verify-cli/help.sh                    # no turn, costs nothing
 bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
@@ -119,6 +122,18 @@ background run shows a recorded `turn.started` with the real `claude`; doctor th
 `stop` there is one `turn.ended` per `turn.started`; doctor exits 0 again and leaves nothing; `abandon` ends the
 thread. `VERIFY_CLI_SABOTAGE=1` stops the turn before the second doctor, so the exit-6 and names-the-thread steps must
 FAIL. The turn is stopped early, so it costs about nothing.
+
+### help (P15 task 2)
+
+No thread turn is run, so it costs nothing. `goal new` and `goal approve` make a throwaway thread (for the "writes nothing"
+step), then every command named in `workbench help` is asked `<cmd> --help`, `<cmd> -h` and `help <cmd>`, in this
+repository and in an empty directory. Steps: the commands are listed; all three forms exit 0 with nothing on stderr and
+print one text; the text names the command and has `changes:`, `example:`, `--json:` and `exit:` lines; the same text
+comes outside a repository and writes nothing there; `help plan` shows every form and `plan show --help` only that one;
+help leaves the thread's log and branch alone; `ship --bogus` exits 2 with one stderr line holding the argument, the
+synopsis and `(workbench help ship)`; the same with `--json` in `error.message`; `help frobnicate` exits 2 and lists the
+commands; plain `help` is still the usage block; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` compares `ship`'s
+help with `plan`'s, so the "same text" step must FAIL.
 
 ## Adding a scenario for the next feature
 
