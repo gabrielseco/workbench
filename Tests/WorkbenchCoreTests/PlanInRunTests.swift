@@ -181,7 +181,7 @@ private func changeGoal(_ p: Planned) async throws {
         let p = try await planned()
         try await makePlan(p)
         let service = p.fx.service
-        let draft = try service.planDraft(id: p.id)
+        let draft = try await service.planDraft(id: p.id)
         #expect(try String(contentsOf: draft, encoding: .utf8) == (try planText(p, "plans/plan-1.md")))
         try editedPlan.write(to: draft, atomically: true, encoding: .utf8)
 
@@ -237,7 +237,7 @@ private func changeGoal(_ p: Planned) async throws {
             do { try await body() } catch let error as PlanRefusal { return error } catch { return nil }
             return nil
         }
-        #expect(await refusal { _ = try service.planDraft(id: p.id) } == .noPlanToEdit)
+        #expect(await refusal { _ = try await service.planDraft(id: p.id) } == .noPlanToEdit)
         #expect(await refusal { _ = try service.planDraftText(id: p.id) } == .noDraft)
         #expect(await refusal { try await service.planEdit(id: p.id, text: "  \n ") } == .emptyEdit)
 
@@ -270,6 +270,55 @@ private func changeGoal(_ p: Planned) async throws {
             Issue.record("expected a refusal")
         } catch let error as PlanRefusal { #expect(error == .busy) }
         await held.close()
+    }
+
+    @Test func aBusyThreadAndAChangedGoalRefuseADraftAndAnOversizedDraftIsNotRead() async throws {
+        let p = try await planned()
+        try await makePlan(p)
+        let held = try EventLogWriter.open(at: p.fx.project.eventsURL(p.id))
+        do {
+            _ = try await p.fx.service.planDraft(id: p.id)
+            Issue.record("expected the thread to be busy")
+        } catch let error as PlanRefusal { #expect(error == .busy) }
+        await held.close()
+        #expect(!FileManager.default.fileExists(atPath: p.fx.service.planDraftURL(p.id).path), "nothing was overwritten")
+
+        let draft = try await p.fx.service.planDraft(id: p.id)
+        try String(repeating: "x", count: ThreadService.editInputLimit + 1).write(to: draft, atomically: true, encoding: .utf8)
+        do {
+            _ = try p.fx.service.planDraftText(id: p.id)
+            Issue.record("expected a refusal")
+        } catch let error as PlanRefusal {
+            if case .fileUnreadable = error {} else { Issue.record("\(error)") }
+        }
+        #expect(p.events.filter { $0.kind == .planEdited }.isEmpty)
+
+        try await changeGoalWithoutApproving(p)
+        do {
+            _ = try await p.fx.service.planDraft(id: p.id)
+            Issue.record("expected a refusal")
+        } catch let error as PlanRefusal { #expect(error == .goalNotApproved(.stale)) }
+    }
+
+    @Test func anEditWhoseBaseCannotBeReadIsNotRecorded() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread("ghost", base: "no-such-branch")
+        do {
+            try await fx.service.planEdit(id: id, text: editedPlan)
+            Issue.record("expected a refusal")
+        } catch let error as PlanRefusal { #expect(error == .baseUnknown) }
+        #expect(try fx.events(id).allSatisfy { $0.kind != .planEdited })
+    }
+
+    @Test func aRegeneratedPlanAfterAnEditIsTheOneTheCoderGets() async throws {
+        let p = try await planned()
+        try await makePlan(p)
+        try await p.fx.service.planEdit(id: p.id, text: editedPlan)
+        try await makePlan(p, again: true)
+        _ = try await p.fx.runner(p.id).run(p.fx.options())
+        let text = try prompt(p, turn: 1)
+        #expect(text.contains("Add a greeting to a.txt.") && !text.contains("A person rewrote this plan."))
+        #expect(started(p).first?.data["plan"]?["source"] == "generated")
     }
 
     @Test func showSaysWhoWroteItAndWhetherItStillFitsTheGoal() async throws {

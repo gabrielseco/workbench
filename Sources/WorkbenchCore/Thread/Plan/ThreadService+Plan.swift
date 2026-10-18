@@ -27,6 +27,7 @@ public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     case unchangedEdit
     case noDraft
     case fileUnreadable(String)
+    case baseUnknown
 
     public var description: String {
         switch self {
@@ -47,6 +48,8 @@ public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
         case .unchangedEdit: "the plan is the same as the latest one; nothing was recorded."
         case .noDraft: "there is no draft to apply: run `workbench plan edit`, edit plans/draft.md, then `plan edit --apply`."
         case .fileUnreadable(let why): "the file could not be read: \(why)"
+        case .baseUnknown:
+            "the goal's base commit could not be read, so the plan cannot be tied to one; nothing was recorded."
         }
     }
 }

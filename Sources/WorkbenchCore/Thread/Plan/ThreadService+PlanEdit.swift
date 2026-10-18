@@ -41,8 +41,23 @@ extension ThreadService {
         return view
     }
 
-    /// Writes the latest plan to `plans/draft.md` to be edited, and says where.
-    public func planDraft(id: String) throws -> URL {
+    /// Writes the latest plan to `plans/draft.md` to be edited, and says where. Held like an edit: a run, a judge or a
+    /// plan makes it `busy`, and a draft or changed goal is refused, so a draft is never replaced under a running
+    /// command or offered for a goal that would refuse it.
+    public func planDraft(id: String) async throws -> URL {
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        do {
+            return try await withLog(id) { _ in try self.writeDraft(id: id) }
+        } catch EventLogError.alreadyOpen { throw PlanRefusal.busy }
+    }
+
+    private func writeDraft(id: String) throws -> URL {
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        if let decision = ThreadState.derive(from: events, id: id).decision { throw ThreadServiceError.threadEnded(decision) }
+        do {
+            let goal = try GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
+            guard goal.approval == .approved else { throw PlanRefusal.goalNotApproved(goal.approval) }
+        } catch let error as PlanRefusal { throw error } catch { throw PlanRefusal.goalUnreadable("\(error)") }
         guard let view = planShow(id: id) else { throw PlanRefusal.noPlanToEdit }
         guard let text = view.text else { throw PlanRefusal.planFileProblem(view.problem ?? "the plan cannot be read") }
         let url = planDraftURL(id)
@@ -51,10 +66,24 @@ extension ThreadService {
         return url
     }
 
+    /// The most text read from a draft or a file given to `plan edit`; the stored plan is cut far below this.
+    public static let editInputLimit = Plan.textLimit * 4
+
+    /// The text of a file for an edit, read only up to `editInputLimit` bytes: a larger file is refused, not read.
+    public static func editText(at path: String) throws -> String {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+        guard let size = attributes?[.size] as? Int, size <= editInputLimit,
+            let text = try? String(contentsOfFile: path, encoding: .utf8)
+        else {
+            throw PlanRefusal.fileUnreadable("\(path) is missing, not text, or over \(editInputLimit) bytes")
+        }
+        return text
+    }
+
     /// The draft `plan edit` left, for `--apply`.
     public func planDraftText(id: String) throws -> String {
-        guard let text = try? String(contentsOf: planDraftURL(id), encoding: .utf8) else { throw PlanRefusal.noDraft }
-        return text
+        guard FileManager.default.fileExists(atPath: planDraftURL(id).path) else { throw PlanRefusal.noDraft }
+        return try Self.editText(at: planDraftURL(id).path)
     }
 
     /// Records `text` as the thread's newest plan: written as the next `plans/plan-N.md`, bounded and scrubbed like a
@@ -84,6 +113,8 @@ extension ThreadService {
         let recorded = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
         var base = latest?.baseCommit ?? recorded
         if base == nil { base = try? await WorktreeManager(repoRoot: project.root, git: git).commit(of: goal.base) }
+        // An edit is tied to the commit it is about, as a generated plan is: without one it is not recorded.
+        guard let base else { throw PlanRefusal.baseUnknown }
 
         let ref = "plans/plan-\(Self.nextPlanNumber(events)).md"
         let url = project.threadDirectory(id).appendingPathComponent(ref)
@@ -94,7 +125,7 @@ extension ThreadService {
             "truncated": .bool(stored.truncated), "from_sha256": latest.map { .string($0.sha256) } ?? .null,
             "goal_hash": .string(goal.contentHash),
         ]
-        if let base { data["base_commit"] = .string(base) }
+        data["base_commit"] = .string(base)
         try await log.append(.planEdited, turn: state.lastTurn, data: .object(data))
         try? FileManager.default.removeItem(at: planDraftURL(id))
         return PlanEditResult(ref: ref, bytes: stored.text.utf8.count, truncated: stored.truncated)

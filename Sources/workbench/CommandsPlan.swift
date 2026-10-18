@@ -96,21 +96,12 @@ extension Commands {
         let id = try ctx.threadIDForViewing(named)
         do {
             if !apply && from == nil {
-                let url = try ctx.service.planDraft(id: id)
+                let url = try await ctx.service.planDraft(id: id)
                 out("draft: \(url.path)")
                 out("edit it, then run `workbench plan edit --apply` to make it the plan the next run uses")
                 return 0
             }
-            let text: String
-            if let from {
-                let size = (try? FileManager.default.attributesOfItem(atPath: from)[.size] as? Int) ?? 0
-                guard size <= Plan.textLimit * 4, let read = try? String(contentsOfFile: from, encoding: .utf8) else {
-                    throw PlanRefusal.fileUnreadable("\(from) is missing, not text, or over \(Plan.textLimit * 4) bytes")
-                }
-                text = read
-            } else {
-                text = try ctx.service.planDraftText(id: id)
-            }
+            let text = try from.map { try ThreadService.editText(at: $0) } ?? ctx.service.planDraftText(id: id)
             let result = try await ctx.service.planEdit(id: id, text: text)
             out("plan saved to \(result.ref)\(result.truncated ? "  (cut at \(Plan.textLimit) bytes)" : "")")
             out("`workbench run` puts it in the first prompt")

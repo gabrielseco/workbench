@@ -76,7 +76,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   the log recorded, is left out and `run` says why; `run --no-plan` leaves it out on purpose; follow-up turns
   resume the session and carry no plan. `plan show` prints the newest plan; `plan edit` copies it to
   `plans/draft.md`, and `plan edit --apply` (or `--from <file>`) records the edited text as the newest plan
-  (`plan.edited`). No editor is started: every child Workbench runs has no terminal, so you edit the file yourself.
+  (`plan.edited`); a file over 64 KB is refused, not read. No editor is started: every child Workbench runs has no terminal, so you edit the file yourself.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
   work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,
   with untracked files named), the check (with the end of its output when it did not
