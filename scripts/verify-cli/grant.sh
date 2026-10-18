@@ -35,7 +35,7 @@ in order, each as its own tool call:
 1. With the file tools, create `scripts/verify-cli/grant-probe.sh` holding the two lines `#!/bin/sh` and
    `echo grant-probe`.
 2. With the Bash tool, run exactly `chmod +x scripts/verify-cli/grant-probe.sh`.
-3. With the Bash tool, run exactly `echo grant-compound-a && echo grant-compound-b` as one command.
+3. With the Bash tool, run exactly `mkdir -p scratch/grant-compound && touch scratch/grant-compound/a` as one command.
 4. With the Bash tool, run exactly `rm -rf scratch/grant-probe-dir`.
 
 If the Bash tool refuses a command, do not retry it, do not look for another way to do the same and do not
@@ -75,7 +75,7 @@ for x in d['denied']:
     print('    %s  %-9s %-9s %s' % (x['number'], x['level'], x['status'], (x['input'] or '')[:80]))"
 
 CHMOD_N=$(number_of "(x['input'] or '').strip() == 'chmod +x $PROBE'")
-COMPOUND_N=$(number_of "x['compound'] and 'grant-compound-a' in (x['input'] or '')")
+COMPOUND_N=$(number_of "x['compound'] and 'grant-compound' in (x['input'] or '')")
 RM_N=$(number_of "(x['input'] or '').strip().startswith('rm -rf')")
 echo "    denial numbers: chmod ${CHMOD_N:-none}, compound ${COMPOUND_N:-none}, rm -rf ${RM_N:-none}"
 

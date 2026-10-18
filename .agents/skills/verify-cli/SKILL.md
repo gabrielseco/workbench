@@ -77,7 +77,7 @@ files; no process of the worktree is left; on a pass, removing each restore chec
 ### grant (P13 task 7)
 
 `goal new` (a goal that asks for `scripts/verify-cli/grant-probe.sh`, then `chmod +x` on it, a compound
-`echo … && echo …` and `rm -rf scratch/grant-probe-dir`, none of which the project's tool set allows), `goal approve`,
+`mkdir -p … && touch …` and `rm -rf scratch/grant-probe-dir`, none of which the project's tool set allows), `goal approve`,
 `run`, then only workbench commands. Steps: the goal approved with the cap; turn 1 succeeded with denials and
 used the real `claude`; `grant --json` lists the chmod as `safe`, open, with the pattern
 `Bash(chmod +x scripts/verify-cli/grant-probe.sh)`, and the compound and the `rm -rf` too; the file is there and not
