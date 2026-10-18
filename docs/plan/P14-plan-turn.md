@@ -124,6 +124,9 @@ it had a plan. Spec in `docs/spec/event-log.md`, `--json` keys added never renam
 | 5. verify-cli | `scripts/verify-cli/plan.sh`: real `claude`, a throwaway thread, plan then run, using only workbench commands | a recorded PASS on this repository |
 | 6. Compare | the same three goals, each run: no plan on Sonnet, no plan on Opus, Opus plan then Sonnet; cost, turns to a green check, judge verdict | numbers in this file; then decide the default |
 
+One pull request each for tasks 1 and 2 (events and state are of no use without the turn that writes them), 3 and 4
+(the plan reaches the run, and you can see and change it), and 5. Task 6 is a measurement and updates this file.
+
 ## Failure cases to test
 
 Hangs; crashes; ignores SIGTERM; leaves a child behind, also detached; killed mid-run; stop before start; goal
