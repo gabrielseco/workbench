@@ -109,6 +109,17 @@ file's sha256; no process of the worktree is left; the thread is ended (`abandon
 `plans/plan-2.md` on disk before `run`, so the plan is left out and the prompt and `turn.started` steps must FAIL.
 It costs one cheap plan turn and one cheap coding turn; the summary prints both costs.
 
+### doctor (P15 task 1)
+
+`goal new` (a goal that asks for `scratch/doctor-probe.txt` after reading three files), `goal approve`, then `doctor`
+with no turn run, `run` in the background, `doctor` again, `stop`, `doctor` a third time, `abandon`. Steps: the goal
+approved with the cap; doctor exits 0 and reports a `check:` line; the thread's log has the same number of lines
+after it; no `workbench/doctor` branch or `.workbench/worktrees/doctor` is left, and the thread has no branch yet; the
+background run shows a recorded `turn.started` with the real `claude`; doctor then exits 6 and names the thread; after
+`stop` there is one `turn.ended` per `turn.started`; doctor exits 0 again and leaves nothing; `abandon` ends the
+thread. `VERIFY_CLI_SABOTAGE=1` stops the turn before the second doctor, so the exit-6 and names-the-thread steps must
+FAIL. The turn is stopped early, so it costs about nothing.
+
 ## Adding a scenario for the next feature
 
 One task, one script: `scripts/verify-cli/<feature>.sh`, started with `bash`. Do not copy `abandon.sh`: source

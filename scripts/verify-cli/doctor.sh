@@ -63,21 +63,33 @@ check "doctor creates no worktree or branch for the thread" "branch $BRANCH exis
 # --- 2. while a turn is live ----------------------------------------------------------------------------
 
 echo "\$ workbench run $ID   (in the background)"
+echo "workbench run $ID (in the background)" >>"$SCRATCH/commands"
 "$WB" run "$ID" >"$SCRATCH/run.out" 2>&1 &
 RUN_PID=$!
 CHILD=$RUN_PID
+# The run gets the same bound as any command: SIGTERM, then SIGKILL, so a hung run cannot hold the script.
+( sleep "$T_RUN" && kill -TERM "$RUN_PID" 2>/dev/null && sleep 10 && kill -KILL "$RUN_PID" 2>/dev/null ) >/dev/null 2>&1 &
+RUN_DOG=$!
+
+# Live means a recorded turn.started whose argv is the real claude: the runner is marked live before the worktree
+# and the claude are ready, and a doctor refused then proves less.
+turn_started() {
+    with_timeout "$T_WB" "$WB" log "$ID" --json 2>/dev/null | py "s=[e for e in lines if e['kind']=='turn.started']
+print('yes' if s and 'fake-claude' not in s[-1]['data']['argv'][0] else 'no')"
+}
 live=0
-for _ in $(seq 1 60); do
-    running=$("$WB" status "$ID" --json 2>/dev/null | py "print(d['running'])")
-    [ "$running" = True ] && { live=1; break; }
+for _ in $(seq 1 90); do
+    [ "$(turn_started)" = yes ] && { live=1; break; }
     kill -0 "$RUN_PID" 2>/dev/null || break
     sleep 1
 done
-check "run: the turn is live" "status never showed running (run output: $(head -c 300 "$SCRATCH/run.out"))" test "$live" = 1
+check "run: the turn is live (turn.started, the real claude)" "no turn.started while the run was alive (run output: $(head -c 300 "$SCRATCH/run.out"))" \
+    test "$live" = 1
 
 stop_run() {
     wb "$T_WB" stop >/dev/null 2>&1
     wait "$RUN_PID" 2>/dev/null
+    pkill -P "$RUN_DOG" 2>/dev/null; kill "$RUN_DOG" 2>/dev/null; wait "$RUN_DOG" 2>/dev/null
     CHILD=""
 }
 # Sabotage: the turn is gone before doctor asks, so the refusal this step expects cannot come.
