@@ -1,6 +1,6 @@
 # P10: A verifier that runs the project's skill
 
-Status: plan, nothing built. Written 2026-10-17. Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
+Status: plan, nothing built. Written 2026-10-17, extended 2026-10-18 (design stage, model, skill location, PR breakdown). Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
 proof, the judge), [P6](P6-review-stages.md) (reading a skill file as instructions) and the project-instructions
 loader (a file read from the base commit). [P9](P9-agent-providers.md) will decide which providers can run it. 
 [P11](P11-verified-pipeline.md) runs it as the `verify` step of a pipeline, before `ship`, with the proof tied to a commit.
@@ -53,11 +53,24 @@ judge then reads the proof as it does today. It is advisory and never gates `acc
 9. **The project owns its safety helpers.** Workbench does not know `ax.swift`. Triage's helpers keep their
    refusal list and PID targeting; the tool list decides which helpers the model may run at all.
 
+10. **The skill is an explicit path, never discovered.** Projects keep skills under `.claude/skills/` or `.agents/skills/`
+    (this repo links the first to the second). `skill` names the file; both work. It must be a regular file at the base
+    commit: git stores a symlink as its target path, so reading it would hand the model a path as its instructions. A
+    symlink is refused with the real path to use.
+11. **The model is the project's choice.** `[verifier] model` is passed as `--model`; unset it falls back to the coding
+    `model`. Recommended: `sonnet`. The run is a long loop of short tool calls and screenshot reading, which Haiku
+    is the likeliest to get wrong (a wasted run still costs money) and Opus adds little to, since the skill is written
+    down. PR 5 measures it.
+12. **Claude only.** The verifier runs tools (build, launch, press, capture), which the read-only Codex sandbox the
+    review stages use forbids. A Codex verifier is a P9 question; the config has no `provider` key, so P9 adds one
+    without renaming anything.
+
 ## Config
 
 ```toml
 [verifier]
-skill = ".claude/skills/verify/SKILL.md"    # instructions, read from the base commit
+skill = ".claude/skills/verify/SKILL.md"    # instructions, read from the base commit; an explicit path, `.claude/` or `.agents/`
+model = "sonnet"                            # --model for the verifier; unset = the coding model
 tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Bash(swift scripts/ax.swift:*)"]
 budget_usd = 1.00
 timeout_min = 10
@@ -65,6 +78,31 @@ timeout_min = 10
 
 No `[verifier]` table means today's behaviour. A skill file that is missing or empty at the base is a refusal with
 the path, never a verifier that runs without instructions.
+
+## What the design stage gets
+
+`design-review` is Triage's skill: scope, a static pass over the diff, a capture matrix (dark mode, 1000×600 and
+1600×1000, states, before from `origin/main`), a designer's review, a report posted on the PR. The shipped
+`[review.stage.design]` runs only the judging half. It is a read-only Codex run over a brief (diff, goal, criteria,
+`docs/DESIGN.md`, the skill as a rubric with a header saying to ignore the build, run and post steps) and the proof
+images, and ends in `VERDICT: CLEAN` or `FIX`. It builds nothing, so it can only judge what is in `proof/`.
+
+On Triage #75 (thread `g-2026-10-18-triage-everything-created-order`) it was handed one dark, launch-size
+screenshot and said so: "Minimum-size and before screenshots were not supplied." Verdict `CLEAN`, in 24 seconds.
+
+The verifier does not change the stage. It changes what the stage is handed:
+
+| Part of `design-review` | Today | With the verifier |
+|---|---|---|
+| Rubric (hierarchy, type, color, states) | yes | yes |
+| Static pass over the diff | possible, not required | possible, not required |
+| Capture matrix, before/after | no | yes, for the states the goal names |
+| Posting findings on the PR | no | no |
+
+So a goal for a UI change names the captures it needs (`proof: screenshot: everything-order, everything-min-size,
+everything-before`), the verifier takes them, and PR 3 makes the stage and the judge read every PNG in the turn's
+proof directory, with its pixel size (row 10 of [P11](P11-verified-pipeline.md)). What the stage still cannot do is
+press a button: a state nobody captured stays unreviewed.
 
 ## Events and command
 
@@ -83,15 +121,21 @@ Not a rewrite of the skill, and not a second system: a small helper and a short 
 - `/verify` gets an "under Workbench" section: build with `TRIAGE_APP`, launch through the helper (the binary, never
   `open`), drive with `TRIAGE_PID` set, save screenshots to `$WORKBENCH_PROOF_DIR`, never touch the installed app.
 
-## Tasks
+## Tasks and pull requests
 
-| Task | Result | Gate |
-|---|---|---|
-| 1. Config and `doctor` | `[verifier]` parses; a bare `Bash` is refused; `doctor` reads the skill at the base and prints the tools | config and doctor tests, including a missing and an oversized skill |
-| 2. The turn | `workbench verifier`: argv, prompt (skill text, goal criteria, environment), bounded run, sweep, events | fake-claude tests for every failure below |
-| 3. Proof and review | PNGs recorded as proof; `review` shows the verifier's note; the judge reads them | `review` fixtures; a screenshot criterion satisfied by the verifier's file |
-| 4. Triage pilot | `verify-app.sh`, the skill's section, the Bot finding criterion from Triage #66 including the half the recipe could not show (a finding on someone else's PR has no fix buttons) | a recorded run with screenshots of both states |
-| 5. Compare | the same criterion five times with the recipe and with the verifier: cost, time, how often the screenshot shows the state | numbers in this file; then decide whether the recipe files go |
+Five pull requests, four in this repo and one in Triage. Each ships alone with its own tests; PR 2 follows PR 1 at once,
+since a config nobody can run proves nothing. Size is the diff a reviewer reads: S is a day, M two to three.
+
+| PR | Repo | Result | Gate | Size |
+|---|---|---|---|---|
+| 1. Config and `doctor` | Workbench | `[verifier]` (`skill`, `tools`, `model`, `budget_usd`, `timeout_min`) parses; a bare `Bash` is refused; the skill is an explicit path (`.claude/` or `.agents/`) that must be a regular file at the base, a symlink is refused; `doctor` prints the path, model and tools | config, skill-reader and doctor tests, including missing, empty, oversized and symlink | S |
+| 2. The turn | Workbench | `workbench verifier`: argv with `--model`, prompt (skill text, goal criteria, environment), bounded run, sweep, events; Claude only; the `verifier.sh` verify-cli scenario | fake-claude tests for every failure below; scenario PASS and sabotage FAIL | M |
+| 3. Proof and review | Workbench | PNGs recorded as proof; `review` shows the verifier's note; a criterion can name several screenshots; the judge and the design stage get every PNG in the proof directory with its pixel size | `review` and review-stage fixtures; a screenshot criterion satisfied by the verifier's file | M |
+| 4. Triage side | Triage | `verify-app.sh` and the skill's "under Workbench" section; `[verifier]` in Triage's config with `model = "sonnet"` | a recorded verifier run on the Bot finding criterion from Triage #66, including the half the recipe could not show (a finding on someone else's PR has no fix buttons) | S |
+| 5. Pilot and compare | Workbench (docs) | #75's Everything order run with the verifier; the same criterion five times with the recipe and with the verifier, and the model as a variable (Sonnet against Haiku; Opus only if Sonnet fails): cost, time, how often the screenshot shows the state | numbers in this file; then decide whether the recipe files go and whether `[verifier] auto` is worth it | S |
+
+Order: 1, 2, 3 in Workbench, then 4 in Triage, then 5. PR 3 can start once PR 2 has merged; PR 4 only needs PR 2.
+Dropped from scope for now: `[verifier] auto`, and any provider but Claude (P9).
 
 ## Failure cases to test
 
@@ -105,6 +149,8 @@ window never appears; a refused press (the helper exits 1 and the model is told)
   more useful and more expensive; `[verifier] auto = true` is the likely answer, off by default.
 - **Where do its screenshots go?** The verify step's proof directory is per turn; the verifier would add to the same
   directory. A name that verify already wrote needs a rule (the verifier's wins, both recorded).
-- **Providers.** It runs on Claude. Whether Codex can drive tools the same way belongs to P9.
+- **Providers.** Decided for now: Claude only (rule 12). Whether Codex can drive tools belongs to P9.
+- **Which model?** Sonnet is the default recommendation (rule 11). PR 5 runs Sonnet against Haiku on the same
+  criteria, Opus only if Sonnet fails; if Haiku shows the right state about as often at a third of the cost, switch.
 - **Grants.** Verify under Workbench already captured the screen and pressed buttons from the owner's terminal. Check
   that the same holds for processes a `claude` run starts with its `Bash` tool.
