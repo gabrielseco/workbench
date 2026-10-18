@@ -66,8 +66,8 @@ $ workbench grant
 6. **Suggest the repo config** after repeats. Done: `grant` (the list, and after a decision) prints the entry to add
    for a safe narrow prefix (`Bash(git show:*)`) that was denied in two or more threads of the project and is
    neither allowed, denied nor turned down; exact commands are never suggested. Printed, never written.
-7. **`verify-cli` scenario** for grant on the real `claude`. Done (`scripts/verify-cli/grant.sh`): 25 steps pass on
-   haiku for about $0.005 over two turns; `VERIFY_CLI_SABOTAGE=1` fails the two steps that need the grant.
+7. **`verify-cli` scenario** for grant on the real `claude`. Done (`scripts/verify-cli/grant.sh`): 26 steps pass on
+   haiku for about $0.006 over two turns; `VERIFY_CLI_SABOTAGE=1` fails the three steps that need the grant.
 
 ## Acceptance
 

@@ -122,6 +122,34 @@ status_after_grant=$(status_of "${CHMOD_N:-0}")
 check "grant --json shows granted_once" "status is '$status_after_grant'" test "$status_after_grant" = granted_once
 check ".workbench/config.toml is byte for byte unchanged" "grant wrote to the config" cmp -s "$SCRATCH/config.before" "$CONFIG"
 
+# --- refusals, with the documented exit codes: before turn 2, so its argv shows whether one leaked a grant ----
+
+# <expected exit> <step> <why> <grant arguments...>: the exit code of `workbench grant` with those arguments.
+refusal() {
+    local want=$1 name=$2 why=$3 out got; shift 3
+    out=$(wb "$T_WB" grant "$ID" "$@" 2>&1); got=$?
+    echo "$out" | sed 's/^/    /' | head -3
+    check "$name: exit $want" "$why; exit $got" test "$got" = "$want"
+}
+if [ -n "$COMPOUND_N" ]; then
+    refusal 6 "grant $COMPOUND_N --once (a compound named whole)" "a compound must be granted by part" "$COMPOUND_N" --once
+else
+    fail "grant of a compound named whole: exit 6" "turn 1 was not denied the compound"
+fi
+refusal 7 "grant 99 --once (no such denial)" "99 does not exist" 99 --once
+if [ -n "$CHMOD_N" ]; then
+    refusal 2 "grant $CHMOD_N without a scope" "a number needs --once, --thread or --never" "$CHMOD_N"
+fi
+if [ -n "$RM_N" ]; then
+    rm_out=$(wb "$T_WB" grant "$ID" "$RM_N" --once --allow-dangerous 2>&1); rm_exit=$?
+    echo "$rm_out" | sed 's/^/    /' | head -3
+    check "grant $RM_N --once --allow-dangerous (under [tools] denied): exit 6, names [tools] denied" \
+        "exit $rm_exit" bash -c '[ "$1" = 6 ] && [[ $2 == *"[tools] denied"* ]]' _ "$rm_exit" "$rm_out"
+else
+    fail "grant of a command under [tools] denied: exit 6" "turn 1 was not denied the rm -rf"
+fi
+check ".workbench/config.toml is still byte for byte unchanged" "grant wrote to the config" cmp -s "$SCRATCH/config.before" "$CONFIG"
+
 # --- turn 2: the grant reaches the next turn -----------------------------------------------------------
 
 if [ "$SABOTAGE" = 1 ]; then
@@ -150,47 +178,25 @@ echo "    turn 2: $result2, $denials2 denial(s)"
 check "turn 2 ended succeeded" "turn 2 ended '$result2'" test "$result2" = succeeded
 check "turn 2 ran the chmod: $PROBE is executable in the worktree" "the mode is not executable" test -x "$WT/$PROBE"
 
+# --- the refused rm -rf stayed refused -------------------------------------------------------------------
+
+if [ -n "$RM_N" ]; then
+    rm_status=$(status_of "$RM_N")
+    check "the refused rm -rf stays open" "status '${rm_status:-?}'" test "${rm_status:-}" = open
+    rm_in_allowed=$(echo "$argv2" | py "
+a=d[d.index('--allowedTools')+1:] if '--allowedTools' in d else []
+a=a[:next((i for i,v in enumerate(a) if v.startswith('--')), len(a))]
+print(' '.join(v for v in a if v.startswith('Bash(rm')))")
+    check "turn 2's --allowedTools has no rm entry" "found: $rm_in_allowed" test -z "$rm_in_allowed"
+fi
+check ".workbench/config.toml is byte for byte unchanged after turn 2" "grant wrote to the config" cmp -s "$SCRATCH/config.before" "$CONFIG"
+
 # --- the once grant is spent ---------------------------------------------------------------------------
 
 status_after_turn=$(status_of "${CHMOD_N:-0}")
 check "a once grant is spent: grant --json says open again (now '$status_after_turn')" \
     "status is '$status_after_turn' after the turn it was for" test "$status_after_turn" = open
 
-# --- refusals, with the documented exit codes -----------------------------------------------------------
-
-# <expected exit> <step> <why> <grant arguments...>: the exit code of `workbench grant` with those arguments.
-refusal() {
-    local want=$1 name=$2 why=$3 out got; shift 3
-    out=$(wb "$T_WB" grant "$ID" "$@" 2>&1); got=$?
-    echo "$out" | sed 's/^/    /' | head -3
-    check "$name: exit $want" "$why; exit $got" test "$got" = "$want"
-}
-if [ -n "$COMPOUND_N" ]; then
-    refusal 6 "grant $COMPOUND_N --once (a compound named whole)" "a compound must be granted by part" "$COMPOUND_N" --once
-else
-    fail "grant of a compound named whole: exit 6" "turn 1 was not denied the compound"
-fi
-refusal 7 "grant 99 --once (no such denial)" "99 does not exist" 99 --once
-if [ -n "$CHMOD_N" ]; then
-    refusal 2 "grant $CHMOD_N without a scope" "a number needs --once, --thread or --never" "$CHMOD_N"
-fi
-if [ -n "$RM_N" ]; then
-    rm_out=$(wb "$T_WB" grant "$ID" "$RM_N" --once --allow-dangerous 2>&1); rm_exit=$?
-    echo "$rm_out" | sed 's/^/    /' | head -3
-    check "grant $RM_N --once --allow-dangerous (under [tools] denied): exit 6, names [tools] denied" \
-        "exit $rm_exit" bash -c '[ "$1" = 6 ] && [[ $2 == *"[tools] denied"* ]]' _ "$rm_exit" "$rm_out"
-    rm_status=$(status_of "$RM_N")
-    # Still blocked: nothing was recorded, so the denial stays open and no later turn is told to allow it.
-    check "the refused rm -rf stays open" "status '$rm_status'" test "$rm_status" = open
-    rm_in_allowed=$(echo "$argv2" | py "
-a=d[d.index('--allowedTools')+1:] if '--allowedTools' in d else []
-a=a[:next((i for i,v in enumerate(a) if v.startswith('--')), len(a))]
-print(' '.join(v for v in a if v.startswith('Bash(rm')))")
-    check "turn 2's --allowedTools has no rm entry" "found: $rm_in_allowed" test -z "$rm_in_allowed"
-else
-    fail "grant of a command under [tools] denied: exit 6" "turn 1 was not denied the rm -rf"
-fi
-check ".workbench/config.toml is still byte for byte unchanged" "grant wrote to the config" cmp -s "$SCRATCH/config.before" "$CONFIG"
 
 left=$( [ -n "$WT" ] && pgrep -fl "$WT")
 check "no process of the worktree left" "$left" test -z "$left"
