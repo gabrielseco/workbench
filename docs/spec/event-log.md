@@ -33,7 +33,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `setup.ran` | the project's `setup_command` ended, once, before the first turn | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
-| `grant.added` | the user decided what to do about a denied command (P13) | `scope` (`once`, `thread`, `never`), `pattern`, and when it answers a denial `denial_seq` |
+| `grant.added` | the user decided what to do about a denied command (P13) | `scope` (`once`, `thread`, `never`), `pattern`, `level` (`safe`, `caution`, `unsafe`), `by`, and when it answers a denial `denial_seq`. Written by `workbench grant` only while no run is live and the thread has not ended |
 | `pr.opened` | `workbench ship` opened the pull request (P2.5) | `url`, `number`, `branch`, `base`, `head_sha` |
 | `pr.described` | `workbench ship` ran the read-only describing turn for the PR title and body | `ok`, `argv` (without the prompt), `title` when `ok`, `reason` when not (the goal-based body was used) |
 | `pr.refreshed` | `workbench ship` proposed (`stage: proposed`) or applied (`stage: applied`) an update to the text of the pull request a thread continues | `stage`, `ok`, `number`, `title_changed`, `sections` (headings), `argv` and `reason` when a proposal failed |

@@ -45,6 +45,26 @@ public enum GrantPattern {
     }
 }
 
+extension GrantPattern {
+    /// The `[tools] denied` entry that covers `pattern`, nil when none does: the same pattern, a prefix rule
+    /// (`Bash(git push:*)` covers `Bash(git push origin x)`), or the whole tool.
+    public static func deniedBy(_ pattern: String, denied: [String]) -> String? {
+        let (tool, content) = split(pattern)
+        let target = content.hasSuffix(":*") ? String(content.dropLast(2)) : content
+        return denied.first { entry in
+            if entry == pattern || entry == tool { return true }
+            let (entryTool, entryContent) = split(entry)
+            guard entryTool == tool, entryContent.hasSuffix(":*") else { return false }
+            return target.hasPrefix(String(entryContent.dropLast(2)))
+        }
+    }
+
+    private static func split(_ pattern: String) -> (tool: String, content: String) {
+        guard let open = pattern.firstIndex(of: "("), pattern.hasSuffix(")") else { return (pattern, "") }
+        return (String(pattern[..<open]), String(pattern[pattern.index(after: open)..<pattern.index(before: pattern.endIndex)]))
+    }
+}
+
 /// The grants of a thread, read from its `grant.added` events (the log is the state).
 public struct GrantLedger: Sendable, Equatable {
     public private(set) var records: [GrantRecord] = []
@@ -75,7 +95,8 @@ public struct GrantLedger: Sendable, Equatable {
         var out: [String] = []
         for record in records where record.scope == .thread || (record.scope == .once && record.seq > lastTurnStartSeq) {
             guard GrantPattern.problem(record.pattern, available: tools.available) == nil,
-                !tools.denied.contains(record.pattern), !tools.allowed.contains(record.pattern), !out.contains(record.pattern)
+                GrantPattern.deniedBy(record.pattern, denied: tools.denied) == nil, !tools.allowed.contains(record.pattern),
+                !out.contains(record.pattern)
             else { continue }
             out.append(record.pattern)
         }
