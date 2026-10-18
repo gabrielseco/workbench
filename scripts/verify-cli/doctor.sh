@@ -39,7 +39,6 @@ single line `doctor-probe`. Do not commit.
 GOAL
 
 start_thread verify-cli-doctor "$GOAL_SRC"
-remove_on_pass branch "$BRANCH"
 
 # What doctor must not touch: the thread's log, and its worktree and branch (none before the first run).
 log_lines() { wb "$T_WB" log "$ID" --json | py "print(len(lines))"; }
@@ -100,5 +99,7 @@ check "doctor after the turn: exit 0" "workbench doctor exited $code" test "$cod
 check "doctor after the turn: no worktree or branch of its own" "doctor's are still there" no_doctor_leftovers
 
 WT=$(wb "$T_WB" status "$ID" --json | py "print(d['worktree']['path'] or '')")
+# The worktree first: git refuses to delete a branch a worktree still has checked out.
 [ -n "$WT" ] && [ -d "$WT" ] && remove_on_pass worktree "$WT"
+remove_on_pass branch "$BRANCH"
 finish
