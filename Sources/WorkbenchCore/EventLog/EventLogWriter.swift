@@ -181,6 +181,16 @@ public actor EventLogWriter {
             data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
     }
 
+    /// Closes a plan whose process died (`plan.started` and no `plan.ended`) with a synthetic `interrupted`.
+    /// `goal_hash` and `base_commit` come from the start, so the end record stands alone.
+    @discardableResult
+    public func recoverOrphanedPlan(started: Event) throws -> Event? {
+        guard state.openPlan != nil else { return nil }
+        var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
+        for key in ["goal_hash", "base_commit"] { if let value = started.data[key] { data[key] = value } }
+        return try append(.planEnded, turn: started.turn, data: .object(data))
+    }
+
     // MARK: - Internals
 
     private static func acquireLock(fd: Int32, path: String, timeout: TimeInterval) throws {

@@ -118,6 +118,16 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), a run is live, or another command holds the thread (a second judge, a send-back) |
 | 7 | `not-found` | the thread named does not exist |
 
+### `plan`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 | | a plan was recorded and printed |
+| 1 | `failed` | no plan this time: no `claude`, the base commit could not be read or checked out, a stop, a timeout, a budget stop, or an empty answer (recorded, with the reason) |
+| 2 | `usage` | wrong command line, or a `--model` or `--budget` that is not valid |
+| 6 | `refused` | the goal is a draft or changed since approval, this goal has a plan already (`--again` makes another), the thread has ended, a run is live, or another command holds the thread (a judge, another plan) |
+| 7 | `not-found` | the thread named does not exist |
+
 ### `pr-review`
 
 | Code | Kind | When |

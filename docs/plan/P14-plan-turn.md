@@ -1,6 +1,6 @@
 # P14: A plan turn before the first run
 
-Status: plan, nothing built. Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
+Status: tasks 1 and 2 built (`workbench plan`, `plan_model`, `plan.started`/`plan.ended`; nothing reads the plan yet). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
 give it a provider. Builds on the judge (a separate read-only `claude -p` run with its own budget and events) and
 on the per-role model keys (`judge_model`, `describe_model`, #126).
 

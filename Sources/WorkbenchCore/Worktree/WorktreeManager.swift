@@ -186,6 +186,29 @@ public struct WorktreeManager: Sendable {
         return Self.lines(result.stdout)
     }
 
+    /// A throwaway, detached checkout of `commit` at `target`, for a read-only turn. It has no branch, so removing it
+    /// leaves nothing behind in the repository but git's own bookkeeping, which `worktree prune` clears.
+    public func addDetached(at target: URL, commit: String) async throws {
+        try await requireRepository()
+        _ = try await git.run(["worktree", "prune"], in: repoRoot)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try await check(["worktree", "add", "--detach", target.path, commit])
+    }
+
+    /// Removes a checkout `addDetached` made, whatever state it was left in: through git first, then by hand.
+    public func removeDetached(at target: URL) async {
+        _ = try? await git.run(["worktree", "remove", "--force", target.path], in: repoRoot)
+        try? FileManager.default.removeItem(at: target)
+        _ = try? await git.run(["worktree", "prune"], in: repoRoot)
+    }
+
+    /// The commit a branch name or sha names, for a plan made before any worktree exists.
+    public func commit(of base: String) async throws -> String {
+        guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
+        return try await resolveCommit(base)
+    }
+
     private func resolveCommit(_ base: String) async throws -> String {
         let result = try await git.run(
             ["rev-parse", "--verify", "--quiet", "\(base)^{commit}"], in: repoRoot)
