@@ -37,6 +37,7 @@ extension Commands {
             if case .invalidModel = error { throw CLIError.usage("\(error)") }
             throw CLIError.refused("\(error)")
         }
+        if let warning = result.warning { out("note: \(warning)") }
         let cost = result.costUSD.map { String(format: "  $%.4f", $0) } ?? ""
         guard let text = result.text, let ref = result.ref else {
             out("no plan\(cost): \(result.failure ?? "unknown")")

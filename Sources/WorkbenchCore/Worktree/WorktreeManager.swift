@@ -197,10 +197,13 @@ public struct WorktreeManager: Sendable {
     }
 
     /// Removes a checkout `addDetached` made, whatever state it was left in: through git first, then by hand.
-    public func removeDetached(at target: URL) async {
+    /// Returns whether it is gone, so a caller never takes a failed removal for a clean one.
+    @discardableResult
+    public func removeDetached(at target: URL) async -> Bool {
         _ = try? await git.run(["worktree", "remove", "--force", target.path], in: repoRoot)
         try? FileManager.default.removeItem(at: target)
         _ = try? await git.run(["worktree", "prune"], in: repoRoot)
+        return !FileManager.default.fileExists(atPath: target.path)
     }
 
     /// The commit a branch name or sha names, for a plan made before any worktree exists.

@@ -11,6 +11,8 @@ public struct PlanResult: Sendable, Equatable {
     public var truncated: Bool
     /// Why there is no plan.
     public var failure: String?
+    /// Something to tell the person that did not stop the plan, such as a checkout that could not be removed.
+    public var warning: String?
 }
 
 public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
@@ -47,6 +49,11 @@ extension ThreadService {
     /// Where a plan turn's checkout lives; a `claude` a killed plan left is found by this folder.
     func planDirectory(_ id: String) -> URL { project.threadDirectory(id).appendingPathComponent("plan") }
 
+    /// Closes a plan left open by a process that died, and ends what it left behind (see `Plan.recoverOrphan`).
+    func closeOrphanedPlan(id: String, log: EventLogWriter) async throws {
+        try await Plan.recoverOrphan(log: log, folder: planDirectory(id), repoRoot: project.root, git: git)
+    }
+
     /// Runs the plan turn on the approved goal and records `plan.started` and `plan.ended`. Read-only and separate
     /// from the work: it reads a throwaway checkout of the base commit, has its own session and budget, opens no
     /// numbered turn, and nothing in Workbench acts on what it says (yet: `run` does not read it).
@@ -78,7 +85,9 @@ extension ThreadService {
         id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
         agent: ReadOnlyAgent, timeout: TimeInterval, attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PlanResult {
-        var events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        // First, before any refusal: a plan whose process died is closed and its leftovers ended by whatever comes next.
+        try await closeOrphanedPlan(id: id, log: log)
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         if let decision = ThreadState.derive(from: events, id: id).decision { throw ThreadServiceError.threadEnded(decision) }
         let goal: Goal
         do {
@@ -86,12 +95,6 @@ extension ThreadService {
         } catch { throw PlanRefusal.goalUnreadable("\(error)") }
         guard goal.approval == .approved else { throw PlanRefusal.goalNotApproved(goal.approval) }
 
-        // A plan whose process died left a `plan.started` with no end: close it before anything else is read.
-        if let started = events.last(where: { $0.kind == .planStarted }),
-            !events.contains(where: { $0.kind == .planEnded && $0.seq > started.seq }) {
-            try await log.recoverOrphanedPlan(started: started)
-            events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? events
-        }
         let hash = goal.contentHash
         let planned = events.contains {
             $0.kind == .planEnded && $0.data["ok"] == true && $0.data["goal_hash"]?.stringValue == hash
@@ -136,10 +139,10 @@ extension ThreadService {
         try? writeHolderMarker(id)
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
 
-        // A `claude` and a checkout a killed plan left behind are found by the folder and ended first.
         let folder = planDirectory(id)
-        OrphanSweeper.sweep(inside: folder)
         let checkout = folder.appendingPathComponent("checkout")
+        // Anything left in the folder was left by a plan that is already closed (above); ended again to be sure.
+        OrphanSweeper.sweep(inside: folder)
         await manager.removeDetached(at: checkout)
         let began = Date()
         var answer: ReadOnlyAnswer
@@ -152,18 +155,21 @@ extension ThreadService {
                 text: nil, costUSD: nil, failure: "the base commit could not be checked out: \(error)")
         }
         OrphanSweeper.sweep(inside: folder)
-        await manager.removeDetached(at: checkout)
+        var warning: String?
+        if !(await manager.removeDetached(at: checkout)) {
+            warning = "the checkout of the base commit could not be removed; the next plan clears it"
+        }
         let elapsed = Int(Date().timeIntervalSince(began) * 1000)
 
         guard let raw = answer.text else {
             return try await recordPlan(
                 log, turn: turn, hash: hash, base: commit, cost: answer.costUSD, failure: answer.failure ?? "no answer",
-                argv: shown, durationMs: elapsed)
+                argv: shown, durationMs: elapsed, warning: warning)
         }
         guard let stored = Plan.stored(from: raw) else {
             return try await recordPlan(
                 log, turn: turn, hash: hash, base: commit, cost: answer.costUSD, failure: "the plan was empty",
-                argv: shown, durationMs: elapsed)
+                argv: shown, durationMs: elapsed, warning: warning)
         }
         let number = events.filter { $0.kind == .planEnded && $0.data["plan_ref"] != nil }.count + 1
         let ref = "plans/plan-\(number).md"
@@ -175,17 +181,19 @@ extension ThreadService {
         } catch {
             return try await recordPlan(
                 log, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
-                failure: "the plan could not be written: \(error.localizedDescription)", argv: shown, durationMs: elapsed)
+                failure: "the plan could not be written: \(error.localizedDescription)", argv: shown, durationMs: elapsed,
+                warning: warning)
         }
         return try await recordPlan(
             log, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
-            stored: SavedPlan(text: stored.text, truncated: stored.truncated, ref: ref), argv: shown, durationMs: elapsed)
+            stored: SavedPlan(text: stored.text, truncated: stored.truncated, ref: ref), argv: shown, durationMs: elapsed,
+            warning: warning)
     }
 
     private func recordPlan(
         _ log: EventLogWriter, turn: Int, hash: String, base: String?, cost: Double? = nil,
         stored: SavedPlan? = nil, failure: String? = nil, argv: [String]?,
-        durationMs: Int? = nil
+        durationMs: Int? = nil, warning: String? = nil
     ) async throws -> PlanResult {
         var data: [String: JSONValue] = ["ok": .bool(stored != nil), "goal_hash": .string(hash)]
         if let base { data["base_commit"] = .string(base) }
@@ -200,8 +208,10 @@ extension ThreadService {
         }
         let reason = failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
         if let reason { data["reason"] = .string(reason) }
+        if let warning { data["warning"] = .string(warning) }
         try await log.append(.planEnded, turn: turn, data: .object(data))
         return PlanResult(
-            text: stored?.text, ref: stored?.ref, costUSD: cost, truncated: stored?.truncated ?? false, failure: reason)
+            text: stored?.text, ref: stored?.ref, costUSD: cost, truncated: stored?.truncated ?? false, failure: reason,
+            warning: warning)
     }
 }

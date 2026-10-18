@@ -30,8 +30,8 @@ struct LogState: Sendable {
     /// The turn whose verify step started and has not ended. Tracked for crash recovery only: it is not an
     /// invariant, so a stray `verify.ended` is not a problem.
     var openVerify: Int?
-    /// The turn number a `plan.started` carried and no `plan.ended` has closed. Crash recovery only, like verify.
-    var openPlan: Int?
+    /// The `plan.started` no `plan.ended` has closed. Crash recovery only, like verify: not an invariant.
+    var planStart: Event?
 
     func check(_ event: Event, line: Int = 0) -> LogProblem? {
         if event.seq != nextSeq {
@@ -84,9 +84,9 @@ struct LogState: Sendable {
         case .verifyEnded:
             openVerify = nil
         case .planStarted:
-            openPlan = event.turn
+            planStart = event
         case .planEnded:
-            openPlan = nil
+            planStart = nil
         default:
             break
         }

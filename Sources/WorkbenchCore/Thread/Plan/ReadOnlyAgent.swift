@@ -52,7 +52,8 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
             "--session-id", sessionID.uuidString.lowercased(),
             "--max-budget-usd", NSDecimalNumber(decimal: request.budget).stringValue,
         ]
-        if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
+        // Always: `safe_mode = false` lets a project's hooks and plugins into a run, and this turn is read-only.
+        args += ["--safe-mode", "--disable-slash-commands"]
         if let model = request.model { args += ["--model", model] }
         args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools
         args += ["--", request.prompt]

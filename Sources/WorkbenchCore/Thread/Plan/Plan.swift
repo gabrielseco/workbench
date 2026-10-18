@@ -78,6 +78,18 @@ public enum Plan {
         return (cut + cutMarker, true)
     }
 
+    /// Closes a plan whose process died and ends what it left behind: a `claude` running in the plan folder and the
+    /// checkout. Run by every command that opens the log, so the next one of any kind finds it closed.
+    /// Returns whether there was one.
+    @discardableResult
+    static func recoverOrphan(log: EventLogWriter, folder: URL, repoRoot: URL, git: GitRunner) async throws -> Bool {
+        guard await log.hasOpenPlan else { return false }
+        OrphanSweeper.sweep(inside: folder)
+        await WorktreeManager(repoRoot: repoRoot, git: git).removeDetached(at: folder.appendingPathComponent("checkout"))
+        try await log.recoverOrphanedPlan()
+        return true
+    }
+
     public static func sha256(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }

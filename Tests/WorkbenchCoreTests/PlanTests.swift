@@ -68,6 +68,12 @@ private let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.
         #expect(args[model + 1] == "opus")
     }
 
+    @Test func safeModeIsOnEvenWhenTheProjectTurnedItOffForRuns() throws {
+        let config = try Config.parse("safe_mode = false\n[tools]\navailable = [\"Read\"]\n")
+        let args = ClaudeReadOnlyAgent(config: config, environment: [:]).arguments(for: request())
+        #expect(args.contains("--safe-mode") && args.contains("--disable-slash-commands"))
+    }
+
     @Test func theLoggedCommandHasNoPrompt() throws {
         let config = try Config.parse("[tools]\navailable = [\"Read\"]\n")
         let shown = ClaudeReadOnlyAgent(config: config, environment: [:]).shownArguments(for: request())
@@ -306,6 +312,63 @@ private let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.
         #expect(ends.count == 2 && ends[0].data["reason"] == "interrupted" && ends[0].data["synthetic"] == true)
         #expect(ends[0].data["goal_hash"] == "h" && ends[1].data["ok"] == true)
         #expect(try p.fx.contents(p.id).isHealthy)
+    }
+
+    @Test func anInterruptedPlanIsClosedBeforeAnyRefusalAndByARun() async throws {
+        let p = try await planned()
+        func orphan() async throws {
+            let log = try EventLogWriter.open(at: p.fx.project.eventsURL(p.id))
+            try await log.append(.planStarted, turn: 0, data: ["argv": [], "goal_hash": "h", "base_commit": "b"])
+            await log.close()  // killed here
+        }
+        let leftover = p.fx.service.planDirectory(p.id).appendingPathComponent("checkout")
+        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+
+        // A plan that is then refused (the goal changed) still closes the old one and clears what it left.
+        try await orphan()
+        let url = p.fx.project.goalURL(p.id)
+        try (try String(contentsOf: url, encoding: .utf8) + "\n- another\n").write(to: url, atomically: true, encoding: .utf8)
+        do {
+            _ = try await p.fx.service.plan(id: p.id, config: p.config)
+            Issue.record("expected a refusal")
+        } catch let error as PlanRefusal { #expect(error == .goalNotApproved(.stale)) }
+        #expect(p.events.last?.kind == .planEnded && p.events.last?.data["reason"] == "interrupted")
+        #expect(!FileManager.default.fileExists(atPath: leftover.path))
+
+        // So does a run, which is not a plan command at all.
+        try await orphan()
+        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+        try await p.fx.service.approve(id: p.id)
+        _ = try await p.fx.runner(p.id).run()
+        let ends = p.events.filter { $0.kind == .planEnded }
+        #expect(ends.count == 2 && ends.allSatisfy { $0.data["reason"] == "interrupted" })
+        #expect(!FileManager.default.fileExists(atPath: leftover.path))
+        #expect(try p.fx.contents(p.id).isHealthy)
+    }
+
+    @Test func aCheckoutThatCannotBeRemovedIsReportedNotHidden() async throws {
+        struct Locking: ReadOnlyAgent {
+            func unavailable() -> String? { nil }
+            func shownArguments(for request: ReadOnlyRequest) -> [String] { ["stub"] }
+            func run(_ request: ReadOnlyRequest, attach: @Sendable (ProcessRun) -> Void) async -> ReadOnlyAnswer {
+                // A read-only directory with a file in it cannot be emptied, by git or by hand.
+                let locked = request.workingDirectory.appendingPathComponent("locked")
+                try? FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+                try? "x".write(to: locked.appendingPathComponent("f"), atomically: true, encoding: .utf8)
+                chmod(locked.path, 0o555)
+                return ReadOnlyAnswer(text: "A plan.", costUSD: nil, failure: nil)
+            }
+        }
+        let p = try await planned()
+        let checkout = p.fx.service.planDirectory(p.id).appendingPathComponent("checkout")
+        defer {
+            chmod(checkout.appendingPathComponent("locked").path, 0o755)
+            try? FileManager.default.removeItem(at: checkout)
+        }
+        let result = try await p.fx.service.plan(id: p.id, config: p.config, agent: Locking())
+        #expect(result.text != nil, "the plan itself is kept")
+        #expect(result.warning?.contains("could not be removed") == true, "\(result.warning ?? "")")
+        #expect(p.events.last?.data["warning"] != nil)
     }
 
     @Test func aLeftoverCheckoutFromAKilledPlanIsClearedBeforeTheNextOne() async throws {
