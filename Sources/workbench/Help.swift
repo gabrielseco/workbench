@@ -195,8 +195,17 @@ enum Help {
         // `log -f` follows; everywhere else `-f` takes a value.
         let all = valueOptions
         let values = first == "log" ? all.subtracting(["-f"]) : all
-        let asked = arguments.indices.contains { i in
-            i > 0 && ["--help", "-h"].contains(arguments[i]) && !values.contains(arguments[i - 1])
+        // Walk the arguments and skip each option's value: in `run --feedback --model --help`, `--model` is the value
+        // and the last word asks for help.
+        var asked = false
+        var index = 1
+        while index < arguments.count {
+            if values.contains(arguments[index]) {
+                index += 2
+            } else {
+                if ["--help", "-h"].contains(arguments[index]) { asked = true }
+                index += 1
+            }
         }
         guard asked else { return nil }
         // `plan show --help` is the help for `plan show`: keep the words that still select an entry.

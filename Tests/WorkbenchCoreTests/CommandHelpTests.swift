@@ -164,6 +164,9 @@ private func commandNames(from usage: String) -> [String] {
             let ran = try await workbench(arguments, in: dir)
             #expect(ran.code != 0 && !ran.stdout.hasPrefix("workbench "), "\(arguments): \(ran.stdout)")
         }
+        // The value is whatever follows the option, even a word that looks like another option: this asks for help.
+        let after = try await workbench(["run", "--feedback", "--model", "--help"], in: dir)
+        #expect(after.code == 0 && after.stdout.hasPrefix("workbench run"), "\(after.stdout) \(after.stderr)")
         // `log -f` is a flag, not an option that takes a value.
         let follow = try await workbench(["log", "-f", "--help"], in: dir)
         #expect(follow.code == 0 && follow.stdout.hasPrefix("workbench log"))
