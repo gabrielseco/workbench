@@ -44,8 +44,10 @@ MARKER="verify-cli-plan-marker-$$"
 # --- the plan turn ---------------------------------------------------------------------------------------
 # (preflight already refused a claude_path that is fake-claude, so this is the real claude.)
 
-wb "$T_RUN" plan "$ID" --model "$MODEL" --budget "$BUDGET_USD" 2>&1 | sed 's/^/    /' | head -12
-plan_exit=${PIPESTATUS[0]}
+# The output is captured whole and then cut for the screen: a pipe into `head` can break the command's write.
+wb "$T_RUN" plan "$ID" --model "$MODEL" --budget "$BUDGET_USD" >"$SCRATCH/plan.out" 2>&1
+plan_exit=$?
+head -12 "$SCRATCH/plan.out" | sed 's/^/    /'
 check "plan: exit 0" "workbench plan exited $plan_exit" test "$plan_exit" = 0
 
 LOG1=$(wb "$T_WB" log "$ID" --json)
@@ -117,8 +119,9 @@ echo "$DRAFT_OUT" | sed 's/^/    /'
 check "plan edit wrote plans/draft.md with the plan" "no draft, or it differs from plan-1.md" \
     bash -c '[ -f "$1/draft.md" ] && cmp -s "$1/draft.md" "$1/plan-1.md"' _ "$PLANS"
 printf '\n%s\n' "$MARKER" >>"$PLANS/draft.md"
-wb "$T_WB" plan edit --apply "$ID" 2>&1 | sed 's/^/    /'
-apply_exit=${PIPESTATUS[0]}
+wb "$T_WB" plan edit --apply "$ID" >"$SCRATCH/apply.out" 2>&1
+apply_exit=$?
+head -5 "$SCRATCH/apply.out" | sed 's/^/    /'
 check "plan edit --apply exits 0" "exit $apply_exit" test "$apply_exit" = 0
 check "the draft is used up and plans/plan-2.md holds the marker" "see $PLANS" \
     bash -c '[ ! -e "$1/draft.md" ] && grep -qF -- "$2" "$1/plan-2.md"' _ "$PLANS" "$MARKER"
