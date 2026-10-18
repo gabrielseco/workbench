@@ -90,6 +90,12 @@ public enum Plan {
         return true
     }
 
+    @discardableResult
+    static func recoverOrphan(log: EventLogWriter, project: Project, threadID: String, git: GitRunner) async throws -> Bool {
+        let folder = project.threadDirectory(threadID).appendingPathComponent("plan")
+        return try await recoverOrphan(log: log, folder: folder, repoRoot: project.root, git: git)
+    }
+
     public static func sha256(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
