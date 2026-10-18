@@ -1,6 +1,6 @@
 # `--json`
 
-`workbench status`, `review` and `log` take `--json`. Version 1. Within a version keys are added, never
+`workbench status`, `review`, `log` and `grant` take `--json`. Version 1. Within a version keys are added, never
 renamed or removed. Errors are described in [exit-codes.md](exit-codes.md).
 
 Nothing else is printed on stdout, and the command never asks a question.
@@ -62,3 +62,22 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goa
 
 JSON lines: the stored events, one per line, exactly as in `events.jsonl` (`claude` lines verbatim).
 `log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one stored line.
+
+## grant
+
+`workbench grant [id] --json`: `{v, thread, denied, suggestions}`. `suggestions` is `{pattern, config_entry, threads}` for each
+safe narrow prefix denied in two or more threads that the config neither allows nor denies and nobody turned down
+(`config_entry` is the string to add to `[tools] allowed`; nothing is written). `denied` is one entry per distinct denied call, in the order they
+first happened (the numbers `grant <n>` takes; they do not change when more is granted or denied):
+`{number, tool, input, level, compound, status, turns, seqs, parts}`.
+
+- `input`: the command, path or URL as the model sent it (JSON-escaped, not made safe to print).
+- `level`: `safe`, `caution` or `unsafe`, by fixed rules (`DeniedCommandClassifier`); a compound is at least `caution`.
+- `status`: `open`, `granted_once` (until the next turn starts), `granted_thread` or `never`.
+- `turns`, `seqs`: the turns that were denied it and the `claude` lines that carry the denial.
+- `parts`: `{number, command, level, pattern, reasons, status}`; one for a plain command (`number` `"3"`), one per
+  simple command of a compound (`"3.1"`, ...). `pattern` is what granting it would allow, null when it cannot be
+  written as a fixed pattern.
+
+`workbench grant [id] <n> --once|--thread|--never --json`: `{v, thread, pattern, scope, level, recorded, seq, suggestion}` (`suggestion` as above for this pattern, else null);
+`recorded` is false and `seq` null when the same decision was already on record. A refusal is the usual error object.

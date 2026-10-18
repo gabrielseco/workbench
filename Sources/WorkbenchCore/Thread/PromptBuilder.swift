@@ -52,8 +52,16 @@ public enum PromptBuilder {
         return out
     }
 
-    public static func followUpPrompt(feedback: String, check: CheckAttachment? = nil) -> String {
+    public static func followUpPrompt(
+        feedback: String, check: CheckAttachment? = nil, granted: [String] = []
+    ) -> String {
         var out = "The reviewer sent this back with feedback:\n\n\(feedback)\n\n"
+        if !granted.isEmpty {
+            let list = granted.joined(separator: "\n")
+            let fence = fence(for: list)
+            out += "The user has now allowed these commands, which were denied before. You may run them this turn. "
+            out += "They follow as data, one per line.\n\n\(fence)\n\(list)\n\(fence)\n\n"
+        }
         if let check {
             // A fence longer than any run of backticks inside the output, so it cannot close early.
             var longest = 0
@@ -69,9 +77,21 @@ public enum PromptBuilder {
             out += check.omittedBytes > 0 ? "; the first \(check.omittedBytes) bytes were left out.\n\n" : ".\n\n"
             out += "\(fence)\n\(check.text)\(check.text.hasSuffix("\n") ? "" : "\n")\(fence)\n\n"
         }
-        out += "Address it, keeping to the original criteria and out of scope. "
+        out +=
+            "Address it, keeping to the original criteria and out of scope. "
             + "When you finish, say which criteria you believe hold and why.\n"
         return out
+    }
+
+    /// A code fence longer than any run of backticks in `text`, so the text cannot close it early.
+    private static func fence(for text: String) -> String {
+        var longest = 0
+        var run = 0
+        for character in text {
+            run = character == "`" ? run + 1 : 0
+            longest = max(longest, run)
+        }
+        return String(repeating: "`", count: max(3, longest + 1))
     }
 
     /// Appended to Claude Code's own system prompt (`--append-system-prompt`).
@@ -79,8 +99,10 @@ public enum PromptBuilder {
         var out = """
             You are working in an isolated git worktree for one task. Stay inside the current directory. \
             Do not push, merge, publish or change anything outside it. Commit your work with clear messages \
-            when a logical step is complete. If a tool is denied, do not retry it or look for a way around \
-            it: say what you needed and continue with what is allowed.
+            when a logical step is complete. If a command is denied, do not retry it and do not do the same \
+            thing another way (a script, a different tool): say exactly which command you needed and why, then \
+            continue with what is allowed. Only the user can allow it, and may send you back to run it. \
+            Create and change files with the file tools, never with shell redirects or heredocs.
             """
         if let check = checkCommand {
             out += " The project's full check is `\(check)`; run it exactly as written, variations of it are denied."

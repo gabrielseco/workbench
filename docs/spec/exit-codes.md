@@ -108,6 +108,15 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `usage` | wrong command line |
 | 7 | `not-found` | no such thread, event or patch path; with `--json`, also when there are no threads at all |
 
+### `grant`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 | | listed, or the decision is on record (also when the same decision already was) |
+| 2 | `usage` | no or more than one of `--once`, `--thread`, `--never`; a scope without a number; a target that is not a number like `3` or `3.2` |
+| 6 | `refused` | the thread has ended or a run is live; a compound named whole (grant a part); text that cannot be written as a fixed pattern; a pattern `[tools] denied` covers or the project's tools cannot take; `unsafe` without `--allow-dangerous`, or `unsafe` with `--thread` |
+| 7 | `not-found` | no such thread, denial number or part |
+
 ### `judge`
 
 | Code | Kind | When |

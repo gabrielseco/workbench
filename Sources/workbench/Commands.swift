@@ -366,6 +366,9 @@ enum Commands {
                     + (report.costUSD.map { String(format: "  $%.4f", $0) } ?? "")
                     + "  \(report.durationMs / 1000)s"
                     + (report.permissionDenials > 0 ? "  \(report.permissionDenials) denied" : ""))
+                if report.permissionDenials > 0 {
+                    out("  `workbench grant` lists what was denied and lets you allow it; then send the work back")
+                }
             case .advisory(let text):
                 out("note: \(text)")
             case .setupStarted(let command):

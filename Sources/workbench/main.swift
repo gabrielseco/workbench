@@ -28,6 +28,12 @@ let usage = """
       log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
       status [id] [--all]        where the thread stands; --all: one line per thread
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      grant [id]                 the commands a run was denied, numbered, rated safe / caution / unsafe, with what each
+                                 would allow; changes nothing
+      grant [id] <n> --once|--thread|--never  decide one: allow it for the next turn, for every later turn of this
+                                 thread, or never (stop offering it). 2.1 is the first part of a compound, which is
+                                 never granted whole. unsafe needs --allow-dangerous and is once only. A [tools]
+                                 denied entry still wins. Written to the log, not to the config.
       judge [id] [--again] [--model <name>] [--budget <usd>]
                                  ask a second, read-only Claude run whether the check, the verify step, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
@@ -69,7 +75,7 @@ let usage = """
       abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
                              are saved as abandon.patch in the thread folder first, the branch is kept
 
-      --json on status, review and log; exit codes: docs/spec/exit-codes.md
+      --json on status, review, log and grant; exit codes: docs/spec/exit-codes.md
 
       version
     """
@@ -101,8 +107,8 @@ if let at = arguments.indices.first(where: {
 }) {
     arguments.remove(at: at)
     Output.json = true
-    if !["status", "review", "log"].contains(arguments.first ?? "") {
-        exit(fail(.usage, "--json is available on status, review and log"))
+    if !["status", "review", "log", "grant"].contains(arguments.first ?? "") {
+        exit(fail(.usage, "--json is available on status, review, log and grant"))
     }
 }
 
@@ -138,6 +144,8 @@ do {
         try await Commands.status(Array(arguments.dropFirst()))
     case "review":
         try await Commands.review(Array(arguments.dropFirst()))
+    case "grant":
+        try await Commands.grant(Array(arguments.dropFirst()))
     case "judge":
         exit(try await Commands.judge(Array(arguments.dropFirst())))
     case "plan":

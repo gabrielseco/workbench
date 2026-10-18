@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once, after the merge.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there is `abandon` (P12 task 1).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1) and `grant` (P13 task 7).
 
 ## When to use it
 
@@ -22,6 +22,7 @@ Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there is `
 ```bash
 git checkout main && git pull --ff-only            # the main checkout, clean, at origin's main
 bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 VERIFY_CLI_MODEL=haiku by default
+bash scripts/verify-cli/grant.sh                   # two turns (the second is a send-back), each capped at the budget
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -72,6 +73,22 @@ and the `system/init` line); abandon exit 0; worktree gone; branch kept; `abando
 `abandon-staged.patch` exist; `abandon.saved` in `workbench log` with size, sha256, tree and head (and they
 match the file); `git apply` of each patch on a fresh checkout of that committed tip (the saved head) restores the
 files; no process of the worktree is left; on a pass, removing each restore checkout and the branch.
+
+### grant (P13 task 7)
+
+`goal new` (a goal that asks for `scripts/verify-cli/grant-probe.sh`, then `chmod +x` on it, a compound
+`mkdir -p … && touch …` and `rm -rf scratch/grant-probe-dir`, none of which the project's tool set allows), `goal approve`,
+`run`, then only workbench commands. Steps: the goal approved with the cap; turn 1 succeeded with denials and
+used the real `claude`; `grant --json` lists the chmod as `safe`, open, with the pattern
+`Bash(chmod +x scripts/verify-cli/grant-probe.sh)`, and the compound and the `rm -rf` too; the file is there and not
+executable; `grant <n> --once` records the pattern; `grant --json` says `granted_once` and
+`.workbench/config.toml` is byte for byte what it was; `send-back` runs turn 2, whose `turn.started` argv has the
+pattern in `--allowedTools`; turn 2 succeeded and the file is executable; `grant --json` says `open` again
+(the grant is spent); refusals: a compound named whole exits 6, a number that does not exist 7, a
+number without a scope 2, and the `rm -rf` under `[tools] denied` exits 6 naming `[tools] denied` even with
+`--allow-dangerous`, stays open and is not in turn 2's allowed list; the config is still unchanged; no process of the
+worktree is left; the thread is ended (`abandon`). `VERIFY_CLI_SABOTAGE=1` revokes the grant (`--never`) before
+turn 2, so the argv and executable-bit steps must FAIL. It costs two cheap turns.
 
 ## Adding a scenario for the next feature
 

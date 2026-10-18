@@ -98,6 +98,9 @@ func failureKind(of error: Error) -> FailureKind {
     case is ConfigError: return .invalidConfig
     case is GoalParseError: return .invalidGoal
     case let e as ShipError: return e.failureKind
+    case let e as GrantError:
+        if case .notFound = e { return .notFound }
+        return .refused
     case let e as ThreadStoreError:
         if case .invalidName = e { return .usage }
         return .refused
