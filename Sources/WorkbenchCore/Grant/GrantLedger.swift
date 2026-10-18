@@ -92,17 +92,32 @@ public struct GrantLedger: Sendable, Equatable {
     /// What to add to the project's allowed tools for the turn that starts next: the thread's grants and the
     /// `once` grants given since the last turn started. Invalid patterns and ones the project denies are left out.
     public func patternsForNextTurn(tools: ToolSet) -> [String] {
-        var out: [String] = []
-        for record in records where record.scope == .thread || (record.scope == .once && record.seq > lastTurnStartSeq) {
-            guard GrantPattern.problem(record.pattern, available: tools.available) == nil,
-                GrantPattern.deniedBy(record.pattern, denied: tools.denied) == nil, !tools.allowed.contains(record.pattern),
-                !out.contains(record.pattern)
-            else { continue }
-            out.append(record.pattern)
+        // Records are read in order and the latest word on a pattern stands: `never` revokes what came before it,
+        // and a grant after a `never` allows it again.
+        var order: [String] = []
+        var thread: Set<String> = []
+        var once: [String: Int] = [:]
+        for record in records {
+            if !order.contains(record.pattern) { order.append(record.pattern) }
+            switch record.scope {
+            case .thread: thread.insert(record.pattern)
+            case .once: once[record.pattern] = record.seq
+            case .never:
+                thread.remove(record.pattern)
+                once[record.pattern] = nil
+            }
         }
-        return out
+        return order.filter { pattern in
+            (thread.contains(pattern) || (once[pattern] ?? 0) > lastTurnStartSeq)
+                && GrantPattern.problem(pattern, available: tools.available) == nil
+                && GrantPattern.deniedBy(pattern, denied: tools.denied) == nil && !tools.allowed.contains(pattern)
+        }
     }
 
     /// Patterns the user turned down, so `grant` does not offer them again.
-    public var refused: [String] { records.filter { $0.scope == .never }.map(\.pattern) }
+    public var refused: [String] {
+        var latest: [String: GrantScope] = [:]
+        for record in records { latest[record.pattern] = record.scope }
+        return latest.filter { $0.value == .never }.map(\.key).sorted()
+    }
 }

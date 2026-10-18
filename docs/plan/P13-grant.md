@@ -46,7 +46,7 @@ $ workbench grant
   worktree and an unknown remote are unsafe. Unknown command: caution. Unsafe needs `--allow-dangerous`, once only.
 - **A push stays in `ship`** unless the thread opts in (FRICTION #35).
 - **No terminal is assumed.** Every choice is a flag (`grant 1 --once`), because runs are driven by Claude or by
-  `!`. Without flags and with a terminal, it asks.
+  `!`. There is no interactive prompt: `grant` lists, a flag decides.
 - The repo config is only ever *suggested*: a narrow safe prefix, after it was denied or granted more than once.
 
 ## Tasks

@@ -36,45 +36,58 @@ extension ThreadService {
         id: String, target: String, scope: GrantScope, allowDangerous: Bool = false, by: String = "user"
     ) async throws -> GrantOutcome {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
-        if let decision = ThreadStore(project: project).state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let config = try Config.load(from: project.configURL)
-        let events = try EventLogReader.read(at: project.eventsURL(id)).events
-        let candidates = GrantCandidates.derive(events: events)
-
-        let (candidate, part) = try Self.resolve(target, in: candidates)
-        let pattern: String
-        let level: DeniedCommandAssessment.Level
-        if let part {
-            level = part.level
-            pattern = try Self.patternToRecord(
-                part: part, candidate: candidate, scope: scope, config: config, allowDangerous: allowDangerous)
-        } else {
-            // A whole compound: only a refusal can be recorded for it.
-            guard scope == .never else {
-                let parts = candidate.parts.map(\.number).joined(separator: ", ")
-                throw GrantError.refused(
-                    "\(candidate.number) is several commands in one and is not granted whole. Grant a part: \(parts)")
+        // Everything is checked again under the log's lock, so a decision recorded or a thread ended by another
+        // command between the check and the write is seen.
+        return try await withLog(id) { log in
+            if let decision = ThreadStore(project: project).state(of: id).decision {
+                throw ThreadServiceError.threadEnded(decision)
             }
-            level = candidate.assessment.level
-            pattern = candidate.wholePattern
-        }
+            let events = try EventLogReader.read(at: project.eventsURL(id)).events
+            let choice = try Self.choose(target, scope, GrantCandidates.derive(events: events), config, allowDangerous)
 
-        let ledger = GrantLedger(events: events)
-        // The same decision, or a thread grant when `once` is asked, is already on record.
-        let counting = ledger.records.last { record in
-            record.pattern == pattern && (record.scope != .once || record.seq > ledger.lastTurnStartSeq)
+            let ledger = GrantLedger(events: events)
+            // The same decision, or a thread grant when `once` is asked, is already on record.
+            let counting = ledger.records.last { record in
+                record.pattern == choice.pattern && (record.scope != .once || record.seq > ledger.lastTurnStartSeq)
+            }
+            if let counting, counting.scope == scope || (counting.scope == .thread && scope == .once) {
+                return GrantOutcome(pattern: choice.pattern, scope: counting.scope, level: choice.level, seq: nil)
+            }
+            var data: [String: JSONValue] = [
+                "scope": .string(scope.rawValue), "pattern": .string(choice.pattern),
+                "level": .string("\(choice.level)"), "by": .string(by),
+            ]
+            if let seq = choice.denialSeq { data["denial_seq"] = .int(seq) }
+            let event = try await log.append(.grantAdded, data: .object(data))
+            return GrantOutcome(pattern: choice.pattern, scope: scope, level: choice.level, seq: event.seq)
         }
-        if let counting, counting.scope == scope || (counting.scope == .thread && scope == .once) {
-            return GrantOutcome(pattern: pattern, scope: counting.scope, level: level, seq: nil)
+    }
+
+    private struct Choice {
+        var pattern: String
+        var level: DeniedCommandAssessment.Level
+        var denialSeq: Int?
+    }
+
+    /// What the target names and the pattern that would be recorded for it, or why not.
+    private static func choose(
+        _ target: String, _ scope: GrantScope, _ candidates: [GrantCandidate], _ config: Config, _ allowDangerous: Bool
+    ) throws -> Choice {
+        let (candidate, part) = try resolve(target, in: candidates)
+        if let part {
+            let pattern = try patternToRecord(
+                part: part, candidate: candidate, scope: scope, config: config, allowDangerous: allowDangerous)
+            return Choice(pattern: pattern, level: part.level, denialSeq: candidate.seqs.last)
         }
-        var data: [String: JSONValue] = [
-            "scope": .string(scope.rawValue), "pattern": .string(pattern), "level": .string("\(level)"),
-            "by": .string(by),
-        ]
-        if let seq = candidate.seqs.last { data["denial_seq"] = .int(seq) }
-        let event = try await withLog(id) { try await $0.append(.grantAdded, data: .object(data)) }
-        return GrantOutcome(pattern: pattern, scope: scope, level: level, seq: event.seq)
+        // A whole compound: only a refusal can be recorded for it.
+        guard scope == .never else {
+            let parts = candidate.parts.map(\.number).joined(separator: ", ")
+            throw GrantError.refused(
+                "\(candidate.number) is several commands in one and is not granted whole. Grant a part: \(parts)")
+        }
+        return Choice(pattern: candidate.wholePattern, level: candidate.assessment.level, denialSeq: candidate.seqs.last)
     }
 
     /// `3` or `3.2`: the candidate and, for a plain command or a named part, the part. A compound named by its

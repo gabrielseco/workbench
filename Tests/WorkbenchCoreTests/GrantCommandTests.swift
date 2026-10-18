@@ -119,6 +119,34 @@ private func grantEvents(_ fx: RunnerFixture, _ id: String) throws -> [Event] {
         #expect(try grantEvents(fx, id).isEmpty)
     }
 
+    @Test func turningAGrantedCommandDownTakesItBackFromTheNextRun() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        try await denyInLog(fx, id, ["ls docs"])
+        _ = try await fx.service.grant(id: id, target: "1", scope: .thread)
+        _ = try await fx.service.grant(id: id, target: "1", scope: .never)
+        #expect(try fx.service.grantCandidates(id: id)[0].status == .refused)
+        _ = try await fx.runner(id).run(fx.options(feedback: "go on"))
+        let started = try #require(try fx.events(id).last { $0.kind == .turnStarted })
+        guard case .array(let argv)? = started.data["argv"] else {
+            Issue.record("no argv")
+            return
+        }
+        #expect(!argv.compactMap(\.stringValue).contains("Bash(ls docs)"))
+    }
+
+    @Test func aThreadThatEndsBeforeTheWriteIsNotGrantedOn() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        try await denyInLog(fx, id, ["ls docs"])
+        // The decision lands between the caller's view of the thread and the grant: the grant checks again.
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
+        await log.close()
+        await #expect(throws: ThreadServiceError.self) { try await fx.service.grant(id: id, target: "1", scope: .once) }
+        #expect(try grantEvents(fx, id).isEmpty)
+    }
+
     @Test func aDecisionOnTheSameThingIsNotRecordedTwice() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
