@@ -1,6 +1,6 @@
 # P14: A plan turn before the first run
 
-Status: tasks 1 to 4 built (`workbench plan`, `plan_model`, `plan.started`/`plan.ended`, the plan in the run's first prompt, `plan show`, `plan edit`). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
+Status: tasks 1 to 5 built, a recorded run of the scenario pending (task 5: `scripts/verify-cli/plan.sh`; `workbench plan`, `plan_model`, `plan.started`/`plan.ended`, the plan in the run's first prompt, `plan show`, `plan edit`). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
 give it a provider. Builds on the judge (a separate read-only `claude -p` run with its own budget and events) and
 on the per-role model keys (`judge_model`, `describe_model`, #126).
 
