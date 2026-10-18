@@ -204,6 +204,10 @@ public struct ReviewReport: Sendable, Equatable {
                 let turns = Set(items.map(\.turn)).sorted().map(String.init).joined(separator: ", ")
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
                 lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
+                // The label is cut for scanning; the whole command follows when there is more of it.
+                if let full = items.lazy.compactMap(\.fullInput).first, full != items[0].input {
+                    lines.append(contentsOf: Self.wrap("\(items[0].tool)(\(full))", width: 96).map { "      " + $0 })
+                }
             }
             lines.append("  open one with `workbench log \(state.id) --seq <n>`")
             let stalled = ["stopped", "timed_out", "failed", "interrupted", "budget_exceeded"]
@@ -219,6 +223,21 @@ public struct ReviewReport: Sendable, Equatable {
 
         lines.append("")
         lines.append(Self.nextStep(for: review.status, openTurn: state.openTurn ?? state.openCheck))
+        return lines
+    }
+
+    /// `text` in lines of at most `width` characters, broken at a space when there is one.
+    static func wrap(_ text: String, width: Int) -> [String] {
+        var lines: [String] = []
+        var rest = Substring(text)
+        while rest.count > width {
+            let window = rest.prefix(width + 1)
+            let space = window.lastIndex(of: " ").flatMap { $0 > window.startIndex ? $0 : nil }
+            let cut = space ?? window.index(before: window.endIndex)
+            lines.append(String(rest[..<cut]))
+            rest = rest[cut...].drop(while: { $0 == " " })
+        }
+        if !rest.isEmpty { lines.append(String(rest)) }
         return lines
     }
 

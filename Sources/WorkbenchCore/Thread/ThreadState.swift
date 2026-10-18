@@ -78,6 +78,9 @@ public struct Review: Sendable, Equatable {
         /// What it was denied for (the command, path or pattern), on one line and safe to print; nil when
         /// the denial carried nothing usable.
         public var input: String?
+        /// The whole input as `turn.ended.denials` recorded it (one line, safe to print, 4096 characters at most),
+        /// nil for a log from before that field or a turn that did not record it.
+        public var fullInput: String?
         /// What equal denials share: the tool and the whole input, before it was shortened for display.
         public var identity: String = ""
 
@@ -310,6 +313,7 @@ public struct ThreadState: Sendable, Equatable {
                 if state.openTurn == event.turn { state.openTurn = nil }
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
+                Self.attachFullInputs(event, to: &state.review.deniedTools)
                 switch event.data["cost_usd"] {
                 case .double(let d)?: state.totalCostUSD += d
                 case .int(let i)?: state.totalCostUSD += Double(i)
@@ -467,6 +471,19 @@ public struct ThreadState: Sendable, Equatable {
             if let value = input[key]?.stringValue { return value }
         }
         return nil
+    }
+
+    /// Puts the full inputs `turn.ended` recorded on the turn's entries, which came from the same result line in
+    /// the same order. A different count means they are not the same list, so nothing is attached.
+    static func attachFullInputs(_ ended: Event, to tools: inout [Review.DeniedTool]) {
+        guard case .array(let calls)? = ended.data["denials"] else { return }
+        let indices = tools.indices.filter { tools[$0].turn == ended.turn }
+        guard indices.count == calls.count else { return }
+        for (index, call) in zip(indices, calls) {
+            guard let text = call["input"]?.stringValue else { continue }
+            let line = safeLine(text, limit: 4096)
+            if !line.isEmpty { tools[index].fullInput = line }
+        }
     }
 
     /// What a denied call was for: the command, path, URL or pattern in its `tool_input`.
