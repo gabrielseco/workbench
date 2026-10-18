@@ -25,6 +25,8 @@ public struct Review: Sendable, Equatable {
         public var outputRef: String?
         /// The command that ran, as `check.ran` recorded it; nil for a synthetic result that has none.
         public var command: String?
+        /// The tests the output showed finishing; nil when the runner's format was not known.
+        public var tests: CheckTests?
     }
 
     /// The verify step of a turn, as `verify.ended` and its `proof.added` events recorded it.
@@ -318,6 +320,14 @@ public struct ThreadState: Sendable, Equatable {
             turn: event.turn, verdict: JudgeVerdict(criteria: criteria, concerns: concerns), costUSD: cost, failure: nil)
     }
 
+    private static func tests(in event: Event) -> CheckTests? {
+        guard case .array(let passed)? = event.data["tests_passed"], case .array(let failed)? = event.data["tests_failed"]
+        else { return nil }
+        return CheckTests(
+            passed: passed.compactMap(\.stringValue), failed: failed.compactMap(\.stringValue),
+            truncated: event.data["tests_truncated"] == true)
+    }
+
     /// The verify step's events: `proof.added` lines gather until `verify.ended` closes the step.
     private static func applyVerify(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
         switch event.kind {
@@ -412,7 +422,7 @@ public struct ThreadState: Sendable, Equatable {
                         turn: event.turn, result: result, exitCode: event.data["exit_code"]?.intValue,
                         durationMs: event.data["duration_ms"]?.intValue,
                         outputRef: event.data["output_ref"]?.stringValue,
-                        command: event.data["command"]?.stringValue)
+                        command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
                 Self.applyVerify(event, to: &state, pending: &pendingProof)

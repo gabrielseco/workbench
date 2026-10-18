@@ -26,7 +26,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 ## Criteria
 
 - [c1] `SyncClient.fetch` retries on 5xx and network errors, not on 4xx.
-  - proof: test `SyncClientTests.retries*` pass
+  - proof: test: SyncClientTests/retries
 - [c2] Delay grows exponentially with jitter and is capped at 30s.
   - proof: unit test with injected clock
 - [c3] The settings screen shows no change.
@@ -43,6 +43,14 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown.
   `proof` is free text for now; typed proofs (`check:`, `screenshot:`, `diff:`) are described in
   [`later/proof.md`](../later/proof.md).
+- **A test proof is `proof: test: <Suite>/<name>[, …]`.** It is decided by the tests the latest turn's check saw
+  finish (`check.ran` `tests_passed` and `tests_failed`, read from the `swift test` output as it streamed). A
+  name matches a test that equals it or starts with it, so `retries` covers a family; the suite part is not
+  compared, because the output does not carry it. `✔ passed` when every name matches a test and every match
+  passed (note "named test ran in the check, turn N"); `✘ failed` when any match failed; `you check` when a name
+  matches nothing, the check ran after an earlier turn, did not finish, listed no tests (a format the parser
+  does not know) or had its list cut at 2000 names. A proof written as prose is read the same way only when
+  every word is a recorded test name or filler such as "passes"; anything else in it keeps it `you check`.
 - **A screenshot proof is `proof: screenshot: <name>`.** `<name>` is one token of letters, digits, `.`, `_`
   and `-` (at most 64, not starting with a symbol); a malformed one is a goal error. It is satisfied by
   `<name>.png` at the top of the proof directory of the latest verify step, run after the latest turn (see
@@ -146,7 +154,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   `check.ran` recorded (not the config as it is now)
   (backticked, with at most words like "exits 0" or "passes") shows `✔ passed` or `✘ failed`, from the
   check recorded after the latest turn. Every other proof is `you check`, with its backticked commands
-  listed. Nothing is ever passed on Claude's say-so, `review` runs nothing, and none of this gates
+  listed. A `test:` proof (below) is the other way to a verdict. Nothing is ever passed on Claude's say-so, `review` runs nothing, and none of this gates
   `accept` or `ship`. The PR table carries pass or fail only, never check output.
 - **Approval binds a hash.** `approved_hash` covers the body (request, criteria, out of scope) and the front
   matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them

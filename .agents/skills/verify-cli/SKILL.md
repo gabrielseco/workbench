@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) and `help` (P15 task 2).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3).
 
 ## When to use it
 
@@ -27,6 +27,7 @@ bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 
 bash scripts/verify-cli/grant.sh                   # two turns (the second is a send-back), each capped at the budget
 bash scripts/verify-cli/plan.sh                    # one plan turn and one coding turn, each capped at the budget
 bash scripts/verify-cli/help.sh                    # no turn, costs nothing
+bash scripts/verify-cli/criteria-tests.sh          # a test: proof backed by the check (one tiny turn, then the suite runs)
 bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1

@@ -29,7 +29,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P12](P12-pipeline-rough-edges.md) | Pipeline rough edges | planned: what a second sequential run of the P11 loop found in Workbench: `abandon` saves a worktree's changes then removes it, refusals that say what to do, a judge or stage result that knows its commit, a true `ship` preview; independent of P11's tasks | S |
 | [P13](P13-grant.md) | Grant | planned: `workbench grant` turns a turn's denied commands into a per-command decision (once, thread, never) with a rules-based risk level, recorded in the log, so a run goes on without hand-editing `[tools]` | S |
 | [P14](P14-plan-turn.md) | Plan turn | tasks 1 to 5 built (the verify-cli scenario has a recorded PASS and a recorded sabotage FAIL), the comparison planned: `workbench plan` runs a read-only turn on its own model against the approved goal and base commit, and the next `run` gets the plan in its first prompt, so a stronger model can decide and a cheaper one can code; a provider seam for P9 | M |
-| [P15](P15-agent-ergonomics.md) | Agent ergonomics | planned: `doctor` after approve, per-command help, a criterion backed by the named tests the check ran; typed proofs written down for later | S |
+| [P15](P15-agent-ergonomics.md) | Agent ergonomics | `doctor` after approve, per-command help, a criterion backed by the named tests the check ran; typed proofs written down for later | S |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 **P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,

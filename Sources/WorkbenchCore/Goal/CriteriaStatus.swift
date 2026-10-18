@@ -48,12 +48,20 @@ public enum CriteriaStatus {
                 return screenshot(
                     criterion, name: name, verify: verify, lastTurn: lastTurn, available: proofAvailable)
             }
+            if let names = TestProof.names(in: criterion.proof) {
+                return named(criterion, names: names, check: check, lastTurn: lastTurn)
+            }
             let spans = ProofCommands.spans(in: criterion.proof)
             var status = CriterionStatus(
                 id: criterion.id, state: .manual, commands: spans, note: nil, proof: criterion.proof)
             // Without a recorded check there is no command to match; the summary line says no check ran.
             guard let check else { return status }
             guard let ran = check.command, isTheCheck(proof: criterion.proof, spans: spans, command: ran) else {
+                // Fallback for proofs that are not typed: prose that names only tests the check ran.
+                if let tests = check.tests, !tests.truncated,
+                    let names = TestProof.namesInProse(criterion.proof, known: tests) {
+                    return named(criterion, names: names, check: check, lastTurn: lastTurn)
+                }
                 return status
             }
             guard check.turn == lastTurn else {
@@ -72,6 +80,33 @@ public enum CriteriaStatus {
             }
             return status
         }
+    }
+
+    /// A proof that names tests: decided by the tests the latest turn's finished check saw, else left to a person.
+    static func named(_ criterion: Criterion, names: [String], check: Review.Check?, lastTurn: Int) -> CriterionStatus {
+        var status = CriterionStatus(
+            id: criterion.id, state: .manual, commands: [], note: nil, proof: criterion.proof)
+        guard let check else { return status }
+        guard check.turn == lastTurn else {
+            status.note = "the check ran after turn \(check.turn), not the latest turn \(lastTurn)"
+            return status
+        }
+        guard check.result == "passed" || check.result == "failed" else {
+            status.note = "the check ended \(check.result.replacingOccurrences(of: "_", with: " "))"
+            return status
+        }
+        guard let tests = check.tests, !tests.truncated else {
+            status.note = check.tests == nil ? "the check's output listed no tests" : "the check's test list was cut"
+            return status
+        }
+        guard let state = TestProof.verdict(for: names, in: tests) else {
+            status.note = "a named test did not appear in the check's output (turn \(check.turn))"
+            return status
+        }
+        status.state = state
+        status.note = state == .passed
+            ? "named test ran in the check, turn \(check.turn)" : "named test failed in the check, turn \(check.turn)"
+        return status
     }
 
     /// A screenshot is shown when the latest verify step, run after the latest turn, left `<name>.png`.
