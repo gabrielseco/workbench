@@ -114,9 +114,10 @@ extension ThreadService {
         // runs (`stop` reaches it, a run or another judge is refused). A `claude` a killed judge left behind is
         // found by its working directory and ended before the next one starts.
         OrphanSweeper.sweep(inside: folder)
-        try await log.append(.judgeStarted, turn: turn, data: ["argv": .array(shown.map { .string($0) })])
         try? writeHolderMarker(id)
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+        try ThreadStore(project: project).requireNoDoctor()
+        try await log.append(.judgeStarted, turn: turn, data: ["argv": .array(shown.map { .string($0) })])
         var request = SpawnRequest(
             executable: claude, arguments: arguments, environment: config.childEnvironment(from: environment),
             workingDirectory: folder, timeout: timeout)

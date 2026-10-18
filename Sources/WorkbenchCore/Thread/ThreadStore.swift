@@ -48,6 +48,20 @@ public struct ThreadStore: Sendable {
             .sorted { ($0.lineage?.round ?? 0, $0.id) < ($1.lineage?.round ?? 0, $1.id) }
     }
 
+    /// The pid of the `workbench run` holding this thread, if there is one: same pid *and* same start time
+    /// as recorded, so a process that merely reused the number is not mistaken for it.
+    public func runnerPID(id: String) -> Int32? {
+        guard
+            let data = try? Data(contentsOf: project.runnerURL(id)),
+            let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let pid = (info["pid"] as? NSNumber)?.int32Value,
+            let seconds = (info["started_seconds"] as? NSNumber)?.uint64Value,
+            let micros = (info["started_micros"] as? NSNumber)?.uint64Value
+        else { return nil }
+        let expected = ProcessMember(pid: pid, startSeconds: seconds, startMicros: micros)
+        return ProcessTree.isAlive(expected) ? pid : nil
+    }
+
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
     /// ambiguous, the newest wins; `create` refuses to make a second, so this should be one.
     public func activeThreadID() -> String? {
@@ -57,14 +71,25 @@ public struct ThreadStore: Sendable {
             .max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }?.id
     }
 
+    /// The thread with a live runner (a turn, check, verify, plan or judge in progress), if any. A crashed runner
+    /// leaves an open turn in the log but no live process, so the log alone cannot say.
+    public func threadWithLiveRunner() -> String? {
+        threadIDs().first { state(of: $0).isActive && runnerPID(id: $0) != nil }
+    }
+
+    /// Doctor holds the project lock for its whole run; taking and dropping it here is the check. A run calls it
+    /// after writing its `runner.json`, and doctor looks for that file after taking the lock, so one sees the other.
+    public func requireNoDoctor() throws {
+        if let held = try? ProjectLock.acquire(project) { ProjectLock.release(held) } else {
+            throw ThreadStoreError.doctorRunning
+        }
+    }
+
     /// Makes the thread directory and refuses when another thread is still active (the single-thread rule).
     public func create(id: String) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         if let active = activeThreadID() { throw ThreadStoreError.activeThreadExists(active) }
-        // Doctor holds this lock for its whole run; taking and dropping it here is the check.
-        if let held = try? ProjectLock.acquire(project) { ProjectLock.release(held) } else {
-            throw ThreadStoreError.doctorRunning
-        }
+        try requireNoDoctor()
         guard !FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
             throw ThreadStoreError.threadExists(id)
         }

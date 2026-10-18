@@ -324,8 +324,8 @@ Notes:
   same runners, environment and limits a thread uses, and prints each step's result, duration, output tail
   and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `model` (or
   the CLI default), and whether `Bash` is in `[tools].available` and the check is not denied. It runs nothing the config does not
-  declare, writes no event into a thread and no file into the project, and refuses while a thread is active
-  or another doctor holds the project (a lock on `.workbench/`, which also makes `goal new` wait for it). A worktree it cannot remove is an error
+  declare, writes no event into a thread and no file into the project, and refuses while a thread's run is live
+  (a turn or check; a draft, an approved goal or a finished turn does not stop it) or another doctor holds the project (a lock on `.workbench/`, which also makes `goal new` wait for it). A worktree it cannot remove is an error
   (exit 1) that names the command to remove it by hand.
   A step the config leaves out is reported, not failed; the check is skipped when a declared setup did not
   pass. Exit 0 when everything declared passed, 1 when a step did not, 3 when stopped (`exit-codes.md`).

@@ -151,13 +151,15 @@ extension ThreadService {
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it, a run, a judge or another plan is refused).
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+        // After the marker, so a doctor that starts now sees this plan, and this plan sees a doctor that is running.
+        try ThreadStore(project: project).requireNoDoctor()
         try await log.append(
             .planStarted, turn: turn,
             data: [
                 "argv": .array(shown.map { .string($0) }), "base_commit": .string(commit), "goal_hash": .string(hash),
             ])
-        try? writeHolderMarker(id)
-        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
 
         let folder = planDirectory(id)
         let checkout = folder.appendingPathComponent("checkout")

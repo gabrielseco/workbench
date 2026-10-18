@@ -154,17 +154,17 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
         try await expectClean(fx)
     }
 
-    @Test func itRefusesWhileAThreadIsActiveAndWithoutAConfig() async throws {
-        let (fx, _) = try await fixture(check: "true")
-        let id = try await fx.service.newThread(name: "work", base: "main")
-        do {
-            _ = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
-            Issue.record("expected a refusal")
-        } catch let error as DoctorError {
-            #expect(error == .threadActive(id))
-        }
-        try await expectClean(fx)
+    /// What `workbench run` leaves in the thread folder: this process, or a start time no process has.
+    private func writeRunner(_ fx: RunnerFixture, _ id: String, alive: Bool) throws {
+        let me = try #require(ProcessTree.member(for: getpid()))
+        let info: [String: Any] = [
+            "pid": getpid(), "started_seconds": alive ? me.startSeconds : 0, "started_micros": alive ? me.startMicros : 0,
+        ]
+        try JSONSerialization.data(withJSONObject: info).write(to: fx.project.runnerURL(id))
+    }
 
+    @Test func itRefusesWithoutAConfig() async throws {
+        let (fx, _) = try await fixture(check: "true")
         try FileManager.default.removeItem(at: fx.project.configURL)
         do {
             _ = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
@@ -172,6 +172,65 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
         } catch let error as DoctorError {
             #expect(error == .noConfig(fx.project.configURL.path))
         }
+    }
+
+    @Test func itRunsWithADraftGoalAndLeavesTheThreadAlone() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.service.newThread(name: "work", base: "main")
+        let before = try fx.events(id).map(\.seq)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed && report.check.outcome == .passed)
+        #expect(try fx.events(id).map(\.seq) == before, "doctor writes nothing to the thread's log")
+        #expect(ThreadStore(project: fx.project).activeThreadID() == id)
+        try await expectClean(fx)
+    }
+
+    @Test func itRunsWithAnApprovedGoalAndNoTurn() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.approvedThread()
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed)
+        #expect(try fx.kinds(id).last == "goal.approved")
+        try await expectClean(fx)
+    }
+
+    @Test func itRunsWhenARunnerDiedLeavingATurnOpen() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.approvedThread()
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s", "resume": false])
+        await log.close()
+        try writeRunner(fx, id, alive: false)
+        #expect(ThreadStore(project: fx.project).state(of: id).openTurn == 1)
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed)
+        try await expectClean(fx)
+    }
+
+    @Test func itRunsAfterAFinishedTurn() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.approvedThread()
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s", "resume": false])
+        _ = try await log.append(.turnEnded, turn: 1, data: ["result": "success"])
+        await log.close()
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed)
+        try await expectClean(fx)
+    }
+
+    @Test func itRefusesWhileARunnerIsAlive() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.approvedThread()
+        try writeRunner(fx, id, alive: true)
+        do {
+            _ = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+            Issue.record("expected a refusal")
+        } catch let error as DoctorError {
+            #expect(error == .runnerLive(id))
+            #expect("\(error)".contains(id) && "\(error)".contains("running"))
+        }
+        try await expectClean(fx)
     }
 
     @Test func anInvalidBaseIsRefusedBeforeGitIsTouched() async throws {
@@ -211,6 +270,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         let fx = try await RunnerFixture()
         let help = try await cli(["help"], in: fx)
         #expect(help.text.contains("doctor [--base <branch>]"))
+        #expect(help.text.contains("after goal approve"))
         try FileManager.default.removeItem(at: fx.project.configURL)
         let initialised = try await cli(["init"], in: fx)
         #expect(initialised.code == 0)
@@ -240,7 +300,10 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         #expect(bad.code == 1)
         #expect(bad.text.contains("nope") && bad.text.contains("failed (exit 1)"))
 
-        _ = try await failing.service.newThread(name: "work", base: "main")
+        let live = try await failing.service.newThread(name: "work", base: "main")
+        let me = try #require(ProcessTree.member(for: getpid()))
+        let info: [String: Any] = ["pid": getpid(), "started_seconds": me.startSeconds, "started_micros": me.startMicros]
+        try JSONSerialization.data(withJSONObject: info).write(to: failing.project.runnerURL(live))
         let refused = try await cli(["doctor"], in: failing)
         #expect(refused.code == 6, "\(refused.text)")
         #expect(refused.text.contains("refused"))
@@ -282,6 +345,45 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 }
 
 @Suite struct DoctorBoundaryTests {
+    @Test func aRunCannotStartWhileDoctorRuns() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let id = try await fx.approvedThread()
+        let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await fx.runner(id).run(fx.options())
+            Issue.record("expected a refusal")
+        } catch let error as ThreadStoreError {
+            #expect(error == .doctorRunning)
+        }
+        #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path), "the refused run left no runner.json")
+        #expect(!(try fx.kinds(id)).contains("turn.started"))
+        _ = try await task.value
+    }
+
+    @Test func aPlanOrAJudgeCannotStartWhileDoctorRuns() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let config = try Config.load(from: fx.project.configURL)
+        let before = try fx.kinds(id)
+        let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await fx.service.plan(id: id, config: config, again: true)
+            Issue.record("expected the plan to be refused")
+        } catch let error as ThreadStoreError { #expect(error == .doctorRunning) }
+        do {
+            _ = try await fx.service.judge(id: id, config: config, again: true)
+            Issue.record("expected the judge to be refused")
+        } catch let error as ThreadStoreError { #expect(error == .doctorRunning) }
+        #expect(try fx.kinds(id) == before, "neither wrote a started event")
+        #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path))
+        _ = try await task.value
+    }
+
     @Test func aThreadCannotBeStartedWhileDoctorRuns() async throws {
         let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }

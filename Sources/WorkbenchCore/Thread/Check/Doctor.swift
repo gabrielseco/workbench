@@ -3,7 +3,7 @@ import Foundation
 
 public enum DoctorError: Error, Equatable, CustomStringConvertible {
     case noConfig(String)
-    case threadActive(String)
+    case runnerLive(String)
     case invalidBase(String)
     case alreadyRunning
 
@@ -11,8 +11,8 @@ public enum DoctorError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .alreadyRunning: "another `workbench doctor` is running in this project"
         case .noConfig(let path): "no config at \(path): run `workbench init` first"
-        case .threadActive(let id):
-            "thread \(id) is still active; doctor would run a second check next to it. End it (accept, discard, abandon) first"
+        case .runnerLive(let id):
+            "a turn or check of thread \(id) is running; doctor would run a second check next to it. Wait, or `workbench stop`"
         case .invalidBase(let base): "'\(base)' is not a usable branch name"
         }
     }
@@ -175,7 +175,6 @@ public final class Doctor: @unchecked Sendable {
             throw DoctorError.noConfig(project.configURL.path)
         }
         guard SafeNames.isBranchName(base) else { throw DoctorError.invalidBase(base) }
-        if let active = store.activeThreadID() { throw DoctorError.threadActive(active) }
         let config = try Config.load(from: project.configURL)
 
         let claude = ExecutableResolver.resolve(config.claudePath, searchPath: options.environment["PATH"])
@@ -199,6 +198,8 @@ public final class Doctor: @unchecked Sendable {
         // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover".
         let lock = try ProjectLock.acquire(project)
         defer { ProjectLock.release(lock) }
+        // After the lock: a run that starts now sees the lock and refuses itself (it writes runner.json first).
+        if let live = store.threadWithLiveRunner() { throw DoctorError.runnerLive(live) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         try await removeLeftover(manager)
         let worktree: Worktree
