@@ -38,6 +38,19 @@ private let turnStarted: (EventKind, JSONValue) = (.turnStarted, [:])
         #expect(ledger.refused == ["Bash(rm x)"])
     }
 
+    @Test func theLatestWordOnAPatternStands() {
+        let granted = events([grant("thread", "Bash(ls)"), grant("never", "Bash(ls)")])
+        #expect(GrantLedger(events: granted).patternsForNextTurn(tools: tools).isEmpty)
+        #expect(GrantLedger(events: granted).refused == ["Bash(ls)"])
+        let onceRevoked = events([grant("once", "Bash(ls)"), grant("never", "Bash(ls)")])
+        #expect(GrantLedger(events: onceRevoked).patternsForNextTurn(tools: tools).isEmpty)
+        let changedMind = events([grant("never", "Bash(ls)"), grant("thread", "Bash(ls)")])
+        #expect(GrantLedger(events: changedMind).patternsForNextTurn(tools: tools) == ["Bash(ls)"])
+        #expect(GrantLedger(events: changedMind).refused.isEmpty)
+        let spentOnceKeepsThread = events([grant("thread", "Bash(ls)"), turnStarted, grant("once", "Bash(ls)"), turnStarted])
+        #expect(GrantLedger(events: spentOnceKeepsThread).patternsForNextTurn(tools: tools) == ["Bash(ls)"])
+    }
+
     @Test func aGrantTheProjectDeniesOrAlreadyAllowsIsLeftOut() {
         let ledger = GrantLedger(
             events: events([

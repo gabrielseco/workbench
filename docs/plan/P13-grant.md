@@ -1,6 +1,6 @@
 # P13: Grant
 
-Status: tasks 0 to 3 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
+Status: tasks 0 to 4 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
 FRICTION #1, #28, #29, #33, #34 and #35, which all say the same thing: a run has no prompt path
 (`--permission-prompts none`), so a denied command ends the turn's work and the only way on is to edit
 `[tools] allowed` by hand, which then stays for every later thread.
@@ -46,7 +46,7 @@ $ workbench grant
   worktree and an unknown remote are unsafe. Unknown command: caution. Unsafe needs `--allow-dangerous`, once only.
 - **A push stays in `ship`** unless the thread opts in (FRICTION #35).
 - **No terminal is assumed.** Every choice is a flag (`grant 1 --once`), because runs are driven by Claude or by
-  `!`. Without flags and with a terminal, it asks.
+  `!`. There is no interactive prompt: `grant` lists, a flag decides.
 - The repo config is only ever *suggested*: a narrow safe prefix, after it was denied or granted more than once.
 
 ## Tasks
@@ -59,7 +59,7 @@ $ workbench grant
 3. **`grant.added` and the allowed list.** Done (`GrantLedger`). Event kind and spec; `ThreadState` derives the grants; the turn's
    invocation adds them (`once` expires when the next turn ends). Tests: a grant reaches `--allowedTools`; `once`
    is gone one turn later; a denied pattern in `[tools] denied` is never overridden by a grant.
-4. **`workbench grant`.** List, `grant <n> --once|--thread|--never`, `--allow-dangerous`, `--json`. Refuses a
+4. **`workbench grant`.** Done. List, `grant <n> --once|--thread|--never`, `--allow-dangerous`, `--json`. Refuses a
    decided thread or a running turn.
 5. **`run` says it.** A turn that ended with denials prints "N denied, `workbench grant` to review", and the
    first prompt's tool note tells the model that a denied command is granted by the user, not worked around.
