@@ -116,6 +116,16 @@ private func fenced(_ inner: String) -> String {
         #expect(!PRDescriber.displayArguments(args).contains("the prompt"))
     }
 
+    @Test func theDescribeModelBeatsTheConfigModel() throws {
+        func model(_ toml: String) throws -> String? {
+            let args = PRDescriber.arguments(config: try Config.parse(toml + "[tools]\navailable = [\"Read\"]\n"), prompt: "p")
+            return args.firstIndex(of: "--model").map { args[$0 + 1] }
+        }
+        #expect(try model("model = \"opus\"\ndescribe_model = \"haiku\"\n") == "haiku")
+        #expect(try model("model = \"opus\"\n") == "opus")
+        #expect(try model("") == nil)
+    }
+
     @Test func thePromptCarriesEverythingAndNoLocalPaths() {
         let check = Review.Check(
             turn: 1, result: "passed", exitCode: 0, durationMs: 4000, outputRef: nil, command: "scripts/check.sh")

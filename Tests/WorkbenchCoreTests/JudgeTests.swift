@@ -172,6 +172,15 @@ private let good = """
         let tuned = Judge.arguments(config: config, prompt: "p", withScreenshots: false, budget: 2, model: "haiku")
         #expect(tuned.contains("haiku") && tuned.contains("2"))
     }
+
+    @Test func theJudgeModelBeatsTheConfigModelAndTheFlagBeatsBoth() throws {
+        let config = try Config.parse("model = \"opus\"\njudge_model = \"sonnet\"\n[tools]\navailable = [\"Read\"]\n")
+        func model(_ args: [String]) throws -> String { args[try #require(args.firstIndex(of: "--model")) + 1] }
+        #expect(try model(Judge.arguments(config: config, prompt: "p", withScreenshots: false)) == "sonnet")
+        #expect(try model(Judge.arguments(config: config, prompt: "p", withScreenshots: false, model: "haiku")) == "haiku")
+        let plain = try Config.parse("model = \"opus\"\n[tools]\navailable = [\"Read\"]\n")
+        #expect(try model(Judge.arguments(config: plain, prompt: "p", withScreenshots: false)) == "opus")
+    }
 }
 
 private struct Judged {

@@ -137,7 +137,7 @@ public enum Judge {
             "--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue,
         ]
         if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
-        if let model = model ?? config.model { args += ["--model", model] }
+        if let model = model ?? config.judgeModel ?? config.model { args += ["--model", model] }
         args += withScreenshots ? ["--tools", "Read", "--allowedTools", "Read"] : ["--tools", ""]
         args += ["--", prompt]
         return args
