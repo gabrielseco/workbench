@@ -362,6 +362,28 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         _ = try await task.value
     }
 
+    @Test func aPlanOrAJudgeCannotStartWhileDoctorRuns() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let config = try Config.load(from: fx.project.configURL)
+        let before = try fx.kinds(id)
+        let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await fx.service.plan(id: id, config: config, again: true)
+            Issue.record("expected the plan to be refused")
+        } catch let error as ThreadStoreError { #expect(error == .doctorRunning) }
+        do {
+            _ = try await fx.service.judge(id: id, config: config, again: true)
+            Issue.record("expected the judge to be refused")
+        } catch let error as ThreadStoreError { #expect(error == .doctorRunning) }
+        #expect(try fx.kinds(id) == before, "neither wrote a started event")
+        #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path))
+        _ = try await task.value
+    }
+
     @Test func aThreadCannotBeStartedWhileDoctorRuns() async throws {
         let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
