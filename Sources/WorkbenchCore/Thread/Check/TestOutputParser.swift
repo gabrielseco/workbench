@@ -29,11 +29,22 @@ struct TestOutputParser {
     private var seen: Set<String> = []
     private var truncated = false
 
+    /// The process stream was cut, so lines after the cut were never seen: a failure may be among them.
+    mutating func markIncomplete() { truncated = true }
+
     mutating func feed(_ line: String) {
+        if let (name, isPass) = Self.xctest(line) {
+            record(name, isPass: isPass)
+            return
+        }
         let isPass = line.hasPrefix("✔ Test ")
         guard isPass || line.hasPrefix("✘ Test ") else { return }
         let rest = line.dropFirst("✔ Test ".count)
         guard let name = Self.name(in: rest, verdict: isPass ? " passed after " : " failed after ") else { return }
+        record(name, isPass: isPass)
+    }
+
+    private mutating func record(_ name: String, isPass: Bool) {
         // A name that passed and failed (a retry, a parameterized case) is listed once per side.
         guard seen.insert((isPass ? "p:" : "f:") + name).inserted else { return }
         if passed.count + failed.count >= Self.maxNames {
@@ -44,6 +55,14 @@ struct TestOutputParser {
     }
 
     var result: CheckTests { CheckTests(passed: passed, failed: failed, truncated: truncated) }
+
+    /// XCTest: `Test Case '-[Suite testName]' passed (0.001 seconds).` (macOS) or `Test Case 'Suite.testName' passed`
+    /// (Linux). The name is the test method; `started` lines and suite lines are not results.
+    private static func xctest(_ line: String) -> (String, Bool)? {
+        let pattern = #/Test Case '(?:-\[)?[^'\s\]]*?[. ]?([A-Za-z_][A-Za-z0-9_]*)\]?' (passed|failed) .*/#
+        guard let match = line.wholeMatch(of: pattern) else { return nil }
+        return (String(match.1), match.2 == "passed")
+    }
 
     /// `name()` or `"display name"` up to the verdict words; nil when the line is not a final result.
     private static func name(in rest: Substring, verdict: String) -> String? {

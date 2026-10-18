@@ -189,7 +189,10 @@ struct CheckRunner {
                 sink.truncated = true
             case .exited(let exit):
                 outcome.exit = exit
-                if exit.outputTruncated { sink.truncated = true }
+                if exit.outputTruncated {
+                    sink.truncated = true
+                    parser.markIncomplete()
+                }
             }
         }
         sink.finish()

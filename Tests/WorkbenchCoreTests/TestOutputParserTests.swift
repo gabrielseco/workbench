@@ -25,9 +25,28 @@ private func parse(_ lines: [String]) -> CheckTests {
         #expect(!tests.truncated)
     }
 
+    @Test func xcTestResultLinesAreRead() {
+        let tests = parse([
+            "Test Case '-[SuiteTests testRetry]' started.",
+            "Test Case '-[SuiteTests testRetry]' passed (0.001 seconds).",
+            "Test Case 'SuiteTests.testLinux' passed (0.002 seconds).",
+            "Test Case '-[SuiteTests testBroken]' failed (0.003 seconds).",
+            "Test Suite 'SuiteTests' passed at 2026-10-18 11:16:42.044.",
+        ])
+        #expect(tests.passed == ["testRetry", "testLinux"])
+        #expect(tests.failed == ["testBroken"])
+    }
+
     @Test func outputInAnUnknownFormatRecordsNothing() {
-        let tests = parse(["Test Case '-[S t]' passed (0.001 seconds).", "Executed 1 test", "ok"])
+        let tests = parse(["Executed 1 test", "ok", "Test Case without a verdict"])
         #expect(tests.isEmpty)
+    }
+
+    @Test func aCutStreamIsMarkedSoItBacksNoVerdict() {
+        var parser = TestOutputParser()
+        parser.feed("✔ Test a() passed after 0.001 seconds.")
+        parser.markIncomplete()
+        #expect(parser.result.truncated)
     }
 
     @Test func aRepeatedLineIsListedOnce() {

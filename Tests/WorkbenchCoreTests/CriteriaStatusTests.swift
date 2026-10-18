@@ -114,6 +114,19 @@ private func eval(_ proofs: [String], check: Review.Check? = nil, lastTurn: Int 
         #expect(oneFailing[0].state == .failed)
     }
 
+    @Test func aNameThatCannotBeReadLeavesTheWholeProofToAPerson() {
+        let status = eval(["test: Suite/a, Suite/not-a-name!"], check: ran(passed: ["a()"]))
+        #expect(status[0].state == .manual)
+        #expect(eval(["test: Suite/échec"], check: ran(passed: ["échec()"]))[0].state == .passed)
+        #expect(eval(["test: Suite/a, Suite/échec"], check: ran(passed: ["a()"]))[0].state == .manual)
+    }
+
+    @Test func aNamedTestRowReachesThePullRequestTableAsACheckRun() {
+        let rows = CriteriaStatus.markdown(
+            eval(["test: a"], check: ran(passed: ["a()"])), oneLine: { $0 })
+        #expect(rows.contains("✔ passed | Workbench's check run (named test ran in the check, turn 1)"))
+    }
+
     @Test func severalNamesAllNeedToHavePassed() {
         let status = eval(["test: a, b"], check: ran(passed: ["a()"]))
         #expect(status[0].state == .manual)

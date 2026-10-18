@@ -8,8 +8,10 @@ public enum TestProof {
     public static func names(in proof: String) -> [String]? {
         let trimmed = proof.trimmingCharacters(in: .whitespaces)
         guard let match = trimmed.wholeMatch(of: #/(?i)test:\s*(.+)/#) else { return nil }
-        let names = match.1.split(whereSeparator: { $0 == "," || $0 == " " }).compactMap { normalize(String($0)) }
-        return names.isEmpty ? nil : names
+        let words = match.1.split(whereSeparator: { $0 == "," || $0 == " " })
+        // One name that cannot be read must not drop out and leave the rest to decide: no verdict at all.
+        let names = words.compactMap { normalize(String($0)) }
+        return names.isEmpty || names.count != words.count ? nil : names
     }
 
     /// The fallback for a proof written as prose: it counts only when every word is a recorded test name or
@@ -53,7 +55,7 @@ public enum TestProof {
         if let slash = text.lastIndex(of: "/") { text = text[text.index(after: slash)...] }
         var name = String(text)
         while let last = name.last, "*…)(.".contains(last) { name.removeLast() }
-        return name.wholeMatch(of: #/[A-Za-z_][A-Za-z0-9_]*/#) == nil ? nil : name
+        return name.wholeMatch(of: #/[\p{L}_][\p{L}\p{N}_]*/#) == nil ? nil : name
     }
 
     private static let proseFiller: Set<String> = [
