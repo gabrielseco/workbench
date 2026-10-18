@@ -20,18 +20,34 @@ public enum GrantSuggestions {
     /// - Not one the project already allows or denies, one that cannot be a valid pattern, or one the user turned
     ///   down with `--never` in any thread.
     public static func derive(threads: [(id: String, events: [Event])], tools: ToolSet) -> [GrantSuggestion] {
+        derive(observations: threads.map { ($0.id, observe($0.events)) }, tools: tools)
+    }
+
+    /// What one thread says, small enough to keep for every thread of a project once its log is let go.
+    struct Observation {
+        /// The safe patterns a grant would record for what was denied.
+        var safe: Set<String> = []
+        /// Patterns the user turned down, whatever the command was rated.
+        var refused: Set<String> = []
+    }
+
+    static func observe(_ events: [Event]) -> Observation {
+        var observation = Observation()
+        for candidate in GrantCandidates.derive(events: events) {
+            for part in candidate.parts {
+                if let pattern = part.pattern, part.level == .safe { observation.safe.insert(pattern) }
+            }
+        }
+        observation.refused = Set(GrantLedger(events: events).refused)
+        return observation
+    }
+
+    static func derive(observations: [(id: String, observation: Observation)], tools: ToolSet) -> [GrantSuggestion] {
         var seen: [String: [String]] = [:]
         var refused: Set<String> = []
-        for thread in threads {
-            var inThread: Set<String> = []
-            for candidate in GrantCandidates.derive(events: thread.events) {
-                for part in candidate.parts {
-                    guard let pattern = part.pattern, part.level == .safe else { continue }
-                    inThread.insert(pattern)
-                    if part.status == .refused { refused.insert(pattern) }
-                }
-            }
-            for pattern in inThread { seen[pattern, default: []].append(thread.id) }
+        for (id, observation) in observations {
+            for pattern in observation.safe { seen[pattern, default: []].append(id) }
+            refused.formUnion(observation.refused)
         }
         return seen.compactMap { pattern, ids -> GrantSuggestion? in
             guard ids.count >= minimumThreads, pattern.hasSuffix(":*)"), !refused.contains(pattern), isWritable(pattern),
@@ -53,11 +69,11 @@ public enum GrantSuggestions {
 extension ThreadService {
     /// Suggestions from every thread of the project, history included.
     public func grantSuggestions(tools: ToolSet) -> [GrantSuggestion] {
-        let store = ThreadStore(project: project)
-        let threads = store.threadIDs().map { id in
-            (id: id, events: (try? EventLogReader.read(at: project.eventsURL(id)).events) ?? [])
+        // One log at a time: a project can have many threads, each with a long transcript.
+        let observations = ThreadStore(project: project).threadIDs().map { id in
+            (id: id, observation: GrantSuggestions.observe((try? EventLogReader.read(at: project.eventsURL(id)).events) ?? []))
         }
-        return GrantSuggestions.derive(threads: threads, tools: tools)
+        return GrantSuggestions.derive(observations: observations, tools: tools)
     }
 }
 

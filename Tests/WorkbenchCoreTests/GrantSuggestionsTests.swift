@@ -60,6 +60,23 @@ private func thread(
         #expect(GrantSuggestions.derive(threads: threads, tools: tools).isEmpty)
     }
 
+    @Test func aRefusalOfACautionCommandStillBlocksTheSuggestion() {
+        // `git show $ref` is a caution (a variable), but turning it down records the prefix.
+        let threads = [
+            thread("a", denied: ["git show $ref"], decisions: [("never", "Bash(git show:*)")]),
+            thread("b", denied: ["git show HEAD"]), thread("c", denied: ["git show HEAD~1"]),
+        ]
+        #expect(GrantSuggestions.derive(threads: threads, tools: tools).isEmpty)
+    }
+
+    @Test func aLaterGrantAfterARefusalLiftsIt() {
+        let threads = [
+            thread("a", denied: ["git show HEAD"], decisions: [("never", "Bash(git show:*)"), ("thread", "Bash(git show:*)")]),
+            thread("b", denied: ["git show HEAD~1"]),
+        ]
+        #expect(GrantSuggestions.derive(threads: threads, tools: tools).map(\.pattern) == ["Bash(git show:*)"])
+    }
+
     @Test func theMostRepeatedComesFirstAndEachPartOfACompoundCounts() {
         let threads = [
             thread("a", denied: ["git show HEAD && git log -1"]), thread("b", denied: ["git log"]),
