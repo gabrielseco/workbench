@@ -204,6 +204,8 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
 # model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
+# judge_model = "sonnet"                # --model for the judge (it only reads); `judge --model` wins; unset = model
+# describe_model = "haiku"              # --model for the PR description turn; unset = model
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see

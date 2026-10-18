@@ -105,7 +105,7 @@ public enum PRDescriber {
             "--max-budget-usd", NSDecimalNumber(decimal: budgetUSD).stringValue,
         ]
         if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
-        if let model = config.model { args += ["--model", model] }
+        if let model = config.describeModel ?? config.model { args += ["--model", model] }
         args += ["--tools", "", "--", prompt]
         return args
     }

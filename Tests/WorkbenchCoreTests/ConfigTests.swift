@@ -297,6 +297,17 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
             .contains("--model")))
     }
 
+    @Test func roleModelsAreValidatedLikeModelAndDoNotReachTheCodingTurn() throws {
+        let config = try Config.parse(
+            "model = \"opus\"\njudge_model = \"sonnet\"\ndescribe_model = \"haiku\"\n[tools]\navailable = [\"Read\"]")
+        #expect(config.judgeModel == "sonnet" && config.describeModel == "haiku")
+        let args = try config.invocation(
+            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+        #expect(args[try #require(args.firstIndex(of: "--model")) + 1] == "opus")
+        #expect(codes("judge_model = \"-x\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
+        #expect(codes("describe_model = \"a b\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
+    }
+
     @Test(arguments: ["-x", "a b", "a;b", ""])
     func modelMustBeANameNotAFlag(model: String) {
         #expect(codes("model = \"\(model)\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
