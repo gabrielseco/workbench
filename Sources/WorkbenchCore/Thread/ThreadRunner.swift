@@ -437,8 +437,7 @@ public actor ThreadRunner {
         extra: [String: JSONValue] = [:], exit: ProcessExit? = nil, resultLine: [String: Any]? = nil,
         sawOutput: Bool = false
     ) async throws -> TurnOutcome {
-        var code: Int32?
-        var signal: Int32?
+        var code: Int32?, signal: Int32?
         switch exit?.termination {
         case .exited(let c)?: code = c
         case .signaled(let s)?: signal = s
@@ -467,6 +466,7 @@ public actor ThreadRunner {
             let tail = exit.stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
             if !tail.isEmpty { data["stderr_tail"] = .string(String(tail.suffix(2000))) }
         }
+        data["denials"] = Self.deniedCalls(resultLine)
         for (key, value) in extra { data[key] = value }
 
         try await log.append(.turnEnded, turn: turn, data: .object(data))

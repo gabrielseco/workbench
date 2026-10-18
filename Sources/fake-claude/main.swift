@@ -16,6 +16,7 @@ import Foundation
 //   exit=<n>              exit status at the end (default 0)
 //   invalid-line          put a line that is not JSON before the last line
 //   flood=<bytes>         put one valid JSON line of about this size before the last line
+//   deny=<command>       built-in turn: the result line lists this Bash command as a permission denial
 //   partial-tail          write the last line without a trailing newline
 //   ignore-term           ignore SIGTERM (default: stop the grandchild and exit 143, like the real CLI)
 //   grandchild=<pidfile>  start a `sleep` in its own process group, write its pid to the file
@@ -186,15 +187,19 @@ if let fixture = d.string("fixture") {
             "type": "assistant", "session_id": sessionID,
             "message": ["role": "assistant", "content": [["type": "text", "text": "fake claude: \(prompt)"]]],
         ]))
+    // `deny=<command>` records one denied Bash call.
+    let denials: [Any] = d.string("deny").map {
+        [["tool_name": "Bash", "tool_use_id": "toolu_fake", "tool_input": ["command": $0]]]
+    } ?? []
     if !d.has("no-result") {
-        lines.append(
-            json([
-                "type": "result", "subtype": "success", "is_error": false, "num_turns": 1,
-                "duration_ms": 1, "result": "fake claude: \(prompt)", "stop_reason": "end_turn",
-                "terminal_reason": "completed", "session_id": sessionID, "total_cost_usd": 0.001,
-                "permission_denials": [Any](),
-                "usage": ["input_tokens": 1, "output_tokens": 1],
-            ]))
+        let result: [String: Any] = [
+            "type": "result", "subtype": "success", "is_error": false, "num_turns": 1,
+            "duration_ms": 1, "result": "fake claude: \(prompt)", "stop_reason": "end_turn",
+            "terminal_reason": "completed", "session_id": sessionID, "total_cost_usd": 0.001,
+            "permission_denials": denials,
+            "usage": ["input_tokens": 1, "output_tokens": 1],
+        ]
+        lines.append(json(result))
     }
 }
 
