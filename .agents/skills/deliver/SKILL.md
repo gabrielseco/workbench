@@ -19,6 +19,7 @@ Take current changes to open, reviewed PR(s). **Never merge** — stop once PRs 
 
 ### 3. Commit
 - Stage everything (or only files the user named) — never `git add` unrelated leftovers; check `git status` first.
+- A change to what a `workbench` command does also needs its verify-cli scenario in the same PR, run from the branch (normally and with `VERIFY_CLI_SABOTAGE=1`), with both results in the PR body (`AGENTS.md`, "Shipping a change", step 3).
 - Conventional commit (`type(scope): subject`, imperative, ≤72 chars; see "Commits and PR titles" in `AGENTS.md`), body if needed, HEREDOC, plus the Co-Authored-By / attribution footer your agent's guidance asks for, if any.
 - Before pushing, check the diff as `AGENTS.md` ("Shipping a change", step 2) says: `swiftlint lint --quiet` on the changed `.swift` files and `swift test --filter` on the suites that cover them. Not `scripts/check.sh`; CI runs that.
 - Never force push or skip hooks.

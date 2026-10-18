@@ -45,11 +45,19 @@ list the tasks.
    not match), and a changed test file is its own suite. Docs-only changes need neither. Do not run
    `scripts/check.sh` or the soak locally: CI runs them. Add tests for what you add, including the failure
    cases the phase plan lists.
-3. Commit messages and the PR title follow Conventional Commits (below).
-4. After opening a PR, or after pushing a fix to an open one, have Codex review it with
+3. A change to what a `workbench` command does (its output, flags, exit codes, or what it writes) ships a
+   verify-cli scenario in the same PR: add `scripts/verify-cli/<feature>.sh`, or update the one that covers the
+   command (the `verify-cli` skill says how). Run it by hand from the branch (`VERIFY_CLI_FROM_BRANCH=1`), once
+   normally (it must PASS) and once with `VERIFY_CLI_SABOTAGE=1` (the steps its header names must FAIL), and put
+   both results in the PR description. A scenario that starts a real turn costs money (the script caps it);
+   one that does not, such as `help.sh`, costs nothing. A change no command shows (an internal refactor, docs,
+   tests, scripts) needs none; say that in the PR. Do not put it in a later PR: a scenario that was not run on
+   the change has not checked it.
+4. Commit messages and the PR title follow Conventional Commits (below).
+5. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
-5. Don't merge. Leave the PR open with CI green; the user reviews and merges.
-6. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
+6. Don't merge. Leave the PR open with CI green; the user reviews and merges.
+7. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
    same PR.
 
 ### Commits and PR titles
