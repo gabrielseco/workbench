@@ -22,6 +22,12 @@ import Testing
         #expect(prompt.hasPrefix("The reviewer sent this back with feedback:\n\nGo on.\n\nThe user has now allowed"))
     }
 
+    @Test func aGrantWithBackticksInItCannotCloseTheFence() {
+        let pattern = "Bash(echo ```x```)"
+        let prompt = PromptBuilder.followUpPrompt(feedback: "Go on.", granted: [pattern])
+        #expect(prompt.contains("````\n\(pattern)\n````"), "the fence is longer than the longest run inside")
+    }
+
     @Test func aFollowUpWithNothingGrantedIsAsItWas() {
         #expect(PromptBuilder.followUpPrompt(feedback: "x", granted: []) == PromptBuilder.followUpPrompt(feedback: "x"))
         #expect(!PromptBuilder.followUpPrompt(feedback: "x").contains("now allowed"))
