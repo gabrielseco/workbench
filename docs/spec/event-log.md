@@ -33,6 +33,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `setup.ran` | the project's `setup_command` ended, once, before the first turn | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref` |
 | `thread.note` | user feedback sent back (P2) | `text` |
 | `review.decision` | accept / discard (P2) | `decision`, `by` |
+| `grant.added` | the user decided what to do about a denied command (P13) | `scope` (`once`, `thread`, `never`), `pattern`, and when it answers a denial `denial_seq` |
 | `pr.opened` | `workbench ship` opened the pull request (P2.5) | `url`, `number`, `branch`, `base`, `head_sha` |
 | `pr.described` | `workbench ship` ran the read-only describing turn for the PR title and body | `ok`, `argv` (without the prompt), `title` when `ok`, `reason` when not (the goal-based body was used) |
 | `pr.refreshed` | `workbench ship` proposed (`stage: proposed`) or applied (`stage: applied`) an update to the text of the pull request a thread continues | `stage`, `ok`, `number`, `title_changed`, `sections` (headings), `argv` and `reason` when a proposal failed |
@@ -156,6 +157,12 @@ of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown 
   `seq` of that line, and `input`, the `command`, `file_path`, `path`, `url`, `pattern` or `query` of its
   `tool_input` made safe to print (one line, no control characters, at most 100 characters), and `fullInput`, the same made safe to print from the turn's `turn.ended.denials` (at most 4096 characters; absent for a log from before that field, or when its count differs from the result line's). `review` prints it wrapped under the entry when it is longer than `input`. Only a turn's last `result` line counts (an earlier one of the same turn is a replay), so a turn's entries match its
   `turn.ended.permission_denials`. A denial is `tool_name`, `tool_use_id` and `tool_input`. Entries are grouped by tool and the full, unshortened input.
+- **Grants** are not a field of `ThreadState`; `GrantLedger(events:)` reads them from the same events: every `grant.added`. For the turn that starts next, `once` grants written after the
+  latest `turn.started` and every `thread` grant are added to the project's allowed tools; `never` allows nothing and
+  is only remembered. A pattern is ignored (not an error) unless it is `Tool(content)` for a tool in `[tools]
+  available`, one line, at most 2000 characters, with content that is more than a wildcard; one that `[tools] denied`
+  lists or `[tools] allowed` already has is left out, and `--disallowedTools` is passed as ever, so a grant never
+  overrides a denial. The grants of a turn are visible in its `turn.started.argv`.
 - **`notes`**: every `thread.note` with its `seq` and the follow-up turn it started. The runner writes the
   note with `turn: 0` before that turn, so the turn is derived (last turn + 1), not read from the event.
 

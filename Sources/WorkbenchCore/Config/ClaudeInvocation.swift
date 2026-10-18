@@ -10,12 +10,15 @@ public struct TurnRequest: Sendable, Equatable {
     public var appendSystemPrompt: String?
     /// The goal's model, which wins over the config's.
     public var model: String?
+    /// Patterns the user granted this thread for this turn, on top of the project's (`GrantLedger`).
+    public var extraAllowed: [String]
 
     public init(
         sessionID: UUID, resume: Bool, budgetUSD: Decimal, prompt: String, appendSystemPrompt: String? = nil,
-        model: String? = nil
+        model: String? = nil, extraAllowed: [String] = []
     ) {
         self.model = model
+        self.extraAllowed = extraAllowed
         self.sessionID = sessionID
         self.resume = resume
         self.budgetUSD = budgetUSD
@@ -68,7 +71,11 @@ extension Config {
         args += ["--max-budget-usd", NSDecimalNumber(decimal: turn.budgetUSD).stringValue]
         if let model = turn.model ?? model { args += ["--model", model] }
         args += ["--tools"] + tools.available
-        let allowed = effectiveAllowedTools
+        var allowed = effectiveAllowedTools
+        // A grant never repeats a pattern or revives one the project denies; `--disallowedTools` still wins.
+        for pattern in turn.extraAllowed where !allowed.contains(pattern) && !tools.denied.contains(pattern) {
+            allowed.append(pattern)
+        }
         if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
         if !tools.denied.isEmpty { args += ["--disallowedTools"] + tools.denied }
         if let rules = turn.appendSystemPrompt, !rules.isEmpty { args += ["--append-system-prompt", rules] }

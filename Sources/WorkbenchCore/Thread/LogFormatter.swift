@@ -43,6 +43,9 @@ public enum LogFormatter {
             return out
         case .threadNote:
             return head + "feedback: \(event.data["text"]?.stringValue ?? "")"
+        case .grantAdded:
+            let scope = ThreadState.safeLine(event.data["scope"]?.stringValue ?? "?", limit: 20)
+            return head + "grant (\(scope)): " + ThreadState.safeLine(event.data["pattern"]?.stringValue ?? "?", limit: 300)
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
         case .worktreeRemoved:
