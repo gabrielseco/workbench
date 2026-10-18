@@ -79,4 +79,88 @@ private func eval(_ proofs: [String], check: Review.Check? = nil, lastTurn: Int 
         #expect(table.contains("| c1 | ✔ passed |"))
         #expect(table.contains("`grep a \\| wc -l`"))
     }
+
+    // MARK: Proofs that name tests
+
+    private func ran(
+        passed: [String] = [], failed: [String] = [], truncated: Bool = false, turn: Int = 1, result: String = "passed"
+    ) -> Review.Check {
+        var c = check(result, turn: turn)
+        c.tests = CheckTests(passed: passed, failed: failed, truncated: truncated)
+        return c
+    }
+
+    @Test func aNamedTestThatPassedInTheLatestTurnIsPassed() {
+        let status = eval(["test: Suite/everythingOrder()"], check: ran(passed: ["everythingOrder()"]))
+        #expect(status[0].state == .passed)
+        #expect(status[0].note == "named test ran in the check, turn 1")
+    }
+
+    @Test func aNamedTestThatDidNotAppearStaysForAPerson() {
+        let status = eval(["test: Suite/missing"], check: ran(passed: ["other()"]))
+        #expect(status[0].state == .manual)
+        #expect(status[0].note?.contains("did not appear") == true)
+    }
+
+    @Test func aNamedTestThatFailedIsFailed() {
+        let status = eval(["test: Suite/broken"], check: ran(failed: ["broken()"], result: "failed"))
+        #expect(status[0].state == .failed)
+    }
+
+    @Test func aPrefixPassesOnlyIfEveryMatchPassed() {
+        let both = eval(["test: Suite/order*"], check: ran(passed: ["orderA()", "orderB()"]))
+        #expect(both[0].state == .passed)
+        let oneFailing = eval(["test: Suite/order"], check: ran(passed: ["orderA()"], failed: ["orderB()"]))
+        #expect(oneFailing[0].state == .failed)
+    }
+
+    @Test func aNameThatCannotBeReadLeavesTheWholeProofToAPerson() {
+        let status = eval(["test: Suite/a, Suite/not-a-name!"], check: ran(passed: ["a()"]))
+        #expect(status[0].state == .manual)
+        #expect(eval(["test: Suite/échec"], check: ran(passed: ["échec()"]))[0].state == .passed)
+        #expect(eval(["test: Suite/a, Suite/échec"], check: ran(passed: ["a()"]))[0].state == .manual)
+    }
+
+    @Test func aNamedTestRowReachesThePullRequestTableAsACheckRun() {
+        let rows = CriteriaStatus.markdown(
+            eval(["test: a"], check: ran(passed: ["a()"])), oneLine: { $0 })
+        #expect(rows.contains("✔ passed | Workbench's check run (named test ran in the check, turn 1)"))
+    }
+
+    @Test func aSeenFailureHoldsEvenWhenAnotherNameIsAbsent() {
+        let status = eval(["test: broken, missing"], check: ran(failed: ["broken()"], result: "failed"))
+        #expect(status[0].state == .failed)
+    }
+
+    @Test func severalNamesAllNeedToHavePassed() {
+        let status = eval(["test: a, b"], check: ran(passed: ["a()"]))
+        #expect(status[0].state == .manual)
+        #expect(eval(["test: a, b"], check: ran(passed: ["a()", "b()"]))[0].state == .passed)
+    }
+
+    @Test func aCheckFromAnEarlierTurnOrNoCheckGivesNoVerdict() {
+        let old = eval(["test: a"], check: ran(passed: ["a()"], turn: 1), lastTurn: 2)
+        #expect(old[0].state == .manual)
+        #expect(old[0].note?.contains("not the latest turn 2") == true)
+        #expect(eval(["test: a"], check: nil)[0].state == .manual)
+    }
+
+    @Test func aCheckThatDidNotFinishOrListedNoTestsGivesNoVerdict() {
+        #expect(eval(["test: a"], check: ran(passed: ["a()"], result: "timed_out"))[0].state == .manual)
+        #expect(eval(["test: a"], check: check("passed"))[0].state == .manual, "format the parser does not know")
+        #expect(eval(["test: a"], check: ran(passed: ["a()"], truncated: true))[0].state == .manual)
+    }
+
+    @Test func proseNamingOnlyRecordedTestsStillCountsAsTheFallback() {
+        let c = ran(passed: ["everythingOrderIsKept()"])
+        #expect(eval(["`everythingOrderIsKept` passes"], check: c)[0].state == .passed)
+        #expect(eval(["`everythingOrderIsKept` passes and the doc says so"], check: c)[0].state == .manual)
+        #expect(eval(["`notRecorded` passes"], check: c)[0].state == .manual)
+    }
+
+    @Test func aProofThatIsTheCheckKeepsItsOldBehaviourWhenTestsAreRecorded() {
+        var c = ran(passed: ["a()"])
+        c.command = "npm run ci"
+        #expect(eval(["`npm run ci` passes"], check: c)[0].state == .passed)
+    }
 }

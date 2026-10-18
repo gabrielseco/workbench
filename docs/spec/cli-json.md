@@ -43,7 +43,7 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goa
 - `criteria`: `{id, text, proof, status, commands, note, file}`. `status` is `passed` or `failed` only when the
   proof is exactly the command the latest check recorded (`check.ran` `command`) and that check ran after the
   latest turn;
-  otherwise `manual`. `commands` are the proof's backticked commands; `note` says why a check-shaped proof
+  otherwise `manual`; a `test:` proof is `passed` or `failed` from the tests that check saw (goal-file spec). `commands` are the proof's backticked commands; `note` says why a check-shaped proof
   is still `manual`, or which check backs a verdict (null otherwise). A `screenshot: <name>` proof is
   `evidence` when the latest verify step, run after the latest turn, left `<name>.png` (`file` is its path
   relative to the thread directory; a person looks at it, it is never a pass) and `missing` otherwise,

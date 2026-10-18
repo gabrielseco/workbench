@@ -97,6 +97,11 @@ struct CheckRunner {
             if exit.termination == .lost { data["lost"] = true }
         }
         if let error = outcome.error { data["error"] = .string(error) }
+        if !outcome.tests.isEmpty {
+            data["tests_passed"] = .array(outcome.tests.passed.map { .string($0) })
+            data["tests_failed"] = .array(outcome.tests.failed.map { .string($0) })
+            if outcome.tests.truncated { data["tests_truncated"] = true }
+        }
         try await log.append(.checkRan, turn: turn, data: .object(data))
         return report
     }
@@ -154,6 +159,7 @@ struct CheckRunner {
         var exit: ProcessExit?
         var truncated = false
         var error: String?
+        var tests = CheckTests()
     }
 
     func execute(outputURL: URL, attach: @Sendable (ProcessRun) async -> Void) async throws -> Outcome {
@@ -170,20 +176,27 @@ struct CheckRunner {
 
         // The stream is read to its `exited` event even past the limit: that is what keeps the pipe empty.
         var outcome = Outcome()
+        var parser = TestOutputParser()
         for await event in process.events {
             switch event {
             case .started: break
-            case .line(let line): sink.write(line)
+            case .line(let line):
+                sink.write(line)
+                parser.feed(line)
             case .oversizedLine(let preview, let total):
                 // A single line over the limit: the runner kept only its start, so say how much was cut.
                 sink.write("\(preview)… [line of \(total) bytes, cut after its first \(preview.count) characters]")
                 sink.truncated = true
             case .exited(let exit):
                 outcome.exit = exit
-                if exit.outputTruncated { sink.truncated = true }
+                if exit.outputTruncated {
+                    sink.truncated = true
+                    parser.markIncomplete()
+                }
             }
         }
         sink.finish()
+        outcome.tests = parser.result
         outcome.truncated = sink.truncated
         if sink.failed { outcome.error = "the output file could not be written in full" }
         return outcome
