@@ -85,8 +85,7 @@ extension ThreadService {
         id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
         agent: ReadOnlyAgent, timeout: TimeInterval, attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PlanResult {
-        // First, before any refusal: a plan whose process died is closed and its leftovers ended by whatever comes next.
-        try await closeOrphanedPlan(id: id, log: log)
+        // `withLog` has already closed a plan whose process died, before any refusal below.
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         if let decision = ThreadState.derive(from: events, id: id).decision { throw ThreadServiceError.threadEnded(decision) }
         let goal: Goal

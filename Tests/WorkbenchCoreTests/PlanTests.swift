@@ -343,6 +343,12 @@ private let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.
         let ends = p.events.filter { $0.kind == .planEnded }
         #expect(ends.count == 2 && ends.allSatisfy { $0.data["reason"] == "interrupted" })
         #expect(!FileManager.default.fileExists(atPath: leftover.path))
+
+        // And any other command that opens the log (here, the judge).
+        try await orphan()
+        let verdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": ["ok"]}], "concerns": []}"#
+        _ = try await p.fx.service.judge(id: p.id, config: p.config, environment: try p.answering(verdict))
+        #expect(p.events.filter { $0.kind == .planEnded }.count == 3)
         #expect(try p.fx.contents(p.id).isHealthy)
     }
 
