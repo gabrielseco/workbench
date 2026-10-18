@@ -295,7 +295,7 @@ enum Commands {
                 out("warning: " + warning.line)
             }
         }
-        if before?.goal.approval != .approved { out("next:    workbench run") }
+        if before?.goal.approval != .approved { out("next:    workbench run   (`workbench doctor` first preflights the environment)") }
     }
 
     static func run(_ args: [String]) async throws -> Int32 {

@@ -207,6 +207,18 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
         try await expectClean(fx)
     }
 
+    @Test func itRunsAfterAFinishedTurn() async throws {
+        let (fx, _) = try await fixture(check: "true")
+        let id = try await fx.approvedThread()
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s", "resume": false])
+        _ = try await log.append(.turnEnded, turn: 1, data: ["result": "success"])
+        await log.close()
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
+        #expect(report.passed)
+        try await expectClean(fx)
+    }
+
     @Test func itRefusesWhileARunnerIsAlive() async throws {
         let (fx, _) = try await fixture(check: "true")
         let id = try await fx.approvedThread()
@@ -333,6 +345,23 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 }
 
 @Suite struct DoctorBoundaryTests {
+    @Test func aRunCannotStartWhileDoctorRuns() async throws {
+        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let id = try await fx.approvedThread()
+        let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
+        #expect(await script.waitFor("setup.sh.started"))
+
+        do {
+            _ = try await fx.runner(id).run(fx.options())
+            Issue.record("expected a refusal")
+        } catch let error as ThreadStoreError {
+            #expect(error == .doctorRunning)
+        }
+        #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path), "the refused run left no runner.json")
+        #expect(!(try fx.kinds(id)).contains("turn.started"))
+        _ = try await task.value
+    }
+
     @Test func aThreadCannotBeStartedWhileDoctorRuns() async throws {
         let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }

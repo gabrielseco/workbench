@@ -77,14 +77,19 @@ public struct ThreadStore: Sendable {
         threadIDs().first { state(of: $0).isActive && runnerPID(id: $0) != nil }
     }
 
+    /// Doctor holds the project lock for its whole run; taking and dropping it here is the check. A run calls it
+    /// after writing its `runner.json`, and doctor looks for that file after taking the lock, so one sees the other.
+    public func requireNoDoctor() throws {
+        if let held = try? ProjectLock.acquire(project) { ProjectLock.release(held) } else {
+            throw ThreadStoreError.doctorRunning
+        }
+    }
+
     /// Makes the thread directory and refuses when another thread is still active (the single-thread rule).
     public func create(id: String) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         if let active = activeThreadID() { throw ThreadStoreError.activeThreadExists(active) }
-        // Doctor holds this lock for its whole run; taking and dropping it here is the check.
-        if let held = try? ProjectLock.acquire(project) { ProjectLock.release(held) } else {
-            throw ThreadStoreError.doctorRunning
-        }
+        try requireNoDoctor()
         guard !FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
             throw ThreadStoreError.threadExists(id)
         }

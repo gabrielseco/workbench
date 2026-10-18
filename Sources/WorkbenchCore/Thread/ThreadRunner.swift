@@ -130,6 +130,7 @@ public actor ThreadRunner {
         defer {
             try? FileManager.default.removeItem(at: project.runnerURL(threadID))
         }
+        try ThreadStore(project: project).requireNoDoctor()
 
         do {
             let report = try await runLocked(
