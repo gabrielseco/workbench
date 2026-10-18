@@ -26,10 +26,12 @@ extension Commands {
             }
             let id = try ctx.threadIDForViewing(named)
             let candidates = try ctx.service.grantCandidates(id: id)
+            let suggestions = suggestions(ctx)
             if Output.json {
-                printJSON(grantListJSON(thread: id, candidates: candidates))
+                printJSON(grantListJSON(thread: id, candidates: candidates, suggestions: suggestions))
             } else {
                 for line in GrantReport.render(threadID: id, candidates: candidates) { out(line) }
+                for line in GrantReport.renderSuggestions(suggestions) { out(line) }
             }
             return
         }
@@ -46,9 +48,11 @@ extension Commands {
             case .notFound(let message): throw CLIError.notFound(message)
             }
         }
+        let suggestion = outcome.scope == .never ? nil : suggestions(ctx).first { $0.pattern == outcome.pattern }
         if Output.json {
             printJSON([
                 "v": 1, "thread": .string(id), "pattern": .string(outcome.pattern),
+                "suggestion": suggestion.map(suggestionJSON) ?? .null,
                 "scope": .string(outcome.scope.rawValue), "level": .string(GrantReport.level(outcome.level)),
                 "recorded": .bool(outcome.seq != nil), "seq": outcome.seq.map { .int($0) } ?? .null,
             ])
@@ -61,9 +65,23 @@ extension Commands {
         case (_, .once): out("granted once: \(pattern) \u{2014} the next turn may run it, then it is gone")
         case (_, .thread): out("granted for \(id): \(pattern)")
         }
+        if let suggestion { for line in GrantReport.renderSuggestions([suggestion]) { out(line) } }
         if outcome.scope != .never {
             out("next: workbench send-back \"<note>\"   or   workbench run --feedback \"<note>\"")
         }
+    }
+
+    /// Commands the project keeps being denied; empty when the config cannot be read.
+    private static func suggestions(_ ctx: Context) -> [GrantSuggestion] {
+        guard let config = try? Config.load(from: ctx.project.configURL) else { return [] }
+        return ctx.service.grantSuggestions(tools: config.tools)
+    }
+
+    private static func suggestionJSON(_ suggestion: GrantSuggestion) -> JSONValue {
+        [
+            "pattern": .string(suggestion.pattern), "config_entry": .string(suggestion.configEntry),
+            "threads": .array(suggestion.threads.map { .string($0) }),
+        ]
     }
 
     private static func isDenialNumber(_ text: String) -> Bool {
@@ -78,8 +96,9 @@ extension Commands {
         }
     }
 
-    static func grantListJSON(thread: String, candidates: [GrantCandidate]) -> JSONValue {
+    static func grantListJSON(thread: String, candidates: [GrantCandidate], suggestions: [GrantSuggestion]) -> JSONValue {
         [
+            "suggestions": .array(suggestions.map(suggestionJSON)),
             "v": 1, "thread": .string(thread),
             "denied": .array(
                 candidates.map { candidate in

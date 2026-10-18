@@ -65,7 +65,9 @@ JSON lines: the stored events, one per line, exactly as in `events.jsonl` (`clau
 
 ## grant
 
-`workbench grant [id] --json`: `{v, thread, denied}`. `denied` is one entry per distinct denied call, in the order they
+`workbench grant [id] --json`: `{v, thread, denied, suggestions}`. `suggestions` is `{pattern, config_entry, threads}` for each
+safe narrow prefix denied in two or more threads that the config neither allows nor denies and nobody turned down
+(`config_entry` is the string to add to `[tools] allowed`; nothing is written). `denied` is one entry per distinct denied call, in the order they
 first happened (the numbers `grant <n>` takes; they do not change when more is granted or denied):
 `{number, tool, input, level, compound, status, turns, seqs, parts}`.
 
@@ -77,5 +79,5 @@ first happened (the numbers `grant <n>` takes; they do not change when more is g
   simple command of a compound (`"3.1"`, ...). `pattern` is what granting it would allow, null when it cannot be
   written as a fixed pattern.
 
-`workbench grant [id] <n> --once|--thread|--never --json`: `{v, thread, pattern, scope, level, recorded, seq}`;
+`workbench grant [id] <n> --once|--thread|--never --json`: `{v, thread, pattern, scope, level, recorded, seq, suggestion}` (`suggestion` as above for this pattern, else null);
 `recorded` is false and `seq` null when the same decision was already on record. A refusal is the usual error object.
