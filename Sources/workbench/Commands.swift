@@ -104,7 +104,7 @@ enum Commands {
             try Config.exampleTOML.write(to: ctx.project.configURL, atomically: true, encoding: .utf8)
             out("wrote \(ctx.project.configURL.path)")
             out("review the tool set, set check_command and setup_command, then: workbench doctor")
-            out("then: workbench goal new <name>")
+            out("then: workbench goal new <name> (doctor can also run after goal approve, before run)")
         }
         // Keeps `.workbench/` out of the repository's `git status` without touching its .gitignore.
         do {
@@ -196,7 +196,7 @@ enum Commands {
         do { report = try await doctor.run(base: resolved) } catch let error as DoctorError {
             switch error {
             case .invalidBase: throw CLIError.usage("\(error)")
-            case .noConfig, .threadActive, .alreadyRunning: throw CLIError.refused("\(error)")
+            case .noConfig, .runnerLive, .alreadyRunning: throw CLIError.refused("\(error)")
             }
         }
         printDoctor(report)

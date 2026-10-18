@@ -422,19 +422,8 @@ public struct ThreadService: Sendable {
         case notRunning
     }
 
-    /// The pid of the `workbench run` holding this thread, if there is one: same pid *and* same start time
-    /// as recorded, so a process that merely reused the number is not mistaken for it.
-    public func runnerPID(id: String) -> Int32? {
-        guard
-            let data = try? Data(contentsOf: project.runnerURL(id)),
-            let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let pid = (info["pid"] as? NSNumber)?.int32Value,
-            let seconds = (info["started_seconds"] as? NSNumber)?.uint64Value,
-            let micros = (info["started_micros"] as? NSNumber)?.uint64Value
-        else { return nil }
-        let expected = ProcessMember(pid: pid, startSeconds: seconds, startMicros: micros)
-        return ProcessTree.isAlive(expected) ? pid : nil
-    }
+    /// The pid of the `workbench run` holding this thread, if there is one (see `ThreadStore.runnerPID`).
+    public func runnerPID(id: String) -> Int32? { store.runnerPID(id: id) }
 
     /// Asks the `workbench run` holding this thread to stop. It records the turn as `stopped` itself.
     public func requestStop(id: String) -> StopResult {

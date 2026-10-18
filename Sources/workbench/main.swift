@@ -12,7 +12,8 @@ let usage = """
                                  non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
-      doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing
+      doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing;
+                                 works before goal new and after goal approve, refused only while a run is live
 
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
