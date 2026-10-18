@@ -103,51 +103,53 @@ public struct Review: Sendable, Equatable {
     public var prReview: PRReview?
 }
 
-/// A `plan.ended` as `status` and `review` show it: the plan that was made, or why there is none.
+/// A plan event as `status` and `review` show it: the plan that was made or edited, or why there is none.
 public struct PlanRecord: Sendable, Equatable {
     public var ok: Bool
+    public var source: PlanSource
+    /// The model the plan turn was asked for, read from the logged command; nil for an edit or an old log.
+    public var model: String?
     public var costUSD: Double?
     /// The plan file, relative to the thread's folder.
     public var ref: String?
+    public var sha256: String?
+    public var bytes: Int?
     public var goalHash: String?
     public var baseCommit: String?
     public var truncated: Bool
     public var failure: String?
 
-    init(
-        ok: Bool, costUSD: Double?, ref: String?, goalHash: String?, baseCommit: String?, truncated: Bool,
-        failure: String?
-    ) {
-        self.ok = ok
-        self.costUSD = costUSD
-        self.ref = ref
-        self.goalHash = goalHash
-        self.baseCommit = baseCommit
-        self.truncated = truncated
-        self.failure = failure
-    }
-
     init(_ event: Event) {
         // A start is replaced by the `plan.ended` that follows; if none does, the plan was cut off.
-        guard event.kind == .planEnded else {
-            self.init(
-                ok: false, costUSD: nil, ref: nil, goalHash: event.data["goal_hash"]?.stringValue,
-                baseCommit: event.data["base_commit"]?.stringValue, truncated: false,
-                failure: "started and never recorded a result (still running, or it was interrupted)")
-            return
-        }
-        let ok = event.data["ok"] == true
-        let cost: Double?
+        let started = event.kind == .planStarted
+        let ok = event.kind == .planEdited || (!started && event.data["ok"] == true)
+        var cost: Double?
         switch event.data["cost_usd"] {
         case .double(let d)?: cost = d
         case .int(let i)?: cost = Double(i)
-        default: cost = nil
+        default: break
         }
-        self.init(
-            ok: ok, costUSD: cost, ref: ok ? event.data["plan_ref"]?.stringValue : nil,
-            goalHash: event.data["goal_hash"]?.stringValue, baseCommit: event.data["base_commit"]?.stringValue,
-            truncated: event.data["truncated"] == true,
-            failure: ok ? nil : (event.data["reason"]?.stringValue ?? "no reason recorded"))
+        var model: String?
+        if case .array(let argv)? = event.data["argv"], let at = argv.firstIndex(of: "--model"), at + 1 < argv.count {
+            model = argv[at + 1].stringValue
+        }
+        self.ok = ok
+        self.source = event.kind == .planEdited ? .edited : .generated
+        self.model = model
+        self.costUSD = cost
+        self.ref = ok ? event.data["plan_ref"]?.stringValue : nil
+        self.sha256 = ok ? event.data["sha256"]?.stringValue : nil
+        self.bytes = ok ? event.data["bytes"]?.intValue : nil
+        self.goalHash = event.data["goal_hash"]?.stringValue
+        self.baseCommit = event.data["base_commit"]?.stringValue
+        self.truncated = event.data["truncated"] == true
+        if ok {
+            self.failure = nil
+        } else if started {
+            self.failure = "started and never recorded a result (still running, or it was interrupted)"
+        } else {
+            self.failure = event.data["reason"]?.stringValue ?? "no reason recorded"
+        }
     }
 }
 
@@ -251,8 +253,14 @@ public struct ThreadState: Sendable, Equatable {
     public var progress: Progress
     /// Set for a review follow-up, nil for a thread someone started.
     public var lineage: ThreadLineage?
-    /// The latest plan turn, nil when none has run. Advisory: nothing gates on it.
+    /// The latest plan event, nil when none has run: a plan turn that started, ended or failed, or an edit.
     public var plan: PlanRecord?
+    /// The latest plan that was kept (generated or edited), nil when none was. A later failed plan does not hide it.
+    public var currentPlan: PlanRecord?
+    /// What the plan turns cost, apart from the turns' `totalCostUSD`. An edit is free.
+    public var planCostUSD: Double = 0
+    /// The hash the latest `goal.approved` bound, so a plan made for another version reads as stale.
+    public var approvedGoalHash: String?
 
     public var isActive: Bool { decision == nil }
 
@@ -347,8 +355,13 @@ public struct ThreadState: Sendable, Equatable {
                 failure: "started and never recorded a result (still running, or it was interrupted)")
         case .judgeRan:
             state.review.judge = judgeRun(event)
-        case .planStarted, .planEnded:
-            state.plan = PlanRecord(event)
+        case .planStarted, .planEnded, .planEdited:
+            let record = PlanRecord(event)
+            state.plan = record
+            if record.ok { state.currentPlan = record }
+            if event.kind == .planEnded { state.planCostUSD += record.costUSD ?? 0 }
+        case .goalApproved:
+            state.approvedGoalHash = event.data["hash"]?.stringValue
         default:
             state.review.prReview = prReviewRound(event)
         }
@@ -403,7 +416,8 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
                 Self.applyVerify(event, to: &state, pending: &pendingProof)
-            case .judgeStarted, .judgeRan, .planStarted, .planEnded, .prReviewStarted, .prReviewFinished:
+            case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
+                .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {

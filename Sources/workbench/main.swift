@@ -21,7 +21,7 @@ let usage = """
       goal approve [id]          approve the goal; any later edit returns it to draft
                                  refused while a proof names a command a run cannot execute
                                  (--allow-unrunnable-proofs to approve anyway; also on run, send-back)
-      run                        run Claude on the approved goal in a worktree [--feedback "<text>"]
+      run                        run Claude on the approved goal in a worktree [--feedback "<text>"] [--no-plan]
                                  (local edits in your checkout are left out; --allow-dirty is ignored)
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
@@ -41,7 +41,10 @@ let usage = """
       plan [id] [--again] [--model <name>] [--budget <usd>]
                                  a read-only Claude run reads the repository at the base commit against the
                                  approved goal and writes the approach; saved under plans/ in the thread, once
-                                 per approved goal unless --again; run does not read it yet
+                                 per approved goal unless --again; the next run puts it in the first prompt
+      plan show [id]             the latest plan, who wrote it, what it cost and whether it fits the goal
+      plan edit [id] [--apply | --from <file>]
+                                 copy the plan to plans/draft.md to edit; --apply (or --from) makes the edit the plan
       pr-review --pr <n> [--spec <file>] [--again]
                                  the same review for a pull request no thread made (one written by hand): its own
                                  text is the goal, or the file; kept under .workbench/reviews/, no rounds counted

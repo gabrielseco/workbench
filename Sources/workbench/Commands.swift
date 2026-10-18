@@ -304,12 +304,14 @@ enum Commands {
         // Accepted and ignored: a checkout with local edits no longer blocks a run.
         let allowDirty = a.flag("--allow-dirty")
         let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
+        let noPlan = a.flag("--no-plan")
         let named = a.positional()
         try a.requireEmpty()
 
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
         var options = RunOptions(feedback: feedback)
+        options.noPlan = noPlan
         options.allowDirty = allowDirty
         options.allowUnrunnableProofs = allowUnrunnable
         return try await runTurn(ctx: ctx, id: id, options: options)

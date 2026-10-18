@@ -21,6 +21,12 @@ public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     case alreadyPlanned
     case invalidModel(String)
     case busy
+    case noPlanToEdit
+    case planFileProblem(String)
+    case emptyEdit
+    case unchangedEdit
+    case noDraft
+    case fileUnreadable(String)
 
     public var description: String {
         switch self {
@@ -34,6 +40,13 @@ public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
             "this goal has a plan already (`workbench log` shows it). Pass --again to make another."
         case .invalidModel: "--model needs a model name or alias like \"opus\""
         case .busy: "another command is using this thread (a run, a judge or another plan); try again when it ends."
+        case .noPlanToEdit:
+            "this thread has no plan to edit: run `workbench plan` first, or give one with `plan edit --from <file>`."
+        case .planFileProblem(let why): why
+        case .emptyEdit: "the edited plan is empty; nothing was recorded."
+        case .unchangedEdit: "the plan is the same as the latest one; nothing was recorded."
+        case .noDraft: "there is no draft to apply: run `workbench plan edit`, edit plans/draft.md, then `plan edit --apply`."
+        case .fileUnreadable(let why): "the file could not be read: \(why)"
         }
     }
 }
@@ -48,6 +61,11 @@ private struct SavedPlan {
 extension ThreadService {
     /// Where a plan turn's checkout lives; a `claude` a killed plan left is found by this folder.
     func planDirectory(_ id: String) -> URL { project.threadDirectory(id).appendingPathComponent("plan") }
+
+    /// The number of the next plan file: one more than the plans kept so far, generated or edited.
+    static func nextPlanNumber(_ events: [Event]) -> Int {
+        events.filter { ($0.kind == .planEnded || $0.kind == .planEdited) && $0.data["plan_ref"] != nil }.count + 1
+    }
 
     /// Closes a plan left open by a process that died, and ends what it left behind (see `Plan.recoverOrphan`).
     func closeOrphanedPlan(id: String, log: EventLogWriter) async throws {
@@ -170,8 +188,7 @@ extension ThreadService {
                 log, turn: turn, hash: hash, base: commit, cost: answer.costUSD, failure: "the plan was empty",
                 argv: shown, durationMs: elapsed, warning: warning)
         }
-        let number = events.filter { $0.kind == .planEnded && $0.data["plan_ref"] != nil }.count + 1
-        let ref = "plans/plan-\(number).md"
+        let ref = "plans/plan-\(Self.nextPlanNumber(events)).md"
         let url = project.threadDirectory(id).appendingPathComponent(ref)
         do {
             try FileManager.default.createDirectory(

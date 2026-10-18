@@ -66,6 +66,9 @@ public struct RunOptions: Sendable {
     /// The environment `claude` is derived from. Defaults to this process's.
     public var parentEnvironment: [String: String] = ProcessInfo.processInfo.environment
 
+    /// Leave the thread's plan out of the first prompt (`run --no-plan`).
+    public var noPlan = false
+
     public init(feedback: String? = nil) { self.feedback = feedback }
 }
 
@@ -74,7 +77,7 @@ public struct RunOptions: Sendable {
 public actor ThreadRunner {
     let project: Project
     let threadID: String
-    private let git: GitRunner
+    let git: GitRunner
     let notify: @Sendable (RunNotice) -> Void
     var currentRun: ProcessRun?
     private var stopRequested = false
@@ -241,17 +244,9 @@ public actor ThreadRunner {
             }
         }
 
-        // The prompt built from the goal carries the project's instructions as they were at the base
-        // commit: not the main checkout, and not the worktree, which the run may already have edited.
-        var instructions: JSONValue?
+        var promptInfo: [String: JSONValue] = [:]
         if builtFromGoal {
-            var loaded: ProjectInstructions?
-            if config.projectInstructions, let baseCommit {
-                loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: baseCommit)
-            }
-            prompt = PromptBuilder.firstPrompt(
-                goal: goal, checkCommand: config.checkCommand, instructions: loaded, verifies: config.verifyCommand != nil)
-            instructions = loaded?.eventData ?? .null
+            (prompt, promptInfo) = await firstPrompt(goal: goal, config: config, baseCommit: baseCommit, options: options)
         }
 
         // The session: decided before spawning and written down first (spike S4).
@@ -271,7 +266,7 @@ public actor ThreadRunner {
             let turn = await log.lastTurn + 1
             let result = try await executeTurn(
                 turn: turn, resume: resume, sessionID: sessionID, prompt: prompt, config: config, goal: goal,
-                claude: claude, worktree: worktree, instructions: instructions, log: log, store: store,
+                claude: claude, worktree: worktree, promptInfo: promptInfo, log: log, store: store,
                 options: options)
             report = result.report
             // An unconfirmed session may not exist at all, in which case `--resume` fails at once with no
@@ -315,7 +310,7 @@ public actor ThreadRunner {
 
     private func executeTurn(
         turn: Int, resume: Bool, sessionID: String, prompt: String, config: Config, goal: Goal, claude: URL,
-        worktree: URL, instructions: JSONValue?, log: EventLogWriter, store: ThreadStore, options: RunOptions
+        worktree: URL, promptInfo: [String: JSONValue], log: EventLogWriter, store: ThreadStore, options: RunOptions
     ) async throws -> TurnOutcome {
         let promptURL = project.promptURL(threadID, turn: turn)
         try FileManager.default.createDirectory(
@@ -342,7 +337,7 @@ public actor ThreadRunner {
                 "argv": .array(([claude.path] + shownArgs).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
-            if let instructions { data["instructions"] = instructions }
+            data.merge(promptInfo) { _, new in new }
             return .object(data)
         }
 
@@ -505,13 +500,6 @@ extension ThreadRunner {
         return ran
     }
 
-    /// Closes a check or verify step left open by a runner that died.
-    func recoverOrphanedChecks(log: EventLogWriter) async throws {
-        if let recovered = try await log.recoverOrphanedCheck() { notify(.recoveredOrphanedCheck(recovered.turn)) }
-        _ = try await log.recoverOrphanedVerify()
-        try await Plan.recoverOrphan(log: log, project: project, threadID: threadID, git: git)
-    }
-
     // MARK: The verify step
 
     /// The project's verify command, run here so that the evidence is Workbench's and not Claude's claim. Only
@@ -541,27 +529,6 @@ extension ThreadRunner {
     func attach(_ process: ProcessRun) {
         currentRun = process
         if stopRequested { process.stop() }
-    }
-
-    // MARK: Classification (pure, tested directly)
-
-    static func classify(exit: ProcessExit?, result: [String: Any]?) -> RunResult {
-        guard let exit else { return .failed }
-        switch exit.cause {
-        case .stopped: return .stopped
-        case .timedOut: return .timedOut
-        case .natural: break
-        }
-        if case .signaled = exit.termination { return .failed }
-        guard let result else { return .failed }
-
-        let subtype = result["subtype"] as? String
-        let terminal = result["terminal_reason"] as? String
-        if subtype == "error_max_budget_usd" || terminal == "budget_exhausted" { return .budgetExceeded }
-        // A success line from a process that then exited non-zero is not a success.
-        if case .exited(let code) = exit.termination, code != 0 { return .failed }
-        if subtype == "success", result["is_error"] as? Bool != true { return .succeeded }
-        return .failed
     }
 
     // MARK: Helpers

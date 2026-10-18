@@ -137,6 +137,15 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 6 | `refused` | the goal is a draft or changed since approval, this goal has a plan already (`--again` makes another), the thread has ended, a run is live, or another command holds the thread (a judge, another plan) |
 | 7 | `not-found` | the thread named does not exist |
 
+### `plan show`, `plan edit`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 | | `show` printed the plan (or said there is none); `edit` wrote the draft or recorded the edit |
+| 2 | `usage` | wrong command line, such as `--apply` with `--from` |
+| 6 | `refused` | `edit`: there is no plan to edit, no draft to apply, an empty or unchanged text, an unreadable file, a draft or changed goal, an ended thread, a run is live, or another command holds the thread |
+| 7 | `not-found` | the thread named does not exist |
+
 ### `pr-review`
 
 | Code | Kind | When |

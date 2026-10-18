@@ -9,7 +9,8 @@ public enum PromptBuilder {
         + "commit in this worktree and stop there."
 
     public static func firstPrompt(
-        goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false
+        goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false,
+        plan: PlanForRun? = nil
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
@@ -21,6 +22,7 @@ public enum PromptBuilder {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"
             for item in goal.outOfScope { out += "- \(item)\n" }
         }
+        if let plan { out += planSection(plan) }
         if let instructions {
             out += "\n## Project instructions\n\n\(instructionsIntro)\n\n\(instructions.text)\n"
         }
@@ -50,6 +52,19 @@ public enum PromptBuilder {
         }
         out += "\nWork in the current directory. When you finish, say which criteria you believe hold and why.\n"
         return out
+    }
+
+    /// The plan, as advice: another model wrote it from the same goal, and the contract is still the criteria.
+    static func planSection(_ plan: PlanForRun) -> String {
+        var out = "\n## Plan\n\n"
+        out += "Another model read the repository and wrote this plan for the work above"
+        out += plan.source == .edited ? ", and a person then edited it" : ""
+        out += ". Treat it as advice: the criteria and the out-of-scope list win wherever they disagree with it, "
+        out += "and where you do something differently, say so in your summary.\n"
+        if let planned = plan.plannedAt {
+            out += "\nIt was written at commit `\(planned.prefix(12))`; this worktree starts from a different one.\n"
+        }
+        return out + "\n" + plan.text + (plan.text.hasSuffix("\n") ? "" : "\n")
     }
 
     public static func followUpPrompt(

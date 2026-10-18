@@ -9,7 +9,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, plan, plan_cost_usd, notes, base_gap, worktree, progress
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -36,7 +36,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, base, worktree, criteria, diff, check, verify, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, diff, check, verify, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
@@ -52,6 +52,7 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goa
   each file `{path, old_path, status, binary, untracked, staged, additions, deletions}`.
 - `check`: null, or `{turn, result, exit_code, duration_ms}`.
 - `verify`: null when no verify step has run, else `{turn, result, exit_code, duration_ms, proof}` where `proof` is a list of `{name, path, sha256, bytes}`.
+- `plan`: null when no plan was kept, else `{source, model, cost_usd, ref, sha256, bytes, truncated, stale, last_failure}`: `source` is `generated` or `edited`, `model` the plan turn's `--model` (null for an edit), `cost_usd` that turn's cost (null for an edit), `ref` the file under the thread's folder, `stale` true when it was made for another version of the goal than the one approved now (`run` leaves it out), `last_failure` why the newest plan turn made nothing (null when it did). `plan_cost_usd` is what all plan turns cost, apart from `cost_usd`, which stays the turns' cost.
 - `judge`: null when the advisory judge has not run, else `{turn, ok, stale, cost_usd, failure, criteria, concerns}`; `criteria` is `{id, met, evidence}` per criterion, `stale` is true when `turn` is not the latest turn, `failure` says why there is no verdict when `ok` is false. Advisory: nothing acts on it.
 - `pr_review`: null when `workbench pr-review` has not run, else the latest round `{round, pr, ok, verdict, stale, head_sha, findings_path, failure}`; `verdict` is `clean` or `fix` (null when `ok` is false and `failure` says why), `head_sha` is the commit that round reviewed, and `stale` is true when `workbench/<id>` has moved on from it (false when the branch is not known here). Advisory: nothing acts on it.
 - `review_stages`: one entry per stage of `review.stages`, in its order (`["pr-review"]` with no `[review]` config, or when the config does not load), each the stage's latest round for the thread's pull request `{name, round, verdict, stale, skipped, findings_path}`; `[]` when the thread has no pull request. `round` and `verdict` are null when the stage has not run; `verdict` is `clean`, `fix`, `skipped` or null (a round without a verdict); `skipped` is true when the stage did not run because its `applies_to` matches no changed file (never clean); `stale` is as in `pr_review` (false when the stage has not run). The `pr-review` entry is read from the `pr_review.*` events, the others from `review_stage.*`. `pr_review` above stays as it is.
