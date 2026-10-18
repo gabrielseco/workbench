@@ -127,8 +127,23 @@ extension Commands {
                 "open_turn": state.openVerify.map { .int($0) } ?? .null,
                 "last": state.review.verify.map { .string($0.result) } ?? .null,
             ],
-            "cost_usd": .double(state.totalCostUSD), "notes": noteJSON(state.review.notes), "base_gap": gap,
+            "cost_usd": .double(state.totalCostUSD), "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
+            "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
+        ]
+    }
+
+    /// The latest kept plan, null when there is none. `stale` is true when it was made for another version of the
+    /// goal than the one approved now; `last_failure` is why the newest plan turn made nothing, else null.
+    static func planJSON(_ state: ThreadState) -> JSONValue {
+        guard let plan = state.currentPlan else { return .null }
+        let failure: JSONValue = if let attempt = state.plan, !attempt.ok { .string(attempt.failure ?? "") } else { .null }
+        return [
+            "source": .string(plan.source.rawValue), "model": plan.model.map { .string($0) } ?? .null,
+            "cost_usd": plan.costUSD.map { .double($0) } ?? .null, "ref": plan.ref.map { .string($0) } ?? .null,
+            "sha256": plan.sha256.map { .string($0) } ?? .null, "bytes": plan.bytes.map { .int($0) } ?? .null,
+            "truncated": .bool(plan.truncated), "stale": .bool(plan.goalHash != state.approvedGoalHash),
+            "last_failure": failure,
         ]
     }
 
@@ -270,6 +285,7 @@ extension Commands {
             "approval": report.approval.map { .string($0) } ?? .null,
             "goal_problem": report.goalProblem.map { .string($0) } ?? .null, "turns": .int(state.lastTurn),
             "last_result": review.turnResult.map { .string($0) } ?? .null, "cost_usd": .double(state.totalCostUSD),
+            "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
             "base": base.map { .string($0) } ?? .null, "worktree": worktreeJSON(id: state.id, ctx: ctx),
             "criteria": .array(
                 zip(report.criteria, report.criterionStatuses).map { criterion, status in

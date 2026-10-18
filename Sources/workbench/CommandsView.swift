@@ -172,7 +172,8 @@ extension Commands {
         if state.openTurn != nil {
             for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
         }
-        out(String(format: "cost:      $%.4f (list price; not what a subscription charges)", state.totalCostUSD))
+        out(ReviewReport.planLine(for: state))
+        out("cost:      \(ReviewReport.costText(state)) (list price; not what a subscription charges)")
         if state.openTurn != nil { out("           the open turn's cost is reported when it ends") }
         for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)

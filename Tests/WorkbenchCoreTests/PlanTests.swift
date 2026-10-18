@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-private struct Planned {
+struct Planned {
     var fx: RunnerFixture
     var id: String
     var config: Config
@@ -27,7 +27,7 @@ private struct Planned {
     var events: [Event] { (try? fx.events(id)) ?? [] }
 }
 
-private func planned(extraConfig: String = "") async throws -> Planned {
+func planned(extraConfig: String = "") async throws -> Planned {
     let fx = try await RunnerFixture(extraConfig: extraConfig)
     let id = try await fx.approvedThread()
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("plan-\(UUID().uuidString)")
@@ -43,7 +43,7 @@ private final class PlanBox<T>: @unchecked Sendable {
     func get() -> T { lock.lock(); defer { lock.unlock() }; return value }
 }
 
-private let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add hello.\n"
+let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add hello.\n"
 
 @Suite struct PlanArgumentsTests {
     private func request() -> ReadOnlyRequest {
@@ -140,7 +140,7 @@ private let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.
         #expect(ended.data["goal_hash"] == started.data["goal_hash"] && ended.data["base_commit"] == started.data["base_commit"])
         #expect(ended.data["bytes"]?.intValue == aPlan.utf8.count)
         #expect(ended.data["sha256"]?.stringValue?.count == 64)
-        #expect(started.data["argv"].map { "\($0)" }?.contains("a-") != true, "the prompt is not logged")
+        #expect(started.data["argv"].map { "\($0)" }?.contains("Plan the work") != true, "the prompt is not logged")
         #expect(events.filter { $0.kind == .turnStarted }.count == turns, "not a numbered turn")
         #expect(try p.fx.contents(p.id).isHealthy)
 

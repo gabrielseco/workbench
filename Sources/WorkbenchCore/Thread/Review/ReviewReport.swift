@@ -116,8 +116,9 @@ public struct ReviewReport: Sendable, Equatable {
 
         var turns = "turns:     \(state.lastTurn)"
         if let result = review.turnResult { turns += "  last \(result)" }
-        turns += String(format: "  $%.4f", state.totalCostUSD)
+        turns += "  " + Self.costText(state)
         lines.append(turns)
+        lines.append(Self.planLine(for: state))
 
         lines.append("")
         lines.append("Criteria")
@@ -243,6 +244,29 @@ public struct ReviewReport: Sendable, Equatable {
     }
 
     /// A note on one line, cut at 120 characters, for lists.
+    /// `$0.3700`, or `$0.4800 (turns $0.3700, plan $0.1100)` when a plan turn cost something.
+    public static func costText(_ state: ThreadState) -> String {
+        guard state.planCostUSD > 0 else { return String(format: "$%.4f", state.totalCostUSD) }
+        return String(
+            format: "$%.4f (turns $%.4f, plan $%.4f)", state.totalCostUSD + state.planCostUSD, state.totalCostUSD,
+            state.planCostUSD)
+    }
+
+    /// The plan, as `status` and `review` say it: who wrote it, what it cost, and whether it fits the approved goal.
+    public static func planLine(for state: ThreadState) -> String {
+        guard let plan = state.currentPlan else {
+            if let attempt = state.plan, !attempt.ok {
+                return "plan:      none (the last attempt failed: \(oneLine(attempt.failure ?? "no reason recorded")))"
+            }
+            return "plan:      none"
+        }
+        var line = "plan:      \(plan.source.rawValue)"
+        if let model = plan.model { line += " (\(model))" }
+        if let cost = plan.costUSD { line += String(format: "  $%.4f", cost) }
+        if plan.goalHash != state.approvedGoalHash { line += "  stale: made for an earlier version of the goal" }
+        return line
+    }
+
     public static func oneLine(_ text: String) -> String {
         let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
         return flat.count > 120 ? String(flat.prefix(119)) + "…" : flat

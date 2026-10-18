@@ -70,7 +70,13 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   of machine paths and credentials, cut at 16 KB with a marker, and kept as `plans/plan-N.md` in the thread's folder.
   It needs an approved goal (a draft or a changed one is refused before anything is spent), runs once per approved
   goal unless `--again`, has its own budget (default $1.00) and timeout (10 minutes), and opens no numbered turn.
-  Nothing reads the plan yet: `run` does not put it in the prompt (P14 task 3).
+  The next `run` puts the thread's newest plan in the **first** prompt, after the out-of-scope list, as advice:
+  written by another model, the criteria and the out-of-scope list win where they disagree, and a deviation is to
+  be said in the summary. A plan made for another version of the goal, or whose file is missing or no longer what
+  the log recorded, is left out and `run` says why; `run --no-plan` leaves it out on purpose; follow-up turns
+  resume the session and carry no plan. `plan show` prints the newest plan; `plan edit` copies it to
+  `plans/draft.md`, and `plan edit --apply` (or `--from <file>`) records the edited text as the newest plan
+  (`plan.edited`); a file over 64 KB is refused, not read. No editor is started: every child Workbench runs has no terminal, so you edit the file yourself.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
   work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,
   with untracked files named), the check (with the end of its output when it did not

@@ -1,6 +1,6 @@
 # P14: A plan turn before the first run
 
-Status: tasks 1 and 2 built (`workbench plan`, `plan_model`, `plan.started`/`plan.ended`; nothing reads the plan yet). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
+Status: tasks 1 to 4 built (`workbench plan`, `plan_model`, `plan.started`/`plan.ended`, the plan in the run's first prompt, `plan show`, `plan edit`). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
 give it a provider. Builds on the judge (a separate read-only `claude -p` run with its own budget and events) and
 on the per-role model keys (`judge_model`, `describe_model`, #126).
 
@@ -71,11 +71,13 @@ skips one that exists.
 9. **The log is the state.** The plan text is a file (`plans/plan-N.md`, like `prompts/turn-N.md`) referenced from
    `plan.ended` with its sha256 and size; no second copy is stored in `session.json` or the goal.
 
-10. **A plan can be edited, and an edit is a new plan.** `plan edit` opens a copy of the latest plan in `$EDITOR`
-    and, on save, records it as the latest plan with `source: "edited"`; the generated one stays in the log. The
-    next `run` uses whichever is latest. An edit is bounded, scrubbed and bound to the goal hash and base commit
-    exactly like a generated plan, and an unchanged save records nothing. It costs nothing, runs no process, and
-    so has no `started`/`ended` pair.
+10. **A plan can be edited, and an edit is a new plan.** `plan edit` copies the latest plan to `plans/draft.md`;
+    you edit that file and `plan edit --apply` (or `plan edit --from <file>`) records it as the latest plan with a
+    `plan.edited` event; the generated one stays in the log. The next `run` uses whichever is latest. An edit is
+    bounded, scrubbed and bound to the goal hash and base commit exactly like a generated plan, and an unchanged
+    text records nothing. It costs nothing, runs no process, and so has no `started`/`ended` pair. No `$EDITOR` is
+    started: every child Workbench runs has stdin on /dev/null and no terminal, and the banned-API script forbids
+    another way.
 
 ## The seam for other providers
 
@@ -100,8 +102,8 @@ turn are **not** moved onto it in this phase.
 
 `workbench plan [id] [--model M] [--budget USD] [--again]`, once per approved goal unless `--again`.
 `workbench plan show [id]` prints the latest plan, whether it was generated or edited, and what it cost.
-`workbench plan edit [id]` edits it by hand; `plan edit --from <file>` takes the text from a file, for scripts and
-for a plan written elsewhere (a different model, say). `workbench run [--no-plan]`. `status` and
+`workbench plan edit [id]` writes the draft to change; `plan edit --apply` records the draft, and `plan edit --from
+<file>` takes the text from a file, for scripts and for a plan written elsewhere (a different model, say). `workbench run [--no-plan]`. `status` and
 `review` show "planned (opus, $0.21)" or "no plan"; the thread's cost line includes the plan's cost, itemised.
 
 ## Events
