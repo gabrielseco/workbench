@@ -45,12 +45,13 @@ struct TestOutputParser {
     }
 
     private mutating func record(_ name: String, isPass: Bool) {
-        // A name that passed and failed (a retry, a parameterized case) is listed once per side.
-        guard seen.insert((isPass ? "p:" : "f:") + name).inserted else { return }
+        // Past the bound nothing is kept, the set included.
         if passed.count + failed.count >= Self.maxNames {
             truncated = true
             return
         }
+        // A name that passed and failed (a retry, a parameterized case) is listed once per side.
+        guard seen.insert((isPass ? "p:" : "f:") + name).inserted else { return }
         if isPass { passed.append(name) } else { failed.append(name) }
     }
 

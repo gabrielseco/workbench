@@ -127,6 +127,11 @@ private func eval(_ proofs: [String], check: Review.Check? = nil, lastTurn: Int 
         #expect(rows.contains("✔ passed | Workbench's check run (named test ran in the check, turn 1)"))
     }
 
+    @Test func aSeenFailureHoldsEvenWhenAnotherNameIsAbsent() {
+        let status = eval(["test: broken, missing"], check: ran(failed: ["broken()"], result: "failed"))
+        #expect(status[0].state == .failed)
+    }
+
     @Test func severalNamesAllNeedToHavePassed() {
         let status = eval(["test: a, b"], check: ran(passed: ["a()"]))
         #expect(status[0].state == .manual)

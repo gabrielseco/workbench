@@ -30,17 +30,20 @@ public enum TestProof {
         return names.isEmpty ? nil : names
     }
 
-    /// Passed when every name matches a test and all matches passed; failed when any match failed; nil when a
-    /// name matches nothing, since a test that did not appear says nothing.
+    /// Failed when any match failed; passed when every name matches a test and all matches passed; else nil, since
+    /// a test that did not appear says nothing.
     static func verdict(for names: [String], in tests: CheckTests) -> CriterionStatus.State? {
         var anyFailed = false
+        var anyAbsent = false
         for name in names {
             let passed = tests.passed.contains { matches(name, $0) }
             let failed = tests.failed.contains { matches(name, $0) }
-            if !passed && !failed { return nil }
+            if !passed && !failed { anyAbsent = true }
             if failed { anyFailed = true }
         }
-        return anyFailed ? .failed : .passed
+        // A failure that was seen holds whatever else is missing; a pass needs every name to have appeared.
+        if anyFailed { return .failed }
+        return anyAbsent ? nil : .passed
     }
 
     private static func matches(_ name: String, _ test: String) -> Bool { baseName(test).hasPrefix(name) }
