@@ -18,7 +18,7 @@ private func bash(_ command: String) -> DeniedCommandAssessment {
         #expect(a.isCompound)
         #expect(a.level == .caution, "running the script is the caution")
         #expect(a.grantable.contains("Bash(chmod +x scripts/verify-cli/abandon.sh)"), "\(a.grantable)")
-        #expect(a.grantable.contains("Bash(bash -n:*)"))
+        #expect(a.grantable.contains("Bash(bash -n scripts/verify-cli/abandon.sh)"))
         #expect(a.grantable.contains("Bash(shellcheck:*)"))
         #expect(a.parts.first { $0.command == "scripts/verify-cli/abandon.sh" }?.level == .caution)
         #expect(a.problems.contains { $0.contains("several commands") })
@@ -177,6 +177,25 @@ private func bash(_ command: String) -> DeniedCommandAssessment {
         ] { #expect(bash(push).level == .unsafe, "\(push)") }
         #expect(bash("git push origin workbench/g-1").level == .caution)
         #expect(bash("git push -u origin workbench/g-1").level == .caution)
+    }
+
+    @Test func syntaxCheckIsGrantedExactlyNotAsAPrefixThatAlsoRuns() {
+        #expect(bash("bash -n scripts/x.sh").grantable == ["Bash(bash -n scripts/x.sh)"])
+    }
+
+    @Test func processSubstitutionIsACommandRunningInsideTheCommand() {
+        let a = bash("cat <(rm -rf build)")
+        #expect(a.level >= .caution && a.grantable.isEmpty)
+        #expect(a.reasons.contains { $0.contains("inside it") })
+        #expect(bash("tee >(cat)").level >= .caution)
+    }
+
+    @Test func sedAndUniqCannotWriteOutsideTheWorktreeUnnoticed() {
+        #expect(bash("uniq input.txt /tmp/victim").level == .unsafe)
+        #expect(bash("sed -n 'w /tmp/victim' input.txt").level == .caution)
+        #expect(bash("sed -n 's/a/b/e' input.txt").level == .caution)
+        #expect(bash("sed -n 3,9p input.txt").level == .safe)
+        #expect(bash("sed -n '$p' input.txt").level == .safe)
     }
 
     @Test func aReaderThatCanWriteAFileIsNotSafe() {

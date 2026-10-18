@@ -124,6 +124,10 @@ struct ShellSplit: Equatable {
             case ">":
                 // `2>&1` and `>/dev/null` write nothing; `> f` and `>> f` write f.
                 endWordKeepingDescriptor(&word, &inWord, &words)
+                if next == "(" {
+                    result.hasSubstitution = true
+                    local.hasSubstitution = true
+                }
                 let scan = Self.scanRedirect(chars, at: i)
                 raw += scan.text
                 pendingRedirect = scan.writesFile
@@ -135,6 +139,11 @@ struct ShellSplit: Equatable {
                     // The body is not a command; stop reading here.
                     endSegment(next: nil)
                     return finish(result, raw: text, quote: quote)
+                }
+                // `<(cmd)` and `>(cmd)` run cmd.
+                if next == "(" {
+                    result.hasSubstitution = true
+                    local.hasSubstitution = true
                 }
                 raw.append(c)
                 endWord()
