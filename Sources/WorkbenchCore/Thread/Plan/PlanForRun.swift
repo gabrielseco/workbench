@@ -54,9 +54,15 @@ public enum PlanLookup {
     /// The text of a plan, only when the file is still what the log recorded: a file changed outside `plan edit`
     /// is not a plan, because the log is the state.
     public static func text(of plan: LatestPlan, in threadDirectory: URL) -> Result<String, PlanProblem> {
-        guard let text = try? String(contentsOf: threadDirectory.appendingPathComponent(plan.ref), encoding: .utf8)
-        else { return .failure(.missing(plan.ref)) }
-        guard Plan.sha256(text) == plan.sha256 else { return .failure(.changed(plan.ref)) }
+        let url = threadDirectory.appendingPathComponent(plan.ref)
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return .failure(.missing(plan.ref))
+        }
+        // The size is checked before the file is read: a file that is not the recorded size is not the plan, and a
+        // replacement of any size, or a directory, must not be loaded just to be rejected.
+        guard attributes[.type] as? FileAttributeType == .typeRegular, attributes[.size] as? Int == plan.bytes,
+            let text = try? String(contentsOf: url, encoding: .utf8), Plan.sha256(text) == plan.sha256
+        else { return .failure(.changed(plan.ref)) }
         return .success(text)
     }
 

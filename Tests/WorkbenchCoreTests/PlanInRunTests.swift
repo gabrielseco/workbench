@@ -156,6 +156,23 @@ private func changeGoal(_ p: Planned) async throws {
         #expect(advisories(notices).contains { $0.contains("plans/plan-1.md") && $0.contains(how) })
     }
 
+    @Test(arguments: ["bigger", "directory"])
+    func aPlanFileThatIsNotTheRecordedSizeOrKindIsRejectedUnread(how: String) async throws {
+        let p = try await planned()
+        try await makePlan(p)
+        let file = p.fx.project.threadDirectory(p.id).appendingPathComponent("plans/plan-1.md")
+        try FileManager.default.removeItem(at: file)
+        if how == "bigger" {
+            try String(repeating: "x", count: Plan.textLimit * 8).write(to: file, atomically: true, encoding: .utf8)
+        } else {
+            try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        }
+        let latest = try #require(PlanLookup.latest(in: p.events))
+        #expect(PlanLookup.text(of: latest, in: p.fx.project.threadDirectory(p.id)) == .failure(.changed("plans/plan-1.md")))
+        _ = try await p.fx.runner(p.id).run(p.fx.options())
+        #expect(started(p).first?.data["plan"] == .null)
+    }
+
     @Test func aWorktreeCutFromAnotherCommitThanThePlanWasMadeAtSaysSo() async throws {
         let p = try await planned()
         try await makePlan(p)
