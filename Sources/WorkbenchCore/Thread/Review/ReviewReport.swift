@@ -205,7 +205,7 @@ public struct ReviewReport: Sendable, Equatable {
                 let seqs = items.map { String($0.seq) }.joined(separator: ", ")
                 lines.append("  \(label) ×\(items.count)  turn \(turns), seq \(seqs)")
                 // The label is cut for scanning; the whole command follows when there is more of it.
-                if let full = items[0].fullInput, full != items[0].input {
+                if let full = items.lazy.compactMap(\.fullInput).first, full != items[0].input {
                     lines.append(contentsOf: Self.wrap("\(items[0].tool)(\(full))", width: 96).map { "      " + $0 })
                 }
             }

@@ -79,6 +79,20 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(rendered(old).contains { $0.hasPrefix("  Bash(git push origin main) ×1") })
     }
 
+    @Test func aGroupTakesTheFullCommandFromAnyTurnThatRecordedIt() {
+        let long = String(repeating: "word ", count: 40) + "end"
+        let call = result([denial("Bash", ["command": .string(long)])])
+        let s = state([(1, call), (2, call)], recorded: [2: [["tool": "Bash", "input": .string(long)]]])
+        #expect(s.review.deniedTools.map(\.fullInput) == [nil, long])
+        #expect(rendered(s).contains { $0.hasPrefix("      ") })
+    }
+
+    @Test func theFullInputIsMadeSafeToPrint() {
+        let call = result([denial("Bash", ["command": "echo hi"])])
+        let s = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "\u{1B}[31mecho\u{07}\nhi\tthere"]]])
+        #expect(s.review.deniedTools[0].fullInput == "echo hi there")
+    }
+
     @Test func fullInputsFromAnotherListAreNotAttached() {
         let call = result([denial("Bash", ["command": "ls"]), denial("Bash", ["command": "pwd"])])
         let s = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "something else entirely"]]])
