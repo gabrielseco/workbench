@@ -72,6 +72,7 @@ private func commandNames(from usage: String) -> [String] {
         let goal = try await workbench(["help", "goal"], in: dir).stdout
         #expect(goal.contains("goal new <name>") && goal.contains("goal approve [id]"))
 
+        #expect(try await workbench(["help", "plan", "show"], in: dir).stdout.contains("plan show [id]"))
         let show = try await workbench(["plan", "show", "--help"], in: dir).stdout
         #expect(show.contains("plan show [id]") && !show.contains("plan edit [id]") && !show.contains("--again"))
         let ship = try await workbench(["ship", "-h"], in: dir).stdout
@@ -117,6 +118,31 @@ private func commandNames(from usage: String) -> [String] {
         #expect(message.contains("usage: status [id] [--all]") && message.contains("(workbench help status)"))
     }
 
+    @Test func everyKindOfUsageFailureOfAKnownCommandCarriesTheSynopsis() async throws {
+        let fx = try await RunnerFixture()
+        struct Case {
+            var arguments: [String]
+            var says: String
+            var synopsis: String
+        }
+        let cases = [
+            Case(
+                arguments: ["doctor", "stray"], says: "unexpected argument 'stray'",
+                synopsis: "usage: doctor [--base <branch>]"),
+            Case(arguments: ["run", "--feedback"], says: "--feedback needs a value", synopsis: "usage: run [--feedback"),
+            // An error of another type that maps to `usage`: a thread name git would refuse.
+            Case(arguments: ["goal", "new", "Bad Name!"], says: "is not a usable name", synopsis: "usage: goal new <name>"),
+            Case(arguments: ["ship", "--json"], says: "--json is available on", synopsis: "usage: ship [id]"),
+        ]
+        for item in cases {
+            let ran = try await workbench(item.arguments, in: fx.repo)
+            let text = ran.stderr + ran.stdout
+            #expect(ran.code == 2, "\(item.arguments): exit \(String(describing: ran.code)): \(text)")
+            #expect(text.contains(item.says) && text.contains(item.synopsis), "\(item.arguments): \(text)")
+            #expect(text.contains("(workbench help \(item.arguments[0]))"), "\(item.arguments): \(text)")
+        }
+    }
+
     @Test func anUnknownCommandIsAUsageErrorThatListsTheCommands() async throws {
         let dir = try emptyDirectory()
         let ran = try await workbench(["help", "frobnicate"], in: dir)
@@ -133,6 +159,11 @@ private func commandNames(from usage: String) -> [String] {
         // `--feedback` takes text; `run` then fails for want of a thread, as it would with any other text.
         let value = try await workbench(["run", "--feedback", "--help"], in: dir)
         #expect(value.code != 0 && !value.stdout.hasPrefix("workbench run"), "\(value.stdout)")
+        // Every option that takes a value, not only the ones main.swift lists: `--from`, `--spec`, `--pr`.
+        for arguments in [["goal", "new", "demo", "--from", "--help"], ["pr-review", "--pr", "--help"]] {
+            let ran = try await workbench(arguments, in: dir)
+            #expect(ran.code != 0 && !ran.stdout.hasPrefix("workbench "), "\(arguments): \(ran.stdout)")
+        }
         // `log -f` is a flag, not an option that takes a value.
         let follow = try await workbench(["log", "-f", "--help"], in: dir)
         #expect(follow.code == 0 && follow.stdout.hasPrefix("workbench log"))

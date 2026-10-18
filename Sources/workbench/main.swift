@@ -4,11 +4,9 @@ import WorkbenchCore
 func report(_ error: Error, arguments: [String]) -> Never {
     let kind = failureKind(of: error)
     switch error {
-    case let error as CLIError:
-        if case .usage(let message) = error {
-            exit(fail(kind, Help.withSynopsis(message, arguments: arguments)))
-        }
-        exit(fail(kind, "\(error)"))
+    case _ where kind == .usage:
+        // Whatever the error type, a usage failure of a known command says what the command takes.
+        exit(fail(kind, Help.withSynopsis("\(error)", arguments: arguments)))
     case is ConfigError, is GoalParseError:
         // The core's text starts with the first problem; the kind says what it is about.
         exit(fail(kind, "\(error)"))
@@ -29,7 +27,7 @@ let valueOptions: Set = [
     "--interval", "--in", "--seed",
 ]
 // Help comes before anything else: it needs no project and changes nothing.
-if let query = Help.request(arguments, valueOptions: valueOptions) {
+if let query = Help.request(arguments, valueOptions: Help.valueOptions(adding: valueOptions)) {
     guard let text = Help.text(for: query) else { exit(fail(.usage, Help.unknown(query[0]))) }
     out(text)
     exit(0)
@@ -41,7 +39,7 @@ if let at = arguments.indices.first(where: {
     arguments.remove(at: at)
     Output.json = true
     if !["status", "review", "log", "grant"].contains(arguments.first ?? "") {
-        exit(fail(.usage, "--json is available on status, review, log and grant"))
+        exit(fail(.usage, Help.withSynopsis("--json is available on status, review, log and grant", arguments: arguments)))
     }
 }
 

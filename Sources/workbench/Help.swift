@@ -109,7 +109,11 @@ enum Help {
             if body.isEmpty { close(); continue }
             if indent == 2, !body.hasPrefix("--") {
                 close()
-                let synopsis = String(body.components(separatedBy: "  ")[0]).trimmingCharacters(in: .whitespaces)
+                let parts = body.components(separatedBy: "  ")
+                var synopsis = parts[0].trimmingCharacters(in: .whitespaces)
+                // `run` and `goal new` list their flags in the description on the same line.
+                let described = parts.dropFirst().joined(separator: "  ")
+                for flags in described.matches(of: /\[--?[^\[\]]*\]/) { synopsis += " " + flags.output }
                 current = Entry(words: words(of: synopsis), synopsis: synopsis, lines: [String(raw.dropFirst(2))])
             } else if indent > 2, current != nil {
                 // A synopsis that wraps (`ship`) continues on a line of its own that starts with `[`.
@@ -165,6 +169,20 @@ enum Help {
         return lines.joined(separator: "\n")
     }
 
+    /// The options that take a value, read from the usage block (`--model <name>`, `--feedback "<text>"`) so a new one
+    /// is covered without a second list, and joined with the ones `main.swift` already knows.
+    static func valueOptions(adding known: Set<String>) -> Set<String> {
+        var found = known
+        let pattern = #"(--?[A-Za-z][A-Za-z-]*)\s+"?<"#
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let text = workbenchUsage
+            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                if let range = Range(match.range(at: 1), in: text) { found.insert(String(text[range])) }
+            }
+        }
+        return found
+    }
+
     /// What `workbench help ...` or `workbench <command> ... --help` asks for, nil when it is neither.
     /// An option's value that reads `--help` is a value, not the request.
     static func request(_ arguments: [String], valueOptions: Set<String>) -> [String]? {
@@ -175,16 +193,17 @@ enum Help {
         }
         guard commandNames().contains(first) else { return nil }
         // `log -f` follows; everywhere else `-f` takes a value.
-        let values = first == "log" ? valueOptions.subtracting(["-f"]) : valueOptions
+        let all = valueOptions
+        let values = first == "log" ? all.subtracting(["-f"]) : all
         let asked = arguments.indices.contains { i in
             i > 0 && ["--help", "-h"].contains(arguments[i]) && !values.contains(arguments[i - 1])
         }
         guard asked else { return nil }
         // `plan show --help` is the help for `plan show`: keep the words that still select an entry.
         var query = [first]
-        let all = entries()
+        let known = entries()
         for word in arguments.dropFirst() where !word.hasPrefix("-") {
-            guard !matching(query + [word], in: all).isEmpty else { break }
+            guard !matching(query + [word], in: known).isEmpty else { break }
             query.append(word)
         }
         return query
