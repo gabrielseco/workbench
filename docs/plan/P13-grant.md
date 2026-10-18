@@ -1,6 +1,6 @@
 # P13: Grant
 
-Status: task 0 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
+Status: tasks 0 to 2 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
 FRICTION #1, #28, #29, #33, #34 and #35, which all say the same thing: a run has no prompt path
 (`--permission-prompts none`), so a denied command ends the turn's work and the only way on is to edit
 `[tools] allowed` by hand, which then stays for every later thread.
@@ -52,9 +52,9 @@ $ workbench grant
 ## Tasks
 
 0. **Record the full denied command.** Done (#123): `turn.ended.denials`, the command up to 4096 characters.
-1. **`review` and `log` show the full denied command**, wrapped, from `turn.ended.denials`, falling back to the
-   `claude` line for older logs. Each denial gets a number `grant` can use.
-2. **The classifier.** A pure function: command → `safe | caution | unsafe`, the reason, and the concrete prefix to
+1. **`review` shows the full denied command**, wrapped, from `turn.ended.denials`, falling back to the `claude`
+   line for older logs. Done (#125). Numbering the entries moves to task 4, where the numbers are used.
+2. **The classifier.** Done (`Sources/WorkbenchCore/Grant/`). A pure function: command → `safe | caution | unsafe`, the reason, and the concrete prefix to
    grant (nil for a compound). Table-driven tests from the eight threads above, and the cases in FRICTION #33–35.
 3. **`grant.added` and the allowed list.** Event kind and spec; `ThreadState` derives the grants; the turn's
    invocation adds them (`once` expires when the next turn ends). Tests: a grant reaches `--allowedTools`; `once`
