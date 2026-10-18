@@ -83,8 +83,8 @@ used the real `claude`; `grant --json` lists the chmod as `safe`, open, with the
 `Bash(chmod +x scripts/verify-cli/grant-probe.sh)`, and the compound and the `rm -rf` too; the file is there and not
 executable; `grant <n> --once` records the pattern; `grant --json` says `granted_once` and
 `.workbench/config.toml` is byte for byte what it was; `send-back` runs turn 2, whose `turn.started` argv has the
-pattern in `--allowedTools`; turn 2 succeeded and the file is executable; `grant --json` no longer says
-`granted_once` (the grant is spent); refusals: a compound named whole exits 6, a number that does not exist 7, a
+pattern in `--allowedTools`; turn 2 succeeded and the file is executable; `grant --json` says `open` again
+(the grant is spent); refusals: a compound named whole exits 6, a number that does not exist 7, a
 number without a scope 2, and the `rm -rf` under `[tools] denied` exits 6 naming `[tools] denied` even with
 `--allow-dangerous`, stays open and is not in turn 2's allowed list; the config is still unchanged; no process of the
 worktree is left; the thread is ended (`abandon`). `VERIFY_CLI_SABOTAGE=1` revokes the grant (`--never`) before

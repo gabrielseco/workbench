@@ -112,8 +112,11 @@ sys.exit(0 if d['pattern']=='$CHMOD_PATTERN' and d['scope']=='once' and d['recor
 }
 check "grant $CHMOD_N --once records $CHMOD_PATTERN" "see above (exit or JSON)" grant_once
 
-status_of() { # <number>: the status of that denial now
-    wb "$T_WB" grant "$ID" --json | py "print(next((x['status'] for x in d['denied'] if x['number']==$1), 'missing'))"
+status_of() { # <number>: the status of that denial now; fails (printing nothing) when the query or the entry is missing
+    local list
+    list=$(wb "$T_WB" grant "$ID" --json) || return 1
+    echo "$list" | py "s=next((x['status'] for x in d['denied'] if x['number']==$1), None)
+sys.exit(1) if s is None else print(s)"
 }
 status_after_grant=$(status_of "${CHMOD_N:-0}")
 check "grant --json shows granted_once" "status is '$status_after_grant'" test "$status_after_grant" = granted_once
@@ -150,8 +153,8 @@ check "turn 2 ran the chmod: $PROBE is executable in the worktree" "the mode is 
 # --- the once grant is spent ---------------------------------------------------------------------------
 
 status_after_turn=$(status_of "${CHMOD_N:-0}")
-check "a once grant is spent: grant --json no longer says granted_once (now '$status_after_turn')" \
-    "still granted_once after the turn it was for" test "$status_after_turn" != granted_once
+check "a once grant is spent: grant --json says open again (now '$status_after_turn')" \
+    "status is '$status_after_turn' after the turn it was for" test "$status_after_turn" = open
 
 # --- refusals, with the documented exit codes -----------------------------------------------------------
 
@@ -194,7 +197,7 @@ check "no process of the worktree left" "$left" test -z "$left"
 
 # The thread is ended here, not left active: abandon keeps the branch and saves the changes.
 wb "$T_WB" abandon "$ID" >/dev/null
-check "thread ended (abandon)" "thread $ID is still active" bash -c \
-    "'$WB' status '$ID' --json | python3 -I -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)[\"ended\"] else 1)'"
+ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'] or '')")
+check "thread ended (abandon)" "thread $ID is still active" test -n "$ended"
 
 finish
