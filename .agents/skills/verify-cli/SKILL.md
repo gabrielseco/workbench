@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once, after the merge.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1) and `grant` (P13 task 7).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7) and `plan` (P14 task 5).
 
 ## When to use it
 
@@ -23,6 +23,7 @@ Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are 
 git checkout main && git pull --ff-only            # the main checkout, clean, at origin's main
 bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 VERIFY_CLI_MODEL=haiku by default
 bash scripts/verify-cli/grant.sh                   # two turns (the second is a send-back), each capped at the budget
+bash scripts/verify-cli/plan.sh                    # one plan turn and one coding turn, each capped at the budget
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -89,6 +90,23 @@ number without a scope 2, and the `rm -rf` under `[tools] denied` exits 6 naming
 `--allow-dangerous`, stays open and is not in turn 2's allowed list; the config is still unchanged; no process of the
 worktree is left; the thread is ended (`abandon`). `VERIFY_CLI_SABOTAGE=1` revokes the grant (`--never`) before
 turn 2, so the argv and executable-bit steps must FAIL. It costs two cheap turns.
+
+### plan (P14 task 5)
+
+`goal new` (a goal that asks for `scratch/plan-probe.txt`), `goal approve`, then `plan <id> --model $MODEL --budget
+$BUDGET`, `plan show`, `plan edit`, `plan edit --apply`, `run`, and only workbench commands. Steps: the goal approved
+with the cap; the plan turn exits 0; the log has one `plan.started` and then one ok `plan.ended` with the plan file,
+its sha256, the goal hash and the base commit; the logged argv has tools `Read Grep Glob` only, safe mode and
+`--restricted`; the plan opened no numbered turn; `plans/plan-1.md` is non-empty with no machine path; the
+base-commit checkout is gone and not registered with git; `plan show` says `generated` and prints the plan;
+`status --json` has `plan.source` `generated`, not stale, and `plan_cost_usd` above 0; `plan edit` writes
+`plans/draft.md` equal to the plan; after the script adds a marker line, `plan edit --apply` exits 0 and uses the
+draft up; `plans/plan-2.md` holds the marker; `plan show` and `status --json` say `edited`; `plan.edited` names
+`plans/plan-2.md`, the plan it came from, the base and the goal hash; `run` succeeds with the real `claude`;
+`prompts/turn-1.md` has `## Plan` and the marker; the first `turn.started` has `plan.source` `edited` and the stored
+file's sha256; no process of the worktree is left; the thread is ended (`abandon`). `VERIFY_CLI_SABOTAGE=1` changes
+`plans/plan-2.md` on disk before `run`, so the plan is left out and the prompt and `turn.started` steps must FAIL.
+It costs one cheap plan turn and one cheap coding turn; the summary prints both costs.
 
 ## Adding a scenario for the next feature
 
