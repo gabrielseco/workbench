@@ -157,7 +157,7 @@ of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown 
   `seq` of that line, and `input`, the `command`, `file_path`, `path`, `url`, `pattern` or `query` of its
   `tool_input` made safe to print (one line, no control characters, at most 100 characters), and `fullInput`, the same made safe to print from the turn's `turn.ended.denials` (at most 4096 characters; absent for a log from before that field, or when its count differs from the result line's). `review` prints it wrapped under the entry when it is longer than `input`. Only a turn's last `result` line counts (an earlier one of the same turn is a replay), so a turn's entries match its
   `turn.ended.permission_denials`. A denial is `tool_name`, `tool_use_id` and `tool_input`. Entries are grouped by tool and the full, unshortened input.
-- **`grants`** (`GrantLedger`): every `grant.added`. For the turn that starts next, `once` grants written after the
+- **Grants** are not a field of `ThreadState`; `GrantLedger(events:)` reads them from the same events: every `grant.added`. For the turn that starts next, `once` grants written after the
   latest `turn.started` and every `thread` grant are added to the project's allowed tools; `never` allows nothing and
   is only remembered. A pattern is ignored (not an error) unless it is `Tool(content)` for a tool in `[tools]
   available`, one line, at most 2000 characters, with content that is more than a wildcard; one that `[tools] denied`
