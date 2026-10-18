@@ -183,11 +183,13 @@ struct ShellSplit: Equatable {
         guard j < chars.count, chars[j] == "&" else { return Redirect(text: text, writesFile: true, end: j) }
         text.append("&")
         j += 1
+        let operandStart = j
         while j < chars.count, chars[j].isNumber || chars[j] == "-" {
             text.append(chars[j])
             j += 1
         }
-        return Redirect(text: text, writesFile: false, end: j)
+        // `2>&1` copies a descriptor; `>& file` writes the file.
+        return Redirect(text: text, writesFile: j == operandStart, end: j)
     }
 
     private static func finish(_ split: ShellSplit, raw: String, quote: Character?) -> ShellSplit {

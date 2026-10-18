@@ -50,7 +50,7 @@ extension DeniedCommandClassifier {
             let verdict = self.verdict(for: words, afterPipe: segment.joinedBy == "|")
             note(verdict)
             prefixWords = verdict.prefixWords
-            let pathArgs = words.dropFirst().contains { !$0.hasPrefix("-") && escapesWorktree($0) }
+            let pathArgs = words.dropFirst().contains { escapesWorktree(optionValue($0)) }
             if verdict.level == .safe, pathArgs, !pathLooseCommands.contains(command) {
                 note(.caution("names a path outside the worktree"))
             }
@@ -96,6 +96,13 @@ extension DeniedCommandClassifier {
     private static let loopWords: Set<String> = [
         "for", "while", "until", "if", "case", "done", "fi", "esac", "}", "function",
     ]
+
+    /// The part of an argument that may be a path: the value of `--output=/x` or `-o/x`, or the word itself.
+    private static func optionValue(_ arg: String) -> String {
+        guard arg.hasPrefix("-") else { return arg }
+        if let equals = arg.firstIndex(of: "=") { return String(arg[arg.index(after: equals)...]) }
+        return arg.hasPrefix("--") || arg.count <= 2 ? "" : String(arg.dropFirst(2))
+    }
 
     /// Commands whose arguments are not paths, so an absolute-looking word is not a path.
     private static let pathLooseCommands: Set<String> = ["echo", "printf", "grep", "rg", "test", "["]
@@ -157,13 +164,23 @@ extension DeniedCommandClassifier {
             if syntaxCheck, !escapesWorktree(args[1]) { return .safe(prefix: 2) }
             return .caution("\(command) can run anything")
         }
-        if readers.contains(command) { return .safe }
+        if readers.contains(command) { return readerVerdict(command, args) }
         if command.contains("/") {
             return escapesWorktree(command)
                 ? .unsafe("runs a program outside the worktree")
                 : .caution("runs a script from the worktree")
         }
         return .caution("\(command) is not a command Workbench knows")
+    }
+
+    /// A command that only reads, unless an option or a second file name makes it write.
+    private static func readerVerdict(_ command: String, _ args: [String]) -> Verdict {
+        let writesOutput = command == "sort" && args.contains { $0.hasPrefix("-o") || $0.hasPrefix("--output") }
+        let uniqOutput = command == "uniq" && args.filter { !$0.hasPrefix("-") }.count > 1
+        if writesOutput, args.contains(where: { escapesWorktree(optionValue($0)) }) {
+            return .unsafe("sort writes a file outside the worktree")
+        }
+        return writesOutput || uniqOutput ? .caution("\(command) writes the file it is given") : .safe
     }
 
     private static let safeGit: Set<String> = [
@@ -200,7 +217,11 @@ extension DeniedCommandClassifier {
             ["--force", "-f", "--delete", "-d", "--mirror", "--all", "--prune"].contains($0)
                 || $0.hasPrefix("--force")
         }
-        let refs = args.filter { !$0.hasPrefix("-") }.dropFirst()
+        let operands = args.filter { !$0.hasPrefix("-") }
+        if let remote = operands.first, remote != "origin" {
+            return .unsafe("git push to \(remote), a remote other than origin")
+        }
+        let refs = operands.dropFirst()
         let protected = refs.contains { ref in
             ref.hasPrefix("+") || ref.hasPrefix(":")
                 || ["main", "master", "develop", "HEAD:main", "HEAD:master"].contains(ref)
@@ -224,11 +245,7 @@ extension DeniedCommandClassifier {
         }
         switch words.first {
         case "api":
-            let writes = args.enumerated().contains { index, arg in
-                ["-f", "-F", "--field", "--raw-field", "--input"].contains(arg)
-                    || (["-X", "--method"].contains(arg)
-                        && (args[safe: index + 1] ?? "").uppercased() != "GET")
-            }
+            let writes = ghApiWrites(args)
             return writes ? .unsafe("gh api that writes") : .caution("gh api reaches GitHub")
         default:
             if key == "pr merge" || key.hasSuffix(" delete") {
@@ -236,6 +253,22 @@ extension DeniedCommandClassifier {
             }
             return .caution("gh \(key) changes something on GitHub")
         }
+    }
+
+    /// A `gh api` call that sends data or uses a method other than GET, whether the option and its value are
+    /// two words (`-X POST`) or one (`-XPOST`, `--method=POST`, `-fkey=v`).
+    private static func ghApiWrites(_ args: [String]) -> Bool {
+        for (index, arg) in args.enumerated() {
+            if ["-f", "-F", "--field", "--raw-field", "--input"].contains(arg) { return true }
+            if arg.hasPrefix("--field=") || arg.hasPrefix("--raw-field=") || arg.hasPrefix("--input=") { return true }
+            if arg.hasPrefix("-f") && !arg.hasPrefix("--") || arg.hasPrefix("-F") && !arg.hasPrefix("--") { return true }
+            var method: String?
+            if arg == "-X" || arg == "--method" { method = args[safe: index + 1] }
+            if arg.hasPrefix("--method=") { method = String(arg.dropFirst("--method=".count)) }
+            if arg.hasPrefix("-X"), arg.count > 2 { method = String(arg.dropFirst(2)) }
+            if let method, method.uppercased() != "GET" { return true }
+        }
+        return false
     }
 
     private static func chmodVerdict(_ args: [String]) -> Verdict {
@@ -261,6 +294,9 @@ extension DeniedCommandClassifier {
 
     private static func findVerdict(_ args: [String]) -> Verdict {
         if args.contains("-delete") { return .unsafe("find -delete") }
+        if args.contains(where: { $0.hasPrefix("-fprint") || $0.hasPrefix("-fls") }) {
+            return .caution("find writes the file it is given")
+        }
         if args.contains(where: { ["-exec", "-execdir", "-ok"].contains($0) }) {
             return .caution("find runs a command on each match")
         }

