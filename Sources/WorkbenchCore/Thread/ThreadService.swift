@@ -85,6 +85,8 @@ public struct ThreadService: Sendable {
     func withLog<T>(_ id: String, _ body: (EventLogWriter) async throws -> T) async throws -> T {
         let log = try EventLogWriter.open(at: project.eventsURL(id), now: now)
         do {
+            // Every command that opens the log first closes a plan its process left open (and ends what it left).
+            try await closeOrphanedPlan(id: id, log: log)
             let value = try await body(log)
             await log.close()
             return value

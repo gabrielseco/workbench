@@ -103,6 +103,54 @@ public struct Review: Sendable, Equatable {
     public var prReview: PRReview?
 }
 
+/// A `plan.ended` as `status` and `review` show it: the plan that was made, or why there is none.
+public struct PlanRecord: Sendable, Equatable {
+    public var ok: Bool
+    public var costUSD: Double?
+    /// The plan file, relative to the thread's folder.
+    public var ref: String?
+    public var goalHash: String?
+    public var baseCommit: String?
+    public var truncated: Bool
+    public var failure: String?
+
+    init(
+        ok: Bool, costUSD: Double?, ref: String?, goalHash: String?, baseCommit: String?, truncated: Bool,
+        failure: String?
+    ) {
+        self.ok = ok
+        self.costUSD = costUSD
+        self.ref = ref
+        self.goalHash = goalHash
+        self.baseCommit = baseCommit
+        self.truncated = truncated
+        self.failure = failure
+    }
+
+    init(_ event: Event) {
+        // A start is replaced by the `plan.ended` that follows; if none does, the plan was cut off.
+        guard event.kind == .planEnded else {
+            self.init(
+                ok: false, costUSD: nil, ref: nil, goalHash: event.data["goal_hash"]?.stringValue,
+                baseCommit: event.data["base_commit"]?.stringValue, truncated: false,
+                failure: "started and never recorded a result (still running, or it was interrupted)")
+            return
+        }
+        let ok = event.data["ok"] == true
+        let cost: Double?
+        switch event.data["cost_usd"] {
+        case .double(let d)?: cost = d
+        case .int(let i)?: cost = Double(i)
+        default: cost = nil
+        }
+        self.init(
+            ok: ok, costUSD: cost, ref: ok ? event.data["plan_ref"]?.stringValue : nil,
+            goalHash: event.data["goal_hash"]?.stringValue, baseCommit: event.data["base_commit"]?.stringValue,
+            truncated: event.data["truncated"] == true,
+            failure: ok ? nil : (event.data["reason"]?.stringValue ?? "no reason recorded"))
+    }
+}
+
 /// How far the latest turn has got, from the log alone. Nothing is stored; `status` derives it per call.
 public struct Progress: Sendable, Equatable {
     /// `ts` of the latest `turn.started`.
@@ -203,6 +251,8 @@ public struct ThreadState: Sendable, Equatable {
     public var progress: Progress
     /// Set for a review follow-up, nil for a thread someone started.
     public var lineage: ThreadLineage?
+    /// The latest plan turn, nil when none has run. Advisory: nothing gates on it.
+    public var plan: PlanRecord?
 
     public var isActive: Bool { decision == nil }
 
@@ -287,6 +337,23 @@ public struct ThreadState: Sendable, Equatable {
         }
     }
 
+    /// The runs that only advise: the judge, the plan and the pull request review. Each start is replaced by the
+    /// end that follows; if none does, the run was cut off.
+    private static func applyAdvisory(_ event: Event, to state: inout ThreadState) {
+        switch event.kind {
+        case .judgeStarted:
+            state.review.judge = Review.Judge(
+                turn: event.turn, verdict: nil, costUSD: nil,
+                failure: "started and never recorded a result (still running, or it was interrupted)")
+        case .judgeRan:
+            state.review.judge = judgeRun(event)
+        case .planStarted, .planEnded:
+            state.plan = PlanRecord(event)
+        default:
+            state.review.prReview = prReviewRound(event)
+        }
+    }
+
     /// A pure function of the events: no file, git or clock. Unknown kinds and unknown decisions are ignored.
     public static func derive(from events: [Event], id: String) -> ThreadState {
         var state = ThreadState(
@@ -336,15 +403,8 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
                 Self.applyVerify(event, to: &state, pending: &pendingProof)
-            case .judgeStarted:
-                // Replaced by the `judge.ran` that follows; if none does, the judge was cut off.
-                state.review.judge = Review.Judge(
-                    turn: event.turn, verdict: nil, costUSD: nil,
-                    failure: "started and never recorded a result (still running, or it was interrupted)")
-            case .judgeRan:
-                state.review.judge = Self.judgeRun(event)
-            case .prReviewStarted, .prReviewFinished:
-                state.review.prReview = Self.prReviewRound(event)
+            case .judgeStarted, .judgeRan, .planStarted, .planEnded, .prReviewStarted, .prReviewFinished:
+                Self.applyAdvisory(event, to: &state)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.

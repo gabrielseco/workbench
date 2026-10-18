@@ -62,6 +62,15 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   no tree recorded is "unknown" and uploads as before. `review` prints the same verdict (`current`, `stale`,
   `unknown`) under the proof files, and `--json` has it as `verify.proof_freshness`. It is a note, not an error, when the tool is missing or fails: the PR is open, the
   worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
+- **`workbench plan` writes the approach before any edit.** A separate, read-only `claude` run is given the approved
+  goal (request, criteria, out of scope), the project's instructions as they were at the base commit, and a
+  throwaway detached checkout of the base commit as its working directory (`--restricted` makes that the only place
+  it can read; it is removed on every ending). Its tools are `Read`, `Grep` and `Glob`: no `Bash`, `Edit` or `Write`,
+  and no `--permission-mode`. It answers in Markdown (approach, files, order, risks). The text is trimmed, stripped
+  of machine paths and credentials, cut at 16 KB with a marker, and kept as `plans/plan-N.md` in the thread's folder.
+  It needs an approved goal (a draft or a changed one is refused before anything is spent), runs once per approved
+  goal unless `--again`, has its own budget (default $1.00) and timeout (10 minutes), and opens no numbered turn.
+  Nothing reads the plan yet: `run` does not put it in the prompt (P14 task 3).
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
   work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,
   with untracked files named), the check (with the end of its output when it did not
@@ -206,6 +215,7 @@ default_budget_usd = 5.00               # used when drafting a goal
 # model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
 # judge_model = "sonnet"                # --model for the judge (it only reads); `judge --model` wins; unset = model
 # describe_model = "haiku"              # --model for the PR description turn; unset = model
+# plan_model = "opus"                   # --model for `workbench plan` (it only reads); `plan --model` wins; unset = model
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see

@@ -509,6 +509,7 @@ extension ThreadRunner {
     func recoverOrphanedChecks(log: EventLogWriter) async throws {
         if let recovered = try await log.recoverOrphanedCheck() { notify(.recoveredOrphanedCheck(recovered.turn)) }
         _ = try await log.recoverOrphanedVerify()
+        try await Plan.recoverOrphan(log: log, project: project, threadID: threadID, git: git)
     }
 
     // MARK: The verify step

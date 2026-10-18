@@ -306,6 +306,8 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(args[try #require(args.firstIndex(of: "--model")) + 1] == "opus")
         #expect(codes("judge_model = \"-x\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
         #expect(codes("describe_model = \"a b\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
+        #expect(try Config.parse("plan_model = \"opus\"\n[tools]\navailable = [\"Read\"]").planModel == "opus")
+        #expect(codes("plan_model = \"-x\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
     }
 
     @Test(arguments: ["-x", "a b", "a;b", ""])

@@ -38,6 +38,10 @@ let usage = """
                                  ask a second, read-only Claude run whether the check, the verify step, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
                                  beside your own checks, never changes accept or ship; once per turn unless --again
+      plan [id] [--again] [--model <name>] [--budget <usd>]
+                                 a read-only Claude run reads the repository at the base commit against the
+                                 approved goal and writes the approach; saved under plans/ in the thread, once
+                                 per approved goal unless --again; run does not read it yet
       pr-review --pr <n> [--spec <file>] [--again]
                                  the same review for a pull request no thread made (one written by hand): its own
                                  text is the goal, or the file; kept under .workbench/reviews/, no rounds counted
@@ -144,6 +148,8 @@ do {
         try await Commands.grant(Array(arguments.dropFirst()))
     case "judge":
         exit(try await Commands.judge(Array(arguments.dropFirst())))
+    case "plan":
+        exit(try await Commands.plan(Array(arguments.dropFirst())))
     case "pr-review":
         exit(try await Commands.prReview(Array(arguments.dropFirst())))
     case "review-stage":

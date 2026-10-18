@@ -87,6 +87,8 @@ public struct Config: Sendable, Equatable {
     public var judgeModel: String?
     /// `--model` for the turn that writes or refreshes the pull request description; unset falls back to `model`.
     public var describeModel: String?
+    /// `--model` for the plan turn, which only reads; unset falls back to `model`. A `--model` on the command wins.
+    public var planModel: String?
 
     /// The `pr-review` stage's checklist and round cap, from `[review.stage.pr-review]` or the older `[pr_review]`.
     public var prReview: PRReviewConfig {
@@ -127,7 +129,7 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min", "app_type",
-            "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "safe_mode",
+            "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "plan_model", "safe_mode",
             "project_instructions",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
@@ -212,6 +214,7 @@ public struct Config: Sendable, Equatable {
         let model = modelKey("model")
         let judgeModel = modelKey("judge_model")
         let describeModel = modelKey("describe_model")
+        let planModel = modelKey("plan_model")
 
         func command(_ key: String) -> String? {
             guard let (value, line) = string("", key) else { return nil }
@@ -299,7 +302,8 @@ public struct Config: Sendable, Equatable {
             verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
-            review: review, judgeModel: judgeModel, describeModel: describeModel)
+            review: review, judgeModel: judgeModel, describeModel: describeModel,
+            planModel: planModel)
     }
 
     private static func verifyMinutes(_ value: TOMLValue) -> Int? {
@@ -355,6 +359,7 @@ public struct Config: Sendable, Equatable {
         # model = "opus"                   # --model for every turn; a goal's `model` wins; unset = the CLI default
         # judge_model = "sonnet"           # --model for the judge (it only reads); unset = model
         # describe_model = "haiku"         # --model for the PR description turn; unset = model
+        # plan_model = "opus"              # --model for `workbench plan` (it only reads); unset = model
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
