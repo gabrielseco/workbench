@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once, after the merge.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7) and `plan` (P14 task 5).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1).
 
 ## When to use it
 
@@ -24,6 +24,7 @@ git checkout main && git pull --ff-only            # the main checkout, clean, a
 bash scripts/verify-cli/abandon.sh                 # VERIFY_CLI_BUDGET_USD=0.50 VERIFY_CLI_MODEL=haiku by default
 bash scripts/verify-cli/grant.sh                   # two turns (the second is a send-back), each capped at the budget
 bash scripts/verify-cli/plan.sh                    # one plan turn and one coding turn, each capped at the budget
+bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -107,6 +108,17 @@ draft up; `plans/plan-2.md` holds the marker; `plan show` and `status --json` sa
 file's sha256; no process of the worktree is left; the thread is ended (`abandon`). `VERIFY_CLI_SABOTAGE=1` changes
 `plans/plan-2.md` on disk before `run`, so the plan is left out and the prompt and `turn.started` steps must FAIL.
 It costs one cheap plan turn and one cheap coding turn; the summary prints both costs.
+
+### doctor (P15 task 1)
+
+`goal new` (a goal that asks for `scratch/doctor-probe.txt` after reading three files), `goal approve`, then `doctor`
+with no turn run, `run` in the background, `doctor` again, `stop`, `doctor` a third time, `abandon`. Steps: the goal
+approved with the cap; doctor exits 0 and reports a `check:` line; the thread's log has the same number of lines
+after it; no `workbench/doctor` branch or `.workbench/worktrees/doctor` is left, and the thread has no branch yet; the
+background run shows a recorded `turn.started` with the real `claude`; doctor then exits 6 and names the thread; after
+`stop` there is one `turn.ended` per `turn.started`; doctor exits 0 again and leaves nothing; `abandon` ends the
+thread. `VERIFY_CLI_SABOTAGE=1` stops the turn before the second doctor, so the exit-6 and names-the-thread steps must
+FAIL. The turn is stopped early, so it costs about nothing.
 
 ## Adding a scenario for the next feature
 
