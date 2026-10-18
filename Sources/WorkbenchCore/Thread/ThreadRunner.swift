@@ -191,7 +191,8 @@ public actor ThreadRunner {
                 note["budget_usd"] = .double(NSDecimalNumber(decimal: budget).doubleValue)
             }
             try await log.append(.threadNote, data: .object(note))
-            prompt = PromptBuilder.followUpPrompt(feedback: feedback, check: attachment)
+            prompt = PromptBuilder.followUpPrompt(
+                feedback: feedback, check: attachment, granted: grantsForNextTurn(config: config))
         } else {
             if anySuccess { throw RunnerError.feedbackRequired }
             builtFromGoal = true

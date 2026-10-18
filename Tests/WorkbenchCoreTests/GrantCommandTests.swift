@@ -3,19 +3,19 @@ import Testing
 
 @testable import WorkbenchCore
 
-private func denial(_ command: String) -> JSONValue {
+func bashDenial(_ command: String) -> JSONValue {
     ["tool_name": "Bash", "tool_use_id": "toolu_1", "tool_input": ["command": .string(command)]]
 }
 
 /// A finished turn in the thread's log whose result line lists these denials; returns the `claude` line's seq.
 @discardableResult
-private func denyInLog(_ fx: RunnerFixture, _ id: String, _ commands: [String]) async throws -> Int {
+func denyInLog(_ fx: RunnerFixture, _ id: String, _ commands: [String]) async throws -> Int {
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     let turn = await log.lastTurn + 1
     _ = try await log.append(.turnStarted, turn: turn, data: ["session_id": "s", "resume": false])
     let line = try await log.append(
         .claude, turn: turn,
-        data: ["type": "result", "permission_denials": .array(commands.map(denial))])
+        data: ["type": "result", "permission_denials": .array(commands.map(bashDenial))])
     _ = try await log.append(
         .turnEnded, turn: turn, data: ["result": "succeeded", "permission_denials": .int(commands.count)])
     await log.close()

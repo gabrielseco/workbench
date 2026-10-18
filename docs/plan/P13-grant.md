@@ -1,6 +1,6 @@
 # P13: Grant
 
-Status: tasks 0 to 4 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
+Status: tasks 0 to 5 built; the rest is plan. Written 2026-10-18 after the `verify-cli` threads of 2026-10-17. Closes
 FRICTION #1, #28, #29, #33, #34 and #35, which all say the same thing: a run has no prompt path
 (`--permission-prompts none`), so a denied command ends the turn's work and the only way on is to edit
 `[tools] allowed` by hand, which then stays for every later thread.
@@ -61,7 +61,7 @@ $ workbench grant
    is gone one turn later; a denied pattern in `[tools] denied` is never overridden by a grant.
 4. **`workbench grant`.** Done. List, `grant <n> --once|--thread|--never`, `--allow-dangerous`, `--json`. Refuses a
    decided thread or a running turn.
-5. **`run` says it.** A turn that ended with denials prints "N denied, `workbench grant` to review", and the
+5. **`run` says it.** Done. A turn that ended with denials prints "N denied, `workbench grant` to review", and the
    first prompt's tool note tells the model that a denied command is granted by the user, not worked around.
 6. **Suggest the repo config** after repeats. Print the line to add; never write it.
 7. **`verify-cli` scenario** for grant on the real `claude`.
