@@ -298,8 +298,7 @@ Notes:
   the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
   runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
   says the verify step captures those, so Claude does not report them as unverified.
-- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md); the turn that uses it
-  is not built yet). `skill` is required and is an explicit repository path (`.claude/skills/…` and
+- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is required and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
   `model` is a model name, `auto` a boolean, `budget_usd` a positive number, `timeout_min` 1 to 240; any other key
@@ -308,6 +307,22 @@ Notes:
   into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over
   32 KiB is cut with a marker. `doctor` reads it at its `--base` and prints the path, size, sha256, model, tools and
   `auto`, and a skill that cannot be used is a warning, not a failure.
+- **`workbench verifier [id] [--again]` runs the skill as a separate turn.** Like the judge it is advisory and costs
+  money: one `claude -p --output-format json` run in the thread's worktree, in `--safe-mode --restricted
+  --disable-slash-commands`, with `--model` from `[verifier] model` (else the coding `model`), the tools of `[verifier]
+  tools` as `--tools` and `--allowedTools` and nothing else (the project's `[tools] denied` still applies), its own
+  session, `--max-budget-usd` from `budget_usd` and the `timeout_min` deadline. Its prompt holds the skill text read from
+  the base commit, the goal's request and criteria, and `WORKBENCH_PROOF_DIR` (the latest turn's `proof/turn-N`, not
+  emptied), `WORKBENCH_THREAD` and `WORKBENCH_GOAL`, which its tools see too. It runs once per turn unless `--again`
+  (a failed attempt does not count). The thread's log is held while it runs: a second verifier, a judge, a run or a
+  send-back is refused as busy, `stop` reaches it, and `doctor` is refused. It runs under the same process layer as
+  every `claude`: its own process group, SIGTERM then SIGKILL, the tree swept, and after it ends any process left with
+  no live parent and the worktree as its working directory (an app started in a session of its own) is killed. It ends
+  in exactly one `verifier.ended` ([event-log.md](event-log.md)), and what it says is stored as a bounded note, never
+  as a pass. With `[verifier] auto = true`, a run starts it after the check, when the turn succeeded, the check passed
+  (or none is declared), the worktree has a change to look at and no `verifier.ended` exists for the turn; a verifier
+  that cannot start (no skill at the base) is a `verifier.skipped` with the reason and a note, and does not fail the
+  turn. An answer that is empty is not a success.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

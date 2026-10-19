@@ -32,6 +32,8 @@ struct LogState: Sendable {
     var openVerify: Int?
     /// The `plan.started` no `plan.ended` has closed. Crash recovery only, like verify: not an invariant.
     var planStart: Event?
+    /// The `verifier.started` no `verifier.ended` has closed. Crash recovery only, like the plan.
+    var verifierStart: Event?
 
     func check(_ event: Event, line: Int = 0) -> LogProblem? {
         if event.seq != nextSeq {
@@ -87,6 +89,10 @@ struct LogState: Sendable {
             planStart = event
         case .planEnded:
             planStart = nil
+        case .verifierStarted:
+            verifierStart = event
+        case .verifierEnded:
+            verifierStart = nil
         default:
             break
         }

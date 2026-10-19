@@ -57,6 +57,11 @@ enum Help {
         "judge": Extra(
             changes: "runs a second, read-only Claude; appends its verdict and cost to the log",
             example: "workbench judge --model sonnet"),
+        "verifier": Extra(
+            changes:
+                "runs a separate Claude on the project's skill in the thread's worktree; adds its screenshots "
+                + "to the turn's proof folder; appends verifier.started and verifier.ended with the cost to the log",
+            example: "workbench verifier --again"),
         "plan": Extra(
             changes:
                 "plan: runs a read-only Claude and saves the plan under plans/ in the thread folder; "

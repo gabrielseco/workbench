@@ -25,6 +25,11 @@ import Foundation
 //   dump=<file>           write argv, environment, cwd, open descriptors and stdin state as JSON
 //   answer=<file>         with `--output-format json` (one object, not a stream) answer with this file's text
 //                         as the `result`, then exit; `exit=<n>` still applies
+//                         (json mode also takes: crash-after=<any> exits 70 and die-after=<any> kills itself, before
+//                         printing; budget-stop answers a budget stop (is_error, subtype error_max_budget_usd) and
+//                         exits 1; error-result answers is_error without a reason; proof=<name> first writes that
+//                         file into $WORKBENCH_PROOF_DIR; detached=<pidfile> first leaves a `sleep` that outlives
+//                         this process, re-parented to launchd, with this process's working directory)
 //   write=<path>          add a line to this file (relative to the working directory) each run, so a turn leaves a diff
 //   sessions=<dir>        emulate session bookkeeping: --session-id twice, or --resume of an unknown id,
 //                         exits 1 with no output (the first is spike S4; the second message is a guess)
@@ -135,7 +140,35 @@ if let path = d.string("ready") {
 // MARK: single-object answer
 
 if argument(after: "--output-format", in: args) == "json" {
+    if let name = d.string("proof"), let dir = ProcessInfo.processInfo.environment["WORKBENCH_PROOF_DIR"] {
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? "proof \(UUID().uuidString)\n".write(toFile: dir + "/" + name, atomically: true, encoding: .utf8)
+    }
+    if let pidFile = d.string("detached") {
+        // A shell starts the sleep in the background and exits at once, so the sleep is re-parented to launchd.
+        let script = "nohup /bin/sleep 300 >/dev/null 2>&1 & echo $! > '\(pidFile)'"
+        var pid: pid_t = 0
+        // A session of its own, so the process-group sweep at the end of the run cannot reach it (as an app opened
+        // through LaunchServices is out of reach).
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("sh"), strdup("-c"), strdup(script), nil]
+        _ = posix_spawn(&pid, "/bin/sh", nil, &attributes, argv, environ)
+        var status: Int32 = 0
+        waitpid(pid, &status, 0)
+    }
     if d.int("hang-after") != nil { while true { sleep(60) } }
+    if d.has("crash-after") { exit(70) }
+    if d.has("die-after") { kill(getpid(), SIGKILL) }
+    if d.has("budget-stop") || d.has("error-result") {
+        write(
+            json([
+                "type": "result", "subtype": d.has("budget-stop") ? "error_max_budget_usd" : "error_during_execution",
+                "is_error": true, "session_id": sessionID, "total_cost_usd": 0.5,
+            ]) + "\n")
+        exit(1)
+    }
     let text = d.string("answer").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? "fake claude: \(prompt)"
     write(
         json([

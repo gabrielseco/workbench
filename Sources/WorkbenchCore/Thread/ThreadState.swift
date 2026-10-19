@@ -429,6 +429,8 @@ public struct ThreadState: Sendable, Equatable {
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
+            case .verifierStarted, .verifierEnded, .verifierSkipped:
+                break  // shown by `review` in a later change (P10 PR 3)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.

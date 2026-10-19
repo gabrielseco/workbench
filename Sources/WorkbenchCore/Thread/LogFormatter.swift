@@ -35,6 +35,16 @@ public enum LogFormatter {
             if let ms = event.data["duration_ms"]?.intValue { out += "  \(ms / 1000)s" }
             if let n = event.data["proof_files"]?.intValue { out += "  \(n) proof file(s)" }
             return out
+        case .verifierStarted:
+            return head + "verifier started: \(event.data["skill"]?.stringValue ?? "?")"
+        case .verifierSkipped:
+            return head + "verifier skipped: \(event.data["reason"]?.stringValue ?? "?")"
+        case .verifierEnded:
+            var out = head + (event.data["ok"] == true ? "verifier finished" : "verifier did not finish")
+            if let reason = event.data["reason"]?.stringValue { out += " (\(reason))" }
+            if let ms = event.data["duration_ms"]?.intValue { out += "  \(ms / 1000)s" }
+            if case .array(let files)? = event.data["files"] { out += "  \(files.count) proof file(s)" }
+            return out
         case .proofAdded:
             return head + "proof: \(event.data["path"]?.stringValue ?? "?")"
         case .setupRan:
@@ -134,14 +144,21 @@ public enum LogFormatter {
 
     /// Whether `log -f` has seen everything this run will write. A turn is followed to the end of its check,
     /// then, when it succeeded and a verify step is configured, to the end of that.
-    public static func followEnds(_ event: Event, sawStart: Bool, checks: Bool, verifies: Bool, turnSucceeded: Bool) -> Bool {
+    public static func followEnds(
+        _ event: Event, sawStart: Bool, checks: Bool, verifies: Bool, turnSucceeded: Bool, verifiers: Bool = false,
+        checkPassed: Bool = true
+    ) -> Bool {
         let result = event.data["result"]?.stringValue
         let stopped = result == "stopped" || result == "interrupted"
         let verifyFollows = verifies && turnSucceeded
+        // An automatic verifier follows a successful turn whose check passed (or that has none), and the verify step.
+        let verifierFollows = verifiers && turnSucceeded
         switch event.kind {
-        case .turnEnded: return sawStart && !(checks && !stopped) && !verifyFollows
-        case .checkRan: return sawStart && !(verifyFollows && !stopped)
-        case .verifyEnded: return sawStart
+        case .turnEnded: return sawStart && !(checks && !stopped) && !verifyFollows && !(verifierFollows && !checks)
+        case .checkRan:
+            return sawStart && !(verifyFollows && !stopped) && !(verifierFollows && result == "passed")
+        case .verifyEnded: return sawStart && !(verifierFollows && checkPassed)
+        case .verifierEnded, .verifierSkipped: return sawStart
         // A setup that did not pass ends the run before any turn: nothing else will come.
         case .setupRan: return result != "passed"
         default: return false

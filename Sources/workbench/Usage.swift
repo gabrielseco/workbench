@@ -39,6 +39,9 @@ let workbenchUsage = """
                                  ask a second, read-only Claude run whether the check, the verify step, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
                                  beside your own checks, never changes accept or ship; once per turn unless --again
+      verifier [id] [--again]    run the project's [verifier] skill as its own Claude run: it builds and drives the app to
+                                 the states the goal names, leaves the screenshots in the proof folder and reports per
+                                 criterion; advisory, never a pass; once per turn unless --again
       plan [id] [--again] [--model <name>] [--budget <usd>]
                                  a read-only Claude run reads the repository at the base commit against the
                                  approved goal and writes the approach; saved under plans/ in the thread, once
