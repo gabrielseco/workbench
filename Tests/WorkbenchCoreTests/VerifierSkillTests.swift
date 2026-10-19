@@ -106,6 +106,18 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
         #expect(found.bytes == found.text.utf8.count)
     }
 
+    @Test func aBlobCutByTheReaderIsMarkedEvenWhenTheRestIsWhitespace() async throws {
+        let repo = try await SkillRepo()
+        let padding = String(repeating: " ", count: ProjectInstructions.blobReadLimit)
+        try repo.write("SKILL.md", "# Verify\n" + padding + "the instructions that matter\n")
+        let commit = try await repo.commit()
+
+        let found = try skill(await repo.load(commit, "SKILL.md"))
+        #expect(found.truncated)
+        #expect(found.text == "# Verify\n" + VerifierSkill.truncationMarker)
+        #expect(!found.text.contains("the instructions that matter"))
+    }
+
     @Test func aSkillExactlyAtTheLimitIsNotCut() {
         let text = String(repeating: "a", count: VerifierSkill.sizeLimit)
         let found = try? skill(VerifierSkill.finish(path: "s.md", raw: text))

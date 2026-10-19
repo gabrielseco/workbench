@@ -50,10 +50,10 @@ public struct VerifierSkill: Sendable, Equatable {
         if let problem = await symlinkProblem(reader, path) { return .failure(problem) }
         guard let entry = await reader.entry(path) else { return .failure(.missing(path)) }
         guard entry.isRegularFile else { return .failure(.missing(path)) }
-        guard let raw = await reader.contents(of: entry) else {
+        guard let raw = await reader.read(entry) else {
             return .failure(await oversized(git: git, repo: repo, sha: entry.sha) ? .tooLarge(path) : .unreadable(path))
         }
-        return finish(path: path, raw: raw)
+        return finish(path: path, raw: raw.text, cut: raw.cut)
     }
 
     /// The path is a symlink, or sits under one (this repository's `.claude/skills/<name>` points into `.agents/`).
@@ -71,11 +71,15 @@ public struct VerifierSkill: Sendable, Equatable {
         return nil
     }
 
-    static func finish(path: String, raw: String) -> Result<VerifierSkill, Problem> {
+    /// `cut` is set when the reader stopped before the end of the blob: the text is incomplete however short it is.
+    static func finish(path: String, raw: String, cut readCut: Bool = false) -> Result<VerifierSkill, Problem> {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return .failure(.empty(path)) }
         var truncated = false
-        if text.utf8.count > sizeLimit {
+        if readCut && text.utf8.count + 1 + truncationMarker.utf8.count <= sizeLimit {
+            truncated = true
+            text += "\n" + truncationMarker
+        } else if readCut || text.utf8.count > sizeLimit {
             truncated = true
             let budget = sizeLimit - truncationMarker.utf8.count - 1
             let window = Array(text.utf8.prefix(budget))

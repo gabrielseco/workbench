@@ -64,6 +64,9 @@ public struct VerifierConfig: Sendable, Equatable {
                     fail(.invalidValue, entry.line, "'skill' must be a path to the skill file, not empty")
                 } else if let reason = PRReviewConfig.checklistProblem(value) {
                     fail(.invalidValue, entry.line, "'skill' \(reason)")
+                } else if value.split(separator: "/").contains(".") {
+                    // Git lists the canonical path, so a "./" part would make a committed file look missing.
+                    fail(.invalidValue, entry.line, "'skill' must be a path without '.' parts")
                 } else {
                     skill = value
                 }

@@ -100,6 +100,13 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         #expect(found.first?.message.contains("'skill'") == true)
     }
 
+    @Test(arguments: ["./.claude/skills/verify/SKILL.md", ".claude/./skills/SKILL.md", "skills/SKILL.md/."])
+    func aDotPartInTheSkillPathIsRefused(path: String) {
+        let found = problems("[verifier]\nskill = \"\(path)\"")
+        #expect(found.map(\.code) == [.invalidValue], "\(found)")
+        #expect(found.first?.message.contains("'skill' must be a path without '.' parts") == true)
+    }
+
     @Test(arguments: ["provider", "allowed_tools", "skills"])
     func anUnknownKeyIsRefusedWithItsName(key: String) {
         let found = problems("[verifier]\nskill = \"s.md\"\n\(key) = \"codex\"")

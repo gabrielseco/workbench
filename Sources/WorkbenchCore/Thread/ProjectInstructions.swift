@@ -95,7 +95,10 @@ public struct ProjectInstructions: Sendable, Equatable {
         }
 
         /// The blob's text, or nil when it is over the ceiling or cannot be read. Cut at the read limit.
-        func contents(of entry: Entry) async -> String? {
+        func contents(of entry: Entry) async -> String? { await read(entry)?.text }
+
+        /// As `contents(of:)`, and whether the blob was longer than the read limit and so cut.
+        func read(_ entry: Entry) async -> (text: String, cut: Bool)? {
             guard
                 let size = try? await git.run(["cat-file", "-s", entry.sha], in: repo),
                 size.succeeded, let bytes = Int(size.stdout.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -108,7 +111,7 @@ public struct ProjectInstructions: Sendable, Equatable {
             let data = Data(blob.stdout.utf8.prefix(blobReadLimit))
             var text = String(decoding: data, as: UTF8.self)
             if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
-            return text.replacingOccurrences(of: "\r\n", with: "\n")
+            return (text.replacingOccurrences(of: "\r\n", with: "\n"), blob.stdout.utf8.count > blobReadLimit)
         }
 
         func read(_ path: String) async -> String? {
