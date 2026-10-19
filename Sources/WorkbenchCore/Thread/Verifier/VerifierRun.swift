@@ -26,7 +26,8 @@ struct VerifierRun {
     func run(turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void) async throws -> VerifierReport {
         let prompt = Verifier.prompt(
             skill: skill, goal: goal, proofDirectory: proofDirectory, threadID: threadID, goalPath: goalPath)
-        let arguments = Verifier.arguments(config: config, verifier: verifier, prompt: prompt)
+        let arguments = Verifier.arguments(
+            config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory)
         let shown = PRDescriber.displayArguments(arguments)
 
         // A `claude` or an app a killed verifier left is found by the worktree it ran in, and ended first.

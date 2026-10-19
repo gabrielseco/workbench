@@ -110,6 +110,8 @@ private func pid(in path: String) throws -> pid_t {
         #expect(Array(argv[(allowed + 1)...].prefix(2)) == ["Read", "Bash(scripts/snap.sh:*)"])
         #expect(argv[allowed + 3] == "--disallowedTools" || argv[allowed + 3] == "--")
         #expect(!argv.contains("--resume"))
+        // The proof folder is readable to the run's file tools, which are confined to the worktree otherwise.
+        #expect(value(after: "--add-dir") == v.fx.project.proofDirectory(v.id, turn: 1).path)
 
         // The prompt: the skill text, the goal's criteria and the three variables.
         let prompt = try #require(argv.last)
