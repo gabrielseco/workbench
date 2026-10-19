@@ -3,11 +3,11 @@
 # thread does, so no turn is run and it costs nothing.
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/copy.sh   (in the main checkout, on a branch that contains origin/main)
 # Puts an ignored probe file (.build/verify-copy-probe.txt) in this checkout, adds `copy` and a `setup_command` that
-# prints it to .workbench/config.toml (restored on exit), and runs doctor: the setup output must show the probe's
-# contents, so the file reached the new worktree before setup ran, and the doctor worktree must be gone afterwards.
+# prints it to .workbench/config.toml (restored on exit), and runs doctor: the setup (`cat` of the probe) must pass, so the
+# file reached the new worktree before setup ran, and the doctor worktree must be gone afterwards.
 # Then a `copy` entry that points out of the repository must make the config refuse to load. Exit 0 only when every step
 # passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 leaves the probe out, so
-# the "setup sees the copied file" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# the "setup read the copied file" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -41,7 +41,7 @@ setup_command = \"cat $PROBE\""
 code=$(doctor_to "$SCRATCH/doctor1.out")
 sed 's/^/    /' "$SCRATCH/doctor1.out" | head -14
 check "doctor with copy: exit 0" "workbench doctor exited $code" test "$code" = 0
-check "doctor with copy: setup sees the copied file" "the setup output has no contents-7f3a91" grep -q contents-7f3a91 "$SCRATCH/doctor1.out"
+check "doctor with copy: setup read the copied file" "the setup line does not say passed" grep -q '^setup: .*passed' "$SCRATCH/doctor1.out"
 check "doctor leaves no worktree or branch of its own" "doctor's worktree or branch is still there" \
     bash -c '! git rev-parse -q --verify refs/heads/workbench/doctor >/dev/null && [ ! -e "$1/.workbench/worktrees/doctor" ]' _ "$ROOT"
 check "the checkout is unchanged" "git status shows: $(g status --porcelain)" test -z "$(g status --porcelain)"
