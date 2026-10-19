@@ -294,11 +294,14 @@ Notes:
 - **`copy` brings the ignored files a checkout needs into each new worktree.** Repo-relative paths or globs
   (`*` and `?` within one path component, no `**`), copied from the main checkout right after the worktree is
   cut and before `setup_command`, so an install step can read them (`.env.*`, `example/.env`). Only regular files
-  that git ignores are copied: a file git does not ignore would show up in the diff, so it is skipped with that
-  reason, as is a symlink (never followed), a file over 1 MiB, anything past 200 files, and a file already
-  there. A pattern that matches nothing is a note, not an error. Entries are checked when the config loads: no
-  absolute or `~` path, no `.`, `..` or empty parts, nothing under `.git` or `.workbench`. `worktree.created`
-  lists what was copied; `doctor` copies too, so its setup and check see the same files a thread does.
+  that git ignores are copied, by the rules of both the main checkout and the new worktree (which has the base's
+  rules): a file either does not ignore would show up in the diff, so it is skipped with that reason. Also skipped,
+  with a reason: a symlink (never followed), a file whose folder is a symlink in the worktree, a file over 1 MiB,
+  anything past 200 files, and a file already there. A pattern that matches nothing is a note, not an error. At
+  most 1000 matches are looked at and 20 notes kept, then one line counts the rest. Entries are checked when the
+  config loads: no absolute or `~` path, no `.`, `..` or empty parts, nothing under `.git` or `.workbench`.
+  `worktree.created` lists what was copied; `doctor` copies too, so its setup and check see the same files a
+  thread does, and prints `copy: not copied:` lines for what it left out.
 - **`verify_command` and `verify_timeout_min` are gone.** A config that still has either is refused at load with
   "'verify_command' was removed: replace it with a [verifier] table" (not the unknown-key message), so nothing runs
   on a half-migrated project. The project's evidence is made by the verifier ([P10](../plan/P10-skill-verifier.md)),

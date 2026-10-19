@@ -13,10 +13,14 @@ public struct CopyReport: Sendable, Equatable {
 /// path component, there is no `**`.
 struct WorktreeCopier: Sendable {
     static let maxFiles = 200
+    /// Matches looked at in all, copied or not, and notes kept: a glob over `node_modules` must not run for long.
+    static let defaultMaxMatches = 1000
+    static let maxNotes = 20
     static let maxFileBytes = 1 << 20
 
     let source: URL
     let git: GitRunner
+    var maxMatches = WorktreeCopier.defaultMaxMatches
 
     /// Why a pattern cannot be used, nil when it can: it ends up in a path under two checkouts.
     static func patternProblem(_ pattern: String) -> String? {
@@ -39,21 +43,27 @@ struct WorktreeCopier: Sendable {
     func copy(_ patterns: [String], to destination: URL) async -> CopyReport {
         var report = CopyReport()
         var seen = Set<String>()
+        var omitted = 0
+        func skip(_ note: String) {
+            if report.skipped.count < Self.maxNotes { report.skipped.append(note) } else { omitted += 1 }
+        }
         for pattern in patterns {
-            let matches = Self.expand(pattern.split(separator: "/").map(String.init), under: source, relative: "")
-            if matches.isEmpty { report.skipped.append("\(pattern): no file matches") }
+            var budget = maxMatches - seen.count
+            let parts = pattern.split(separator: "/").map(String.init)
+            let matches = Self.expand(parts, under: source, relative: "", budget: &budget)
+            if matches.isEmpty { skip("\(pattern): no file matches") }
             for path in matches where seen.insert(path).inserted {
                 if report.copied.count >= Self.maxFiles {
-                    report.skipped.append("\(path): more than \(Self.maxFiles) files")
-                    continue
-                }
-                if let reason = await copyOne(path, to: destination) {
-                    report.skipped.append("\(path): \(reason)")
+                    skip("\(path): more than \(Self.maxFiles) files")
+                } else if let reason = await copyOne(path, to: destination) {
+                    skip("\(path): \(reason)")
                 } else {
                     report.copied.append(path)
                 }
             }
+            if seen.count >= maxMatches { skip("\(pattern): stopped after \(maxMatches) matches"); break }
         }
+        if omitted > 0 { report.skipped.append("and \(omitted) more not copied") }
         return report
     }
 
@@ -66,9 +76,13 @@ struct WorktreeCopier: Sendable {
             attrs[.type] as? FileAttributeType == .typeRegular
         else { return "not a regular file" }
         if let size = attrs[.size] as? Int, size > Self.maxFileBytes { return "larger than \(Self.maxFileBytes / 1024) KiB" }
-        guard let ignored = try? await git.run(["check-ignore", "-q", "--", path], in: source), ignored.status != 128
-        else { return "git could not say whether it is ignored" }
-        guard ignored.succeeded else { return "not ignored by git, so it would show up in the diff" }
+        if Self.hasSymlink(path, under: destination) { return "a parent folder is a symlink in the worktree" }
+        // Both checkouts: the worktree is cut from `base`, whose ignore rules can differ from the checkout's.
+        for root in [source, destination] {
+            guard let ignored = try? await git.run(["check-ignore", "-q", "--", path], in: root), ignored.status != 128
+            else { return "git could not say whether it is ignored" }
+            guard ignored.succeeded else { return "not ignored by git, so it would show up in the diff" }
+        }
         guard !FileManager.default.fileExists(atPath: to.path) else { return "already in the worktree" }
         do {
             try FileManager.default.createDirectory(
@@ -80,13 +94,26 @@ struct WorktreeCopier: Sendable {
         return nil
     }
 
+    /// Whether `path` or one of its parents already exists under `root` as a symlink: creating folders or a file
+    /// through it would write outside the worktree.
+    private static func hasSymlink(_ path: String, under root: URL) -> Bool {
+        var url = root
+        for part in path.split(separator: "/") {
+            url.appendPathComponent(String(part))
+            let type = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
+            if type == .typeSymbolicLink { return true }
+            if type == nil { return false }
+        }
+        return false
+    }
+
     private static func isDirectory(_ url: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeDirectory
     }
 
     /// Repo-relative paths under `dir` that match `parts`, in name order. A symlink is never followed: it is not
     /// listed as a directory to enter, and `copyOne` refuses it as a file.
-    private static func expand(_ parts: [String], under dir: URL, relative: String) -> [String] {
+    private static func expand(_ parts: [String], under dir: URL, relative: String, budget: inout Int) -> [String] {
         guard let head = parts.first else { return [] }
         let rest = Array(parts.dropFirst())
         let isGlob = head.contains("*") || head.contains("?")
@@ -98,13 +125,16 @@ struct WorktreeCopier: Sendable {
             names = [head]
         }
         var out: [String] = []
-        for name in names where !(relative.isEmpty && (name == ".git" || name == ".workbench")) {
+        for name in names where budget > 0 && !(relative.isEmpty && (name == ".git" || name == ".workbench")) {
             let path = relative.isEmpty ? name : relative + "/" + name
             let url = dir.appendingPathComponent(name)
             if rest.isEmpty {
-                if (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil { out.append(path) }
+                if (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil {
+                    out.append(path)
+                    budget -= 1
+                }
             } else if isDirectory(url) {
-                out += expand(rest, under: url, relative: path)
+                out += expand(rest, under: url, relative: path, budget: &budget)
             }
         }
         return out

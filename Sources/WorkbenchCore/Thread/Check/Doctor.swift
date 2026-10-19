@@ -94,6 +94,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var verifier: DoctorVerifier?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []
+    /// What the config's `copy` left out of the throwaway worktree, with why.
+    public var copySkipped: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
     public var cleanupProblem: String?
 
@@ -226,6 +228,7 @@ public final class Doctor: @unchecked Sendable {
             throw error
         }
 
+        report.copySkipped = worktree.copy.skipped
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("workbench-doctor-\(UUID().uuidString)")
         let result: Result<DoctorReport, Error>

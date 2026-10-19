@@ -235,6 +235,7 @@ enum Commands {
         show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
         show("check:", report.check, undeclared: "turns will end with no check evidence")
         for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
+        for note in report.copySkipped { out("copy:     not copied: \(note)") }
         if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
     }
 
