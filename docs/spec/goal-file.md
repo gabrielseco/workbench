@@ -246,10 +246,10 @@ default_budget_usd = 5.00               # used when drafting a goal
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
 # [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
-# skill = ".claude/skills/verify/SKILL.md"  # required; an explicit repo path, read from the base commit
+# skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
 # tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
 # model = "sonnet"                      # --model for the verifier; unset = model
-# auto = false                          # true: run after each turn whose check passed
+# enabled = false                       # the verifier is on by default; this turns it off
 # budget_usd = 1.00                     # default 1.00
 # timeout_min = 10                      # default 10 (1 to 240)
 
@@ -302,11 +302,11 @@ Notes:
   the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
   runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
   says the verify step captures those, so Claude does not report them as unverified. A `[verifier]` counts as
-  a verify step for that sentence only when `auto` is on, since only then does a run start it.
-- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is required and is an explicit repository path (`.claude/skills/…` and
+  a verify step for that sentence when it is on (the default) and its skill is in the base commit, since only then does a run start it.
+- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is optional (default `.claude/skills/verify/SKILL.md`) and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
-  `model` is a model name, `auto` a boolean, `budget_usd` a positive number, `timeout_min` 1 to 240; any other key
+  `model` is a model name, `enabled` a boolean (`false` turns the verifier off; it is on with no table at all), `budget_usd` a positive number, `timeout_min` 1 to 240; any other key
   (there is no `provider`) is refused with its name. The skill is read from the thread's base commit, never the
   worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points
   into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over
@@ -325,10 +325,10 @@ Notes:
   every `claude`: its own process group, SIGTERM then SIGKILL, the tree swept, and after it ends any process left with
   no live parent and the worktree as its working directory (an app started in a session of its own) is killed. It ends
   in exactly one `verifier.ended` ([event-log.md](event-log.md)), and what it says is stored as a bounded note, never
-  as a pass. With `[verifier] auto = true`, a run starts it after the check, when the turn succeeded, the check passed
-  (or none is declared), the worktree has a change to look at and no `verifier.ended` exists for the turn; a verifier
-  that cannot start (no skill at the base) is a `verifier.skipped` with the reason and a note, and does not fail the
-  turn. An answer that is empty is not a success. Every PNG the run adds to, or changes in, the turn's proof folder
+  as a pass. Unless `[verifier] enabled = false`, a run starts it after the check, when the turn succeeded, the check passed
+  (or none is declared), the worktree has a change to look at and no `verifier.ended` exists for the turn; a project
+  with no skill file at the base gets no verifier and no event, and any other reason it cannot start (a symlinked or
+  oversized skill, no change) is a `verifier.skipped` with the reason and a note; none fails the turn. An answer that is empty is not a success. Every PNG the run adds to, or changes in, the turn's proof folder
   is recorded as `proof.added` (with `source: "verifier"`, the commit and tree it ran at) before `verifier.ended`;
   other files are only listed in `files`. `review` prints a `Verifier` section beside the verify step's: advisory,
   the turn, its cost and time, the screenshots, and what it said as a note (twelve lines at most, each cut), never

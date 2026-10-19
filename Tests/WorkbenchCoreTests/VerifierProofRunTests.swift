@@ -285,10 +285,10 @@ private let designStage = """
             - none
             """
         let goal = try GoalFile.parse(goalText).goal
-        let none = try Config.parse("[tools]\navailable = [\"Read\"]\n")
+        let none = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
         let with = try Config.parse("[tools]\navailable = [\"Read\"]\n[verifier]\nskill = \"s.md\"\n")
         let reason = ProofCommands.warnings(goal: goal, config: none).first?.reason
-        #expect(reason?.contains("no verify_command or [verifier]") == true)
+        #expect(reason?.contains("turned [verifier] off") == true)
         #expect(ProofCommands.warnings(goal: goal, config: with).isEmpty)
     }
 
@@ -321,9 +321,9 @@ private let designStage = """
             let c = try Config.parse("[tools]\navailable = [\"Read\"]\n" + config)
             return PromptBuilder.firstPrompt(
                 goal: goal, checkCommand: nil, instructions: nil,
-                verifies: c.verifyCommand != nil || c.verifier?.auto == true, plan: nil)
+                verifies: c.verifyCommand != nil || c.verifier != nil, plan: nil)
         }
-        #expect(try prompt("[verifier]\nskill = \"s.md\"\nauto = true\n").contains("Workbench runs the project's verify step"))
-        #expect(try !prompt("[verifier]\nskill = \"s.md\"\n").contains("Workbench runs the project's verify step"))
+        #expect(try prompt("[verifier]\nskill = \"s.md\"\n").contains("Workbench runs the project's verify step"))
+        #expect(try !prompt("[verifier]\nenabled = false\n").contains("Workbench runs the project's verify step"))
     }
 }

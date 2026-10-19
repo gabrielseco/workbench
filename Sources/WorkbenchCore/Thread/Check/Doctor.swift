@@ -273,7 +273,7 @@ public final class Doctor: @unchecked Sendable {
         for name in review.stages {
             if review.stage(name)?.needsProof == true, !hasVerifyCommand {
                 warnings.append(
-                    "the \(name) stage reads proof, and there is no verify_command or [verifier] to leave any: "
+                    "the \(name) stage reads proof, and there is no verify_command and the verifier is off to leave any: "
                         + "its rounds will fail")
             }
             guard let stage = review.stage(name), let rubric = stage.rubric else { continue }

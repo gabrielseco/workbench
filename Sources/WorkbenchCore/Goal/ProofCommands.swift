@@ -45,7 +45,7 @@ public enum ProofCommands {
                 out.append(
                     ProofWarning(
                         criterion: criterion.id, command: "screenshot: \(name)",
-                        reason: "the project has no verify_command or [verifier], so nothing will produce \(name).png: "
+                        reason: "the project has no verify_command and turned [verifier] off, so nothing makes \(name).png: "
                             + "set one in .workbench/config.toml, or change the proof",
                         suggestion: nil, isScreenshot: true))
                 continue

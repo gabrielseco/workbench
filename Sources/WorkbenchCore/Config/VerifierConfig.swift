@@ -1,37 +1,36 @@
 import Foundation
 
 /// `[verifier]`: the project's own skill, run as a separate turn that drives the app and leaves proof
-/// (docs/plan/P10-skill-verifier.md). No table means no verifier.
+/// (docs/plan/P10-skill-verifier.md). On by default: no table means the default skill, `enabled = false` means none.
 public struct VerifierConfig: Sendable, Equatable {
     public static let defaultBudgetUSD: Decimal = 1
     public static let defaultTimeoutMin = 10
     public static let defaultTools = ["Read"]
+    public static let defaultSkill = ".claude/skills/verify/SKILL.md"
 
-    /// A repo-relative path to the skill file, read from the base commit. Explicit: nothing is discovered.
+    /// A repo-relative path to the skill file, read from the base commit. Nothing is discovered: a project without
+    /// the file gets no verifier turn.
     public var skill: String
     /// Claude Code permission patterns the verifier may use, and only these. Never the skill's own `allowed-tools`.
     public var tools: [String]
     /// `--model` for the verifier; unset falls back to the coding `model`.
     public var model: String?
-    /// Run after each turn whose check passed, not only by `workbench verifier`.
-    public var auto: Bool
     public var budgetUSD: Decimal
     public var timeoutMin: Int
 
     public init(
-        skill: String, tools: [String] = VerifierConfig.defaultTools, model: String? = nil, auto: Bool = false,
+        skill: String = VerifierConfig.defaultSkill, tools: [String] = VerifierConfig.defaultTools, model: String? = nil,
         budgetUSD: Decimal = VerifierConfig.defaultBudgetUSD, timeoutMin: Int = VerifierConfig.defaultTimeoutMin
     ) {
         self.skill = skill
         self.tools = tools
         self.model = model
-        self.auto = auto
         self.budgetUSD = budgetUSD
         self.timeoutMin = timeoutMin
     }
 
     static let table = "verifier"
-    static let keys: Set<String> = ["skill", "tools", "model", "auto", "budget_usd", "timeout_min"]
+    static let keys: Set<String> = ["skill", "tools", "model", "enabled", "budget_usd", "timeout_min"]
 
     /// Whether `Config.parse` should leave this table to `parse(_:fail:)`.
     static func owns(table name: String) -> Bool { name == table }
@@ -51,13 +50,23 @@ public struct VerifierConfig: Sendable, Equatable {
         return nil
     }
 
+    /// Nil only when the project turned the verifier off with `enabled = false`.
     static func parse(_ document: TOMLDocument, fail: ReviewConfig.Fail) -> VerifierConfig? {
-        guard let table = document.tables[table] else { return nil }
+        guard let table = document.tables[table] else { return VerifierConfig() }
         for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !keys.contains(key) {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [verifier]")
         }
 
-        var skill: String?
+        var enabled = true
+        if let entry = table.entries["enabled"] {
+            if case .bool(let value) = entry.value {
+                enabled = value
+            } else {
+                fail(.wrongType, entry.line, "'enabled' must be true or false, found \(entry.value.typeName)")
+            }
+        }
+
+        var skill = defaultSkill
         if let entry = table.entries["skill"] {
             if case .string(let value) = entry.value {
                 if value.isEmpty {
@@ -73,8 +82,6 @@ public struct VerifierConfig: Sendable, Equatable {
             } else {
                 fail(.wrongType, entry.line, "'skill' must be a string, found \(entry.value.typeName)")
             }
-        } else {
-            fail(.missingKey, table.line, "missing required key 'skill' in [verifier]")
         }
 
         var tools = defaultTools
@@ -117,15 +124,6 @@ public struct VerifierConfig: Sendable, Equatable {
             }
         }
 
-        var auto = false
-        if let entry = table.entries["auto"] {
-            if case .bool(let value) = entry.value {
-                auto = value
-            } else {
-                fail(.wrongType, entry.line, "'auto' must be true or false, found \(entry.value.typeName)")
-            }
-        }
-
         var budget = defaultBudgetUSD
         if let entry = table.entries["budget_usd"] {
             switch entry.value {
@@ -144,8 +142,7 @@ public struct VerifierConfig: Sendable, Equatable {
             }
         }
 
-        guard let skill else { return nil }
-        return VerifierConfig(
-            skill: skill, tools: tools, model: model, auto: auto, budgetUSD: budget, timeoutMin: timeout)
+        guard enabled else { return nil }
+        return VerifierConfig(skill: skill, tools: tools, model: model, budgetUSD: budget, timeoutMin: timeout)
     }
 }

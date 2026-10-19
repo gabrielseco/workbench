@@ -3,10 +3,10 @@
 # No turn is run, so it costs nothing.
 #   bash scripts/verify-cli/verifier-config.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/verifier-config.sh   (the same, on a branch that contains origin/main)
-# Doctor must read the skill from the base commit and print its path, size, sha256, model, tools and auto setting; the
+# Doctor must read the skill from the base commit and print its path, size, sha256, model and tools; the
 # sha256 must equal the one computed here from `git show`; an edit in the working tree must not change it; a missing
 # skill and a symlinked one must be a warning (the symlink naming the real path); a bare `Bash` in `tools` must be
-# refused at config load; no `[verifier]` table must print nothing. Exit 0 only when every step passed, 1 when one failed,
+# refused at config load; `enabled = false` must print nothing, and no table at all must print the default skill path. Exit 0 only when every step passed, 1 when one failed,
 # 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 points the skill at a path that does not exist, so
 # the steps that need the skill read (path and sha256 printed, equal to git's, unchanged by an edit) must FAIL. The frame
 # and the other switches are in lib.sh. Run by hand, not by CI.
@@ -52,14 +52,13 @@ check "init writes a config in the clone" "workbench init exited $RC" test "$RC"
 config "[verifier]
 skill = \"$SKILL\"
 model = \"sonnet\"
-auto = true
 tools = [\"Read\", \"Bash(scripts/check-changed.sh:*)\"]"
 wbp "$SCRATCH/d1.out" doctor --base "$BASE"
 shown "$SCRATCH/d1.out"
 check "doctor with a [verifier]: exit 0" "workbench doctor exited $RC" test "$RC" = 0
 check "doctor prints the skill path at the base" "no 'verifier: $SKILL at $BASE' line" grep -q "^verifier: $SKILL at $BASE (" "$SCRATCH/d1.out"
-check "doctor prints the model, tools and auto" "model/tools/auto lines are wrong" bash -c \
-    'grep -q "^  model:  sonnet$" "$1" && grep -q "^  tools:  Read, Bash(scripts/check-changed.sh:\*)$" "$1" && grep -q "^  auto:   on" "$1"' _ "$SCRATCH/d1.out"
+check "doctor prints the model and tools" "model/tools lines are wrong" bash -c \
+    'grep -q "^  model:  sonnet$" "$1" && grep -q "^  tools:  Read, Bash(scripts/check-changed.sh:\*)$" "$1"' _ "$SCRATCH/d1.out"
 
 # The sha256 doctor prints is that of the text the model is given: the blob, trimmed.
 want=$(git -C "$P" show "$BASE:$SKILL" 2>/dev/null | python3 -I -c "import hashlib,sys
@@ -104,7 +103,12 @@ shown "$SCRATCH/d5.out" 4
 check "a bare Bash in tools: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
 check "a bare Bash in tools: the message names the entry" "no ''tools' entry 'Bash'' in the output" grep -q "'tools' entry 'Bash'" "$SCRATCH/d5.out"
 
-config ""
+config "[verifier]
+enabled = false"
 wbp "$SCRATCH/d6.out" doctor --base "$BASE"
-check "no [verifier]: nothing about a verifier is printed" "a verifier line was printed" bash -c '! grep -q "verifier" "$1"' _ "$SCRATCH/d6.out"
+check "enabled = false: nothing about a verifier is printed" "a verifier line was printed" bash -c '! grep -q "verifier" "$1"' _ "$SCRATCH/d6.out"
+
+config ""
+wbp "$SCRATCH/d7.out" doctor --base "$BASE"
+check "no [verifier]: the default skill is looked for" "no line naming .claude/skills/verify/SKILL.md" grep -q "^verifier: .claude/skills/verify/SKILL.md" "$SCRATCH/d7.out"
 finish

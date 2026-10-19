@@ -39,7 +39,7 @@ extension Commands {
             let config = try? Config.load(from: ctx.project.configURL)
             let checks = config?.checkCommand != nil
             let verifies = config?.verifyCommand != nil
-            let verifiers = config?.verifier?.auto == true
+            let verifiers = if let config { await ctx.service.verifierWillRun(id: id, config: config) } else { false }
             var checkPassed = true
             var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
             var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
@@ -88,7 +88,7 @@ extension Commands {
         let config = try? Config.load(from: ctx.project.configURL)
         let checks = config?.checkCommand != nil
         let verifies = config?.verifyCommand != nil
-        let verifiers = config?.verifier?.auto == true
+        let verifiers = if let config { await ctx.service.verifierWillRun(id: id, config: config) } else { false }
         var checkPassed = true
         var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn

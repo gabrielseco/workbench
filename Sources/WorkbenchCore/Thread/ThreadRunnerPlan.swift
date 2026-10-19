@@ -19,10 +19,15 @@ extension ThreadRunner {
         if config.projectInstructions, let baseCommit {
             loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: baseCommit)
         }
+        var verifierRuns = false
+        if let verifier = config.verifier, let baseCommit {
+            let skill = await VerifierSkill.load(git: git, repo: project.root, commit: baseCommit, path: verifier.skill)
+            if case .success = skill { verifierRuns = true }
+        }
         let chosen = planForFirstPrompt(goal: goal, baseCommit: baseCommit, options: options)
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,
-            verifies: config.verifyCommand != nil || config.verifier?.auto == true,
+            verifies: config.verifyCommand != nil || verifierRuns,
             plan: chosen.plan)
         return (prompt, ["instructions": loaded?.eventData ?? .null, "plan": chosen.info])
     }

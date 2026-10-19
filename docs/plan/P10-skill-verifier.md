@@ -1,6 +1,6 @@
 # P10: A verifier that runs the project's skill
 
-Status: plan, nothing built. Written 2026-10-17, extended 2026-10-18 (design stage, model, skill location, PR breakdown), 2026-10-19 (the verifier replaces `verify_command`, runs automatically). Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
+Status: plan, nothing built. Written 2026-10-17, extended 2026-10-18 (design stage, model, skill location, PR breakdown), 2026-10-19 (the verifier replaces `verify_command`, runs by default). Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
 proof, the judge), [P6](P6-review-stages.md) (reading a skill file as instructions) and the project-instructions
 loader (a file read from the base commit). [P9](P9-agent-providers.md) will decide which providers can run it. 
 [P11](P11-verified-pipeline.md) runs it as the `verify` step of a pipeline, before `ship`, with the proof tied to a commit.
@@ -18,8 +18,8 @@ model to `pkill` and `open` the app, which can hit the installed one. Its guards
 
 ## The idea
 
-After a turn's check passes, Workbench runs a **verifier turn** (with `[verifier] auto = true`; by hand with
-`workbench verifier` otherwise): a separate `claude -p` run, not the coding run, whose instructions are the project's
+After a turn's check passes, Workbench runs a **verifier turn** (by default; `[verifier] enabled = false` turns it off; by hand with
+`workbench verifier`): a separate `claude -p` run, not the coding run, whose instructions are the project's
 skill file **read from the base commit**, with a tool list the project sets in its config. It drives the app, takes
 the screenshots the goal names, checks the proposed code against each criterion of the goal, and ends with a short
 report. The judge then reads the proof as it does today. It is advisory and never gates `accept` or `ship`.
@@ -76,18 +76,20 @@ helper the skill may call.
 
 ```toml
 [verifier]
-skill = ".claude/skills/verify/SKILL.md"    # instructions, read from the base commit; an explicit path, `.claude/` or `.agents/`
+enabled = true                              # the default; false turns the verifier off
+skill = ".claude/skills/verify/SKILL.md"    # the default; instructions, read from the base commit; an explicit path, `.claude/` or `.agents/`
 model = "sonnet"                            # --model for the verifier; unset = the coding model
-auto = true                                 # run after each turn whose check passed; default false
 tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Bash(swift scripts/ax.swift:*)"]
 budget_usd = 1.00
 timeout_min = 10
 ```
 
-`auto` is off unless a project sets it, because a run costs money. With it on, the verifier runs once per turn, only
-when the check passed, and not for a turn that left no change. No `[verifier]` table means no proof step runs at all
-(until `verify_command` is removed it means today's behaviour). A skill file that is missing or empty at the base is a refusal with
-the path, never a verifier that runs without instructions.
+The verifier is on in every project: no table is the table above with its defaults, and `enabled = false` is the
+opt-out. It runs once per turn, only when the check passed, and not for a turn that left no change. `budget_usd` and
+`timeout_min` bound what a run costs. A project with no skill file at the base is skipped without an event or a note
+(most CLI projects let their tests catch what a verifier would; a project that wants one adds the skill). A skill that
+exists but is empty, a symlink or too large is a `verifier.skipped` with the path, and `workbench verifier` by hand
+refuses with it; never a verifier that runs without instructions.
 
 ## What the design stage gets
 
@@ -118,8 +120,8 @@ press a button: a state nobody captured stays unreviewed.
 
 `verifier.started` (`argv` without the prompt, `skill`, `sha256`, `bytes`) and `verifier.ended` (`ok`, `reason`,
 `cost_usd`, `duration_ms`, `files`, `report` bounded), and the existing `proof.added` for each PNG it leaves.
-`workbench verifier [id] [--again]` runs it by hand, as `judge` does; with `auto = true` the turn runner starts it
-after a passing check, with the same events. A turn that already has a `verifier.ended` is not run again by `auto`.
+`workbench verifier [id] [--again]` runs it by hand, as `judge` does; the turn runner starts it
+after a passing check, with the same events. A turn that already has a `verifier.ended` is not run again.
 Spec in `docs/spec/event-log.md`, `--json` keys added never renamed.
 
 ## What goes away
@@ -163,7 +165,7 @@ since a config nobody can run proves nothing. Size is the diff a reviewer reads:
 | 1. Config and `doctor` **(built)** | Workbench | `[verifier]` (`skill`, `tools`, `model`, `budget_usd`, `timeout_min`) parses; a bare `Bash` is refused; the skill is an explicit path (`.claude/` or `.agents/`) that must be a regular file at the base, a symlink is refused; `doctor` prints the path, model and tools | config, skill-reader and doctor tests, including missing, empty, oversized and symlink | S |
 | 2. The turn **(built)** | Workbench | `workbench verifier`: argv with `--model`, prompt (skill text, goal criteria, environment), bounded run, sweep, events; `auto` after a passing check; Claude only; the `verifier.sh` verify-cli scenario | fake-claude tests for every failure below; scenario PASS and sabotage FAIL | M |
 | 3. Proof and review **(built)** | Workbench | PNGs recorded as proof; `review` shows the verifier's note; a criterion can name several screenshots; the judge and the design stage get every PNG in the proof directory with its pixel size | `review` and review-stage fixtures; a screenshot criterion satisfied by the verifier's file | M |
-| 4. Triage side | Triage | `verify-app.sh` and the skill's "under Workbench" section; `[verifier]` in Triage's config with `model = "sonnet"` and `auto = true` | a recorded verifier run on the Bot finding criterion from Triage #66, including the half the recipe could not show (a finding on someone else's PR has no fix buttons) | S |
+| 4. Triage side | Triage | `verify-app.sh` and the skill's "under Workbench" section; `[verifier]` in Triage's config with `model = "sonnet"` | a recorded verifier run on the Bot finding criterion from Triage #66, including the half the recipe could not show (a finding on someone else's PR has no fix buttons) | S |
 | 5. Pilot and compare | Workbench (docs) | #75's Everything order run with the verifier; the same criterion five times with the recipe and with the verifier, and the model as a variable (Sonnet against Haiku; Opus only if Sonnet fails): cost, time, how often the screenshot shows the state | numbers in this file; the verifier beats the recipe on how often the screenshot shows the state, at a cost the owner accepts, or PR 6 does not start | S |
 | 6. Remove `verify_command` | Workbench, then each project | the key, `VerifyRunner`, the `verify.started` event and its readers (the goal-file rule, `doctor`, `ProofCommands`, P6 stages, P11) move to `[verifier]`; the migration message; Triage deletes `verify.sh` and `verify-steps/`; spec and the other plans updated in the same PR | tests: old config refused with the migration message, an old log still reads; `help.sh` and the verifier scenario still PASS; no `verify_command` left under `Sources/` | M |
 
@@ -175,13 +177,13 @@ Dropped from scope for now: any provider but Claude (P9).
 Hangs; crashes; ignores SIGTERM; leaves the app running, also detached; killed mid-run; stop before start; skill
 missing at the base; skill over the size limit; an invalid or bare-`Bash` tool pattern; budget stop; the app's
 window never appears; a refused press (the helper exits 1 and the model is told); a second verifier while one runs;
-`auto` after a failed check (does not run), after a turn with no change (does not run), after a restart that already
+the automatic run after a failed check (does not run), after a turn with no change (does not run), after a restart that already
 has a `verifier.ended` for the turn (does not run again), and with the budget spent by the coding turn.
 
 ## Open questions
 
-- **Cost of `auto`.** Decided: it is a per-project setting, off by default, on in Triage. If a turn that failed its
-  check also deserves a look, that is a later key, not a change to this one.
+- **Cost of running by default.** Decided: on everywhere, off with `enabled = false`, and a project without the skill
+  pays nothing. If a turn that failed its check also deserves a look, that is a later key, not a change to this one.
 - **Providers.** Decided for now: Claude only (rule 12). Whether Codex can drive tools belongs to P9.
 - **Which model?** Sonnet is the default recommendation (rule 11). PR 5 runs Sonnet against Haiku on the same
   criteria, Opus only if Sonnet fails; if Haiku shows the right state about as often at a third of the cost, switch.

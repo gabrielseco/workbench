@@ -381,6 +381,10 @@ public struct Config: Sendable, Equatable {
         # max_rounds = 3                   # reviews of one pull request, counted from the event log (1 to 10)
         # (also accepted as [review.stage.pr-review]; `[review] stages = [...]` lists the review stages, in order)
 
+        # [verifier]                       # on by default: runs the project's skill after a passing check
+        # enabled = false                  # turn it off; with no skill file at the base it is skipped anyway
+        # skill = ".claude/skills/verify/SKILL.md"  # read from the base commit
+
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).
         available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]

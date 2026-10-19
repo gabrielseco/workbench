@@ -166,8 +166,8 @@ private func pid(in path: String) throws -> pid_t {
 
     // MARK: Refusals
 
-    @Test func aProjectWithoutAVerifierIsRefused() async throws {
-        let fx = try await RunnerFixture()
+    @Test func aProjectThatTurnedTheVerifierOffIsRefused() async throws {
+        let fx = try await RunnerFixture(extraConfig: "[verifier]\nenabled = false")
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
         let config = try Config.load(from: fx.project.configURL)
@@ -393,7 +393,7 @@ private func pid(in path: String) throws -> pid_t {
     }
 
     @Test func aRunnerStartingOverAnOpenVerifierClosesIt() async throws {
-        let v = try await VerifierFixture()
+        let v = try await VerifierFixture(verifier: "enabled = false")
         let log = try EventLogWriter.open(at: v.fx.project.eventsURL(v.id))
         try await log.append(.verifierStarted, turn: 1, data: ["argv": ["claude"]])
         await log.close()

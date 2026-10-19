@@ -181,7 +181,7 @@ tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Ba
 - **Every step is optional, none is assumed.** A step not listed does not run and leaves no event. A listed step
   that does not apply (`applies_to` matches nothing, no screenshot criterion for verify) is recorded as `skipped`
   with the reason, never as `CLEAN`. A listed step with nothing configured behind it (`design` with no stage table,
-  `verify` with no `[verifier]`) is refused at config load. A UI-less project lists
+  `verify` with `[verifier] enabled = false`) is refused at config load. A UI-less project lists
   `before_ship = ["judge"]` or `[]`.
 - **Nothing verified is said, not implied.** When every `before_ship` step ended `skipped` (or the list is empty),
   `review` and the PR body say "nothing was verified before ship" rather than reporting a clean pipeline.
