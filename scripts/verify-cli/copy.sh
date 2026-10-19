@@ -16,12 +16,14 @@ PROBE=".build/verify-copy-probe.txt"
 [ -f "$CONFIG" ] || die "no $CONFIG; this scenario edits it (and puts it back)"
 grep -Eq '^(copy|setup_command)[[:space:]]*=' "$CONFIG" && die "$CONFIG already sets copy or setup_command; this scenario will not overwrite them"
 
-cp "$CONFIG" "$SCRATCH/config.orig"
-restore() { cp "$SCRATCH/config.orig" "$CONFIG" 2>/dev/null; rm -f "$ROOT/$PROBE"; }
+# The backup lives outside $SCRATCH, which finish removes before the EXIT trap runs.
+ORIG=$(mktemp "${TMPDIR:-/tmp}/verify-cli-copy-config.XXXXXX") || die "mktemp failed"
+cp "$CONFIG" "$ORIG"
+restore() { cp "$ORIG" "$CONFIG" && rm -f "$ORIG"; rm -f "$ROOT/$PROBE"; }
 trap restore EXIT
 
 with_config() { # <lines>: the original config with <lines> as its first root keys
-    { printf '%s\n' "$1"; cat "$SCRATCH/config.orig"; } >"$CONFIG"
+    { printf '%s\n' "$1"; cat "$ORIG"; } >"$CONFIG"
 }
 doctor_to() { # <file>: doctor's output into <file>, its exit code on stdout
     wb "$T_RUN" doctor >"$1" 2>&1
@@ -39,7 +41,7 @@ setup_command = \"cat $PROBE\""
 code=$(doctor_to "$SCRATCH/doctor1.out")
 sed 's/^/    /' "$SCRATCH/doctor1.out" | head -14
 check "doctor with copy: exit 0" "workbench doctor exited $code" test "$code" = 0
-check "doctor with copy: setup sees the copied file" "the setup output has no 'copy-probe'" grep -q contents-7f3a91 "$SCRATCH/doctor1.out"
+check "doctor with copy: setup sees the copied file" "the setup output has no contents-7f3a91" grep -q contents-7f3a91 "$SCRATCH/doctor1.out"
 check "doctor leaves no worktree or branch of its own" "doctor's worktree or branch is still there" \
     bash -c '! git rev-parse -q --verify refs/heads/workbench/doctor >/dev/null && [ ! -e "$1/.workbench/worktrees/doctor" ]' _ "$ROOT"
 check "the checkout is unchanged" "git status shows: $(g status --porcelain)" test -z "$(g status --porcelain)"
