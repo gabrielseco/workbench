@@ -219,7 +219,7 @@ public final class Doctor: @unchecked Sendable {
         try await removeLeftover(manager)
         let worktree: Worktree
         do {
-            worktree = try await manager.create(threadID: Self.worktreeID, base: base)
+            worktree = try await manager.create(threadID: Self.worktreeID, base: base, copying: config.copy)
         } catch {
             // `worktree add` can register the worktree and then fail (a post-checkout hook, say).
             try? await removeLeftover(manager)

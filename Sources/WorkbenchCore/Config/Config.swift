@@ -68,6 +68,9 @@ public struct Config: Sendable, Equatable {
     /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
     /// `claude`, so it is not added to the allowed tools.
     public var setupCommand: String?
+    /// Repo-relative files or globs copied from the main checkout into each new worktree, before `setup_command`:
+    /// the git-ignored files a checkout does not carry (`.env`). Files git does not ignore are not copied.
+    public var copy: [String] = []
     /// What the project's verifier drives. `desktop` needs Screen Recording, which `doctor` checks.
     public var appType: AppType = .web
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
@@ -128,7 +131,7 @@ public struct Config: Sendable, Equatable {
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type",
             "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "plan_model", "safe_mode",
-            "project_instructions",
+            "project_instructions", "copy",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -261,6 +264,16 @@ public struct Config: Sendable, Equatable {
             envPass = values
         }
 
+        var copy: [String] = []
+        if let (values, line) = strings("", "copy") {
+            for pattern in values {
+                if let reason = WorktreeCopier.patternProblem(pattern) {
+                    fail(.invalidValue, line, "'copy' entry '\(pattern)' \(reason)")
+                }
+            }
+            copy = values
+        }
+
         // [tools]
         guard let toolsTable = document.tables["tools"] else {
             fail(.missingKey, nil, "missing [tools] table with 'available'")
@@ -293,7 +306,7 @@ public struct Config: Sendable, Equatable {
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
         return Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
-            model: model, checkCommand: checkCommand, setupCommand: setupCommand,
+            model: model, checkCommand: checkCommand, setupCommand: setupCommand, copy: copy,
             appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, judgeModel: judgeModel, describeModel: describeModel,
@@ -354,6 +367,7 @@ public struct Config: Sendable, Equatable {
         # plan_model = "opus"              # --model for `workbench plan` (it only reads); unset = model
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
+        # copy = [".env.*", "example/.env"] # git-ignored files copied from this checkout into each new worktree
         # app_type = "web"                 # "desktop" if the verifier captures the screen: doctor checks Screen Recording
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)

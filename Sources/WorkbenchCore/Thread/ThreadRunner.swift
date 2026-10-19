@@ -211,16 +211,14 @@ public actor ThreadRunner {
             baseCommit = await recordedBaseCommit(goal: goal)
         } else {
             let local = (try? await worktreeManager.checkoutChanges()) ?? []
-            let created = try await worktreeManager.create(threadID: threadID, base: goal.base, fetching: goal.pushTo)
+            let created = try await worktreeManager.create(
+                threadID: threadID, base: goal.base, fetching: goal.pushTo,
+                copying: config.copy)
             worktree = created.path
             baseCommit = created.baseCommit
             // Recorded before anything slow (the fetch below), so a runner killed meanwhile still has it.
-            try await log.append(
-                .worktreeCreated,
-                data: [
-                    "path": .string(created.path.path), "branch": .string(created.branch),
-                    "base_commit": .string(created.baseCommit),
-                ])
+            try await log.append(.worktreeCreated, data: created.eventData)
+            for skipped in created.copy.skipped { notify(.advisory("copy: \(skipped)")) }
             if !local.isEmpty {
                 let one = local.count == 1
                 notify(.advisory(
