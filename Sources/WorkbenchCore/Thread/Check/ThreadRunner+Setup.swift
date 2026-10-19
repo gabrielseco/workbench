@@ -44,6 +44,13 @@ extension ThreadRunner {
             + "manager sets (mise: MIX_HOME, MIX_ARCHIVES): add it to `env_pass` in .workbench/config.toml."
     }
 
+    /// Whether the verifier's skill is there, read as the verifier will: from the recorded base once the worktree
+    /// exists, from the branch name before that.
+    func verifierSkillAvailable(config: Config, goal: Goal) async -> Bool {
+        let ref = await recordedBaseCommit(goal: goal) ?? goal.base
+        return await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: ref)
+    }
+
     /// A run needs an approved goal, and proofs the tool set can execute. The config is not in the approval
     /// hash, so the proofs are judged again here, where a turn gets paid for.
     static func requireRunnable(

@@ -122,7 +122,7 @@ public actor ThreadRunner {
         let config = try Config.load(from: project.configURL)
         let goalFile = try loadGoal()
         let goal = goalFile.goal
-        let skillAvailable = await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: goal.base)
+        let skillAvailable = await verifierSkillAvailable(config: config, goal: goal)
         try Self.requireRunnable(goal: goal, config: config, options: options, verifierSkillAvailable: skillAvailable)
         guard
             let claude = ExecutableResolver.resolve(
