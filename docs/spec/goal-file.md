@@ -321,7 +321,8 @@ Notes:
   in exactly one `verifier.ended` ([event-log.md](event-log.md)), and what it says is stored as a bounded note, never
   as a pass. With `[verifier] auto = true`, a run starts it after the check, when the turn succeeded, the check passed
   (or none is declared), the worktree has a change to look at and no `verifier.ended` exists for the turn; a verifier
-  that cannot start (no skill at the base) is a note and does not fail the turn.
+  that cannot start (no skill at the base) is a `verifier.skipped` with the reason and a note, and does not fail the
+  turn. An answer that is empty is not a success.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

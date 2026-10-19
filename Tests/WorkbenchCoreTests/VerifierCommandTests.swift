@@ -127,6 +127,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
         ("turn.ended", true, false, false, true, true, false),
         ("turn.ended", false, false, false, true, true, true),
         ("verifier.ended", true, true, false, true, true, true),
+        ("verifier.skipped", true, true, false, true, true, true),
     ])
     func followingALogWaitsForTheVerifierOnlyWhenOneWillRun(
         kind: String, succeeded: Bool, checks: Bool, verifies: Bool, verifiers: Bool, checkPassed: Bool, ends: Bool
@@ -149,5 +150,9 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
         let line = LogFormatter.describe(failed)
         #expect(line.contains("verifier did not finish (stopped at the budget ($1))") && line.contains("9s"), "\(line)")
         #expect(line.contains("1 proof file(s)"))
+        let skipped = Event(
+            seq: 3, ts: "2026-10-19T10:00:09Z", turn: 1, kind: .verifierSkipped,
+            data: ["reason": "the turn left no change to look at"])
+        #expect(LogFormatter.describe(skipped).contains("verifier skipped: the turn left no change to look at"))
     }
 }

@@ -139,6 +139,10 @@ public enum Verifier {
         guard let text = object["result"] as? String else {
             return Answer(text: nil, costUSD: cost, failure: "the answer had no result")
         }
+        // A run that ends with nothing to say has not verified anything; it must not count as having done so.
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return Answer(text: nil, costUSD: cost, failure: "the answer was empty")
+        }
         return Answer(text: text, costUSD: cost, failure: nil)
     }
 

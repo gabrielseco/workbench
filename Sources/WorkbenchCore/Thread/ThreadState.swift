@@ -429,7 +429,7 @@ public struct ThreadState: Sendable, Equatable {
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
-            case .verifierStarted, .verifierEnded:
+            case .verifierStarted, .verifierEnded, .verifierSkipped:
                 break  // shown by `review` in a later change (P10 PR 3)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {

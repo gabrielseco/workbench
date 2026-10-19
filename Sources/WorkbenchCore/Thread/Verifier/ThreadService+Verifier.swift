@@ -113,31 +113,31 @@ extension ThreadRunner {
 
     /// The project's verifier, run here after the check when `[verifier] auto` is on. Only after a turn that
     /// succeeded, whose check passed (or that has no check), that left a change to look at, and that no verifier
-    /// has ended for already. Anything it cannot start (no skill at the base, no worktree change) is a note, not a
-    /// failure of the turn: it is advisory and costs nothing unless it runs.
+    /// has ended for already. Anything it cannot start (no skill at the base, no worktree change) is a
+    /// `verifier.skipped` with the reason and a note, not a failure of the turn: it is advisory and costs nothing
+    /// unless it runs. After a failed turn or check it is silent: a follower of the log knows from those.
     func runVerifier(
         after report: TurnReport, check: CheckReport?, config: Config, goal: Goal, worktree: URL, log: EventLogWriter,
         claude: URL, options: RunOptions
     ) async throws -> VerifierReport? {
-        guard let verifier = config.verifier, verifier.auto, report.result == .succeeded, !stopRequested else { return nil }
+        guard let verifier = config.verifier, verifier.auto, report.result == .succeeded else { return nil }
         if let check, check.result != .passed { return nil }
         let turn = report.turn
+        if stopRequested { return try await skip("the run was stopped", turn: turn, log: log) }
         if let events = try? EventLogReader.read(at: project.eventsURL(threadID)).events,
             events.contains(where: { $0.kind == .verifierEnded && $0.turn == turn }) {
-            return nil
+            return try await skip("a verifier has ended for this turn already", turn: turn, log: log)
         }
-        let base = await recordedBaseCommit(goal: goal)
-        guard let base else {
-            notify(.advisory("the verifier did not run: the base commit is unknown, so its skill cannot be read"))
-            return nil
+        guard let base = await recordedBaseCommit(goal: goal) else {
+            return try await skip("the base commit is unknown, so its skill cannot be read", turn: turn, log: log)
         }
-        guard await hasChange(worktree: worktree, base: base) else { return nil }
+        guard await hasChange(worktree: worktree, base: base) else {
+            return try await skip("the turn left no change to look at", turn: turn, log: log)
+        }
         let skill: VerifierSkill
         switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
         case .success(let loaded): skill = loaded
-        case .failure(let problem):
-            notify(.advisory("the verifier did not run: \(problem)"))
-            return nil
+        case .failure(let problem): return try await skip("\(problem)", turn: turn, log: log)
         }
         let run = VerifierRun(
             config: config, verifier: verifier, skill: skill, goal: goal, threadID: threadID,
@@ -152,6 +152,14 @@ extension ThreadRunner {
         }
         notify(.verifierEnded(ran))
         return ran
+    }
+
+    /// Why an automatic verifier did not start, said once in the log and as a note, so a follower of the log knows
+    /// nothing more is coming and a person can see it was left out.
+    private func skip(_ reason: String, turn: Int, log: EventLogWriter) async throws -> VerifierReport? {
+        try await log.append(.verifierSkipped, turn: turn, data: ["reason": .string(reason)])
+        notify(.advisory("the verifier did not run: \(reason)"))
+        return nil
     }
 
     /// Whether the worktree holds anything to look at: a commit past the base, or edits (untracked files too).

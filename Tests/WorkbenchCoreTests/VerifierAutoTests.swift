@@ -53,11 +53,19 @@ import Testing
         #expect(try verifierKinds(v) == ["verifier.started", "verifier.ended"])
     }
 
-    @Test func itDoesNotRunWhenTheTurnLeftNothingToLookAt() async throws {
+    private func skipReason(_ v: VerifierFixture) throws -> String? {
+        try v.fx.events(v.id).last { $0.kind == .verifierSkipped }?.data["reason"]?.stringValue
+    }
+
+    @Test func itDoesNotRunWhenTheTurnLeftNothingToLookAtAndSaysSo() async throws {
         let v = try await VerifierFixture(verifier: "auto = true", check: "true", runTurn: false)
-        let report = try await v.fx.runner(v.id).run(v.fx.options())
+        let notices = NoticeBox()
+        let report = try await v.fx.runner(v.id, notices: notices).run(v.fx.options())
         #expect(report.result == .succeeded && report.verifier == nil)
-        #expect(try verifierKinds(v).isEmpty)
+        #expect(try verifierKinds(v) == ["verifier.skipped"])
+        #expect(try skipReason(v) == "the turn left no change to look at")
+        #expect(notices.all.contains { if case .advisory(let t) = $0 { t.contains("no change to look at") } else { false } })
+        #expect(try v.fx.contents(v.id).isHealthy)
     }
 
     @Test func itDoesNotRunAfterATurnThatFailed() async throws {
@@ -75,7 +83,10 @@ import Testing
         await log.close()
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))
         #expect(report.verifier == nil)
-        #expect(try verifierKinds(v) == ["verifier.started", "verifier.ended"], "only the one that was already there")
+        #expect(
+            try verifierKinds(v) == ["verifier.started", "verifier.ended", "verifier.skipped"],
+            "the one that was already there, and the skip")
+        #expect(try skipReason(v) == "a verifier has ended for this turn already")
     }
 
     @Test func aSkillMissingAtTheBaseIsANoteAndTheTurnStillSucceeds() async throws {
@@ -83,7 +94,8 @@ import Testing
         let notices = NoticeBox()
         let report = try await v.fx.runner(v.id, notices: notices).run(v.fx.options("write=a.txt"))
         #expect(report.result == .succeeded && report.verifier == nil)
-        #expect(try verifierKinds(v).isEmpty)
+        #expect(try verifierKinds(v) == ["verifier.skipped"])
+        #expect(try skipReason(v)?.contains(".claude/skills/verify/SKILL.md") == true)
         let notes = notices.all.compactMap { notice -> String? in
             if case .advisory(let text) = notice { text } else { nil }
         }

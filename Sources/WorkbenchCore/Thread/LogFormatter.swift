@@ -37,6 +37,8 @@ public enum LogFormatter {
             return out
         case .verifierStarted:
             return head + "verifier started: \(event.data["skill"]?.stringValue ?? "?")"
+        case .verifierSkipped:
+            return head + "verifier skipped: \(event.data["reason"]?.stringValue ?? "?")"
         case .verifierEnded:
             var out = head + (event.data["ok"] == true ? "verifier finished" : "verifier did not finish")
             if let reason = event.data["reason"]?.stringValue { out += " (\(reason))" }
@@ -156,7 +158,7 @@ public enum LogFormatter {
         case .checkRan:
             return sawStart && !(verifyFollows && !stopped) && !(verifierFollows && result == "passed")
         case .verifyEnded: return sawStart && !(verifierFollows && checkPassed)
-        case .verifierEnded: return sawStart
+        case .verifierEnded, .verifierSkipped: return sawStart
         // A setup that did not pass ends the run before any turn: nothing else will come.
         case .setupRan: return result != "passed"
         default: return false

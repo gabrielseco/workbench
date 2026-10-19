@@ -36,6 +36,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let judgeRan: EventKind = "judge.ran"
     public static let verifierStarted: EventKind = "verifier.started"
     public static let verifierEnded: EventKind = "verifier.ended"
+    public static let verifierSkipped: EventKind = "verifier.skipped"
     public static let planStarted: EventKind = "plan.started"
     public static let planEnded: EventKind = "plan.ended"
     public static let planEdited: EventKind = "plan.edited"

@@ -424,3 +424,54 @@ private final class StopHolder: @unchecked Sendable {
         return false
     }
 }
+
+@Suite struct VerifierAnswerTests {
+    private func answer(_ result: String, error: Bool = false) -> String {
+        let escaped = result.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\t", with: "\\t")
+        return #"{"type":"result","is_error":\#(error),"result":"\#(escaped)","total_cost_usd":0.01}"#
+    }
+
+    @Test(arguments: ["", " ", "\n\n", " \t\n "])
+    func anEmptyAnswerIsNotASuccess(result: String) {
+        let parsed = Verifier.parse(output: answer(result), budget: 1)
+        #expect(parsed.text == nil && parsed.failure == "the answer was empty" && parsed.costUSD == 0.01)
+    }
+
+    @Test func aWordIsAnAnswer() {
+        let parsed = Verifier.parse(output: answer("c1: holds"), budget: 1)
+        #expect(parsed.text == "c1: holds" && parsed.failure == nil)
+    }
+
+    @Test func aLongReportIsCutAtALineWithAMarkerAndStaysWithinTheLimit() {
+        let lines = (0..<2000).map { "line \($0) of the report" }.joined(separator: "\n")
+        let bounded = Verifier.bounded(lines)
+        #expect(bounded.utf8.count <= Verifier.reportLimit)
+        #expect(bounded.hasSuffix("[report cut at \(Verifier.reportLimit) bytes]"))
+        #expect(bounded.hasPrefix("line 0 of the report\n"))
+        #expect(Verifier.bounded("short") == "short")
+    }
+
+    @Test func aHugeReportEndsUpBoundedInTheLog() async throws {
+        let v = try await VerifierFixture()
+        let file = FakeClaude.scratch("verifier-answer")
+        defer { try? FileManager.default.removeItem(atPath: file) }
+        try (0..<5000).map { "row \($0): holds" }.joined(separator: "\n").write(
+            toFile: file, atomically: true, encoding: .utf8)
+        let report = try await v.verify("answer=\(file)")
+        #expect(report.ok && report.report.utf8.count <= Verifier.reportLimit)
+        let stored = try #require(try v.verifierEvents().last?.data["report"]?.stringValue)
+        #expect(stored.utf8.count <= Verifier.reportLimit && stored.hasSuffix("bytes]"))
+    }
+
+    @Test func anEmptyAnswerFromTheRunIsRecordedAsNotOkAndDoesNotCountAsVerified() async throws {
+        let v = try await VerifierFixture()
+        let file = FakeClaude.scratch("verifier-empty")
+        defer { try? FileManager.default.removeItem(atPath: file) }
+        try "  \n".write(toFile: file, atomically: true, encoding: .utf8)
+        let report = try await v.verify("answer=\(file)")
+        #expect(!report.ok && report.reason == "the answer was empty")
+        let again = try await v.verify()  // not blocked by --again: the first did not verify the turn
+        #expect(again.ok)
+    }
+}
