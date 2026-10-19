@@ -118,6 +118,23 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         #expect(!(try fx.kinds(id)).contains("turn.started"))
     }
 
+    @Test func copiedFilesAreInTheWorktreeWhenTheSetupRunsAndTheLogNamesThem() async throws {
+        let script = try CheckScript()
+        let path = try script.write("cp \"$PWD/.env.local\" \"$PWD/seen\"", name: "setup.sh")
+        let fx = try await RunnerFixture(extraConfig: "setup_command = \"\(path)\"\ncopy = [\".env.*\"]")
+        try ".env*\n".write(
+            to: fx.repo.appendingPathComponent(".git/info/exclude"), atomically: true, encoding: .utf8)
+        try "A=1\n".write(to: fx.repo.appendingPathComponent(".env.local"), atomically: true, encoding: .utf8)
+        let id = try await fx.approvedThread()
+        let report = try await fx.runner(id).run(fx.options())
+
+        #expect(report.result == .succeeded)
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        #expect(try String(contentsOf: worktree.appendingPathComponent("seen"), encoding: .utf8) == "A=1\n")
+        let created = try #require(try fx.events(id).first { $0.kind == .worktreeCreated })
+        #expect(created.data["copied"] == .array([.string(".env.local")]))
+    }
+
     @Test func withNoSetupCommandNothingRunsAndNothingIsWritten() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

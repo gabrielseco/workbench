@@ -12,6 +12,11 @@ extension ThreadRunner {
         try await runSetup(command: command, config: config, goal: goal, worktree: worktree, log: log, options: options)
     }
 
+    /// What the config's `copy` left out of the worktree, said once per file.
+    func noteCopy(_ report: CopyReport) {
+        for skipped in report.skipped { notify(.advisory("copy: \(skipped)")) }
+    }
+
     private func setupPassed() -> Bool {
         guard let contents = try? EventLogReader.read(at: project.eventsURL(threadID)) else { return false }
         return contents.events.contains { $0.kind == .setupRan && $0.data["result"]?.stringValue == "passed" }

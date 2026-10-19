@@ -6,6 +6,17 @@ public struct Worktree: Sendable, Equatable {
     public var branch: String
     /// The commit `base` pointed at when the worktree was cut.
     public var baseCommit: String
+    /// What the project's `copy` patterns put in from the main checkout.
+    public var copy = CopyReport()
+
+    /// The `worktree.created` payload.
+    var eventData: JSONValue {
+        var fields: [String: JSONValue] = [
+            "path": .string(path.path), "branch": .string(branch), "base_commit": .string(baseCommit),
+        ]
+        if !copy.copied.isEmpty { fields["copied"] = .array(copy.copied.map { .string($0) }) }
+        return .object(fields)
+    }
 }
 
 public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -65,7 +76,9 @@ public struct WorktreeManager: Sendable {
 
     /// The worktree is cut from the committed `base`, so uncommitted edits in this checkout never reach it
     /// and no clean checkout is needed (accept commits on the thread's branch and merges nothing here).
-    public func create(threadID: String, base: String, fetching remoteBranch: String? = nil) async throws -> Worktree {
+    public func create(
+        threadID: String, base: String, fetching remoteBranch: String? = nil, copying patterns: [String] = []
+    ) async throws -> Worktree {
         guard SafeNames.isThreadID(threadID) else { throw WorktreeError.invalidThreadID(threadID) }
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
 
@@ -94,7 +107,14 @@ public struct WorktreeManager: Sendable {
             at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         try await check(["worktree", "add", "--no-track", "-b", branch, target.path, baseCommit])
-        return Worktree(threadID: threadID, path: target, branch: branch, baseCommit: baseCommit)
+        let copy = await WorktreeCopier(source: repoRoot, git: git).copy(patterns, to: target)
+        return Worktree(threadID: threadID, path: target, branch: branch, baseCommit: baseCommit, copy: copy)
+    }
+
+    /// Finishes a copy a killed run left half done: what is already in the worktree is kept, the rest is copied.
+    public func copyMissing(_ patterns: [String], into threadID: String) async -> CopyReport {
+        guard SafeNames.isThreadID(threadID), exists(threadID), !patterns.isEmpty else { return CopyReport() }
+        return await WorktreeCopier(source: repoRoot, git: git).copy(patterns, to: path(for: threadID))
     }
 
     // MARK: Remove

@@ -209,18 +209,18 @@ public actor ThreadRunner {
         if worktreeManager.exists(threadID) {
             worktree = worktreeManager.path(for: threadID)
             baseCommit = await recordedBaseCommit(goal: goal)
+            // A run killed between `worktree add` and the end of the copy left the files half there.
+            if lastTurn == 0 { noteCopy(await worktreeManager.copyMissing(config.copy, into: threadID)) }
         } else {
             let local = (try? await worktreeManager.checkoutChanges()) ?? []
-            let created = try await worktreeManager.create(threadID: threadID, base: goal.base, fetching: goal.pushTo)
+            let created = try await worktreeManager.create(
+                threadID: threadID, base: goal.base, fetching: goal.pushTo,
+                copying: config.copy)
             worktree = created.path
             baseCommit = created.baseCommit
             // Recorded before anything slow (the fetch below), so a runner killed meanwhile still has it.
-            try await log.append(
-                .worktreeCreated,
-                data: [
-                    "path": .string(created.path.path), "branch": .string(created.branch),
-                    "base_commit": .string(created.baseCommit),
-                ])
+            try await log.append(.worktreeCreated, data: created.eventData)
+            noteCopy(created.copy)
             if !local.isEmpty {
                 let one = local.count == 1
                 notify(.advisory(

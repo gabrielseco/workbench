@@ -226,6 +226,7 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
 # app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording for the verifier
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
+# copy = [".env.*", "example/.env"]     # optional; git-ignored files copied from your checkout into each new worktree
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
 # model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
@@ -290,6 +291,18 @@ Notes:
   any turn is spent; the worktree is kept and the next `run` tries it again. What it writes into the
   worktree is untracked there: keep installs in ignored paths (`deps/`, `node_modules/`), or they show up
   in the diff.
+- **`copy` brings the ignored files a checkout needs into each new worktree.** Repo-relative paths or globs
+  (`*` and `?` within one path component, no `**`), copied from the main checkout right after the worktree is
+  cut and before `setup_command`, so an install step can read them (`.env.*`, `example/.env`). Only regular files
+  that git ignores are copied, by the rules of both the main checkout and the new worktree (which has the base's
+  rules): a file either does not ignore would show up in the diff, so it is skipped with that reason. Also skipped,
+  with a reason: a symlink (never followed), a file whose folder is a symlink in the worktree, a file over 1 MiB,
+  anything past 200 files, and a file already there. A pattern that matches nothing is a note, not an error. At
+  most 1000 directory entries are looked at (matching or not) and 20 notes kept, then one line counts the rest. A run
+  killed mid-copy finishes the copy on its next `run`, before the first turn. Entries are checked when the
+  config loads: no absolute or `~` path, no `.`, `..` or empty parts, nothing under `.git` or `.workbench`.
+  `worktree.created` lists what was copied; `doctor` copies too, so its setup and check see the same files a
+  thread does, and prints `copy: not copied:` lines for what it left out.
 - **`verify_command` and `verify_timeout_min` are gone.** A config that still has either is refused at load with
   "'verify_command' was removed: replace it with a [verifier] table" (not the unknown-key message), so nothing runs
   on a half-migrated project. The project's evidence is made by the verifier ([P10](../plan/P10-skill-verifier.md)),

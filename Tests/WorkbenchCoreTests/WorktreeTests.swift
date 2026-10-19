@@ -415,3 +415,157 @@ private struct TestRepo {
         #expect(!branches.contains("workbench/"))
     }
 }
+
+@Suite struct WorktreeCopyTests {
+    private func ignoringEnv() async throws -> TestRepo {
+        let repo = try await TestRepo()
+        try repo.write(".gitignore", ".env*\nexample/.env\nbig.env\n")
+        try await repo.run("add", "-A")
+        try await repo.run("commit", "-q", "-m", "ignore env")
+        return repo
+    }
+
+    @Test func copiesIgnoredFilesThatMatchAndKeepsThemOutOfStatus() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write(".env.local", "A=1\n")
+        try repo.write(".env.test", "B=2\n")
+        try repo.write("example/.env", "C=3\n")
+        let tree = try await repo.manager.create(
+            threadID: "t1", base: "main", copying: [".env.*", "example/.env"])
+        #expect(tree.copy.copied == [".env.local", ".env.test", "example/.env"])
+        #expect(tree.copy.skipped.isEmpty)
+        #expect(try String(contentsOf: tree.path.appendingPathComponent("example/.env"), encoding: .utf8) == "C=3\n")
+        #expect(try await repo.manager.changes(in: "t1").isEmpty)
+    }
+
+    @Test func aGlobInADirectoryComponentMatches() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write("example/.env", "C=3\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: ["*/.env"])
+        #expect(tree.copy.copied == ["example/.env"])
+    }
+
+    @Test func aFileGitDoesNotIgnoreIsNotCopiedAndSaysWhy() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write("notes.txt", "mine\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: ["notes.txt"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped.count == 1 && tree.copy.skipped[0].contains("not ignored"))
+        #expect(!FileManager.default.fileExists(atPath: tree.path.appendingPathComponent("notes.txt").path))
+    }
+
+    @Test func aPatternThatMatchesNothingIsReportedNotFatal() async throws {
+        let repo = try await ignoringEnv()
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: [".env.*"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped == [".env.*: no file matches"])
+    }
+
+    @Test func aSymlinkIsNeverFollowed() async throws {
+        let repo = try await ignoringEnv()
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("wb-secret-\(UUID().uuidString)")
+        try "secret\n".write(to: outside, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try FileManager.default.createSymbolicLink(
+            at: repo.root.appendingPathComponent(".env.link"), withDestinationURL: outside)
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: [".env.*"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped.first?.contains("not a regular file") == true)
+        #expect(!FileManager.default.fileExists(atPath: tree.path.appendingPathComponent(".env.link").path))
+    }
+
+    @Test func aFileOverTheSizeCapIsSkipped() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write("big.env", String(repeating: "x", count: WorktreeCopier.maxFileBytes + 1))
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: ["big.env"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped.first?.contains("larger than") == true)
+    }
+
+    @Test func withNoPatternsNothingIsCopied() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write(".env.local", "A=1\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main")
+        #expect(tree.copy == CopyReport())
+        #expect(!FileManager.default.fileExists(atPath: tree.path.appendingPathComponent(".env.local").path))
+    }
+
+    @Test func aSymlinkedFolderInTheWorktreeIsNotWrittenThrough() async throws {
+        let repo = try await TestRepo()
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("wb-out-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try repo.write(".gitignore", ".env\n")
+        try FileManager.default.createSymbolicLink(
+            at: repo.root.appendingPathComponent("example"), withDestinationURL: outside)
+        try await repo.run("add", "-A")
+        try await repo.run("commit", "-q", "-m", "example is a link")
+        // The checkout has a real folder there (uncommitted), the base has a link.
+        try FileManager.default.removeItem(at: repo.root.appendingPathComponent("example"))
+        try repo.write("example/.env", "S=1\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: ["example/.env"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped.first?.contains("symlink") == true)
+        #expect(!FileManager.default.fileExists(atPath: outside.appendingPathComponent(".env").path))
+    }
+
+    @Test func aFileOnlyTheCheckoutIgnoresIsNotCopied() async throws {
+        let repo = try await TestRepo()
+        try repo.write(".gitignore", ".env.local\n")  // not committed: the base does not have this rule
+        try repo.write(".env.local", "A=1\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: [".env.local"])
+        #expect(tree.copy.copied.isEmpty)
+        #expect(tree.copy.skipped.first?.contains("not ignored") == true)
+        #expect(!FileManager.default.fileExists(atPath: tree.path.appendingPathComponent(".env.local").path))
+    }
+
+    @Test func aWideGlobStopsAtTheCapWithOneAggregateNote() async throws {
+        let repo = try await TestRepo()
+        for i in 0..<60 { try repo.write("many/f\(i)", "x") }
+        let tree = try await repo.manager.create(threadID: "t1", base: "main")
+        var copier = WorktreeCopier(source: repo.root, git: repo.git)
+        copier.maxMatches = 40
+        let report = await copier.copy(["many/*"], to: tree.path)
+        #expect(report.copied.isEmpty)
+        // 20 notes, one that the glob stopped, one aggregate; never one note per match.
+        #expect(report.skipped.count <= WorktreeCopier.maxNotes + 1)
+        #expect(report.skipped.last?.hasPrefix("and ") == true)
+    }
+
+    @Test func aCopyThatWasCutShortIsFinishedWithoutCopyingTwice() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write(".env.a", "A=1\n")
+        try repo.write(".env.b", "B=2\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: [".env.a"])
+        #expect(tree.copy.copied == [".env.a"])
+        // The worktree exists with one of the two files, as after a run killed mid-copy.
+        let first = await repo.manager.copyMissing([".env.a", ".env.b"], into: "t1")
+        #expect(first.copied == [".env.b"] && first.skipped.isEmpty)
+        let again = await repo.manager.copyMissing([".env.a", ".env.b"], into: "t1")
+        #expect(again == CopyReport())
+        #expect(try String(contentsOf: tree.path.appendingPathComponent(".env.b"), encoding: .utf8) == "B=2\n")
+    }
+
+    @Test func aGlobOverManyFoldersWithNoMatchStopsWithANote() async throws {
+        let repo = try await TestRepo()
+        for i in 0..<12 { for j in 0..<3 { try repo.write("deps/p\(i)/q\(j)/index.js", "x") } }
+        let tree = try await repo.manager.create(threadID: "t1", base: "main")
+        var copier = WorktreeCopier(source: repo.root, git: repo.git)
+        copier.maxMatches = 20
+        let report = await copier.copy(["deps/*/*/.env"], to: tree.path)
+        #expect(report.copied.isEmpty)
+        #expect(report.skipped.contains { $0.contains("stopped after looking at 20 entries") })
+    }
+
+    @Test func theConfigKeyRejectsPathsThatLeaveTheRepository() throws {
+        func parse(_ line: String) throws -> Config {
+            try Config.parse("\(line)\n[tools]\navailable = [\"Read\"]\n")
+        }
+        #expect(try parse("copy = [\".env.*\", \"example/.env\"]").copy == [".env.*", "example/.env"])
+        #expect(try parse("").copy.isEmpty)
+        for bad in ["/etc/passwd", "~/.ssh/id_rsa", "../.env", "a/../b", "-x", "", ".git/config", ".workbench/x", "a//b"] {
+            #expect(throws: ConfigError.self, "\(bad)") { try parse("copy = [\"\(bad)\"]") }
+        }
+        #expect(throws: ConfigError.self) { try parse("copy = \".env\"") }
+    }
+}
