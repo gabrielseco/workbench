@@ -314,7 +314,8 @@ Notes:
   `auto`, and a skill that cannot be used is a warning, not a failure.
 - **`workbench verifier [id] [--again]` runs the skill as a separate turn.** Like the judge it is advisory and costs
   money: one `claude -p --output-format json` run in the thread's worktree, in `--safe-mode --restricted
-  --disable-slash-commands`, with `--model` from `[verifier] model` (else the coding `model`), the tools of `[verifier]
+  --disable-slash-commands --add-dir <the turn's proof folder>` (the file tools are confined to the worktree, and the
+  proof folder is outside it: the run can `Read` the screenshots it takes), with `--model` from `[verifier] model` (else the coding `model`), the tools of `[verifier]
   tools` as `--tools` and `--allowedTools` and nothing else (the project's `[tools] denied` still applies), its own
   session, `--max-budget-usd` from `budget_usd` and the `timeout_min` deadline. Its prompt holds the skill text read from
   the base commit, the goal's request and criteria, and `WORKBENCH_PROOF_DIR` (the latest turn's `proof/turn-N`, not

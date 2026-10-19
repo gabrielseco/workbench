@@ -43,14 +43,18 @@ public enum Verifier {
     /// The argv, prompt last. Always `--safe-mode` and `--disable-slash-commands` (rule 3), whatever the project's
     /// `safe_mode` says: the skill is text in the prompt. The tools are the project's `[verifier] tools` and
     /// nothing else (rule 2); the project's `[tools] denied` still applies on top.
+    ///
+    /// `--add-dir` names the turn's proof directory: `--restricted` confines the file tools to the worktree, and the
+    /// proof directory is in the thread's folder, so without it the verifier could write a screenshot (through the
+    /// project's helper) but not `Read` it back to look.
     public static func arguments(
-        config: Config, verifier: VerifierConfig, prompt: String, sessionID: UUID = UUID()
+        config: Config, verifier: VerifierConfig, prompt: String, proofDirectory: URL, sessionID: UUID = UUID()
     ) -> [String] {
         var args = [
             "-p", "--output-format", "json", "--permission-prompts", "none", "--restricted",
             "--session-id", sessionID.uuidString.lowercased(),
             "--max-budget-usd", NSDecimalNumber(decimal: verifier.budgetUSD).stringValue,
-            "--safe-mode", "--disable-slash-commands",
+            "--safe-mode", "--disable-slash-commands", "--add-dir", proofDirectory.path,
         ]
         if let model = config.verifierModel { args += ["--model", model] }
         args += ["--tools"] + availableTools(verifier.tools)

@@ -136,6 +136,8 @@ check "argv: the model, safe mode, restricted and no slash commands" "argv is: $
     bash -c '[[ $1 == *"--model $2"* && $1 == *"--safe-mode"* && $1 == *"--restricted"* && $1 == *"--disable-slash-commands"* ]]' _ "$argv" "$MODEL"
 check "argv: exactly the configured tools" "argv is: $argv" \
     bash -c '[[ $1 == *"--tools Read Bash"* && $1 == *"--allowedTools Read Bash(scripts/write-proof.sh:*)"* ]] || [[ $2 = 1 && $1 == *"--tools Read --allowedTools Read"* ]]' _ "$argv" "$SABOTAGE"
+check "argv: the turn's proof folder is added, so the run can Read its screenshots" "argv is: $argv" \
+    bash -c '[[ $1 == *"--add-dir "*"/threads/$2/proof/turn-1 "* ]]' _ "$argv" "$ID"
 check "the log holds no prompt" "the argv contains the skill text" bash -c '[[ $1 != *"Probe verifier"* && $1 != *" -- "* ]]' _ "$argv"
 
 # The skill the log names is the one at the base commit, byte for byte (trimmed).
