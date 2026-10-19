@@ -70,7 +70,17 @@ public struct ProjectInstructions: Sendable, Equatable {
         let repo: URL
         let commit: String
 
-        func read(_ path: String) async -> String? {
+        /// One tree entry at an exact path: its git mode and object id.
+        struct Entry {
+            let mode: String
+            let type: String
+            let sha: String
+            var isRegularFile: Bool { type == "blob" && (mode == "100644" || mode == "100755") }
+            var isSymlink: Bool { type == "blob" && mode == "120000" }
+        }
+
+        /// The entry at exactly `path` in the commit, or nil when there is none.
+        func entry(_ path: String) async -> Entry? {
             guard
                 let tree = try? await git.run(["ls-tree", "-z", commit, "--", path], in: repo),
                 tree.succeeded
@@ -80,22 +90,33 @@ public struct ProjectInstructions: Sendable, Equatable {
                 let tab = record.firstIndex(of: "\t")
             else { return nil }
             let fields = record[..<tab].split(separator: " ")
-            guard fields.count == 3, fields[1] == "blob", fields[0] == "100644" || fields[0] == "100755",
-                String(record[record.index(after: tab)...]) == path
-            else { return nil }
+            guard fields.count == 3, String(record[record.index(after: tab)...]) == path else { return nil }
+            return Entry(mode: String(fields[0]), type: String(fields[1]), sha: String(fields[2]))
+        }
+
+        /// The blob's text, or nil when it is over the ceiling or cannot be read. Cut at the read limit.
+        func contents(of entry: Entry) async -> String? { await read(entry)?.text }
+
+        /// As `contents(of:)`, and whether the blob was longer than the read limit and so cut.
+        func read(_ entry: Entry) async -> (text: String, cut: Bool)? {
             guard
-                let size = try? await git.run(["cat-file", "-s", String(fields[2])], in: repo),
+                let size = try? await git.run(["cat-file", "-s", entry.sha], in: repo),
                 size.succeeded, let bytes = Int(size.stdout.trimmingCharacters(in: .whitespacesAndNewlines)),
                 bytes <= blobSizeCeiling
             else { return nil }
             guard
-                let blob = try? await git.run(["cat-file", "blob", String(fields[2])], in: repo),
+                let blob = try? await git.run(["cat-file", "blob", entry.sha], in: repo),
                 blob.succeeded
             else { return nil }
             let data = Data(blob.stdout.utf8.prefix(blobReadLimit))
             var text = String(decoding: data, as: UTF8.self)
             if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
-            return text.replacingOccurrences(of: "\r\n", with: "\n")
+            return (text.replacingOccurrences(of: "\r\n", with: "\n"), blob.stdout.utf8.count > blobReadLimit)
+        }
+
+        func read(_ path: String) async -> String? {
+            guard let entry = await entry(path), entry.isRegularFile else { return nil }
+            return await contents(of: entry)
         }
     }
 

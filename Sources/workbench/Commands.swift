@@ -238,6 +238,7 @@ enum Commands {
         for file in report.verifyFiles { out("  proof: \(file.name) (\(file.bytes) bytes)") }
         if let warning = report.verifyWarning { out("  warning: \(warning)") }
         for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
+        if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
     }
 
     static func goalNew(_ args: [String]) async throws {
