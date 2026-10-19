@@ -201,18 +201,17 @@ public final class Doctor: @unchecked Sendable {
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""),
             verify: DoctorStep(command: config.verifyCommand, outcome: .notDeclared, tail: "", hint: ""),
             appType: config.appType)
+        let runsSteps = config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil
+        // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover". The
+        // lock comes first so a second doctor is refused at once, not after the git reads below.
+        let lock = runsSteps ? try ProjectLock.acquire(project) : nil
+        defer { if let lock { ProjectLock.release(lock) } }
         if let verifier = config.verifier {
             report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
         }
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil || config.verifier != nil)
-        guard config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil else {
-            return report
-        }
-
-        // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover".
-        let lock = try ProjectLock.acquire(project)
-        defer { ProjectLock.release(lock) }
+        guard runsSteps else { return report }
         // After the lock: a run that starts now sees the lock and refuses itself (it writes runner.json first).
         if let live = store.threadWithLiveRunner() { throw DoctorError.runnerLive(live) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
