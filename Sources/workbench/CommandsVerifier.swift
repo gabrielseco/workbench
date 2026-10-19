@@ -58,3 +58,10 @@ extension Commands {
         }
     }
 }
+
+extension Commands {
+    /// Whether the verifier can run on work cut from `base`, for judging a screenshot proof before it is paid for.
+    static func skillAvailable(_ config: Config, _ ctx: Context, _ base: String) async -> Bool {
+        await VerifierSkill.isAvailable(config: config, git: ctx.service.git, repo: ctx.project.root, ref: base)
+    }
+}

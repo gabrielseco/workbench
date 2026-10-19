@@ -64,6 +64,7 @@ available = ["Read", "Edit", "Write"]
 allowed = ["Read", "Edit", "Write"]
 
 [verifier]
+enabled = false   # the scenario runs the command by hand; an automatic run would make its second run a refusal
 skill = "$SKILL"
 model = "$MODEL"
 tools = [$TOOLS]

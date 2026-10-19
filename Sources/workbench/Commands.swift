@@ -278,7 +278,8 @@ enum Commands {
         // means there is no tool set to judge against.
         if let before, !allowUnrunnable, FileManager.default.fileExists(atPath: ctx.project.configURL.path) {
             let config = try Config.load(from: ctx.project.configURL)
-            let unrunnable = ProofCommands.warnings(goal: before.goal, config: config)
+            let skill = await skillAvailable(config, ctx, before.goal.base)
+            let unrunnable = ProofCommands.warnings(goal: before.goal, config: config, verifierSkillAvailable: skill)
             if !unrunnable.isEmpty { throw CLIError.refused(ProofWarning.refusal(unrunnable)) }
         }
         let approved = try await ctx.service.approve(id: id)
@@ -292,7 +293,8 @@ enum Commands {
             if let pushTo = approved.goal.pushTo { out("push to: \(pushTo)") }
         }
         if allowUnrunnable, let config = try? Config.load(from: ctx.project.configURL) {
-            for warning in ProofCommands.warnings(goal: approved.goal, config: config) {
+            let skill = await skillAvailable(config, ctx, approved.goal.base)
+            for warning in ProofCommands.warnings(goal: approved.goal, config: config, verifierSkillAvailable: skill) {
                 out("warning: " + warning.line)
             }
         }

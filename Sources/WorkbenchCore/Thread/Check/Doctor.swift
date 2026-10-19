@@ -210,7 +210,7 @@ public final class Doctor: @unchecked Sendable {
             report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
         }
         report.reviewWarnings = Self.reviewWarnings(
-            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil || config.verifier != nil)
+            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil || report.verifier?.skill != nil)
         guard runsSteps else { return report }
         // After the lock: a run that starts now sees the lock and refuses itself (it writes runner.json first).
         if let live = store.threadWithLiveRunner() { throw DoctorError.runnerLive(live) }

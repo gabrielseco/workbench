@@ -85,3 +85,17 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(report.verifier?.problem?.hasSuffix(": .agents/skills/verify/SKILL.md") == true)
     }
 }
+
+@Suite struct VerifierAvailabilityTests {
+    @Test func theSkillIsAvailableOnlyWhenOnAndCommittedAtTheRef() async throws {
+        let path = ".claude/skills/verify/SKILL.md"
+        let fx = try await RunnerFixture()
+        let config = try Config.load(from: fx.project.configURL)
+        let before = await VerifierSkill.isAvailable(config: config, git: fx.git, repo: fx.repo, ref: "main")
+        #expect(!before)
+        try await commitSkill(fx, path, "# Verify\n")
+        #expect(await VerifierSkill.isAvailable(config: config, git: fx.git, repo: fx.repo, ref: "main"))
+        let off = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
+        #expect(await !VerifierSkill.isAvailable(config: off, git: fx.git, repo: fx.repo, ref: "main"))
+    }
+}

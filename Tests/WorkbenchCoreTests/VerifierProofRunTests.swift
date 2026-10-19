@@ -288,7 +288,7 @@ private let designStage = """
         let none = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
         let with = try Config.parse("[tools]\navailable = [\"Read\"]\n[verifier]\nskill = \"s.md\"\n")
         let reason = ProofCommands.warnings(goal: goal, config: none).first?.reason
-        #expect(reason?.contains("turned [verifier] off") == true)
+        #expect(reason?.contains("no verifier skill") == true)
         #expect(ProofCommands.warnings(goal: goal, config: with).isEmpty)
     }
 

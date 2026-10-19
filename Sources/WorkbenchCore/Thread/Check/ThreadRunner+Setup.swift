@@ -46,9 +46,11 @@ extension ThreadRunner {
 
     /// A run needs an approved goal, and proofs the tool set can execute. The config is not in the approval
     /// hash, so the proofs are judged again here, where a turn gets paid for.
-    static func requireRunnable(goal: Goal, config: Config, options: RunOptions) throws {
+    static func requireRunnable(
+        goal: Goal, config: Config, options: RunOptions, verifierSkillAvailable: Bool = true
+    ) throws {
         guard goal.approval == .approved else { throw RunnerError.goalNotApproved(goal.approval) }
-        let unrunnable = ProofCommands.warnings(goal: goal, config: config)
+        let unrunnable = ProofCommands.warnings(goal: goal, config: config, verifierSkillAvailable: verifierSkillAvailable)
         if !unrunnable.isEmpty, !options.allowUnrunnableProofs {
             throw RunnerError.unrunnableProofs(ProofWarning.refusal(unrunnable))
         }

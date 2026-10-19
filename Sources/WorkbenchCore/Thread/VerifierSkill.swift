@@ -43,6 +43,13 @@ public struct VerifierSkill: Sendable, Equatable {
         }
     }
 
+    /// Whether the project's verifier can run on work cut from `ref`: it is on and its skill is a usable file there.
+    public static func isAvailable(config: Config, git: GitRunner, repo: URL, ref: String) async -> Bool {
+        guard let verifier = config.verifier else { return false }
+        if case .success = await load(git: git, repo: repo, commit: ref, path: verifier.skill) { return true }
+        return false
+    }
+
     /// Reads `path` at `commit`. A symlink is refused with the path it points at, since git stores a link as
     /// its target text and that text would reach the model as its instructions.
     public static func load(git: GitRunner, repo: URL, commit: String, path: String) async -> Result<VerifierSkill, Problem> {
