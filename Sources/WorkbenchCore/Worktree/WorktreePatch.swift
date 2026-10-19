@@ -134,7 +134,7 @@ public enum WorktreePatch {
             ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--no-color",
              "--src-prefix=a/", "--dst-prefix=b/", "--output=\(partial.path)", "HEAD", "--"], worktree)
         try await requireApplies(partial, worktree: worktree, git: git)
-        guard let digest = VerifyRunner.sha256(of: partial, limit: limit * 2) else {
+        guard let digest = ProofCollector.sha256(of: partial, limit: limit * 2) else {
             throw WorktreePatchError.tooLarge(bytes: fileSize(partial), limit: limit)
         }
         return Written(

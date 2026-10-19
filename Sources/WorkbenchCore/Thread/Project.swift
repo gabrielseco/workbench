@@ -29,13 +29,8 @@ public struct Project: Sendable, Equatable {
 
     /// Where a turn's check output is kept, relative to the thread directory (`output_ref` in the log).
     public static func checkOutputRef(turn: Int) -> String { "checks/turn-\(turn).log" }
-    /// Where the setup command's output is kept, relative to the thread directory.
-    public static func verifyOutputRef(turn: Int) -> String { "verify/turn-\(turn).log" }
     public static func proofRef(turn: Int) -> String { "proof/turn-\(turn)" }
-    public func verifyOutputURL(_ id: String, turn: Int) -> URL {
-        threadDirectory(id).appendingPathComponent(Self.verifyOutputRef(turn: turn))
-    }
-    /// Where the verify step of `turn` writes its evidence. Emptied before each run.
+    /// Where the verifier of `turn` writes its evidence. Emptied before each run.
     public func proofDirectory(_ id: String, turn: Int) -> URL {
         threadDirectory(id).appendingPathComponent(Self.proofRef(turn: turn), isDirectory: true)
     }

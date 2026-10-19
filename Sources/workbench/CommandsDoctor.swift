@@ -15,5 +15,6 @@ extension Commands {
         out("  tools:  \(config.tools.joined(separator: ", "))")
         out("  budget: $\(config.budgetUSD)  timeout: \(config.timeoutMin) min")
         if let problem = verifier.problem { out("  warning: \(problem)") }
+        if let missing = verifier.screenRecording { out("  warning: \(missing)") }
     }
 }

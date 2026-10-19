@@ -25,7 +25,7 @@ private func recordVerifierProof(
     let proof = fx.project.proofDirectory(id, turn: turn)
     try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
     for (name, data) in files { try data.write(to: proof.appendingPathComponent(name)) }
-    let recorded = VerifyRunner.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
+    let recorded = ProofCollector.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
     for file in recorded where files[file.name] != nil && file.name.hasSuffix(".png") {
@@ -99,9 +99,8 @@ private let designStage = """
     }
 
     @Test func theVerifiersFileWinsANameTheVerifyStepLeftAndBothAreRecorded() async throws {
-        let write = "printf 'from the verify step' > \"$WORKBENCH_PROOF_DIR/shot.png\""
-        let script = try CheckScript().write(write, name: "verify.sh")
-        let v = try await VerifierFixture(root: "verify_command = \"\(script)\"")
+        let v = try await VerifierFixture()
+        try await recordLegacyVerify(v.fx, v.id, ["shot.png": "from the verify step"])
         _ = try await v.verify("proof=shot.png")
 
         let events = try v.fx.events(v.id)
@@ -222,8 +221,8 @@ private let designStage = """
     }
 
     @Test func theStageIsGivenBothSourcesAtOnce() async throws {
-        let script = try CheckScript().write("printf a > \"$WORKBENCH_PROOF_DIR/step.png\"", name: "v.sh")
-        let r = try await reviewedPR(extraConfig: "verify_command = \"\(script)\"" + designStage)
+        let r = try await reviewedPR(extraConfig: designStage)
+        try await recordLegacyVerify(r.fx, r.id, ["step.png": "a"])
         try await recordVerifierProof(r.fx, r.id, ["seen.png": "pixels"])
         _ = try await stage(r)
         let started = try #require(try r.fx.events(r.id).first { $0.kind == .reviewStageStarted && $0.data["stage"] != nil })
@@ -321,7 +320,7 @@ private let designStage = """
             let c = try Config.parse("[tools]\navailable = [\"Read\"]\n" + config)
             return PromptBuilder.firstPrompt(
                 goal: goal, checkCommand: nil, instructions: nil,
-                verifies: c.verifyCommand != nil || c.verifier != nil, plan: nil)
+                verifies: c.verifier != nil, plan: nil)
         }
         #expect(try prompt("[verifier]\nskill = \"s.md\"\n").contains("Workbench runs the project's verify step"))
         #expect(try !prompt("[verifier]\nenabled = false\n").contains("Workbench runs the project's verify step"))

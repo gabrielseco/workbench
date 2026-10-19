@@ -8,7 +8,6 @@ private func options() -> Doctor.Options {
     o.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName(), "FAKE_CLAUDE": "set"]
     o.setupTimeout = 30
     o.checkTimeout = 30
-    o.verifyTimeout = 30
     o.screenRecordingGranted = { true }
     return o
 }
@@ -97,5 +96,39 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(await VerifierSkill.isAvailable(config: config, git: fx.git, repo: fx.repo, ref: "main"))
         let off = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
         #expect(await !VerifierSkill.isAvailable(config: off, git: fx.git, repo: fx.repo, ref: "main"))
+    }
+
+    @Test func aDesktopAppWithoutScreenRecordingWarnsOnTheVerifier() async throws {
+        let path = "SKILL.md"
+        let fx = try await RunnerFixture(extraConfig: "app_type = \"desktop\"\n[verifier]\nskill = \"\(path)\"")
+        try await commitSkill(fx, path, "drive it\n")
+        var o = options()
+        o.environment["TERM_PROGRAM"] = "iTerm.app"
+        o.screenRecordingGranted = { false }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+
+        let warning = try #require(report.verifier?.screenRecording)
+        #expect(warning.contains("Screen Recording") && warning.contains("iTerm.app") && warning.contains("Privacy & Security"))
+        #expect(report.passed, "a warning, as the skill problem is")
+    }
+
+    @Test(arguments: ["app_type = \"desktop\"", "app_type = \"web\"", ""])
+    func theGrantOrANonDesktopAppNeverWarns(extra: String) async throws {
+        let path = "SKILL.md"
+        let fx = try await RunnerFixture(extraConfig: "\(extra)\n[verifier]\nskill = \"\(path)\"")
+        try await commitSkill(fx, path, "drive it\n")
+        var o = options()
+        // Granted, or never asked: the answer only matters for a desktop app.
+        o.screenRecordingGranted = { extra.contains("desktop") }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+        #expect(report.verifier?.screenRecording == nil)
+    }
+
+    @Test func noSkillMeansNoScreenRecordingWarning() async throws {
+        let fx = try await RunnerFixture(extraConfig: "app_type = \"desktop\"\n[verifier]\nskill = \"SKILL.md\"")
+        var o = options()
+        o.screenRecordingGranted = { false }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+        #expect(report.verifier?.screenRecording == nil && report.verifier?.problem != nil)
     }
 }

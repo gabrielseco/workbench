@@ -397,7 +397,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
 
         await #expect(throws: ThreadServiceError.self) { try await fx.service.abandon(id: id) }
 
-        let digest = VerifyRunner.sha256(of: patchURL(id, fx), limit: 1 << 20)
+        let digest = ProofCollector.sha256(of: patchURL(id, fx), limit: 1 << 20)
         #expect(digest?.hex == first.sha256)
     }
 

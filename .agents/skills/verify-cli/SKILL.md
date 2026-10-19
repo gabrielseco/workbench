@@ -17,7 +17,7 @@ Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are 
 - With every change to what a workbench command does (`AGENTS.md`, "Shipping a change", step 3): add or update the
   scenario in the same PR and run it from the branch, normally and with `VERIFY_CLI_SABOTAGE=1`. It can also be run
   on `main` after the merge.
-- Not for a target project's change (that is `verify_command`, P4 and P11), and not in CI.
+- Not for a target project's change (that is the project's `[verifier]`, P10 and P11), and not in CI.
 
 ## Running one
 

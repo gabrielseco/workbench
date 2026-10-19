@@ -186,7 +186,7 @@ these differences:
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the review ended `VERDICT: CLEAN`, or the stage was skipped because its `applies_to` matches no file the pull request changes (recorded as `skipped`, never as clean; no reviewer ran) |
-| 1 | `failed` | as `pr-review`, and also: the stage reads `proof` and the latest verify step left no PNG, is from before the latest turn, or never ran |
+| 1 | `failed` | as `pr-review`, and also: the stage reads `proof` and the latest proof (the verifier's) left no PNG, is from before the latest turn, or never ran |
 | 2 | `usage` | no stage name, or the `pr-review` cases |
 | 6 | `refused` | `<name>` is not in `review.stages` (nothing runs), `max_rounds` of this stage already ran for this pull request (counted over its own rounds; `--again` does not lift that), or the `pr-review` cases |
 

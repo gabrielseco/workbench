@@ -68,14 +68,7 @@ public struct Config: Sendable, Equatable {
     /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
     /// `claude`, so it is not added to the allowed tools.
     public var setupCommand: String?
-    /// Run by Workbench after a successful turn's check to produce evidence (screenshots, a verdict) in the
-    /// proof directory. Never offered to `claude`, so it is not added to the allowed tools.
-    public var verifyCommand: String?
-    /// The verify step is killed, tree and all, after this many minutes.
-    public var verifyTimeoutMin: Int = Config.defaultVerifyTimeoutMin
-    public static let defaultVerifyTimeoutMin = 10
-    /// What the project's verify step drives. `desktop` needs Screen Recording, which `doctor` checks first;
-    /// the verify command itself still owns its tooling.
+    /// What the project's verifier drives. `desktop` needs Screen Recording, which `doctor` checks.
     public var appType: AppType = .web
     /// Used when drafting a new goal. Goals carry their own `budget_usd`.
     public var defaultBudgetUSD: Decimal
@@ -133,7 +126,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "setup_command", "verify_command", "verify_timeout_min", "app_type",
+            "claude_path", "check_command", "setup_command", "app_type",
             "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "plan_model", "safe_mode",
             "project_instructions",
         ]
@@ -148,6 +141,10 @@ public struct Config: Sendable, Equatable {
             }
             let known = name == "" ? rootKeys : toolKeys
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !known.contains(key) {
+                if name == "", Self.removedVerifyKeys.contains(key) {
+                    fail(.unknownKey, entry.line, "'\(key)' was removed: replace it with a [verifier] table")
+                    continue
+                }
                 let location = name == "" ? "" : " in [\(name)]"
                 fail(.unknownKey, entry.line, "unknown key '\(key)'\(location)")
             }
@@ -232,15 +229,6 @@ public struct Config: Sendable, Equatable {
         }
         let checkCommand = command("check_command")
         let setupCommand = command("setup_command")
-        let verifyCommand = command("verify_command")
-        var verifyTimeoutMin = defaultVerifyTimeoutMin
-        if let entry = document.tables[""]?.entries["verify_timeout_min"] {
-            if let minutes = Self.verifyMinutes(entry.value) {
-                verifyTimeoutMin = minutes
-            } else {
-                fail(.invalidValue, entry.line, "'verify_timeout_min' must be a whole number of minutes from 1 to 240")
-            }
-        }
 
         var appType = AppType.web
         if let (value, line) = string("", "app_type") {
@@ -306,17 +294,14 @@ public struct Config: Sendable, Equatable {
         return Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand,
-            verifyCommand: verifyCommand, verifyTimeoutMin: verifyTimeoutMin, appType: appType,
-            defaultBudgetUSD: budget,
+            appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, judgeModel: judgeModel, describeModel: describeModel,
             planModel: planModel, verifier: verifier)
     }
 
-    private static func verifyMinutes(_ value: TOMLValue) -> Int? {
-        if case .int(let n) = value, (1...240).contains(n) { return n }
-        return nil
-    }
+    /// Keys an older config used for the verify step, which `[verifier]` replaced.
+    private static let removedVerifyKeys: Set<String> = ["verify_command", "verify_timeout_min"]
 
     private static func sorted(_ problems: [ConfigProblem]) -> [ConfigProblem] {
         problems.enumerated().sorted {
@@ -369,9 +354,7 @@ public struct Config: Sendable, Equatable {
         # plan_model = "opus"              # --model for `workbench plan` (it only reads); unset = model
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
-        # verify_command = "scripts/verify.sh"  # run after each turn's check; writes screenshots to $WORKBENCH_PROOF_DIR
-        # verify_timeout_min = 10          # the verify step is killed after this long
-        # app_type = "web"                 # "desktop" if verify captures the screen: doctor checks Screen Recording
+        # app_type = "web"                 # "desktop" if the verifier captures the screen: doctor checks Screen Recording
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]

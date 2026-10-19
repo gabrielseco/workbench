@@ -214,11 +214,11 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
         return try GoalFile.parse(text).goal
     }
 
-    @Test func aScreenshotProofWithTheVerifierOffAndNoVerifyCommandIsWarned() throws {
+    @Test func aScreenshotProofWithTheVerifierOffIsWarned() throws {
         let config = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
         let warnings = ProofCommands.warnings(goal: try goal("screenshot: home"), config: config)
         #expect(warnings.count == 1)
-        #expect(warnings[0].line.contains("no verify_command"))
+        #expect(warnings[0].line.contains("no verifier skill"))
         #expect(warnings[0].line.contains("home.png"))
     }
 
@@ -231,10 +231,5 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
         let config = try Config.parse("[tools]\navailable = [\"Read\"]\n")
         let warnings = ProofCommands.warnings(goal: try goal("screenshot: home"), config: config, verifierSkillAvailable: false)
         #expect(warnings.count == 1 && warnings[0].line.contains("no verifier skill"))
-    }
-
-    @Test func withAVerifyCommandItIsNotWarned() throws {
-        let config = try Config.parse("verify_command = \"scripts/verify.sh\"\n[tools]\navailable = [\"Read\"]\n")
-        #expect(ProofCommands.warnings(goal: try goal("screenshot: home"), config: config).isEmpty)
     }
 }

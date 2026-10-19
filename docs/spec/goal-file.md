@@ -54,14 +54,14 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **A screenshot proof is `proof: screenshot: <name>[, <name>…]`.** Each `<name>` is one token of letters, digits,
   `.`, `_` and `-` (at most 64, not starting with a symbol), up to 16 names, a name listed twice counting once; a
   malformed list is a goal error. It is satisfied when the latest turn's proof has `<name>.png` at the top of the
-  proof directory for every name. The turn's proof is what the verify step (`verify_command`, below) and the
-  verifier (`[verifier]`, below) left in it, recorded and still there as recorded; when both left a file of the same
-  name the verifier's is the one used, and both stay in the log. `review` shows `see screenshot` and the files in the
-  order named, or `✘ missing` with the reason and the files that are there: no verify step or verifier run, a proof
+  proof directory for every name. The turn's proof is what the verifier (`[verifier]`, below) left in it, recorded and still there as recorded (and,
+  in a log written before `verify_command` was removed, what its verify step left; when both left a file of the same
+  name the verifier's is the one used, and both stay in the log). `review` shows `see screenshot` and the files in the
+  order named, or `✘ missing` with the reason and the files that are there: no verifier run, a proof
   from an earlier turn, a name with no file, or a recorded file that is gone, unreadable, a link or a different size
   than recorded. One of three missing is `✘ missing`. A screenshot is never `passed`: a person looks at it, and what
-  the verifier said about it is a note. `approve` and `run` refuse such a proof when the project has neither a
-  `verify_command` nor a `[verifier]` (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
+  the verifier said about it is a note. `approve` and `run` refuse such a proof when the project has no `[verifier]`
+  whose skill is in the base commit (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **`ship` puts the screenshots in the pull request.** After the PR exists, the top-level `*.png` files of the
   latest verify step (recorded, and still there as recorded) are copied into a fresh folder that is the
   tool's whole screenshot folder (`PR_SHOTS_DIR`, so no older screenshot is uploaded), under the names
@@ -224,9 +224,7 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 
 ```toml
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
-# verify_command = "scripts/verify.sh"  # optional; run after each successful turn's check, writes evidence to $WORKBENCH_PROOF_DIR
-# verify_timeout_min = 10               # the verify step is killed, tree and all, after this long
-# app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording
+# app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording for the verifier
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 default_budget_usd = 5.00               # used when drafting a goal
 # claude_path = "claude"                # name on PATH, or an absolute path
@@ -292,17 +290,12 @@ Notes:
   any turn is spent; the worktree is kept and the next `run` tries it again. What it writes into the
   worktree is untracked there: keep installs in ignored paths (`deps/`, `node_modules/`), or they show up
   in the diff.
-- **`verify_command` is run by Workbench, not offered to the model.** Validated like `check_command` and run
-  after a successful turn's check, with the check's machinery and environment plus `WORKBENCH_PROOF_DIR`,
-  `WORKBENCH_PORT`, `WORKBENCH_THREAD` and `WORKBENCH_GOAL`. It is the answer to a project whose evidence
-  needs more than the tool set allows (a browser, a built app): the command is the project's own, and Claude
-  is not given those tools. It writes screenshots and, optionally, a `verdict.json` into the proof directory;
-  `review` lists them and the event log records each with its hash. Its result is shown, never counted as a
-  criterion met. See [event-log.md](event-log.md) for the events. After the step, any process left running in
-  the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
-  runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
-  says the verify step captures those, so Claude does not report them as unverified. A `[verifier]` counts as
-  a verify step for that sentence when it is on (the default) and its skill is in the base commit, since only then does a run start it.
+- **`verify_command` and `verify_timeout_min` are gone.** A config that still has either is refused at load with
+  "'verify_command' was removed: replace it with a [verifier] table" (not the unknown-key message), so nothing runs
+  on a half-migrated project. The project's evidence is made by the verifier ([P10](../plan/P10-skill-verifier.md)),
+  a `claude` turn on the project's skill; a project with no skill at the base has no verify step. When a goal has a
+  `screenshot:` proof and the verifier will run (on, the default, with its skill in the base commit), the first prompt
+  says the verifier captures it, so Claude does not report it as unverified.
 - **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is optional (default `.claude/skills/verify/SKILL.md`) and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
@@ -330,7 +323,7 @@ Notes:
   with no skill file at the base gets no verifier and no event, and any other reason it cannot start (a symlinked or
   oversized skill, no change) is a `verifier.skipped` with the reason and a note; none fails the turn. An answer that is empty is not a success. Every PNG the run adds to, or changes in, the turn's proof folder
   is recorded as `proof.added` (with `source: "verifier"`, the commit and tree it ran at) before `verifier.ended`;
-  other files are only listed in `files`. `review` prints a `Verifier` section beside the verify step's: advisory,
+  other files are only listed in `files`. `review` prints a `Verifier` section (and, for an older log, the verify step's): advisory,
   the turn, its cost and time, the screenshots, and what it said as a note (twelve lines at most, each cut), never
   a pass; `review --json` has it as `verifier`. The judge and a review stage that reads `proof` are given every PNG of
   the turn's proof (both sources, bounded as before: eight for the judge, twenty for a stage), each with its pixel
@@ -350,9 +343,9 @@ Notes:
   skill's `## Rubric` section when it has one, else the whole skill under a header saying to ignore steps that
   build, run or post; a prompt file whole); when that file is missing or empty the round fails.
   `workbench review-stage <name>` runs one round of a listed stage (`pr-review` is `workbench pr-review`).
-  `proof` attaches the top-level `*.png` files of the thread's latest verify step to the Codex run (`-i`, at
-  most 20) and lists their paths in the brief; with no verify step, one from before the latest turn, or no
-  PNG left, the round fails, never passes, and `doctor` warns when such a stage has no `verify_command`.
+  `proof` attaches the top-level `*.png` files of the thread's latest proof (the verifier's, or an older log's verify step) to the Codex run (`-i`, at
+  most 20) and lists their paths in the brief; with no proof, one from before the latest turn, or no
+  PNG left, the round fails, never passes, and `doctor` warns when such a stage has no verifier skill at the base.
   `applies_to` globs (`**` any run of folders, `*` within one name) are matched against the files the pull
   request changes (a renamed file counts by its old path and its new one); a stage, `pr-review` included, that matches none is recorded as skipped and runs nothing.
   An empty list (the default) always runs, and so does a round whose list of changed files git could not give
@@ -361,7 +354,7 @@ Notes:
 - **Ignored files do not keep a shipped worktree.** After a ship, the worktree is removed only when nothing in
   it could be lost, which means nothing uncommitted: modified, staged and untracked files all keep it. A file
   the repository ignores does not, since git already says what is ignored and a worktree Workbench made holds
-  only what its `setup_command`, check, `verify_command` or run produced (`node_modules`, a build directory,
+  only what its `setup_command`, check or run produced (`node_modules`, a build directory,
   a verify login file). `worktree.removed` names what was ignored in it, so the record shows what went.
 - **The child environment is an allowlist**: `PATH HOME USER LOGNAME SHELL LANG TMPDIR TERM
   CLAUDE_CONFIG_DIR` and `LC_*`, plus whatever `env_pass` names. `USER` and `LOGNAME` are required: without
@@ -381,13 +374,10 @@ Notes:
   (exit 1) that names the command to remove it by hand.
   A step the config leaves out is reported, not failed; the check is skipped when a declared setup did not
   pass. Exit 0 when everything declared passed, 1 when a step did not, 3 when stopped (`exit-codes.md`).
-  A declared `verify_command` runs last, only after setup and check passed, through the same runner a thread
-  uses (its `verify_timeout_min`, the proof-directory/port/thread/goal variables, the tree and detached-server
-  sweep); `WORKBENCH_GOAL` points at a stub, and the files it wrote are listed. A pass that wrote no files is a
-  warning, not a failure. With `app_type = "desktop"`, doctor first checks that the process running it may
-  record the screen (`CGPreflightScreenCaptureAccess`), and if not, fails without running the verify and names
-  the Settings pane. `web` (the default) and an unset key are never checked; the verify command still owns its
-  own tooling.
+  Doctor does not run the verifier (it is a paid `claude` turn). It reads `[verifier]`'s skill at `--base` and says
+  whether it can be used. With `app_type = "desktop"` and a usable skill, it also checks that the process running
+  doctor may record the screen (`CGPreflightScreenCaptureAccess`) and, if not, warns and names the Settings pane
+  (a warning, not a failure). `web` (the default) and an unset key are never checked.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

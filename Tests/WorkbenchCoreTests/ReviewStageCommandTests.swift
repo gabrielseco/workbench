@@ -20,15 +20,6 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
     ((try? r.fx.events(r.id)) ?? []).filter { $0.kind == kind && $0.data["stage"]?.stringValue == stage }
 }
 
-/// A verify script that writes `files` (name to content) into the proof directory, `/` making folders.
-private func verifyConfig(_ files: [String: String]) throws -> String {
-    let writes = files.map { name, text in
-        "mkdir -p \"$(dirname \"$WORKBENCH_PROOF_DIR/\(name)\")\"; printf '\(text)' > \"$WORKBENCH_PROOF_DIR/\(name)\""
-    }
-    let script = try CheckScript().write(writes.joined(separator: "\n"), name: "verify.sh")
-    return "verify_command = \"\(script)\""
-}
-
 // MARK: running a stage
 
 @Suite struct ReviewStageCommandTests {
@@ -164,8 +155,9 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
 
 @Suite struct ReviewStageProofTests {
     @Test func theVerifyStepsTopLevelPNGsAreInTheBriefAndAttachedWithDashI() async throws {
-        let verify = try verifyConfig(["home.png": "pixels", "dark.png": "night", "notes.txt": "x", "sub/deep.png": "d"])
-        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]", before: verify))
+        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
+        try await recordLegacyVerify(
+            r.fx, r.id, ["home.png": "pixels", "dark.png": "night", "notes.txt": "x", "sub/deep.png": "d"])
         let result = try await runStage("design", r)
         #expect(result.verdict == .clean, "\(result.failure ?? "")")
         #expect(result.warnings.isEmpty, "\(result.warnings)")
@@ -183,8 +175,8 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
     }
 
     @Test func noPNGLeftFailsTheRoundAndCodexDoesNotRun() async throws {
-        let verify = try verifyConfig(["notes.txt": "x"])
-        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"proof\", \"diff\", \"goal\"]", before: verify))
+        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"proof\", \"diff\", \"goal\"]"))
+        try await recordLegacyVerify(r.fx, r.id, ["notes.txt": "x"])
         let result = try await runStage("design", r)
         #expect(result.verdict == nil)
         #expect(result.failure?.contains("left no PNG") == true, "\(result.failure ?? "")")
@@ -201,8 +193,8 @@ private func verifyConfig(_ files: [String: String]) throws -> String {
     }
 
     @Test func aVerifyStepFromBeforeTheLatestTurnFailsTheRound() async throws {
-        let verify = try verifyConfig(["home.png": "pixels"])
-        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]", before: verify))
+        let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
+        try await recordLegacyVerify(r.fx, r.id, ["home.png": "pixels"])
         let log = try EventLogWriter.open(at: r.fx.project.eventsURL(r.id))
         _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
         _ = try await log.append(.turnEnded, turn: 2, data: ["result": "success"])
@@ -405,7 +397,7 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
 // MARK: doctor
 
 @Suite struct ReviewStageProofDoctorTests {
-    @Test func aProofStageWithoutAVerifyCommandWarnsAndDoesNotFail() async throws {
+    @Test func aProofStageWithoutAVerifierWarnsAndDoesNotFail() async throws {
         let stages = stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]")
         let fx = try await RunnerFixture(extraConfig: stages + "\n[verifier]\nenabled = false")
         var options = Doctor.Options()
@@ -413,17 +405,17 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
         options.screenRecordingGranted = { true }
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options)
         #expect(report.reviewWarnings == [
-            "the design stage reads proof, and there is no verify_command and the verifier is off to leave any: "
+            "the design stage reads proof, and there is no verifier skill at the base to leave any: "
                 + "its rounds will fail",
         ])
         #expect(report.passed)
     }
 
-    @Test func aProofStageWithAVerifyCommandHasNoWarning() throws {
+    @Test func aProofStageWithAVerifierHasNoWarning() throws {
         let config = try Config.parse(
             stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]") + "[tools]\navailable = [\"Read\"]\n")
         let root = FileManager.default.temporaryDirectory
-        #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifyCommand: true).isEmpty)
-        #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifyCommand: false).count == 1)
+        #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifier: true).isEmpty)
+        #expect(Doctor.reviewWarnings(config.review, root: root, hasVerifier: false).count == 1)
     }
 }

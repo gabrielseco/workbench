@@ -416,7 +416,7 @@ extension ThreadService {
             return .failure(
                 PRReviewFailure(
                     "the \(stage.name) stage reads proof, and this thread has no verify step or verifier run on record "
-                        + "(set [verifier] or verify_command and run a turn)"))
+                        + "(set up [verifier] and run a turn)"))
         }
         guard set.turn == state.lastTurn else {
             return .failure(

@@ -202,7 +202,7 @@ enum Commands {
         printDoctor(report)
         if let problem = report.cleanupProblem { return fail(.failed, problem) }
         if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
-        return report.passed ? 0 : fail(.failed, "the declared setup, check or verify did not pass")
+        return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
     }
 
     private static func printDoctor(_ report: DoctorReport) {
@@ -234,9 +234,6 @@ enum Commands {
         }
         show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
         show("check:", report.check, undeclared: "turns will end with no check evidence")
-        show("verify:", report.verify, undeclared: "turns will end with no screenshots or other proof")
-        for file in report.verifyFiles { out("  proof: \(file.name) (\(file.bytes) bytes)") }
-        if let warning = report.verifyWarning { out("  warning: \(warning)") }
         for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
         if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
     }
@@ -381,12 +378,6 @@ enum Commands {
             case .setupRan(let setup):
                 out("setup \(setup.result.rawValue)  \(setup.durationMs / 1000)s"
                     + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(setup.outputRef).path))")
-            case .verifyStarted(_, let command):
-                out("verify started: \(command)")
-            case .verifyEnded(let verify):
-                out("verify \(verify.result.rawValue)  \(verify.durationMs / 1000)s  \(verify.proof.count) proof file(s)"
-                    + (verify.outputTruncated ? "  output truncated" : "")
-                    + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(verify.outputRef).path))")
             case .verifierStarted, .verifierEnded:
                 printVerifierNotice(notice)
             case .checkStarted(_, let command):
