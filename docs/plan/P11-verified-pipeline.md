@@ -168,7 +168,7 @@ skill = ".agents/skills/design-review/SKILL.md"
 inputs = ["diff", "goal", "proof", "docs/DESIGN.md"]
 applies_to = ["Sources/Triage/**", "Resources/**"]
 
-[verifier]                                    # P10, unchanged; without it "verify" is verify_command
+[verifier]                                    # P10; it is the `verify` step, `verify_command` is removed there
 skill = ".claude/skills/verify/SKILL.md"
 tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Bash(swift scripts/ax.swift:*)"]
 ```
@@ -181,7 +181,7 @@ tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Ba
 - **Every step is optional, none is assumed.** A step not listed does not run and leaves no event. A listed step
   that does not apply (`applies_to` matches nothing, no screenshot criterion for verify) is recorded as `skipped`
   with the reason, never as `CLEAN`. A listed step with nothing configured behind it (`design` with no stage table,
-  `verify` with neither `verify_command` nor `[verifier]`) is refused at config load. A UI-less project lists
+  `verify` with no `[verifier]`) is refused at config load. A UI-less project lists
   `before_ship = ["judge"]` or `[]`.
 - **Nothing verified is said, not implied.** When every `before_ship` step ended `skipped` (or the list is empty),
   `review` and the PR body say "nothing was verified before ship" rather than reporting a clean pipeline.
@@ -203,7 +203,7 @@ tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Ba
 |---|---|
 | Events (`docs/spec/event-log.md`) | `commit` on `proof.added`, `verify.started`, `verifier.started`; `pipeline.started`, `pipeline.step`, `pipeline.ended` with `reason` (clean, round cap, cost cap, stopped, failed) |
 | Proof | `ProofSet.head(commit:)` and a stale check used by `review`, judge, design and publish |
-| `Verify` | a failed or missing-criterion result builds a follow-up request; no change to `verify_command` |
+| `Verify` | a failed or missing-criterion result builds a follow-up request; runs the verifier ([P10](P10-skill-verifier.md)); `verify_command` is removed in P10 PR 6 |
 | `Judge` | `--gate` returns the not-met criteria with evidence as the follow-up request |
 | `Ship/ShipScreenshots.swift` | `PRProof.publish(number:, worktree:)`: refuses a stale proof, no PNGs means no edit, a failure is a note |
 | `Config` | `[pipeline]` and its refusals; `doctor` prints the order and the budget |
