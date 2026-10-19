@@ -307,7 +307,10 @@ private func pid(in path: String) throws -> pid_t {
         defer { kill(app, SIGKILL) }
         #expect(report.ok)
         #expect(await waitUntilGone(app), "the detached process is still running")
-        #expect(try v.verifierEvents().last?.data["swept_orphans"]?.intValue ?? 0 >= 1)
+        // Ended by the run's own sweep of what it saw, or by the sweep of orphans in the worktree: either is the promise.
+        let ended = try #require(try v.verifierEvents().last?.data)
+        let swept = (ended["swept_orphans"]?.intValue ?? 0) + (ended["swept_processes"]?.intValue ?? 0)
+        #expect(swept >= 1, "\(ended)")
     }
 
     @Test func anAppAKilledVerifierLeftIsEndedBeforeTheNextOne() async throws {
@@ -318,11 +321,17 @@ private func pid(in path: String) throws -> pid_t {
         // killed verifier leaves behind (an app opened outside the run's process group).
         let script = "use POSIX; my $p = fork(); if ($p == 0) { POSIX::setsid(); exec '/bin/sleep', '300' } "
             + "open(F, '>', $ARGV[0]); print F $p; close F;"
-        var spawn = SpawnRequest(
-            executable: URL(fileURLWithPath: "/usr/bin/perl"), arguments: ["-e", script, pidFile],
-            environment: ["PATH": "/usr/bin:/bin"], workingDirectory: v.worktree, timeout: 20)
-        spawn.snapshotInterval = 3600
-        for await _ in try ProcessRunner.start(spawn).events {}
+        // Started outside the process layer on purpose: its sweep of a child's descendants would otherwise kill the
+        // leftover on a slow machine, before the test has made it.
+        let perl = Process()
+        perl.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        perl.arguments = ["-e", script, pidFile]
+        perl.currentDirectoryURL = v.worktree
+        perl.environment = ["PATH": "/usr/bin:/bin"]
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            perl.terminationHandler = { _ in done.resume() }
+            do { try perl.run() } catch { done.resume() }
+        }
         let left = try pid(in: pidFile)
         defer { kill(left, SIGKILL) }
         #expect(alive(left))
