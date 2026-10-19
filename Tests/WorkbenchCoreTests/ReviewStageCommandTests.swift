@@ -412,7 +412,7 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
         options.screenRecordingGranted = { true }
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options)
         #expect(report.reviewWarnings == [
-            "the design stage reads proof, and there is no verify_command to leave any: its rounds will fail",
+            "the design stage reads proof, and there is no verify_command or [verifier] to leave any: its rounds will fail",
         ])
         #expect(report.passed)
     }

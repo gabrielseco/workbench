@@ -41,12 +41,12 @@ public enum ProofCommands {
         var out: [ProofWarning] = []
         var seen = Set<String>()
         for criterion in goal.criteria {
-            if let name = ScreenshotProof.name(in: criterion.proof), config.verifyCommand == nil {
+            if let name = ScreenshotProof.name(in: criterion.proof), config.verifyCommand == nil, config.verifier == nil {
                 out.append(
                     ProofWarning(
                         criterion: criterion.id, command: "screenshot: \(name)",
-                        reason: "the project has no verify_command, so nothing will produce \(name).png: "
-                            + "set it in .workbench/config.toml, or change the proof",
+                        reason: "the project has no verify_command or [verifier], so nothing will produce \(name).png: "
+                            + "set one in .workbench/config.toml, or change the proof",
                         suggestion: nil, isScreenshot: true))
                 continue
             }

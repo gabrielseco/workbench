@@ -97,6 +97,8 @@ public struct Review: Sendable, Equatable {
     public var check: Check?
     /// The latest completed verify step, nil when none has run.
     public var verify: Verify?
+    /// The latest verifier run, nil when none has run or been skipped. Advisory.
+    public var verifier: Verifier?
     /// The latest judge run, nil when none has run. Advisory.
     public var judge: Judge?
     public var notes: [Note]
@@ -329,7 +331,14 @@ public struct ThreadState: Sendable, Equatable {
     }
 
     /// The verify step's events: `proof.added` lines gather until `verify.ended` closes the step.
-    private static func applyVerify(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
+    private static func applyVerify(
+        _ event: Event, to state: inout ThreadState, pending: inout [ProofFile], verifierPending: inout [ProofFile]
+    ) {
+        // The verifier's screenshots are told apart by `source`; they gather for its own end, not the verify step's.
+        if event.kind == .proofAdded, event.data["source"]?.stringValue == "verifier" {
+            if let file = proofFile(event) { verifierPending.append(file) }
+            return
+        }
         switch event.kind {
         case .verifyStarted:
             state.openVerify = event.turn
@@ -383,11 +392,12 @@ public struct ThreadState: Sendable, Equatable {
             id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, openVerify: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
             review: Review(
-                status: .empty, turnResult: nil, check: nil, verify: nil, judge: nil, notes: [], deniedTools: [],
+                status: .empty, turnResult: nil, check: nil, verify: nil, verifier: nil, judge: nil, notes: [], deniedTools: [],
                 prReview: nil),
             progress: Progress())
         var noteIsLatest = false
         var pendingProof: [ProofFile] = []
+        var verifierProof: [ProofFile] = []
         for event in events {
             switch event.kind {
             case .threadCreated:
@@ -425,12 +435,12 @@ public struct ThreadState: Sendable, Equatable {
                         command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
             case .verifyStarted, .proofAdded, .verifyEnded:
-                Self.applyVerify(event, to: &state, pending: &pendingProof)
+                Self.applyVerify(event, to: &state, pending: &pendingProof, verifierPending: &verifierProof)
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
             case .verifierStarted, .verifierEnded, .verifierSkipped:
-                break  // shown by `review` in a later change (P10 PR 3)
+                Self.applyVerifier(event, to: &state, pending: &verifierProof)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
                     // The runner writes the note with turn 0, before the turn it starts.

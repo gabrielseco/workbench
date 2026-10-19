@@ -36,22 +36,24 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, diff, check, verify, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
-- `criteria`: `{id, text, proof, status, commands, note, file}`. `status` is `passed` or `failed` only when the
+- `criteria`: `{id, text, proof, status, commands, note, file, files}`. `status` is `passed` or `failed` only when the
   proof is exactly the command the latest check recorded (`check.ran` `command`) and that check ran after the
   latest turn;
   otherwise `manual`; a `test:` proof is `passed` or `failed` from the tests that check saw (goal-file spec). `commands` are the proof's backticked commands; `note` says why a check-shaped proof
-  is still `manual`, or which check backs a verdict (null otherwise). A `screenshot: <name>` proof is
-  `evidence` when the latest verify step, run after the latest turn, left `<name>.png` (`file` is its path
-  relative to the thread directory; a person looks at it, it is never a pass) and `missing` otherwise,
-  with `note` saying why.
+  is still `manual`, or which check backs a verdict (null otherwise). A `screenshot: <name>[, <name>…]`
+  proof is `evidence` when the latest turn's proof (the verify step's and the verifier's files together; the
+  verifier's wins a name both left) has `<name>.png` for every name (`files` are their paths relative to the thread
+  directory, in the order named, `file` the first; a person looks at them, it is never a pass) and `missing`
+  otherwise, with `note` saying which and why (`files` then holds the ones that are there).
 - `diff`: `{state: summary | unavailable, base, total_files, truncated, additions, deletions, files, reason}`;
   each file `{path, old_path, status, binary, untracked, staged, additions, deletions}`.
 - `check`: null, or `{turn, result, exit_code, duration_ms}`.
 - `verify`: null when no verify step has run, else `{turn, result, exit_code, duration_ms, proof}` where `proof` is a list of `{name, path, sha256, bytes}`.
+- `verifier`: null when no verifier has run or been skipped, else `{turn, ok, skipped, open, stale, reason, cost_usd, duration_ms, report, proof}`: `ok` is true only for a run that ended on its own with an answer, `skipped` for an automatic run that did not start (`reason` says why), `open` for one that started and has no end on record, `stale` when `turn` is not the latest turn, `report` what it said last (bounded; a note, never a pass), `proof` the PNGs it recorded as `{name, path, sha256, bytes}`.
 - `plan`: null when no plan was kept, else `{source, model, cost_usd, ref, sha256, bytes, truncated, stale, last_failure}`: `source` is `generated` or `edited`, `model` the plan turn's `--model` (null for an edit), `cost_usd` that turn's cost (null for an edit), `ref` the file under the thread's folder, `stale` true when it was made for another version of the goal than the one approved now (`run` leaves it out), `last_failure` why the newest plan turn made nothing (null when it did). `plan_cost_usd` is what all plan turns cost, apart from `cost_usd`, which stays the turns' cost.
 - `judge`: null when the advisory judge has not run, else `{turn, ok, stale, cost_usd, failure, criteria, concerns}`; `criteria` is `{id, met, evidence}` per criterion, `stale` is true when `turn` is not the latest turn, `failure` says why there is no verdict when `ok` is false. Advisory: nothing acts on it.
 - `pr_review`: null when `workbench pr-review` has not run, else the latest round `{round, pr, ok, verdict, stale, head_sha, findings_path, failure}`; `verdict` is `clean` or `fix` (null when `ok` is false and `failure` says why), `head_sha` is the commit that round reviewed, and `stale` is true when `workbench/<id>` has moved on from it (false when the branch is not known here). Advisory: nothing acts on it.

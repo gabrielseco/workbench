@@ -205,7 +205,7 @@ public final class Doctor: @unchecked Sendable {
             report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
         }
         report.reviewWarnings = Self.reviewWarnings(
-            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil)
+            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil || config.verifier != nil)
         guard config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil else {
             return report
         }
@@ -273,7 +273,8 @@ public final class Doctor: @unchecked Sendable {
         for name in review.stages {
             if review.stage(name)?.needsProof == true, !hasVerifyCommand {
                 warnings.append(
-                    "the \(name) stage reads proof, and there is no verify_command to leave any: its rounds will fail")
+                    "the \(name) stage reads proof, and there is no verify_command or [verifier] to leave any: "
+                        + "its rounds will fail")
             }
             guard let stage = review.stage(name), let rubric = stage.rubric else { continue }
             let key = stage.skill != nil ? "skill" : "prompt"

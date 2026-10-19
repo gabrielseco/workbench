@@ -234,6 +234,7 @@ extension Commands {
         } else {
             verify = .null
         }
+        let verifier = verifierJSON(review.verifier, lastTurn: state.lastTurn)
         let judge: JSONValue
         if let j = review.judge {
             judge = [
@@ -295,9 +296,10 @@ extension Commands {
                         "commands": .array(status.commands.map { .string($0) }),
                         "note": status.note.map { .string($0) } ?? .null,
                         "file": status.file.map { .string($0) } ?? .null,
+                        "files": .array(status.files.map { .string($0) }),
                     ]
                 }),
-            "diff": diff, "check": check, "verify": verify, "judge": judge,
+            "diff": diff, "check": check, "verify": verify, "verifier": verifier, "judge": judge,
             "pr_review": prReview, "review_stages": .array(reviewStages),
             "denied_tools": .array(
                 review.deniedTools.map {
@@ -323,5 +325,23 @@ extension Commands {
         case .tooLarge(let bytes): value["too_large_bytes"] = .int(bytes)
         }
         return .object(value)
+    }
+
+    /// The verifier's part of `review --json`: null when it has not run or been skipped.
+    static func verifierJSON(_ verifier: Review.Verifier?, lastTurn: Int) -> JSONValue {
+        guard let v = verifier else { return .null }
+        return [
+            "turn": .int(v.turn), "ok": .bool(v.ok), "skipped": .bool(v.skipped), "open": .bool(v.open),
+            "stale": .bool(v.turn != lastTurn), "reason": v.reason.map { .string($0) } ?? .null,
+            "cost_usd": v.costUSD.map { .double($0) } ?? .null, "duration_ms": v.durationMs.map { .int($0) } ?? .null,
+            "report": .string(v.report),
+            "proof": .array(
+                v.proof.map {
+                    [
+                        "name": .string($0.name), "path": .string($0.path), "sha256": .string($0.sha256),
+                        "bytes": .int($0.bytes),
+                    ]
+                }),
+        ]
     }
 }

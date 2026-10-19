@@ -51,13 +51,17 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   matches nothing, the check ran after an earlier turn, did not finish, listed no tests (a format the parser
   does not know) or had its list cut at 2000 names. A proof written as prose is read the same way only when
   every word is a recorded test name or filler such as "passes"; anything else in it keeps it `you check`.
-- **A screenshot proof is `proof: screenshot: <name>`.** `<name>` is one token of letters, digits, `.`, `_`
-  and `-` (at most 64, not starting with a symbol); a malformed one is a goal error. It is satisfied by
-  `<name>.png` at the top of the proof directory of the latest verify step, run after the latest turn (see
-  `verify_command` below). `review` shows `see screenshot` and the file, or `✘ missing` with the reason: no
-  verify step, a verify step from an earlier turn, no such file, or a recorded file that is gone, unreadable, a link or a different size than recorded. A screenshot is never `passed`: a
-  person looks at it. `approve` and `run` refuse such a proof when the project has no `verify_command`
-  (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
+- **A screenshot proof is `proof: screenshot: <name>[, <name>…]`.** Each `<name>` is one token of letters, digits,
+  `.`, `_` and `-` (at most 64, not starting with a symbol), up to 16 names, a name listed twice counting once; a
+  malformed list is a goal error. It is satisfied when the latest turn's proof has `<name>.png` at the top of the
+  proof directory for every name. The turn's proof is what the verify step (`verify_command`, below) and the
+  verifier (`[verifier]`, below) left in it, recorded and still there as recorded; when both left a file of the same
+  name the verifier's is the one used, and both stay in the log. `review` shows `see screenshot` and the files in the
+  order named, or `✘ missing` with the reason and the files that are there: no verify step or verifier run, a proof
+  from an earlier turn, a name with no file, or a recorded file that is gone, unreadable, a link or a different size
+  than recorded. One of three missing is `✘ missing`. A screenshot is never `passed`: a person looks at it, and what
+  the verifier said about it is a note. `approve` and `run` refuse such a proof when the project has neither a
+  `verify_command` nor a `[verifier]` (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **`ship` puts the screenshots in the pull request.** After the PR exists, the top-level `*.png` files of the
   latest verify step (recorded, and still there as recorded) are copied into a fresh folder that is the
   tool's whole screenshot folder (`PR_SHOTS_DIR`, so no older screenshot is uploaded), under the names
@@ -297,7 +301,8 @@ Notes:
   criterion met. See [event-log.md](event-log.md) for the events. After the step, any process left running in
   the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
   runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
-  says the verify step captures those, so Claude does not report them as unverified.
+  says the verify step captures those, so Claude does not report them as unverified. A `[verifier]` counts as
+  a verify step for that sentence only when `auto` is on, since only then does a run start it.
 - **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is required and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
@@ -322,7 +327,13 @@ Notes:
   as a pass. With `[verifier] auto = true`, a run starts it after the check, when the turn succeeded, the check passed
   (or none is declared), the worktree has a change to look at and no `verifier.ended` exists for the turn; a verifier
   that cannot start (no skill at the base) is a `verifier.skipped` with the reason and a note, and does not fail the
-  turn. An answer that is empty is not a success.
+  turn. An answer that is empty is not a success. Every PNG the run adds to, or changes in, the turn's proof folder
+  is recorded as `proof.added` (with `source: "verifier"`, the commit and tree it ran at) before `verifier.ended`;
+  other files are only listed in `files`. `review` prints a `Verifier` section beside the verify step's: advisory,
+  the turn, its cost and time, the screenshots, and what it said as a note (twelve lines at most, each cut), never
+  a pass; `review --json` has it as `verifier`. The judge and a review stage that reads `proof` are given every PNG of
+  the turn's proof (both sources, bounded as before: eight for the judge, twenty for a stage), each with its pixel
+  size, and `review_stage.started` names them in `proof`.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

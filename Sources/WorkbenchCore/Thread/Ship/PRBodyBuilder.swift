@@ -20,7 +20,7 @@ public enum PRBodyBuilder {
     ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
     public static func build(
         goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil, description: PRDescription? = nil,
-        verify: Review.Verify? = nil, changes: [FileChange] = [], judge: Review.Judge? = nil,
+        verify: Review.Verify? = nil, verifier: Review.Verifier? = nil, changes: [FileChange] = [], judge: Review.Judge? = nil,
         proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> PRBody {
         let request =
@@ -31,7 +31,7 @@ public enum PRBodyBuilder {
         if !goal.criteria.isEmpty {
             let statuses = CriteriaStatus.evaluate(
                 criteria: goal.criteria, check: check, lastTurn: lastTurn ?? check?.turn ?? 0, verify: verify,
-                proofAvailable: proofAvailable)
+                verifier: verifier, proofAvailable: proofAvailable)
             // The checklist stays as the reviewer's to tick; the table says who verifies each line.
             criteria += "\n\n" + CriteriaStatus.summary(statuses, check: check) + "\n\n"
                 + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }

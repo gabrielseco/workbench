@@ -5,9 +5,10 @@ import Foundation
 public struct CriterionStatus: Sendable, Equatable {
     public enum State: String, Sendable, Equatable {
         case passed, failed, manual
-        /// A screenshot proof whose file the latest verify step left: for a person to look at, not a pass.
+        /// A screenshot proof whose files the latest turn's verify step or verifier left: for a person to look at,
+        /// not a pass.
         case evidence
-        /// A screenshot proof with no such file. Never read as met.
+        /// A screenshot proof with a file missing. Never read as met.
         case missing
     }
 
@@ -19,8 +20,19 @@ public struct CriterionStatus: Sendable, Equatable {
     public var note: String?
     /// The proof as written, for a row that has no command to show.
     public var proof: String
-    /// The recorded file that backs an `evidence` row, relative to the thread directory.
-    public var file: String?
+    /// The recorded file that backs an `evidence` row, relative to the thread directory (the first, when several).
+    public var file: String? { files.first }
+    /// Every recorded file that backs an `evidence` row, in the order the proof names them.
+    public var files: [String] = []
+    /// For a screenshot proof: each name it asks for and whether the file is there, in order.
+    public var screenshots: [Screenshot] = []
+
+    public struct Screenshot: Sendable, Equatable {
+        public var name: String
+        /// Relative to the thread directory when present.
+        public var path: String?
+        public var present: Bool { path != nil }
+    }
 
     /// What a person sees in the first column.
     public var label: String {
@@ -41,12 +53,13 @@ public enum CriteriaStatus {
     ///   - lastTurn: the newest turn; a check from an earlier turn says nothing about the current work.
     public static func evaluate(
         criteria: [Criterion], check: Review.Check?, lastTurn: Int, verify: Review.Verify? = nil,
-        proofAvailable: (ProofFile) -> Bool = { _ in true }
+        verifier: Review.Verifier? = nil, proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> [CriterionStatus] {
-        criteria.map { criterion in
-            if let name = ScreenshotProof.name(in: criterion.proof) {
+        let proof = Review.ProofSet(verify: verify, verifier: verifier)
+        return criteria.map { criterion in
+            if let names = ScreenshotProof.names(in: criterion.proof) {
                 return screenshot(
-                    criterion, name: name, verify: verify, lastTurn: lastTurn, available: proofAvailable)
+                    criterion, names: names, proof: proof, lastTurn: lastTurn, available: proofAvailable)
             }
             if let names = TestProof.names(in: criterion.proof) {
                 return named(criterion, names: names, check: check, lastTurn: lastTurn)
@@ -109,32 +122,44 @@ public enum CriteriaStatus {
         return status
     }
 
-    /// A screenshot is shown when the latest verify step, run after the latest turn, left `<name>.png`.
+    /// Screenshots are shown when the latest turn's proof (the verify step, the verifier, or both) has `<name>.png` for
+    /// every name the criterion asks for.
     static func screenshot(
-        _ criterion: Criterion, name: String, verify: Review.Verify?, lastTurn: Int, available: (ProofFile) -> Bool
+        _ criterion: Criterion, names: [String], proof: Review.ProofSet?, lastTurn: Int, available: (ProofFile) -> Bool
     ) -> CriterionStatus {
         var status = CriterionStatus(
             id: criterion.id, state: .missing, commands: [], note: nil, proof: criterion.proof)
-        let wanted = ScreenshotProof.fileName(for: name)
-        guard let verify else {
-            status.note = "no verify step has run, so \(wanted) was not produced"
+        let wanted = names.map { ScreenshotProof.fileName(for: $0) }
+        let list = wanted.joined(separator: ", ")
+        guard let proof else {
+            status.note = "no verify step or verifier has run, so \(list) was not produced"
             return status
         }
-        guard verify.turn == lastTurn else {
-            status.note = "the verify step ran after turn \(verify.turn), not the latest turn \(lastTurn)"
+        guard proof.turn == lastTurn else {
+            status.note = "the proof is of turn \(proof.turn), not the latest turn \(lastTurn)"
             return status
         }
-        guard let file = verify.proof.first(where: { $0.name == wanted }) else {
-            status.note = "no \(wanted) in the verify step's proof (turn \(verify.turn))"
-            return status
+        var problems: [String] = []
+        for (name, fileName) in zip(names, wanted) {
+            guard let file = proof.files.first(where: { $0.name == fileName }) else {
+                status.screenshots.append(.init(name: name, path: nil))
+                problems.append("no \(fileName) in the proof (turn \(proof.turn))")
+                continue
+            }
+            guard available(file) else {
+                status.screenshots.append(.init(name: name, path: nil))
+                problems.append("\(fileName) was recorded in turn \(proof.turn), but the file is gone, unreadable or changed")
+                continue
+            }
+            status.screenshots.append(.init(name: name, path: file.path))
         }
-        guard available(file) else {
-            status.note = "\(wanted) was recorded in turn \(verify.turn), but the file is gone, unreadable or changed"
+        status.files = status.screenshots.compactMap(\.path)
+        guard problems.isEmpty else {
+            status.note = problems.joined(separator: "; ")
             return status
         }
         status.state = .evidence
-        status.file = file.path
-        status.note = "verify \(verify.result.replacingOccurrences(of: "_", with: " ")), turn \(verify.turn)"
+        status.note = "\(proof.source), turn \(proof.turn)"
         return status
     }
 
@@ -178,8 +203,11 @@ extension CriteriaStatus {
             var row = "  [\(status.id)] \(status.label)"
             if status.state != .manual, let note = status.note { row += "  (\(note))" }
             lines.append(row)
-            if status.state == .evidence, let file = status.file { lines.append("         \(file)") }
-            if status.state == .missing, let note = status.note { lines.append("         \(note)") }
+            if status.state == .evidence { for file in status.files { lines.append("         \(file)") } }
+            if status.state == .missing {
+                for shot in status.screenshots where shot.present { lines.append("         \(shot.path ?? "")") }
+                if let note = status.note { lines.append("         \(note)") }
+            }
             if status.state == .manual {
                 if let note = status.note { lines.append("         \(note)") }
                 if status.commands.isEmpty {

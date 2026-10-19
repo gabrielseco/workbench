@@ -12,7 +12,9 @@ struct VerifierFixture {
     let id: String
     let config: Config
 
-    init(verifier: String = "", skill: String? = skillText, check: String? = nil, runTurn: Bool = true) async throws {
+    init(
+        verifier: String = "", skill: String? = skillText, check: String? = nil, runTurn: Bool = true, root: String = ""
+    ) async throws {
         let table = """
             [verifier]
             skill = "\(skillPath)"
@@ -22,7 +24,7 @@ struct VerifierFixture {
             """
         // The root keys of the fixture come first, so the verifier table goes last: the fixture appends `[tools]`
         // after `extraConfig`, which would end it, so it is written again after.
-        fx = try await RunnerFixture(extraConfig: check.map { "check_command = \"\($0)\"" } ?? "")
+        fx = try await RunnerFixture(extraConfig: (check.map { "check_command = \"\($0)\"\n" } ?? "") + root)
         var text = try String(contentsOf: fx.project.configURL, encoding: .utf8)
         text += "\n" + table + "\n"
         try text.write(to: fx.project.configURL, atomically: true, encoding: .utf8)

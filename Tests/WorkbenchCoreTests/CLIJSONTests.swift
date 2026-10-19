@@ -97,7 +97,7 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         let criteria = try #require(r["criteria"] as? [[String: Any]])
         #expect(criteria.count == 1)
         // Documented in docs/spec/cli-json.md: a proof that is not the recorded check is left to a person.
-        #expect(Set(criteria[0].keys) == ["id", "text", "proof", "status", "commands", "note", "file"])
+        #expect(Set(criteria[0].keys) == ["id", "text", "proof", "status", "commands", "note", "file", "files"])
         #expect(criteria[0]["status"] as? String == "manual" && criteria[0]["commands"] is [Any])
         #expect((r["next"] as? String)?.contains("accept") == true)
     }
