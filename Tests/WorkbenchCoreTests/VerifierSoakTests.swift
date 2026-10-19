@@ -3,14 +3,14 @@ import Testing
 
 @testable import WorkbenchCore
 
-private let soakEnabled = ProcessInfo.processInfo.environment["WORKBENCH_SOAK"] == "1"
-private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_RUNS"] ?? "") ?? 100
+private let verifierSoakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_RUNS"] ?? "") ?? 100
 
 /// The verifier under repetition: every ending, many times, on one thread. Every `verifier.started` has exactly one
 /// `verifier.ended`, nothing it started outlives it, and nothing accumulates. Run by CI with the rest of the soak:
-/// `WORKBENCH_SOAK=1 swift test --filter SoakTests`.
-@Suite(.serialized, .enabled(if: soakEnabled)) struct VerifierSoakTests {
-    private struct Scenario {
+/// `WORKBENCH_SOAK=1 swift test --filter SoakTests`. It is part of `SoakTests`, which is serialized and enabled by
+/// that variable: the fake claudes of two soak tests running at once would be each other's strays.
+extension SoakTests {
+    private struct VerifierScenario {
         var name: String
         var directives: [String]
         var ok: Bool
@@ -20,18 +20,18 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
         var leavesChild = false
     }
 
-    private static let scenarios: [Scenario] = [
-        Scenario(name: "ok", directives: ["proof=shot.png"], ok: true),
-        Scenario(name: "ok-slow", directives: ["delay-ms=50"], ok: true),
-        Scenario(name: "crash", directives: ["crash-after=1"], ok: false),
-        Scenario(name: "killed", directives: ["die-after=1"], ok: false),
-        Scenario(name: "error", directives: ["error-result"], ok: false),
-        Scenario(name: "budget", directives: ["budget-stop"], ok: false),
-        Scenario(name: "hang", directives: ["hang-after=1"], ok: false, timeout: 0.7),
-        Scenario(name: "ignores-term", directives: ["hang-after=1", "ignore-term"], ok: false, timeout: 0.7, grace: 0.3),
-        Scenario(name: "stop", directives: ["hang-after=1"], ok: false, stopAfterAttach: true),
-        Scenario(name: "grandchild", directives: ["grandchild=%PID%"], ok: true, leavesChild: true),
-        Scenario(name: "detached", directives: ["detached=%PID%"], ok: true, leavesChild: true),
+    private static let verifierScenarios: [VerifierScenario] = [
+        VerifierScenario(name: "ok", directives: ["proof=shot.png"], ok: true),
+        VerifierScenario(name: "ok-slow", directives: ["delay-ms=50"], ok: true),
+        VerifierScenario(name: "crash", directives: ["crash-after=1"], ok: false),
+        VerifierScenario(name: "killed", directives: ["die-after=1"], ok: false),
+        VerifierScenario(name: "error", directives: ["error-result"], ok: false),
+        VerifierScenario(name: "budget", directives: ["budget-stop"], ok: false),
+        VerifierScenario(name: "hang", directives: ["hang-after=1"], ok: false, timeout: 0.7),
+        VerifierScenario(name: "ignores-term", directives: ["hang-after=1", "ignore-term"], ok: false, timeout: 0.7, grace: 0.3),
+        VerifierScenario(name: "stop", directives: ["hang-after=1"], ok: false, stopAfterAttach: true),
+        VerifierScenario(name: "grandchild", directives: ["grandchild=%PID%"], ok: true, leavesChild: true),
+        VerifierScenario(name: "detached", directives: ["detached=%PID%"], ok: true, leavesChild: true),
     ]
 
     @Test func manyVerifierRunsEachEndOnce() async throws {
@@ -40,8 +40,8 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
         var spawned: [pid_t] = []
         var results: [String: Int] = [:]
 
-        for i in 0..<soakRuns {
-            let scenario = Self.scenarios[i % Self.scenarios.count]
+        for i in 0..<verifierSoakRuns {
+            let scenario = Self.verifierScenarios[i % Self.verifierScenarios.count]
             var directives = scenario.directives
             var pidFile: String?
             if scenario.leavesChild {
@@ -78,17 +78,20 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
         let contents = try v.fx.contents(v.id)
         #expect(contents.isHealthy, "log not healthy: \(contents.problems)")
         let marks = try v.verifierEvents().map(\.kind.rawValue)
-        #expect(marks == Array(repeating: ["verifier.started", "verifier.ended"], count: soakRuns).flatMap { $0 })
+        #expect(marks == Array(repeating: ["verifier.started", "verifier.ended"], count: verifierSoakRuns).flatMap { $0 })
 
         for pid in spawned { #expect(await FakeClaude.waitUntilGone(pid), "a child \(pid) outlived its verifier") }
-        #expect(!(await processExists(commandLine: "sleep 300")), "a tool child is still running")
+        // Other soak suites run beside this one and start fake claudes and sleeps of their own, so only what carries
+        // this suite's mark counts: the verifier's tool list, and the pids recorded above.
         let listing = GitRunner(executable: URL(fileURLWithPath: "/bin/ps"), environment: [:], timeout: 10)
         let ps = try await listing.run(["-axo", "command="], in: URL(fileURLWithPath: "/tmp"))
-        let strays = ps.stdout.split(separator: "\n").filter { $0.hasPrefix(FakeClaude.executable.path) }
-        #expect(strays.isEmpty, "a fake claude is still running: \(strays)")
+        let strays = ps.stdout.split(separator: "\n").filter {
+            $0.hasPrefix(FakeClaude.executable.path) && $0.contains("--allowedTools Read Bash(scripts/snap.sh:*)")
+        }
+        #expect(strays.isEmpty, "a fake verifier is still running: \(strays)")
         let after = openDescriptorCount()
-        #expect(after - before <= 4, "descriptors grew from \(before) to \(after) over \(soakRuns) runs")
-        print("SOAK verifier runs=\(soakRuns) \(results.sorted { $0.key < $1.key }) fds \(before)->\(after)")
+        #expect(after - before <= 4, "descriptors grew from \(before) to \(after) over \(verifierSoakRuns) runs")
+        print("SOAK verifier runs=\(verifierSoakRuns) \(results.sorted { $0.key < $1.key }) fds \(before)->\(after)")
     }
 }
 

@@ -19,6 +19,8 @@ struct VerifierRun {
     var environment: [String: String]
     var timeout: TimeInterval
     var killGrace: TimeInterval = 5
+    /// What the worktree held as the run started, recorded on every `proof.added` it writes (as the verify step does).
+    var identity: ProofIdentity?
 
     /// Appends `verifier.started`, runs, sweeps and appends `verifier.ended`. Only a failure to write the log throws.
     func run(turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void) async throws -> VerifierReport {
@@ -74,12 +76,24 @@ struct VerifierRun {
             answer = Self.answer(lines: lines, oversized: oversized, exit: exit, timeout: timeout, budget: verifier.budgetUSD)
         }
         let after = Self.snapshot(proofDirectory, threadDirectory)
-        let files = after.filter { before[$0.name]?.sha256 != $0.sha256 }.prefix(Verifier.maxFiles)
+        let changed = after.filter { file in before.first { $0.name == file.name }?.sha256 != file.sha256 }
+            .prefix(Verifier.maxFiles)
+        let files = changed.map { VerifierFile(name: $0.name, bytes: $0.bytes, sha256: $0.sha256) }
+        // Every PNG it left is proof, recorded before the end so `review` and the criteria find it.
+        for file in changed where file.name.lowercased().hasSuffix(".png") && !file.name.contains("/") {
+            try await log.append(
+                .proofAdded, turn: turn,
+                data: [
+                    "name": .string(file.name), "path": .string(file.path), "sha256": .string(file.sha256),
+                    "bytes": .int(file.bytes), "commit": identity.map { .string($0.commit) } ?? .null,
+                    "tree": identity.map { .string($0.tree) } ?? .null, "source": "verifier",
+                ])
+        }
         let elapsed = Int(Date().timeIntervalSince(began) * 1000)
         let report = VerifierReport(
             turn: turn, ok: answer.failure == nil && answer.text != nil,
             reason: answer.failure.map { Self.clean($0) }, costUSD: answer.costUSD, durationMs: elapsed,
-            files: Array(files), report: Self.clean(Verifier.bounded(answer.text ?? "")))
+            files: files, report: Self.clean(Verifier.bounded(answer.text ?? "")))
 
         var data: [String: JSONValue] = [
             "ok": .bool(report.ok), "duration_ms": .int(elapsed),
@@ -126,12 +140,7 @@ struct VerifierRun {
     }
 
     /// The regular files under the proof directory by name, with their hashes; bounded as the verify step's is.
-    static func snapshot(_ proofDirectory: URL, _ threadDirectory: URL) -> [VerifierFile] {
+    static func snapshot(_ proofDirectory: URL, _ threadDirectory: URL) -> [ProofFile] {
         VerifyRunner.collect(proofDirectory: proofDirectory, threadDirectory: threadDirectory).files
-            .map { VerifierFile(name: $0.name, bytes: $0.bytes, sha256: $0.sha256) }
     }
-}
-
-private extension Array where Element == VerifierFile {
-    subscript(name: String) -> VerifierFile? { first { $0.name == name } }
 }

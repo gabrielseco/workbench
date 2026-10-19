@@ -92,7 +92,8 @@ extension ThreadService {
                 exitCode: check.exitCode)?.text
         }
         let verify = state.review.verify
-        let (screenshots, folder) = judgeScreenshots(id: id, verify: verify, lastTurn: turn)
+        let (screenshots, folder) = judgeScreenshots(
+            id: id, set: Review.ProofSet(verify: verify, verifier: state.review.verifier), lastTurn: turn)
         let input = JudgeInput(
             goal: goal, diff: diffText, diffTruncated: cut, check: check, checkOutput: checkOutput, verify: verify,
             screenshots: screenshots,
@@ -200,17 +201,18 @@ extension ThreadService {
         return (diff.stdout, Array(names))
     }
 
-    /// The screenshots of the verify step of the latest turn that are still there as recorded, as names relative
-    /// to the folder the judge runs in, and that folder. With none, the judge runs in the thread directory and
-    /// has no tools.
-    private func judgeScreenshots(id: String, verify: Review.Verify?, lastTurn: Int) -> (names: [String], folder: URL) {
+    /// The screenshots of the latest turn's proof (the verify step's and the verifier's, the verifier's winning a
+    /// name both left) that are still there as recorded, as names relative to the folder the judge runs in, and
+    /// that folder. With none, the judge runs in the thread directory and has no tools.
+    private func judgeScreenshots(id: String, set: Review.ProofSet?, lastTurn: Int) -> (names: [String], folder: URL) {
         let thread = project.threadDirectory(id)
-        guard let verify, verify.turn == lastTurn else { return ([], thread) }
-        let files = verify.proof.filter {
-            $0.name.lowercased().hasSuffix(".png") && $0.bytes <= Self.judgeScreenshotBytes && $0.isAvailable(in: thread)
+        guard let set, set.turn == lastTurn else { return ([], thread) }
+        let files = set.files.filter {
+            !$0.name.contains("/") && $0.name.lowercased().hasSuffix(".png") && $0.bytes <= Self.judgeScreenshotBytes
+                && $0.isAvailable(in: thread)
         }
         guard !files.isEmpty else { return ([], thread) }
-        return (files.prefix(Self.judgeScreenshotLimit).map(\.name), project.proofDirectory(id, turn: verify.turn))
+        return (files.prefix(Self.judgeScreenshotLimit).map(\.name), project.proofDirectory(id, turn: set.turn))
     }
 
     private func recordJudge(

@@ -27,6 +27,7 @@ public struct ReviewReport: Sendable, Equatable {
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
             criteria: criteria, check: state.review.check, lastTurn: state.lastTurn, verify: state.review.verify,
+            verifier: state.review.verifier,
             proofAvailable: { [threadDirectory] file in threadDirectory.map(file.isAvailable(in:)) ?? true })
     }
 
@@ -71,6 +72,41 @@ public struct ReviewReport: Sendable, Equatable {
             lines = ["PR review  round \(round.round) · no verdict\(sha)\(stale): \(round.failure ?? "unknown")"]
         }
         if let path = round.findingsPath { lines.append("  findings: \(path)") }
+        return lines
+    }
+
+    /// Most lines of the verifier's report `review` prints, each cut; the whole (bounded) text is in the log.
+    static let verifierNoteLines = 12
+    static let verifierNoteWidth = 200
+
+    /// The verifier's part of the report: nothing when it has not run. What it said is a note for a person; the
+    /// criteria above are not changed by it, and a claim of success there leaves a criterion "you check".
+    public func verifierLines() -> [String] {
+        guard let verifier = state.review.verifier else { return [] }
+        let stale = verifier.turn == state.lastTurn ? "" : " (turn \(verifier.turn); the latest turn is \(state.lastTurn))"
+        if verifier.skipped {
+            return ["Verifier   skipped\(stale): \(verifier.reason ?? "unknown")"]
+        }
+        let cost = verifier.costUSD.map { String(format: " · $%.4f", $0) } ?? ""
+        let seconds = verifier.durationMs.map { " · \($0 / 1000)s" } ?? ""
+        var lines: [String]
+        if verifier.ok {
+            lines = ["Verifier   advisory · finished · turn \(verifier.turn)\(cost)\(seconds)\(stale)"]
+        } else {
+            let why = verifier.reason ?? "unknown"
+            lines = ["Verifier   did not finish · turn \(verifier.turn)\(cost)\(seconds)\(stale): \(why)"]
+        }
+        for file in verifier.proof { lines.append("  \(file.path)  \(file.bytes) bytes") }
+        let note = verifier.report.split(separator: "\n", omittingEmptySubsequences: true)
+        for line in note.prefix(Self.verifierNoteLines) {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            let shown = text.count > Self.verifierNoteWidth ? String(text.prefix(Self.verifierNoteWidth)) + "…" : text
+            lines.append("  note: " + shown)
+        }
+        if note.count > Self.verifierNoteLines {
+            lines.append("  note: … \(note.count - Self.verifierNoteLines) more line(s) in `workbench log`")
+        }
+        if !note.isEmpty { lines.append("  (its words are a note, not a pass: look at the screenshots yourself)") }
         return lines
     }
 
@@ -189,6 +225,7 @@ public struct ReviewReport: Sendable, Equatable {
             }
         }
 
+        lines.append(contentsOf: verifierLines())
         lines.append(contentsOf: judgeLines())
         lines.append(contentsOf: prReviewLines())
 

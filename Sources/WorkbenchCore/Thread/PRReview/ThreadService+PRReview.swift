@@ -140,6 +140,10 @@ extension ThreadService {
             "argv": .array(PRDescriber.displayArguments(argv).map { .string($0) }),
         ]
         if let name = stage.events.stage { started["stage"] = .string(name) }
+        // The screenshots this round is given, by name, so the log says what a verdict was based on.
+        if case .success(let files)? = context.proof {
+            started["proof"] = .array(files.map { .string(URL(fileURLWithPath: $0).lastPathComponent) })
+        }
         try await log.append(stage.events.started, turn: state.lastTurn, data: .object(started))
         try? writeHolderMarker(id)
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
@@ -408,28 +412,28 @@ extension ThreadService {
     /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify
     /// step of the latest turn counts, as an older one shows code the pull request may no longer have.
     func stageProof(_ stage: ReviewStage, state: ThreadState, id: String) -> Result<[String], PRReviewFailure> {
-        guard let verify = state.review.verify else {
+        guard let set = Review.ProofSet(verify: state.review.verify, verifier: state.review.verifier) else {
             return .failure(
                 PRReviewFailure(
-                    "the \(stage.name) stage reads proof, and this thread has no verify step on record "
-                        + "(set verify_command and run a turn)"))
+                    "the \(stage.name) stage reads proof, and this thread has no verify step or verifier run on record "
+                        + "(set [verifier] or verify_command and run a turn)"))
         }
-        guard verify.turn == state.lastTurn else {
+        guard set.turn == state.lastTurn else {
             return .failure(
                 PRReviewFailure(
-                    "the \(stage.name) stage reads proof, and the latest verify step is of turn \(verify.turn), before "
+                    "the \(stage.name) stage reads proof, and the latest proof is of turn \(set.turn), before "
                         + "the latest turn \(state.lastTurn): its screenshots may not show this change"))
         }
         let folder = project.threadDirectory(id)
-        let files = verify.proof
+        let files = set.files
             .filter { !$0.name.contains("/") && $0.name.lowercased().hasSuffix(".png") && $0.isAvailable(in: folder) }
             .prefix(PRReview.proofLimit)
             .map { folder.appendingPathComponent($0.path).path }
         guard !files.isEmpty else {
             return .failure(
                 PRReviewFailure(
-                    "the \(stage.name) stage reads proof, and the verify step of turn \(verify.turn) left no PNG in "
-                        + "\(Project.proofRef(turn: verify.turn))/"))
+                    "the \(stage.name) stage reads proof, and turn \(set.turn) left no PNG in "
+                        + "\(Project.proofRef(turn: set.turn))/"))
         }
         return .success(Array(files))
     }

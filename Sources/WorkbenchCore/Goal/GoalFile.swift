@@ -274,8 +274,9 @@ public struct GoalFile: Sendable, Equatable {
                 if ScreenshotProof.isMalformed(proof) {
                     add(
                         .malformedScreenshotProof, p.line,
-                        "criterion [\(p.id)]: a screenshot proof is 'screenshot: <name>' with a name of letters, "
-                            + "digits, '.', '_' or '-' (the file is <name>.png)")
+                        "criterion [\(p.id)]: a screenshot proof is 'screenshot: <name>' (or several, separated by commas, "
+                            + "at most \(ScreenshotProof.maxNames)) with names of letters, digits, '.', '_' or '-' "
+                            + "(the file is <name>.png)")
                 }
                 done.append(Criterion(id: p.id, text: p.text, proof: proof))
             } else {

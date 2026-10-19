@@ -103,7 +103,8 @@ extension ThreadService {
             config: config, verifier: verifier, skill: skill, goal: goal, threadID: id,
             goalPath: project.goalURL(id).path, worktree: manager.path(for: id),
             proofDirectory: project.proofDirectory(id, turn: turn), threadDirectory: project.threadDirectory(id),
-            claude: claude, environment: environment, timeout: timeout, killGrace: killGrace)
+            claude: claude, environment: environment, timeout: timeout, killGrace: killGrace,
+            identity: await ProofIdentity.of(worktree: manager.path(for: id), git: git, attributesFrom: base))
         return try await run.run(turn: turn, log: log, attach: attach)
     }
 }
@@ -144,7 +145,8 @@ extension ThreadRunner {
             goalPath: project.goalURL(threadID).path, worktree: worktree,
             proofDirectory: project.proofDirectory(threadID, turn: turn), threadDirectory: project.threadDirectory(threadID),
             claude: claude, environment: options.parentEnvironment,
-            timeout: options.verifierTimeoutOverride ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: options.killGrace)
+            timeout: options.verifierTimeoutOverride ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: options.killGrace,
+            identity: await ProofIdentity.of(worktree: worktree, git: git, attributesFrom: base))
         notify(.verifierStarted(turn: turn, skill: skill.path))
         defer { currentRun = nil }
         let ran = try await run.run(turn: turn, log: log) { [self] process in
