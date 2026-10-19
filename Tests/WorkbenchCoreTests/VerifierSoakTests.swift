@@ -3,7 +3,9 @@ import Testing
 
 @testable import WorkbenchCore
 
-private let verifierSoakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_RUNS"] ?? "") ?? 100
+/// Four turns of the eleven endings below; each ending is exercised often enough to show a leak. The fake-run soak
+/// next to it keeps its 100 runs. `WORKBENCH_SOAK_RUNS` sets both.
+private let verifierSoakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_RUNS"] ?? "") ?? 44
 
 /// The verifier under repetition: every ending, many times, on one thread. Every `verifier.started` has exactly one
 /// `verifier.ended`, nothing it started outlives it, and nothing accumulates. Run by CI with the rest of the soak:
