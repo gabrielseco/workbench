@@ -211,6 +211,28 @@ private func evaluate(
         #expect(set?.files.map(\.name) == ["seen.png", "step.png"])
     }
 
+    @Test func aRunAgainKeepsTheEarlierRunsFilesAndANewerFileOfTheSameNameReplacesIt() {
+        let base = [event(1, .turnStarted, ["resume": false]), event(2, .turnEnded, ["result": "succeeded"])]
+        let first = base + [
+            event(3, .verifierStarted, [:]), proofAdded(4, "home.png", source: "verifier"),
+            proofAdded(5, "dark.png", source: "verifier"), event(6, .verifierEnded, ["ok": true]),
+        ]
+        // The second run left home.png as it was (not recorded again) and changed dark.png.
+        let second = first + [
+            event(7, .verifierStarted, [:]), proofAdded(8, "dark.png", source: "verifier"),
+            event(9, .verifierEnded, ["ok": true]),
+        ]
+        var verifier = ThreadState.derive(from: second, id: "t").review.verifier
+        #expect(verifier?.proof.map(\.name) == ["home.png", "dark.png"])
+        // A run for a later turn starts over.
+        let later = second + [
+            event(10, .turnStarted, turn: 2, ["resume": true]), event(11, .turnEnded, turn: 2, ["result": "succeeded"]),
+            event(12, .verifierStarted, turn: 2, [:]), event(13, .verifierEnded, turn: 2, ["ok": true]),
+        ]
+        verifier = ThreadState.derive(from: later, id: "t").review.verifier
+        #expect(verifier?.turn == 2 && verifier?.proof.isEmpty == true)
+    }
+
     @Test func aVerifierThatStartedAndNeverEndedShowsAsOpenAndNotOk() {
         let events = [event(1, .turnStarted, ["resume": false]), event(2, .turnEnded, ["result": "succeeded"]),
             event(3, .verifierStarted, ["argv": ["claude"]]), proofAdded(4, "seen.png", source: "verifier")]

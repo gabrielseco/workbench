@@ -5,12 +5,26 @@ import Testing
 
 /// Writes `files` into the turn's proof folder and records them as the verifier's: `proof.added` for each PNG, between
 /// `verifier.started` and `verifier.ended`, exactly as `VerifierRun` does.
+/// The head of a PNG, enough for its size to be read: signature, then an IHDR of `width` x `height`.
+private func png(_ width: Int, _ height: Int, tag: String = "") -> Data {
+    func big(_ n: Int) -> [UInt8] { [UInt8(n >> 24 & 255), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] }
+    var bytes: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] + big(13) + Array("IHDR".utf8)
+    bytes += big(width) + big(height) + [8, 6, 0, 0, 0]
+    return Data(bytes) + Data(tag.utf8)
+}
+
 private func recordVerifierProof(
     _ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1
 ) async throws {
+    try await recordVerifierProof(fx, id, files.mapValues { Data($0.utf8) }, turn: turn)
+}
+
+private func recordVerifierProof(
+    _ fx: RunnerFixture, _ id: String, _ files: [String: Data], turn: Int = 1
+) async throws {
     let proof = fx.project.proofDirectory(id, turn: turn)
     try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
-    for (name, text) in files { try text.write(to: proof.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    for (name, data) in files { try data.write(to: proof.appendingPathComponent(name)) }
     let recorded = VerifyRunner.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
@@ -139,6 +153,72 @@ private let designStage = """
             return
         }
         #expect(Set(given.compactMap(\.stringValue)) == ["home.png", "dark.png", "min.png"])
+    }
+
+    @Test func theStageBriefGivesEachImagesPixelSize() async throws {
+        let r = try await reviewedPR(extraConfig: designStage)
+        let files: [String: Data] = ["wide.png": png(2000, 1304), "min.png": png(1000, 600), "bad.png": Data("x".utf8)]
+        try await recordVerifierProof(r.fx, r.id, files)
+        _ = try await stage(r)
+        let brief = try #require(r.codex.read("brief_1"))
+        #expect(brief.contains("wide.png (2000 × 1304 px)") && brief.contains("min.png (1000 × 600 px)"), "\(brief)")
+        #expect(brief.contains("bad.png\n"), "a size that cannot be read is left out, the image is still given")
+    }
+
+    @Test func aStageIsGivenNoMoreImagesThanItsLimit() async throws {
+        let r = try await reviewedPR(extraConfig: designStage)
+        var files: [String: Data] = [:]
+        for i in 0..<(PRReview.proofLimit + 5) { files[String(format: "shot-%02d.png", i)] = png(10 + i, 20, tag: "\(i)") }
+        try await recordVerifierProof(r.fx, r.id, files)
+        _ = try await stage(r)
+        let call = try #require(r.codex.calls.first)
+        #expect(call.components(separatedBy: " -i ").count - 1 == PRReview.proofLimit, "\(call)")
+        let started = try #require(try r.fx.events(r.id).first { $0.kind == .reviewStageStarted && $0.data["stage"] != nil })
+        guard case .array(let given)? = started.data["proof"] else {
+            Issue.record("proof missing")
+            return
+        }
+        #expect(given.count == PRReview.proofLimit)
+    }
+
+    @Test func theJudgeIsToldEachImagesSizeAndGivenNoMoreThanItsLimit() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await acceptedThread(fx)
+        var files: [String: Data] = [:]
+        let count = ThreadService.judgeScreenshotLimit + 3
+        for i in 0..<count { files[String(format: "s-%02d.png", i)] = png(300 + i, 200, tag: "\(i)") }
+        try await recordVerifierProof(fx, id, files)
+        let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("judge-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let answer = dir.appendingPathComponent("a.json")
+        try #"{"criteria": [{"id": "c1", "met": true, "evidence": ["x"]}], "concerns": []}"#
+            .write(to: answer, atomically: true, encoding: .utf8)
+        let dump = dir.appendingPathComponent("dump.json").path
+        _ = try await fx.service.judge(
+            id: id, config: try Config.load(from: fx.project.configURL),
+            environment: ["PATH": "/usr/bin:/bin", "FAKE_CLAUDE": "answer=\(answer.path),dump=\(dump)"])
+        let text = try String(contentsOfFile: dump, encoding: .utf8)
+        let listed = text.components(separatedBy: " px)").count - 1
+        #expect(listed == ThreadService.judgeScreenshotLimit, "\(listed) images listed")
+        #expect(text.contains("s-00.png (300 × 200 px)"))
+    }
+
+    @Test func aSecondRunThatFailsKeepsTheTurnsProof() async throws {
+        let v = try await VerifierFixture()
+        _ = try await v.verify("proof=shot.png")
+        let first = try #require(ThreadState.derive(from: try v.fx.events(v.id), id: v.id).review.verifier)
+        #expect(first.proof.map(\.name) == ["shot.png"])
+
+        // A run again that dies before it writes anything: the earlier file is still on disk and still the proof.
+        let failed = try await v.verify("crash-after=1", again: true)
+        #expect(!failed.ok && failed.files.isEmpty)
+        let after = try #require(ThreadState.derive(from: try v.fx.events(v.id), id: v.id).review.verifier)
+        #expect(!after.ok && after.proof == first.proof)
+        let thread = v.fx.project.threadDirectory(v.id)
+        let status = CriteriaStatus.evaluate(
+            criteria: [Criterion(id: "c1", text: "t", proof: "screenshot: shot")], check: nil, lastTurn: 1, verify: nil,
+            verifier: after, proofAvailable: { $0.isAvailable(in: thread) })
+        #expect(status[0].state == .evidence)
     }
 
     @Test func theStageIsGivenBothSourcesAtOnce() async throws {

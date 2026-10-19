@@ -59,11 +59,24 @@ extension ThreadState {
             commit: event.data["commit"]?.stringValue, tree: event.data["tree"]?.stringValue)
     }
 
+    /// Each name once, the last recorded winning, in the order the names first appeared.
+    static func latestByName(_ files: [ProofFile]) -> [ProofFile] {
+        var order: [String] = []
+        var latest: [String: ProofFile] = [:]
+        for file in files {
+            if latest[file.name] == nil { order.append(file.name) }
+            latest[file.name] = file
+        }
+        return order.compactMap { latest[$0] }
+    }
+
     /// The verifier's events: its `proof.added` lines gather until `verifier.ended` closes the run.
     static func applyVerifier(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
         switch event.kind {
         case .verifierStarted:
-            pending = []
+            // A run again for the same turn keeps what an earlier run left: a file it did not change is not
+            // recorded again, and it is still the turn's proof (the files are checked against the disk when read).
+            pending = state.review.verifier.flatMap { $0.turn == event.turn ? $0.proof : nil } ?? []
             state.review.verifier = Review.Verifier(
                 turn: event.turn, ok: false, reason: "started and never recorded an end (still running, or it was interrupted)",
                 skipped: false, costUSD: nil, durationMs: nil, report: "", proof: [], open: true)
@@ -76,7 +89,7 @@ extension ThreadState {
                 turn: event.turn, ok: event.data["ok"] == true, reason: event.data["reason"]?.stringValue, skipped: false,
                 costUSD: { if case .double(let d)? = event.data["cost_usd"] { d } else { nil } }(),
                 durationMs: event.data["duration_ms"]?.intValue, report: event.data["report"]?.stringValue ?? "",
-                proof: pending, open: false)
+                proof: Self.latestByName(pending), open: false)
             pending = []
         }
     }
