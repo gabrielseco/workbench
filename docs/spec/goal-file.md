@@ -241,6 +241,13 @@ default_budget_usd = 5.00               # used when drafting a goal
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
+# [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
+# skill = ".claude/skills/verify/SKILL.md"  # required; an explicit repo path, read from the base commit
+# tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
+# model = "sonnet"                      # --model for the verifier; unset = model
+# auto = false                          # true: run after each turn whose check passed
+# budget_usd = 1.00                     # default 1.00
+# timeout_min = 10                      # default 10 (1 to 240)
 
 [tools]
 available = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
@@ -291,6 +298,16 @@ Notes:
   the worktree with no live parent (a server a tool detached) is killed, as the next run does for a dead
   runner's. When the project has a `verify_command` and a goal has a `screenshot:` proof, the first prompt
   says the verify step captures those, so Claude does not report them as unverified.
+- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md); the turn that uses it
+  is not built yet). `skill` is required and is an explicit repository path (`.claude/skills/…` and
+  `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
+  Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
+  `model` is a model name, `auto` a boolean, `budget_usd` a positive number, `timeout_min` 1 to 240; any other key
+  (there is no `provider`) is refused with its name. The skill is read from the thread's base commit, never the
+  worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points
+  into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over
+  32 KiB is cut with a marker. `doctor` reads it at its `--base` and prints the path, size, sha256, model, tools and
+  `auto`, and a skill that cannot be used is a warning, not a failure.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

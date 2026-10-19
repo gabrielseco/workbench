@@ -62,6 +62,16 @@ public struct DoctorStep: Sendable, Equatable {
     public var hint: String
 }
 
+/// `[verifier]` as doctor found it: the config, and the skill as it is at the base commit.
+public struct DoctorVerifier: Sendable, Equatable {
+    public var config: VerifierConfig
+    /// `--model` the verifier gets: its own, else the coding model, else nil for the CLI's default.
+    public var model: String?
+    public var skill: VerifierSkill?
+    /// Why the skill cannot be used, when it cannot. A warning: doctor still runs the declared steps.
+    public var problem: String?
+}
+
 public struct DoctorReport: Sendable, Equatable {
     public var base: String
     /// Where `claude_path` resolved, or nil.
@@ -83,6 +93,8 @@ public struct DoctorReport: Sendable, Equatable {
     /// Something worth knowing about a verify that passed (it wrote no files).
     public var verifyWarning: String?
     public var appType: AppType = .web
+    /// Nil when the config has no `[verifier]`.
+    public var verifier: DoctorVerifier?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
@@ -189,6 +201,9 @@ public final class Doctor: @unchecked Sendable {
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""),
             verify: DoctorStep(command: config.verifyCommand, outcome: .notDeclared, tail: "", hint: ""),
             appType: config.appType)
+        if let verifier = config.verifier {
+            report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
+        }
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil)
         guard config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil else {
@@ -234,6 +249,16 @@ public final class Doctor: @unchecked Sendable {
         report = try result.get()
         report.cleanupProblem = cleanupProblem
         return report
+    }
+
+    /// The skill at the base commit, never the working tree, which a run may have edited.
+    private func readVerifier(_ verifier: VerifierConfig, model: String?, base: String) async -> DoctorVerifier {
+        var found = DoctorVerifier(config: verifier, model: model)
+        switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
+        case .success(let skill): found.skill = skill
+        case .failure(let problem): found.problem = problem.description
+        }
+        return found
     }
 
     /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a stage

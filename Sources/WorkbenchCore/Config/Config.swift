@@ -89,6 +89,11 @@ public struct Config: Sendable, Equatable {
     public var describeModel: String?
     /// `--model` for the plan turn, which only reads; unset falls back to `model`. A `--model` on the command wins.
     public var planModel: String?
+    /// `[verifier]`, or nil when the project declares none.
+    public var verifier: VerifierConfig?
+
+    /// `--model` for the verifier: its own, else the coding `model`.
+    public var verifierModel: String? { verifier?.model ?? model }
 
     /// The `pr-review` stage's checklist and round cap, from `[review.stage.pr-review]` or the older `[pr_review]`.
     public var prReview: PRReviewConfig {
@@ -134,8 +139,9 @@ public struct Config: Sendable, Equatable {
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
-        // The review tables check their own keys (ReviewConfig.parse).
-        for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !ReviewConfig.owns(table: name) {
+        // The review and verifier tables check their own keys (ReviewConfig.parse, VerifierConfig.parse).
+        let leftToTheirOwn = { (name: String) in ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) }
+        for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !leftToTheirOwn(name) {
             if name != "" && name != "tools" {
                 fail(.unknownTable, table.line, "unknown table [\(name)]")
                 continue
@@ -257,6 +263,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let review = ReviewConfig.parse(document, fail: fail)
+        let verifier = VerifierConfig.parse(document, fail: fail)
 
         var envPass: [String] = []
         if let (values, line) = strings("", "env_pass") {
@@ -303,7 +310,7 @@ public struct Config: Sendable, Equatable {
             defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, judgeModel: judgeModel, describeModel: describeModel,
-            planModel: planModel)
+            planModel: planModel, verifier: verifier)
     }
 
     private static func verifyMinutes(_ value: TOMLValue) -> Int? {

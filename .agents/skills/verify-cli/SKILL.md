@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) and `verifier-config` (P10 PR 1).
 
 ## When to use it
 
@@ -29,6 +29,7 @@ bash scripts/verify-cli/plan.sh                    # one plan turn and one codin
 bash scripts/verify-cli/help.sh                    # no turn, costs nothing
 bash scripts/verify-cli/criteria-tests.sh          # a test: proof backed by the check (one tiny turn, then the suite runs)
 bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
+bash scripts/verify-cli/verifier-config.sh         # [verifier] and doctor on a clone, no turn, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
