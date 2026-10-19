@@ -22,8 +22,6 @@ public struct TurnReport: Sendable, Equatable {
     public var summary: String?
     /// The project's check as Workbench ran it after this turn, nil when none ran.
     public var check: CheckReport?
-    /// The project's verify step as Workbench ran it after this turn's check, nil when none ran.
-    public var verify: VerifyReport?
     /// The verifier turn Workbench ran after the check (`[verifier] auto`), nil when none ran.
     public var verifier: VerifierReport?
 }
@@ -37,8 +35,6 @@ public enum RunNotice: Sendable {
     case turnEnded(TurnReport)
     case checkStarted(turn: Int, command: String)
     case checkRan(CheckReport)
-    case verifyStarted(turn: Int, command: String)
-    case verifyEnded(VerifyReport)
     case verifierStarted(turn: Int, skill: String)
     case verifierEnded(VerifierReport)
     case setupStarted(command: String)
@@ -56,8 +52,6 @@ public struct RunOptions: Sendable {
     public var checkTimeoutOverride: TimeInterval?
     /// Replaces the setup command's timeout (`SetupRunner.defaultTimeout`). For tests.
     public var setupTimeoutOverride: TimeInterval?
-    /// Replaces the verify step's timeout (`verify_timeout_min`). For tests.
-    public var verifyTimeoutOverride: TimeInterval?
     /// Replaces the verifier's timeout (`[verifier] timeout_min`). For tests.
     public var verifierTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
@@ -283,8 +277,6 @@ public actor ThreadRunner {
             if canFallBack, result.report.result == .failed, !result.sawOutput, !stopRequested { continue }
             report?.check = try await runCheck(
                 after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
-            report?.verify = try await runVerify(
-                after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
             let checked = report?.check
             report?.verifier = try await runVerifier(
                 after: result.report, check: checked, config: config, goal: goal, worktree: worktree, log: log,
@@ -509,31 +501,6 @@ extension ThreadRunner {
             turn: report.turn, outputURL: project.checkOutputURL(threadID, turn: report.turn), log: log
         ) { [self] process in await attach(process) }
         notify(.checkRan(ran))
-        return ran
-    }
-
-    // MARK: The verify step
-
-    /// The project's verify command, run here so that the evidence is Workbench's and not Claude's claim. Only
-    /// after a turn that succeeded: there is nothing to show for a turn that did not finish.
-    private func runVerify(
-        after report: TurnReport, config: Config, goal: Goal, worktree: URL, log: EventLogWriter, options: RunOptions
-    ) async throws -> VerifyReport? {
-        guard let command = config.verifyCommand, report.result == .succeeded, !stopRequested else { return nil }
-        let runner = VerifyRunner(
-            command: command, worktree: worktree, environment: config.childEnvironment(from: options.parentEnvironment),
-            timeout: options.verifyTimeoutOverride ?? TimeInterval(config.verifyTimeoutMin) * 60,
-            killGrace: options.killGrace, threadID: threadID, goalPath: project.goalURL(threadID).path,
-            identity: await ProofIdentity.of(
-                worktree: worktree, git: git, attributesFrom: await recordedBaseCommit(goal: goal)))
-        notify(.verifyStarted(turn: report.turn, command: command))
-        defer { currentRun = nil }
-        let ran = try await runner.run(
-            turn: report.turn, proofDirectory: project.proofDirectory(threadID, turn: report.turn),
-            threadDirectory: project.threadDirectory(threadID),
-            outputURL: project.verifyOutputURL(threadID, turn: report.turn), log: log
-        ) { [self] process in await attach(process) }
-        notify(.verifyEnded(ran))
         return ran
     }
 

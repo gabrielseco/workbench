@@ -168,7 +168,7 @@ skill = ".agents/skills/design-review/SKILL.md"
 inputs = ["diff", "goal", "proof", "docs/DESIGN.md"]
 applies_to = ["Sources/Triage/**", "Resources/**"]
 
-[verifier]                                    # P10; it is the `verify` step, `verify_command` is removed there
+[verifier]                                    # P10; it is the `verify` step; `verify_command` is gone
 skill = ".claude/skills/verify/SKILL.md"
 tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Bash(swift scripts/ax.swift:*)"]
 ```

@@ -142,6 +142,6 @@ struct VerifierRun {
 
     /// The regular files under the proof directory by name, with their hashes; bounded as the verify step's is.
     static func snapshot(_ proofDirectory: URL, _ threadDirectory: URL) -> [ProofFile] {
-        VerifyRunner.collect(proofDirectory: proofDirectory, threadDirectory: threadDirectory).files
+        ProofCollector.collect(proofDirectory: proofDirectory, threadDirectory: threadDirectory).files
     }
 }

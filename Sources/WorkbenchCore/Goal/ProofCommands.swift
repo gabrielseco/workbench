@@ -32,8 +32,8 @@ extension ProofWarning {
 /// free text, so only a backticked span that looks like a command counts: its first word is an
 /// executable the tool set already mentions, or a path into the repository.
 public enum ProofCommands {
-    /// `verifierSkillAvailable` is whether the verifier's skill is in the base; false means a screenshot proof has
-    /// only a `verify_command` to come from.
+    /// `verifierSkillAvailable` is whether the verifier's skill is in the base; false means nothing makes a
+    /// screenshot proof.
     public static func warnings(goal: Goal, config: Config, verifierSkillAvailable: Bool = true) -> [ProofWarning] {
         let allowed = config.effectiveAllowedTools.compactMap(bashPattern)
         let denied = config.tools.denied.compactMap(bashPattern)
@@ -43,12 +43,11 @@ public enum ProofCommands {
         var out: [ProofWarning] = []
         var seen = Set<String>()
         for criterion in goal.criteria {
-            if let name = ScreenshotProof.name(in: criterion.proof), config.verifyCommand == nil,
-                !(config.verifier != nil && verifierSkillAvailable) {
+            if let name = ScreenshotProof.name(in: criterion.proof), !(config.verifier != nil && verifierSkillAvailable) {
                 out.append(
                     ProofWarning(
                         criterion: criterion.id, command: "screenshot: \(name)",
-                        reason: "the project has no verify_command and no verifier skill (off, or not in the base commit), so "
+                        reason: "the project has no verifier skill (off, or not in the base commit), so "
                             + "nothing makes \(name).png: set one in the config, commit the skill, or change the proof",
                         suggestion: nil, isScreenshot: true))
                 continue

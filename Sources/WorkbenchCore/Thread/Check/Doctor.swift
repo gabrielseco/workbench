@@ -70,6 +70,8 @@ public struct DoctorVerifier: Sendable, Equatable {
     public var skill: VerifierSkill?
     /// Why the skill cannot be used, when it cannot. A warning: doctor still runs the declared steps.
     public var problem: String?
+    /// Set when `app_type = "desktop"` and Screen Recording is not granted, so its screenshots would show the wallpaper.
+    public var screenRecording: String?
 }
 
 public struct DoctorReport: Sendable, Equatable {
@@ -87,11 +89,6 @@ public struct DoctorReport: Sendable, Equatable {
     public var checkDenied = false
     public var setup: DoctorStep
     public var check: DoctorStep
-    public var verify: DoctorStep
-    /// What the verify step left in its proof directory.
-    public var verifyFiles: [ProofFile] = []
-    /// Something worth knowing about a verify that passed (it wrote no files).
-    public var verifyWarning: String?
     public var appType: AppType = .web
     /// Nil when the config has no `[verifier]`.
     public var verifier: DoctorVerifier?
@@ -104,7 +101,7 @@ public struct DoctorReport: Sendable, Equatable {
     /// failure.
     public var passed: Bool {
         cleanupProblem == nil
-            && [setup, check, verify].allSatisfy {
+            && [setup, check].allSatisfy {
             switch $0.outcome {
                 case .passed, .notDeclared: true
                 default: false
@@ -114,7 +111,7 @@ public struct DoctorReport: Sendable, Equatable {
 
     /// A step ended by a stop, or was skipped because one arrived between steps.
     public var wasStopped: Bool {
-        [setup, check, verify].contains {
+        [setup, check].contains {
             switch $0.outcome {
             case .stopped, .skipped("interrupted"): true
             default: false
@@ -138,8 +135,6 @@ public final class Doctor: @unchecked Sendable {
         public var setupTimeout: TimeInterval = SetupRunner.defaultTimeout
         /// Same default a goal gives a turn (30 minutes), which is also what bounds the check in a thread.
         public var checkTimeout: TimeInterval = 30 * 60
-        /// Nil takes the config's `verify_timeout_min`.
-        public var verifyTimeout: TimeInterval?
         public var killGrace: TimeInterval = 5
         /// Whether the process running doctor may record the screen. Replaced in tests.
         public var screenRecordingGranted: @Sendable () -> Bool = { CGPreflightScreenCaptureAccess() }
@@ -199,18 +194,24 @@ public final class Doctor: @unchecked Sendable {
             } ?? false,
             setup: DoctorStep(command: config.setupCommand, outcome: .notDeclared, tail: "", hint: ""),
             check: DoctorStep(command: config.checkCommand, outcome: .notDeclared, tail: "", hint: ""),
-            verify: DoctorStep(command: config.verifyCommand, outcome: .notDeclared, tail: "", hint: ""),
             appType: config.appType)
-        let runsSteps = config.setupCommand != nil || config.checkCommand != nil || config.verifyCommand != nil
+        let runsSteps = config.setupCommand != nil || config.checkCommand != nil
         // One doctor at a time: a second would otherwise remove the first one's live worktree as a "leftover". The
         // lock comes first so a second doctor is refused at once, not after the git reads below.
         let lock = runsSteps ? try ProjectLock.acquire(project) : nil
         defer { if let lock { ProjectLock.release(lock) } }
         if let verifier = config.verifier {
             report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
+            // The verifier takes screenshots of a desktop app, which macOS refuses without this permission.
+            if config.appType == .desktop, report.verifier?.skill != nil, !options.screenRecordingGranted() {
+                let app = options.environment["TERM_PROGRAM"] ?? "the app that runs workbench (your terminal)"
+                report.verifier?.screenRecording =
+                    "Screen Recording is not granted to \(app): grant it in System Settings > Privacy & Security > "
+                    + "Screen & System Audio Recording, then restart the app"
+            }
         }
         report.reviewWarnings = Self.reviewWarnings(
-            config.review, root: project.root, hasVerifyCommand: config.verifyCommand != nil || report.verifier?.skill != nil)
+            config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         guard runsSteps else { return report }
         // After the lock: a run that starts now sees the lock and refuses itself (it writes runner.json first).
         if let live = store.threadWithLiveRunner() { throw DoctorError.runnerLive(live) }
@@ -261,18 +262,18 @@ public final class Doctor: @unchecked Sendable {
     }
 
     /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a stage
-    /// that reads proof with no verify step to leave any, a table no list names. The project knows its own pipeline,
+    /// that reads proof with no verifier to leave any, a table no list names. The project knows its own pipeline,
     /// so each is said and none is refused.
-    static func reviewWarnings(_ review: ReviewConfig, root: URL, hasVerifyCommand: Bool) -> [String] {
+    static func reviewWarnings(_ review: ReviewConfig, root: URL, hasVerifier: Bool) -> [String] {
         var warnings: [String] = []
         if !review.stages.contains(ReviewConfig.prReviewStage) {
             warnings.append(
                 "review.stages does not list \(ReviewConfig.prReviewStage): no correctness review will run in the loop")
         }
         for name in review.stages {
-            if review.stage(name)?.needsProof == true, !hasVerifyCommand {
+            if review.stage(name)?.needsProof == true, !hasVerifier {
                 warnings.append(
-                    "the \(name) stage reads proof, and there is no verify_command and the verifier is off to leave any: "
+                    "the \(name) stage reads proof, and there is no verifier skill at the base to leave any: "
                         + "its rounds will fail")
             }
             guard let stage = review.stage(name), let rubric = stage.rubric else { continue }
@@ -347,21 +348,7 @@ public final class Doctor: @unchecked Sendable {
             }
         }
 
-        guard let command = config.verifyCommand else { return report }
-        if let why = skipReason("setup", report.setup) ?? skipReason("check", report.check) {
-            report.verify.outcome = .skipped(why)
-            return report
-        }
-        if config.appType == .desktop, !options.screenRecordingGranted() {
-            let app = options.environment["TERM_PROGRAM"] ?? "the app that runs workbench (your terminal)"
-            report.verify.outcome = .failed(how: "not run: Screen Recording is not granted to \(app)")
-            report.verify.hint =
-                "Grant it in System Settings > Privacy & Security > Screen & System Audio Recording, then restart "
-                + "the app. `app_type = \"desktop\"` in the config makes doctor check this."
-            return report
-        }
-        return try await runVerify(report, command: command, config: config, worktree: worktree, scratch: scratch,
-            environment: environment, options: options, log: log)
+        return report
     }
 
     /// Why an earlier step stops the next one, or nil when it may go on.
@@ -371,33 +358,6 @@ public final class Doctor: @unchecked Sendable {
         case .passed, .notDeclared: return nil
         default: return "\(name) did not pass"
         }
-    }
-
-    private func runVerify(
-        _ initial: DoctorReport, command: String, config: Config, worktree: URL, scratch: URL,
-        environment: [String: String], options: Options, log: EventLogWriter
-    ) async throws -> DoctorReport {
-        var report = initial
-        // A stub for WORKBENCH_GOAL, so a verify that reads which pages to capture has a file to open.
-        let goal = scratch.appendingPathComponent("goal.md")
-        try Data("# doctor\n\nA throwaway goal: doctor has no task.\n".utf8).write(to: goal)
-        let output = scratch.appendingPathComponent("verify.log")
-        let proof = scratch.appendingPathComponent("proof")
-        let ran = try await VerifyRunner(
-            command: command, worktree: worktree, environment: environment,
-            timeout: options.verifyTimeout ?? TimeInterval(config.verifyTimeoutMin) * 60, killGrace: options.killGrace,
-            threadID: Self.worktreeID, goalPath: goal.path
-        ).run(turn: 0, proofDirectory: proof, threadDirectory: scratch, outputURL: output, log: log) { [self] in
-            attach($0)
-        }
-        let how = ran.exitCode.map { "failed (exit \($0))" } ?? ran.signal.map { "failed (signal \($0))" } ?? "failed"
-        report.verify = Self.step(
-            command: command, result: ran.result, how: how, durationMs: ran.durationMs, output: output, hint: "")
-        report.verifyFiles = ran.proof
-        if ran.result == .passed, ran.proof.isEmpty {
-            report.verifyWarning = "wrote no files to WORKBENCH_PROOF_DIR: nothing would be shown as proof"
-        }
-        return report
     }
 
     private static func how(_ check: CheckReport) -> String {

@@ -117,26 +117,26 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
     }
 
     @Test(arguments: [
-        // (event, turnSucceeded, checks, verifies, verifiers, checkPassed, ends)
-        ("check.ran", true, true, false, true, true, false),
-        ("check.ran", true, true, false, false, true, true),
-        ("check.ran", true, true, false, true, false, true),
-        ("verify.ended", true, true, true, true, true, false),
-        ("verify.ended", true, true, true, true, false, true),
-        ("verify.ended", true, true, true, false, true, true),
-        ("turn.ended", true, false, false, true, true, false),
-        ("turn.ended", false, false, false, true, true, true),
-        ("verifier.ended", true, true, false, true, true, true),
-        ("verifier.skipped", true, true, false, true, true, true),
+        // (event, turnSucceeded, checks, verifiers, checkPassed, ends)
+        ("check.ran", true, true, true, true, false),
+        ("check.ran", true, true, false, true, true),
+        ("check.ran", true, true, true, false, true),
+        ("verify.ended", true, true, true, true, false),
+        ("verify.ended", true, true, true, false, true),
+        ("verify.ended", true, true, false, true, true),
+        ("turn.ended", true, false, true, true, false),
+        ("turn.ended", false, false, true, true, true),
+        ("verifier.ended", true, true, true, true, true),
+        ("verifier.skipped", true, true, true, true, true),
     ])
     func followingALogWaitsForTheVerifierOnlyWhenOneWillRun(
-        kind: String, succeeded: Bool, checks: Bool, verifies: Bool, verifiers: Bool, checkPassed: Bool, ends: Bool
+        kind: String, succeeded: Bool, checks: Bool, verifiers: Bool, checkPassed: Bool, ends: Bool
     ) {
         let result = kind == "check.ran" ? (checkPassed ? "passed" : "failed") : (succeeded ? "succeeded" : "failed")
         let event = Event(seq: 9, ts: "t", turn: 1, kind: EventKind(rawValue: kind), data: ["result": .string(result)])
         #expect(
             LogFormatter.followEnds(
-                event, sawStart: true, checks: checks, verifies: verifies, turnSucceeded: succeeded, verifiers: verifiers,
+                event, sawStart: true, checks: checks, turnSucceeded: succeeded, verifiers: verifiers,
                 checkPassed: checkPassed) == ends)
     }
 

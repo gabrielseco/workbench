@@ -201,14 +201,9 @@ private struct Judged {
 }
 
 private func judged(verify: Bool = false) async throws -> Judged {
-    var extra = ""
-    if verify {
-        let script = try CheckScript()
-        let path = try script.write("printf pixels > \"$WORKBENCH_PROOF_DIR/home.png\"", name: "verify.sh")
-        extra = "verify_command = \"\(path)\""
-    }
-    let fx = try await RunnerFixture(extraConfig: extra)
+    let fx = try await RunnerFixture()
     let (id, _) = try await acceptedThread(fx)
+    if verify { try await recordLegacyVerify(fx, id, ["home.png": "pixels"]) }
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("judge-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return Judged(fx: fx, id: id, config: try Config.load(from: fx.project.configURL), dir: dir)

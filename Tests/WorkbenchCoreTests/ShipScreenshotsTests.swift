@@ -57,13 +57,11 @@ private struct Shipped {
 }
 
 private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) async throws -> Shipped {
-    let writes = files.map { "printf '\($0.value)' > \"$WORKBENCH_PROOF_DIR/\($0.key)\"" }.joined(separator: "\n")
-    let script = try CheckScript()
-    let verify = try script.write(writes, name: "verify.sh")
-    let fx = try await RunnerFixture(extraConfig: "verify_command = \"\(verify)\"")
+    let fx = try await RunnerFixture()
     // The turn itself changes the work, as a real one does, so verify sees the work that is then accepted.
     let id = try await fx.approvedThread()
     _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+    try await recordLegacyVerify(fx, id, files)
     let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
     try await fx.service.accept(id: id, message: "chore: work")
     let plan = ShipPlan(

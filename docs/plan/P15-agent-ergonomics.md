@@ -29,7 +29,7 @@ the matcher is exact for new goals and only guesses for old ones.
 
 ## Task 4: typed proofs, planned and left for later
 
-What is already built from [`later/proof.md`](../later/proof.md): `screenshot:` proofs, `verify_command`, the
+What is already built from [`later/proof.md`](../later/proof.md): `screenshot:` proofs, the verifier, the
 `judge` as the advisory verifier, the `see screenshot` and `✘ missing` states. What is left is the typed
 `check:`, `test:` and `diff:` proofs.
 
@@ -41,7 +41,7 @@ Shape when it is picked up, 2 to 3 PRs:
 
 1. **Parser.** `proof: test: …`, `check: …`, `diff` are parsed into a `Proof` value; a free-text proof stays valid
    and reads as `manual`. `goal approve` rejects a typed proof nothing could produce, as it does for a screenshot
-   with no `verify_command`.
+   with no `[verifier]` skill.
 2. **Evidence.** `test:` reads the test list task 3 records (the parser is reused, the free-text matcher is
    reduced to the legacy path). `check:` is matched against recorded checks, not run again, unless the design
    question is decided otherwise.

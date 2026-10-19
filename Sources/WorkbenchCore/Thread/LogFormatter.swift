@@ -143,20 +143,19 @@ public enum LogFormatter {
     }
 
     /// Whether `log -f` has seen everything this run will write. A turn is followed to the end of its check,
-    /// then, when it succeeded and a verify step is configured, to the end of that.
+    /// then, when it succeeded and a verifier will run, to the end of that.
     public static func followEnds(
-        _ event: Event, sawStart: Bool, checks: Bool, verifies: Bool, turnSucceeded: Bool, verifiers: Bool = false,
+        _ event: Event, sawStart: Bool, checks: Bool, turnSucceeded: Bool, verifiers: Bool = false,
         checkPassed: Bool = true
     ) -> Bool {
         let result = event.data["result"]?.stringValue
         let stopped = result == "stopped" || result == "interrupted"
-        let verifyFollows = verifies && turnSucceeded
-        // An automatic verifier follows a successful turn whose check passed (or that has none), and the verify step.
+        // The verifier follows a successful turn whose check passed (or that has none).
         let verifierFollows = verifiers && turnSucceeded
         switch event.kind {
-        case .turnEnded: return sawStart && !(checks && !stopped) && !verifyFollows && !(verifierFollows && !checks)
-        case .checkRan:
-            return sawStart && !(verifyFollows && !stopped) && !(verifierFollows && result == "passed")
+        case .turnEnded: return sawStart && !(checks && !stopped) && !(verifierFollows && !checks)
+        case .checkRan: return sawStart && !(verifierFollows && result == "passed")
+        // Only an older log has a verify step.
         case .verifyEnded: return sawStart && !(verifierFollows && checkPassed)
         case .verifierEnded, .verifierSkipped: return sawStart
         // A setup that did not pass ends the run before any turn: nothing else will come.

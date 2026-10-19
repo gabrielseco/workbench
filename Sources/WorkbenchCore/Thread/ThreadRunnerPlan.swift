@@ -28,7 +28,7 @@ extension ThreadRunner {
         let chosen = planForFirstPrompt(goal: goal, baseCommit: baseCommit, options: options)
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,
-            verifies: config.verifyCommand != nil || verifierRuns,
+            verifies: verifierRuns,
             plan: chosen.plan)
         return (prompt, ["instructions": loaded?.eventData ?? .null, "plan": chosen.info])
     }

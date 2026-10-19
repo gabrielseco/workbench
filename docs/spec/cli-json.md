@@ -19,7 +19,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `goal`: null when there is no goal file; else `title`, `approval` (`approved`, `draft`, `stale`,
   `invalid`), `base`, `budget_usd`, `turn_timeout_min`, `problems` (lines, for `invalid`).
 - `check`: `open_turn` and `last` (the latest result).
-- `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict.
+- `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict. Only an older log has a verify step (`verify_command` was removed).
 - `notes`: `{turn, seq, text}` for each send-back.
 - `base_gap`: null, or `{base, behind, fetch_note}`.
 - `worktree`: `{state: present | removed | none, path}`.

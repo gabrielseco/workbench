@@ -1,5 +1,7 @@
 # P4: Verify
 
+> `verify_command` was removed by [P10](P10-skill-verifier.md): a config that has it is refused with a message that names `[verifier]`. The proof, the events and the readers below stay as the history of what an older log holds.
+
 **Outcome:** a thread ends with evidence you can look at: screenshots of the change, a recorded verify step
 and, optionally, an independent verdict, all produced in the background with no UI and no prompts. First
 proven on a web app (expense-tracker, Playwright), then on a native one (Triage, which is the hard case).
@@ -108,7 +110,7 @@ bad or missing verdict leaves the thread reviewable with the failure shown. It n
 4. **Verifier turn** (done as `workbench judge`: `Thread/Judge/`; not `verify --judge`, since it is its own command with its own once-per-turn rule). Prompt builder (reuse expense-tracker's `verifier` agent text as the starting point),
    strict verdict schema (the verdict is recorded in the `judge.ran` event, the log being the source of truth, not in a `verdict.json`), read-only tool set, budget, failure shown, advisory.
 5. **`doctor` checks verify** (built: `Doctor.swift`, `app_type = "web" | "desktop"`. Still open: measuring by hand whether the
-   child inherits the terminal's grant, with `scripts/probe-screen-recording.sh`). Runs `verify_command` in the throwaway worktree, reports duration, files, and a
+   child inherits the terminal's grant, with a probe script, since removed). Runs `verify_command` in the throwaway worktree, reports duration, files, and a
    missing Screen Recording grant as a clear failure. Writes down whether the child inherits the terminal's
    permissions.
 6. **Triage pilot.** Verify script, app-swap policy (a separate throwaway bundle that does not touch the
@@ -145,6 +147,6 @@ Docs travel with the code.
 
 ## Open questions
 
-- Does the child inherit the terminal's Screen Recording grant when `workbench` is run from iTerm? Task 5. **Not measured yet**: run `scripts/probe-screen-recording.sh` as the `verify_command` of a scratch project (`app_type = "desktop"`) and record the answer here.
+- Does the child inherit the terminal's Screen Recording grant when `workbench` is run from iTerm? Task 5. **Not measured yet**, and its probe script (`scripts/probe-screen-recording.sh`, a `verify_command`) was removed with the key: the Triage verifier took screenshots from a terminal with the grant (P10), and `doctor` warns when a desktop project's terminal lacks it.
 - One `verify_command` per project, or per criterion? Start with one; the goal file names the pages.
 - Should the verifier see the images, or only text evidence? Leaning: include images, keep it advisory.

@@ -6,10 +6,13 @@
 # Doctor must read the skill from the base commit and print its path, size, sha256, model and tools; the
 # sha256 must equal the one computed here from `git show`; an edit in the working tree must not change it; a missing
 # skill and a symlinked one must be a warning (the symlink naming the real path); a bare `Bash` in `tools` must be
-# refused at config load; `enabled = false` must print nothing, and no table at all must print the default skill path. Exit 0 only when every step passed, 1 when one failed,
+# refused at config load; `enabled = false` must print nothing, and no table at all must print the default skill path.
+# A `verify_command` or `verify_timeout_min` left in the config (P10 PR 6) must be refused with the message that names
+# `[verifier]`, by `doctor`, and `doctor` must print no verify step. Exit 0 only when every step passed, 1 when one failed,
 # 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 points the skill at a path that does not exist, so
-# the steps that need the skill read (path and sha256 printed, equal to git's, unchanged by an edit) must FAIL. The frame
-# and the other switches are in lib.sh. Run by hand, not by CI.
+# the steps that need the skill read (path and sha256 printed, equal to git's, unchanged by an edit) must FAIL, and it
+# leaves the old key out of section 5, so the steps that expect the refusal (doctor refused, the migration message) must FAIL too. The frame and the other switches are in lib.sh.
+# Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -111,4 +114,32 @@ check "enabled = false: nothing about a verifier is printed" "a verifier line wa
 config ""
 wbp "$SCRATCH/d7.out" doctor --base "$BASE"
 check "no [verifier]: the default skill is looked for" "no line naming .claude/skills/verify/SKILL.md" grep -q "^verifier: .claude/skills/verify/SKILL.md" "$SCRATCH/d7.out"
+
+# --- 5. the old verify keys are gone ---------------------------------------------------------------------
+
+OLD='verify_command = "scripts/verify.sh"'
+[ "$SABOTAGE" = 1 ] && OLD=""
+for key in "$OLD" 'verify_timeout_min = 20'; do
+    [ "$SABOTAGE" = 1 ] && key=""
+    cat >"$P/.workbench/config.toml" <<TOML
+$key
+
+[tools]
+available = ["Read"]
+allowed = ["Read"]
+TOML
+    wbp "$SCRATCH/d8.out" doctor --base "$BASE"
+    shown "$SCRATCH/d8.out" 3
+    check "'${key%% *}' in the config: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
+    check "'${key%% *}': the message says it was removed and names [verifier]" "no migration message in the output" \
+        grep -q "was removed: replace it with a \[verifier\] table" "$SCRATCH/d8.out"
+    check "'${key%% *}': it is not the unknown-key message" "the unknown-key message was printed" \
+        bash -c '! grep -q "unknown key" "$1"' _ "$SCRATCH/d8.out"
+done
+
+config '[verifier]
+model = "sonnet"'
+wbp "$SCRATCH/d10.out" doctor --base "$BASE"
+check "a verifier-only config: doctor prints no verify step" "a 'verify:' line was printed" \
+    bash -c '! grep -q "^verify:" "$1"' _ "$SCRATCH/d10.out"
 finish
