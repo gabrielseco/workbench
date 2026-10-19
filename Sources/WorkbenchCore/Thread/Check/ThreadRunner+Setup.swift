@@ -47,6 +47,8 @@ extension ThreadRunner {
     /// Whether the verifier's skill is there, read as the verifier will: from the recorded base once the worktree
     /// exists, from the branch name before that.
     func verifierSkillAvailable(config: Config, goal: Goal) async -> Bool {
+        // Only a screenshot proof depends on the answer; every other run skips the git reads.
+        guard goal.criteria.contains(where: { ScreenshotProof.name(in: $0.proof) != nil }) else { return true }
         let ref = await recordedBaseCommit(goal: goal) ?? goal.base
         return await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: ref)
     }

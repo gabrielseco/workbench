@@ -20,7 +20,8 @@ extension ThreadRunner {
             loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: baseCommit)
         }
         var verifierRuns = false
-        if let verifier = config.verifier, let baseCommit {
+        if let verifier = config.verifier, let baseCommit,
+            goal.criteria.contains(where: { ScreenshotProof.name(in: $0.proof) != nil }) {
             let skill = await VerifierSkill.load(git: git, repo: project.root, commit: baseCommit, path: verifier.skill)
             if case .success = skill { verifierRuns = true }
         }
