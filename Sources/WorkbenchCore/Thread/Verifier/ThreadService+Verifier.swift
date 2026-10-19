@@ -1,0 +1,166 @@
+import Foundation
+
+public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible {
+    case notConfigured
+    case noTurn
+    case alreadyVerified(turn: Int)
+    case goalUnreadable(String)
+    case skill(String)
+    case noWorktree
+    case claudeNotFound(String)
+    case busy
+
+    public var description: String {
+        switch self {
+        case .notConfigured:
+            "this project has no [verifier] in .workbench/config.toml (see docs/spec/goal-file.md, 'Tool permissions')."
+        case .noTurn: "nothing to verify: no turn has run."
+        case .alreadyVerified(let turn):
+            "turn \(turn) was verified already (`workbench log` shows it). Pass --again to run it once more."
+        case .goalUnreadable(let why): "the goal could not be read: \(why)"
+        case .skill(let why): why
+        case .noWorktree:
+            "the thread has no worktree to drive (it was shipped, accepted or discarded); the verifier runs on the work in it."
+        case .claudeNotFound(let name): "`\(name)` was not found"
+        case .busy: "another command is using this thread (a run, a send-back or another verifier); try again when it ends."
+        }
+    }
+}
+
+extension ThreadService {
+    /// Closes a verifier left open by a process that died, and ends what it left running in the worktree.
+    func closeOrphanedVerifier(id: String, log: EventLogWriter) async throws {
+        try await Verifier.recoverOrphan(
+            log: log, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id))
+    }
+
+    /// Runs the verifier on the latest turn and records `verifier.started` and `verifier.ended`. A separate `claude`
+    /// run on the project's skill, read from the base commit, with the project's tools and its own session and
+    /// budget; it opens no numbered turn, and nothing in Workbench treats what it says as a pass.
+    ///
+    /// The thread's log is held from the checks to the record, so a verifier, a judge and a run cannot spend on the
+    /// same thread at once: the second is refused as `busy`.
+    ///
+    /// - Parameters:
+    ///   - timeout: replaces `[verifier] timeout_min`. For tests.
+    ///   - attach: called with the running process, so the caller can stop it (Ctrl-C).
+    public func verifier(
+        id: String, config: Config, again: Bool = false,
+        environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval? = nil,
+        killGrace: TimeInterval = 5, attach: @Sendable (ProcessRun) -> Void = { _ in }
+    ) async throws -> VerifierReport {
+        guard let verifier = config.verifier else { throw VerifierRefusal.notConfigured }
+        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        do {
+            return try await withLog(id) { log in
+                try await self.verifierLocked(
+                    id: id, log: log, config: config, verifier: verifier, again: again, environment: environment,
+                    timeout: timeout ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: killGrace, attach: attach)
+            }
+        } catch EventLogError.alreadyOpen { throw VerifierRefusal.busy }
+    }
+
+    private func verifierLocked(
+        id: String, log: EventLogWriter, config: Config, verifier: VerifierConfig, again: Bool,
+        environment: [String: String], timeout: TimeInterval, killGrace: TimeInterval,
+        attach: @Sendable (ProcessRun) -> Void
+    ) async throws -> VerifierReport {
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        let state = ThreadState.derive(from: events, id: id)
+        guard state.lastTurn > 0 else { throw VerifierRefusal.noTurn }
+        let turn = state.lastTurn
+        if !again, events.contains(where: { $0.kind == .verifierEnded && $0.turn == turn && $0.data["ok"] == true }) {
+            throw VerifierRefusal.alreadyVerified(turn: turn)
+        }
+        let goal: Goal
+        do {
+            goal = try GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
+        } catch { throw VerifierRefusal.goalUnreadable("\(error)") }
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        guard manager.exists(id) else { throw VerifierRefusal.noWorktree }
+        guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
+            throw VerifierRefusal.claudeNotFound(config.claudePath)
+        }
+        let recorded = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
+        let base: String
+        if let recorded { base = recorded } else {
+            do { base = try await manager.commit(of: goal.base) } catch {
+                throw VerifierRefusal.skill("the base commit could not be read, so the skill cannot be: \(error)")
+            }
+        }
+        let skill: VerifierSkill
+        switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
+        case .success(let loaded): skill = loaded
+        case .failure(let problem): throw VerifierRefusal.skill(problem.description)
+        }
+
+        // This process is the thread's live holder while it runs (`stop` reaches it, a run or another verifier is
+        // refused).
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+        try ThreadStore(project: project).requireNoDoctor()
+        let run = VerifierRun(
+            config: config, verifier: verifier, skill: skill, goal: goal, threadID: id,
+            goalPath: project.goalURL(id).path, worktree: manager.path(for: id),
+            proofDirectory: project.proofDirectory(id, turn: turn), threadDirectory: project.threadDirectory(id),
+            claude: claude, environment: environment, timeout: timeout, killGrace: killGrace)
+        return try await run.run(turn: turn, log: log, attach: attach)
+    }
+}
+
+extension ThreadRunner {
+    // MARK: The verifier step
+
+    /// The project's verifier, run here after the check when `[verifier] auto` is on. Only after a turn that
+    /// succeeded, whose check passed (or that has no check), that left a change to look at, and that no verifier
+    /// has ended for already. Anything it cannot start (no skill at the base, no worktree change) is a note, not a
+    /// failure of the turn: it is advisory and costs nothing unless it runs.
+    func runVerifier(
+        after report: TurnReport, check: CheckReport?, config: Config, goal: Goal, worktree: URL, log: EventLogWriter,
+        claude: URL, options: RunOptions
+    ) async throws -> VerifierReport? {
+        guard let verifier = config.verifier, verifier.auto, report.result == .succeeded, !stopRequested else { return nil }
+        if let check, check.result != .passed { return nil }
+        let turn = report.turn
+        if let events = try? EventLogReader.read(at: project.eventsURL(threadID)).events,
+            events.contains(where: { $0.kind == .verifierEnded && $0.turn == turn }) {
+            return nil
+        }
+        let base = await recordedBaseCommit(goal: goal)
+        guard let base else {
+            notify(.advisory("the verifier did not run: the base commit is unknown, so its skill cannot be read"))
+            return nil
+        }
+        guard await hasChange(worktree: worktree, base: base) else { return nil }
+        let skill: VerifierSkill
+        switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
+        case .success(let loaded): skill = loaded
+        case .failure(let problem):
+            notify(.advisory("the verifier did not run: \(problem)"))
+            return nil
+        }
+        let run = VerifierRun(
+            config: config, verifier: verifier, skill: skill, goal: goal, threadID: threadID,
+            goalPath: project.goalURL(threadID).path, worktree: worktree,
+            proofDirectory: project.proofDirectory(threadID, turn: turn), threadDirectory: project.threadDirectory(threadID),
+            claude: claude, environment: options.parentEnvironment,
+            timeout: options.verifierTimeoutOverride ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: options.killGrace)
+        notify(.verifierStarted(turn: turn, skill: skill.path))
+        defer { currentRun = nil }
+        let ran = try await run.run(turn: turn, log: log) { [self] process in
+            Task { await self.attach(process) }
+        }
+        notify(.verifierEnded(ran))
+        return ran
+    }
+
+    /// Whether the worktree holds anything to look at: a commit past the base, or edits (untracked files too).
+    private func hasChange(worktree: URL, base: String) async -> Bool {
+        if let head = try? await git.run(["rev-parse", "HEAD"], in: worktree), head.succeeded,
+            head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) != base {
+            return true
+        }
+        guard let status = try? await git.run(["status", "--porcelain"], in: worktree), status.succeeded else { return true }
+        return !status.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}

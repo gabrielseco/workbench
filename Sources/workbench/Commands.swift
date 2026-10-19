@@ -385,6 +385,8 @@ enum Commands {
                 out("verify \(verify.result.rawValue)  \(verify.durationMs / 1000)s  \(verify.proof.count) proof file(s)"
                     + (verify.outputTruncated ? "  output truncated" : "")
                     + "  (\(ctx.project.threadDirectory(id).appendingPathComponent(verify.outputRef).path))")
+            case .verifierStarted, .verifierEnded:
+                printVerifierNotice(notice)
             case .checkStarted(_, let command):
                 out("check started: \(command)")
             case .checkRan(let check):

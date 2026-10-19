@@ -194,6 +194,18 @@ public actor EventLogWriter {
         return try append(.planEnded, turn: started.turn, data: .object(data))
     }
 
+    /// True while a `verifier.started` has no `verifier.ended`.
+    public var hasOpenVerifier: Bool { state.verifierStart != nil }
+
+    /// Closes a verifier whose process died (`verifier.started` and no `verifier.ended`) with a synthetic
+    /// `interrupted`, so every start has exactly one end.
+    @discardableResult
+    public func recoverOrphanedVerifier() throws -> Event? {
+        guard let started = state.verifierStart else { return nil }
+        let data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
+        return try append(.verifierEnded, turn: started.turn, data: .object(data))
+    }
+
     // MARK: - Internals
 
     private static func acquireLock(fd: Int32, path: String, timeout: TimeInterval) throws {

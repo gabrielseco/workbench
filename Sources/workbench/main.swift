@@ -79,6 +79,8 @@ do {
         try await Commands.grant(Array(arguments.dropFirst()))
     case "judge":
         exit(try await Commands.judge(Array(arguments.dropFirst())))
+    case "verifier":
+        exit(try await Commands.verifier(Array(arguments.dropFirst())))
     case "plan":
         exit(try await Commands.plan(Array(arguments.dropFirst())))
     case "pr-review":

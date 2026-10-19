@@ -6,6 +6,7 @@ extension ThreadRunner {
         if let recovered = try await log.recoverOrphanedCheck() { notify(.recoveredOrphanedCheck(recovered.turn)) }
         _ = try await log.recoverOrphanedVerify()
         try await Plan.recoverOrphan(log: log, project: project, threadID: threadID, git: git)
+        try await Verifier.recoverOrphan(log: log, worktree: worktreeManager.path(for: threadID))
     }
 
     /// The prompt built from the goal, and what `turn.started` records about it (`instructions`, `plan`). It carries

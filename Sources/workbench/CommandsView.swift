@@ -39,6 +39,8 @@ extension Commands {
             let config = try? Config.load(from: ctx.project.configURL)
             let checks = config?.checkCommand != nil
             let verifies = config?.verifyCommand != nil
+            let verifiers = config?.verifier?.auto == true
+            var checkPassed = true
             var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
             var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
             var seen = contents.events.count
@@ -51,8 +53,10 @@ extension Commands {
                 for event in contents.events.dropFirst(seen) {
                     if event.kind == .turnStarted { sawStart = true }
                     if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
+                    if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
                     let done = LogFormatter.followEnds(
-                        event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded)
+                        event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded,
+                        verifiers: verifiers, checkPassed: checkPassed)
                     if done {
                         return
                     }
@@ -82,6 +86,8 @@ extension Commands {
         let config = try? Config.load(from: ctx.project.configURL)
         let checks = config?.checkCommand != nil
         let verifies = config?.verifyCommand != nil
+        let verifiers = config?.verifier?.auto == true
+        var checkPassed = true
         var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn
         while true {
@@ -91,8 +97,10 @@ extension Commands {
                 show(event)
                 if event.kind == .turnStarted { sawStart = true }
                 if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
+                if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
                 let done = LogFormatter.followEnds(
-                    event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded)
+                    event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded,
+                    verifiers: verifiers, checkPassed: checkPassed)
                 if done {
                     return
                 }

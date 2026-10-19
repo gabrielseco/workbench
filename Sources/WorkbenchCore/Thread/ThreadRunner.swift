@@ -24,6 +24,8 @@ public struct TurnReport: Sendable, Equatable {
     public var check: CheckReport?
     /// The project's verify step as Workbench ran it after this turn's check, nil when none ran.
     public var verify: VerifyReport?
+    /// The verifier turn Workbench ran after the check (`[verifier] auto`), nil when none ran.
+    public var verifier: VerifierReport?
 }
 
 public enum RunNotice: Sendable {
@@ -37,6 +39,8 @@ public enum RunNotice: Sendable {
     case checkRan(CheckReport)
     case verifyStarted(turn: Int, command: String)
     case verifyEnded(VerifyReport)
+    case verifierStarted(turn: Int, skill: String)
+    case verifierEnded(VerifierReport)
     case setupStarted(command: String)
     case setupRan(SetupReport)
     /// Something worth a line that is not an error: local edits left out, a base behind its origin.
@@ -54,6 +58,8 @@ public struct RunOptions: Sendable {
     public var setupTimeoutOverride: TimeInterval?
     /// Replaces the verify step's timeout (`verify_timeout_min`). For tests.
     public var verifyTimeoutOverride: TimeInterval?
+    /// Replaces the verifier's timeout (`[verifier] timeout_min`). For tests.
+    public var verifierTimeoutOverride: TimeInterval?
     public var killGrace: TimeInterval = 5
     /// Kept so scripts that pass `--allow-dirty` still work; a dirty checkout no longer blocks a run.
     public var allowDirty = false
@@ -80,7 +86,7 @@ public actor ThreadRunner {
     let git: GitRunner
     let notify: @Sendable (RunNotice) -> Void
     var currentRun: ProcessRun?
-    private var stopRequested = false
+    var stopRequested = false
 
     public init(
         project: Project, threadID: String, git: GitRunner,
@@ -278,6 +284,10 @@ public actor ThreadRunner {
                 after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
             report?.verify = try await runVerify(
                 after: result.report, config: config, goal: goal, worktree: worktree, log: log, options: options)
+            let checked = report?.check
+            report?.verifier = try await runVerifier(
+                after: result.report, check: checked, config: config, goal: goal, worktree: worktree, log: log,
+                claude: claude, options: options)
             break
         }
         // The loop above runs at least once and assigns `report` on every pass.
@@ -285,11 +295,11 @@ public actor ThreadRunner {
         return report!
     }
 
-    private var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
+    var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
 
     /// The commit the worktree was cut from: what `worktree.created` recorded, or for a thread that
     /// predates that event the point its branch left `base`.
-    private func recordedBaseCommit(goal: Goal) async -> String? {
+    func recordedBaseCommit(goal: Goal) async -> String? {
         if let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
             let event = contents.events.last(where: { $0.kind == .worktreeCreated }),
             let sha = event.data["base_commit"]?.stringValue {

@@ -73,6 +73,7 @@ extension ThreadService {
     /// Closes a plan left open by a process that died, and ends what it left behind (see `Plan.recoverOrphan`).
     func closeOrphanedPlan(id: String, log: EventLogWriter) async throws {
         try await Plan.recoverOrphan(log: log, folder: planDirectory(id), repoRoot: project.root, git: git)
+        try await closeOrphanedVerifier(id: id, log: log)
     }
 
     /// Runs the plan turn on the approved goal and records `plan.started` and `plan.ended`. Read-only and separate
