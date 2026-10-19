@@ -30,9 +30,9 @@ doctor_to() { # <file>: doctor's output into <file>, its exit code on stdout
 
 # --- 1. a matching ignored file reaches the worktree before setup ------------------------------------------
 
-[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: no probe file in the checkout" || echo "copy-probe" >"$ROOT/$PROBE"
-check "the probe is ignored by git" "git does not ignore $PROBE" bash -c 'echo x >"$1" 2>/dev/null; git check-ignore -q "$1"; r=$?; [ -s "$1" ] || rm -f "$1"; exit $r' _ "$ROOT/$PROBE"
-[ "$SABOTAGE" = 1 ] && rm -f "$ROOT/$PROBE"
+echo "copy-probe" >"$ROOT/$PROBE"
+check "the probe is ignored by git" "git does not ignore $PROBE" git check-ignore -q "$PROBE"
+[ "$SABOTAGE" = 1 ] && { echo "    VERIFY_CLI_SABOTAGE=1: removing the probe from the checkout"; rm -f "$ROOT/$PROBE"; }
 
 with_config "copy = [\".build/verify-*.txt\"]
 setup_command = \"cat $PROBE\""
