@@ -13,7 +13,7 @@ public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible
     public var description: String {
         switch self {
         case .notConfigured:
-            "this project has no [verifier] in .workbench/config.toml (see docs/spec/goal-file.md, 'Tool permissions')."
+            "this project turned the verifier off with [verifier] enabled = false in .workbench/config.toml."
         case .noTurn: "nothing to verify: no turn has run."
         case .alreadyVerified(let turn):
             "turn \(turn) was verified already (`workbench log` shows it). Pass --again to run it once more."
@@ -109,10 +109,25 @@ extension ThreadService {
     }
 }
 
+extension ThreadService {
+    /// Whether a turn of this thread will be followed by a verifier: it is on and its skill is in the base commit.
+    /// `log -f` waits for the verifier only then.
+    public func verifierWillRun(id: String, config: Config) async -> Bool {
+        guard let verifier = config.verifier,
+            let contents = try? EventLogReader.read(at: project.eventsURL(id)),
+            let base = contents.events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue
+        else { return false }
+        if case .success = await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
+            return true
+        }
+        return false
+    }
+}
+
 extension ThreadRunner {
     // MARK: The verifier step
 
-    /// The project's verifier, run here after the check when `[verifier] auto` is on. Only after a turn that
+    /// The project's verifier, run here after the check unless `[verifier] enabled = false`. Only after a turn that
     /// succeeded, whose check passed (or that has no check), that left a change to look at, and that no verifier
     /// has ended for already. Anything it cannot start (no skill at the base, no worktree change) is a
     /// `verifier.skipped` with the reason and a note, not a failure of the turn: it is advisory and costs nothing
@@ -121,24 +136,25 @@ extension ThreadRunner {
         after report: TurnReport, check: CheckReport?, config: Config, goal: Goal, worktree: URL, log: EventLogWriter,
         claude: URL, options: RunOptions
     ) async throws -> VerifierReport? {
-        guard let verifier = config.verifier, verifier.auto, report.result == .succeeded else { return nil }
+        guard let verifier = config.verifier, report.result == .succeeded else { return nil }
         if let check, check.result != .passed { return nil }
         let turn = report.turn
+        guard let base = await recordedBaseCommit(goal: goal) else {
+            return try await skip("the base commit is unknown, so its skill cannot be read", turn: turn, log: log)
+        }
+        let skill: VerifierSkill
+        switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
+        case .success(let loaded): skill = loaded
+        case .failure(.missing): return nil  // most projects have no verify skill; that is not worth a line per turn
+        case .failure(let problem): return try await skip("\(problem)", turn: turn, log: log)
+        }
         if stopRequested { return try await skip("the run was stopped", turn: turn, log: log) }
         if let events = try? EventLogReader.read(at: project.eventsURL(threadID)).events,
             events.contains(where: { $0.kind == .verifierEnded && $0.turn == turn }) {
             return try await skip("a verifier has ended for this turn already", turn: turn, log: log)
         }
-        guard let base = await recordedBaseCommit(goal: goal) else {
-            return try await skip("the base commit is unknown, so its skill cannot be read", turn: turn, log: log)
-        }
         guard await hasChange(worktree: worktree, base: base) else {
             return try await skip("the turn left no change to look at", turn: turn, log: log)
-        }
-        let skill: VerifierSkill
-        switch await VerifierSkill.load(git: git, repo: project.root, commit: base, path: verifier.skill) {
-        case .success(let loaded): skill = loaded
-        case .failure(let problem): return try await skip("\(problem)", turn: turn, log: log)
         }
         let run = VerifierRun(
             config: config, verifier: verifier, skill: skill, goal: goal, threadID: threadID,

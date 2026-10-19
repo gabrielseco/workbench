@@ -145,7 +145,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 0 |  | the verifier ended on its own with an answer; its report and files were printed and recorded |
 | 1 | `failed` | no report this time: no `claude`, a timeout, a stop, a crash, a budget stop or an answer that was not usable (recorded, with the reason) |
 | 2 | `usage` | wrong command line |
-| 6 | `refused` | the project has no `[verifier]`; no turn has run; the turn was verified already (`--again` runs it once more); the thread has no worktree; the skill is missing, empty, a symlink or too large at the base commit; a run is live or another command holds the thread (a second verifier, a judge, a send-back) |
+| 6 | `refused` | the project turned the verifier off (`[verifier] enabled = false`); no turn has run; the turn was verified already (`--again` runs it once more); the thread has no worktree; the skill is missing, empty, a symlink or too large at the base commit; a run is live or another command holds the thread (a second verifier, a judge, a send-back) |
 | 7 | `not-found` | the thread named does not exist |
 
 ### `plan`

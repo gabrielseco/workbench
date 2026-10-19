@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-/// `[verifier] auto = true`: the turn runner starts the verifier after a passing check.
+/// The default verifier: the turn runner starts the verifier after a passing check.
 @Suite struct VerifierAutoTests {
     private func kinds(_ v: VerifierFixture) throws -> [String] { try v.fx.kinds(v.id) }
 
@@ -12,7 +12,7 @@ import Testing
     }
 
     @Test func itRunsAfterAPassingCheckAndTheTurnReportsIt() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", check: "true", runTurn: false)
+        let v = try await VerifierFixture(check: "true", runTurn: false)
         let notices = NoticeBox()
         let report = try await v.fx.runner(v.id, notices: notices).run(v.fx.options("write=a.txt,proof=shot.png"))
 
@@ -32,22 +32,22 @@ import Testing
         #expect(seen == ["started \(".claude/skills/verify/SKILL.md")", "ended true"])
     }
 
-    @Test func itDoesNotRunUnlessSwitchedOn() async throws {
-        let v = try await VerifierFixture(verifier: "", check: "true", runTurn: false)
+    @Test func itDoesNotRunWhenSwitchedOff() async throws {
+        let v = try await VerifierFixture(verifier: "enabled = false", check: "true", runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))
         #expect(report.verifier == nil)
         #expect(try verifierKinds(v).isEmpty)
     }
 
     @Test func itDoesNotRunAfterAFailedCheck() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", check: "false", runTurn: false)
+        let v = try await VerifierFixture(check: "false", runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))
         #expect(report.check?.result == .failed && report.verifier == nil)
         #expect(try verifierKinds(v).isEmpty)
     }
 
     @Test func itRunsWhenTheProjectHasNoCheck() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", runTurn: false)
+        let v = try await VerifierFixture(runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))
         #expect(report.check == nil && report.verifier?.ok == true)
         #expect(try verifierKinds(v) == ["verifier.started", "verifier.ended"])
@@ -58,7 +58,7 @@ import Testing
     }
 
     @Test func itDoesNotRunWhenTheTurnLeftNothingToLookAtAndSaysSo() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", check: "true", runTurn: false)
+        let v = try await VerifierFixture(check: "true", runTurn: false)
         let notices = NoticeBox()
         let report = try await v.fx.runner(v.id, notices: notices).run(v.fx.options())
         #expect(report.result == .succeeded && report.verifier == nil)
@@ -69,14 +69,14 @@ import Testing
     }
 
     @Test func itDoesNotRunAfterATurnThatFailed() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", check: "true", runTurn: false)
+        let v = try await VerifierFixture(check: "true", runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt,exit=1"))
         #expect(report.result != .succeeded && report.verifier == nil)
         #expect(try verifierKinds(v).isEmpty)
     }
 
     @Test func itDoesNotRunWhenThisTurnAlreadyHasAnEndedVerifier() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", runTurn: false)
+        let v = try await VerifierFixture(runTurn: false)
         let log = try EventLogWriter.open(at: v.fx.project.eventsURL(v.id))
         try await log.append(.verifierStarted, turn: 1, data: ["argv": ["claude"]])
         try await log.append(.verifierEnded, turn: 1, data: ["ok": true])
@@ -89,22 +89,21 @@ import Testing
         #expect(try skipReason(v) == "a verifier has ended for this turn already")
     }
 
-    @Test func aSkillMissingAtTheBaseIsANoteAndTheTurnStillSucceeds() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", skill: nil, runTurn: false)
+    @Test func aSkillMissingAtTheBaseIsSkippedQuietlyAndTheTurnStillSucceeds() async throws {
+        let v = try await VerifierFixture(skill: nil, runTurn: false)
         let notices = NoticeBox()
         let report = try await v.fx.runner(v.id, notices: notices).run(v.fx.options("write=a.txt"))
         #expect(report.result == .succeeded && report.verifier == nil)
-        #expect(try verifierKinds(v) == ["verifier.skipped"])
-        #expect(try skipReason(v)?.contains(".claude/skills/verify/SKILL.md") == true)
+        #expect(try verifierKinds(v).isEmpty, "nothing is logged for a project without the skill")
         let notes = notices.all.compactMap { notice -> String? in
             if case .advisory(let text) = notice { text } else { nil }
         }
-        let named = notes.contains { $0.contains("the verifier did not run") && $0.contains(".claude/skills/verify/SKILL.md") }
-        #expect(named, "\(notes)")
+        let nagged = notes.contains { $0.contains("the verifier did not run") }
+        #expect(!nagged, "a project without the skill is not nagged: \(notes)")
     }
 
     @Test func aVerifierThatFailsDoesNotFailTheTurn() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true", check: "true", runTurn: false)
+        let v = try await VerifierFixture(check: "true", runTurn: false)
         // `budget-stop` only changes the json answer; the coding turn is a stream and ignores it.
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt,budget-stop"))
         #expect(report.result == .succeeded)
@@ -113,7 +112,7 @@ import Testing
     }
 
     @Test func theTimeoutIsTheConfiguredOneAndTheTurnStillEnds() async throws {
-        let v = try await VerifierFixture(verifier: "auto = true\ntimeout_min = 1", runTurn: false)
+        let v = try await VerifierFixture(verifier: "timeout_min = 1", runTurn: false)
         var options = v.fx.options("write=a.txt")
         options.verifierTimeoutOverride = 1
         options.parentEnvironment["FAKE_CLAUDE"] = "write=a.txt,hang-after=99"

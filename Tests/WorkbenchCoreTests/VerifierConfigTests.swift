@@ -22,10 +22,22 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
 }
 
 @Suite struct VerifierConfigTests {
-    @Test func noTableMeansNoVerifier() throws {
+    @Test func noTableMeansTheDefaultVerifier() throws {
         let config = try Config.parse(tools)
-        #expect(config.verifier == nil)
+        #expect(config.verifier == VerifierConfig())
+        #expect(config.verifier?.skill == ".claude/skills/verify/SKILL.md")
         #expect(config.verifierModel == nil)
+    }
+
+    @Test func enabledFalseTurnsTheVerifierOff() throws {
+        #expect(try parse("[verifier]\nenabled = false").verifier == nil)
+        #expect(try parse("[verifier]\nenabled = true\nmodel = \"sonnet\"").verifier?.model == "sonnet")
+        #expect(problems("[verifier]\nenabled = \"no\"").map(\.code) == [.wrongType])
+    }
+
+    @Test func autoIsGoneAndNamedAsUnknown() {
+        let found = problems("[verifier]\nauto = true")
+        #expect(found.first?.message == "unknown key 'auto' in [verifier]")
     }
 
     @Test func aMinimalTableTakesThePlansDefaults() throws {
@@ -34,7 +46,6 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         #expect(verifier.skill == ".claude/skills/verify/SKILL.md")
         #expect(verifier.tools == ["Read"])
         #expect(verifier.model == nil)
-        #expect(!verifier.auto)
         #expect(verifier.budgetUSD == 1)
         #expect(verifier.timeoutMin == 10)
     }
@@ -45,7 +56,6 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
             [verifier]
             skill = ".agents/skills/verify/SKILL.md"
             model = "sonnet"
-            auto = true
             budget_usd = 2.5
             timeout_min = 20
             tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(swift scripts/ax.swift:*)"]
@@ -53,7 +63,6 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         let verifier = try #require(config.verifier)
         #expect(verifier.skill == ".agents/skills/verify/SKILL.md")
         #expect(verifier.model == "sonnet")
-        #expect(verifier.auto)
         #expect(verifier.budgetUSD == Decimal(string: "2.5"))
         #expect(verifier.timeoutMin == 20)
         #expect(verifier.tools == ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(swift scripts/ax.swift:*)"])
@@ -86,8 +95,8 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         #expect(problems("[verifier]\nskill = \"s.md\"\ntools = []").map(\.code) == [.invalidValue])
     }
 
-    @Test func theSkillIsRequiredAndNotEmpty() {
-        #expect(problems("[verifier]\nmodel = \"sonnet\"").map(\.code) == [.missingKey])
+    @Test func theSkillMayBeLeftOutButNotEmpty() {
+        #expect(problems("[verifier]\nmodel = \"sonnet\"").isEmpty)
         let empty = problems("[verifier]\nskill = \"\"")
         #expect(empty.map(\.code) == [.invalidValue])
         #expect(empty.first?.message.contains("'skill'") == true)
@@ -116,7 +125,7 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
 
     @Test func wrongTypesAndBoundsAreRefused() {
         let base = "[verifier]\nskill = \"s.md\"\n"
-        #expect(problems(base + "auto = \"yes\"").map(\.code) == [.wrongType])
+        #expect(problems(base + "enabled = \"yes\"").map(\.code) == [.wrongType])
         #expect(problems(base + "model = 3").map(\.code) == [.wrongType])
         #expect(problems(base + "model = \"has space\"").map(\.code) == [.invalidValue])
         #expect(problems(base + "tools = \"Read\"").map(\.code) == [.wrongType])

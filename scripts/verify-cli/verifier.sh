@@ -4,7 +4,7 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/verifier.sh   (the same, on a branch that contains origin/main)
 # In the clone, a throwaway base commit adds a probe skill and a helper that writes probe.txt and probe.png into the proof
 # folder. A
-# real coding turn writes one file, then `workbench verifier` runs the probe skill on the real claude, with only the
+# real coding turn writes one file, then the verifier (on by default) runs the probe skill on the real claude by itself, with only the
 # helper and Read allowed. It must end in exactly one verifier.ended with ok, name the skill and its sha256 (equal to
 # git's), run with the flags and tools the config names and no prompt in the log, leave probe.txt in the turn's proof
 # folder, record the PNG as proof.added and show it, with the verifier's note, in `review` (the criterion `screenshot:
@@ -113,12 +113,11 @@ check "goal approved" "approval is '${approval:-?}'" test "${approval:-}" = appr
 
 run_thread
 
-wb "$T_RUN" verifier >"$SCRATCH/verifier.out" 2>&1
-code=$?
-sed 's/^/    /' "$SCRATCH/verifier.out" | head -14
-check "verifier: exit 0" "workbench verifier exited $code" test "$code" = 0
-check "verifier: prints a finished report and says it is advisory" "no 'verifier finished for turn 1' / 'advisory only'" \
-    bash -c 'grep -q "verifier finished for turn 1" "$1" && grep -q "advisory only" "$1"' _ "$SCRATCH/verifier.out"
+# The verifier is on by default, so the run above started it after the turn; nothing here starts it by hand.
+wb "$T_WB" log "$ID" >"$SCRATCH/verifier.out" 2>&1
+sed 's/^/    /' "$SCRATCH/verifier.out" | grep -i verifier | head -6
+check "the run started the verifier by itself and the log says it finished" "no 'verifier finished' line in workbench log" \
+    grep -q "verifier finished" "$SCRATCH/verifier.out"
 
 LOG="$SCRATCH/log.json"
 wb "$T_WB" log "$ID" --json >"$LOG"

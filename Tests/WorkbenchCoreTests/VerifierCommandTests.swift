@@ -30,12 +30,12 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
 }
 
 @Suite struct VerifierCommandTests {
-    @Test func aProjectWithoutAVerifierSaysSoAndExitsAsARefusal() async throws {
-        let fx = try await RunnerFixture()
+    @Test func aProjectThatTurnedTheVerifierOffSaysSoAndExitsAsARefusal() async throws {
+        let fx = try await RunnerFixture(extraConfig: "[verifier]\nenabled = false")
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
         let out = try await cli(["verifier"], in: fx)
-        #expect(out.code == 6 && out.text.contains("no [verifier]"), "\(out.text)")
+        #expect(out.code == 6 && out.text.contains("enabled = false"), "\(out.text)")
     }
 
     @Test func theCommandVerifiesOnceAndAgainOnRequestThroughTheBinary() async throws {

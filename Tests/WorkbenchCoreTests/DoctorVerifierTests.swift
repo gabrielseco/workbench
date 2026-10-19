@@ -22,8 +22,8 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
 }
 
 @Suite struct DoctorVerifierTests {
-    @Test func noVerifierTableMeansNothingToReport() async throws {
-        let fx = try await RunnerFixture(extraConfig: "check_command = \"true\"")
+    @Test func disabledMeansNothingToReport() async throws {
+        let fx = try await RunnerFixture(extraConfig: "check_command = \"true\"\n[verifier]\nenabled = false")
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
         #expect(report.verifier == nil)
     }
@@ -36,7 +36,6 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
                 [verifier]
                 skill = "\(path)"
                 tools = ["Read", "Bash(scripts/snap.sh:*)"]
-                auto = true
                 """)
         try await commitSkill(fx, path, "# Verify\n\nDrive the app.\n")
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
@@ -47,7 +46,6 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(verifier.skill?.text == "# Verify\n\nDrive the app.")
         #expect(verifier.model == "opus", "the coding model is the fallback")
         #expect(verifier.config.tools == ["Read", "Bash(scripts/snap.sh:*)"])
-        #expect(verifier.config.auto)
         #expect(report.passed)
     }
 
@@ -85,5 +83,19 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
 
         #expect(report.verifier?.skill == nil)
         #expect(report.verifier?.problem?.hasSuffix(": .agents/skills/verify/SKILL.md") == true)
+    }
+}
+
+@Suite struct VerifierAvailabilityTests {
+    @Test func theSkillIsAvailableOnlyWhenOnAndCommittedAtTheRef() async throws {
+        let path = ".claude/skills/verify/SKILL.md"
+        let fx = try await RunnerFixture()
+        let config = try Config.load(from: fx.project.configURL)
+        let before = await VerifierSkill.isAvailable(config: config, git: fx.git, repo: fx.repo, ref: "main")
+        #expect(!before)
+        try await commitSkill(fx, path, "# Verify\n")
+        #expect(await VerifierSkill.isAvailable(config: config, git: fx.git, repo: fx.repo, ref: "main"))
+        let off = try Config.parse("[verifier]\nenabled = false\n[tools]\navailable = [\"Read\"]\n")
+        #expect(await !VerifierSkill.isAvailable(config: off, git: fx.git, repo: fx.repo, ref: "main"))
     }
 }

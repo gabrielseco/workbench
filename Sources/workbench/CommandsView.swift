@@ -38,9 +38,13 @@ extension Commands {
             guard follow else { return }
             let config = try? Config.load(from: ctx.project.configURL)
             let checks = config?.checkCommand != nil
+            // Asked when a turn or its check ends, not at the start: the base commit is not known before the worktree is.
+            func willVerify(_ event: Event) async -> Bool {
+                guard let config, [.turnEnded, .checkRan, .verifyEnded].contains(event.kind) else { return false }
+                return await ctx.service.verifierWillRun(id: id, config: config)
+            }
             let verifies = config?.verifyCommand != nil
-            let verifiers = config?.verifier?.auto == true
-            var checkPassed = true
+                        var checkPassed = true
             var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
             var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
                 || contents.openVerifier != nil
@@ -55,6 +59,7 @@ extension Commands {
                     if event.kind == .turnStarted { sawStart = true }
                     if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
                     if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
+                    let verifiers = await willVerify(event)
                     let done = LogFormatter.followEnds(
                         event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded,
                         verifiers: verifiers, checkPassed: checkPassed)
@@ -87,9 +92,13 @@ extension Commands {
         // A turn is followed to the end of its check and of its verify step, when they will run.
         let config = try? Config.load(from: ctx.project.configURL)
         let checks = config?.checkCommand != nil
+            // Asked when a turn or its check ends, not at the start: the base commit is not known before the worktree is.
+            func willVerify(_ event: Event) async -> Bool {
+                guard let config, [.turnEnded, .checkRan, .verifyEnded].contains(event.kind) else { return false }
+                return await ctx.service.verifierWillRun(id: id, config: config)
+            }
         let verifies = config?.verifyCommand != nil
-        let verifiers = config?.verifier?.auto == true
-        var checkPassed = true
+                var checkPassed = true
         var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn
         while true {
@@ -100,6 +109,7 @@ extension Commands {
                 if event.kind == .turnStarted { sawStart = true }
                 if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
                 if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
+                let verifiers = await willVerify(event)
                 let done = LogFormatter.followEnds(
                     event, sawStart: sawStart, checks: checks, verifies: verifies, turnSucceeded: turnSucceeded,
                     verifiers: verifiers, checkPassed: checkPassed)

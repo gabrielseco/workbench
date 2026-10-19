@@ -13,7 +13,7 @@ extension Commands {
         }
         out("  model:  \(model)")
         out("  tools:  \(config.tools.joined(separator: ", "))")
-        out("  auto:   \(config.auto ? "on" : "off")  budget: $\(config.budgetUSD)  timeout: \(config.timeoutMin) min")
+        out("  budget: $\(config.budgetUSD)  timeout: \(config.timeoutMin) min")
         if let problem = verifier.problem { out("  warning: \(problem)") }
     }
 }

@@ -406,13 +406,15 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
 
 @Suite struct ReviewStageProofDoctorTests {
     @Test func aProofStageWithoutAVerifyCommandWarnsAndDoesNotFail() async throws {
-        let fx = try await RunnerFixture(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
+        let stages = stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]")
+        let fx = try await RunnerFixture(extraConfig: stages + "\n[verifier]\nenabled = false")
         var options = Doctor.Options()
         options.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
         options.screenRecordingGranted = { true }
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options)
         #expect(report.reviewWarnings == [
-            "the design stage reads proof, and there is no verify_command or [verifier] to leave any: its rounds will fail",
+            "the design stage reads proof, and there is no verify_command and the verifier is off to leave any: "
+                + "its rounds will fail",
         ])
         #expect(report.passed)
     }

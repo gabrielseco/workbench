@@ -368,6 +368,8 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         _ = try await fx.runner(id).run(fx.options())
         let config = try Config.load(from: fx.project.configURL)
         let before = try fx.kinds(id)
+        // The thread run above touched it too; wait for doctor's own setup.
+        try? FileManager.default.removeItem(atPath: script.path("setup.sh.started"))
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
         #expect(await script.waitFor("setup.sh.started"))
 
