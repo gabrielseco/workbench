@@ -172,7 +172,7 @@ check "the screenshot criterion reads see screenshot" "c2 is not 'see screenshot
     bash -c 'grep -q "\[c2\] see screenshot" "$1"' _ "$SCRATCH/review.out"
 check "the other criterion is still yours to check (the report passes nothing)" "c1 is not 'you check'" \
     bash -c 'grep -q "\[c1\] you check" "$1" && ! grep -q "✔ passed" "$1"' _ "$SCRATCH/review.out"
-wb "$T_WB" review "$ID" --json >"$SCRATCH/review.json" 2>&1
+wb "$T_WB" review "$ID" --json >"$SCRATCH/review.json" 2>/dev/null
 rj=$(py "v=d['verifier']; c={x['id']:x for x in d['criteria']}; print(v['ok'], v['stale'], ' '.join(f['name'] for f in v['proof']), c['c2']['status'], ' '.join(c['c2']['files']), c['c1']['status'])" <"$SCRATCH/review.json")
 check "review --json lists the verifier, its proof and the criteria" "got: $rj" \
     test "$rj" = "True False probe.png evidence proof/turn-1/probe.png manual"
