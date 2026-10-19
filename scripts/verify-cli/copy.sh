@@ -30,7 +30,7 @@ doctor_to() { # <file>: doctor's output into <file>, its exit code on stdout
 
 # --- 1. a matching ignored file reaches the worktree before setup ------------------------------------------
 
-echo "copy-probe" >"$ROOT/$PROBE"
+echo "contents-7f3a91" >"$ROOT/$PROBE"
 check "the probe is ignored by git" "git does not ignore $PROBE" git check-ignore -q "$PROBE"
 [ "$SABOTAGE" = 1 ] && { echo "    VERIFY_CLI_SABOTAGE=1: removing the probe from the checkout"; rm -f "$ROOT/$PROBE"; }
 
@@ -39,7 +39,7 @@ setup_command = \"cat $PROBE\""
 code=$(doctor_to "$SCRATCH/doctor1.out")
 sed 's/^/    /' "$SCRATCH/doctor1.out" | head -14
 check "doctor with copy: exit 0" "workbench doctor exited $code" test "$code" = 0
-check "doctor with copy: setup sees the copied file" "the setup output has no 'copy-probe'" grep -q 'copy-probe' "$SCRATCH/doctor1.out"
+check "doctor with copy: setup sees the copied file" "the setup output has no 'copy-probe'" grep -q contents-7f3a91 "$SCRATCH/doctor1.out"
 check "doctor leaves no worktree or branch of its own" "doctor's worktree or branch is still there" \
     bash -c '! git rev-parse -q --verify refs/heads/workbench/doctor >/dev/null && [ ! -e "$1/.workbench/worktrees/doctor" ]' _ "$ROOT"
 check "the checkout is unchanged" "git status shows: $(g status --porcelain)" test -z "$(g status --porcelain)"
