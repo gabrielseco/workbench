@@ -111,6 +111,12 @@ public struct WorktreeManager: Sendable {
         return Worktree(threadID: threadID, path: target, branch: branch, baseCommit: baseCommit, copy: copy)
     }
 
+    /// Finishes a copy a killed run left half done: what is already in the worktree is kept, the rest is copied.
+    public func copyMissing(_ patterns: [String], into threadID: String) async -> CopyReport {
+        guard SafeNames.isThreadID(threadID), exists(threadID), !patterns.isEmpty else { return CopyReport() }
+        return await WorktreeCopier(source: repoRoot, git: git).copy(patterns, to: path(for: threadID))
+    }
+
     // MARK: Remove
 
     /// Removes the worktree directory. Git refuses when it has uncommitted changes unless `force`.

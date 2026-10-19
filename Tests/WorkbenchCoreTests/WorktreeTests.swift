@@ -532,6 +532,31 @@ private struct TestRepo {
         #expect(report.skipped.last?.hasPrefix("and ") == true)
     }
 
+    @Test func aCopyThatWasCutShortIsFinishedWithoutCopyingTwice() async throws {
+        let repo = try await ignoringEnv()
+        try repo.write(".env.a", "A=1\n")
+        try repo.write(".env.b", "B=2\n")
+        let tree = try await repo.manager.create(threadID: "t1", base: "main", copying: [".env.a"])
+        #expect(tree.copy.copied == [".env.a"])
+        // The worktree exists with one of the two files, as after a run killed mid-copy.
+        let first = await repo.manager.copyMissing([".env.a", ".env.b"], into: "t1")
+        #expect(first.copied == [".env.b"] && first.skipped.isEmpty)
+        let again = await repo.manager.copyMissing([".env.a", ".env.b"], into: "t1")
+        #expect(again == CopyReport())
+        #expect(try String(contentsOf: tree.path.appendingPathComponent(".env.b"), encoding: .utf8) == "B=2\n")
+    }
+
+    @Test func aGlobOverManyFoldersWithNoMatchStopsWithANote() async throws {
+        let repo = try await TestRepo()
+        for i in 0..<12 { for j in 0..<3 { try repo.write("deps/p\(i)/q\(j)/index.js", "x") } }
+        let tree = try await repo.manager.create(threadID: "t1", base: "main")
+        var copier = WorktreeCopier(source: repo.root, git: repo.git)
+        copier.maxMatches = 20
+        let report = await copier.copy(["deps/*/*/.env"], to: tree.path)
+        #expect(report.copied.isEmpty)
+        #expect(report.skipped.contains { $0.contains("stopped after looking at 20 entries") })
+    }
+
     @Test func theConfigKeyRejectsPathsThatLeaveTheRepository() throws {
         func parse(_ line: String) throws -> Config {
             try Config.parse("\(line)\n[tools]\navailable = [\"Read\"]\n")

@@ -298,7 +298,8 @@ Notes:
   rules): a file either does not ignore would show up in the diff, so it is skipped with that reason. Also skipped,
   with a reason: a symlink (never followed), a file whose folder is a symlink in the worktree, a file over 1 MiB,
   anything past 200 files, and a file already there. A pattern that matches nothing is a note, not an error. At
-  most 1000 matches are looked at and 20 notes kept, then one line counts the rest. Entries are checked when the
+  most 1000 directory entries are looked at (matching or not) and 20 notes kept, then one line counts the rest. A run
+  killed mid-copy finishes the copy on its next `run`, before the first turn. Entries are checked when the
   config loads: no absolute or `~` path, no `.`, `..` or empty parts, nothing under `.git` or `.workbench`.
   `worktree.created` lists what was copied; `doctor` copies too, so its setup and check see the same files a
   thread does, and prints `copy: not copied:` lines for what it left out.
