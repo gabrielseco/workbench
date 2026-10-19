@@ -156,3 +156,50 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
         #expect(LogFormatter.describe(skipped).contains("verifier skipped: the turn left no change to look at"))
     }
 }
+
+@Suite struct VerifierFollowTests {
+    @Test func aLogJoinedWhileTheVerifierRunsReportsItAsOpen() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vfollow-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = try EventLogWriter.open(at: url)
+        try await log.append(.verifierStarted, turn: 2, data: [:])
+        #expect(try EventLogReader.read(at: url).openVerifier == 2)
+        try await log.append(.verifierEnded, turn: 2, data: ["ok": true])
+        #expect(try EventLogReader.read(at: url).openVerifier == nil)
+        await log.close()
+    }
+
+    @Test func followingJoinedMidVerifierEndsWhenItDoes() async throws {
+        let v = try await VerifierFixture()
+        let ready = FakeClaude.scratch("verifier-follow")
+        defer { try? FileManager.default.removeItem(atPath: ready) }
+        var verifier = SpawnRequest(
+            executable: WorkbenchBinary.executable, arguments: ["verifier"],
+            environment: [
+                "PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName(),
+                "FAKE_CLAUDE": "ready=\(ready),hang-after=1",
+            ],
+            workingDirectory: v.fx.repo, timeout: 60)
+        verifier.snapshotInterval = 3600
+        let run = try ProcessRunner.start(verifier)
+        let deadline = Date().addingTimeInterval(Patience.limit)
+        while !FileManager.default.fileExists(atPath: ready), Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        try #require(FileManager.default.fileExists(atPath: ready))
+
+        var follow = SpawnRequest(
+            executable: WorkbenchBinary.executable, arguments: ["log", "-f"],
+            environment: ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName()],
+            workingDirectory: v.fx.repo, timeout: 30)
+        follow.snapshotInterval = 3600
+        let following = try ProcessRunner.start(follow)
+        try await Task.sleep(nanoseconds: 700_000_000)  // let it read the log and start waiting
+        let stop = try await cli(["stop"], in: v.fx)
+        #expect(stop.code == 0, "\(stop.text)")
+        var followExit: ProcessExit?
+        for await event in following.events { if case .exited(let e) = event { followExit = e } }
+        for await _ in run.events {}
+        let how = String(describing: followExit)
+        #expect(followExit?.cause == .natural, "the follower should end by itself, not at the timeout: \(how)")
+        #expect(followExit?.termination == .exited(0))
+    }
+}

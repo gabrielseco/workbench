@@ -43,6 +43,7 @@ extension Commands {
             var checkPassed = true
             var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
             var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
+                || contents.openVerifier != nil
             var seen = contents.events.count
             while true {
                 try await Task.sleep(nanoseconds: 300_000_000)
@@ -76,6 +77,7 @@ extension Commands {
         var contents = try EventLogReader.read(at: url)
         // Already in the middle of a turn or of its check: follow until that ends.
         let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
+            || contents.openVerifier != nil
         for event in contents.events {
             show(event)
             printed += 1
