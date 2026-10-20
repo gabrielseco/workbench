@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `verifier` (P10 PR 2) and `run` (P16).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `verifier` (P10 PR 2), `run` (P16) and `thread-setup` (the default base, `goal new --from`'s front matter, `ship` and a base not on origin).
 
 ## When to use it
 
@@ -32,6 +32,7 @@ bash scripts/verify-cli/doctor.sh                  # doctor after approve and du
 bash scripts/verify-cli/verifier-config.sh         # [verifier] and doctor on a clone, no turn, costs nothing
 bash scripts/verify-cli/verifier.sh                # one real verifier run on a throwaway skill (a coding turn, then the verifier)
 bash scripts/verify-cli/run.sh                     # [run]: the verifier's helper can only reach the app Workbench started, which is gone after
+bash scripts/verify-cli/thread-setup.sh            # default base, goal new --from, ship refusing a local-only base; a clone, no turn, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -138,6 +139,18 @@ help leaves the thread's log and branch alone; `ship --bogus` exits 2 with one s
 synopsis and `(workbench help ship)`; the same with `--json` in `error.message`; `help frobnicate` exits 2 and lists the
 commands; plain `help` is still the usage block; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` compares `ship`'s
 help with `plan`'s, so the "same text" step must FAIL.
+
+### thread-setup
+
+No turn is run, so it costs nothing. A clone of this repository whose origin is a bare copy in the temp folder (its
+`HEAD` is `main`), with a feature branch checked out and a branch that exists only in the clone. Steps: `init`; `goal new`
+without `--base` exits 0, prints `base: main` and `status --json` says the base is `main`, not the feature branch; `abandon`
+ends it; `goal new --from` a file with `budget_usd: 7`, `base` and `status` exits 0, names `base` and `status` on its
+`ignored from the file:` line, and `status --json` reports `budget_usd` 7; `goal approve`; the script makes the thread's
+worktree and one file itself (no turn) and `accept` commits it; `ship --yes --no-describe` of that thread, whose base is
+the local-only branch, exits 6, names the base and says to push it or change the goal's base, and the origin has no
+`workbench/` branch. `VERIFY_CLI_SABOTAGE=1` pushes the local base to the origin before `ship`, so the three ship steps
+must FAIL (the push then lands only in the temp folder's origin, and `gh` cannot open a pull request on it).
 
 ## Adding a scenario for the next feature
 
