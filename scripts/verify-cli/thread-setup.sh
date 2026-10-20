@@ -90,7 +90,8 @@ check "goal new --from names the ignored keys" "no 'ignored from the file:' line
 ID2=$(created "$SCRATCH/new2.out")
 wbp "$SCRATCH/st2.json" status "$ID2" --json
 budget=$(py "print(d['goal']['budget_usd'])" <"$SCRATCH/st2.json" 2>/dev/null)
-check "status --json reports the file's budget_usd: 7" "status --json says budget_usd '$budget'" test "$budget" = 7.0
+check "status --json reports the file's budget_usd: 7" "status --json says budget_usd '$budget'" \
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) == 7 else 1)" "${budget:-0}"
 
 # --- 3. ship refuses a base that is not on origin -----------------------------------------------------------
 
@@ -113,6 +114,7 @@ check "ship with the base only in the clone: exit 6 (refused)" "workbench ship e
 check "the refusal names the base and says to push it or change it" "no 'origin has no branch $LOCAL_BASE' message" \
     bash -c 'grep -q "origin has no branch $2" "$1" && grep -q "Push it" "$1" && grep -q "goal.s base" "$1"' \
     _ "$SCRATCH/ship.out" "$LOCAL_BASE"
-pushed=$(g -C "$ORIGIN" for-each-ref --format='%(refname)' "refs/heads/workbench/")
-check "nothing was pushed: the origin has no workbench/ branch" "the origin has: $pushed" test -z "$pushed"
+# This thread's branch only: a copy made from a thread's own branch already holds that one.
+pushed=$(g -C "$ORIGIN" for-each-ref --format='%(refname)' "refs/heads/workbench/$ID2")
+check "nothing was pushed: the origin has no branch for this thread" "the origin has: $pushed" test -z "$pushed"
 finish
