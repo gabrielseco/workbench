@@ -158,6 +158,7 @@ struct VerifierRun {
                 data: ["ready": false, "reason": "no free port could be found for the app"])
             return (nil, "no free port could be found for the app")
         }
+        let launchBegan = Date()
         let launcher = AppLauncher(
             run: runConfig, worktree: worktree, environment: config.childEnvironment(from: environment),
             lifetime: timeout + TimeInterval(runConfig.readyTimeoutS) + 30, killGrace: killGrace)
@@ -167,6 +168,7 @@ struct VerifierRun {
         case .failure(let failure):
             var data: [String: JSONValue] = ["ready": false, "reason": .string(Self.clean(failure.description))]
             if !failure.tail.isEmpty { data["tail"] = .array(failure.tail.map { .string(Self.clean($0)) }) }
+            data["duration_ms"] = .int(Int(Date().timeIntervalSince(launchBegan) * 1000))
             if case .exited(let end) = failure, let exit = end.exit {
                 data["duration_ms"] = .int(exit.durationMs)
                 switch exit.termination {

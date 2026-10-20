@@ -261,6 +261,7 @@ private final class StopHolder: @unchecked Sendable {
         try v.expectPairedRun()
         let ended = try #require(try v.fx.events(v.id).first { $0.kind == .runEnded }).data
         #expect(ended["ready"] == false && ended["reason"]?.stringValue == reason)
+        #expect(ended["duration_ms"]?.intValue != nil, "every failed start says how long it took")
         if reason.contains("ended before") { #expect(ended["exit_code"]?.intValue == 3 && ended["duration_ms"]?.intValue != nil) }
         guard case .array(let lines)? = ended["tail"] else { Issue.record("tail missing"); return }
         #expect(lines.compactMap(\.stringValue).contains { $0.contains(tail) })

@@ -42,6 +42,7 @@ import Testing
         ("[run]\ncommand = \"a\"\nready_line = \"\"", "regular expression"),
         ("[run]\ncommand = \"a\"\nready_url = \"https://localhost:1/\"", "'ready_url' must be an http URL"),
         ("[run]\ncommand = \"a\"\nready_url = \"http://example.com/\"", "must point at this machine"),
+        ("[run]\ncommand = \"a\"\nready_url = \"http://localhost/\"", "with a port"),
         ("[run]\ncommand = \"a\"\nready_line = \"x\"\nready_timeout_s = 0", "'ready_timeout_s'"),
         ("[run]\ncommand = \"a\"\nready_line = \"x\"\nready_timeout_s = 100000", "'ready_timeout_s'"),
         ("[run]\ncommand = 3\nready_line = \"x\"", "'command' must be a string"),

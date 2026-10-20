@@ -35,8 +35,8 @@ public struct RunConfig: Sendable, Equatable {
     /// Why a ready URL cannot be used, nil when it can. Only this machine: the check must not reach out.
     static func urlProblem(_ value: String) -> String? {
         guard let url = URL(string: value.replacingOccurrences(of: "{port}", with: "1")),
-            let scheme = url.scheme, scheme == "http", let host = url.host
-        else { return "must be an http URL such as \"http://localhost:{port}/\"" }
+            let scheme = url.scheme, scheme == "http", let host = url.host, url.port != nil
+        else { return "must be an http URL with a port, such as \"http://localhost:{port}/\"" }
         guard ["localhost", "127.0.0.1", "[::1]", "::1"].contains(host) else {
             return "must point at this machine (localhost or 127.0.0.1), not '\(host)'"
         }
