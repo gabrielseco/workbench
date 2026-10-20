@@ -13,10 +13,13 @@ let workbenchUsage = """
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
       doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing;
-                                 works before goal new and after goal approve, refused only while a run is live
+                                 works before goal new and after goal approve, refused only while a run is live;
+                                 base without --base: the default branch (origin/HEAD, else main, else master,
+                                 else the checked-out branch)
 
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
+                                 base without --base: the default branch, as for doctor; printed as base:
                                  --from <goal-file> copies its request, criteria and out of scope into the draft
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
       goal approve [id]          approve the goal; any later edit returns it to draft

@@ -164,6 +164,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them
   and the status is `draft` again.
 - **Out of scope is part of the contract.** The runner puts it in the prompt and the review shows it.
+- **`workbench goal new <name>` writes the draft.** Its `base` is `--base` when given, else the repo's default
+  branch: the branch `origin/HEAD` points to, else a local `main`, else a local `master`, else the checked-out
+  branch, else `main` (an unborn repo). It is not simply the checked-out branch, which may be a feature branch.
+  `goal new` prints it as `base: <branch>`; `doctor` without `--base` uses the same default.
 - **The inputs are the goal and the project's instructions file.** The runner builds the first prompt from
   the goal, and puts the repository's `AGENTS.md` (else `CLAUDE.md`) after "Out of scope" under
   `## Project instructions`. Nothing else installed on the machine reaches a run. See "Project
@@ -393,7 +397,7 @@ Notes:
   prints a hint at `env_pass`.
 - **`workbench doctor [--base <branch>]` proves the declared config works** before any goal exists. It cuts
   a throwaway worktree (reserved id `doctor`, removed on every path, a crash leftover is replaced by the next
-  run) at the base (default: the checked-out branch), runs `setup_command` then `check_command` through the
+  run) at the base (default: the repo's default branch, as for `goal new`), runs `setup_command` then `check_command` through the
   same runners, environment and limits a thread uses, and prints each step's result, duration, output tail
   and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `model` (or
   the CLI default), and whether `Bash` is in `[tools].available` and the check is not denied. It runs nothing the config does not

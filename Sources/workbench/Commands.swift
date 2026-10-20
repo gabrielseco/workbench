@@ -257,6 +257,9 @@ enum Commands {
         let id = try await ctx.service.newThread(
             name: name, base: base, updating: updating, config: config, body: body)
         out("created \(id)")
+        if let base = try? GoalFile.parse(String(contentsOf: ctx.project.goalURL(id), encoding: .utf8)).goal.base {
+            out("base:    \(base)")
+        }
         out("edit:    \(ctx.project.goalURL(id).path)")
         out("then:    workbench goal approve")
         if config == nil { out("note: no .workbench/config.toml yet; run `workbench init`") }
