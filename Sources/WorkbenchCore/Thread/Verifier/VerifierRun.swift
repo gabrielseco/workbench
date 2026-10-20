@@ -7,6 +7,8 @@ import Foundation
 struct VerifierRun {
     var config: Config
     var verifier: VerifierConfig
+    /// `[run]`: the app Workbench starts before the turn and stops after it. Nil when the project has none.
+    var run: RunConfig?
     var skill: VerifierSkill
     var goal: Goal
     var threadID: String
@@ -24,11 +26,12 @@ struct VerifierRun {
 
     /// Appends `verifier.started`, runs, sweeps and appends `verifier.ended`. Only a failure to write the log throws.
     func run(turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void) async throws -> VerifierReport {
-        let prompt = Verifier.prompt(
-            skill: skill, goal: goal, proofDirectory: proofDirectory, threadID: threadID, goalPath: goalPath)
-        let arguments = Verifier.arguments(
-            config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory)
-        let shown = PRDescriber.displayArguments(arguments)
+        // The prompt names the app, which is only known once it is up; the attempt below is recorded first, so the
+        // recorded argv has the prompt left out as it always has.
+        let sessionID = UUID()
+        let shown = PRDescriber.displayArguments(
+            Verifier.arguments(
+                config: config, verifier: verifier, prompt: "", proofDirectory: proofDirectory, sessionID: sessionID))
 
         // A `claude` or an app a killed verifier left is found by the worktree it ran in, and ended first.
         OrphanSweeper.sweep(inside: worktree)
@@ -44,30 +47,53 @@ struct VerifierRun {
             ])
         let began = Date()
 
-        var request = SpawnRequest(
-            executable: claude, arguments: arguments,
-            environment: Verifier.environment(
-                base: config.childEnvironment(from: environment), proofDirectory: proofDirectory,
-                threadID: threadID, goalPath: goalPath),
-            workingDirectory: worktree, timeout: timeout)
-        request.killGrace = killGrace
-        request.maxLineBytes = Verifier.maxOutputBytes
+        // The app comes up first, and only a verifier that has one to drive is started and paid for.
+        var app: AppLauncher.Running?
+        var launchFailure: String?
+        if let runConfig = run {
+            let launched = await launch(runConfig, turn: turn, log: log, attach: attach)
+            app = launched.app
+            launchFailure = launched.failure
+        }
+
         var lines: [String] = []
         var exit: ProcessExit?
         var oversized = false
-        var startError: String?
-        do {
-            let process = try ProcessRunner.start(request)
-            attach(process)
-            for await event in process.events {
-                switch event {
-                case .line(let line): lines.append(line)
-                case .exited(let e): exit = e
-                case .oversizedLine: oversized = true
-                case .started: break
+        var startError = launchFailure
+        if launchFailure == nil {
+            let info = app.map { Verifier.RunningApp(pid: $0.pid, port: $0.port, url: $0.url) }
+            let prompt = Verifier.prompt(
+                skill: skill, goal: goal, proofDirectory: proofDirectory, threadID: threadID, goalPath: goalPath,
+                app: info)
+            let arguments = Verifier.arguments(
+                config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory,
+                sessionID: sessionID)
+            var request = SpawnRequest(
+                executable: claude, arguments: arguments,
+                environment: Verifier.environment(
+                    base: config.childEnvironment(from: environment), proofDirectory: proofDirectory,
+                    threadID: threadID, goalPath: goalPath, app: info),
+                workingDirectory: worktree, timeout: timeout)
+            request.killGrace = killGrace
+            request.maxLineBytes = Verifier.maxOutputBytes
+            do {
+                let process = try ProcessRunner.start(request)
+                attach(process)
+                for await event in process.events {
+                    switch event {
+                    case .line(let line): lines.append(line)
+                    case .exited(let e): exit = e
+                    case .oversizedLine: oversized = true
+                    case .started: break
+                    }
                 }
-            }
-        } catch { startError = "claude could not be started" }
+            } catch { startError = "claude could not be started" }
+        }
+
+        // The app goes with the turn, however the turn ended. Nothing between its start and here can throw.
+        var appEnd: AppLauncher.AppEnd?
+        if let app { appEnd = await app.stop() }
+        if let app, let appEnd { try await recordRunEnd(app: app, end: appEnd, turn: turn, log: log) }
 
         // The run ended; whatever it started and left (the app, also in a new session) goes with it.
         let swept = OrphanSweeper.sweep(inside: worktree)
@@ -111,6 +137,55 @@ struct VerifierRun {
         }
         try await log.append(.verifierEnded, turn: turn, data: .object(data))
         return report
+    }
+
+    /// Records `run.started`, starts the app and waits for it. On a failure `run.ended` is already written and the
+    /// failure is what the verifier turn ends with.
+    private func launch(
+        _ runConfig: RunConfig, turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void
+    ) async -> (app: AppLauncher.Running?, failure: String?) {
+        let port = AppLauncher.freePort()
+        var started: [String: JSONValue] = ["command": .string(runConfig.command), "port": port.map { .int($0) } ?? .null]
+        switch runConfig.ready {
+        case .url(let url): started["ready_url"] = .string(url)
+        case .line(let pattern): started["ready_line"] = .string(pattern)
+        }
+        try? await log.append(.runStarted, turn: turn, data: .object(started))
+        guard let port else {
+            try? await log.append(
+                .runEnded, turn: turn,
+                data: ["ready": false, "reason": "no free port could be found for the app"])
+            return (nil, "no free port could be found for the app")
+        }
+        let launcher = AppLauncher(
+            run: runConfig, worktree: worktree, environment: config.childEnvironment(from: environment),
+            lifetime: timeout + TimeInterval(runConfig.readyTimeoutS) + 30, killGrace: killGrace)
+        switch await launcher.start(port: port, threadID: threadID, goalPath: goalPath, attach: attach) {
+        case .success(let app):
+            return (app, nil)
+        case .failure(let failure):
+            var data: [String: JSONValue] = ["ready": false, "reason": .string(Self.clean(failure.description))]
+            if !failure.tail.isEmpty { data["tail"] = .array(failure.tail.map { .string(Self.clean($0)) }) }
+            try? await log.append(.runEnded, turn: turn, data: .object(data))
+            return (nil, Self.clean(failure.description))
+        }
+    }
+
+    private func recordRunEnd(
+        app: AppLauncher.Running, end: AppLauncher.AppEnd, turn: Int, log: EventLogWriter
+    ) async throws {
+        var data: [String: JSONValue] = ["ready": true, "ready_ms": .int(app.readyMs), "exited_early": .bool(end.exitedEarly)]
+        if let exit = end.exit {
+            data["duration_ms"] = .int(exit.durationMs)
+            switch exit.termination {
+            case .exited(let code): data["exit_code"] = .int(Int(code))
+            case .signaled(let signal): data["signal"] = .int(Int(signal))
+            case .lost: data["lost"] = true
+            }
+            if exit.escalatedToKill { data["escalated_to_kill"] = true }
+            if exit.sweptProcesses > 0 { data["swept_processes"] = .int(exit.sweptProcesses) }
+        }
+        try await log.append(.runEnded, turn: turn, data: .object(data))
     }
 
     /// What the output and the exit say. A run that was stopped or timed out has no answer worth reading; one that

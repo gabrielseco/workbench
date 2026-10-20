@@ -17,4 +17,13 @@ extension Commands {
         if let problem = verifier.problem { out("  warning: \(problem)") }
         if let missing = verifier.screenRecording { out("  warning: \(missing)") }
     }
+
+    static func printRun(_ run: DoctorRun) {
+        out("run: \(run.config.command)")
+        switch run.config.ready {
+        case .url(let url): out("  ready:  \(url) answers (within \(run.config.readyTimeoutS)s)")
+        case .line(let pattern): out("  ready:  a line matching /\(pattern)/ (within \(run.config.readyTimeoutS)s)")
+        }
+        if let problem = run.problem { out("  warning: \(problem)") }
+    }
 }

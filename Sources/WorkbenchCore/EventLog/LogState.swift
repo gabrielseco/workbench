@@ -34,6 +34,8 @@ struct LogState: Sendable {
     var planStart: Event?
     /// The `verifier.started` no `verifier.ended` has closed. Crash recovery only, like the plan.
     var verifierStart: Event?
+    /// The `run.started` no `run.ended` has closed: the verifier's app. Crash recovery only.
+    var runStart: Event?
 
     func check(_ event: Event, line: Int = 0) -> LogProblem? {
         if event.seq != nextSeq {
@@ -89,6 +91,10 @@ struct LogState: Sendable {
             planStart = event
         case .planEnded:
             planStart = nil
+        case .runStarted:
+            runStart = event
+        case .runEnded:
+            runStart = nil
         case .verifierStarted:
             verifierStart = event
         case .verifierEnded:

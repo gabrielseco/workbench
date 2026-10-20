@@ -13,7 +13,8 @@ struct VerifierFixture {
     let config: Config
 
     init(
-        verifier: String = "", skill: String? = skillText, check: String? = nil, runTurn: Bool = true, root: String = ""
+        verifier: String = "", skill: String? = skillText, check: String? = nil, runTurn: Bool = true, root: String = "",
+        run: String = "", files: [String: String] = [:]
     ) async throws {
         let table = """
             [verifier]
@@ -26,8 +27,19 @@ struct VerifierFixture {
         // after `extraConfig`, which would end it, so it is written again after.
         fx = try await RunnerFixture(extraConfig: (check.map { "check_command = \"\($0)\"\n" } ?? "") + root)
         var text = try String(contentsOf: fx.project.configURL, encoding: .utf8)
-        text += "\n" + table + "\n"
+        text += "\n" + table + "\n" + run + "\n"
         try text.write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+        // Committed before the thread exists, so they are in its worktree; executable, like a project's scripts.
+        for (path, body) in files {
+            let url = fx.repo.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        }
+        if !files.isEmpty {
+            _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+            _ = try await fx.git.run(["commit", "-q", "-m", "scripts"], in: fx.repo)
+        }
         if let skill {
             let url = fx.repo.appendingPathComponent(skillPath)
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

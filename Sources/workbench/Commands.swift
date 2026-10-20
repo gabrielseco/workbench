@@ -237,6 +237,7 @@ enum Commands {
         for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
         for note in report.copySkipped { out("copy:     not copied: \(note)") }
         if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
+        if let run = report.run { printRun(run) }
     }
 
     static func goalNew(_ args: [String]) async throws {

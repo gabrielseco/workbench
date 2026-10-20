@@ -202,6 +202,10 @@ public actor EventLogWriter {
     @discardableResult
     public func recoverOrphanedVerifier() throws -> Event? {
         guard let started = state.verifierStart else { return nil }
+        // The app it started went down with it (the caller sweeps the worktree); say so before the verifier's end.
+        if let run = state.runStart {
+            try append(.runEnded, turn: run.turn, data: ["ready": false, "reason": "interrupted", "synthetic": true])
+        }
         let data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
         return try append(.verifierEnded, turn: started.turn, data: .object(data))
     }

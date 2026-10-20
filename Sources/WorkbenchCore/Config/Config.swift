@@ -88,6 +88,9 @@ public struct Config: Sendable, Equatable {
     /// `[verifier]`, or nil when the project declares none.
     public var verifier: VerifierConfig?
 
+    /// `[run]`, or nil when the project declares no way to start its app.
+    public var run: RunConfig?
+
     /// `--model` for the verifier: its own, else the coding `model`.
     public var verifierModel: String? { verifier?.model ?? model }
 
@@ -136,7 +139,8 @@ public struct Config: Sendable, Equatable {
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
         // The review and verifier tables check their own keys (ReviewConfig.parse, VerifierConfig.parse).
-        let leftToTheirOwn = { (name: String) in ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) }
+        let leftToTheirOwn = { (name: String) in ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) || RunConfig.owns(table: name)
+        }
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !leftToTheirOwn(name) {
             if name != "" && name != "tools" {
                 fail(.unknownTable, table.line, "unknown table [\(name)]")
@@ -255,6 +259,7 @@ public struct Config: Sendable, Equatable {
 
         let review = ReviewConfig.parse(document, fail: fail)
         let verifier = VerifierConfig.parse(document, fail: fail)
+        let run = RunConfig.parse(document, fail: fail)
 
         var envPass: [String] = []
         if let (values, line) = strings("", "env_pass") {
@@ -310,7 +315,7 @@ public struct Config: Sendable, Equatable {
             appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, judgeModel: judgeModel, describeModel: describeModel,
-            planModel: planModel, verifier: verifier)
+            planModel: planModel, verifier: verifier, run: run)
     }
 
     /// Keys an older config used for the verify step, which `[verifier]` replaced.
@@ -377,6 +382,10 @@ public struct Config: Sendable, Equatable {
         # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head
         # max_rounds = 3                   # reviews of one pull request, counted from the event log (1 to 10)
         # (also accepted as [review.stage.pr-review]; `[review] stages = [...]` lists the review stages, in order)
+
+        # [run]                            # how the verifier's app is started: Workbench runs it and stops it
+        # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
+        # ready_url = "http://localhost:{port}/"  # or ready_line = "Triage on mock data" (a regex on its output)
 
         # [verifier]                       # on by default: runs the project's skill after a passing check
         # enabled = false                  # turn it off; with no skill file at the base it is skipped anyway
