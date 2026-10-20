@@ -139,7 +139,8 @@ public struct Config: Sendable, Equatable {
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
         // The review and verifier tables check their own keys (ReviewConfig.parse, VerifierConfig.parse).
-        let leftToTheirOwn = { (name: String) in ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) || RunConfig.owns(table: name)
+        let leftToTheirOwn = { (name: String) in
+            ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) || RunConfig.owns(table: name)
         }
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !leftToTheirOwn(name) {
             if name != "" && name != "tools" {

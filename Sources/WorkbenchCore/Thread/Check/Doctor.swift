@@ -271,7 +271,9 @@ public final class Doctor: @unchecked Sendable {
             problem = "[run] starts the app for the verifier, which is turned off; nothing will use it"
         } else if let word = run.command.split(separator: " ").first.map(String.init), word.contains("/"), !word.hasPrefix("/") {
             let there = try? await git.run(["cat-file", "-e", "\(base):\(word)"], in: project.root)
-            if there?.succeeded != true { problem = "'\(word)' is not in the repository at \(base), so the app cannot be started" }
+            if there?.succeeded != true {
+                problem = "'\(word)' is not in the repository at \(base), so the app cannot be started"
+            }
         }
         return DoctorRun(config: run, problem: problem)
     }

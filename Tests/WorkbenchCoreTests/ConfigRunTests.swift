@@ -4,7 +4,9 @@ import Testing
 @testable import WorkbenchCore
 
 @Suite struct ConfigRunTests {
-    private func parse(_ run: String) throws -> Config { try Config.parse("\(run)\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n") }
+    private func parse(_ run: String) throws -> Config {
+        try Config.parse("\(run)\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n")
+    }
 
     private func problems(_ run: String) -> [String] {
         do {

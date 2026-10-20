@@ -104,7 +104,9 @@ public struct RunConfig: Sendable, Equatable {
             if case .int(let n) = entry.value, (1...maxReadyTimeoutS).contains(n) {
                 timeout = n
             } else {
-                fail(.invalidValue, entry.line, "'ready_timeout_s' must be a whole number of seconds from 1 to \(maxReadyTimeoutS)")
+                fail(
+                    .invalidValue, entry.line,
+                    "'ready_timeout_s' must be a whole number of seconds from 1 to \(maxReadyTimeoutS)")
                 ok = false
             }
         }
