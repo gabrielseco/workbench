@@ -1,11 +1,37 @@
 import Foundation
 
+/// One commit as `review` and `branch.ahead` list it.
+public struct BranchCommit: Sendable, Equatable {
+    public var sha: String
+    /// Cut at `subjectLimit` characters.
+    public var subject: String
+
+    public static let listed = 10
+    public static let subjectLimit = 100
+
+    /// The commits in `range` (`<from>..<to>`, both already validated), how many there are and the oldest
+    /// `listed` of them, oldest first. Nil when git cannot list them.
+    static func oldest(in range: String, at directory: URL, git: GitRunner) async -> (count: Int, commits: [BranchCommit])? {
+        guard let counted = try? await git.run(["rev-list", "--count", range], in: directory), counted.succeeded,
+            let count = Int(counted.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return nil }
+        // Newest first from git, so skipping the newest leaves the oldest few, read without walking more.
+        guard let listed = try? await git.run(
+            ["log", "--no-decorate", "--format=%H%x09%s", "--max-count=\(listed)", "--skip=\(max(0, count - listed))", range],
+            in: directory), listed.succeeded
+        else { return nil }
+        let commits = listed.stdout.split(separator: "\n").reversed().map { line in
+            let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+            return BranchCommit(
+                sha: String(parts[0]), subject: String((parts.count > 1 ? parts[1] : "").prefix(subjectLimit)))
+        }
+        return (count, commits)
+    }
+}
+
 /// Commits on `workbench/<id>` after the one `accept` recorded: what `ship` pushes that was never accepted.
 public struct BranchAhead: Sendable, Equatable {
-    public struct Commit: Sendable, Equatable {
-        public var sha: String
-        public var subject: String
-    }
+    public typealias Commit = BranchCommit
 
     /// The commit the `accepted` decision recorded.
     public var accepted: String
@@ -15,8 +41,7 @@ public struct BranchAhead: Sendable, Equatable {
     /// Oldest first, at most ten, subjects cut at 100 characters.
     public var commits: [Commit]
 
-    public static let listed = 10
-    public static let subjectLimit = 100
+    public static let listed = BranchCommit.listed
 
     /// The line `ship` prints.
     public var note: String {
@@ -49,24 +74,10 @@ extension ThreadService {
             !plan.head.hasPrefix(accepted)
         else { return nil }
 
-        let range = "\(accepted)..\(plan.head)"
-        var count = 0
-        if let counted = try? await git.run(["rev-list", "--count", range], in: plan.worktree), counted.succeeded {
-            count = Int(counted.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-        }
-        // Bounded: --reverse applies after --max-count, so this is the newest ones, put oldest first.
-        var commits: [BranchAhead.Commit] = []
-        if let listed = try? await git.run(
-            ["log", "--reverse", "--max-count=1000", "--no-decorate", "--format=%H%x09%s", range], in: plan.worktree),
-            listed.succeeded, listed.stdout.utf8.count < GitRunner.outputLimit {
-            commits = listed.stdout.split(separator: "\n").prefix(BranchAhead.listed).map { line in
-                let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
-                return BranchAhead.Commit(
-                    sha: String(parts[0]),
-                    subject: String((parts.count > 1 ? parts[1] : "").prefix(BranchAhead.subjectLimit)))
-            }
-        }
-        let ahead = BranchAhead(accepted: accepted, head: plan.head, count: max(count, commits.count), commits: commits)
+        // Unreadable (the accepted commit was rewritten away, say): the event still says the head moved.
+        let found = await BranchCommit.oldest(in: "\(accepted)..\(plan.head)", at: plan.worktree, git: git)
+        let commits = found?.commits ?? []
+        let ahead = BranchAhead(accepted: accepted, head: plan.head, count: found?.count ?? 0, commits: commits)
 
         try await withLog(id) { log in
             // A ship that stopped after this was written and is run again does not record it twice.
