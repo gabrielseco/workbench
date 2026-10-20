@@ -96,6 +96,11 @@ extension Commands {
             out("accepted \(id): committed \(result.commit) on \(result.branch). Nothing was pushed.")
         } else {
             out("accepted \(id): \(result.branch) at \(result.commit), already committed. Nothing was pushed.")
+            // A message with nothing to commit would otherwise vanish while the person thinks it is on the branch.
+            if message != nil {
+                let count = plan.commits.count > 10 ? "more than 10" : String(plan.commits.count)
+                out("-m ignored: the work was already committed (\(count) commit(s) on \(result.branch)); nothing to commit")
+            }
         }
         out("the worktree is kept for `ship`, which removes it once the PR is open; the log is kept (`workbench log \(id)`)")
     }

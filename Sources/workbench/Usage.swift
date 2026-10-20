@@ -63,7 +63,8 @@ let workbenchUsage = """
       review-stage <name> [id] [--again]
                                  the same for the stage <name> of review.stages (pr-review is `pr-review`), with its
                                  own rounds; a stage whose applies_to matches no changed path is skipped (exit 0)
-      accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push
+      accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push; -m is used only
+                                 when accept commits (work already committed keeps its messages)
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
            [--watch|-w [--timeout <min>] [--interval <s>]] [--review-loop]
                                  push the accepted branch and open its pull request; asks first, after

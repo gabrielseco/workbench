@@ -193,7 +193,9 @@ these differences:
 
 ### `accept`
 
-`-m` only applies when something is left to commit; work the agent already committed keeps its messages.
+`-m` only applies when something is left to commit; work the agent already committed keeps its messages. Given
+with nothing to commit, `accept` still accepts (exit 0) and prints, after its result,
+`-m ignored: the work was already committed (<n> commit(s) on <branch>); nothing to commit`.
 
 | Code | Kind | When |
 |---|---|---|
