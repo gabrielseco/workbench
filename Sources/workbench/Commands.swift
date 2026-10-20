@@ -250,13 +250,17 @@ enum Commands {
                 "usage: workbench goal new <name> [--base <branch> | --update <branch>] [--from <goal-file>]")
         }
         try a.requireEmpty()
-        let body = try from.map { try ThreadService.goalBody(copying: URL(fileURLWithPath: $0)) }
+        let copy = try from.map { try ThreadService.goalCopy(copying: URL(fileURLWithPath: $0)) }
 
         let ctx = try await Context.load()
         let config = try? Config.load(from: ctx.project.configURL)
         let id = try await ctx.service.newThread(
-            name: name, base: base, updating: updating, config: config, body: body)
+            name: name, base: base, updating: updating, config: config, body: copy?.body,
+            settings: copy?.settings ?? GoalSettings())
         out("created \(id)")
+        if let ignored = copy?.ignoredKeys, !ignored.isEmpty {
+            out("ignored from the file: \(ignored.joined(separator: ", "))")
+        }
         if let base = try? GoalFile.parse(String(contentsOf: ctx.project.goalURL(id), encoding: .utf8)).goal.base {
             out("base:    \(base)")
         }

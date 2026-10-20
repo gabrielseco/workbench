@@ -20,40 +20,7 @@ public struct GoalFile: Sendable, Equatable {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 
-        guard lines.first == "---" else {
-            throw GoalParseError(problems: [
-                GoalProblem(
-                    code: .missingFrontMatter, line: 1,
-                    message: "goal must start with a front matter block delimited by '---'")
-            ])
-        }
-        guard let closing = lines.indices.dropFirst().first(where: { lines[$0] == "---" }) else {
-            throw GoalParseError(problems: [
-                GoalProblem(
-                    code: .unterminatedFrontMatter, line: 1,
-                    message: "front matter has no closing '---'")
-            ])
-        }
-
-        // Front matter
-        var entries: [FrontMatterLine] = []
-        var seen = Set<String>()
-        for index in 1..<closing {
-            let number = index + 1
-            let raw = lines[index]
-            let trimmed = raw.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            guard let entry = FrontMatterLine(raw: raw, lineNumber: number) else {
-                add(.malformedFrontMatterLine, number, "expected 'key: value', found '\(trimmed)'")
-                continue
-            }
-            if !FrontMatterLine.knownKeys.contains(entry.key) {
-                add(.unknownKey, number, "unknown key '\(entry.key)'")
-            } else if !seen.insert(entry.key).inserted {
-                add(.duplicateKey, number, "key '\(entry.key)' appears more than once")
-            }
-            entries.append(entry)
-        }
+        let (entries, closing) = try frontMatter(lines, add: add)
         func value(_ key: String) -> FrontMatterLine? { entries.first { $0.key == key } }
 
         func required(_ key: String) -> String? {
@@ -89,19 +56,16 @@ public struct GoalFile: Sendable, Equatable {
         }
         let budget = required("budget_usd").flatMap { raw -> Decimal? in
             guard let entry = value("budget_usd") else { return nil }
-            guard let d = Decimal(string: raw), d > 0, raw.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil
-            else {
-                add(.invalidValue, entry.lineNumber, "'budget_usd' must be a positive number, found '\(raw)'")
+            guard let d = budgetValue(raw) else {
+                add(.invalidValue, entry.lineNumber, budgetProblem(raw))
                 return nil
             }
             return d
         }
         let timeout = required("turn_timeout_min").flatMap { raw -> Int? in
             guard let entry = value("turn_timeout_min") else { return nil }
-            guard let n = Int(raw), (1...1440).contains(n) else {
-                add(
-                    .invalidValue, entry.lineNumber,
-                    "'turn_timeout_min' must be a whole number from 1 to 1440, found '\(raw)'")
+            guard let n = timeoutValue(raw) else {
+                add(.invalidValue, entry.lineNumber, timeoutProblem(raw))
                 return nil
             }
             return n
@@ -120,29 +84,9 @@ public struct GoalFile: Sendable, Equatable {
             }
         }
 
-        // Body
         let bodyStart = closing + 1
-        let sections = parseSections(Array(lines[bodyStart...]), firstLine: bodyStart + 1, add: add)
-
-        var request = ""
-        if let section = sections["request"] {
-            request = section.lines.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if request.isEmpty { add(.emptySection, section.headingLine, "'## Request' is empty") }
-        } else {
-            add(.missingSection, nil, "missing '## Request' section")
-        }
-
-        var criteria: [Criterion] = []
-        if let section = sections["criteria"] {
-            criteria = parseCriteria(section, add: add)
-            if criteria.isEmpty && !problems.contains(where: { $0.code == .malformedCriterion }) {
-                add(.emptySection, section.headingLine, "'## Criteria' has no criteria")
-            }
-        } else {
-            add(.missingSection, nil, "missing '## Criteria' section")
-        }
-
-        let outOfScope = sections["out of scope"].map { parseOutOfScope($0, add: add) } ?? []
+        let parsed = parseBody(lines, from: bodyStart, add: add)
+        let (request, criteria, outOfScope) = (parsed.request, parsed.criteria, parsed.outOfScope)
 
         guard problems.isEmpty, let id, let title, let base, let budget, let timeout else {
             throw GoalParseError(problems: problems.sorted { ($0.line ?? .max) < ($1.line ?? .max) })
@@ -159,14 +103,113 @@ public struct GoalFile: Sendable, Equatable {
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
+    /// The front matter block's entries and the index of its closing `---`. Unknown, duplicate and malformed
+    /// lines are reported through `add`; a file without the block throws.
+    static func frontMatter(
+        _ lines: [String], add: (GoalProblem.Code, Int?, String) -> Void
+    ) throws -> (entries: [FrontMatterLine], closing: Int) {
+        guard lines.first == "---" else {
+            throw GoalParseError(problems: [
+                GoalProblem(
+                    code: .missingFrontMatter, line: 1,
+                    message: "goal must start with a front matter block delimited by '---'")
+            ])
+        }
+        guard let closing = lines.indices.dropFirst().first(where: { lines[$0] == "---" }) else {
+            throw GoalParseError(problems: [
+                GoalProblem(
+                    code: .unterminatedFrontMatter, line: 1,
+                    message: "front matter has no closing '---'")
+            ])
+        }
+        var entries: [FrontMatterLine] = []
+        var seen = Set<String>()
+        for index in 1..<closing {
+            let number = index + 1
+            let raw = lines[index]
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            guard let entry = FrontMatterLine(raw: raw, lineNumber: number) else {
+                add(.malformedFrontMatterLine, number, "expected 'key: value', found '\(trimmed)'")
+                continue
+            }
+            if !FrontMatterLine.knownKeys.contains(entry.key) {
+                add(.unknownKey, number, "unknown key '\(entry.key)'")
+            } else if !seen.insert(entry.key).inserted {
+                add(.duplicateKey, number, "key '\(entry.key)' appears more than once")
+            }
+            entries.append(entry)
+        }
+        return (entries, closing)
+    }
+
+    struct Body {
+        var request: String
+        var criteria: [Criterion]
+        var outOfScope: [String]
+    }
+
+    /// The request, criteria and out of scope of the lines from `bodyStart` on.
+    static func parseBody(
+        _ lines: [String], from bodyStart: Int, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> Body {
+        var malformedCriterion = false
+        func note(_ code: GoalProblem.Code, _ line: Int?, _ message: String) {
+            if code == .malformedCriterion { malformedCriterion = true }
+            add(code, line, message)
+        }
+        let sections = parseSections(Array(lines[bodyStart...]), firstLine: bodyStart + 1, add: note)
+
+        var request = ""
+        if let section = sections["request"] {
+            request = section.lines.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if request.isEmpty { note(.emptySection, section.headingLine, "'## Request' is empty") }
+        } else {
+            note(.missingSection, nil, "missing '## Request' section")
+        }
+
+        var criteria: [Criterion] = []
+        if let section = sections["criteria"] {
+            criteria = parseCriteria(section, add: note)
+            if criteria.isEmpty && !malformedCriterion {
+                note(.emptySection, section.headingLine, "'## Criteria' has no criteria")
+            }
+        } else {
+            note(.missingSection, nil, "missing '## Criteria' section")
+        }
+
+        let outOfScope = sections["out of scope"].map { parseOutOfScope($0, add: note) } ?? []
+        return Body(request: request, criteria: criteria, outOfScope: outOfScope)
+    }
+
+    static func budgetValue(_ raw: String) -> Decimal? {
+        guard let d = Decimal(string: raw), d > 0,
+            raw.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil
+        else { return nil }
+        return d
+    }
+
+    static func budgetProblem(_ raw: String) -> String { "'budget_usd' must be a positive number, found '\(raw)'" }
+
+    static func timeoutValue(_ raw: String) -> Int? {
+        guard let n = Int(raw), (1...1440).contains(n) else { return nil }
+        return n
+    }
+
+    static func timeoutProblem(_ raw: String) -> String {
+        "'turn_timeout_min' must be a whole number from 1 to 1440, found '\(raw)'"
+    }
+
+    static func modelProblem(_ raw: String) -> String {
+        "'model' must be a model name or alias like \"opus\", found '\(raw)'"
+    }
+
     private static func modelValue(
         _ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void
     ) -> String? {
         guard let entry else { return nil }
         guard SafeNames.isModelName(entry.value) else {
-            add(
-                .invalidValue, entry.lineNumber,
-                "'model' must be a model name or alias like \"opus\", found '\(entry.value)'")
+            add(.invalidValue, entry.lineNumber, modelProblem(entry.value))
             return nil
         }
         return entry.value

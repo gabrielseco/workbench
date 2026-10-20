@@ -20,7 +20,8 @@ let workbenchUsage = """
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
                                  base without --base: the default branch, as for doctor; printed as base:
-                                 --from <goal-file> copies its request, criteria and out of scope into the draft
+                                 --from <goal-file> copies its request, criteria and out of scope into the draft,
+                                 and its budget_usd, turn_timeout_min and model; prints the front matter it ignored
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
       goal approve [id]          approve the goal; any later edit returns it to draft
                                  refused while a proof names a command a run cannot execute

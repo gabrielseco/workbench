@@ -107,6 +107,7 @@ func failureKind(of error: Error) -> FailureKind {
     case let e as ThreadServiceError:
         switch e {
         case .goalInvalid: return .invalidGoal
+        case .copyValueInvalid: return .usage
         case .acceptIncomplete, .discardIncomplete: return .failed
         default: return .refused
         }

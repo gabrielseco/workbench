@@ -36,18 +36,16 @@ extension ThreadService {
         return probe.succeeded
     }
 
-    /// The request, criteria and out of scope of an existing goal file, for `goal new --from`. Nothing else
-    /// comes along: not the status, the hash, the id, the base or the budget.
-    public static func goalBody(copying url: URL) throws -> GoalBody {
+    /// The request, criteria and out of scope of an existing goal file, for `goal new --from`, with its
+    /// `budget_usd`, `turn_timeout_min` and `model`. The rest of its front matter (the id, title, base, status,
+    /// approval) belongs to that file's thread and is named in `ignoredKeys`.
+    public static func goalCopy(copying url: URL) throws -> GoalCopy {
         let text = try readBounded(url)
-        let file: GoalFile
-        do { file = try GoalFile.parse(text) } catch let error as GoalParseError {
+        do { return try GoalFile.copy(text) } catch let error as GoalParseError {
             throw ThreadServiceError.goalInvalid(error.description)
+        } catch let error as GoalCopyValueError {
+            throw ThreadServiceError.copyValueInvalid(error.message)
         }
-        return GoalBody(
-            request: file.goal.request,
-            criteria: file.goal.criteria.map { GoalBody.Criterion(id: $0.id, text: $0.text, proof: $0.proof) },
-            outOfScope: file.goal.outOfScope)
     }
 
     /// Reads a regular file of at most `copySourceLimit` bytes. The descriptor is opened without blocking

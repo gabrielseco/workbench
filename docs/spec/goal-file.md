@@ -168,6 +168,14 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   branch: the branch `origin/HEAD` points to, else a local `main`, else a local `master`, else the checked-out
   branch, else `main` (an unborn repo). It is not simply the checked-out branch, which may be a feature branch.
   `goal new` prints it as `base: <branch>`; `doctor` without `--base` uses the same default.
+- **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
+  out of scope, and its `budget_usd`, `turn_timeout_min` and `model`, into the draft. Those three are checked by the
+  same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.
+  One the file does not give keeps the default (`default_budget_usd`, 30 minutes, no `model`). The rest of the front
+  matter (`id`, `title`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
+  thread and is ignored; `goal new` prints one line naming what it ignored (`ignored from the file: base, status`),
+  nothing when there is none. The file's front matter must still be well formed (unknown or repeated keys are goal
+  errors) but no key is required in it, and its body must parse as a goal's. The draft is always a draft.
 - **The inputs are the goal and the project's instructions file.** The runner builds the first prompt from
   the goal, and puts the repository's `AGENTS.md` (else `CLAUDE.md`) after "Out of scope" under
   `## Project instructions`. Nothing else installed on the machine reaches a run. See "Project
