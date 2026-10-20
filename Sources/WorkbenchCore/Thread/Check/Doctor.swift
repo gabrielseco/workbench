@@ -74,6 +74,13 @@ public struct DoctorVerifier: Sendable, Equatable {
     public var screenRecording: String?
 }
 
+/// `[run]` as doctor found it.
+public struct DoctorRun: Sendable, Equatable {
+    public var config: RunConfig
+    /// Why the app could not be started as configured, when it cannot. A warning, like the verifier's.
+    public var problem: String?
+}
+
 public struct DoctorReport: Sendable, Equatable {
     public var base: String
     /// Where `claude_path` resolved, or nil.
@@ -92,6 +99,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var appType: AppType = .web
     /// Nil when the config has no `[verifier]`.
     public var verifier: DoctorVerifier?
+    /// Nil when the config has no `[run]`.
+    public var run: DoctorRun?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []
     /// What the config's `copy` left out of the throwaway worktree, with why.
@@ -212,6 +221,7 @@ public final class Doctor: @unchecked Sendable {
                     + "Screen & System Audio Recording, then restart the app"
             }
         }
+        if let run = config.run { report.run = await readRun(run, verifierOn: config.verifier != nil, base: base) }
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         guard runsSteps else { return report }
@@ -252,6 +262,20 @@ public final class Doctor: @unchecked Sendable {
         report = try result.get()
         report.cleanupProblem = cleanupProblem
         return report
+    }
+
+    /// The `[run]` command must be there at the base commit if it is a path, and something must use it.
+    private func readRun(_ run: RunConfig, verifierOn: Bool, base: String) async -> DoctorRun {
+        var problem: String?
+        if !verifierOn {
+            problem = "[run] starts the app for the verifier, which is turned off; nothing will use it"
+        } else if let word = run.command.split(separator: " ").first.map(String.init), word.contains("/"), !word.hasPrefix("/") {
+            let there = try? await git.run(["cat-file", "-e", "\(base):\(word)"], in: project.root)
+            if there?.succeeded != true {
+                problem = "'\(word)' is not in the repository at \(base), so the app cannot be started"
+            }
+        }
+        return DoctorRun(config: run, problem: problem)
     }
 
     /// The skill at the base commit, never the working tree, which a run may have edited.

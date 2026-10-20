@@ -100,7 +100,7 @@ extension ThreadService {
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
         try ThreadStore(project: project).requireNoDoctor()
         let run = VerifierRun(
-            config: config, verifier: verifier, skill: skill, goal: goal, threadID: id,
+            config: config, verifier: verifier, run: config.run, skill: skill, goal: goal, threadID: id,
             goalPath: project.goalURL(id).path, worktree: manager.path(for: id),
             proofDirectory: project.proofDirectory(id, turn: turn), threadDirectory: project.threadDirectory(id),
             claude: claude, environment: environment, timeout: timeout, killGrace: killGrace,
@@ -157,7 +157,7 @@ extension ThreadRunner {
             return try await skip("the turn left no change to look at", turn: turn, log: log)
         }
         let run = VerifierRun(
-            config: config, verifier: verifier, skill: skill, goal: goal, threadID: threadID,
+            config: config, verifier: verifier, run: config.run, skill: skill, goal: goal, threadID: threadID,
             goalPath: project.goalURL(threadID).path, worktree: worktree,
             proofDirectory: project.proofDirectory(threadID, turn: turn), threadDirectory: project.threadDirectory(threadID),
             claude: claude, environment: options.parentEnvironment,

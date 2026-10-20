@@ -37,6 +37,12 @@ public enum LogFormatter {
             return out
         case .verifierStarted:
             return head + "verifier started: \(event.data["skill"]?.stringValue ?? "?")"
+        case .runStarted:
+            return head + "app starting: \(event.data["command"]?.stringValue ?? "?")"
+        case .runEnded:
+            var out = head + (event.data["ready"] == true ? "app stopped" : "app did not come up")
+            if let reason = event.data["reason"]?.stringValue { out += " (\(reason))" }
+            return out
         case .verifierSkipped:
             return head + "verifier skipped: \(event.data["reason"]?.stringValue ?? "?")"
         case .verifierEnded:

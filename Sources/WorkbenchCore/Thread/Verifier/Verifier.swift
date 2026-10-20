@@ -67,7 +67,7 @@ public enum Verifier {
     /// What the verifier is told: its role, the skill as the project wrote it, the goal's criteria, and where to
     /// leave the proof. The paths are real here (the model needs them), unlike in the judge's brief.
     public static func prompt(
-        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String
+        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil
     ) -> String {
         var parts: [String] = [
             """
@@ -82,7 +82,16 @@ public enum Verifier {
             saw. Your words are a note for the person reviewing; they decide nothing.
             """
         ]
-        parts.append("## Environment\n\n" + environmentLines(proofDirectory, threadID, goalPath))
+        parts.append("## Environment\n\n" + environmentLines(proofDirectory, threadID, goalPath, app: app))
+        if app != nil {
+            parts.append(
+                """
+                ## The app
+
+                Workbench has already started the project's app (`[run]`) and will stop it when you finish. Drive that \
+                instance; do not start, restart or stop one yourself.
+                """)
+        }
         parts.append("## Goal: \(oneLine(goal.title))\n\n\(goal.request)")
         let criteria = goal.criteria.map { "- [\($0.id)] \(oneLine($0.text))\n  - proof: \(oneLine($0.proof))" }
         parts.append("## Criteria\n\n" + criteria.joined(separator: "\n"))
@@ -93,23 +102,44 @@ public enum Verifier {
         return parts.joined(separator: "\n\n")
     }
 
-    static func environmentLines(_ proofDirectory: URL, _ threadID: String, _ goalPath: String) -> String {
-        """
-        - WORKBENCH_PROOF_DIR=\(proofDirectory.path)
-        - WORKBENCH_THREAD=\(threadID)
-        - WORKBENCH_GOAL=\(goalPath)
-        """
+    static func environmentLines(
+        _ proofDirectory: URL, _ threadID: String, _ goalPath: String, app: RunningApp? = nil
+    ) -> String {
+        var lines = [
+            "- WORKBENCH_PROOF_DIR=\(proofDirectory.path)",
+            "- WORKBENCH_THREAD=\(threadID)",
+            "- WORKBENCH_GOAL=\(goalPath)",
+        ]
+        if let app {
+            lines.append("- WORKBENCH_RUN_PID=\(app.pid)")
+            lines.append("- WORKBENCH_PORT=\(app.port)")
+            if let url = app.url { lines.append("- WORKBENCH_RUN_URL=\(url)") }
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// The variables the verifier's tools see, on top of the allowlisted environment.
     public static func environment(
-        base: [String: String], proofDirectory: URL, threadID: String, goalPath: String
+        base: [String: String], proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil
     ) -> [String: String] {
         var env = base
+        if let app {
+            env["WORKBENCH_RUN_PID"] = String(app.pid)
+            env["WORKBENCH_PORT"] = String(app.port)
+            env["PORT"] = String(app.port)
+            if let url = app.url { env["WORKBENCH_RUN_URL"] = url }
+        }
         env["WORKBENCH_PROOF_DIR"] = proofDirectory.path
         env["WORKBENCH_THREAD"] = threadID
         env["WORKBENCH_GOAL"] = goalPath
         return env
+    }
+
+    /// The app Workbench started from `[run]`, as the verifier is told about it.
+    public struct RunningApp: Sendable, Equatable {
+        public var pid: Int32
+        public var port: Int
+        public var url: String?
     }
 
     static func oneLine(_ text: String) -> String {
