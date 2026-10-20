@@ -59,6 +59,26 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(gh.count("pr create") == 1)
     }
 
+    @Test func aBaseOnlyHereIsRefusedBeforeAnyPushAndShipsOnceItIsOnOrigin() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx, withMain: false)
+        let before = try fx.events(id).count
+
+        let refused = try await ship(["--yes", "--no-describe"], fx: fx, gh: gh)
+        #expect(refused.code == 6, "\(refused.text)")
+        #expect(refused.text.contains("workbench: refused: origin has no branch main"))
+        #expect(try await branches(bare, fx).isEmpty, "nothing was pushed")
+        #expect(gh.count("pr create") == 0)
+        #expect(try fx.events(id).count == before, "nothing was recorded")
+
+        _ = try await fx.git.run(["push", "-q", "origin", "main"], in: fx.repo)
+        let shipped = try await ship(["--yes", "--no-describe"], fx: fx, gh: gh)
+        #expect(shipped.code == 0, "\(shipped.text)")
+        #expect(try await branches(bare, fx).contains("refs/heads/workbench/\(id)"))
+    }
+
     @Test func theDescriptionIsShownBeforeShippingAndUsedForThePR() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
@@ -133,7 +153,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let result = try await ship([], fx: fx, gh: gh)
         #expect(result.code == 6, "\(result.text)")
         #expect(result.text.contains("branch:  workbench/\(id)") && result.text.contains("Pass --yes"))
-        #expect(try await branches(bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
         #expect(gh.count("pr create") == 0)
     }
 
@@ -154,7 +174,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let active = try await ship(["--yes", id], fx: fx, gh: gh)
         #expect(active.code == 10, "\(active.text)")
         #expect(active.text.contains("workbench accept"), "an active thread is told how to end it")
-        #expect(try await branches(bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
     }
 
     @Test func aRejectedPushExitsFiveAndTheNextRunCompletes() async throws {
@@ -170,7 +190,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let rejected = try await ship(["--yes"], fx: fx, gh: gh)
         #expect(rejected.code == 12, "\(rejected.text)")
         #expect(rejected.text.contains("closed for release"))
-        #expect(try await branches(bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
         #expect(!(try fx.events(id).contains { $0.kind == .prOpened }))
 
         try FileManager.default.removeItem(at: hook)
@@ -249,7 +269,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let result = try await ship(["--yes"], fx: fx, gh: gh, withGH: false)
         #expect(result.code == 6, "\(result.text)")
         #expect(result.text.contains("not-found") == false && result.text.contains("gh"))
-        #expect(try await branches(bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
     }
 
     @Test func watchFollowsTheChecksAfterShippingAndOnAnAlreadyShippedThread() async throws {

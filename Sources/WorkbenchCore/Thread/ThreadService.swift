@@ -19,6 +19,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case updateWithBase
     case copySourceMissing(String)
     case copySourceTooLarge(String)
+    case copyValueInvalid(String)
     case noFreeID(String)
     case abandonNotSaved(String)
 
@@ -26,6 +27,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         switch self {
         case .copySourceMissing(let path): "no goal file to copy at \(path)"
         case .copySourceTooLarge(let path): "\(path) is too large to be a goal file"
+        case .copyValueInvalid(let problem): "the goal file to copy has a bad value: \(problem); nothing was created"
         case .abandonNotSaved(let why):
             "not abandoned: \(why). Nothing was removed. Commit what you want to keep, or `workbench discard` "
                 + "throws it away after listing it."
@@ -102,7 +104,7 @@ public struct ThreadService: Sendable {
     /// thread is active.
     public func newThread(
         name: String, base: String? = nil, updating: String? = nil, config: Config? = nil,
-        lineage: ThreadLineage? = nil, body: GoalBody? = nil
+        lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings()
     ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
         if let updating {
@@ -123,8 +125,13 @@ public struct ThreadService: Sendable {
             baseBranch = await defaultBase()
         }
         let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
-        let budget = NSDecimalNumber(decimal: config?.defaultBudgetUSD ?? Config.defaultBudgetUSD).stringValue
+        let budget = NSDecimalNumber(
+            decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD
+        ).stringValue
         let title = name.replacingOccurrences(of: "-", with: " ")
+        let modelLine =
+            settings.model.map { "model: \($0)" }
+            ?? "# model: opus   (optional; unset = the config's model, else the claude CLI default)"
 
         let header = """
             ---
@@ -133,8 +140,8 @@ public struct ThreadService: Sendable {
             status: draft
             base: \(baseBranch)\(pushToLine)
             budget_usd: \(budget)
-            turn_timeout_min: 30
-            # model: opus   (optional; unset = the config's model, else the claude CLI default)
+            turn_timeout_min: \(settings.turnTimeoutMin ?? 30)
+            \(modelLine)
             ---
 
 
@@ -432,8 +439,31 @@ public struct ThreadService: Sendable {
         return .signalled(pid: pid)
     }
 
-    /// The branch a thread is cut from when none is named: the checked-out one, else `main`.
-    public func defaultBase() async -> String { await currentBranch() ?? "main" }
+    /// The branch a thread is cut from when none is named: the repo's default branch (what `origin/HEAD` points
+    /// to, else a local `main`, else a local `master`), then the checked-out one, else `main`. Not simply the
+    /// checked-out branch, which may be a feature branch.
+    public func defaultBase() async -> String {
+        if let remote = await originHead() { return remote }
+        for name in ["main", "master"] where await localBranchExists(name) { return name }
+        return await currentBranch() ?? "main"
+    }
+
+    private func originHead() async -> String? {
+        guard
+            let result = try? await git.run(
+                ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], in: project.root),
+            result.succeeded
+        else { return nil }
+        let ref = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ref.hasPrefix("origin/") else { return nil }
+        let name = String(ref.dropFirst("origin/".count))
+        return SafeNames.isBranchName(name) ? name : nil
+    }
+
+    private func localBranchExists(_ name: String) async -> Bool {
+        let probe = try? await git.run(["show-ref", "--verify", "--quiet", "refs/heads/\(name)"], in: project.root)
+        return probe?.succeeded ?? false
+    }
 
     private func currentBranch() async -> String? {
         guard let result = try? await git.run(["rev-parse", "--abbrev-ref", "HEAD"], in: project.root),

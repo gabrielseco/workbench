@@ -29,6 +29,7 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case pullRequestBehind(pr: String)
     case pullRequestTextChanged
     case ghEditFailed(String)
+    case baseNotOnOrigin(String)
 
     public var description: String {
         switch self {
@@ -76,6 +77,9 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
             "origin's \(branch) is at \(sha.prefix(12)), which this thread's work does not include: it moved after "
                 + "the thread started. Nothing was pushed, and Workbench never forces. Start a new thread from its "
                 + "current tip with `workbench goal new <name> --update \(branch)`."
+        case .baseNotOnOrigin(let base):
+            "origin has no branch \(base), the base the pull request would target, so nothing was pushed. Push it "
+                + "first (`git push origin \(base)`) or change the goal's base, then run `workbench ship` again."
         case .noPullRequest(let branch):
             "origin has \(branch) but no open pull request uses it, and shipping a thread that continues a branch "
                 + "never opens one. Nothing was recorded."
@@ -214,6 +218,15 @@ extension ThreadService {
 
         let remote = try await remoteState(
             branch: remoteBranch, head: head, worktree: worktree, updating: pushTo != nil)
+        // A pull request needs its base on origin; without it `gh` fails only after the push.
+        if pushTo == nil {
+            let prBase = base.hasPrefix("origin/") ? String(base.dropFirst("origin/".count)) : base
+            let listed = try await run(["ls-remote", "--heads", "origin", "refs/heads/\(prBase)"], in: worktree)
+            guard listed.succeeded else { throw ShipError.remoteUnreachable("git ls-remote failed for \(prBase)") }
+            guard try Self.remoteBranchSHA(in: listed.stdout, branch: prBase) != nil else {
+                throw ShipError.baseNotOnOrigin(prBase)
+            }
+        }
         var pullRequest: ShipPlan.ExistingPR?
         if pushTo != nil {
             // Before any push: a branch without an open pull request is refused with nothing changed.

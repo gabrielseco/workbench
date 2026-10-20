@@ -66,7 +66,8 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | thread created |
-| 2 | `usage` | wrong command line |
+| 2 | `usage` | wrong command line, or `--from` names a file whose `budget_usd`, `turn_timeout_min` or `model` is not valid (the message names the key; nothing is created) |
+| 2 | `invalid-goal` | the `--from` file is not a well-formed goal |
 | 6 | `refused` | the name is taken, another thread is active, or `doctor` is running |
 
 ### `goal approve`
@@ -209,7 +210,7 @@ these differences:
 | 0 |  | the PR is open (and with `--watch`: every check passed or was skipped) |
 | 1 | `failed` | git, `gh` or the network failed; with `--watch`: the answer at the prompt was no (no PR was made, so 0 would claim passing checks), or three failed polls in a row |
 | 2 | `usage` | wrong command line |
-| 6 | `refused` | a live runner, the worktree is missing or on another branch, uncommitted work, no `origin`, `gh` missing or not logged in, or no terminal to ask on (pass `--yes`) |
+| 6 | `refused` | a live runner, the worktree is missing or on another branch, uncommitted work, no `origin`, `gh` missing or not logged in, the goal's base (the branch the pull request would target) is not on `origin` (push it first or change the goal's base; checked before anything is pushed, and nothing is recorded), or no terminal to ask on (pass `--yes`) |
 | 7 | `not-found` | no such thread |
 | 10 | `not-accepted` | the thread is not accepted: still active, discarded, abandoned, unknown, or none waiting |
 | 11 | `already-shipped` | the recorded URL is the last line of stdout |

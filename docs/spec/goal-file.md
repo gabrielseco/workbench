@@ -164,6 +164,18 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them
   and the status is `draft` again.
 - **Out of scope is part of the contract.** The runner puts it in the prompt and the review shows it.
+- **`workbench goal new <name>` writes the draft.** Its `base` is `--base` when given, else the repo's default
+  branch: the branch `origin/HEAD` points to, else a local `main`, else a local `master`, else the checked-out
+  branch, else `main` (an unborn repo). It is not simply the checked-out branch, which may be a feature branch.
+  `goal new` prints it as `base: <branch>`; `doctor` without `--base` uses the same default.
+- **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
+  out of scope, and its `budget_usd`, `turn_timeout_min` and `model`, into the draft. Those three are checked by the
+  same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.
+  One the file does not give keeps the default (`default_budget_usd`, 30 minutes, no `model`). The rest of the front
+  matter (`id`, `title`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
+  thread and is ignored; `goal new` prints one line naming what it ignored (`ignored from the file: base, status`),
+  nothing when there is none. The file's front matter must still be well formed (unknown or repeated keys are goal
+  errors) but no key is required in it, and its body must parse as a goal's. The draft is always a draft.
 - **The inputs are the goal and the project's instructions file.** The runner builds the first prompt from
   the goal, and puts the repository's `AGENTS.md` (else `CLAUDE.md`) after "Out of scope" under
   `## Project instructions`. Nothing else installed on the machine reaches a run. See "Project
@@ -393,7 +405,7 @@ Notes:
   prints a hint at `env_pass`.
 - **`workbench doctor [--base <branch>]` proves the declared config works** before any goal exists. It cuts
   a throwaway worktree (reserved id `doctor`, removed on every path, a crash leftover is replaced by the next
-  run) at the base (default: the checked-out branch), runs `setup_command` then `check_command` through the
+  run) at the base (default: the repo's default branch, as for `goal new`), runs `setup_command` then `check_command` through the
   same runners, environment and limits a thread uses, and prints each step's result, duration, output tail
   and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `model` (or
   the CLI default), and whether `Bash` is in `[tools].available` and the check is not denied. It runs nothing the config does not

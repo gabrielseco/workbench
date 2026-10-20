@@ -77,7 +77,7 @@ extension ShipError {
         case .pushRejected, .remoteDiverged, .branchMoved: .pushRejected
         case .running, .worktreeMissing, .wrongBranch, .uncommitted, .noOrigin, .ghMissing, .ghNotAuthenticated,
             .notPushed, .changedSinceShown, .changedAfterPush, .goalUnreadable, .pushDestinationDiffers, .notShipped,
-            .pushTargetMissing, .noPullRequest, .pullRequestTextChanged:
+            .pushTargetMissing, .noPullRequest, .pullRequestTextChanged, .baseNotOnOrigin:
             .refused
         case .invalidName: .usage
         case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind, .ghEditFailed: .failed
@@ -107,6 +107,7 @@ func failureKind(of error: Error) -> FailureKind {
     case let e as ThreadServiceError:
         switch e {
         case .goalInvalid: return .invalidGoal
+        case .copyValueInvalid: return .usage
         case .acceptIncomplete, .discardIncomplete: return .failed
         default: return .refused
         }

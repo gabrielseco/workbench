@@ -119,7 +119,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
     @Test func theRequestCriteriaAndOutOfScopeComeInAsADraft() async throws {
         let (fx, service) = try await fixture(suffixes: ["cafe"])
         let url = try write(goalFile(), in: fx)
-        let id = try await service.newThread(name: "copy", body: try ThreadService.goalBody(copying: url))
+        let id = try await service.newThread(name: "copy", body: try ThreadService.goalCopy(copying: url).body)
         let copy = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8))
         #expect(copy.goal.request == "Make it work.")
         #expect(copy.goal.criteria.map(\.id) == ["c1"])
@@ -127,8 +127,61 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         #expect(copy.goal.outOfScope == ["Everything else."])
         #expect(copy.goal.id == id)
         #expect(copy.goal.approval == .draft)
-        // Not the source's budget.
-        #expect(copy.goal.budgetUSD != 7)
+        #expect(copy.goal.base == "main")
+    }
+
+    @Test func theBudgetTimeoutAndModelAreCarried() async throws {
+        let (fx, service) = try await fixture(suffixes: ["cafe"])
+        let text = goalFile().replacingOccurrences(of: "turn_timeout_min: 30", with: "turn_timeout_min: 45\nmodel: sonnet")
+        let copy = try ThreadService.goalCopy(copying: try write(text, in: fx))
+        #expect(copy.settings == GoalSettings(budgetUSD: 7, turnTimeoutMin: 45, model: "sonnet"))
+        let id = try await service.newThread(name: "copy", body: copy.body, settings: copy.settings)
+        let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
+        #expect(goal.budgetUSD == 7)
+        #expect(goal.turnTimeoutMin == 45)
+        #expect(goal.model == "sonnet")
+    }
+
+    @Test func keysTheFileDoesNotGiveKeepTheDefaults() async throws {
+        let (fx, service) = try await fixture(suffixes: ["cafe"])
+        let text =
+            "---\ntitle: Only a title\n---\n\n## Request\n\nMake it work.\n\n## Criteria\n\n"
+            + "- [c1] It works.\n  - proof: swift test\n"
+        let copy = try ThreadService.goalCopy(copying: try write(text, in: fx))
+        #expect(copy.settings == GoalSettings())
+        #expect(copy.ignoredKeys == ["title"])
+        let id = try await service.newThread(name: "copy", body: copy.body, settings: copy.settings)
+        let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
+        #expect(goal.budgetUSD == Config.defaultBudgetUSD)
+        #expect(goal.turnTimeoutMin == 30)
+        #expect(goal.model == nil)
+    }
+
+    @Test func theKeysThatBelongToTheSourceThreadAreNamed() async throws {
+        let (fx, _) = try await fixture(suffixes: ["cafe"])
+        let approved = try GoalFile.parse(goalFile()).approving()
+        let copy = try ThreadService.goalCopy(copying: try write(approved.text, in: fx))
+        #expect(copy.ignoredKeys == ["id", "title", "status", "base", "approved_at", "approved_hash"])
+    }
+
+    @Test(arguments: [
+        ("budget_usd: 7.00", "budget_usd: -3", "'budget_usd'"),
+        ("turn_timeout_min: 30", "turn_timeout_min: 0", "'turn_timeout_min'"),
+        ("turn_timeout_min: 30", "turn_timeout_min: 30\nmodel: -rm", "'model'"),
+    ])
+    func aBadCarriedValueIsRefusedNamingTheKey(old: String, new: String, key: String) async throws {
+        let (fx, _) = try await fixture(suffixes: ["cafe"])
+        let url = try write(goalFile().replacingOccurrences(of: old, with: new), in: fx)
+        do {
+            _ = try ThreadService.goalCopy(copying: url)
+            Issue.record("a bad \(key) was accepted")
+        } catch let error as ThreadServiceError {
+            guard case .copyValueInvalid(let message) = error else {
+                Issue.record("\(error)")
+                return
+            }
+            #expect(message.contains(key))
+        }
     }
 
     @Test func aGoalApprovedElsewhereComesInAsADraft() async throws {
@@ -136,7 +189,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let approved = try GoalFile.parse(goalFile()).approving()
         let url = try write(approved.text, in: fx)
         #expect(approved.goal.approval == .approved)
-        let id = try await service.newThread(name: "copy", body: try ThreadService.goalBody(copying: url))
+        let id = try await service.newThread(name: "copy", body: try ThreadService.goalCopy(copying: url).body)
         let text = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
         #expect(!text.contains("approved_hash"))
         #expect(try GoalFile.parse(text).goal.approval == .draft)
@@ -146,7 +199,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let (fx, service) = try await fixture(suffixes: ["cafe"])
         let url = fx.repo.appendingPathComponent("nope.md")
         #expect(throws: ThreadServiceError.copySourceMissing(url.path)) {
-            _ = try ThreadService.goalBody(copying: url)
+            _ = try ThreadService.goalCopy(copying: url)
         }
         #expect(ThreadStore(project: fx.project).threadIDs().isEmpty)
         _ = service
@@ -155,12 +208,12 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
     @Test func aFileWithNoCriteriaIsRefused() async throws {
         let (fx, _) = try await fixture(suffixes: ["cafe"])
         let url = try write(goalFile(criteria: ""), in: fx)
-        #expect(throws: ThreadServiceError.self) { _ = try ThreadService.goalBody(copying: url) }
+        #expect(throws: ThreadServiceError.self) { _ = try ThreadService.goalCopy(copying: url) }
     }
 
     @Test func theCopiedCriterionKeepsItsText() async throws {
         let (fx, _) = try await fixture(suffixes: ["cafe"])
-        let body = try ThreadService.goalBody(copying: try write(goalFile(), in: fx))
+        let body = try ThreadService.goalCopy(copying: try write(goalFile(), in: fx)).body
         #expect(body.criteria == [GoalBody.Criterion(id: "c1", text: "It works.", proof: "swift test")])
     }
 
@@ -169,7 +222,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let url = fx.repo.appendingPathComponent("fifo.md")
         #expect(mkfifo(url.path, 0o600) == 0)
         #expect(throws: ThreadServiceError.copySourceMissing(url.path)) {
-            _ = try ThreadService.goalBody(copying: url)
+            _ = try ThreadService.goalCopy(copying: url)
         }
     }
 
@@ -177,7 +230,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let (fx, _) = try await fixture(suffixes: ["cafe"])
         let url = try write(String(repeating: "x", count: ThreadService.copySourceLimit + 1), in: fx)
         #expect(throws: ThreadServiceError.copySourceTooLarge(url.path)) {
-            _ = try ThreadService.goalBody(copying: url)
+            _ = try ThreadService.goalCopy(copying: url)
         }
     }
 }
