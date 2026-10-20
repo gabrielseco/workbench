@@ -104,8 +104,8 @@ check "review lists the commits under Commits, oldest first" "no Commits block w
         | grep -qx "  ${2:0:12} verify-cli: first commit|  ${3:0:12} verify-cli: second commit|"' \
     _ "$SCRATCH/review-a.out" "$SHA1" "$SHA2"
 check "Commits sits between the criteria and the diff" "the order of the headings is wrong" \
-    bash -c 'grep -n -e "^Criteria$" -e "^Commits$" -e "^Diff against" "$1" | cut -d: -f2 | cut -c1-6 | tr "\n" " " \
-        | grep -qx "Criteria Commits Diff a "' _ "$SCRATCH/review-a.out"
+    bash -c 'grep -e "^Criteria$" -e "^Commits$" -e "^Diff against" "$1" | sed -E "s/^Diff against.*/Diff/" | tr "\n" " " \
+        | grep -qx "Criteria Commits Diff "' _ "$SCRATCH/review-a.out"
 wbp "$SCRATCH/review-a.json" review "$A" --json
 subjects=$(py "print('|'.join(c['subject'] + '@' + c['sha'] for c in d['commits']))" <"$SCRATCH/review-a.json" 2>/dev/null)
 check "review --json has commits with sha and subject" "commits is '$subjects'" \
