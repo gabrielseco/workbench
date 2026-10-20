@@ -19,6 +19,7 @@ WORKBENCH_SOAK=1 swift test --filter SoakTests   # the soak, CI runs it as its o
 swift build                              # builds `workbench` and the `fake-claude` test double
 scripts/soak-real.py                     # real `claude` runs; costs money, run by hand
 bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on this repo (verify-cli skill); costs money, by hand
+scripts/verify-cli/from-branch.sh <feature>  # the same on a branch from a temp clone, normal then sabotaged, with the PR snippet
 ```
 
 ## Skills
