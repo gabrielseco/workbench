@@ -23,10 +23,16 @@ bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on thi
 
 ## Skills
 
-Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`). Agents that don't read that directory
+Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `workbench`). Agents that don't read that directory
 natively can open the `SKILL.md` and follow it. Claude Code reads them through the symlinks in
 `.claude/skills/`; when adding a skill, add its symlink there too:
 `ln -s ../../.agents/skills/<name> .claude/skills/<name>`.
+
+## Using Workbench on a project
+
+The lifecycle for driving any project through Workbench (goal, run, review, accept, ship, PR review, clean) is the `workbench` skill:
+`.agents/skills/workbench/SKILL.md`. It is the one definition; a project's own `workbench` skill adds only what is specific to it and points
+here. Follow it only when asked to use Workbench.
 
 ## Shipping a change
 
