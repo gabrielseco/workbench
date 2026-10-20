@@ -61,7 +61,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         let bare = try await addOrigin(fx)
         let loggedOut = await pushRefusal { try await fx.service.shipPush(id: id, gh: fakeGH(status: 1, in: fx)) }
         #expect(loggedOut == .ghNotAuthenticated)
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
 
         try "x".write(to: worktree.appendingPathComponent("loose.txt"), atomically: true, encoding: .utf8)
         do {
@@ -73,7 +73,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
                 return
             }
         }
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
     }
 
     @Test func aPlanThatChangedAfterItWasShownPushesNothing() async throws {
@@ -86,6 +86,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         // The person answered yes to origin A; origin is now B.
         let second = fx.repo.deletingLastPathComponent().appendingPathComponent("other-\(UUID().uuidString).git")
         _ = try await fx.git.run(["init", "-q", "--bare", second.path], in: fx.repo)
+        _ = try await fx.git.run(["push", "-q", second.path, "main"], in: fx.repo)
         _ = try await fx.git.run(["remote", "set-url", "origin", second.path], in: fx.repo)
         do {
             _ = try await fx.service.shipPush(id: id, gh: gh, shown: shown)
@@ -93,8 +94,8 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         } catch let error as ShipError {
             #expect(error == .changedSinceShown)
         }
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], second, fx).isEmpty)
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+        #expect(try await originBranches(second, fx) == ["refs/heads/main"])
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
 
         // After the push the wording must not claim that nothing was published.
         #expect(ShipError.changedAfterPush.description.contains("was pushed"))
@@ -125,7 +126,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             }
             #expect(why.contains("rejected by policy"), "\(why)")
         }
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
         #expect(try fx.events(id).count == eventsBefore)
         #expect(try await shipOut(["status", "--porcelain"], worktree, fx).isEmpty)
 
@@ -192,7 +193,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             try await Task.sleep(nanoseconds: 300_000_000)
             #expect(kill(pid, 0) != 0, "the hook is gone")
         }
-        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"])
 
         try FileManager.default.removeItem(at: bare.appendingPathComponent("hooks/pre-receive"))
         #expect(try await fx.service.shipPush(id: id, gh: gh).outcome == .pushed)

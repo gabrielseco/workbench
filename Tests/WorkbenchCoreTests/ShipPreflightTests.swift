@@ -25,12 +25,19 @@ func shipOut(_ args: [String], _ dir: URL, _ fx: RunnerFixture) async throws -> 
     try await fx.git.run(args, in: dir).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-/// A bare repository added as `origin`.
-func addOrigin(_ fx: RunnerFixture) async throws -> URL {
+/// A bare repository added as `origin`, holding `main` as a real origin would (a pull request needs its base there).
+func addOrigin(_ fx: RunnerFixture, withMain: Bool = true) async throws -> URL {
     let bare = fx.repo.deletingLastPathComponent().appendingPathComponent("origin-\(UUID().uuidString).git")
     _ = try await fx.git.run(["init", "-q", "--bare", bare.path], in: fx.repo)
     _ = try await fx.git.run(["remote", "add", "origin", bare.path], in: fx.repo)
+    if withMain { _ = try await fx.git.run(["push", "-q", "origin", "main"], in: fx.repo) }
     return bare
+}
+
+/// The branches `addOrigin`'s repository holds: `["refs/heads/main"]` until something is pushed.
+func originBranches(_ bare: URL, _ fx: RunnerFixture) async throws -> [String] {
+    try await shipOut(["for-each-ref", "--format=%(refname)", "refs/heads"], bare, fx)
+        .split(separator: "\n").map(String.init)
 }
 
 private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
@@ -57,6 +64,23 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         #expect(plan.remote == .absent)
         // Reading only: the log has no new event and the repository has no new ref.
         #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted")
+    }
+
+    @Test func aBaseThatOriginDoesNotHaveIsRefusedAndOnceItIsPushedItPasses() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx, withMain: false)
+        let gh = try fakeGH(status: 0, in: fx)
+
+        let error = await refusal { try await fx.service.shipPreflight(id: id, gh: gh) }
+        #expect(error == .baseNotOnOrigin("main"))
+        let message = error?.description ?? ""
+        #expect(message.contains("main") && message.contains("Push it first") && message.contains("goal's base"))
+        #expect(try await shipOut(["for-each-ref", "refs/heads"], bare, fx).isEmpty, "nothing was pushed")
+
+        _ = try await fx.git.run(["push", "-q", "origin", "main"], in: fx.repo)
+        let plan = try await fx.service.shipPreflight(id: id, gh: gh)
+        #expect(plan.base == "main" && plan.remote == .absent)
     }
 
     @Test func aThreadThatIsNotAcceptedIsRefusedWithTheReason() async throws {
