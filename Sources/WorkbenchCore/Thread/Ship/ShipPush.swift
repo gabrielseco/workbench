@@ -10,6 +10,8 @@ public struct ShipPushResult: Sendable, Equatable {
 
     public var plan: ShipPlan
     public var outcome: Outcome
+    /// Set when the pushed head is not the commit `accept` recorded.
+    public var ahead: BranchAhead?
 }
 
 extension ThreadService {
@@ -24,7 +26,8 @@ extension ThreadService {
     /// Runs the preflight, then pushes `workbench/<id>` to `origin` (to the goal's `push_to` branch when it has
     /// one) with its upstream set. A rejected,
     /// timed-out or killed push changes nothing the next attempt depends on: preflight reads the remote
-    /// again and a plain push is repeated. Writes no event; the PR is task 4.
+    /// again and a plain push is repeated. Writes only `branch.ahead`, before the push, when the head is not the
+    /// accepted commit; the PR is task 4.
     ///
     /// - Parameter shown: the plan the person confirmed. If the thread, tip, base or origin differ now,
     ///   nothing is pushed: the answer was about something else.
@@ -35,7 +38,8 @@ extension ThreadService {
         if let shown, !shown.sameTarget(as: plan) || shown.remote != plan.remote {
             throw ShipError.changedSinceShown
         }
-        if plan.remote == .upToDate { return ShipPushResult(plan: plan, outcome: .alreadyOnOrigin) }
+        let ahead = try await recordBranchAhead(id: id, plan: plan)
+        if plan.remote == .upToDate { return ShipPushResult(plan: plan, outcome: .alreadyOnOrigin, ahead: ahead) }
 
         let pusher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
         let result: GitResult
@@ -55,6 +59,6 @@ extension ThreadService {
             let shown = String(Self.withoutCredentials(text, environment: git.environment).suffix(2_000))
             throw ShipError.pushRejected(shown.isEmpty ? "git push exited \(result.status)" : shown)
         }
-        return ShipPushResult(plan: plan, outcome: .pushed)
+        return ShipPushResult(plan: plan, outcome: .pushed, ahead: ahead)
     }
 }

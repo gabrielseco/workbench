@@ -43,6 +43,48 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted", "no event was written")
     }
 
+    @Test func commitsAfterAcceptAreRecordedOncePerHeadOldestFirstAndAtMostTen() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+        let gh = try fakeGH(status: 0, in: fx)
+        for n in 1...12 {
+            try "\(n)\n".write(to: worktree.appendingPathComponent("f\(n).txt"), atomically: true, encoding: .utf8)
+            _ = try await fx.git.run(["add", "-A"], in: worktree)
+            _ = try await fx.git.run(["commit", "-q", "-m", "fix \(n)"], in: worktree)
+        }
+
+        let first = try await fx.service.shipPush(id: id, gh: gh)
+        #expect(first.outcome == .pushed)
+        #expect(first.ahead?.count == 12)
+        #expect(first.ahead?.commits.map(\.subject) == (1...10).map { "fix \($0)" })
+        // Run again (as after a failed PR step): origin has the head, and the event is not written twice.
+        let second = try await fx.service.shipPush(id: id, gh: gh)
+        #expect(second.outcome == .alreadyOnOrigin)
+        let ahead = try fx.events(id).filter { $0.kind == .branchAhead }
+        #expect(ahead.count == 1)
+        guard case .array(let commits)? = ahead.first?.data["commits"] else {
+            Issue.record("no commits array")
+            return
+        }
+        #expect(commits.count == 10 && commits.first?["subject"]?.stringValue == "fix 1")
+
+        let line = LogFormatter.describe(try #require(ahead.first))
+        #expect(!line.contains("\n"))
+        #expect(line.contains("branch ahead of accept: 10+ commit(s)"), "\(line)")
+    }
+
+    @Test func branchAheadIsDocumentedInTheEventLogSpec() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/spec/event-log.md")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let row = try #require(text.split(separator: "\n").first { $0.hasPrefix("| `branch.ahead` | `accepted`") })
+        for field in ["`head`", "`commits`", "`sha`", "`subject`", "100 characters", "before it pushes"] {
+            #expect(row.contains(field), "\(field)")
+        }
+    }
+
     @Test func anAncestorOnOriginIsFastForwarded() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)

@@ -64,14 +64,23 @@ public enum LogFormatter {
             return head + "grant (\(scope)): " + ThreadState.safeLine(event.data["pattern"]?.stringValue ?? "?", limit: 300)
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
-        case .worktreeRemoved:
-            let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
-            return head + "worktree removed (\(event.data["reason"]?.stringValue ?? "?"))\(sha); the branch is kept"
-        case .branchRemoved:
-            let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
-            return head + "branch removed (pull request \(event.data["reason"]?.stringValue ?? "?"))\(sha)"
+        case .worktreeRemoved, .branchRemoved, .branchAhead:
+            return head + describeBranch(event)
         default:
             return head + event.kind.rawValue
+        }
+    }
+
+    /// What happened to the thread's worktree or branch around `ship` and `clean`.
+    static func describeBranch(_ event: Event) -> String {
+        let sha = event.data["head_sha"]?.stringValue.map { " at \($0.prefix(12))" } ?? ""
+        switch event.kind {
+        case .worktreeRemoved:
+            return "worktree removed (\(event.data["reason"]?.stringValue ?? "?"))\(sha); the branch is kept"
+        case .branchRemoved:
+            return "branch removed (pull request \(event.data["reason"]?.stringValue ?? "?"))\(sha)"
+        default:
+            return BranchAhead.describe(event.data)
         }
     }
 

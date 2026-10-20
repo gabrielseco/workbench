@@ -51,6 +51,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let prRefreshed: EventKind = "pr.refreshed"
     public static let worktreeRemoved: EventKind = "worktree.removed"
     public static let branchRemoved: EventKind = "branch.removed"
+    public static let branchAhead: EventKind = "branch.ahead"
 }
 
 /// One line of `events.jsonl`.
