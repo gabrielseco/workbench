@@ -397,6 +397,9 @@ public struct ReviewLoader: Sendable {
             commitCount: commits?.count ?? 0)
     }
 
+    /// How many commits `workbench/<id>` holds past its base; nil when unknown.
+    public func branchCommitCount(id: String) async -> Int? { await branchCommits(id)?.count }
+
     /// The commits on `workbench/<id>` since the commit its worktree was cut from; nil when unknown.
     private func branchCommits(_ id: String) async -> (count: Int, commits: [BranchCommit])? {
         guard SafeNames.isThreadID(id), let base = recordedBase(id),

@@ -98,7 +98,8 @@ extension Commands {
             out("accepted \(id): \(result.branch) at \(result.commit), already committed. Nothing was pushed.")
             // A message with nothing to commit would otherwise vanish while the person thinks it is on the branch.
             if message != nil {
-                let count = plan.commits.count > 10 ? "more than 10" : String(plan.commits.count)
+                // The plan lists at most eleven; the real count comes from the branch.
+                let count = await ReviewLoader(project: ctx.project, git: ctx.git).branchCommitCount(id: id) ?? plan.commits.count
                 out("-m ignored: the work was already committed (\(count) commit(s) on \(result.branch)); nothing to commit")
             }
         }

@@ -189,6 +189,19 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted")
     }
 
+    @Test func theIgnoredMessageNoticeSaysTheRealCountPastTen() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+        for i in 1...11 { _ = try await fx.git.run(["commit", "-q", "--allow-empty", "-m", "more \(i)"], in: worktree) }
+
+        let result = try await cli(["accept", "-m", "mine"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        let line = "-m ignored: the work was already committed (12 commit(s) on workbench/\(id)); nothing to commit"
+        #expect(result.lines.contains(line), "\(result.text)")
+    }
+
     @Test func aMessageWithPendingWorkIsUsedAndNothingIsSaidAboutIgnoringIt() async throws {
         let fx = try await RunnerFixture()
         let (id, _) = try await dirtyThread(fx)

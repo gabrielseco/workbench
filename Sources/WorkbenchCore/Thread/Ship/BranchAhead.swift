@@ -18,7 +18,9 @@ public struct BranchCommit: Sendable, Equatable {
         // Newest first from git, so skipping the newest leaves the oldest few, read without walking more.
         guard let listed = try? await git.run(
             ["log", "--no-decorate", "--format=%H%x09%s", "--max-count=\(listed)", "--skip=\(max(0, count - listed))", range],
-            in: directory), listed.succeeded
+            in: directory), listed.succeeded,
+            // A cut listing would be published as if it were whole: better none than a partial one.
+            !listed.outputTruncated
         else { return nil }
         let commits = listed.stdout.split(separator: "\n").reversed().map { line in
             let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
