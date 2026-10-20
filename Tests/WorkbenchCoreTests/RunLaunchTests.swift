@@ -114,7 +114,44 @@ private final class StopHolder: @unchecked Sendable {
         let env = try #require(info["env"] as? [String: String])
         let url = try #require(env["WORKBENCH_RUN_URL"])
         #expect(url.hasPrefix("http://127.0.0.1:") && url.hasSuffix("/") && !url.contains("{port}"))
+        let prompt = try #require((info["argv"] as? [String])?.last)
+        #expect(prompt.contains("WORKBENCH_RUN_URL=\(url)"))
         #expect(await waitUntilGone(try pid(v, "app.pid")), "the server is still running")
+    }
+
+    @Test func aRedirectingServerThatNeverEndsItsBodyIsStillReadyAtItsHeaders() async throws {
+        try #require(FileManager.default.isExecutableFile(atPath: "/usr/bin/python3"))
+        // A 302 to an address that must never be contacted, then a body that does not end: the check takes the answer
+        // at the headers, does not follow the redirect and does not read on.
+        let server = """
+            import http.server, sys
+            class H(http.server.BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(302)
+                    self.send_header("Location", "http://203.0.113.1:9/")
+                    self.end_headers()
+                    try:
+                        while True:
+                            self.wfile.write(b"x" * 65536)
+                    except OSError:
+                        pass
+                def log_message(self, *args): pass
+            http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+            """
+        let app = """
+            #!/bin/sh
+            echo $$ > app.pid
+            exec python3 scripts/server.py "$WORKBENCH_PORT"
+            """
+        let table = "[run]\ncommand = \"scripts/app.sh\"\nready_url = \"http://127.0.0.1:{port}/\"\nready_timeout_s = 20"
+        let v = try await VerifierFixture(run: table, files: ["scripts/app.sh": app, "scripts/server.py": server])
+        let began = Date()
+        let report = try await v.verify("proof=shot.png")
+        #expect(report.ok)
+        #expect(Date().timeIntervalSince(began) < 15, "the check waited on the body")
+        let ended = try #require(try v.fx.events(v.id).first { $0.kind == .runEnded }).data
+        #expect(ended["ready"] == true)
+        #expect(await waitUntilGone(try pid(v, "app.pid")))
     }
 
     // MARK: Events
@@ -152,6 +189,17 @@ private final class StopHolder: @unchecked Sendable {
         #expect(!report.ok && report.reason?.contains("did not finish within 1s") == true)
         #expect(await waitUntilGone(try pid(v, "app.pid")))
         #expect(await waitUntilGone(try pid(v, "child.pid")))
+        try v.expectPairedRun()
+    }
+
+    @Test(arguments: ["crash-after=1", "die-after=1"])
+    func aVerifierThatCrashesStillEndsTheApp(directive: String) async throws {
+        let v = try await fixture()
+        let report = try await v.verify(directive)
+        #expect(!report.ok)
+        #expect(await waitUntilGone(try pid(v, "app.pid")))
+        #expect(await waitUntilGone(try pid(v, "child.pid")))
+        try v.expectPaired(1)
         try v.expectPairedRun()
     }
 
@@ -213,6 +261,7 @@ private final class StopHolder: @unchecked Sendable {
         try v.expectPairedRun()
         let ended = try #require(try v.fx.events(v.id).first { $0.kind == .runEnded }).data
         #expect(ended["ready"] == false && ended["reason"]?.stringValue == reason)
+        if reason.contains("ended before") { #expect(ended["exit_code"]?.intValue == 3 && ended["duration_ms"]?.intValue != nil) }
         guard case .array(let lines)? = ended["tail"] else { Issue.record("tail missing"); return }
         #expect(lines.compactMap(\.stringValue).contains { $0.contains(tail) })
     }

@@ -23,6 +23,17 @@ Start at [`docs/plan/README.md`](docs/plan/README.md).
 Run `scripts/check.sh` from any directory: it runs the banned-API check, `swift build` and `swift test`, as CI
 does, and stops at the first step that fails.
 
+## Starting a project's app
+
+A project that has a UI says how to start it in `.workbench/config.toml`, and Workbench starts it for the verifier on a
+free port, waits until it is ready and ends it with the turn (see [P16](docs/plan/P16-run.md)):
+
+```toml
+[run]
+command = "npm run dev:mock"
+ready_url = "http://localhost:{port}/"   # or ready_line = "a line the command prints when it is up"
+```
+
 ## What a thread is
 
 The thread is the unit of work. There is exactly one active at a time, and it is exactly:

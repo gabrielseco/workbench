@@ -51,7 +51,7 @@ struct VerifierRun {
         var app: AppLauncher.Running?
         var launchFailure: String?
         if let runConfig = run {
-            let launched = await launch(runConfig, turn: turn, log: log, attach: attach)
+            let launched = try await launch(runConfig, turn: turn, log: log, attach: attach)
             app = launched.app
             launchFailure = launched.failure
         }
@@ -143,16 +143,17 @@ struct VerifierRun {
     /// failure is what the verifier turn ends with.
     private func launch(
         _ runConfig: RunConfig, turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void
-    ) async -> (app: AppLauncher.Running?, failure: String?) {
+    ) async throws -> (app: AppLauncher.Running?, failure: String?) {
         let port = AppLauncher.freePort()
         var started: [String: JSONValue] = ["command": .string(runConfig.command), "port": port.map { .int($0) } ?? .null]
         switch runConfig.ready {
         case .url(let url): started["ready_url"] = .string(url)
         case .line(let pattern): started["ready_line"] = .string(pattern)
         }
-        try? await log.append(.runStarted, turn: turn, data: .object(started))
+        // The attempt is on record before anything is launched: a start that cannot be written is not made.
+        try await log.append(.runStarted, turn: turn, data: .object(started))
         guard let port else {
-            try? await log.append(
+            try await log.append(
                 .runEnded, turn: turn,
                 data: ["ready": false, "reason": "no free port could be found for the app"])
             return (nil, "no free port could be found for the app")
@@ -166,7 +167,15 @@ struct VerifierRun {
         case .failure(let failure):
             var data: [String: JSONValue] = ["ready": false, "reason": .string(Self.clean(failure.description))]
             if !failure.tail.isEmpty { data["tail"] = .array(failure.tail.map { .string(Self.clean($0)) }) }
-            try? await log.append(.runEnded, turn: turn, data: .object(data))
+            if case .exited(let end) = failure, let exit = end.exit {
+                data["duration_ms"] = .int(exit.durationMs)
+                switch exit.termination {
+                case .exited(let code): data["exit_code"] = .int(Int(code))
+                case .signaled(let signal): data["signal"] = .int(Int(signal))
+                case .lost: data["lost"] = true
+                }
+            }
+            try await log.append(.runEnded, turn: turn, data: .object(data))
             return (nil, Self.clean(failure.description))
         }
     }

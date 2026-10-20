@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Starts the project's `[run]` command for one verifier turn and stops it when the turn ends
 /// (docs/plan/P16-run.md). It is the check's machinery (one `ProcessRunner` child, its streams merged, its whole
@@ -172,15 +173,54 @@ struct AppLauncher {
         regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
-    /// Any HTTP answer, whatever its status, means something is listening and serving.
-    static func answers(_ url: String) async -> Bool {
-        guard let url = URL(string: url) else { return false }
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 1)
-        request.httpMethod = "GET"
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return response is HTTPURLResponse
-        } catch { return false }
+    /// Any HTTP answer, whatever its status, means something is listening and serving. It is the status line that
+    /// counts, read from a plain TCP connection: nothing follows a redirect (the check stays on this machine, and a 3xx
+    /// is an answer already), the body is never read (a server that streams one cannot hold the check or grow our
+    /// memory), and the whole attempt ends within `attempt` seconds.
+    static func answers(_ url: String, attempt: TimeInterval = 1.5) async -> Bool {
+        guard let url = URL(string: url), let host = url.host, let number = url.port,
+            let port = NWEndpoint.Port(rawValue: UInt16(clamping: number))
+        else { return false }
+        let target = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?" + $0 } ?? "")
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: port, using: .tcp)
+        let queue = DispatchQueue(label: "workbench.ready-check")
+        return await withCheckedContinuation { continuation in
+            let once = Once(continuation)
+            let request = Data("GET \(target) HTTP/1.0\r\nHost: \(host)\r\nConnection: close\r\n\r\n".utf8)
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    connection.send(content: request, completion: .contentProcessed { _ in })
+                    connection.receive(minimumIncompleteLength: 5, maximumLength: 16) { data, _, _, _ in
+                        once.resume(data.map { String(decoding: $0, as: UTF8.self).hasPrefix("HTTP/") } ?? false)
+                        connection.cancel()
+                    }
+                case .failed, .cancelled:
+                    once.resume(false)
+                default:
+                    break
+                }
+            }
+            connection.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + attempt) {
+                once.resume(false)
+                connection.cancel()
+            }
+        }
+    }
+
+    /// Resumes a continuation once, whichever of the answer, the failure and the deadline comes first.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+        func resume(_ value: Bool) {
+            lock.lock()
+            let taken = continuation
+            continuation = nil
+            lock.unlock()
+            taken?.resume(returning: value)
+        }
     }
 
     /// A port nothing listens on: the kernel picks one for a socket that is closed again at once.
