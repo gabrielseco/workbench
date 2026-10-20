@@ -19,6 +19,14 @@ Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are 
   on `main` after the merge.
 - Not for a target project's change (that is the project's `[verifier]`, P10 and P11), and not in CI.
 
+## Running one on a branch, the short way
+
+`scripts/verify-cli/from-branch.sh <scenario> [branch]` does the whole "from the branch" routine without touching your checkout: it
+clones the branch into a temp folder (a main checkout of its own, as the scenarios need), copies the project's untracked
+`.workbench/config.toml` in, runs the scenario normally and then with `VERIFY_CLI_SABOTAGE=1`, and prints the two results as Markdown for
+the pull request description. It exits 0 only when the normal run passed and the sabotaged one failed (a sabotage that still passes proved
+nothing). `--no-sabotage` skips the second run, `--keep` keeps the temp folder. A scenario that runs a real turn costs what it costs.
+
 ## Running one
 
 ```bash
