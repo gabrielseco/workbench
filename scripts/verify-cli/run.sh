@@ -28,7 +28,8 @@ cat >"$SKILL" <<'SKILLTEXT'
 
 You are checking a Workbench feature, not an app. Do exactly this, with no extra steps:
 
-1. Run `scripts/fetch-page.sh` with the Bash tool. It asks the running app for its page and writes probe.txt into the proof folder.
+1. Run exactly `scripts/fetch-page.sh probe` with the Bash tool, as written: no variables, no prefix, no redirects. It asks the
+   running app for its page and writes probe.txt into the proof folder; the environment it needs is already set.
 2. Read `scratch/run-probe.txt` in the working directory with the Read tool.
 3. Reply with one line per criterion: its id, `holds` or `does not hold`, and what you saw. Nothing else.
 SKILLTEXT

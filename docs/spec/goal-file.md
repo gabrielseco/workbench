@@ -244,6 +244,10 @@ default_budget_usd = 5.00               # used when drafting a goal
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
+# [run]                                 # P16: how the verifier's app is started; Workbench runs it and stops it
+# command = "npm run dev:mock"          # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
+# ready_url = "http://localhost:{port}/"  # or ready_line = "on mock data"; exactly one. Any HTTP answer is up
+# ready_timeout_s = 120                 # default 120 (1 to 900)
 # [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
 # skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
 # tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
@@ -309,6 +313,17 @@ Notes:
   a `claude` turn on the project's skill; a project with no skill at the base has no verify step. When a goal has a
   `screenshot:` proof and the verifier will run (on, the default, with its skill in the base commit), the first prompt
   says the verifier captures it, so Claude does not report it as unverified.
+- **`[run]` is checked when the config loads** ([P16](../plan/P16-run.md)). `command` is one plain command like `check_command`
+  (no operators, quotes or substitutions); exactly one of `ready_url` (an `http` URL on `localhost` or `127.0.0.1`, `{port}`
+  standing for the port) and `ready_line` (a regular expression a line of the command's output must match) says when the app
+  is up; `ready_timeout_s` is 1 to 900 (default 120). A missing `command`, none or both ready checks, an unknown key or a bad
+  value is refused with the key named. Without `[run]` nothing changes. With it, a verifier turn first starts the command in
+  the thread's worktree as a child of Workbench (its streams merged, its whole process tree ended on every ending, also on a
+  stop and a timeout), on a free port given as `WORKBENCH_PORT` and `PORT`, and starts `claude` only once the app is ready.
+  The verifier's environment and prompt then hold `WORKBENCH_RUN_PID`, `WORKBENCH_PORT` and, for `ready_url`,
+  `WORKBENCH_RUN_URL`, and the prompt tells it not to start or stop the app. An app that exits, never comes up or is not
+  found ends the verifier with `ok: false` and the reason, and spends nothing. The command comes from the project's
+  config, never from a file in the worktree. It is launch only: nothing it prints or returns is a verdict.
 - **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is optional (default `.claude/skills/verify/SKILL.md`) and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
@@ -387,6 +402,8 @@ Notes:
   (exit 1) that names the command to remove it by hand.
   A step the config leaves out is reported, not failed; the check is skipped when a declared setup did not
   pass. Exit 0 when everything declared passed, 1 when a step did not, 3 when stopped (`exit-codes.md`).
+  Doctor does not start the `[run]` app either: it prints the command and ready check and warns when the command is a
+  repository path that is not at `--base`, or when the verifier is off so nothing would use it.
   Doctor does not run the verifier (it is a paid `claude` turn). It reads `[verifier]`'s skill at `--base` and says
   whether it can be used. With `app_type = "desktop"` and a usable skill, it also checks that the process running
   doctor may record the screen (`CGPreflightScreenCaptureAccess`) and, if not, warns and names the Settings pane
