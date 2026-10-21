@@ -74,7 +74,9 @@ enum Help {
             changes: "runs one configured review stage read-only; records the round",
             example: "workbench review-stage design"),
         "accept": Extra(
-            changes: "commits the work on its branch and ends the thread; does not push",
+            changes:
+                "commits the work on its branch and ends the thread; does not push; -m is used only when "
+                + "accept commits",
             example: "workbench accept -m \"feat: add retry\" --yes"),
         "ship": Extra(
             changes: "pushes the accepted branch and opens its pull request after asking; never merges",

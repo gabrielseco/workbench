@@ -23,6 +23,10 @@ public struct ReviewReport: Sendable, Equatable {
     public var branchTip: String?
     /// Whether the verify step's proof still describes the worktree; nil when there is no proof to judge.
     public var proofFreshness: ProofFreshness?
+    /// The oldest commits on `workbench/<id>` that are not on its base, oldest first, at most ten.
+    public var commits: [BranchCommit] = []
+    /// How many commits the branch has on top of its base; `commits` lists at most ten of them.
+    public var commitCount = 0
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
@@ -143,6 +147,18 @@ public struct ReviewReport: Sendable, Equatable {
         }
     }
 
+    /// The `Commits` block, none when the branch has no commits of its own. A run commits its own work, so the
+    /// diff alone does not say which commits it made.
+    func commitLines() -> [String] {
+        guard !commits.isEmpty else { return [] }
+        var lines = ["", "Commits"]
+        for commit in commits {
+            lines.append("  \(commit.sha.prefix(12)) \(ThreadState.safeLine(commit.subject, limit: BranchCommit.subjectLimit))")
+        }
+        if commitCount > commits.count { lines.append("  … and \(commitCount - commits.count) more") }
+        return lines
+    }
+
     /// Lines for the terminal, without colour or a trailing newline.
     public func render() -> [String] {
         var lines: [String] = []
@@ -174,6 +190,8 @@ public struct ReviewReport: Sendable, Equatable {
             lines.append(CriteriaStatus.summary(statuses, check: review.check))
             lines.append(contentsOf: CriteriaStatus.render(statuses))
         }
+
+        lines.append(contentsOf: commitLines())
 
         lines.append("")
         switch diff {
@@ -370,11 +388,26 @@ public struct ReviewLoader: Sendable {
         } catch {
             problem = "cannot read the goal file: \(error.localizedDescription)"
         }
+        let commits = await branchCommits(id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
             threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id),
-            proofFreshness: await proofFreshness(state))
+            proofFreshness: await proofFreshness(state), commits: commits?.commits ?? [],
+            commitCount: commits?.count ?? 0)
+    }
+
+    /// How many commits `workbench/<id>` holds past its base; nil when unknown.
+    public func branchCommitCount(id: String) async -> Int? { await branchCommits(id)?.count }
+
+    /// The commits on `workbench/<id>` since the commit its worktree was cut from; nil when unknown.
+    private func branchCommits(_ id: String) async -> (count: Int, commits: [BranchCommit])? {
+        guard SafeNames.isThreadID(id), let base = recordedBase(id),
+            base.range(of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil,
+            await branchTip(id) != nil
+        else { return nil }
+        return await BranchCommit.oldest(
+            in: "\(base)..refs/heads/\(WorktreeManager.branch(for: id))", at: project.root, git: git)
     }
 
     /// Nil unless the latest verify step left proof; then whether the worktree still matches what it saw.

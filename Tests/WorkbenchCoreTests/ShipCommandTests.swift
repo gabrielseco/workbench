@@ -59,6 +59,51 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(gh.count("pr create") == 1)
     }
 
+    @Test func aCommitAddedAfterAcceptIsRecordedAndNotedBeforeThePush() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, worktree) = try await acceptedThread(fx)
+        let bare = try await addOrigin(fx)
+        let accepted = try #require(fx.events(id).last?.data["commit"]?.stringValue)
+        try "fix\n".write(to: worktree.appendingPathComponent("fix.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "fix.txt"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "fix: " + String(repeating: "x", count: 150)], in: worktree)
+        let head = try await shipOut(["rev-parse", "HEAD"], worktree, fx)
+
+        let shipped = try await ship(["--yes", "--no-describe"], fx: fx, gh: gh)
+        #expect(shipped.code == 0, "\(shipped.text)")
+        #expect(shipped.lines.contains("note: 1 commit(s) were added after accept: \(head.prefix(12))"), "\(shipped.text)")
+        let note = try #require(shipped.lines.firstIndex { $0.hasPrefix("note: ") })
+        let pushed = try #require(shipped.lines.firstIndex { $0.hasPrefix("pushed ") })
+        #expect(note < pushed)
+        #expect(try await shipOut(["rev-parse", "refs/heads/workbench/\(id)"], bare, fx) == head, "the head is pushed")
+
+        let events = try fx.events(id)
+        let ahead = events.filter { $0.kind == .branchAhead }
+        #expect(ahead.count == 1)
+        #expect(ahead.first?.data["accepted"]?.stringValue == accepted)
+        #expect(ahead.first?.data["head"]?.stringValue == head)
+        let commits: [JSONValue]
+        if case .array(let listed)? = ahead.first?.data["commits"] { commits = listed } else { commits = [] }
+        #expect(commits.count == 1)
+        #expect(commits.first?["sha"]?.stringValue == head)
+        #expect(commits.first?["subject"]?.stringValue == "fix: " + String(repeating: "x", count: 95))
+        let aheadSeq = try #require(ahead.first?.seq)
+        #expect(events.first { $0.kind == .prOpened }.map { $0.seq > aheadSeq } == true)
+    }
+
+    @Test func aHeadThatIsTheAcceptedCommitAddsNoEventAndNoNote() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+
+        let shipped = try await ship(["--yes", "--no-describe"], fx: fx, gh: gh)
+        #expect(shipped.code == 0, "\(shipped.text)")
+        #expect(!shipped.text.contains("note: "), "\(shipped.text)")
+        #expect(try fx.events(id).contains { $0.kind == .branchAhead } == false)
+    }
+
     @Test func aBaseOnlyHereIsRefusedBeforeAnyPushAndShipsOnceItIsOnOrigin() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

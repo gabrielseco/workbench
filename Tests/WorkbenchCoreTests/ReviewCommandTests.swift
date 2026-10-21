@@ -39,7 +39,76 @@ private func write(_ text: String, to name: String, id: String, in fx: RunnerFix
     try text.write(to: url, atomically: true, encoding: .utf8)
 }
 
+/// Makes `count` commits named `fix 1` … `fix <count>` on the thread's branch, oldest first; returns their shas.
+private func commit(_ count: Int, id: String, in fx: RunnerFixture) async throws -> [String] {
+    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+    var shas: [String] = []
+    for n in 1...count {
+        try write("\(n)\n", to: "f\(n).txt", id: id, in: fx)
+        _ = try await fx.git.run(["add", "f\(n).txt"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "fix \(n)"], in: worktree)
+        shas.append(try await fx.git.run(["rev-parse", "HEAD"], in: worktree).stdout
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return shas
+}
+
 @Suite struct ReviewCommandTests {
+    @Test func theRunsCommitsAreListedOldestFirstBetweenTheCriteriaAndTheDiff() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let shas = try await commit(2, id: id, in: fx)
+
+        let review = try await cli(["review", id], in: fx)
+        #expect(review.exit?.termination == .exited(0), "\(review.text)")
+        let heading = try #require(review.lines.firstIndex(of: "Commits"), "\(review.text)")
+        let criteria = try #require(review.lines.firstIndex(of: "Criteria"))
+        let diff = try #require(review.lines.firstIndex { $0.hasPrefix("Diff against") })
+        #expect(criteria < heading && heading < diff)
+        #expect(Array(review.lines[(heading + 1)...(heading + 2)]) == [
+            "  \(shas[0].prefix(12)) fix 1", "  \(shas[1].prefix(12)) fix 2",
+        ])
+        #expect(!review.text.contains("more"), "\(review.text)")
+
+        let json = try await cli(["review", id, "--json"], in: fx)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(json.text.utf8)) as? [String: Any], "\(json.text)")
+        let commits = try #require(object["commits"] as? [[String: String]])
+        #expect(commits == [["sha": shas[0], "subject": "fix 1"], ["sha": shas[1], "subject": "fix 2"]])
+        #expect(object["diff"] != nil && object["criteria"] != nil, "existing keys stay")
+    }
+
+    @Test func aThreadWithNoCommitsHasNoCommitsHeading() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        try write("loose\n", to: "loose.txt", id: id, in: fx)
+
+        let review = try await cli(["review", id], in: fx)
+        #expect(review.exit?.termination == .exited(0), "\(review.text)")
+        #expect(!review.lines.contains("Commits"), "\(review.text)")
+        let json = try await cli(["review", id, "--json"], in: fx)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(json.text.utf8)) as? [String: Any])
+        #expect((object["commits"] as? [Any])?.isEmpty == true)
+    }
+
+    @Test func moreThanTenCommitsListTheOldestTenAndCountTheRest() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let shas = try await commit(12, id: id, in: fx)
+
+        let review = try await cli(["review", id], in: fx)
+        let heading = try #require(review.lines.firstIndex(of: "Commits"), "\(review.text)")
+        let listed = Array(review.lines[(heading + 1)...(heading + 11)])
+        #expect(listed.prefix(10) == ArraySlice((1...10).map { "  \(shas[$0 - 1].prefix(12)) fix \($0)" }))
+        #expect(listed[10] == "  … and 2 more")
+        let json = try await cli(["review", id, "--json"], in: fx)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(json.text.utf8)) as? [String: Any])
+        #expect((object["commits"] as? [[String: String]])?.map { $0["subject"] } == (1...10).map { "fix \($0)" })
+    }
+
     @Test func showsCriteriaDiffCheckAndNextStepsAfterATurn() async throws {
         let script = try CheckScript()
         let fx = try await RunnerFixture.checking(try script.write("echo bad\nexit 3"))

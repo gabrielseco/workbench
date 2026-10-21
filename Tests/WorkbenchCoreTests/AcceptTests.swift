@@ -171,6 +171,62 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted")
     }
 
+    @Test func aMessageWithNothingToCommitIsSaidToBeIgnoredAndTheCommitIsKept() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+        let tip = try await gitOut(["rev-parse", "workbench/\(id)"], fx.repo, fx)
+
+        let result = try await cli(["accept", "-m", "mine"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        let line = "-m ignored: the work was already committed (1 commit(s) on workbench/\(id)); nothing to commit"
+        let accepted = try #require(result.lines.firstIndex { $0.hasPrefix("accepted \(id):") }, "\(result.text)")
+        #expect(result.lines.dropFirst(accepted + 1).first == line, "\(result.text)")
+        #expect(result.lines.filter { $0.hasPrefix("-m ignored") }.count == 1)
+        #expect(try await gitOut(["rev-parse", "workbench/\(id)"], fx.repo, fx) == tip)
+        #expect(try await gitOut(["log", "-1", "--format=%s", "workbench/\(id)"], fx.repo, fx) == "model work")
+        #expect(try fx.events(id).last?.data["decision"]?.stringValue == "accepted")
+    }
+
+    @Test func theIgnoredMessageNoticeSaysTheRealCountPastTen() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+        for i in 1...11 { _ = try await fx.git.run(["commit", "-q", "--allow-empty", "-m", "more \(i)"], in: worktree) }
+
+        let result = try await cli(["accept", "-m", "mine"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        let line = "-m ignored: the work was already committed (12 commit(s) on workbench/\(id)); nothing to commit"
+        #expect(result.lines.contains(line), "\(result.text)")
+    }
+
+    @Test func aMessageWithPendingWorkIsUsedAndNothingIsSaidAboutIgnoringIt() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await dirtyThread(fx)
+        let before = try await gitOut(["rev-parse", "workbench/\(id)"], fx.repo, fx)
+
+        let result = try await cli(["accept", "-m", "mine"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        #expect(!result.text.contains("-m ignored"), "\(result.text)")
+        #expect(try await gitOut(["log", "-1", "--format=%s", "workbench/\(id)"], fx.repo, fx) == "mine")
+        #expect(try await gitOut(["rev-parse", "workbench/\(id)^"], fx.repo, fx) == before)
+    }
+
+    @Test func noMessageWithNothingToCommitSaysNothingAboutAMessage() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await dirtyThread(fx)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        _ = try await fx.git.run(["commit", "-q", "-m", "model work"], in: worktree)
+        let tip = try await gitOut(["rev-parse", "workbench/\(id)"], fx.repo, fx)
+
+        let result = try await cli(["accept"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        #expect(!result.text.contains("-m ignored"), "\(result.text)")
+        #expect(try await gitOut(["rev-parse", "workbench/\(id)"], fx.repo, fx) == tip)
+    }
+
     @Test func anOpenTurnLeftByADeadRunnerIsRecordedAsInterruptedFirst() async throws {
         let fx = try await RunnerFixture()
         let (id, _) = try await dirtyThread(fx)

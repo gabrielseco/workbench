@@ -119,6 +119,7 @@ extension Commands {
         do {
             let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
             let pushedName = plan.updatesExistingBranch ? plan.remoteBranch : plan.branch
+            pushed.ahead.map { out($0.note) }
             out(pushed.outcome == .pushed ? "pushed \(pushedName)" : "origin already has \(pushedName)")
             let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan, description: description)
             out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")

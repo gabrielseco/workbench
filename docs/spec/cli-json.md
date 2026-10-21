@@ -36,7 +36,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
@@ -49,6 +49,10 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goa
   verifier's wins a name both left) has `<name>.png` for every name (`files` are their paths relative to the thread
   directory, in the order named, `file` the first; a person looks at them, it is never a pass) and `missing`
   otherwise, with `note` saying which and why (`files` then holds the ones that are there).
+- `commits`: the commits on `workbench/<id>` that are not on the commit its worktree was cut from (usually the
+  run's own), oldest first, at most 10, each `{sha, subject}` (the full sha; the subject cut at 100 characters);
+  `[]` when there are none or the branch is gone. The terminal shows them under `Commits`, with `… and <n> more`
+  past ten.
 - `diff`: `{state: summary | unavailable, base, total_files, truncated, additions, deletions, files, reason}`;
   each file `{path, old_path, status, binary, untracked, staged, additions, deletions}`.
 - `check`: null, or `{turn, result, exit_code, duration_ms}`.

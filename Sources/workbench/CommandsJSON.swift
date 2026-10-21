@@ -13,7 +13,7 @@ extension Commands {
 
     static func reviewKeys() -> [String] {
         ["v", "thread", "status", "ended", "title", "approval", "goal_problem", "turns", "last_result", "cost_usd",
-         "base", "worktree", "criteria", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
+         "base", "worktree", "criteria", "commits", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
     }
 
     private static func gapJSON(_ base: String, ctx: Context) async -> JSONValue {
@@ -299,6 +299,7 @@ extension Commands {
                         "files": .array(status.files.map { .string($0) }),
                     ]
                 }),
+            "commits": .array(report.commits.map { ["sha": .string($0.sha), "subject": .string($0.subject)] }),
             "diff": diff, "check": check, "verify": verify, "verifier": verifier, "judge": judge,
             "pr_review": prReview, "review_stages": .array(reviewStages),
             "denied_tools": .array(

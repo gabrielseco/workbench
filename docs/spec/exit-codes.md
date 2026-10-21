@@ -120,6 +120,9 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `usage` | wrong command line |
 | 7 | `not-found` | no such thread, event or patch path; with `--json`, also when there are no threads at all |
 
+`review` lists the commits on the thread's branch that are not on its base under `Commits` (between the
+criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sha, subject}]`, see `cli-json.md`).
+
 ### `grant`
 
 | Code | Kind | When |
@@ -193,7 +196,9 @@ these differences:
 
 ### `accept`
 
-`-m` only applies when something is left to commit; work the agent already committed keeps its messages.
+`-m` only applies when something is left to commit; work the agent already committed keeps its messages. Given
+with nothing to commit, `accept` still accepts (exit 0) and prints, after its result,
+`-m ignored: the work was already committed (<n> commit(s) on <branch>); nothing to commit`.
 
 | Code | Kind | When |
 |---|---|---|
@@ -277,4 +282,5 @@ polls every 15 s (`--interval` 1 to 300) and gives up with exit 1 after three fa
 With `--watch`, answering no at the prompt exits 1 (no PR was made, so 0 would claim passing checks), and a
 named thread is never replaced by another one.
 
-Every `ship` failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists.
+Every `ship` failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists, except
+`branch.ahead` (commits added after `accept`), which is written once per branch head before the push.
