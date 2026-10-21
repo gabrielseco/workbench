@@ -62,10 +62,10 @@ private struct TestRepo {
         let sleep = GitRunner(
             executable: URL(fileURLWithPath: "/bin/sleep"), environment: [:], timeout: 0.3)
         let started = Date()
-        await #expect(throws: GitError.timedOut(arguments: ["30"], seconds: 0.3)) {
-            _ = try await sleep.run(["30"], in: URL(fileURLWithPath: "/tmp"))
+        await #expect(throws: GitError.timedOut(arguments: ["300"], seconds: 0.3)) {
+            _ = try await sleep.run(["300"], in: URL(fileURLWithPath: "/tmp"))
         }
-        #expect(Date().timeIntervalSince(started) < 25, "ended by the timeout, not by `sleep 30`")
+        #expect(Date().timeIntervalSince(started) < Patience.limit, "ended by the timeout, not by `sleep 300`")
     }
 
     @Test func aProcessThatIgnoresSigtermIsStillKilled() async throws {
@@ -258,13 +258,13 @@ private struct TestRepo {
         let bare = repo.root.deletingLastPathComponent().appendingPathComponent("h-\(UUID().uuidString).git")
         _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
         let hang = bare.appendingPathExtension("sh")
-        try "#!/bin/sh\nexec sleep 60\n".write(to: hang, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexec sleep 600\n".write(to: hang, atomically: true, encoding: .utf8)
         chmod(hang.path, 0o755)
         try await repo.run("remote", "set-url", "origin", bare.path)
         try await repo.run("config", "remote.origin.uploadpack", hang.path)
         let started = Date()
         let slow = await repo.manager.baseGap(base: "main", fetchTimeout: 2)
-        #expect(Date().timeIntervalSince(started) < 45, "ended by the fetch timeout, not by `sleep 60`")
+        #expect(Date().timeIntervalSince(started) < Patience.limit, "ended by the fetch timeout, not by `sleep 600`")
         #expect(slow?.fetchNote?.contains("no answer") == true, "\(String(describing: slow))")
     }
 

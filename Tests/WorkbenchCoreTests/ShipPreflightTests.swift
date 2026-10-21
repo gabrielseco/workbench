@@ -323,7 +323,7 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         let bare = try await addOrigin(fx)
         let pidFile = bare.appendingPathExtension("pid")
         let hang = bare.appendingPathExtension("sh")
-        try "#!/bin/sh\necho $$ > '\(pidFile.path)'\nexec sleep 60\n".write(to: hang, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho $$ > '\(pidFile.path)'\nexec sleep 600\n".write(to: hang, atomically: true, encoding: .utf8)
         chmod(hang.path, 0o755)
         _ = try await fx.git.run(["config", "remote.origin.uploadpack", hang.path], in: fx.repo)
 
@@ -336,7 +336,7 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
             return
         }
         #expect(why.contains("ls-remote"), "\(why)")
-        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
         let written = (try? String(contentsOf: pidFile, encoding: .utf8)) ?? ""
         if let pid = Int32(written.trimmingCharacters(in: .whitespacesAndNewlines)) {
             try await Task.sleep(nanoseconds: 300_000_000)

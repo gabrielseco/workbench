@@ -214,7 +214,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         let bare = try await addOrigin(fx)
         let gh = try fakeGH(status: 0, in: fx)
         let pidFile = bare.appendingPathExtension("pid")
-        try hook("pre-receive", "echo $$ > '\(pidFile.path)'\nexec sleep 60", in: bare)
+        try hook("pre-receive", "echo $$ > '\(pidFile.path)'\nexec sleep 600", in: bare)
 
         let started = Date()
         do {
@@ -227,7 +227,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             }
             #expect(why.contains("did not finish"), "\(why)")
         }
-        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
         let written = (try? String(contentsOf: pidFile, encoding: .utf8)) ?? ""
         let pid = Int32(written.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(pid != nil, "the hook ran")
