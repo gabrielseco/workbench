@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `verifier` (P10 PR 2), `run` (P16) and `thread-setup` (the default base, `goal new --from`'s front matter, `ship` and a base not on origin) and `commits-visible` (`accept -m` with nothing to commit, `ship` after a commit added past `accept`, the commits in `review`).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `verifier` (P10 PR 2), `run` (P16) and `thread-setup` (the default base, `goal new --from`'s front matter, `ship` and a base not on origin), `commits-visible` (`accept -m` with nothing to commit, `ship` after a commit added past `accept`, the commits in `review`) and `open` (a thread's worktree in an editor).
 
 ## When to use it
 
@@ -160,6 +160,18 @@ worktree and one file itself (no turn) and `accept` commits it; `ship --yes --no
 the local-only branch, exits 6, names the base and says to push it or change the goal's base, and the origin has no
 `workbench/` branch. `VERIFY_CLI_SABOTAGE=1` pushes the local base to the origin before `ship`, so the three ship steps
 must FAIL (the push then lands only in the temp folder's origin, and `gh` cannot open a pull request on it).
+
+### open
+
+No turn and no real editor, so it costs nothing: a clone in the temp folder with a HOME of its own and fake `zed` and
+`rec` launchers on PATH that write their arguments to a file. `bash scripts/verify-cli/open.sh`. Steps: `init`, `goal new`,
+the script adds the thread's worktree itself; with no editor set `open` exits 6, names `--editor`, `editor` and `--print`
+and launches nothing; `--print` prints only the worktree path and launches nothing; `--print --editor` exits 2; `open
+--editor zed` prints `opened <path> in zed` and the launcher got the path; `open <id> --editor "rec --new-window"` passes
+the argument then the path; the global config's `editor` is used, the project's wins over it and `--editor` over both; an
+unknown id exits 7 and a thread whose worktree was removed exits 6 with the reason, launching nothing.
+`VERIFY_CLI_SABOTAGE=1` sets `editor` in the global config before the first step, so the three "no editor set" steps must
+FAIL.
 
 ## Adding a scenario for the next feature
 

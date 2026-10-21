@@ -12,10 +12,11 @@ let workbenchUsage = """
                                  non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
-      doctor [--base <branch>]   run the declared setup and check in a throwaway worktree; changes nothing;
+      doctor [--base <branch>] [--editor <name-or-command>]
+                                 run the declared setup and check in a throwaway worktree; changes nothing;
                                  works before goal new and after goal approve, refused only while a run is live;
                                  base without --base: the default branch (origin/HEAD, else main, else master,
-                                 else the checked-out branch)
+                                 else the checked-out branch); prints the editor `open` would use, never starts it
 
     one thread at a time
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
@@ -33,6 +34,11 @@ let workbenchUsage = """
       log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
       status [id] [--all]        where the thread stands; --all: one line per thread
       review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      open [id] [--editor <name-or-command>] [--print]
+                                 open the thread's worktree in an editor to read what the run changed: cursor, code,
+                                 zed, subl, windsurf or one plain command (given the path last); from --editor, else
+                                 `editor` in .workbench/config.toml, else in ~/.workbench/config.toml; never $EDITOR;
+                                 --print prints only the path and starts nothing; changes nothing
       grant [id]                 the commands a run was denied, numbered, rated safe / caution / unsafe, with what each
                                  would allow; changes nothing
       grant [id] <n> --once|--thread|--never  decide one: allow it for the next turn, for every later turn of this

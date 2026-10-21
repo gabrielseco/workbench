@@ -107,6 +107,10 @@ public struct DoctorReport: Sendable, Equatable {
     public var copySkipped: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
     public var cleanupProblem: String?
+    /// The editor `workbench open` would start, nil when none is set. Shown only: never launched, never a failure.
+    public var editor: EditorChoice?
+    /// Why the global config's `editor` could not be read, when it could not.
+    public var editorProblem: String?
 
     /// Everything declared passed and nothing was left behind. A step the config does not declare is not a
     /// failure.
@@ -149,6 +153,8 @@ public final class Doctor: @unchecked Sendable {
         public var killGrace: TimeInterval = 5
         /// Whether the process running doctor may record the screen. Replaced in tests.
         public var screenRecordingGranted: @Sendable () -> Bool = { CGPreflightScreenCaptureAccess() }
+        /// `doctor --editor`, which wins over the configs as it does for `open`.
+        public var editor: String?
         public init() {}
     }
 
@@ -224,6 +230,15 @@ public final class Doctor: @unchecked Sendable {
         if let run = config.run { report.run = await readRun(run, verifierOn: config.verifier != nil, base: base) }
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
+        var global: String?
+        if options.editor == nil, config.editor == nil {
+            do {
+                global = try GlobalConfig.load(from: GlobalConfig.defaultURL(environment: options.environment)).editor
+            } catch {
+                report.editorProblem = "\(error)"
+            }
+        }
+        report.editor = EditorChoice.resolve(flag: options.editor, project: config.editor, global: global)
         guard runsSteps else { return report }
         // After the lock: a run that starts now sees the lock and refuses itself (it writes runner.json first).
         if let live = store.threadWithLiveRunner() { throw DoctorError.runnerLive(live) }

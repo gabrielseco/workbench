@@ -91,6 +91,9 @@ public struct Config: Sendable, Equatable {
     /// `[run]`, or nil when the project declares no way to start its app.
     public var run: RunConfig?
 
+    /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
+    public var editor: String?
+
     /// `--model` for the verifier: its own, else the coding `model`.
     public var verifierModel: String? { verifier?.model ?? model }
 
@@ -134,7 +137,7 @@ public struct Config: Sendable, Equatable {
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type",
             "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "plan_model", "safe_mode",
-            "project_instructions", "copy",
+            "project_instructions", "copy", "editor",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -238,6 +241,8 @@ public struct Config: Sendable, Equatable {
         let checkCommand = command("check_command")
         let setupCommand = command("setup_command")
 
+        let editor = string("", "editor").flatMap { editorValue($0.value, line: $0.line, fail: fail) }
+
         var appType = AppType.web
         if let (value, line) = string("", "app_type") {
             if let parsed = AppType(rawValue: value) {
@@ -310,13 +315,22 @@ public struct Config: Sendable, Equatable {
         }
 
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
-        return Config(
+        var config = Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
             model: model, checkCommand: checkCommand, setupCommand: setupCommand, copy: copy,
             appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, judgeModel: judgeModel, describeModel: describeModel,
             planModel: planModel, verifier: verifier, run: run)
+        config.editor = editor
+        return config
+    }
+
+    /// The `editor` key, in the project's config or the global one: the value, or nil after `fail` has been told.
+    static func editorValue(_ value: String, line: Int, fail: ReviewConfig.Fail) -> String? {
+        guard let reason = Editor.valueProblem(value) else { return value }
+        fail(.invalidValue, line, "'editor' \(reason)")
+        return nil
     }
 
     /// Keys an older config used for the verify step, which `[verifier]` replaced.
@@ -378,6 +392,7 @@ public struct Config: Sendable, Equatable {
         # default_budget_usd = 5.00        # used when drafting a goal
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
+        # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
 
         # [pr_review]                      # `workbench pr-review`: Codex reviews the shipped pull request
         # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head

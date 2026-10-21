@@ -77,6 +77,10 @@ private func commandNames(from usage: String) -> [String] {
         #expect(show.contains("plan show [id]") && !show.contains("plan edit [id]") && !show.contains("--again"))
         let ship = try await workbench(["ship", "-h"], in: dir).stdout
         #expect(ship.contains("[--watch|-w") && ship.contains("exit 10 not accepted"))
+        let open = try await workbench(["help", "open"], in: dir).stdout
+        #expect(open.hasPrefix("workbench open\n") && open.contains("open [id] [--editor <name-or-command>] [--print]"))
+        #expect(open.contains("never $EDITOR") && open.contains("--print prints only the path"))
+        #expect(try await workbench(["doctor", "--help"], in: dir).stdout.contains("[--editor <name-or-command>]"))
     }
 
     @Test func helpNeedsNoProjectAndChangesNothing() async throws {
@@ -90,7 +94,7 @@ private func commandNames(from usage: String) -> [String] {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         let log = try Data(contentsOf: fx.project.eventsURL(id))
-        for arguments in [["status", "--help"], ["run", "-h"], ["help", "accept"]] {
+        for arguments in [["status", "--help"], ["run", "-h"], ["help", "accept"], ["open", "--help"]] {
             #expect(try await workbench(arguments, in: fx.repo).code == 0)
         }
         #expect(try Data(contentsOf: fx.project.eventsURL(id)) == log, "no event was written")

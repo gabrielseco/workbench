@@ -179,13 +179,17 @@ enum Commands {
         }
     }
 
-    /// `doctor [--base <branch>]`: runs the declared setup and check in a throwaway worktree.
+    /// `doctor [--base <branch>] [--editor <name-or-command>]`: runs the declared setup and check in a throwaway worktree.
     static func doctor(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let base = try a.value("--base")
+        let editor = try a.value("--editor")
         try a.requireEmpty()
+        if let editor, let reason = Editor.valueProblem(editor) { throw CLIError.usage("--editor \(reason)") }
         let ctx = try await Context.load()
         let doctor = Doctor(project: ctx.project, git: ctx.git)
+        var options = Doctor.Options()
+        options.editor = editor
         let resolved: String
         if let base { resolved = base } else { resolved = await ctx.service.defaultBase() }
 
@@ -193,7 +197,7 @@ enum Commands {
         defer { handlers.forEach { $0.cancel() } }
         out("base:     \(resolved)")
         let report: DoctorReport
-        do { report = try await doctor.run(base: resolved) } catch let error as DoctorError {
+        do { report = try await doctor.run(base: resolved, options: options) } catch let error as DoctorError {
             switch error {
             case .invalidBase: throw CLIError.usage("\(error)")
             case .noConfig, .runnerLive, .alreadyRunning: throw CLIError.refused("\(error)")
@@ -203,41 +207,6 @@ enum Commands {
         if let problem = report.cleanupProblem { return fail(.failed, problem) }
         if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
         return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
-    }
-
-    private static func printDoctor(_ report: DoctorReport) {
-        out("claude:   \(report.claude ?? "NOT FOUND (\(report.claudePath))")")
-        out("model:    \(report.model ?? "the claude CLI default (no `model` in the config)")")
-        if let pattern = report.checkPattern {
-            var note = ""
-            if report.checkDenied {
-                note = "  (but [tools].denied blocks it: a run cannot call the check)"
-            } else if !report.bashAvailable {
-                note = "  (but Bash is not in [tools].available)"
-            }
-            out("allowed:  \(pattern)" + note)
-        }
-        func show(_ name: String, _ step: DoctorStep, undeclared: String) {
-            let label = name.padding(toLength: 10, withPad: " ", startingAt: 0)
-            guard let command = step.command else { return out("\(label)none declared: \(undeclared)") }
-            let seconds = step.durationMs.map { String(format: " in %.1fs", Double($0) / 1000) } ?? ""
-            switch step.outcome {
-            case .passed: out("\(label)passed\(seconds): \(command)")
-            case .failed(let how): out("\(label)\(how)\(seconds): \(command)")
-            case .timedOut: out("\(label)timed out\(seconds): \(command)")
-            case .stopped: out("\(label)stopped\(seconds): \(command)")
-            case .skipped(let why): out("\(label)skipped (\(why)): \(command)")
-            case .notDeclared: out("\(label)none declared: \(undeclared)")
-            }
-            if !step.tail.isEmpty { out(step.tail) }
-            if !step.hint.isEmpty { out("  \(step.hint)") }
-        }
-        show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
-        show("check:", report.check, undeclared: "turns will end with no check evidence")
-        for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
-        for note in report.copySkipped { out("copy:     not copied: \(note)") }
-        if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
-        if let run = report.run { printRun(run) }
     }
 
     static func goalNew(_ args: [String]) async throws {
