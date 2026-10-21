@@ -4,7 +4,8 @@ import Foundation
 public enum ShipScreenshots: Sendable, Equatable {
     /// The latest turn's proof has no screenshot: nothing to say.
     case none
-    case attached(count: Int)
+    /// `note` names the screenshots left out because the work changed after they were taken.
+    case attached(count: Int, note: String? = nil)
     /// Not attached, and why. The pull request is open either way, and the screenshots are still in the thread.
     case skipped(String)
 }
@@ -33,10 +34,18 @@ extension ThreadService {
             set.turn == state.lastTurn
         else { return .none }
         let threadDirectory = project.threadDirectory(id)
-        let shots = set.files.filter {
+        let candidates = set.files.filter {
             $0.name.hasSuffix(".png") && !$0.name.contains("/") && $0.isAvailable(in: threadDirectory)
         }
-        guard !shots.isEmpty else { return .none }
+        guard !candidates.isEmpty else { return .none }
+        // A screenshot is about the work as it was when it was taken. A verifier rerun in the same turn keeps the
+        // files it did not take again, so each file is checked against the work: what was committed since is a
+        // different change, and files not committed are not shipped.
+        let current = await ProofIdentity.committed(worktree: worktree, git: git)
+        let stale = candidates.filter { ProofFreshness.of(recordedTree: $0.tree, current: current) == .stale }
+        let shots = candidates.filter { shot in !stale.contains { $0.name == shot.name } }
+        let staleNote = Self.staleNote(stale)
+        if shots.isEmpty, let staleNote { return .skipped(staleNote) }
         guard let tool else {
             return .skipped(
                 "\(shots.count) screenshot\(shots.count == 1 ? "" : "s") not attached: `pr-shots` is not on PATH "
@@ -46,16 +55,7 @@ extension ThreadService {
             return .skipped("\(shots.count) screenshots is more than the \(Self.maxScreenshots) a pull request takes")
         }
         if let problem = Self.configProblem(worktree: worktree, checkout: project.root) { return .skipped(problem) }
-        // A screenshot is about the work as it was when verify ran. What was committed since then is a different
-        // change, so its screenshots are not put in the pull request. Files not committed are not shipped.
-        let current = await ProofIdentity.committed(worktree: worktree, git: git)
-        let (commit, tree) = (set.files.lazy.compactMap(\.commit).first, set.files.lazy.compactMap(\.tree).first)
-        let at = commit.map { " at \($0.prefix(7))" } ?? ""
-        if ProofFreshness.of(recordedTree: tree, current: current) == .stale {
-            return .skipped(
-                "screenshots not attached: they were taken\(at) and the work has changed since. "
-                    + "Run the verifier again, then `workbench ship --screenshots`")
-        }
+        let at = shots.lazy.compactMap(\.commit).first.map { " at \($0.prefix(7))" } ?? ""
         // The pull request is what the screenshots go into, and a follow-up may have pushed to its branch since
         // this thread's worktree was left: what `origin` has now must be what was just checked. A pull request
         // this log recorded and an origin that cannot be read is not "fine": the uploader may reach GitHub where
@@ -126,7 +126,16 @@ extension ThreadService {
                 .proofPublished,
                 data: ["number": .int(number), "files": .array(shots.map { .string($0.name) }), "tool": "pr-shots"])
         }
-        return .attached(count: shots.count)
+        return .attached(count: shots.count, note: staleNote)
+    }
+
+    /// What to say about screenshots left out because the work changed after they were taken, naming them.
+    static func staleNote(_ stale: [ProofFile]) -> String? {
+        guard !stale.isEmpty else { return nil }
+        let at = stale.lazy.compactMap(\.commit).first.map { " at \($0.prefix(7))" } ?? ""
+        let names = stale.map(\.name).joined(separator: ", ")
+        return "\(names) not attached: taken\(at), and the work has changed since. "
+            + "Run the verifier again, then `workbench ship --screenshots`"
     }
 
     /// `pr-shots` reads `.pr-shots.json` from where it runs, which is the worktree. A file there that the
