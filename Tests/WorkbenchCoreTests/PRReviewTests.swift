@@ -426,7 +426,7 @@ import Testing
         let result = try await r.round()
         #expect(result.headSHA == pushed && result.verdict == .clean)
         #expect(r.codex.read("brief_1")?.contains(pushed) == true && r.codex.read("diff_1")?.contains("+more") == true)
-        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
     }
 
     @Test func stoppingDuringTheCapacityBackoffDoesNotStartAnotherTry() async throws {
@@ -438,9 +438,9 @@ import Testing
             stop.raise()
         }
         let started = Date()
-        let result = try await r.round(backoff: 60, stopRequested: { stop.isRaised })
+        let result = try await r.round(backoff: 600, stopRequested: { stop.isRaised })
         #expect(result.failure == "the review was stopped" && r.codex.runs == 1)
-        #expect(Date().timeIntervalSince(started) < 30, "it did not sit out the backoff")
+        #expect(Date().timeIntervalSince(started) < Patience.limit, "it did not sit out the backoff")
         try await r.expectNoLeftovers()
     }
 

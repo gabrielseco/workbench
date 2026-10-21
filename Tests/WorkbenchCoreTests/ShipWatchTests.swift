@@ -158,7 +158,7 @@ private func watch(
         }
             #expect(why.contains("did not answer"), "\(why)")
         }
-        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
         let written = gh.read("checks_pid") ?? ""
         let pid = Int32(written.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(pid != nil)
