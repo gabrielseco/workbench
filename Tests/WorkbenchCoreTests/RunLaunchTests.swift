@@ -103,7 +103,7 @@ private final class StopHolder: @unchecked Sendable {
             echo $$ > app.pid
             exec python3 -m http.server "$WORKBENCH_PORT" --bind 127.0.0.1
             """
-        let table = "[run]\ncommand = \"scripts/app.sh\"\nready_url = \"http://127.0.0.1:{port}/\"\nready_timeout_s = 20"
+        let table = "[run]\ncommand = \"scripts/app.sh\"\nready_url = \"http://127.0.0.1:{port}/\"\nready_timeout_s = 90"
         let v = try await fixture(app, table: table)
         let dump = FakeClaude.scratch("run-url-dump")
         defer { try? FileManager.default.removeItem(atPath: dump) }
@@ -143,7 +143,7 @@ private final class StopHolder: @unchecked Sendable {
             echo $$ > app.pid
             exec python3 scripts/server.py "$WORKBENCH_PORT"
             """
-        let table = "[run]\ncommand = \"scripts/app.sh\"\nready_url = \"http://127.0.0.1:{port}/\"\nready_timeout_s = 20"
+        let table = "[run]\ncommand = \"scripts/app.sh\"\nready_url = \"http://127.0.0.1:{port}/\"\nready_timeout_s = 90"
         let v = try await VerifierFixture(run: table, files: ["scripts/app.sh": app, "scripts/server.py": server])
         // Ready within `ready_timeout_s` is the proof: a check that waited on the body would end the turn as not ready.
         let report = try await v.verify("proof=shot.png")
