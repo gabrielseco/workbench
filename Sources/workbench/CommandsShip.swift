@@ -155,15 +155,16 @@ extension Commands {
         }
     }
 
-    /// Puts the verify step's screenshots in the pull request through `pr-shots`. A note on failure: the PR is open.
+    /// Puts the latest turn's screenshots in the pull request through `pr-shots`. A note on failure: the PR is open.
     /// Returns false when they were not attached, so the worktree is kept for a retry.
     @discardableResult
     private static func attachScreenshots(id: String, worktree: URL, number: Int, ctx: Context) async -> Bool {
         let tool = try? GitRunner.discover(tool: "pr-shots", timeout: 180)
         switch await ctx.service.shipScreenshots(id: id, worktree: worktree, number: number, tool: tool) {
         case .none: return true
-        case .attached(let count):
+        case .attached(let count, let note):
             out("put \(count) screenshot\(count == 1 ? "" : "s") in the pull request")
+            if let note { out("note: \(note)") }
             return true
         case .skipped(let why):
             out("note: \(why)")

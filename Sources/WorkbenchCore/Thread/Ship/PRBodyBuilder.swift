@@ -39,10 +39,9 @@ public enum PRBodyBuilder {
         let lastTurnNumber = lastTurn ?? check?.turn ?? 0
         let concerns = judgeConcerns(judge, lastTurn: lastTurnNumber)
         let testing = [checkLine, criteria, concerns].filter { !$0.isEmpty }.joined(separator: "\n\n")
-        // `ship` attaches the latest verify step's PNGs after the PR exists.
-        let hasScreenshots =
-            verify.map { $0.turn == (lastTurn ?? check?.turn ?? 0) } == true
-            && verify?.proof.contains { $0.name.hasSuffix(".png") && proofAvailable($0) } == true
+        // `ship` attaches the PNGs of the latest turn's proof (the verifier's, or a verify step's) after the PR exists.
+        let proof = Review.ProofSet(verify: verify, verifier: verifier).flatMap { $0.turn == lastTurnNumber ? $0 : nil }
+        let hasScreenshots = proof?.files.contains { $0.name.hasSuffix(".png") && proofAvailable($0) } == true
 
         let body: String
         if let template, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
