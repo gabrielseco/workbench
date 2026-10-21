@@ -47,7 +47,8 @@ check "goal new: exit 0" "workbench goal new exited $RC" test "$RC" = 0
 ID=$(sed -n 's/^created //p' "$SCRATCH/new.out")
 # No turn: the thread's worktree and branch are made here, as a run would.
 g -C "$P" worktree add -q -b "workbench/$ID" "$P/.workbench/worktrees/$ID" main || die "could not add the thread's worktree"
-WTP=$(cd "$P/.workbench/worktrees/$ID" && pwd -P)
+# The path as the project spells it, which is what `open` prints and passes on (it resolves symlinks only to check it).
+WTP="$P/.workbench/worktrees/$ID"
 
 # --- c2: no editor set, and c5: --print -----------------------------------------------------------------------
 
