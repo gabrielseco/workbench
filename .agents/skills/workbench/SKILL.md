@@ -41,7 +41,8 @@ with `accept`, `discard` or `abandon`.
    normal (compound `a && b`, `node -e`, an env prefix); the model works around them. `wb grant` lists them and decides each.
    `wb stop` ends a turn cleanly.
 5. **Review.** `wb review`: the criteria, the diff, the check and the denied calls. Read the diff for what you did not ask for: unrelated
-   files, a generated file with thousands of changed lines. Run yourself what the run could not (the full check, lint, typecheck). Look
+   files, a generated file with thousands of changed lines. A person can see what a run changed with `wb open` (the worktree in their
+   editor, with the branch's diff in Source Control; `--print` gives the path). Run yourself what the run could not (the full check, lint, typecheck). Look
    at the verifier's screenshots with `Read`; its report is a note, not a pass. Wrong or incomplete: `wb send-back "<note>"`
    (same thread, next turn). Fix tool denials with `grant` or the allowlist, never with `Bash` or `mix:*` unrestricted.
 6. **Accept.** `wb accept -m "<conventional commit>"` commits the work on `workbench/<id>` and ends the thread. Nothing is pushed.

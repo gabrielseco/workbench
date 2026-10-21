@@ -1,20 +1,23 @@
 import Foundation
 
-/// `~/.workbench/config.toml`: machine-level defaults for `workbench new`. It supplies a few keys
-/// and nothing else; a project's own `.workbench/config.toml` is still the only thing a run reads, so a
-/// global file can never change what an existing project does.
+/// `~/.workbench/config.toml`: machine-level defaults for `workbench new`, and the personal `editor` for
+/// `workbench open`. It supplies a few keys and nothing else; a project's own `.workbench/config.toml` is still the
+/// only thing a run reads, so a global file can never change what an existing project does.
 public struct GlobalConfig: Sendable, Equatable {
-    public static let allowedKeys: [String] = ["claude_path", "model", "projects_dir"]
+    public static let allowedKeys: [String] = ["claude_path", "editor", "model", "projects_dir"]
 
     /// Where `workbench new <name>` puts the project when no location is given. Absolute, `~` expanded.
     public var projectsDirectory: URL?
     public var claudePath: String?
     public var model: String?
+    /// What `workbench open` starts when neither `--editor` nor the project names one.
+    public var editor: String?
 
-    public init(projectsDirectory: URL? = nil, claudePath: String? = nil, model: String? = nil) {
+    public init(projectsDirectory: URL? = nil, claudePath: String? = nil, model: String? = nil, editor: String? = nil) {
         self.projectsDirectory = projectsDirectory
         self.claudePath = claudePath
         self.model = model
+        self.editor = editor
     }
 
     /// `~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`.
@@ -84,6 +87,7 @@ public struct GlobalConfig: Sendable, Equatable {
                 fail(.invalidValue, line, "'model' must be a model name or alias like \"haiku\"")
             }
         }
+        if let (value, line) = string("editor") { result.editor = Config.editorValue(value, line: line, fail: fail) }
         if let (value, line) = string("projects_dir") {
             if let url = expandedDirectory(value, home: home) {
                 result.projectsDirectory = url

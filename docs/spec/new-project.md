@@ -46,18 +46,19 @@ removed; a directory that was already there is emptied of what `new` wrote).
 
 `~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`. Optional. If `~` is
 itself a git repository (a dotfiles setup), that directory is also the repository's project directory, so
-the two share it; the global file is only ever read by `new`.
+the two share it; the global file is only ever read by `new`, `open` (its `editor`) and `doctor` (to show that `editor`).
 
 ```toml
 projects_dir = "~/code"   # absolute, or starting with ~/
 claude_path  = "claude"   # written into new projects' config
 model        = "opus"     # written into new projects' config
+editor       = "cursor"   # `workbench open` when neither --editor nor the project names one
 ```
 
-Only these three keys. Anything else (including `check_command`, `setup_command`, `[tools]`) is an
+Only these four keys. Anything else (including `check_command`, `setup_command`, `[tools]`) is an
 `invalid-config` error naming the file and the key, because those depend on the stack and belong to the
-project. The global file is read by `new` only: a run reads the project's own config, so editing the global
-file never changes an existing project.
+project. A run reads the project's own config, so editing the global file never changes an existing project;
+`editor` is a personal setting that only `open` uses (see `goal-file.md`, "Tool permissions").
 
 ## No remote
 

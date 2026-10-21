@@ -248,6 +248,7 @@ default_budget_usd = 5.00               # used when drafting a goal
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
+# editor = "cursor"                     # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
 # [pr_review]                           # `workbench pr-review`: Codex reviews the shipped pull request
 # checklist = "docs/REVIEW.md"          # optional: this project's review invariants, read from the PR head
 # max_rounds = 3                        # reviews of one pull request, counted from the event log (1 to 10)
@@ -420,6 +421,23 @@ Notes:
   whether it can be used. With `app_type = "desktop"` and a usable skill, it also checks that the process running
   doctor may record the screen (`CGPreflightScreenCaptureAccess`) and, if not, warns and names the Settings pane
   (a warning, not a failure). `web` (the default) and an unset key are never checked.
+- **`editor` is for a person, not a run.** `workbench open [id] [--editor <name-or-command>] [--print]` opens the
+  thread's worktree (`.workbench/worktrees/<id>`, on `workbench/<id>`) as its own editor window, so Source Control shows
+  the branch's diff, which the parent repository's window hides because `.workbench/` is ignored. The thread is the one
+  named, else the active one; a thread with no worktree (shipped, accepted, discarded, abandoned, or not run yet) is
+  refused, and so is a worktree path that resolves, after symlinks, outside `.workbench/worktrees/`. The editor comes
+  from `--editor`, else `editor` here, else `editor` in `~/.workbench/config.toml` (the global file, which allows this
+  key); never from `$EDITOR` or `$VISUAL`, since a terminal editor would block with no terminal. None set is refused
+  with what to do. The value is a known name (`cursor`, `code`, `zed`, `subl`, `windsurf`: its launcher on `PATH`, else
+  on macOS `open -a "<App>"` with `Cursor`, `Visual Studio Code`, `Zed`, `Sublime Text`, `Windsurf`) or one plain command
+  validated like `check_command` (a path in it must be absolute), which gets the worktree path as its last argument. A bad
+  value is an `invalid-config` error naming `editor`. The launcher starts through the same spawner as every child (no
+  shell), with only `PATH HOME USER LOGNAME SHELL LANG TMPDIR` and `LC_*`, and has 10 seconds to return: one that does
+  not is stopped with its process group and reported, a non-zero exit is reported with its last output line, and what it
+  prints goes nowhere else. The editor it leaves running is not stopped. `open` writes no event and changes nothing in
+  the thread or the worktree; `--print` prints only the path and starts nothing (`cd "$(workbench open --print)"`).
+  `doctor` prints `editor:  <value> (from --editor|project|global)` or `editor:  none set`, never starts it and never
+  fails for it; `doctor --editor <value>` shows what that flag would pick. A run never reads the key.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

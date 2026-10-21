@@ -49,6 +49,9 @@ enum Help {
         "log": Extra(changes: "nothing; read-only", example: "workbench log -f"),
         "status": Extra(changes: "nothing; read-only", example: "workbench status --all --json"),
         "review": Extra(changes: "nothing; read-only", example: "workbench review --json"),
+        "open": Extra(
+            changes: "nothing in the thread or its worktree; starts the editor (or, with --print, nothing)",
+            example: "workbench open --editor cursor   or   cd \"$(workbench open --print)\""),
         "grant": Extra(
             changes:
                 "the list: nothing; a decision (--once, --thread, --never): appends "
