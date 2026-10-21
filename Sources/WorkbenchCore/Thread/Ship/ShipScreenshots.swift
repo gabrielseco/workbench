@@ -2,7 +2,7 @@ import Foundation
 
 /// What putting a shipped thread's screenshots in its pull request came to.
 public enum ShipScreenshots: Sendable, Equatable {
-    /// The latest verify step left no screenshot: nothing to say.
+    /// The latest turn's proof has no screenshot: nothing to say.
     case none
     case attached(count: Int)
     /// Not attached, and why. The pull request is open either way, and the screenshots are still in the thread.
@@ -13,11 +13,11 @@ extension ThreadService {
     /// Most screenshots attached to one pull request.
     static let maxScreenshots = 20
 
-    /// Puts the PNGs the latest verify step left in the pull request's description, through the `pr-shots`
-    /// tool. Runs after the PR exists and never fails the ship: a missing tool or a failed upload is a note,
+    /// Puts the PNGs the latest turn's proof holds (the verifier's, or a verify step's) in the pull request's
+    /// description, through the `pr-shots` tool. Runs after the PR exists and never fails the ship: a missing tool or a failed upload is a note,
     /// and `ship --screenshots` tries again.
     ///
-    /// Three things keep it from publishing anything but what the verify step recorded, where the person
+    /// Three things keep it from publishing anything but what the proof recorded, where the person
     /// configured it:
     /// - Only files the log recorded and that are still there as recorded are used, copied into a fresh
     ///   directory that is the tool's whole screenshot folder (`PR_SHOTS_DIR`), so nothing older is uploaded.
@@ -27,9 +27,13 @@ extension ThreadService {
     public func shipScreenshots(id: String, worktree: URL, number: Int, tool: GitRunner?) async -> ShipScreenshots {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
-        guard let verify = state.review.verify, verify.turn == state.lastTurn else { return .none }
+        // The proof of the latest turn, whichever step left it: since the verifier replaced `verify_command` it is
+        // the verifier's, and a thread from before that still has its verify step's.
+        guard let set = Review.ProofSet(verify: state.review.verify, verifier: state.review.verifier),
+            set.turn == state.lastTurn
+        else { return .none }
         let threadDirectory = project.threadDirectory(id)
-        let shots = verify.proof.filter {
+        let shots = set.files.filter {
             $0.name.hasSuffix(".png") && !$0.name.contains("/") && $0.isAvailable(in: threadDirectory)
         }
         guard !shots.isEmpty else { return .none }
@@ -45,11 +49,12 @@ extension ThreadService {
         // A screenshot is about the work as it was when verify ran. What was committed since then is a different
         // change, so its screenshots are not put in the pull request. Files not committed are not shipped.
         let current = await ProofIdentity.committed(worktree: worktree, git: git)
-        let at = verify.commit.map { " at \($0.prefix(7))" } ?? ""
-        if ProofFreshness.of(recordedTree: verify.tree, current: current) == .stale {
+        let (commit, tree) = (set.files.lazy.compactMap(\.commit).first, set.files.lazy.compactMap(\.tree).first)
+        let at = commit.map { " at \($0.prefix(7))" } ?? ""
+        if ProofFreshness.of(recordedTree: tree, current: current) == .stale {
             return .skipped(
                 "screenshots not attached: they were taken\(at) and the work has changed since. "
-                    + "Run the turn's verify again, then `workbench ship --screenshots`")
+                    + "Run the verifier again, then `workbench ship --screenshots`")
         }
         // The pull request is what the screenshots go into, and a follow-up may have pushed to its branch since
         // this thread's worktree was left: what `origin` has now must be what was just checked. A pull request

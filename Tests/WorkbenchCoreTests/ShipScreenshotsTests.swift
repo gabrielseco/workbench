@@ -56,12 +56,42 @@ private struct Shipped {
     var plan: ShipPlan
 }
 
-private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) async throws -> Shipped {
+/// What the verifier records for a turn: its `proof.added` lines (marked `source: verifier`) and its end.
+private func recordVerifierProof(_ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1) async throws {
+    let proof = fx.project.proofDirectory(id, turn: turn)
+    try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
+    for (name, text) in files { try Data(text.utf8).write(to: proof.appendingPathComponent(name)) }
+    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+    let identity = await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil)
+    let commit: JSONValue = identity.map { .string($0.commit) } ?? .null
+    let tree: JSONValue = identity.map { .string($0.tree) } ?? .null
+    let recorded = ProofCollector.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
+    let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+    try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
+    for file in recorded {
+        try await log.append(
+            .proofAdded, turn: turn,
+            data: [
+                "name": .string(file.name), "path": .string(file.path), "sha256": .string(file.sha256),
+                "bytes": .int(file.bytes), "commit": commit, "tree": tree, "source": "verifier",
+            ])
+    }
+    try await log.append(.verifierEnded, turn: turn, data: ["ok": true, "report": "c1: holds"])
+    await log.close()
+}
+
+private func shippedThread(
+    _ files: [String: String] = ["home.png": "pixels"], verifier: Bool = false
+) async throws -> Shipped {
     let fx = try await RunnerFixture()
     // The turn itself changes the work, as a real one does, so verify sees the work that is then accepted.
     let id = try await fx.approvedThread()
     _ = try await fx.runner(id).run(fx.options("write=a.txt"))
-    try await recordLegacyVerify(fx, id, files)
+    if verifier {
+        try await recordVerifierProof(fx, id, files)
+    } else {
+        try await recordLegacyVerify(fx, id, files)
+    }
     let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
     try await fx.service.accept(id: id, message: "chore: work")
     let plan = ShipPlan(
@@ -86,6 +116,32 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
         #expect(event.data["number"]?.intValue == 12)
         #expect(event.data["files"] == ["home.png"])
+    }
+
+    @Test func theVerifiersPNGsAreAttachedWhenThereIsNoVerifyStep() async throws {
+        let shipped = try await shippedThread(["home.png": "pixels", "report.md": "x"], verifier: true)
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let tool = try FakeShots(in: fx)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 7, tool: tool.runner)
+
+        #expect(result == .attached(count: 1))
+        #expect(tool.shot("home") == "pixels")
+        let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
+        #expect(event.data["number"]?.intValue == 7)
+        #expect(event.data["files"] == ["home.png"])
+    }
+
+    @Test func aVerifierRunOfAnEarlierTurnIsNotAttached() async throws {
+        let shipped = try await shippedThread(["home.png": "pixels"], verifier: true)
+        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        try await log.append(.turnStarted, turn: 2, data: [:])
+        try await log.append(.turnEnded, turn: 2, data: ["result": "succeeded"])
+        await log.close()
+        let tool = try FakeShots(in: fx)
+        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 7, tool: tool.runner)
+        #expect(result == .none, "the screenshots are about turn 1's work")
+        #expect(tool.calls.isEmpty)
     }
 
     @Test func onlyTheRecordedFilesAreInTheToolsFolderAndGHRepoIsDropped() async throws {
