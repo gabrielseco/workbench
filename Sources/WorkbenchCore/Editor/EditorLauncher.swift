@@ -31,7 +31,7 @@ public enum EditorLauncher {
         } catch {
             throw EditorError.launchFailed(editor: editor, reason: "\(error)")
         }
-        let (termination, timedOut) = await LauncherWait(pid: pid).run(timeout: timeout, killGrace: killGrace)
+        let (termination, timedOut) = await LauncherWait(pid: pid, output: fd).run(timeout: timeout, killGrace: killGrace)
         if timedOut { throw EditorError.timedOut(editor: editor, seconds: Int(timeout.rounded())) }
         switch termination {
         case .exited(0): return
@@ -40,6 +40,16 @@ public enum EditorLauncher {
             throw EditorError.failed(editor: editor, how: "was killed by signal \(signal)", lastLine: lastLine(fd))
         case .lost: throw EditorError.failed(editor: editor, how: "ended with an unknown status", lastLine: lastLine(fd))
         }
+    }
+
+    /// Keeps only the last `tailBytes` of what the launcher printed, so a noisy one cannot fill the disk while it runs.
+    static func trim(_ fd: Int32) {
+        let size = lseek(fd, 0, SEEK_END)
+        guard size > Int(tailBytes) * 4 else { return }
+        var tail = [UInt8](repeating: 0, count: tailBytes)
+        let read = pread(fd, &tail, tail.count, off_t(Int(size) - tailBytes))
+        guard read > 0, ftruncate(fd, 0) == 0 else { return }
+        _ = pwrite(fd, tail, read, 0)
     }
 
     /// The last non-empty line of what the launcher printed, cut to one printable line.
@@ -61,12 +71,18 @@ public enum EditorLauncher {
 /// One launcher's exit or timeout, whichever comes first. All state is confined to `queue`.
 private final class LauncherWait: @unchecked Sendable {
     private let pid: pid_t
+    private let output: Int32
     private let queue = DispatchQueue(label: "workbench.editor")
     private var watcher: ChildExitWatcher?
     private var timers: [DispatchSourceTimer] = []
     private var timedOut = false
+    /// What the launcher had started when the timeout came, to end what a `setsid` took out of its group.
+    private var escaped: [ProcessMember] = []
 
-    init(pid: pid_t) { self.pid = pid }
+    init(pid: pid_t, output: Int32) {
+        self.pid = pid
+        self.output = output
+    }
 
     func run(timeout: TimeInterval, killGrace: TimeInterval) async -> (Termination, Bool) {
         await withCheckedContinuation { (continuation: CheckedContinuation<(Termination, Bool), Never>) in
@@ -74,13 +90,18 @@ private final class LauncherWait: @unchecked Sendable {
                 watcher = ChildExitWatcher(pid: pid, queue: queue) { [self] in
                     timers.forEach { $0.cancel() }
                     // Still a zombie, so its group id is ours alone: whatever a stopped launcher started goes too.
-                    if timedOut { killpg(pid, SIGKILL) }
+                    if timedOut {
+                        killpg(pid, SIGKILL)
+                        for member in escaped where ProcessTree.isAlive(member) { kill(member.pid, SIGKILL) }
+                    }
                     let termination = watcher?.reap() ?? .lost
                     watcher = nil
                     continuation.resume(returning: (termination, timedOut))
                 }
+                every(0.1) { [self] in EditorLauncher.trim(output) }
                 after(timeout) { [self] in
                     timedOut = true
+                    escaped = ProcessTree.descendants(of: pid)
                     killpg(pid, SIGTERM)
                     kill(pid, SIGTERM)
                     after(killGrace) { [self] in
@@ -90,6 +111,14 @@ private final class LauncherWait: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    private func every(_ interval: TimeInterval, _ handler: @escaping @Sendable () -> Void) {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + interval, repeating: interval)
+        timer.setEventHandler(handler: handler)
+        timer.resume()
+        timers.append(timer)
     }
 
     private func after(_ delay: TimeInterval, _ handler: @escaping @Sendable () -> Void) {

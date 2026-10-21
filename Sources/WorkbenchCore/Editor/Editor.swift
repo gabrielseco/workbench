@@ -96,10 +96,16 @@ public enum Editor {
         return nil
     }
 
+    /// Where macOS keeps the apps a person installs, which `open -a` looks in.
+    public static func defaultApplicationDirectories(home: String = NSHomeDirectory()) -> [String] {
+        ["/Applications", "\(home)/Applications", "/System/Applications"]
+    }
+
     /// The command for `value` opening `path`, or `.notFound` naming what was tried. Pure: nothing is run, so the
     /// macOS fallback can be checked as data.
     public static func command(
-        for value: String, path: String, searchPath: String?, isMacOS: Bool, openExecutable: String = macOpen
+        for value: String, path: String, searchPath: String?, isMacOS: Bool, openExecutable: String = macOpen,
+        applicationDirectories: [String] = defaultApplicationDirectories()
     ) throws -> EditorCommand {
         // Bare names are looked up on PATH's absolute entries only: `.` would let the worktree stand in for one.
         let absolutePath = (searchPath ?? "").split(separator: ":").filter { $0.hasPrefix("/") }.joined(separator: ":")
@@ -109,10 +115,16 @@ public enum Editor {
             }
             var tried = ["'\(value)' on PATH"]
             if isMacOS {
-                if FileManager.default.isExecutableFile(atPath: openExecutable) {
+                if !FileManager.default.isExecutableFile(atPath: openExecutable) {
+                    tried.append("\(openExecutable) -a \"\(app)\"")
+                } else if applicationDirectories.contains(where: {
+                    FileManager.default.fileExists(atPath: "\($0)/\(app).app")
+                }) {
                     return EditorCommand(executable: openExecutable, arguments: ["-a", app, path])
+                } else {
+                    // `open -a` would only fail with a message of its own: say what was looked for.
+                    tried.append("\(app).app in \(applicationDirectories.joined(separator: ", "))")
                 }
-                tried.append("\(openExecutable) -a \"\(app)\"")
             }
             throw EditorError.notFound(editor: value, tried: tried)
         }

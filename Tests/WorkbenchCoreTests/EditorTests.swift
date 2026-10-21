@@ -40,11 +40,30 @@ private struct Bin {
     @Test func aMissingLauncherOnMacOSFallsBackToOpenWithTheAppName() throws {
         let bin = try Bin()
         let open = try bin.script("open", "exit 0")
+        let apps = bin.url.appendingPathComponent("Applications")
+        for (_, app) in Editor.known {
+            try FileManager.default.createDirectory(
+                at: apps.appendingPathComponent("\(app).app"), withIntermediateDirectories: true)
+        }
         for (name, app) in Editor.known {
-            let command = try Editor.command(for: name, path: "/w", searchPath: "/nowhere", isMacOS: true, openExecutable: open)
+            let command = try Editor.command(
+                for: name, path: "/w", searchPath: "/nowhere", isMacOS: true, openExecutable: open,
+                applicationDirectories: [apps.path])
             #expect(command == EditorCommand(executable: open, arguments: ["-a", app, "/w"]))
         }
         #expect(Editor.known.map(\.app) == ["Cursor", "Visual Studio Code", "Zed", "Sublime Text", "Windsurf"])
+    }
+
+    @Test func anEditorThatIsNotInstalledOnMacOSIsNotFoundNamingTheAppLookedFor() throws {
+        let bin = try Bin()
+        let open = try bin.script("open", "exit 0")
+        let empty = bin.url.appendingPathComponent("Applications").path
+        try FileManager.default.createDirectory(atPath: empty, withIntermediateDirectories: true)
+        #expect(throws: EditorError.notFound(editor: "zed", tried: ["'zed' on PATH", "Zed.app in \(empty)"])) {
+            try Editor.command(
+                for: "zed", path: "/w", searchPath: "/nowhere", isMacOS: true, openExecutable: open,
+                applicationDirectories: [empty])
+        }
     }
 
     @Test func nothingToRunIsNotFoundNamingWhatWasTried() {
@@ -155,5 +174,56 @@ private struct Bin {
         let pid = try #require(Int32(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
         #expect(kill(pid, 0) == 0, "the app is still running")
         kill(pid, SIGKILL)
+    }
+
+    @Test func aStoppedLauncherTakesWhatItStartedInANewSessionWithIt() async throws {
+        try #require(FileManager.default.isExecutableFile(atPath: "/usr/bin/python3"))
+        let bin = try Bin()
+        let pidFile = bin.url.appendingPathComponent("escaped")
+        // The helper leaves the launcher's process group (a new session), so a group kill alone would miss it.
+        let ed = try bin.script(
+            "ed",
+            """
+            python3 - '\(pidFile.path)' <<'PY'
+            import subprocess, sys, time
+            helper = subprocess.Popen(['sleep', '300'], start_new_session=True)
+            open(sys.argv[1], 'w').write(str(helper.pid))
+            time.sleep(300)
+            PY
+            """)
+        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: 2)) {
+            try await EditorLauncher.launch(
+                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:], timeout: 2,
+                killGrace: 1)
+        }
+        let pid = try #require(Int32(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
+        var gone = false
+        for _ in 0..<50 where !gone {
+            gone = kill(pid, 0) == -1
+            if !gone { try await Task.sleep(nanoseconds: 100_000_000) }
+        }
+        if !gone { kill(pid, SIGKILL) }
+        #expect(gone, "the helper that left the launcher's session is still running")
+    }
+
+    @Test func whatALauncherPrintsIsKeptToItsLastFewKilobytes() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("wb-trim-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let fd = open(file.path, O_RDWR | O_CREAT | O_APPEND, 0o600)
+        defer { close(fd) }
+        let chunk = [UInt8](repeating: UInt8(ascii: "x"), count: 1 << 16)
+        for _ in 0..<8 { _ = write(fd, chunk, chunk.count) }
+        _ = write(fd, "the end\n", 8)
+        EditorLauncher.trim(fd)
+        #expect(lseek(fd, 0, SEEK_END) <= off_t(EditorLauncher.tailBytes))
+        // What is kept is the end of the output, so the failure message at the end survives (shown cut to a short line).
+        let tail = try #require(EditorLauncher.lastLine(fd))
+        #expect(tail.hasPrefix("xxxx"))
+        var last = [UInt8](repeating: 0, count: 7)
+        _ = pread(fd, &last, 7, lseek(fd, 0, SEEK_END) - 8)
+        #expect(String(decoding: last, as: UTF8.self) == "the end")
+        // A small file is left alone.
+        EditorLauncher.trim(fd)
+        #expect(EditorLauncher.lastLine(fd) != nil)
     }
 }
