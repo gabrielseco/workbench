@@ -99,6 +99,19 @@ private func verified(turn: Int, _ names: [String]) -> Review.Verify {
         #expect(!body.contains("<here>"))
     }
 
+    @Test func theVerifiersScreenshotsOfTheLatestTurnKeepTheSection() {
+        let g = goal(request: "Add retry.")
+        let verifier = Review.Verifier(
+            turn: 2, ok: true, reason: nil, skipped: false, costUSD: nil, durationMs: nil, report: "",
+            proof: [ProofFile(name: "home.png", path: "proof/home.png", sha256: "x", bytes: 1)], open: false)
+        let body = PRBodyBuilder.build(
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 2, verifier: verifier).body
+        #expect(section("Screenshots", in: body) == "None", "\(body)")
+        let earlier = PRBodyBuilder.build(
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 3, verifier: verifier).body
+        #expect(!earlier.contains("Screenshots"), "an earlier turn's screenshots are not attached: \(earlier)")
+    }
+
     @Test func aPlanLineInTheRequestFillsWhyEvenWhenTheBodyIsDescribed() {
         let g = goal(request: "Add retry.\n(Plan: docs/plan/P2.5-ship.md task 3)")
         let body = PRBodyBuilder.build(goal: g, check: nil, template: template, description: described).body

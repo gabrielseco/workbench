@@ -56,7 +56,8 @@ private struct Shipped {
     var plan: ShipPlan
 }
 
-/// What the verifier records for a turn: its `proof.added` lines (marked `source: verifier`) and its end.
+/// What one verifier run records for a turn: its `proof.added` lines (marked `source: verifier`) for the files it
+/// wrote, at the work as it is now, and its end. A rerun records only what it wrote again.
 private func recordVerifierProof(_ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1) async throws {
     let proof = fx.project.proofDirectory(id, turn: turn)
     try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
@@ -66,6 +67,7 @@ private func recordVerifierProof(_ fx: RunnerFixture, _ id: String, _ files: [St
     let commit: JSONValue = identity.map { .string($0.commit) } ?? .null
     let tree: JSONValue = identity.map { .string($0.tree) } ?? .null
     let recorded = ProofCollector.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
+        .filter { files[$0.name] != nil }
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
     for file in recorded {
@@ -131,17 +133,89 @@ private func shippedThread(
         #expect(event.data["files"] == ["home.png"])
     }
 
-    @Test func aVerifierRunOfAnEarlierTurnIsNotAttached() async throws {
-        let shipped = try await shippedThread(["home.png": "pixels"], verifier: true)
-        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
-        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
-        try await log.append(.turnStarted, turn: 2, data: [:])
-        try await log.append(.turnEnded, turn: 2, data: ["result": "succeeded"])
-        await log.close()
+    @Test func theLatestTurnsVerifierProofIsAttachedAndAnEarlierTurnsAloneIsNot() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+        try await recordLegacyVerify(fx, id, ["old.png": "turn one"])
+        _ = try await fx.runner(id).run(fx.options("write=a.txt", feedback: "more"))
+        try await recordVerifierProof(fx, id, ["new.png": "turn two"], turn: 2)
+        try await fx.service.accept(id: id, message: "chore: work")
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
         let tool = try FakeShots(in: fx)
-        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 7, tool: tool.runner)
-        #expect(result == .none, "the screenshots are about turn 1's work")
-        #expect(tool.calls.isEmpty)
+
+        // Turn 2's verifier proof is the latest turn's, so it is attached, and turn 1's verify step's is not.
+        let result = await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool.runner)
+        #expect(result == .attached(count: 1))
+        #expect(tool.shot("new") == "turn two")
+        #expect(tool.shot("old") == nil)
+        let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
+        #expect(event.data["files"] == ["new.png"])
+
+        // A later turn with no proof of its own: what turn 2 took is about other work.
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        try await log.append(.turnStarted, turn: 3, data: [:])
+        try await log.append(.turnEnded, turn: 3, data: ["result": "succeeded"])
+        await log.close()
+        let calls = tool.calls.count
+        #expect(await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool.runner) == .none)
+        #expect(tool.calls.count == calls)
+    }
+
+    /// The verifier takes `a.png` and `b.png`, the work changes, and a rerun in the same turn takes only `retaken`
+    /// again: the other file is of the earlier work, whichever comes first in the set.
+    @Test(arguments: ["a", "b"])
+    func aScreenshotTakenBeforeTheWorkChangedIsLeftOutAndNamed(retaken: String) async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+        try await recordVerifierProof(fx, id, ["a.png": "a before", "b.png": "b before"])
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "changed after the first verifier run\n".write(
+            to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try await recordVerifierProof(fx, id, ["\(retaken).png": "\(retaken) after"])
+        try await fx.service.accept(id: id, message: "chore: work")
+        let stale = retaken == "a" ? "b" : "a"
+        let tool = try FakeShots(in: fx)
+
+        let result = await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool.runner)
+
+        guard case .attached(let count, let note?) = result else {
+            Issue.record("expected attached with a note, got \(result)")
+            return
+        }
+        #expect(count == 1)
+        #expect(note.contains("\(stale).png") && !note.contains("\(retaken).png"), "\(note)")
+        #expect(note.contains("work has changed since") && note.contains("ship --screenshots"), "\(note)")
+        #expect(tool.shot(retaken) == "\(retaken) after")
+        #expect(tool.shot(stale) == nil, "the stale screenshot is not published")
+        let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
+        #expect(event.data["files"] == .array([.string("\(retaken).png")]))
+    }
+
+    /// A stale file is named whichever way the upload of the fresh one then goes: no tool, or a tool that fails.
+    @Test(arguments: [false, true])
+    func theStaleFileIsStillNamedWhenTheUploadOfTheFreshOneIsSkipped(toolFails: Bool) async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+        try await recordVerifierProof(fx, id, ["a.png": "a before", "b.png": "b before"])
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "changed after the first verifier run\n".write(
+            to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try await recordVerifierProof(fx, id, ["a.png": "a after"])
+        try await fx.service.accept(id: id, message: "chore: work")
+        let tool = toolFails ? try FakeShots(in: fx, failing: true).runner : nil
+
+        let result = await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool)
+
+        guard case .skipped(let why) = result else {
+            Issue.record("expected skipped, got \(result)")
+            return
+        }
+        #expect(why.contains(toolFails ? "`pr-shots pr` failed" : "not on PATH"), "\(why)")
+        #expect(why.contains("b.png") && why.contains("work has changed since"), "the stale file is named: \(why)")
+        #expect(!why.contains("a.png"), "the fresh file is not reported as left out: \(why)")
     }
 
     @Test func onlyTheRecordedFilesAreInTheToolsFolderAndGHRepoIsDropped() async throws {
