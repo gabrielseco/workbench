@@ -193,6 +193,31 @@ private func shippedThread(
         #expect(event.data["files"] == .array([.string("\(retaken).png")]))
     }
 
+    /// A stale file is named whichever way the upload of the fresh one then goes: no tool, or a tool that fails.
+    @Test(arguments: [false, true])
+    func theStaleFileIsStillNamedWhenTheUploadOfTheFreshOneIsSkipped(toolFails: Bool) async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("write=a.txt"))
+        try await recordVerifierProof(fx, id, ["a.png": "a before", "b.png": "b before"])
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "changed after the first verifier run\n".write(
+            to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try await recordVerifierProof(fx, id, ["a.png": "a after"])
+        try await fx.service.accept(id: id, message: "chore: work")
+        let tool = toolFails ? try FakeShots(in: fx, failing: true).runner : nil
+
+        let result = await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool)
+
+        guard case .skipped(let why) = result else {
+            Issue.record("expected skipped, got \(result)")
+            return
+        }
+        #expect(why.contains(toolFails ? "`pr-shots pr` failed" : "not on PATH"), "\(why)")
+        #expect(why.contains("b.png") && why.contains("work has changed since"), "the stale file is named: \(why)")
+        #expect(!why.contains("a.png"), "the fresh file is not reported as left out: \(why)")
+    }
+
     @Test func onlyTheRecordedFilesAreInTheToolsFolderAndGHRepoIsDropped() async throws {
         let shipped = try await shippedThread(["home.png": "pixels"])
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)

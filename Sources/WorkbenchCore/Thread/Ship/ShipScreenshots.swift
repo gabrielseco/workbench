@@ -46,6 +46,19 @@ extension ThreadService {
         let shots = candidates.filter { shot in !stale.contains { $0.name == shot.name } }
         let staleNote = Self.staleNote(stale)
         if shots.isEmpty, let staleNote { return .skipped(staleNote) }
+        let result = await uploadScreenshots(id: id, worktree: worktree, number: number, tool: tool, shots: shots,
+            staleNote: staleNote, current: current)
+        // Whatever stops the upload, the files left out as stale are still named.
+        if case .skipped(let why) = result, let staleNote { return .skipped(why + "; " + staleNote) }
+        return result
+    }
+
+    /// The upload of the fresh `shots`; never fails the ship (see `shipScreenshots`).
+    private func uploadScreenshots(
+        id: String, worktree: URL, number: Int, tool: GitRunner?, shots: [ProofFile], staleNote: String?,
+        current: ProofIdentity?
+    ) async -> ShipScreenshots {
+        let threadDirectory = project.threadDirectory(id)
         guard let tool else {
             return .skipped(
                 "\(shots.count) screenshot\(shots.count == 1 ? "" : "s") not attached: `pr-shots` is not on PATH "
