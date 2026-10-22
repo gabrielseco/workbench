@@ -283,7 +283,13 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
     private func ignore(_ patterns: String, in worktree: URL, _ fx: RunnerFixture) async throws {
         let exclude = try await shipOut(["rev-parse", "--git-path", "info/exclude"], worktree, fx)
         let url = exclude.hasPrefix("/") ? URL(fileURLWithPath: exclude) : worktree.appendingPathComponent(exclude)
-        try patterns.write(to: url, atomically: true, encoding: .utf8)
+        // `.workbench/` stays ignored, as in a real clone (Workbench keeps it in info/exclude): the run's goal copy is in it.
+        try (".workbench/\n" + patterns).write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @Test func theGoalCopyIsNotListedAsSomethingTheThreadMade() {
+        let inventory = ThreadService.inventory(of: "!! .workbench/\n!! node_modules/\n")
+        #expect(inventory.names == ["node_modules/"])
     }
 
     @Test func ignoredFilesDoNotKeepAWorktreeAndTheEventNamesThem() async throws {
