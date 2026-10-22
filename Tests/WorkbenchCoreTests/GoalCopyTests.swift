@@ -94,4 +94,38 @@ import Testing
         let staged = try await fx.git.run(["diff", "--cached", "--name-only"], in: worktree)
         #expect(!staged.stdout.contains("goal.md"), "staged: \(staged.stdout)")
     }
+
+    @Test func aSymlinkedWorkbenchFolderIsNeverFollowed() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        let goalBefore = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
+
+        // `.workbench` in the worktree becomes a link to the thread's own folder, and the ignore rules stop covering it.
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        let folder = worktree.appendingPathComponent(".workbench")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copyURL(fx, id).path)
+        try FileManager.default.removeItem(at: folder)
+        try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: fx.project.threadDirectory(id))
+        _ = await WorktreeManager(repoRoot: fx.repo, git: fx.git).writeGoalCopy("replacement\n", for: id)
+
+        #expect(try String(contentsOf: fx.project.goalURL(id), encoding: .utf8) == goalBefore, "the source goal is untouched")
+    }
+
+    @Test func aTrackedFileAtThePathIsLeftAlone() async throws {
+        let fx = try await RunnerFixture()
+        // The project's own tracked file, on the thread's base.
+        let dir = fx.repo.appendingPathComponent(".workbench")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "the project's own\n".write(to: dir.appendingPathComponent("goal.md"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-f", ".workbench/goal.md"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "track it"], in: fx.repo)
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        #expect(try String(contentsOf: copyURL(fx, id), encoding: .utf8) == "the project's own\n")
+        let status = try await fx.git.run(["status", "--porcelain"], in: worktree)
+        #expect(!status.stdout.contains("goal.md"), "no deletion or edit of a tracked file: \(status.stdout)")
+    }
 }

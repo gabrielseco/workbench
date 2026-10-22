@@ -134,6 +134,11 @@ public struct WorktreeManager: Sendable {
         let worktree = path(for: threadID)
         let copy = worktree.appendingPathComponent(Self.goalCopyPath)
         let fm = FileManager.default
+        // Only a real `.workbench` directory inside the worktree is ours to write to or clear: a symlink there (or at the
+        // file) could lead outside it, and a tracked `.workbench/goal.md` is the project's own file.
+        for link in [copy.deletingLastPathComponent(), copy] where Self.isSymlink(link) { return false }
+        let tracked = try? await git.run(["ls-files", "--error-unmatch", "--", Self.goalCopyPath], in: worktree)
+        if tracked?.succeeded == true { return false }
         guard
             let ignored = try? await git.run(["check-ignore", "-q", Self.goalCopyPath], in: worktree),
             ignored.succeeded
@@ -157,6 +162,10 @@ public struct WorktreeManager: Sendable {
         } catch {
             return false
         }
+    }
+
+    private static func isSymlink(_ url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
     }
 
     // MARK: Remove
