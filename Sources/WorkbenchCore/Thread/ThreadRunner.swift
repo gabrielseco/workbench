@@ -229,6 +229,11 @@ public actor ThreadRunner {
             }
         }
 
+        // The approved goal beside the diff for anyone who opens the worktree; replaced every turn.
+        if let goalText = try? String(contentsOf: project.goalURL(threadID), encoding: .utf8) {
+            await worktreeManager.writeGoalCopy(goalText, for: threadID)
+        }
+
         // The install step, before the first turn only (SetupRunner says when it runs).
         try await runSetupIfNeeded(
             lastTurn: lastTurn, config: config, goal: goal, worktree: worktree, log: log, options: options)

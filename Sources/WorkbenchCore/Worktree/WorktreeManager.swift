@@ -117,6 +117,40 @@ public struct WorktreeManager: Sendable {
         return await WorktreeCopier(source: repoRoot, git: git).copy(patterns, to: path(for: threadID))
     }
 
+    // MARK: Goal copy
+
+    /// Where the goal is shown inside a worktree: `.workbench/` is already kept out of git (`excludeWorkbench`), so
+    /// `git add -A` in a run, `accept` and `ship` never take it.
+    public static let goalCopyPath = ".workbench/goal.md"
+
+    /// Puts a read-only copy of the approved goal in the thread's worktree, so an editor opened on the worktree shows
+    /// the goal beside the diff. The source stays in the thread's folder: the copy is replaced on every turn and
+    /// editing it changes nothing the approval covers. Writes nothing when git would not ignore the path (the project
+    /// un-ignored `.workbench/`), because a file git sees could be committed. Returns whether it was written.
+    @discardableResult
+    public func writeGoalCopy(_ text: String, for threadID: String) async -> Bool {
+        guard SafeNames.isThreadID(threadID), exists(threadID) else { return false }
+        let worktree = path(for: threadID)
+        guard
+            let ignored = try? await git.run(["check-ignore", "-q", Self.goalCopyPath], in: worktree),
+            ignored.succeeded
+        else { return false }
+        let copy = worktree.appendingPathComponent(Self.goalCopyPath)
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: copy.path) {
+                try? fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+                try fm.removeItem(at: copy)
+            }
+            try text.write(to: copy, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.posixPermissions: 0o444], ofItemAtPath: copy.path)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // MARK: Remove
 
     /// Removes the worktree directory. Git refuses when it has uncommitted changes unless `force`.

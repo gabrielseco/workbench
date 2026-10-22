@@ -9,7 +9,8 @@
 # `run.started` names, be handed to the verifier as WORKBENCH_PORT, and be gone with the turn. Costs at most two turns
 # at the cap ($VERIFY_CLI_BUDGET_USD, default 0.50, on $VERIFY_CLI_MODEL, default haiku), usually a few cents. Exit 0
 # only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1
-# makes the helper ignore the app, so the steps that need the app's page in the proof (the marker, the port) must FAIL.
+# makes the helper ignore the app and removes the goal copy from the worktree, so the steps that need the app's page in the
+# proof (the marker, the port) and the steps on the goal copy (present, read-only, not a change) must FAIL.
 # The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -156,6 +157,18 @@ check "the app is not running after the turn" "$leftover process(es) still servi
 check "nothing answers on the port" "something still answers on $PORT" \
     bash -c '! curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$1/"' _ "${PORT:-0}"
 check "no runner.json is left" "the thread still has a runner" test ! -e "$THREAD_DIR/runner.json"
+
+# --- 3. the goal beside the diff ---------------------------------------------------------------------------------
+
+# A read-only copy of the approved goal sits in the worktree, out of git's sight, for whoever opens it in an editor.
+WT="$P/.workbench/worktrees/$ID"
+COPY="$WT/.workbench/goal.md"
+[ "$SABOTAGE" = 1 ] && rm -f "$COPY"
+check "the worktree holds a copy of the approved goal" "no $COPY, or it differs from the thread's goal.md" \
+    bash -c 'cmp -s "$1" "$2"' _ "$COPY" "$THREAD_DIR/goal.md"
+check "the copy is read-only" "$COPY is writable" bash -c '[ -e "$1" ] && [ ! -w "$1" ]' _ "$COPY"
+check "the copy is not a change in the worktree" "git status in the worktree lists it" \
+    bash -c '! git -C "$1" status --porcelain --untracked-files=all | grep -q "goal.md"' _ "$WT"
 
 wb "$T_WB" abandon "$ID" >/dev/null 2>&1
 ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'])")
