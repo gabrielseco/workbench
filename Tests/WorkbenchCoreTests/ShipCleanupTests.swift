@@ -283,7 +283,14 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
     private func ignore(_ patterns: String, in worktree: URL, _ fx: RunnerFixture) async throws {
         let exclude = try await shipOut(["rev-parse", "--git-path", "info/exclude"], worktree, fx)
         let url = exclude.hasPrefix("/") ? URL(fileURLWithPath: exclude) : worktree.appendingPathComponent(exclude)
-        try patterns.write(to: url, atomically: true, encoding: .utf8)
+        // `.workbench/` stays ignored, as in a real clone (Workbench keeps it in info/exclude): the run's goal copy is in it.
+        try (".workbench/\n" + patterns).write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @Test func theWorkbenchFolderIsListedAsIgnoredContentRemovedWithTheWorktree() {
+        // Git reports the folder as one entry, so a log a run left beside the goal copy is named by it.
+        let inventory = ThreadService.inventory(of: "!! .workbench/\n!! node_modules/\n")
+        #expect(inventory.names == [".workbench/", "node_modules/"])
     }
 
     @Test func ignoredFilesDoNotKeepAWorktreeAndTheEventNamesThem() async throws {
@@ -304,7 +311,8 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
             Issue.record("the event names what was ignored")
             return
         }
-        #expect(Set(listed.compactMap(\.stringValue)) == ["a.cache", "node_modules/"])
+        // `.workbench/` holds the run's goal copy, and anything else a run left in it: all of it goes with the worktree.
+        #expect(Set(listed.compactMap(\.stringValue)) == [".workbench/", "a.cache", "node_modules/"])
         #expect(event.data["ignored_more"] == nil)
     }
 

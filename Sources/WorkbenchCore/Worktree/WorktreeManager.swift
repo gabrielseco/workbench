@@ -117,6 +117,70 @@ public struct WorktreeManager: Sendable {
         return await WorktreeCopier(source: repoRoot, git: git).copy(patterns, to: path(for: threadID))
     }
 
+    // MARK: Goal copy
+
+    /// Where the goal is shown inside a worktree. The folder name is Workbench's own, so nothing in a project is at
+    /// this path, and `.workbench/` is already kept out of git (`excludeWorkbench`): `git add -A` in a run, `accept`
+    /// and `ship` never take it, and the worktree's removal takes it with it.
+    public static let goalCopyPath = ".workbench/goal-copy/goal.md"
+
+    public enum GoalCopy: Sendable, Equatable {
+        case written
+        /// Nothing was written, and why, for the person who opens the worktree and finds no goal.
+        case skipped(String)
+    }
+
+    /// Puts a read-only copy of the approved goal in the thread's worktree, so an editor opened on it shows the goal
+    /// beside the diff. The source stays in the thread's folder: the copy is replaced on every turn and editing it
+    /// changes nothing the approval covers.
+    ///
+    /// It only ever replaces that one file. It writes nothing when `.workbench`, `goal-copy` or the file is something
+    /// else (a link, a file where a folder belongs, a folder where the file belongs), when the file is tracked, or when
+    /// git would not ignore the path (a file git sees could be committed); in that last case it removes its own earlier
+    /// copy, and nothing else.
+    public func writeGoalCopy(_ text: String, for threadID: String) async -> GoalCopy {
+        guard SafeNames.isThreadID(threadID), exists(threadID) else { return .skipped("the thread has no worktree") }
+        let worktree = path(for: threadID)
+        let copy = worktree.appendingPathComponent(Self.goalCopyPath)
+        let folder = copy.deletingLastPathComponent()
+        let parent = folder.deletingLastPathComponent()
+        for dir in [parent, folder] {
+            if let type = Self.type(of: dir), type != .typeDirectory {
+                return .skipped("\(dir.lastPathComponent) in the worktree is not a plain folder")
+            }
+        }
+        if let type = Self.type(of: copy), type != .typeRegular {
+            return .skipped("\(Self.goalCopyPath) is not a plain file")
+        }
+        let tracked = try? await git.run(["ls-files", "--error-unmatch", "--", Self.goalCopyPath], in: worktree)
+        if tracked?.succeeded == true { return .skipped("\(Self.goalCopyPath) is tracked by the project") }
+        let ignored = try? await git.run(["check-ignore", "-q", Self.goalCopyPath], in: worktree)
+        guard ignored?.succeeded == true else {
+            // The ignore rules changed since an earlier turn: a copy left in place would be committed by `git add -A`.
+            if Self.type(of: copy) == .typeRegular {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+                try? FileManager.default.removeItem(at: copy)
+            }
+            return .skipped("git would not ignore \(Self.goalCopyPath)")
+        }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            if Self.type(of: copy) == .typeRegular {
+                try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+            }
+            try text.write(to: copy, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: copy.path)
+            return .written
+        } catch {
+            return .skipped("\(error.localizedDescription)")
+        }
+    }
+
+    /// What is at `url`, without following a link; nil when nothing is.
+    private static func type(of url: URL) -> FileAttributeType? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
+    }
+
     // MARK: Remove
 
     /// Removes the worktree directory. Git refuses when it has uncommitted changes unless `force`.

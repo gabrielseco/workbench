@@ -81,6 +81,11 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 
 ### `run`
 
+Each turn also puts a read-only copy of the approved goal at `.workbench/goal-copy/goal.md` in the thread's worktree (replaced
+on every turn, so an edit to it lasts until the next one and never reaches the goal the approval covers), so an editor
+opened with `open` shows the goal beside the diff. `.workbench/` is already kept out of git, so no run, `accept` or
+`ship` commits it; when git would not ignore the path (the project un-ignored it) nothing is written.
+
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the turn succeeded |
