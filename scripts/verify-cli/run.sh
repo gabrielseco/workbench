@@ -162,7 +162,7 @@ check "no runner.json is left" "the thread still has a runner" test ! -e "$THREA
 
 # A read-only copy of the approved goal sits in the worktree, out of git's sight, for whoever opens it in an editor.
 WT="$P/.workbench/worktrees/$ID"
-COPY="$WT/.workbench/goal.md"
+COPY="$WT/.workbench/goal-copy/goal.md"
 [ "$SABOTAGE" = 1 ] && rm -f "$COPY"
 check "the worktree holds a copy of the approved goal" "no $COPY, or it differs from the thread's goal.md" \
     bash -c 'cmp -s "$1" "$2"' _ "$COPY" "$THREAD_DIR/goal.md"

@@ -131,8 +131,7 @@ extension ThreadService {
     }
 
     static func inventory(of status: String, limit: Int = 20) -> IgnoredInventory {
-        // `.workbench/` holds the goal copy Workbench puts there (`WorktreeManager.goalCopyPath`): not something the thread made.
-        let lines = status.split(separator: "\n").map(String.init).filter { $0.hasPrefix("!! ") && $0 != "!! .workbench/" }
+        let lines = status.split(separator: "\n").map(String.init).filter { $0.hasPrefix("!! ") }
         return IgnoredInventory(
             names: lines.prefix(limit).map { String($0.dropFirst(3)) }, more: max(0, lines.count - limit),
             complete: status.utf8.count < GitRunner.outputLimit - 4)

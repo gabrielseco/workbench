@@ -287,9 +287,10 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
         try (".workbench/\n" + patterns).write(to: url, atomically: true, encoding: .utf8)
     }
 
-    @Test func theGoalCopyIsNotListedAsSomethingTheThreadMade() {
+    @Test func theWorkbenchFolderIsListedAsIgnoredContentRemovedWithTheWorktree() {
+        // Git reports the folder as one entry, so a log a run left beside the goal copy is named by it.
         let inventory = ThreadService.inventory(of: "!! .workbench/\n!! node_modules/\n")
-        #expect(inventory.names == ["node_modules/"])
+        #expect(inventory.names == [".workbench/", "node_modules/"])
     }
 
     @Test func ignoredFilesDoNotKeepAWorktreeAndTheEventNamesThem() async throws {
@@ -310,7 +311,8 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
             Issue.record("the event names what was ignored")
             return
         }
-        #expect(Set(listed.compactMap(\.stringValue)) == ["a.cache", "node_modules/"])
+        // `.workbench/` holds the run's goal copy, and anything else a run left in it: all of it goes with the worktree.
+        #expect(Set(listed.compactMap(\.stringValue)) == [".workbench/", "a.cache", "node_modules/"])
         #expect(event.data["ignored_more"] == nil)
     }
 

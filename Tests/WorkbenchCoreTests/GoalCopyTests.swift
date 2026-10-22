@@ -6,7 +6,7 @@ import Testing
 /// The approved goal, read-only, inside the thread's worktree, so an editor opened on it shows the goal beside the diff.
 @Suite struct GoalCopyTests {
     private func copyURL(_ fx: RunnerFixture, _ id: String) -> URL {
-        fx.project.worktreesDirectory.appendingPathComponent(id).appendingPathComponent(".workbench/goal.md")
+        fx.project.worktreesDirectory.appendingPathComponent(id).appendingPathComponent(".workbench/goal-copy/goal.md")
     }
 
     @Test func aRunPutsAReadOnlyCopyOfTheGoalInTheWorktree() async throws {
@@ -115,10 +115,10 @@ import Testing
     @Test func aTrackedFileAtThePathIsLeftAlone() async throws {
         let fx = try await RunnerFixture()
         // The project's own tracked file, on the thread's base.
-        let dir = fx.repo.appendingPathComponent(".workbench")
+        let dir = fx.repo.appendingPathComponent(".workbench/goal-copy")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try "the project's own\n".write(to: dir.appendingPathComponent("goal.md"), atomically: true, encoding: .utf8)
-        _ = try await fx.git.run(["add", "-f", ".workbench/goal.md"], in: fx.repo)
+        _ = try await fx.git.run(["add", "-f", ".workbench/goal-copy/goal.md"], in: fx.repo)
         _ = try await fx.git.run(["commit", "-q", "-m", "track it"], in: fx.repo)
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options("stream-events=1"))
@@ -127,5 +127,54 @@ import Testing
         #expect(try String(contentsOf: copyURL(fx, id), encoding: .utf8) == "the project's own\n")
         let status = try await fx.git.run(["status", "--porcelain"], in: worktree)
         #expect(!status.stdout.contains("goal.md"), "no deletion or edit of a tracked file: \(status.stdout)")
+    }
+
+    @Test func aUsersOwnGoalFileInDotWorkbenchIsNeverTouched() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        // Untracked notes of the person's, at the path an earlier design used, and a folder named like the file.
+        let folder = fx.project.worktreesDirectory.appendingPathComponent(id).appendingPathComponent(".workbench")
+        try "my notes\n".write(to: folder.appendingPathComponent("goal.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(
+            at: folder.appendingPathComponent("goal.md.d"), withIntermediateDirectories: true)
+        try "kept\n".write(
+            to: folder.appendingPathComponent("goal.md.d/notes.txt"), atomically: true, encoding: .utf8)
+
+        let second = try await fx.runner(id).run(fx.options("stream-events=1", feedback: "Again."))
+        #expect(second.result == .succeeded)
+        #expect(try String(contentsOf: folder.appendingPathComponent("goal.md"), encoding: .utf8) == "my notes\n")
+        #expect(
+            try String(contentsOf: folder.appendingPathComponent("goal.md.d/notes.txt"), encoding: .utf8) == "kept\n")
+    }
+
+    @Test func aFolderAtTheCopysPathIsLeftAloneAndNothingIsWritten() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        let copy = copyURL(fx, id)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+        try FileManager.default.removeItem(at: copy)
+        try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+        try "inside\n".write(to: copy.appendingPathComponent("keep.txt"), atomically: true, encoding: .utf8)
+
+        let outcome = await WorktreeManager(repoRoot: fx.repo, git: fx.git).writeGoalCopy("goal\n", for: id)
+        #expect(outcome == .skipped("\(WorktreeManager.goalCopyPath) is not a plain file"))
+        #expect(try String(contentsOf: copy.appendingPathComponent("keep.txt"), encoding: .utf8) == "inside\n")
+    }
+
+    @Test func aFileWhereTheCopysFolderBelongsIsLeftAlone() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        let copy = copyURL(fx, id)
+        let folder = copy.deletingLastPathComponent()
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+        try FileManager.default.removeItem(at: folder)
+        try "not a folder\n".write(to: folder, atomically: true, encoding: .utf8)
+
+        let outcome = await WorktreeManager(repoRoot: fx.repo, git: fx.git).writeGoalCopy("goal\n", for: id)
+        #expect(outcome == .skipped("goal-copy in the worktree is not a plain folder"))
+        #expect(try String(contentsOf: folder, encoding: .utf8) == "not a folder\n")
     }
 }

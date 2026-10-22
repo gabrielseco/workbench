@@ -230,9 +230,7 @@ public actor ThreadRunner {
         }
 
         // The approved goal beside the diff for anyone who opens the worktree; replaced every turn.
-        if let goalText = try? String(contentsOf: project.goalURL(threadID), encoding: .utf8) {
-            await worktreeManager.writeGoalCopy(goalText, for: threadID)
-        }
+        await copyGoalIntoWorktree()
 
         // The install step, before the first turn only (SetupRunner says when it runs).
         try await runSetupIfNeeded(
@@ -546,5 +544,15 @@ extension ThreadRunner {
 
     private static func object(_ line: String) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
+    }
+}
+
+extension ThreadRunner {
+    /// Says so when the copy was not written, so a person who opens the worktree and finds no goal knows why.
+    fileprivate func copyGoalIntoWorktree() async {
+        guard let text = try? String(contentsOf: project.goalURL(threadID), encoding: .utf8) else { return }
+        if case .skipped(let why) = await worktreeManager.writeGoalCopy(text, for: threadID) {
+            notify(.advisory("the goal was not copied into the worktree: \(why)"))
+        }
     }
 }
