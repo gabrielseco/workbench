@@ -27,6 +27,7 @@ import Testing
         _ = try await fx.runner(id).run(fx.options("stream-events=1"))
 
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        #expect(FileManager.default.fileExists(atPath: copyURL(fx, id).path), "there is a copy to leave out")
         _ = try await fx.git.run(["add", "-A"], in: worktree)
         let staged = try await fx.git.run(["diff", "--cached", "--name-only"], in: worktree)
         #expect(!staged.stdout.contains("goal.md"), "git add -A must leave the copy out: \(staged.stdout)")
@@ -72,5 +73,25 @@ import Testing
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
         let status = try await fx.git.run(["status", "--porcelain", "--untracked-files=all"], in: worktree)
         #expect(!status.stdout.contains("goal.md"), "nothing is written that git would then commit: \(status.stdout)")
+    }
+
+    @Test func aCopyFromAnEarlierTurnIsRemovedWhenTheIgnoreRulesChange() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        #expect(FileManager.default.fileExists(atPath: copyURL(fx, id).path))
+
+        // Between turns the project un-ignores .workbench/ (in the worktree's own checkout), so a copy left behind would be staged.
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "!.workbench/\n".write(
+            to: worktree.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["config", "core.excludesFile", "/dev/null"], in: fx.repo)
+        try "".write(to: fx.repo.appendingPathComponent(".git/info/exclude"), atomically: true, encoding: .utf8)
+
+        _ = try await fx.runner(id).run(fx.options("stream-events=1", feedback: "Again."))
+        #expect(!FileManager.default.fileExists(atPath: copyURL(fx, id).path))
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        let staged = try await fx.git.run(["diff", "--cached", "--name-only"], in: worktree)
+        #expect(!staged.stdout.contains("goal.md"), "staged: \(staged.stdout)")
     }
 }

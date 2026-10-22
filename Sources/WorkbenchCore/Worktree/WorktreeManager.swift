@@ -125,18 +125,26 @@ public struct WorktreeManager: Sendable {
 
     /// Puts a read-only copy of the approved goal in the thread's worktree, so an editor opened on the worktree shows
     /// the goal beside the diff. The source stays in the thread's folder: the copy is replaced on every turn and
-    /// editing it changes nothing the approval covers. Writes nothing when git would not ignore the path (the project
-    /// un-ignored `.workbench/`), because a file git sees could be committed. Returns whether it was written.
+    /// editing it changes nothing the approval covers. Writes nothing, and removes an earlier copy, when git would not
+    /// ignore the path (the project un-ignored `.workbench/`), because a file git sees could be committed. Returns
+    /// whether it was written.
     @discardableResult
     public func writeGoalCopy(_ text: String, for threadID: String) async -> Bool {
         guard SafeNames.isThreadID(threadID), exists(threadID) else { return false }
         let worktree = path(for: threadID)
+        let copy = worktree.appendingPathComponent(Self.goalCopyPath)
+        let fm = FileManager.default
         guard
             let ignored = try? await git.run(["check-ignore", "-q", Self.goalCopyPath], in: worktree),
             ignored.succeeded
-        else { return false }
-        let copy = worktree.appendingPathComponent(Self.goalCopyPath)
-        let fm = FileManager.default
+        else {
+            // The ignore rules changed since an earlier turn: a copy left in place would be committed by `git add -A`.
+            if fm.fileExists(atPath: copy.path) {
+                try? fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+                try? fm.removeItem(at: copy)
+            }
+            return false
+        }
         do {
             try fm.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
             if fm.fileExists(atPath: copy.path) {

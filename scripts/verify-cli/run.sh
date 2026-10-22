@@ -167,8 +167,8 @@ COPY="$WT/.workbench/goal.md"
 check "the worktree holds a copy of the approved goal" "no $COPY, or it differs from the thread's goal.md" \
     bash -c 'cmp -s "$1" "$2"' _ "$COPY" "$THREAD_DIR/goal.md"
 check "the copy is read-only" "$COPY is writable" bash -c '[ -e "$1" ] && [ ! -w "$1" ]' _ "$COPY"
-check "the copy is not a change in the worktree" "git status in the worktree lists it" \
-    bash -c '! git -C "$1" status --porcelain --untracked-files=all | grep -q "goal.md"' _ "$WT"
+check "the copy is there and is not a change in the worktree" "it is missing, or git status in the worktree lists it" \
+    bash -c '[ -e "$2" ] && ! git -C "$1" status --porcelain --untracked-files=all | grep -q "goal.md"' _ "$WT" "$COPY"
 
 wb "$T_WB" abandon "$ID" >/dev/null 2>&1
 ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'])")
