@@ -45,6 +45,11 @@ with `accept`, `discard` or `abandon`.
    editor, with the branch's diff in Source Control; `--print` gives the path). Run yourself what the run could not (the full check, lint, typecheck). Look
    at the verifier's screenshots with `Read`; its report is a note, not a pass. Wrong or incomplete: `wb send-back "<note>"`
    (same thread, next turn). Fix tool denials with `grant` or the allowlist, never with `Bash` or `mix:*` unrestricted.
+   **Two strikes, then the human.** If the verifier has run twice (the first turn and one send-back) and a criterion is still `missing`
+   or `does not hold` for a reason another turn cannot fix (a control the verifier may not press, a state no mock scenario reaches, a
+   screenshot it cannot take), stop sending back: a note gives the verifier no new ability and each turn costs money. Name the criteria
+   in doubt and why, ask the person to check them by hand, and put their answer in the PR under Testing as "checked by hand, not by the
+   verifier". The judge's "not met" on those criteria is then a note, not a block.
 6. **Accept.** `wb accept -m "<conventional commit>"` commits the work on `workbench/<id>` and ends the thread. Nothing is pushed.
 7. **Ship.** `wb ship --yes` pushes the branch and opens the PR (a read-only turn writes the description). If it fails after the push,
    fix the cause; if you open the PR by hand, say so, because `ship` then recorded nothing and `clean` will not know the PR.
