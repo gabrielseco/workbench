@@ -192,17 +192,14 @@ private struct Bin {
             time.sleep(300)
             PY
             """)
-        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: 2)) {
+        // The timeout is the only stop, so it must outlast python starting under load: a ceiling, not a measurement.
+        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: Int(Patience.limit))) {
             try await EditorLauncher.launch(
-                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:], timeout: 2,
-                killGrace: 1)
+                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:],
+                timeout: Patience.limit, killGrace: 1)
         }
         let pid = try #require(Int32(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
-        var gone = false
-        for _ in 0..<50 where !gone {
-            gone = kill(pid, 0) == -1
-            if !gone { try await Task.sleep(nanoseconds: 100_000_000) }
-        }
+        let gone = await pollUntil { kill(pid, 0) == -1 }
         if !gone { kill(pid, SIGKILL) }
         #expect(gone, "the helper that left the launcher's session is still running")
     }
