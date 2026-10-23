@@ -7,10 +7,11 @@
 # Steps: with no editor set `open` exits 6, says what to do and launches nothing; `--print` prints only the worktree path
 # and launches nothing; `--print --editor` exits 2; `--editor zed` and a named thread open the worktree (`opened <path> in
 # zed`, the launcher got the path); `editor` in the global config is used, the project's wins over it and `--editor` over
-# both; a thread whose worktree is gone exits 6 and an unknown id 7, launching nothing. Exit 0 only when every step
+# both; a thread whose worktree is gone exits 6 and an unknown id 7, launching nothing; `--goal` opens that same
+# thread's goal.md anyway (`--print --goal` prints its path). Exit 0 only when every step
 # passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 sets `editor` in the
 # global config before the first step, so the steps that expect "no editor set" (exit 6, the message, nothing launched)
-# must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# must FAIL, and deletes the thread's goal.md before the `--goal` steps, so those must FAIL too. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -108,4 +109,21 @@ shown "$SCRATCH/gone.out"
 check "a thread whose worktree is gone: exit 6 (refused) with the reason" "exit $RC" \
     bash -c 'test "$1" = 6 && grep -q "has no worktree" "$2"' _ "$RC" "$SCRATCH/gone.out.err"
 check "a thread whose worktree is gone: nothing launched" "the fake editor ran" launched_nothing
+check "the refusal points to --goal" "the message lacks --goal" grep -q -- "--goal" "$SCRATCH/gone.out.err"
+
+# --- --goal: the goal file, which needs no worktree ----------------------------------------------------------------
+
+GOAL="$(cd "$P/.workbench/threads/$ID" && pwd)/goal.md"
+if [ "$SABOTAGE" = 1 ]; then
+    echo "    VERIFY_CLI_SABOTAGE=1: the goal file is deleted before the --goal steps"
+    rm -f "$GOAL"
+fi
+wbp "$SCRATCH/goalprint.out" open --goal --print
+check "--goal --print: exit 0 and only the goal file's path" "exit $RC, printed: $(head -c 300 "$SCRATCH/goalprint.out")" \
+    bash -c 'test "$1" = 0 && test "$(cat "$2")" = "$3"' _ "$RC" "$SCRATCH/goalprint.out" "$GOAL"
+wbp "$SCRATCH/goal.out" open "$ID" --goal --editor zed
+shown "$SCRATCH/goal.out"
+check "--goal with no worktree: exit 0, 'opened <goal.md> in zed'" "exit $RC, printed: $(head -c 300 "$SCRATCH/goal.out")" \
+    bash -c 'test "$1" = 0 && test "$(cat "$2")" = "opened $3 in zed"' _ "$RC" "$SCRATCH/goal.out" "$GOAL"
+check "the launcher got the goal file's path" "it got: $(cat "$OPENED" 2>/dev/null)" launched_with "$GOAL"
 finish

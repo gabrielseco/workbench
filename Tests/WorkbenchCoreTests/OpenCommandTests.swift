@@ -113,6 +113,27 @@ struct OpenFixture {
         #expect(o.recorded() == nil)
     }
 
+    @Test func goalOpensTheGoalFileOfAThreadThatHasNoWorktree() async throws {
+        let o = try await OpenFixture(worktree: false)
+        let goal = o.fx.project.goalURL(o.id).path
+        let ran = try await o.open(["--goal", "--editor", "zed"])
+        #expect(ran.code == 0, "\(ran.stderr)")
+        #expect(ran.stdout == "opened \(goal) in zed")
+        #expect(o.recorded() == [goal])
+        let printed = try await o.open([o.id, "--goal", "--print"])
+        #expect(printed.code == 0 && printed.stdout == goal, "\(printed.stderr)")
+    }
+
+    @Test func goalWithAMissingGoalFileIsRefusedAndAnUnknownThreadIsNotFound() async throws {
+        let o = try await OpenFixture(worktree: false)
+        try FileManager.default.removeItem(at: o.fx.project.goalURL(o.id))
+        let missing = try await o.open(["--goal", "--editor", "zed"])
+        #expect(missing.code == 6 && missing.stderr.contains("has no goal file"), "\(missing.stderr)")
+        let unknown = try await o.open(["g-2026-01-01-nope", "--goal", "--editor", "zed"])
+        #expect(unknown.code == 7, "\(unknown.stderr)")
+        #expect(o.recorded() == nil)
+    }
+
     @Test func anUnknownThreadIsNotFoundAndNothingIsLaunched() async throws {
         let o = try await OpenFixture()
         let ran = try await o.open(["g-2026-01-01-nope", "--editor", "zed"])

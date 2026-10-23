@@ -421,11 +421,11 @@ Notes:
   whether it can be used. With `app_type = "desktop"` and a usable skill, it also checks that the process running
   doctor may record the screen (`CGPreflightScreenCaptureAccess`) and, if not, warns and names the Settings pane
   (a warning, not a failure). `web` (the default) and an unset key are never checked.
-- **`editor` is for a person, not a run.** `workbench open [id] [--editor <name-or-command>] [--print]` opens the
+- **`editor` is for a person, not a run.** `workbench open [id] [--editor <name-or-command>] [--print] [--goal]` opens the
   thread's worktree (`.workbench/worktrees/<id>`, on `workbench/<id>`) as its own editor window, so Source Control shows
   the branch's diff, which the parent repository's window hides because `.workbench/` is ignored. The thread is the one
   named, else the active one; a thread with no worktree (shipped, accepted, discarded, abandoned, or not run yet) is
-  refused, and so is a worktree path that resolves, after symlinks, outside `.workbench/worktrees/`. The editor comes
+  refused (its message points to `--goal`), and so is a worktree path that resolves, after symlinks, outside `.workbench/worktrees/`. The editor comes
   from `--editor`, else `editor` here, else `editor` in `~/.workbench/config.toml` (the global file, which allows this
   key); never from `$EDITOR` or `$VISUAL`, since a terminal editor would block with no terminal. None set is refused
   with what to do. The value is a known name (`cursor`, `code`, `zed`, `subl`, `windsurf`: its launcher on `PATH`, else
@@ -436,6 +436,8 @@ Notes:
   not is stopped with its process group and reported, a non-zero exit is reported with its last output line, and what it
   prints goes nowhere else. The editor it leaves running is not stopped. `open` writes no event and changes nothing in
   the thread or the worktree; `--print` prints only the path and starts nothing (`cd "$(workbench open --print)"`).
+  `--goal` opens the thread's `goal.md` (`.workbench/threads/<id>/goal.md`) instead, which a draft has before any run;
+  it needs only that the file exists, and `--print --goal` prints its path.
   `doctor` prints `editor:  <value> (from --editor|project|global)` or `editor:  none set`, never starts it and never
   fails for it; `doctor --editor <value>` shows what that flag would pick. A run never reads the key.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
