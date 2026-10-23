@@ -53,7 +53,7 @@ private final class StopHolder: @unchecked Sendable {
     }
 }
 
-@Suite struct RunLaunchTests {
+@Suite(.processGate) struct RunLaunchTests {
     // MARK: Launch
 
     @Test func theAppIsUpBeforeTheVerifierStartsAndTheVerifierIsToldAboutIt() async throws {
@@ -297,7 +297,7 @@ extension VerifierFixture {
     }
 }
 
-@Suite struct RunRecoveryTests {
+@Suite(.processGate) struct RunRecoveryTests {
     @Test func anAppLeftOpenByADeadRunnerIsClosedBeforeTheVerifierIs() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-runlog-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }

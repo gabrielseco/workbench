@@ -34,7 +34,7 @@ private func defaultBase(_ root: URL, _ git: GitRunner) async -> String {
     await ThreadService(project: Project(root: root), git: git).defaultBase()
 }
 
-@Suite struct DefaultBaseTests {
+@Suite(.processGate) struct DefaultBaseTests {
     @Test func originHeadWinsOverALocalMainAndTheCheckedOutBranch() async throws {
         let (root, git) = try await repo(on: "main")
         _ = try await git.run(["update-ref", "refs/remotes/origin/master", "HEAD"], in: root)

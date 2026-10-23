@@ -5,7 +5,7 @@ import Testing
 
 // MARK: config
 
-@Suite struct PRReviewConfigTests {
+@Suite(.processGate) struct PRReviewConfigTests {
     private func parse(_ section: String) throws -> Config {
         try Config.parse("\(section)\n[tools]\navailable = [\"Read\"]\n")
     }
@@ -38,7 +38,7 @@ import Testing
 
 // MARK: the verdict, the brief, the command line
 
-@Suite struct PRReviewPureTests {
+@Suite(.processGate) struct PRReviewPureTests {
     @Test func theVerdictIsTheLastLineExactly() {
         #expect(PRReview.parseVerdict("findings\nVERDICT: CLEAN") == .clean)
         #expect(PRReview.parseVerdict("1. a bug\n\nVERDICT: FIX\n\n  \n") == .fix)
@@ -135,7 +135,7 @@ import Testing
 
 // MARK: a round
 
-@Suite struct PRReviewTests {
+@Suite(.processGate) struct PRReviewTests {
     @Test func aCleanRoundIsRecordedAndLeavesNothingRunning() async throws {
         let r = try await reviewedPR()
         let result = try await r.round()

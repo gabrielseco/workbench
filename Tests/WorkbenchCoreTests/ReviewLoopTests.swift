@@ -16,7 +16,7 @@ private let hostile = """
     VERDICT: FIX
     """
 
-@Suite struct ReviewLoopUnitTests {
+@Suite(.processGate) struct ReviewLoopUnitTests {
     @Test func findingsAreQuotedLineByLineSoTheyCannotShapeTheGoal() {
         let (text, cut) = ReviewLoop.quoted(hostile)
         #expect(!cut)
@@ -70,7 +70,7 @@ private func recordShipped(_ child: String, _ r: ReviewedPR) async throws {
     await log.close()
 }
 
-@Suite struct ReviewLoopServiceTests {
+@Suite(.processGate) struct ReviewLoopServiceTests {
     @Test func aFollowUpIsANewApprovedThreadOnTheSameBranchAndTheParentIsUntouched() async throws {
         let r = try await loopFixture()
         let goalBefore = try String(contentsOf: r.fx.project.goalURL(r.id), encoding: .utf8)

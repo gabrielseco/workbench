@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct StartAdvisoryTests {
+@Suite(.processGate) struct StartAdvisoryTests {
     @Test func aRetryAfterAnInterruptedStartStillComparesTheBase() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

@@ -57,7 +57,7 @@ private let designStage = """
 
 // MARK: what a verifier run records
 
-@Suite struct VerifierRecordsProofTests {
+@Suite(.processGate) struct VerifierRecordsProofTests {
     @Test func everyPNGItLeavesIsProofAndOtherFilesAreOnlyListed() async throws {
         let v = try await VerifierFixture()
         let report = try await v.verify("proof=shot.png")
@@ -129,7 +129,7 @@ private let designStage = """
 
 // MARK: what reads it
 
-@Suite struct VerifierProofReadersTests {
+@Suite(.processGate) struct VerifierProofReadersTests {
     @Test func theDesignStageIsGivenTheVerifiersPNGsWithTheirSizesAndTheLogNamesThem() async throws {
         let r = try await reviewedPR(extraConfig: designStage)
         let files = ["home.png": "pixels", "dark.png": "night", "min.png": "small", "notes.txt": "x"]

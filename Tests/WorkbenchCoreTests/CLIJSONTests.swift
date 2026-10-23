@@ -41,7 +41,7 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
     return Set(line.dropFirst("\(name) keys:".count).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
 }
 
-@Suite struct CLIJSONTests {
+@Suite(.processGate) struct CLIJSONTests {
     @Test func statusTakesAnIdOfAFinishedThreadAndAllListsEveryThread() async throws {
         let fx = try await RunnerFixture()
         let first = try await fx.approvedThread("first")

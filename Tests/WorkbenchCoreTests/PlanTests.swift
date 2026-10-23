@@ -45,7 +45,7 @@ private final class PlanBox<T>: @unchecked Sendable {
 
 let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add hello.\n"
 
-@Suite struct PlanArgumentsTests {
+@Suite(.processGate) struct PlanArgumentsTests {
     private func request() -> ReadOnlyRequest {
         ReadOnlyRequest(
             prompt: "the prompt", workingDirectory: URL(fileURLWithPath: "/tmp"), model: "opus", budget: 1, timeout: 60)
@@ -123,7 +123,7 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
     }
 }
 
-@Suite struct PlanServiceTests {
+@Suite(.processGate) struct PlanServiceTests {
     @Test func aPlanIsRecordedFromStartToEndAndKeptAsAFile() async throws {
         let p = try await planned()
         let dump = p.dir.appendingPathComponent("dump.json").path

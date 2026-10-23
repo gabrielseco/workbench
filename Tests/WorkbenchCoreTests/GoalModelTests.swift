@@ -37,7 +37,7 @@ private func problems(in text: String) -> [GoalProblem] {
     return []
 }
 
-@Suite struct GoalModelParsingTests {
+@Suite(.processGate) struct GoalModelParsingTests {
     @Test func theModelIsReadAndIsOptional() throws {
         #expect(try GoalFile.parse(goal(model: "opus")).goal.model == "opus")
         #expect(try GoalFile.parse(goal(model: "claude-opus-5-5")).goal.model == "claude-opus-5-5")
@@ -59,7 +59,7 @@ private func problems(in text: String) -> [GoalProblem] {
     }
 }
 
-@Suite struct GoalModelApprovalTests {
+@Suite(.processGate) struct GoalModelApprovalTests {
     private func legacyHash(body: String) -> String {
         let canonical = [
             "workbench-goal-v1", "base=main", "budget_usd=5", "turn_timeout_min=30", "---",
@@ -88,7 +88,7 @@ private func problems(in text: String) -> [GoalProblem] {
     }
 }
 
-@Suite struct GoalModelInvocationTests {
+@Suite(.processGate) struct GoalModelInvocationTests {
     private func argv(config: String, goalModel: String?) async throws -> [String] {
         let fx = try await RunnerFixture(extraConfig: config)
         let id = try await fx.approvedThread()

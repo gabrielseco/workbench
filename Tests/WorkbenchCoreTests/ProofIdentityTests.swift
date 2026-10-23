@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct ProofIdentityTests {
+@Suite(.processGate) struct ProofIdentityTests {
     private func head(_ ref: String, _ fx: RunnerFixture, in dir: URL) async throws -> String {
         try await fx.git.run(["rev-parse", ref], in: dir).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -105,7 +105,7 @@ import Testing
     }
 }
 
-@Suite struct ProofFreshnessTests {
+@Suite(.processGate) struct ProofFreshnessTests {
     private let now = ProofIdentity(commit: "c2", tree: "t2")
 
     @Test func theSameTreeIsCurrentAndAnotherIsStale() {
@@ -120,7 +120,7 @@ import Testing
     }
 }
 
-@Suite struct ProofFreshnessTextTests {
+@Suite(.processGate) struct ProofFreshnessTextTests {
     @Test func reviewSaysWhichCommitAProofWasTakenAtAndWhetherItStillHolds() {
         #expect(ReviewReport.freshnessText(.current, commit: "972aa0f1234").contains("972aa0f: still describes the work"))
         #expect(ReviewReport.freshnessText(.stale, commit: "972aa0f1234").contains("STALE"))
@@ -129,7 +129,7 @@ import Testing
     }
 }
 
-@Suite struct ProofIdentityRecordTests {
+@Suite(.processGate) struct ProofIdentityRecordTests {
     private func proofAdded(_ extra: [String: JSONValue]) -> Event {
         var data: [String: JSONValue] = ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 4]
         for (key, value) in extra { data[key] = value }

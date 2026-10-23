@@ -5,8 +5,9 @@ import Testing
 
 // MARK: fixture
 
-func isolatedGit() throws -> GitRunner {
-    try GitRunner.discover(
+func isolatedGit(sourceLocation: SourceLocation = #_sourceLocation) throws -> GitRunner {
+    expectProcessGate("isolatedGit()", sourceLocation: sourceLocation)
+    return try GitRunner.discover(
         extraEnvironment: [
             "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
             "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
@@ -15,13 +16,16 @@ func isolatedGit() throws -> GitRunner {
 }
 
 /// A scratch repository with a `.workbench/config.toml` that points at the fake claude.
+///
+/// Built and used under `@Suite(.processGate)`, so the test's waits start when its processes can run.
 struct RunnerFixture {
     let repo: URL
     let project: Project
     let git: GitRunner
     let service: ThreadService
 
-    init(extraConfig: String = "") async throws {
+    init(extraConfig: String = "", sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        expectProcessGate("RunnerFixture", sourceLocation: sourceLocation)
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("wb-run-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         repo = base.resolvingSymlinksInPath()
@@ -102,7 +106,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
 
 // MARK: the loop
 
-@Suite struct RunnerTests {
+@Suite(.processGate) struct RunnerTests {
     @Test func aFullTurnIsRecordedAndLeavesAWorktree() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
@@ -454,7 +458,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
 
 // MARK: classification and formatting
 
-@Suite struct ClassificationTests {
+@Suite(.processGate) struct ClassificationTests {
     private func exit(
         _ termination: Termination = .exited(0), cause: StopCause = .natural
     ) -> ProcessExit {
@@ -486,7 +490,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
     }
 }
 
-@Suite struct ThreadServiceTests {
+@Suite(.processGate) struct ThreadServiceTests {
     @Test func newThreadWritesADraftThatCannotBeApprovedUntilFilledIn() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.service.newThread(name: "retry-backoff", base: "main")
@@ -544,7 +548,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
     }
 }
 
-@Suite struct LogFormatterTests {
+@Suite(.processGate) struct LogFormatterTests {
     @Test func describesTheInterestingParts() throws {
         func event(_ kind: EventKind, _ data: JSONValue, turn: Int = 1) -> Event {
             Event(seq: 7, ts: "2026-10-12T20:11:03.120Z", turn: turn, kind: kind, data: data)

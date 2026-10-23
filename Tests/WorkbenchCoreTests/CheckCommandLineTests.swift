@@ -5,7 +5,7 @@ import Testing
 
 // MARK: checks through the real CLI
 
-@Suite struct CheckCommandLineTests {
+@Suite(.processGate) struct CheckCommandLineTests {
     private func cli(_ arguments: [String], in fx: RunnerFixture) throws -> ProcessRun {
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: arguments,

@@ -42,7 +42,7 @@ private struct FakeViewGH {
     }
 }
 
-@Suite struct PRReviewByNumberTests {
+@Suite(.processGate) struct PRReviewByNumberTests {
     private func review(
         _ r: ReviewedPR, gh: FakeViewGH, spec: (text: String, path: String)? = nil, again: Bool = false
     ) async throws -> PRReviewResult {

@@ -57,7 +57,7 @@ private func runClean(_ arguments: [String], fx: RunnerFixture, gh: GitRunner) a
     return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
 }
 
-@Suite struct ShipCleanTests {
+@Suite(.processGate) struct ShipCleanTests {
     @Test func aMergedPullRequestLosesItsWorktreeAndBranch() async throws {
         let fx = try await RunnerFixture()
         let t = try await shippedThread(fx)

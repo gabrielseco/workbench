@@ -50,7 +50,7 @@ private func waitForPath(_ path: String, timeout: TimeInterval = Patience.limit)
 
 // MARK: a real runner process, killed
 
-@Suite struct CrashRecoveryTests {
+@Suite(.processGate) struct CrashRecoveryTests {
     @Test func aKilledRunnerLeavesAnOpenTurnAndAnOrphanThatTheNextRunCleansUp() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

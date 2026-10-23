@@ -69,7 +69,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
 
 // MARK: pure pieces
 
-@Suite struct LineSplitterTests {
+@Suite(.processGate) struct LineSplitterTests {
     private func run(_ chunks: [String], max: Int = 1000, preview: Int = 8) -> [LineSplitter.Output] {
         var splitter = LineSplitter(maxLineBytes: max, previewBytes: preview)
         var out: [LineSplitter.Output] = []
@@ -122,7 +122,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
     }
 }
 
-@Suite struct ProcessTreeTests {
+@Suite(.processGate) struct ProcessTreeTests {
     @Test func findsAChildAndKnowsWhenItIsGone() async throws {
         let fd = open("/dev/null", O_WRONLY)
         defer { close(fd) }
@@ -151,7 +151,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
 
 // MARK: the runner
 
-@Suite struct ProcessRunnerTests {
+@Suite(.processGate) struct ProcessRunnerTests {
     // MARK: normal operation
 
     @Test func streamsLinesInOrderThenExactlyOneExit() async throws {

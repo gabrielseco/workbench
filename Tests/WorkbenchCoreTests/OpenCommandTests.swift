@@ -83,7 +83,7 @@ struct OpenFixture {
     }
 }
 
-@Suite struct OpenCommandTests {
+@Suite(.processGate) struct OpenCommandTests {
     @Test func opensTheActiveThreadsWorktreeInAKnownEditorFoundOnPath() async throws {
         let o = try await OpenFixture()
         let ran = try await o.open(["--editor", "zed"])

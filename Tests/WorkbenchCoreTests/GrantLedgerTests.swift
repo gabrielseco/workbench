@@ -19,7 +19,7 @@ private func grant(_ scope: String, _ pattern: String) -> (EventKind, JSONValue)
 
 private let turnStarted: (EventKind, JSONValue) = (.turnStarted, [:])
 
-@Suite struct GrantLedgerTests {
+@Suite(.processGate) struct GrantLedgerTests {
     @Test func aThreadGrantAppliesToEveryLaterTurn() {
         let ledger = GrantLedger(events: events([grant("thread", "Bash(chmod +x scripts/a.sh)"), turnStarted, turnStarted]))
         #expect(ledger.patternsForNextTurn(tools: tools) == ["Bash(chmod +x scripts/a.sh)"])
@@ -95,7 +95,7 @@ private let turnStarted: (EventKind, JSONValue) = (.turnStarted, [:])
     }
 }
 
-@Suite struct GrantRunnerTests {
+@Suite(.processGate) struct GrantRunnerTests {
     private func argv(_ fx: RunnerFixture, _ id: String, turn: Int) throws -> [String] {
         let started = try #require(try fx.events(id).first { $0.kind == .turnStarted && $0.turn == turn })
         guard case .array(let items)? = started.data["argv"] else { return [] }

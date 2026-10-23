@@ -34,7 +34,7 @@ private func problems(in text: String) -> [GoalProblem] {
     return []
 }
 
-@Suite struct GoalPushToParsingTests {
+@Suite(.processGate) struct GoalPushToParsingTests {
     @Test func thePushTargetIsReadAndIsOptional() throws {
         #expect(try GoalFile.parse(goal()).goal.pushTo == "feature/pr")
         #expect(try GoalFile.parse(goal(base: "main", pushTo: nil)).goal.pushTo == nil)
@@ -98,7 +98,7 @@ func approvedUpdateThread(_ fx: RunnerFixture, branch: String = "feature/pr") as
     return id
 }
 
-@Suite struct UpdateThreadTests {
+@Suite(.processGate) struct UpdateThreadTests {
     @Test func updatingABranchSetsTheBaseAndThePushTarget() async throws {
         let fx = try await RunnerFixture()
         _ = try await originWithBranch(fx)

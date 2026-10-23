@@ -34,7 +34,7 @@ private struct EditorDoctor {
     }
 }
 
-@Suite struct DoctorEditorTests {
+@Suite(.processGate) struct DoctorEditorTests {
     @Test func eachSourceIsReported() async throws {
         let both = try await EditorDoctor(projectEditor: "zed", globalConfig: "editor = \"subl\"\n")
         #expect(try await both.report(flag: "cursor").editor == EditorChoice(value: "cursor", source: .flag))

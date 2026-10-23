@@ -52,7 +52,7 @@ private struct DiffRepo {
     }
 }
 
-@Suite struct DiffTests {
+@Suite(.processGate) struct DiffTests {
     @Test func showsTheSameFilesAsGitStatus() async throws {
         let repo = try await DiffRepo()
         let base = try await repo.base()

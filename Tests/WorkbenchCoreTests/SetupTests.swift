@@ -13,7 +13,7 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
     return nil
 }
 
-@Suite struct SetupTests {
+@Suite(.processGate) struct SetupTests {
     @Test func aPassingSetupRunsInTheNewWorktreeBeforeTheFirstTurn() async throws {
         let script = try CheckScript()
         let fx = try await setupFixture(script, body: "echo installing\ntouch \"$PWD/installed\"")

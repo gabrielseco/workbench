@@ -36,7 +36,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
     return checkout
 }
 
-@Suite struct AbandonSavesChangesTests {
+@Suite(.processGate) struct AbandonSavesChangesTests {
     @Test func aDirtyWorktreeIsSavedThenRemovedAndTheBranchIsKept() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await workedThread(fx)

@@ -92,7 +92,7 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
     } catch { return error as? ShipError }
 }
 
-@Suite struct ShipOpenPRTests {
+@Suite(.processGate) struct ShipOpenPRTests {
     @Test func aRemoteTrackingBaseOpensThePRAgainstTheBranch() {
         func plan(base: String) -> ShipPlan {
             ShipPlan(
@@ -460,7 +460,7 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
     }
 }
 
-@Suite struct ShipOpenPRJudgeTests {
+@Suite(.processGate) struct ShipOpenPRJudgeTests {
     @Test func theLatestJudgesConcernsAreInThePRBody() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

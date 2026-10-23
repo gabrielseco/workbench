@@ -48,7 +48,7 @@ private struct TestRepo {
     var manager: WorktreeManager { WorktreeManager(repoRoot: root, git: git) }
 }
 
-@Suite struct GitRunnerTests {
+@Suite(.processGate) struct GitRunnerTests {
     @Test func capturesStatusStdoutAndStderr() async throws {
         let sh = GitRunner(executable: URL(fileURLWithPath: "/bin/sh"), environment: ["PATH": "/usr/bin:/bin"])
         let result = try await sh.run(["-c", "echo out; echo err >&2; exit 3"], in: URL(fileURLWithPath: "/tmp"))
@@ -124,7 +124,7 @@ private struct TestRepo {
     }
 }
 
-@Suite struct WorktreeCreateTests {
+@Suite(.processGate) struct WorktreeCreateTests {
     @Test func createsWorktreeOnADeterministicBranchAtBase() async throws {
         let repo = try await TestRepo()
         let worktree = try await repo.manager.create(threadID: "t1", base: "main")
@@ -349,7 +349,7 @@ private struct TestRepo {
     }
 }
 
-@Suite struct WorktreeRemoveTests {
+@Suite(.processGate) struct WorktreeRemoveTests {
     @Test func removeKeepsTheBranchByDefault() async throws {
         let repo = try await TestRepo()
         let worktree = try await repo.manager.create(threadID: "t1", base: "main")
@@ -416,7 +416,7 @@ private struct TestRepo {
     }
 }
 
-@Suite struct WorktreeCopyTests {
+@Suite(.processGate) struct WorktreeCopyTests {
     private func ignoringEnv() async throws -> TestRepo {
         let repo = try await TestRepo()
         try repo.write(".gitignore", ".env*\nexample/.env\nbig.env\n")

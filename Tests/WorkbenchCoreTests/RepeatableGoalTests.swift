@@ -64,7 +64,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
     return id
 }
 
-@Suite struct RepeatableGoalTests {
+@Suite(.processGate) struct RepeatableGoalTests {
     @Test func theFirstRunKeepsThePlainName() async throws {
         let (_, service) = try await fixture(suffixes: ["aaaa"])
         let id = try await service.newThread(name: "again")
@@ -115,7 +115,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
     }
 }
 
-@Suite struct CopyGoalTests {
+@Suite(.processGate) struct CopyGoalTests {
     @Test func theRequestCriteriaAndOutOfScopeComeInAsADraft() async throws {
         let (fx, service) = try await fixture(suffixes: ["cafe"])
         let url = try write(goalFile(), in: fx)

@@ -42,7 +42,7 @@ private func workedThread(_ fx: RunnerFixture) async throws -> (id: String, work
     return (id, worktree)
 }
 
-@Suite struct DiscardTests {
+@Suite(.processGate) struct DiscardTests {
     @Test func discardRemovesWorktreeAndBranchKeepsTheLogAndFreesTheSlot() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await workedThread(fx)

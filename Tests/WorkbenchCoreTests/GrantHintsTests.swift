@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct GrantPromptTests {
+@Suite(.processGate) struct GrantPromptTests {
     @Test func theRulesSayOnlyTheUserCanAllowADeniedCommandAndNoWorkaround() {
         let rules = PromptBuilder.rules(checkCommand: nil)
         #expect(rules.contains("do not retry it and do not do the same thing another way"))
@@ -34,7 +34,7 @@ import Testing
     }
 }
 
-@Suite struct GrantHintsTests {
+@Suite(.processGate) struct GrantHintsTests {
     private func prompt(_ fx: RunnerFixture, _ id: String, turn: Int) throws -> String {
         try String(contentsOf: fx.project.promptURL(id, turn: turn), encoding: .utf8)
     }
@@ -63,7 +63,7 @@ import Testing
     }
 }
 
-@Suite struct GrantHintCLITests {
+@Suite(.processGate) struct GrantHintCLITests {
     private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "") async throws -> (
         text: String, exit: ProcessExit?
     ) {

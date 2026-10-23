@@ -26,7 +26,7 @@ private func grantEvents(_ fx: RunnerFixture, _ id: String) throws -> [Event] {
     try fx.events(id).filter { $0.kind == .grantAdded }
 }
 
-@Suite struct GrantCommandTests {
+@Suite(.processGate) struct GrantCommandTests {
     @Test func denialsAreNumberedInTheOrderTheyFirstHappenedAndGroupedByWholeInput() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
@@ -187,7 +187,7 @@ private func grantEvents(_ fx: RunnerFixture, _ id: String) throws -> [Event] {
     }
 }
 
-@Suite struct GrantPatternDeniedTests {
+@Suite(.processGate) struct GrantPatternDeniedTests {
     @Test func aBroaderDeniedRuleCoversANarrowerPattern() {
         let denied = ["Bash(git push:*)", "Write", "Bash(rm -rf:*)"]
         #expect(GrantPattern.deniedBy("Bash(git push origin x)", denied: denied) == "Bash(git push:*)")
@@ -207,7 +207,7 @@ private func grantEvents(_ fx: RunnerFixture, _ id: String) throws -> [Event] {
     }
 }
 
-@Suite struct GrantCLITests {
+@Suite(.processGate) struct GrantCLITests {
     private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (text: String, exit: ProcessExit?) {
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: arguments,

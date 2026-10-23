@@ -116,7 +116,7 @@ private struct Bin {
     }
 }
 
-@Suite struct EditorLauncherTests {
+@Suite(.processGate) struct EditorLauncherTests {
     private let here = FileManager.default.temporaryDirectory
 
     @Test func aLauncherThatExitsZeroIsDone() async throws {

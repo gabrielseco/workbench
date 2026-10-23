@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// The approved goal, read-only, inside the thread's worktree, so an editor opened on it shows the goal beside the diff.
-@Suite struct GoalCopyTests {
+@Suite(.processGate) struct GoalCopyTests {
     private func copyURL(_ fx: RunnerFixture, _ id: String) -> URL {
         fx.project.worktreesDirectory.appendingPathComponent(id).appendingPathComponent(".workbench/goal-copy/goal.md")
     }
