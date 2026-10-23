@@ -143,7 +143,7 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
 /// Many runs in one process, the way the app will hold the runner, checking that nothing accumulates.
 /// Off by default; CI runs it as its own step so descriptor counts are not disturbed by other suites:
 /// `WORKBENCH_SOAK=1 swift test --filter SoakTests`.
-@Suite(.serialized, .enabled(if: soakEnabled)) struct SoakTests {
+@Suite(.serialized, .processGate, .enabled(if: soakEnabled)) struct SoakTests {
     private struct Scenario {
         var name: String
         var directives: [String]
