@@ -192,11 +192,14 @@ private struct Bin {
             time.sleep(300)
             PY
             """)
-        // The timeout is the only stop, so it must outlast python starting under load: a ceiling, not a measurement.
-        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: Int(Patience.limit))) {
+        // The timeout is the launcher's only stop, so it must outlast python starting: 2 s did not on a loaded
+        // machine. It is also how long this test takes, so it is not the 60 s `Patience.limit`; the suite's gate
+        // keeps python from waiting for the CPU that long.
+        let timeout: TimeInterval = 20
+        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: Int(timeout))) {
             try await EditorLauncher.launch(
                 EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:],
-                timeout: Patience.limit, killGrace: 1)
+                timeout: timeout, killGrace: 1)
         }
         let pid = try #require(Int32(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
         let gone = await pollUntil { kill(pid, 0) == -1 }
