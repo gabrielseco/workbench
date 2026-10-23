@@ -116,7 +116,7 @@ private struct Bin {
     }
 }
 
-@Suite struct EditorLauncherTests {
+@Suite(.processGate) struct EditorLauncherTests {
     private let here = FileManager.default.temporaryDirectory
 
     @Test func aLauncherThatExitsZeroIsDone() async throws {
@@ -192,17 +192,17 @@ private struct Bin {
             time.sleep(300)
             PY
             """)
-        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: 2)) {
+        // The timeout is the launcher's only stop, so it must outlast python starting: 2 s did not on a loaded
+        // machine. It is also how long this test takes, so it is not the 60 s `Patience.limit`; the suite's gate
+        // keeps python from waiting for the CPU that long.
+        let timeout: TimeInterval = 20
+        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: Int(timeout))) {
             try await EditorLauncher.launch(
-                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:], timeout: 2,
-                killGrace: 1)
+                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:],
+                timeout: timeout, killGrace: 1)
         }
         let pid = try #require(Int32(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
-        var gone = false
-        for _ in 0..<50 where !gone {
-            gone = kill(pid, 0) == -1
-            if !gone { try await Task.sleep(nanoseconds: 100_000_000) }
-        }
+        let gone = await pollUntil { kill(pid, 0) == -1 }
         if !gone { kill(pid, SIGKILL) }
         #expect(gone, "the helper that left the launcher's session is still running")
     }

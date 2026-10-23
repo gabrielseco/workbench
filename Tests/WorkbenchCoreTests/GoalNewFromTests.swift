@@ -49,7 +49,7 @@ private func write(_ text: String, in fx: RunnerFixture) throws -> String {
     return url.path
 }
 
-@Suite struct GoalNewFromTests {
+@Suite(.processGate) struct GoalNewFromTests {
     @Test func theFileBudgetReachesTheDraftAndTheIgnoredKeysAreNamed() async throws {
         let fx = try await RunnerFixture()
         let result = try await cli(["goal", "new", "copy", "--from", try write(source(), in: fx)], in: fx)

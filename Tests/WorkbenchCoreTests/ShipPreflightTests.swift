@@ -52,7 +52,7 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
     }
 }
 
-@Suite struct ShipPreflightTests {
+@Suite(.processGate) struct ShipPreflightTests {
     @Test func anAcceptedCleanThreadWithOriginAndGHIsAllowed() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)

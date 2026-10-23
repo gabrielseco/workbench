@@ -19,7 +19,7 @@ private let good = """
      "concerns": ["The filtered label was left alone."]}
     """
 
-@Suite struct JudgeParseTests {
+@Suite(.processGate) struct JudgeParseTests {
     @Test func aGoodVerdictIsReadInTheGoalsOrderWithItsCost() throws {
         let parsed = try Judge.parse(output: output(good), criteria: criteria("c1", "c2"))
         #expect(parsed.verdict.criteria.map(\.id) == ["c1", "c2"])
@@ -83,7 +83,7 @@ private let good = """
     }
 }
 
-@Suite struct JudgeRequestTests {
+@Suite(.processGate) struct JudgeRequestTests {
     private func input(
         screenshots: [String] = [], sizes: [String: PNGSize] = [:], check: Review.Check? = nil,
         verify: Review.Verify? = nil, lastTurn: Int = 1
@@ -211,7 +211,7 @@ private func judged(verify: Bool = false) async throws -> Judged {
 
 private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence": ["a.txt now says hello."]}], "concerns": []}"#
 
-@Suite struct JudgeServiceTests {
+@Suite(.processGate) struct JudgeServiceTests {
     @Test func aVerdictIsRecordedAsItsOwnEventAndShownByReview() async throws {
         let j = try await judged()
         let answer = try j.file("answer.json", oneCriterion)

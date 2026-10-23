@@ -29,7 +29,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
     return Out(code: code, stdout: lines, stderr: exit?.stderrTail ?? "")
 }
 
-@Suite struct VerifierCommandTests {
+@Suite(.processGate) struct VerifierCommandTests {
     @Test func aProjectThatTurnedTheVerifierOffSaysSoAndExitsAsARefusal() async throws {
         let fx = try await RunnerFixture(extraConfig: "[verifier]\nenabled = false")
         let id = try await fx.approvedThread()
@@ -83,7 +83,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
     }
 }
 
-@Suite struct VerifierLogTests {
+@Suite(.processGate) struct VerifierLogTests {
     @Test func anOpenVerifierIsClosedOnceWithItsTurn() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vlog-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -157,7 +157,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
     }
 }
 
-@Suite struct VerifierFollowTests {
+@Suite(.processGate) struct VerifierFollowTests {
     @Test func aLogJoinedWhileTheVerifierRunsReportsItAsOpen() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vfollow-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }

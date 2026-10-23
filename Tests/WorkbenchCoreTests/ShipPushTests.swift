@@ -23,7 +23,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
     }
 }
 
-@Suite struct ShipPushTests {
+@Suite(.processGate) struct ShipPushTests {
     @Test func aPushPutsTheBranchOnOriginSetsUpstreamAndASecondRunPushesNothing() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)

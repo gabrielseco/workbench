@@ -44,7 +44,7 @@ private func rendered(_ state: ThreadState) -> [String] {
     ).render()
 }
 
-@Suite struct DeniedToolsTests {
+@Suite(.processGate) struct DeniedToolsTests {
     @Test func aDenialShowsWhatItWasDeniedFor() {
         let push = denial("Bash", ["command": "git push origin main"])
         let s = state([(1, result([push, push, denial("Write", ["file_path": "/etc/hosts"])]))])
@@ -153,7 +153,7 @@ private func rendered(_ state: ThreadState) -> [String] {
     }
 }
 
-@Suite struct DeniedToolsCommandTests {
+@Suite(.processGate) struct DeniedToolsCommandTests {
     private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (text: String, exit: ProcessExit?) {
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: arguments,

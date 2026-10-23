@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct RecordedDenialsTests {
+@Suite(.processGate) struct RecordedDenialsTests {
     private func firstDenial(_ fx: RunnerFixture, _ id: String) throws -> JSONValue? {
         guard case .array(let calls)? = ended(try fx.events(id))[0].data["denials"] else { return nil }
         return calls.first

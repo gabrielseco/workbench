@@ -44,7 +44,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
     return Shipped(id: id, worktree: worktree, bare: bare)
 }
 
-@Suite struct ShipCleanupTests {
+@Suite(.processGate) struct ShipCleanupTests {
     @Test func aShippedCleanThreadLosesItsWorktreeAndKeepsItsBranch() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
@@ -271,7 +271,7 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> Shipped 
     }
 }
 
-@Suite struct IgnoredFilesTests {
+@Suite(.processGate) struct IgnoredFilesTests {
     private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> (id: String, worktree: URL) {
         let (id, worktree) = try await acceptedThread(fx)
         _ = try await addOrigin(fx)

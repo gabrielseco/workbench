@@ -102,7 +102,7 @@ private func shippedThread(
     return Shipped(fx: fx, id: id, plan: plan)
 }
 
-@Suite struct ShipScreenshotsTests {
+@Suite(.processGate) struct ShipScreenshotsTests {
     @Test func theVerifyStepsPNGsAreCopiedToPrShotsNamesAndPublished() async throws {
         let shipped = try await shippedThread(["home.png": "pixels", "notes.txt": "x", "verdict.json": "{}"])
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
@@ -342,7 +342,7 @@ private func shippedThread(
     }
 }
 
-@Suite struct ShipScreenshotsRetryTests {
+@Suite(.processGate) struct ShipScreenshotsRetryTests {
     private func run(_ arguments: [String], in fx: RunnerFixture) async throws -> (code: Int32?, text: String) {
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: arguments,
@@ -386,7 +386,7 @@ private func shippedThread(
     }
 }
 
-@Suite struct ShipScreenshotsFreshnessTests {
+@Suite(.processGate) struct ShipScreenshotsFreshnessTests {
     @Test func aCommitAfterVerifyKeepsTheScreenshotsOutOfThePullRequest() async throws {
         let shipped = try await shippedThread()
         let fx = shipped.fx

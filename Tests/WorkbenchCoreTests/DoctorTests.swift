@@ -37,7 +37,7 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
     #expect(!FileManager.default.fileExists(atPath: fx.project.worktreesDirectory.appendingPathComponent("doctor").path))
 }
 
-@Suite struct DoctorTests {
+@Suite(.processGate) struct DoctorTests {
     @Test func aPassingSetupAndCheckRunInTheSameThrowawayWorktree() async throws {
         let (fx, _) = try await fixture(setup: "touch \"$PWD/installed\"", check: "test -f \"$PWD/installed\"")
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
@@ -263,7 +263,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
     return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
 }
 
-@Suite struct DoctorCommandTests {
+@Suite(.processGate) struct DoctorCommandTests {
     @Test func helpAndInitPointAtDoctor() async throws {
         let fx = try await RunnerFixture()
         let help = try await cli(["help"], in: fx)
@@ -312,7 +312,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
     }
 }
 
-@Suite struct DoctorOwnershipTests {
+@Suite(.processGate) struct DoctorOwnershipTests {
     @Test func aSecondDoctorIsRefusedAndTheFirstKeepsItsWorktree() async throws {
         let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
         let first = Doctor(project: fx.project, git: fx.git)
@@ -342,7 +342,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
     }
 }
 
-@Suite struct DoctorBoundaryTests {
+@Suite(.processGate) struct DoctorBoundaryTests {
     @Test func aRunCannotStartWhileDoctorRuns() async throws {
         let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
         let id = try await fx.approvedThread()
@@ -427,7 +427,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
     }
 }
 
-@Suite struct DoctorStepTests {
+@Suite(.processGate) struct DoctorStepTests {
     @Test func aStopBetweenStepsIsAStopNotAFailure() {
         func step(_ outcome: DoctorStep.Outcome) -> DoctorStep {
             DoctorStep(command: "x", outcome: outcome, tail: "", hint: "")

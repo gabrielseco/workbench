@@ -12,7 +12,7 @@ private func options() -> Doctor.Options {
     return o
 }
 
-@Suite struct DoctorRunTests {
+@Suite(.processGate) struct DoctorRunTests {
     private let table = "[run]\ncommand = \"scripts/app.sh\"\nready_line = \"ready\"\n"
 
     @Test func noRunMeansNothingToReport() async throws {

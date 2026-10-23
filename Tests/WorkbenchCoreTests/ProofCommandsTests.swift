@@ -43,7 +43,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         """)
 }
 
-@Suite struct ProofCommandsTests {
+@Suite(.processGate) struct ProofCommandsTests {
     @Test func aCommandTheAllowlistLacksIsNamedWithTheEntryThatWouldFixIt() throws {
         let g = try goal(proofs: ["`mix api.contract.check` passes", "`mix format --check-formatted` is clean"])
         let c = try config(allowed: ["Read", "Bash(mix test:*)"])
@@ -115,7 +115,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
     }
 }
 
-@Suite struct OutOfScopeContinuationTests {
+@Suite(.processGate) struct OutOfScopeContinuationTests {
     @Test func anIndentedLineWrapsTheBulletAboveIt() throws {
         let g = try goal(
             proofs: ["`x` passes"],
@@ -133,7 +133,7 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
     }
 }
 
-@Suite struct GoalApproveWarningTests {
+@Suite(.processGate) struct GoalApproveWarningTests {
     @Test func approveNamesAProofTheAllowlistWouldDenyAndApprovesOnlyWithTheFlag() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.service.newThread(name: "proof", base: "main")

@@ -27,7 +27,7 @@ private final class CopyCounter: @unchecked Sendable {
 
 // MARK: global config
 
-@Suite struct GlobalConfigTests {
+@Suite(.processGate) struct GlobalConfigTests {
     @Test func anAbsentFileIsEmpty() throws {
         let missing = try scratch().appendingPathComponent("nope.toml")
         #expect(try GlobalConfig.load(from: missing) == GlobalConfig())
@@ -85,7 +85,7 @@ private final class CopyCounter: @unchecked Sendable {
 
 // MARK: creating
 
-@Suite struct ProjectCreatorTests {
+@Suite(.processGate) struct ProjectCreatorTests {
     private func creator() throws -> ProjectCreator { ProjectCreator(git: try isolatedGit()) }
 
     @Test func makesARepoWithOneEmptyCommitAndAConfigThatGitStatusDoesNotShow() async throws {

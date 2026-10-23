@@ -53,7 +53,7 @@ private let fourCountries = """
     {"title": "chore: bump four countries", "sections": {"Summary": "Moves four countries to their latest version."}}
     """
 
-@Suite struct ShipRefreshTests {
+@Suite(.processGate) struct ShipRefreshTests {
     @Test func theProposalChangesOnlyWhatTheAnswerNamesAndIsRecorded() async throws {
         let r = try await refresh()
         let plan = try await r.plan()

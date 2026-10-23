@@ -42,7 +42,7 @@ func recordLegacyVerify(
     await log.close()
 }
 
-@Suite struct ProofCollectorTests {
+@Suite(.processGate) struct ProofCollectorTests {
     @Test func collectingProofIsBoundedInEntriesFileSizeAndTotalBytes() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-proof-\(UUID().uuidString)")
         let thread = dir.appendingPathComponent("thread")
@@ -83,7 +83,7 @@ func recordLegacyVerify(
     }
 }
 
-@Suite struct LogFollowTests {
+@Suite(.processGate) struct LogFollowTests {
     private func event(_ kind: EventKind, _ result: String? = nil) -> Event {
         Event(seq: 1, ts: "t", turn: 1, kind: kind, data: result.map { ["result": .string($0)] } ?? [:])
     }
@@ -124,7 +124,7 @@ func recordLegacyVerify(
     }
 }
 
-@Suite struct VerifyPromptTests {
+@Suite(.processGate) struct VerifyPromptTests {
     private func goal(_ proof: String) throws -> Goal {
         let text = """
             ---
@@ -167,7 +167,7 @@ func recordLegacyVerify(
     }
 }
 
-@Suite struct RemovedVerifyConfigTests {
+@Suite(.processGate) struct RemovedVerifyConfigTests {
     @Test(arguments: ["verify_command = \"scripts/verify.sh\"", "verify_timeout_min = 20"])
     func theOldVerifyKeysAreRefusedWithAMessageThatNamesTheReplacement(line: String) throws {
         let error = try #require(throws: ConfigError.self) {

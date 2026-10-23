@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// The default verifier: the turn runner starts the verifier after a passing check.
-@Suite struct VerifierAutoTests {
+@Suite(.processGate) struct VerifierAutoTests {
     private func kinds(_ v: VerifierFixture) throws -> [String] { try v.fx.kinds(v.id) }
 
     private func verifierKinds(_ v: VerifierFixture) throws -> [String] {

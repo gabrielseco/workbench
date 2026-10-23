@@ -32,7 +32,7 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
     return CLIRun(code: code, stdout: lines.joined(separator: "\n"), stderr: exit?.stderrTail ?? "")
 }
 
-@Suite struct PRReviewCommandTests {
+@Suite(.processGate) struct PRReviewCommandTests {
     @Test func cleanExitsZeroAndPrintsTheFindings() async throws {
         let r = try await reviewedPR(answer: "Nothing to fix.\nVERDICT: CLEAN")
         let run = try await runCLI(["pr-review"], r)

@@ -44,7 +44,7 @@ private func commandNames(from usage: String) -> [String] {
     return seen
 }
 
-@Suite struct CommandHelpTests {
+@Suite(.processGate) struct CommandHelpTests {
     @Test func everyCommandInTheUsageBlockAnswersHelpThreeWaysAndTheTextHasWhatAnAgentNeeds() async throws {
         let dir = try emptyDirectory()
         let names = commandNames(from: try await workbench(["help"], in: dir).stdout)

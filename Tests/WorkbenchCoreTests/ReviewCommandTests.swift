@@ -53,7 +53,7 @@ private func commit(_ count: Int, id: String, in fx: RunnerFixture) async throws
     return shas
 }
 
-@Suite struct ReviewCommandTests {
+@Suite(.processGate) struct ReviewCommandTests {
     @Test func theRunsCommitsAreListedOldestFirstBetweenTheCriteriaAndTheDiff() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
@@ -321,7 +321,7 @@ private func commit(_ count: Int, id: String, in fx: RunnerFixture) async throws
 
 // MARK: rendering without a process
 
-@Suite struct ReviewReportRenderingTests {
+@Suite(.processGate) struct ReviewReportRenderingTests {
     private func report(denied: [(tool: String, seq: Int)]) -> ReviewReport {
         var state = ThreadState.derive(from: [], id: "t")
         state.review.status = .awaitingReview

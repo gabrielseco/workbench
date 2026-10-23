@@ -55,7 +55,7 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
     return (id, worktree)
 }
 
-@Suite struct AcceptTests {
+@Suite(.processGate) struct AcceptTests {
     @Test func acceptCommitsEverythingRecordsTheDecisionAndFreesTheSlot() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await dirtyThread(fx)

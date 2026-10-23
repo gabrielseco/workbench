@@ -29,7 +29,7 @@ private func changeGoal(_ p: Planned) async throws {
     try await p.fx.service.approve(id: p.id)
 }
 
-@Suite struct PlanPromptTests {
+@Suite(.processGate) struct PlanPromptTests {
     private func goal() throws -> Goal {
         try GoalFile.parse(
             """
@@ -86,7 +86,7 @@ private func changeGoal(_ p: Planned) async throws {
     }
 }
 
-@Suite struct PlanInRunTests {
+@Suite(.processGate) struct PlanInRunTests {
     @Test func theFirstPromptCarriesThePlanAndTheLogSaysSo() async throws {
         let p = try await planned()
         try await makePlan(p)
@@ -193,7 +193,7 @@ private func changeGoal(_ p: Planned) async throws {
     }
 }
 
-@Suite struct PlanEditTests {
+@Suite(.processGate) struct PlanEditTests {
     @Test func aDraftIsTheLatestPlanAndApplyingItMakesAnEditTheRunUses() async throws {
         let p = try await planned()
         try await makePlan(p)
@@ -354,7 +354,7 @@ private func changeGoal(_ p: Planned) async throws {
     }
 }
 
-@Suite struct PlanDisplayTests {
+@Suite(.processGate) struct PlanDisplayTests {
     @Test func theStateKeepsThePlanApartFromTheTurnsAndKnowsWhenItIsStale() async throws {
         let p = try await planned()
         try await makePlan(p)

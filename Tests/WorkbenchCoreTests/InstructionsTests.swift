@@ -43,7 +43,7 @@ private struct InstructionsRepo {
     }
 }
 
-@Suite struct ProjectInstructionsTests {
+@Suite(.processGate) struct ProjectInstructionsTests {
     @Test func replacedImportPathsDoNotConsumeTheSizeLimit() async throws {
         let repo = try await InstructionsRepo()
         let prefix = String(repeating: "./", count: 150)
@@ -240,7 +240,7 @@ private struct InstructionsRepo {
     }
 }
 
-@Suite struct InstructionsInPromptTests {
+@Suite(.processGate) struct InstructionsInPromptTests {
     private func fixture(config: String = "", agents: String? = "Always run the checks.\n") async throws
         -> (RunnerFixture, String) {
         let fx = try await RunnerFixture(extraConfig: config)
@@ -353,7 +353,7 @@ private struct InstructionsRepo {
     }
 }
 
-@Suite struct ProjectInstructionsConfigTests {
+@Suite(.processGate) struct ProjectInstructionsConfigTests {
     @Test func defaultsToOnAndAcceptsABoolean() throws {
         let tools = "\n[tools]\navailable = [\"Read\"]\n"
         #expect(try Config.parse(tools).projectInstructions == true)

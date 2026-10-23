@@ -38,7 +38,7 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
     try await shipOut(["for-each-ref", "refs/heads"], bare, fx)
 }
 
-@Suite struct ShipCommandTests {
+@Suite(.processGate) struct ShipCommandTests {
     @Test func shipsTheAcceptedThreadPrintsTheURLLastAndASecondRunSaysAlreadyShipped() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

@@ -23,7 +23,7 @@ private func waitFor(_ path: String, timeout: TimeInterval = Patience.limit) asy
     return false
 }
 
-@Suite struct CheckFollowUpTests {
+@Suite(.processGate) struct CheckFollowUpTests {
     @Test func aFailedResumeAttemptIsNotCheckedAndTheRetryIs() async throws {
         let (fx, id) = try await fixture(script: "echo ok")
         let sessions = FakeClaude.scratch("sessions")

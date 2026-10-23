@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct CheckTestListTests {
+@Suite(.processGate) struct CheckTestListTests {
     @Test func theTestsTheOutputShowedAreRecordedOnTheEvent() async throws {
         let script = try CheckScript()
         let fx = try await RunnerFixture.checking(

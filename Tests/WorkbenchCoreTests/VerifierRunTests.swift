@@ -99,7 +99,7 @@ private func pid(in path: String) throws -> pid_t {
     try #require(pid_t(try String(contentsOfFile: path, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
 }
 
-@Suite struct VerifierRunTests {
+@Suite(.processGate) struct VerifierRunTests {
     @Test func theRunIsAskedForEverythingTheProjectConfiguredAndNothingElse() async throws {
         let v = try await VerifierFixture()
         let dump = FakeClaude.scratch("verifier-dump")
@@ -450,7 +450,7 @@ private final class StopHolder: @unchecked Sendable {
     }
 }
 
-@Suite struct VerifierAnswerTests {
+@Suite(.processGate) struct VerifierAnswerTests {
     private func answer(_ result: String, error: Bool = false) -> String {
         let escaped = result.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\t", with: "\\t")

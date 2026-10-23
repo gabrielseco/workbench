@@ -17,7 +17,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
 // MARK: config
 
-@Suite struct ReviewStageConfigTests {
+@Suite(.processGate) struct ReviewStageConfigTests {
     @Test func noReviewConfigIsPRReviewAloneWithItsDefaults() throws {
         let review = try parse("").review
         #expect(review.stages == ["pr-review"])
@@ -130,7 +130,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
 // MARK: the rubric
 
-@Suite struct ReviewStageRubricTests {
+@Suite(.processGate) struct ReviewStageRubricTests {
     private func stage(_ section: String) throws -> ReviewStage { ReviewStage.prReview(try parse(section)) }
 
     @Test func aSkillsRubricSectionIsTheRubric() throws {
@@ -204,7 +204,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
 // MARK: the runner
 
-@Suite struct ReviewStageRunnerTests {
+@Suite(.processGate) struct ReviewStageRunnerTests {
     @Test func theNewTablesChecklistReachesTheBriefAsTheOldOneDoes() async throws {
         for table in ["[pr_review]", "[review.stage.pr-review]"] {
             let r = try await reviewedPR(extraConfig: "\(table)\nchecklist = \"docs/REVIEW.md\"\n")
@@ -282,7 +282,7 @@ private func problems(_ section: String) -> [ConfigProblem] {
 
 // MARK: doctor
 
-@Suite struct ReviewStageDoctorTests {
+@Suite(.processGate) struct ReviewStageDoctorTests {
     private func doctor(_ extra: String, files: [String] = []) async throws -> DoctorReport {
         let fx = try await RunnerFixture(extraConfig: extra)
         for file in files {

@@ -5,7 +5,7 @@ import Testing
 
 // MARK: scripts/check-changed.sh --plan, in a throwaway git repo
 
-@Suite struct CheckChangedTests {
+@Suite(.processGate) struct CheckChangedTests {
     private struct Repo {
         let dir: URL
 

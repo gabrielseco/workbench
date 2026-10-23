@@ -39,7 +39,7 @@ private func watch(
         now: { clock.now }, sleep: { clock.advance($0) }, onChange: { changes.add($0) })
 }
 
-@Suite struct ShipWatchTests {
+@Suite(.processGate) struct ShipWatchTests {
     @Test func bucketsAreSummarisedAndOddInputIsAnErrorNotNone() throws {
         func state(_ pairs: [(String, String)]) throws -> PRChecksSummary.State {
             try PRChecksSummary.parse(checks(pairs)).state

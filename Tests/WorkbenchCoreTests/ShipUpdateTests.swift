@@ -55,7 +55,7 @@ func runShip(
     return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
 }
 
-@Suite struct ShipUpdateTests {
+@Suite(.processGate) struct ShipUpdateTests {
     @Test func theWorkGoesToTheExistingBranchAndNoWorkbenchBranchReachesOrigin() async throws {
         let fx = try await RunnerFixture()
         let thread = try await acceptedUpdateThread(fx)

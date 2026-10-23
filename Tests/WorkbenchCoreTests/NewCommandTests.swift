@@ -46,7 +46,7 @@ private struct NewHome {
     }
 }
 
-@Suite struct NewCommandTests {
+@Suite(.processGate) struct NewCommandTests {
     @Test func usesProjectsDirFromTheGlobalConfig() async throws {
         let h = try NewHome(globalConfig: "projects_dir = \"~/code\"\nmodel = \"haiku\"\n")
         let result = try await h.run(["new", "mocks-kit"])

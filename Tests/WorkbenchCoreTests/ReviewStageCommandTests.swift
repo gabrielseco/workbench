@@ -22,7 +22,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
 // MARK: running a stage
 
-@Suite struct ReviewStageCommandTests {
+@Suite(.processGate) struct ReviewStageCommandTests {
     @Test func aConfiguredStageRunsAndIsRecordedAsReviewStageEventsOnce() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("max_rounds = 2"), answer: "Looks fine.\nVERDICT: CLEAN\n")
         let result = try await runStage("design", r)
@@ -96,7 +96,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
 // MARK: round caps
 
-@Suite struct ReviewStageCapTests {
+@Suite(.processGate) struct ReviewStageCapTests {
     @Test func eachStageCountsItsOwnRoundsAndAgainDoesNotLiftTheCap() async throws {
         let r = try await reviewedPR(
             extraConfig: stagesConfig("max_rounds = 1", before: "[review.stage.pr-review]\nmax_rounds = 2\n"))
@@ -125,7 +125,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
 // MARK: the reviewer
 
-@Suite struct ReviewStageReviewerTests {
+@Suite(.processGate) struct ReviewStageReviewerTests {
     private func load(_ table: String) throws -> Config {
         try Config.parse(
             "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n\(table)\n[tools]\navailable = [\"Read\"]\n")
@@ -153,7 +153,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
 // MARK: proof
 
-@Suite struct ReviewStageProofTests {
+@Suite(.processGate) struct ReviewStageProofTests {
     @Test func theVerifyStepsTopLevelPNGsAreInTheBriefAndAttachedWithDashI() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
         try await recordLegacyVerify(
@@ -209,7 +209,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
 // MARK: applies_to
 
-@Suite struct ReviewStageAppliesToTests {
+@Suite(.processGate) struct ReviewStageAppliesToTests {
     @Test func aStageMatchingNoChangedFileIsSkippedAndRunsNoReviewer() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("applies_to = [\"Sources/**\", \"*.swift\"]"))
         let result = try await runStage("design", r)
@@ -345,7 +345,7 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
     return CLIRun(code: code, stdout: lines.joined(separator: "\n"), stderr: exit?.stderrTail ?? "")
 }
 
-@Suite struct ReviewStageCLITests {
+@Suite(.processGate) struct ReviewStageCLITests {
     @Test func reviewStageRunsTheStageAndAnUnknownNameExitsSix() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig(), answer: "1. Contrast.\nVERDICT: FIX\n")
         let run = try await runCLI(["review-stage", "design"], r)
@@ -396,7 +396,7 @@ private func runCLI(_ arguments: [String], _ r: ReviewedPR) async throws -> CLIR
 
 // MARK: doctor
 
-@Suite struct ReviewStageProofDoctorTests {
+@Suite(.processGate) struct ReviewStageProofDoctorTests {
     @Test func aProofStageWithoutAVerifierWarnsAndDoesNotFail() async throws {
         let stages = stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]")
         let fx = try await RunnerFixture(extraConfig: stages + "\n[verifier]\nenabled = false")

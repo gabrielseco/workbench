@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// What goes into the brief: the checklist, the instructions, the pinned base and the diff.
-@Suite struct PRReviewBriefTests {
+@Suite(.processGate) struct PRReviewBriefTests {
     // MARK: the checklist and the project instructions
 
     @Test func theChecklistIsReadFromThePullRequestsHeadAndAMissingOneIsSaidNotSilent() async throws {

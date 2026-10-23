@@ -22,7 +22,7 @@ private func thread(
     return (id, events)
 }
 
-@Suite struct GrantSuggestionsTests {
+@Suite(.processGate) struct GrantSuggestionsTests {
     @Test func aSafePrefixDeniedInTwoThreadsIsSuggestedWithTheThreadsItHappenedIn() {
         let found = GrantSuggestions.derive(
             threads: [
@@ -93,7 +93,7 @@ private func thread(
     }
 }
 
-@Suite struct GrantSuggestionsCLITests {
+@Suite(.processGate) struct GrantSuggestionsCLITests {
     private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (text: String, exit: ProcessExit?) {
         var spawn = SpawnRequest(
             executable: WorkbenchBinary.executable, arguments: arguments,

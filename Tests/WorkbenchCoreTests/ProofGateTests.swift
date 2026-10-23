@@ -37,7 +37,7 @@ private func draft(_ fx: RunnerFixture, proof command: String) async throws -> S
     return id
 }
 
-@Suite struct ProofGateTests {
+@Suite(.processGate) struct ProofGateTests {
     @Test func approveRefusesAProofTheRunCannotExecuteAndApprovesNothing() async throws {
         let fx = try await RunnerFixture()
         let id = try await draft(fx, proof: "scripts/verify.sh --all")

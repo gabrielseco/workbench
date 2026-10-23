@@ -52,7 +52,7 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
     if case .failure(let problem) = result { problem } else { nil }
 }
 
-@Suite struct VerifierSkillTests {
+@Suite(.processGate) struct VerifierSkillTests {
     @Test(arguments: [".claude/skills/verify/SKILL.md", ".agents/skills/verify/SKILL.md"])
     func aSkillUnderEitherDirectoryIsRead(path: String) async throws {
         let repo = try await SkillRepo()

@@ -64,7 +64,7 @@ enum FakeClaude {
     }
 }
 
-@Suite struct FakeClaudeTests {
+@Suite(.processGate) struct FakeClaudeTests {
     @Test func theBinaryIsBuiltAndRunnable() {
         #expect(FileManager.default.isExecutableFile(atPath: FakeClaude.executable.path))
     }
@@ -264,7 +264,7 @@ final class FakeProcess: @unchecked Sendable {
     }
 }
 
-@Suite struct FakeClaudeSignalTests {
+@Suite(.processGate) struct FakeClaudeSignalTests {
     @Test func ignoreTermSurvivesSigtermAndOnlySigkillEndsIt() async throws {
         let fake = try FakeProcess("ignore-term", "hang-after=1")
         #expect(await fake.waitReady())

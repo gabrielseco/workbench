@@ -20,7 +20,7 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
     _ = try await fx.git.run(["commit", "-q", "-m", "skill"], in: fx.repo)
 }
 
-@Suite struct DoctorVerifierTests {
+@Suite(.processGate) struct DoctorVerifierTests {
     @Test func disabledMeansNothingToReport() async throws {
         let fx = try await RunnerFixture(extraConfig: "check_command = \"true\"\n[verifier]\nenabled = false")
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
@@ -85,7 +85,7 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
     }
 }
 
-@Suite struct VerifierAvailabilityTests {
+@Suite(.processGate) struct VerifierAvailabilityTests {
     @Test func theSkillIsAvailableOnlyWhenOnAndCommittedAtTheRef() async throws {
         let path = ".claude/skills/verify/SKILL.md"
         let fx = try await RunnerFixture()

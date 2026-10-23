@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// Codex failing, hanging or being stopped.
-@Suite struct PRReviewCodexTests {
+@Suite(.processGate) struct PRReviewCodexTests {
     // MARK: Codex failing
 
     @Test func atCapacityRetriesThenSucceedsOrGivesUpSaying() async throws {

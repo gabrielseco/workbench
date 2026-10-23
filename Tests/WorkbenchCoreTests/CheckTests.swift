@@ -63,7 +63,7 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
 
 // MARK: a check, run and recorded
 
-@Suite struct CheckRunnerTests {
+@Suite(.processGate) struct CheckRunnerTests {
     @Test func aPassingCheckIsRecordedWithItsOutputInOrder() async throws {
         let script = try CheckScript()
         let fx = try await RunnerFixture.checking(
@@ -445,7 +445,7 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
 
 // MARK: the event rules and recovery
 
-@Suite struct CheckEventTests {
+@Suite(.processGate) struct CheckEventTests {
     private func tempLog() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

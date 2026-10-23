@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkbenchCore
 
-@Suite struct BranchCommitTruncationTests {
+@Suite(.processGate) struct BranchCommitTruncationTests {
     @Test func aListingGitRunnerCutIsNotPublishedAsWhole() async throws {
         let fx = try await RunnerFixture()
         // One commit whose subject line is longer than the runner's output limit: git succeeds, the captured text is cut.

@@ -27,7 +27,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> Ou
     return Out(code: code, stdout: lines, stderr: exit?.stderrTail ?? "")
 }
 
-@Suite struct PlanCommandTests {
+@Suite(.processGate) struct PlanCommandTests {
     @Test func showAndEditThroughTheBinary() async throws {
         let fx = try await RunnerFixture()
         _ = try await fx.approvedThread()

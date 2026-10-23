@@ -77,7 +77,7 @@ private func originTip(_ r: ReviewedPR) async throws -> String {
 private let fix1 = "1. A.swift:3 crashes on empty input\nVERDICT: FIX"
 private let clean = "Nothing left.\nVERDICT: CLEAN"
 
-@Suite struct ReviewLoopCommandTests {
+@Suite(.processGate) struct ReviewLoopCommandTests {
     @Test func aFixRoundStartsAFollowUpPushesItAndTheNextReviewIsClean() async throws {
         let (r, gh) = try await loopPR(answers: [fix1, clean])
         let before = await (try originTip(r), try String(contentsOf: r.fx.project.goalURL(r.id), encoding: .utf8))

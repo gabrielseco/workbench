@@ -36,7 +36,7 @@ private func startedArgv(_ id: String, turn: Int, _ fx: RunnerFixture) throws ->
     return items.compactMap { $0.stringValue }
 }
 
-@Suite struct SendBackTests {
+@Suite(.processGate) struct SendBackTests {
     @Test func aFailedChecksOutputRidesAlongOnTheSameSessionAndWorktree() async throws {
         let script = try CheckScript()
         let fx = try await RunnerFixture.checking(try script.write("echo test-broke-at-line-9\nexit 3"))

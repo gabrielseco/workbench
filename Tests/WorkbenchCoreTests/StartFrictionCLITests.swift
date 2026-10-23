@@ -23,7 +23,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
     return (code, (lines + [exit?.stderrTail ?? ""]).joined(separator: "\n"))
 }
 
-@Suite struct StartFrictionCLITests {
+@Suite(.processGate) struct StartFrictionCLITests {
     @Test func initKeepsWorkbenchOutOfGitStatusEvenWhenRunTwice() async throws {
         let fx = try await RunnerFixture()
         #expect(try await cli(["init"], in: fx).code == 0)

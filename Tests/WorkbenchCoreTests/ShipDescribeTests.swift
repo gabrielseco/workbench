@@ -35,7 +35,7 @@ private let good = """
     {"title": "feat(a): add hello", "summary": "Adds a greeting.", "decisions": ["One file."], "deviations": []}
     """
 
-@Suite struct ShipDescribeTests {
+@Suite(.processGate) struct ShipDescribeTests {
     @Test func aGoodAnswerBecomesTheDescriptionAndIsRecordedAsItsOwnEvent() async throws {
         let d = try await described()
         let turnsBefore = try d.fx.events(d.plan.id).filter { $0.kind == .turnStarted }.count
