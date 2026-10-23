@@ -113,7 +113,7 @@ check "the refusal points to --goal" "the message lacks --goal" grep -q -- "--go
 
 # --- --goal: the goal file, which needs no worktree ----------------------------------------------------------------
 
-GOAL="$P/.workbench/threads/$ID/goal.md"
+GOAL="$(cd "$P/.workbench/threads/$ID" && pwd)/goal.md"
 if [ "$SABOTAGE" = 1 ]; then
     echo "    VERIFY_CLI_SABOTAGE=1: the goal file is deleted before the --goal steps"
     rm -f "$GOAL"
