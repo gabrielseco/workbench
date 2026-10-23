@@ -53,7 +53,11 @@ with `accept`, `discard` or `abandon`.
 6. **Accept.** `wb accept -m "<conventional commit>"` commits the work on `workbench/<id>` and ends the thread. Nothing is pushed.
 7. **Ship.** `wb ship --yes` pushes the branch and opens the PR (a read-only turn writes the description). If it fails after the push,
    fix the cause; if you open the PR by hand, say so, because `ship` then recorded nothing and `clean` will not know the PR.
-8. **PR review.** `wb pr-review --pr <n>` (read-only, rounds counted in the log; or `ship --review-loop`). Exit `0` clean, `15` findings,
+   `--watch` only follows CI (read-only) and takes minutes: run `wb ship --yes --watch` in the background and do not wait for it
+   before step 8.
+8. **PR review.** Start it as soon as the PR exists, in parallel with the CI watch: they read the same head and neither needs the other
+   (`ship --review-loop` runs them one after the other, so use it only when you want Codex's fixes pushed in rounds).
+   `wb pr-review --pr <n>` (read-only, rounds counted in the log). Exit `0` clean, `15` findings,
    `1` no verdict (never a pass). Treat each finding as a claim: verify it against the code, fix what holds with a test that fails
    without the fix, say which you rejected and why. Two rounds at most; the rest goes in the PR description. A review reads code and
    cannot run tests, so CI must be green as well. In the Workbench repo itself, `scripts/codex-review.sh` does the same.
