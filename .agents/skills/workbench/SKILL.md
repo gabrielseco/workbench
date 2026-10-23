@@ -33,7 +33,7 @@ with `accept`, `discard` or `abandon`.
    remote ref" when it is not). Pass `--base` only when the user names another one. Write the request, checkable criteria each with a
    `proof:`, and out of scope. A `proof: screenshot: <name>` line holds only the names. A proof may not name a command the run cannot
    execute (not in `[tools] allowed`). Check `budget_usd`, `turn_timeout_min` and `model` in the created `goal.md`: older builds drop them
-   from a `--from` file and use the config defaults. Show the goal to the user. **`wb goal approve` only when the user says to go.**
+   from a `--from` file and use the config defaults. Open the goal for the user with `wb open --goal --editor <name>` (`--print` gives the path; an editor is needed until one is set in the config) so they read the file itself, not a paste. **`wb goal approve` only when the user says to go.**
 3. **Prerequisites land first.** If the run needs something it cannot create itself (a synced API contract from another repo, a
    migration), land that on the default branch as its own PR before creating the thread. A run's file tools stop at its worktree, so it
    cannot read sibling repos or write under `.claude/`.
