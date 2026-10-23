@@ -39,6 +39,7 @@ public struct EditorCommand: Sendable, Equatable {
 public enum EditorError: Error, Equatable, Sendable, CustomStringConvertible {
     case notSet
     case noWorktree(id: String, path: String)
+    case noGoal(id: String, path: String)
     case outsideWorktrees(path: String, resolved: String)
     case notFound(editor: String, tried: [String])
     case launchFailed(editor: String, reason: String)
@@ -51,7 +52,9 @@ public enum EditorError: Error, Equatable, Sendable, CustomStringConvertible {
             "no editor set: pass --editor <name-or-command>, set `editor` in .workbench/config.toml or "
                 + "~/.workbench/config.toml, or use --print to get the path"
         case .noWorktree(let id, let path):
-            "thread \(id) has no worktree at \(path) (it was shipped, accepted, discarded or abandoned, or has not run yet)"
+            "thread \(id) has no worktree at \(path) (it was shipped, accepted, discarded or abandoned, or has not run yet; "
+                + "--goal opens its goal file)"
+        case .noGoal(let id, let path): "thread \(id) has no goal file at \(path)"
         case .outsideWorktrees(let path, let resolved):
             "\(path) resolves to \(resolved), which is outside .workbench/worktrees/; not opening it"
         case .notFound(let editor, let tried):
@@ -152,6 +155,17 @@ public enum Editor {
             throw EditorError.outsideWorktrees(path: path.path, resolved: resolved)
         }
         return URL(fileURLWithPath: resolved, isDirectory: true)
+    }
+
+    /// The thread's `goal.md`, checked to be a file. It lives in the thread's folder, which exists from `goal new` to
+    /// `clean`, so unlike the worktree it can be opened for a draft or an ended thread.
+    public static func goalFile(project: Project, threadID: String) throws -> URL {
+        let url = project.goalURL(threadID)
+        var isDirectory: ObjCBool = false
+        guard SafeNames.isThreadID(threadID),
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue
+        else { throw EditorError.noGoal(id: threadID, path: url.path) }
+        return url
     }
 
     /// The fixed environment the launcher gets: enough to find and start an app, no tokens or project variables.

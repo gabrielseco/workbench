@@ -2,12 +2,14 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `open [id] [--editor <name-or-command>] [--print]`: the thread's worktree in an editor, or its path. Writes no
-    /// event and changes nothing in the thread or the worktree.
+    /// `open [id] [--editor <name-or-command>] [--print] [--goal]`: the thread's worktree in an editor, or its path;
+    /// with `--goal` its goal file, which a draft has before any worktree exists. Writes no event and changes
+    /// nothing in the thread or the worktree.
     static func open(_ args: [String]) async throws {
         var a = Arguments(args)
         let flag = try a.value("--editor")
         let printOnly = a.flag("--print")
+        let goal = a.flag("--goal")
         let named = a.positional()
         try a.requireEmpty()
         if flag != nil, printOnly { throw CLIError.usage("--editor and --print do not go together") }
@@ -16,7 +18,12 @@ extension Commands {
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
         let path: URL
-        do { path = try Editor.worktree(project: ctx.project, threadID: id) } catch let error as EditorError {
+        do {
+            path =
+                goal
+                ? try Editor.goalFile(project: ctx.project, threadID: id)
+                : try Editor.worktree(project: ctx.project, threadID: id)
+        } catch let error as EditorError {
             throw CLIError.refused("\(error)")
         }
         if printOnly { return out(path.path) }
@@ -29,7 +36,8 @@ extension Commands {
             let command = try Editor.command(
                 for: choice.value, path: path.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
             try await EditorLauncher.launch(
-                command, editor: choice.value, in: path, environment: Editor.environment(from: environment))
+                command, editor: choice.value, in: goal ? path.deletingLastPathComponent() : path,
+                environment: Editor.environment(from: environment))
         } catch let error as EditorError {
             switch error {
             case .notFound: throw CLIError.refused("\(error)")
