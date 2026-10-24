@@ -10,7 +10,7 @@ private struct SkillRepo {
     let git: GitRunner
 
     init() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-skill-\(UUID().uuidString)")
+        let dir = Scratch.url("skill")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         root = dir.resolvingSymlinksInPath()
         git = try isolatedGit()

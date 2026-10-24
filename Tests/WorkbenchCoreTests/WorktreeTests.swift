@@ -18,7 +18,7 @@ private struct TestRepo {
     let git: GitRunner
 
     init() async throws {
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("wb-repo-\(UUID().uuidString)")
+        let base = Scratch.url("repo")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         root = base.resolvingSymlinksInPath()
         git = try testGit()
@@ -276,7 +276,7 @@ private struct TestRepo {
     }
 
     @Test func notARepositoryAndMissingDirectory() async throws {
-        let plain = FileManager.default.temporaryDirectory.appendingPathComponent("wb-plain-\(UUID())")
+        let plain = Scratch.url("plain")
         try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
         let git = try testGit()
 
@@ -463,7 +463,7 @@ private struct TestRepo {
 
     @Test func aSymlinkIsNeverFollowed() async throws {
         let repo = try await ignoringEnv()
-        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("wb-secret-\(UUID().uuidString)")
+        let outside = Scratch.url("secret")
         try "secret\n".write(to: outside, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: outside) }
         try FileManager.default.createSymbolicLink(
@@ -492,7 +492,7 @@ private struct TestRepo {
 
     @Test func aSymlinkedFolderInTheWorktreeIsNotWrittenThrough() async throws {
         let repo = try await TestRepo()
-        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("wb-out-\(UUID().uuidString)")
+        let outside = Scratch.url("out")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: outside) }
         try repo.write(".gitignore", ".env\n")

@@ -11,7 +11,7 @@ private struct CLIResult {
 
 /// A HOME whose git config names an author, so a commit made by the CLI works on a machine with none.
 private func gitHome() throws -> URL {
-    let home = FileManager.default.temporaryDirectory.appendingPathComponent("wb-home-\(UUID().uuidString)")
+    let home = Scratch.url("home")
     try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
     try "[user]\n\tname = t\n\temail = t@example.com\n".write(
         to: home.appendingPathComponent(".gitconfig"), atomically: true, encoding: .utf8)

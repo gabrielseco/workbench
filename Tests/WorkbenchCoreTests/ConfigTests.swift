@@ -161,7 +161,7 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
     }
 
     @Test func loadsFromDisk() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID())")
+        let dir = Scratch.url("wb")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("config.toml")
         try validConfig.write(to: url, atomically: true, encoding: .utf8)
@@ -392,7 +392,7 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
 
 @Suite struct ExecutableResolverTests {
     @Test func findsOnPathAndRejectsMissing() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID())")
+        let dir = Scratch.url("wb")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let tool = dir.appendingPathComponent("faketool")
         try "#!/bin/sh\n".write(to: tool, atomically: true, encoding: .utf8)

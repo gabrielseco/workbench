@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 private func tempLog() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString)")
+    let dir = Scratch.url("wb")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir.appendingPathComponent("events.jsonl")
 }
@@ -268,7 +268,7 @@ private func lines(of url: URL) throws -> [String] {
     }
 
     @Test func missingFileIsAnError() {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("nope-\(UUID()).jsonl")
+        let url = Scratch.url("nope", ext: "jsonl")
         #expect(throws: EventLogError.self) { _ = try EventLogReader.read(at: url) }
     }
 }

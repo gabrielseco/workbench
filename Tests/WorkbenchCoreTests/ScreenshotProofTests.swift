@@ -133,7 +133,7 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
 
 @Suite struct ScreenshotProofFileTests {
     @Test func aRecordedFileThatIsGoneOrChangedIsMissingNotEvidence() throws {
-        let thread = FileManager.default.temporaryDirectory.appendingPathComponent("wb-thread-\(UUID().uuidString)")
+        let thread = Scratch.url("thread")
         let dir = thread.appendingPathComponent("proof/turn-1")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: thread) }

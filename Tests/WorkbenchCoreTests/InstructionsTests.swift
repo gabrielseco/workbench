@@ -10,7 +10,7 @@ private struct InstructionsRepo {
     let git: GitRunner
 
     init() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-instr-\(UUID().uuidString)")
+        let dir = Scratch.url("instr")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         root = dir.resolvingSymlinksInPath()
         git = try isolatedGit()

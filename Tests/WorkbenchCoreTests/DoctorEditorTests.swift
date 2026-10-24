@@ -10,7 +10,7 @@ private struct EditorDoctor {
 
     init(projectEditor: String? = nil, globalConfig: String? = nil) async throws {
         fx = try await RunnerFixture(extraConfig: projectEditor.map { "editor = \"\($0)\"" } ?? "")
-        home = FileManager.default.temporaryDirectory.appendingPathComponent("wb-doctor-editor-\(UUID().uuidString)")
+        home = Scratch.url("doctor-editor")
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         if let globalConfig {
             let dir = home.appendingPathComponent(".workbench")

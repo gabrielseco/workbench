@@ -79,15 +79,20 @@ Targets are confirmed against task 1's baseline; a target missed is reported, no
 
 Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (open: run the `Test profile` workflow once it is on `main`, then fill in the goals table).
 
-### 2. Clean up temp directories
+### 2. Clean up temp directories (built)
 
-- Every fixture (`RunnerFixture`, `Bin`, the repo helpers in `WorktreeTests`, `DefaultBaseTests`,
-  `NewProjectTests`, …) removes its directory when the test ends; one shared helper owns creation and removal
-  so a new test gets it for free.
-- At the start of a run, remove `wb-*` directories older than a day.
-- A check fails when a run leaves a `wb-*` directory behind, so it cannot come back.
+- `Scratch` (Tests) owns one root per test process, `$TMPDIR/wb-scratch-<pid>-<uuid>`, removed at exit
+  (`atexit`). `Scratch.url(prefix)` replaces the 46 places that made their own `$TMPDIR/<prefix>-<uuid>`.
+- `RunnerFixture` puts its repo in `<root>/run-<uuid>/repo`, so the fakes tests put beside it (`gh-*`,
+  `codex-*`, `origin-*`, `judge-*`, `plan-*`; thousands each) are inside the run's directory and go with it.
+- The first use sweeps roots whose pid no longer runs (a killed run) and `wb-*` directories older than a day.
+- Measured: a full parallel run (1468 tests) leaves no scratch root, and `$TMPDIR` grew by 18 entries from
+  other processes instead of thousands. `ScratchTests` covers the path, the dead and live roots and the
+  age rule (directories only; a `wb-*` file is never removed). `scripts/check-test-leftovers.sh` runs after the
+  tests in `check.sh` and CI and fails on a scratch root whose process is gone, so a test that bypasses `Scratch`'s
+  exit cleanup shows up. A run killed with SIGKILL still leaves its root until the next run's sweep.
 
-Done when: a full run leaves no `wb-*` directory.
+Done when: a full run leaves no `wb-*` directory (done).
 
 ### 3. Size the gate by measurement
 
