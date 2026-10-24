@@ -16,12 +16,16 @@ extension Commands {
          "base", "worktree", "criteria", "commits", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
     }
 
-    private static func gapJSON(_ base: String, ctx: Context) async -> JSONValue {
+    private static func gapJSON(_ base: String, ctx: Context, fetch: Bool) async -> JSONValue {
         let manager = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git)
-        guard let gap = await manager.baseGap(base: base) else { return .null }
+        guard let gap = await manager.baseGap(base: base, fetch: fetch) else { return .null }
+        // as_of: when origin was last fetched, for an answer that did not fetch; null when it did or git never said.
+        var asOf: JSONValue = .null
+        if case .lastFetch(let date)? = gap.knownFrom { asOf = .string(ISO8601DateFormatter().string(from: date)) }
         return [
             "base": .string(gap.base), "behind": .int(gap.behind),
             "fetch_note": gap.fetchNote.map { .string($0) } ?? .null,
+            "fetched": .bool(gap.knownFrom == nil), "as_of": asOf,
         ]
     }
 
@@ -108,7 +112,7 @@ extension Commands {
         .array(notes.map { ["turn": .int($0.turn), "seq": .int($0.seq), "text": .string($0.text)] })
     }
 
-    static func statusJSON(id: String, ctx: Context) async -> JSONValue {
+    static func statusJSON(id: String, ctx: Context, fetch: Bool) async -> JSONValue {
         // Replayed once: the worktree state below reads the same events.
         let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
@@ -140,7 +144,7 @@ extension Commands {
         }
         let worktreeValue = worktreeJSON(id: id, ctx: ctx, events: events)
         let progressValue = progressJSON(state: state, id: id, ctx: ctx)
-        let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
+        let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: id, ctx: ctx),
@@ -204,7 +208,7 @@ extension Commands {
         return ["state": .string(state), "path": .string(worktree.path)]
     }
 
-    static func reviewJSON(_ report: ReviewReport, ctx: Context) async -> JSONValue {
+    static func reviewJSON(_ report: ReviewReport, ctx: Context, fetch: Bool) async -> JSONValue {
         let state = report.state
         var base: String?
         if let text = try? String(contentsOf: ctx.project.goalURL(state.id), encoding: .utf8) {
@@ -279,7 +283,7 @@ extension Commands {
         }
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
-        let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
+        let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
         return [
             "v": .int(jsonVersion), "thread": .string(state.id), "status": .string(statusString(review.status)),
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: state.id, ctx: ctx),

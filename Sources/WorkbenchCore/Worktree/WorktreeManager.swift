@@ -337,38 +337,85 @@ public struct WorktreeManager: Sendable {
         public var behind: Int
         /// Why the fetch did not happen, when it did not; the comparison then uses what is already known.
         public var fetchNote: String?
+        /// nil when origin was fetched for this answer; else what the answer is based on: the origin ref already
+        /// in this repository, as of the last fetch (`unknown` when git never recorded one).
+        public var knownFrom: KnownFrom?
+
+        public enum KnownFrom: Sendable, Equatable {
+            case lastFetch(Date)
+            case unknown
+        }
     }
 
     /// How far the local `base` branch is behind `origin/<base>`, after one bounded fetch of that branch.
     /// nil when there is no `origin`, `base` is not a local branch, or origin has no such branch. A fetch
-    /// that fails is a note, never an error: being offline must not stop work.
-    public func baseGap(base: String, fetchTimeout: TimeInterval = 20) async -> BaseGap? {
+    /// that fails is a note, never an error: being offline must not stop work. With `fetch: false` nothing touches
+    /// the network: it compares with the origin ref this repository already has and says how old that is, which
+    /// is what a read-only command wants (a fetch costs seconds, and up to `fetchTimeout` offline).
+    public func baseGap(base: String, fetch: Bool = true, fetchTimeout: TimeInterval = 20) async -> BaseGap? {
         guard SafeNames.isBranchName(base) else { return nil }
         guard let origin = try? await git.run(["remote", "get-url", "origin"], in: repoRoot), origin.succeeded
         else { return nil }
         let local = try? await git.run(["rev-parse", "--verify", "--quiet", "refs/heads/\(base)"], in: repoRoot)
         guard local?.succeeded == true else { return nil }
 
-        var note: String?
-        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: fetchTimeout)
+        let note = fetch ? await fetchNote(forBase: base, timeout: fetchTimeout) : nil
+        let remote = "refs/remotes/origin/\(base)"
+        let known = try? await git.run(["rev-parse", "--verify", "--quiet", remote], in: repoRoot)
+        guard known?.succeeded == true else {
+            return note == nil ? nil : BaseGap(base: base, behind: 0, fetchNote: note)
+        }
+        let count = try? await git.run(["rev-list", "--count", "refs/heads/\(base)..\(remote)"], in: repoRoot)
+        let behind = Int(count?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
+        return BaseGap(
+            base: base, behind: behind, fetchNote: note, knownFrom: fetch ? nil : await lastFetch(of: base, from: origin.stdout))
+    }
+
+    /// Fetches `origin/<base>`; why it did not happen, or nil when it did.
+    private func fetchNote(forBase base: String, timeout: TimeInterval) async -> String? {
+        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
         let refspec = "+refs/heads/\(base):refs/remotes/origin/\(base)"
         do {
             let fetched = try await fetcher.run(["fetch", "--no-tags", "--quiet", "origin", refspec], in: repoRoot)
-            if !fetched.succeeded {
-                let first = fetched.stderr.split(separator: "\n").first.map(String.init) ?? "exit \(fetched.status)"
-                note = "could not fetch origin (\(ThreadService.withoutCredentials(first)))"
-            }
+            if fetched.succeeded { return nil }
+            let first = fetched.stderr.split(separator: "\n").first.map(String.init) ?? "exit \(fetched.status)"
+            return "could not fetch origin (\(ThreadService.withoutCredentials(first)))"
         } catch GitError.timedOut {
-            note = "could not fetch origin (no answer in \(Int(fetchTimeout))s)"
+            return "could not fetch origin (no answer in \(Int(timeout))s)"
         } catch {
-            note = "could not fetch origin"
+            return "could not fetch origin"
         }
-        let remote = "refs/remotes/origin/\(base)"
-        let known = try? await git.run(["rev-parse", "--verify", "--quiet", remote], in: repoRoot)
-        guard known?.succeeded == true else { return note == nil ? nil : BaseGap(base: base, behind: 0, fetchNote: note) }
-        let count = try? await git.run(["rev-list", "--count", "refs/heads/\(base)..\(remote)"], in: repoRoot)
-        let behind = Int(count?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
-        return BaseGap(base: base, behind: behind, fetchNote: note)
+    }
+
+    /// When `origin/<base>` was last fetched, as far as git says. `FETCH_HEAD` is rewritten by every fetch, so
+    /// its mtime is the age of `origin/<base>` only when that file names this base fetched from this origin; a
+    /// later fetch of another branch or remote leaves the age unknown, never wrongly fresh.
+    private func lastFetch(of base: String, from originURL: String) async -> BaseGap.KnownFrom {
+        let path = try? await git.run(["rev-parse", "--git-path", "FETCH_HEAD"], in: repoRoot)
+        guard let path, path.succeeded else { return .unknown }
+        let file = URL(fileURLWithPath: path.stdout.trimmingCharacters(in: .whitespacesAndNewlines), relativeTo: repoRoot)
+            .standardizedFileURL
+        // git writes the remote without a trailing `.git` or slash.
+        func bare(_ url: String) -> String {
+            var text = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            while text.hasSuffix("/") { text.removeLast() }
+            return text.hasSuffix(".git") ? String(text.dropLast(4)) : text
+        }
+        let suffix = " of \(bare(originURL))"
+        func namesThisBase(_ line: Substring) -> Bool {
+            line.contains("branch '\(base)'") && bare(String(line)).hasSuffix(suffix)
+        }
+        guard let text = try? String(contentsOf: file, encoding: .utf8),
+            let modified = try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
+        else { return .unknown }
+        let lines = text.split(separator: "\n")
+        // One entry for this base is an explicit fetch of it. A plain `git fetch` writes every branch as
+        // `not-for-merge`. Anything mixed may be an appended fetch that kept an older entry of this base
+        // while the file's mtime moved on, so it dates nothing.
+        let explicit = lines.count == 1 && namesThisBase(lines[0])
+        let plain = lines.contains(where: namesThisBase) && lines.allSatisfy { $0.contains("\tnot-for-merge\t") }
+        guard explicit || plain else { return .unknown }
+        return .lastFetch(modified)
     }
 
     /// Brings `refs/remotes/origin/<branch>` up to date and returns its commit. Unlike `baseGap`, a failure
