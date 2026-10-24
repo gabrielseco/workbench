@@ -100,9 +100,10 @@ extension ThreadState {
     static func applyAgent(_ event: Event, to uses: inout [String: AgentUse]) {
         func start(_ role: String) {
             let use = AgentUse(start: event, role: role)
-            if let known = uses[role], known.attempt != nil, known.turn == use.turn, known.round == use.round,
-                known.stage == use.stage
-            { return }
+            if let known = uses[role], known.attempt != nil {
+                let sameStart = known.turn == use.turn && known.round == use.round && known.stage == use.stage
+                if sameStart { return }
+            }
             uses[role] = use
         }
         switch event.kind {
