@@ -279,17 +279,7 @@ extension Commands {
         } else {
             judge = .null
         }
-        let prReview: JSONValue
-        if let r = review.prReview {
-            prReview = [
-                "round": .int(r.round), "pr": r.pr.map { .int($0) } ?? .null, "verdict": r.verdict.map { .string($0) } ?? .null,
-                "ok": .bool(r.verdict != nil), "stale": .bool(report.prReviewIsStale),
-                "head_sha": r.headSHA.map { .string($0) } ?? .null, "findings_path": r.findingsPath.map { .string($0) } ?? .null,
-                "failure": r.failure.map { .string($0) } ?? .null, "cost_usd": r.costUSD.map { .double($0) } ?? .null,
-            ]
-        } else {
-            prReview = .null
-        }
+        let prReview = review.prReview.map { prReviewJSON($0, stale: report.prReviewIsStale) } ?? .null
         // A config that does not load still shows the stage every project has.
         let stages = (try? Config.load(from: ctx.project.configURL))?.review ?? ReviewConfig()
         let reviewStages: [JSONValue] = ctx.service.latestReviewStages(id: state.id, review: stages).map { name, r in
@@ -378,4 +368,17 @@ extension Commands {
                 }),
         ]
     }
+}
+
+/// `pr_review` of `status`/`review --json`. `cost_usd` is present only when the reviewer's provider reported one, so a log from
+/// before it replays to the same object.
+private func prReviewJSON(_ r: Review.PRReview, stale: Bool) -> JSONValue {
+    var fields: [String: JSONValue] = [
+        "round": .int(r.round), "pr": r.pr.map { .int($0) } ?? .null, "verdict": r.verdict.map { .string($0) } ?? .null,
+        "ok": .bool(r.verdict != nil), "stale": .bool(stale),
+        "head_sha": r.headSHA.map { .string($0) } ?? .null, "findings_path": r.findingsPath.map { .string($0) } ?? .null,
+        "failure": r.failure.map { .string($0) } ?? .null,
+    ]
+    if let cost = r.costUSD { fields["cost_usd"] = .double(cost) }
+    return .object(fields)
 }
