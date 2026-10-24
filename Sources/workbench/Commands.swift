@@ -277,7 +277,7 @@ enum Commands {
             defer { if let binding { out("coding:  \(binding.description)") } }
             out("approved \(id)")
             out("hash:    \(approved.goal.contentHash.prefix(12))")
-            out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
+            out(approved.goal.isTimeoutOnly ? "spend:   \(approved.goal.spendLine)" : "budget:  \(approved.goal.spendLine)")
             if let model = approved.goal.model { out("model:   \(model)") }
             if let pushTo = approved.goal.pushTo { out("push to: \(pushTo)") }
         }

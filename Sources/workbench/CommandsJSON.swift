@@ -45,7 +45,7 @@ extension Commands {
                         "thread": .string(state.id), "status": .string(statusString(state.review.status)),
                         "ended": state.decision.map { .string($0) } ?? .null,
                         "last_result": state.lastResult.map { .string($0) } ?? .null,
-                        "turns": .int(state.lastTurn), "cost_usd": .double(state.totalCostUSD),
+                        "turns": .int(state.lastTurn), "cost_usd": state.knownCostUSD.map { .double($0) } ?? .null,
                         "parent": state.lineage.map { .string($0.parent) } ?? .null,
                         "root": state.lineage.map { .string($0.root) } ?? .null,
                         "round": state.lineage.map { .int($0.round) } ?? .null,
@@ -76,7 +76,7 @@ extension Commands {
     static func approvedJSON(_ use: AgentUse) -> JSONValue {
         [
             "provider": .string(use.provider), "model": use.model.map { .string($0) } ?? .null,
-            "recorded": .bool(use.recorded),
+            "recorded": .bool(use.recorded), "spend_policy": use.spendPolicy.map { .string($0) } ?? .null,
         ]
     }
 
@@ -95,7 +95,7 @@ extension Commands {
                     "status": .string(statusString(child.review.status)),
                     "ended": child.decision.map { .string($0) } ?? .null,
                     "last_result": child.lastResult.map { .string($0) } ?? .null,
-                    "cost_usd": .double(child.totalCostUSD),
+                    "cost_usd": child.knownCostUSD.map { .double($0) } ?? .null,
                 ]
             })
     }
@@ -124,12 +124,13 @@ extension Commands {
                 }
                 goalValue = [
                     "title": .string(goal.title), "approval": .string(approval), "base": .string(goal.base),
-                    "budget_usd": .double(NSDecimalNumber(decimal: goal.budgetUSD).doubleValue),
+                    "budget_usd": goal.budgetUSD.map { .double(NSDecimalNumber(decimal: $0).doubleValue) } ?? .null,
+                    "spend_policy": .string(goal.spendPolicyName),
                     "turn_timeout_min": .int(goal.turnTimeoutMin), "problems": [],
                 ]
             } catch let error as GoalParseError {
                 goalValue = [
-                    "title": .null, "approval": "invalid", "base": .null, "budget_usd": .null,
+                    "title": .null, "approval": "invalid", "base": .null, "budget_usd": .null, "spend_policy": .null,
                     "turn_timeout_min": .null,
                     "problems": .array(error.description.split(separator: "\n").map { .string(String($0)) }),
                 ]
@@ -153,7 +154,8 @@ extension Commands {
                 "open_turn": state.openVerify.map { .int($0) } ?? .null,
                 "last": state.review.verify.map { .string($0.result) } ?? .null,
             ],
-            "cost_usd": .double(state.totalCostUSD), "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
+            "cost_usd": state.knownCostUSD.map { .double($0) } ?? .null, "plan": planJSON(state),
+            "plan_cost_usd": .double(state.planCostUSD),
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
@@ -312,8 +314,10 @@ extension Commands {
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: state.id, ctx: ctx),
             "ended": decision, "title": report.title.map { .string($0) } ?? .null,
             "approval": report.approval.map { .string($0) } ?? .null,
+            "spend_policy": report.spendPolicy.map { .string($0) } ?? .null,
             "goal_problem": report.goalProblem.map { .string($0) } ?? .null, "turns": .int(state.lastTurn),
-            "last_result": review.turnResult.map { .string($0) } ?? .null, "cost_usd": .double(state.totalCostUSD),
+            "last_result": review.turnResult.map { .string($0) } ?? .null,
+            "cost_usd": state.knownCostUSD.map { .double($0) } ?? .null,
             "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "base": base.map { .string($0) } ?? .null, "worktree": worktreeJSON(id: state.id, ctx: ctx),

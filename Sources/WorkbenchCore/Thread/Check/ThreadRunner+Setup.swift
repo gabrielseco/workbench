@@ -60,9 +60,9 @@ extension ThreadRunner {
 
     /// The approval also binds the coding provider and model, which live in the config and not in the goal's hash.
     /// An approval from before they were recorded binds nothing.
-    static func requireApprovedAgent(state: ThreadState, agent: ResolvedAgent) throws {
+    static func requireApprovedAgent(state: ThreadState, agent: ResolvedAgent, spendPolicy: String = "hard_cap") throws {
         guard let approved = state.approvedAgent else { return }
-        let now = ApprovedAgent(agent)
+        let now = ApprovedAgent(agent, spendPolicy: spendPolicy)
         if approved != now { throw RunnerError.codingSettingsChanged(approved: approved.description, now: now.description) }
     }
 

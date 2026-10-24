@@ -182,6 +182,8 @@ public struct ThreadState: Sendable, Equatable {
     public var decision: String?
     public var lastResult: String?
     public var totalCostUSD: Double
+    /// True once a turn ended without a `cost_usd`: the total is then not known, and is never shown as a sum or as 0.
+    public var costUnknown = false
     public var sessionID: String?
     public var sessionProvider: String?  // nil: a log from before turns named one (Claude)
     public var review: Review
@@ -204,6 +206,9 @@ public struct ThreadState: Sendable, Equatable {
     /// Usage the `agent.activity` events of non-Claude turns reported, summed per field. A field no provider ever
     /// reported is nil, never 0; nil when none did. Claude's cost is in `totalCostUSD`.
     public var reportedUsage: AgentUsage?
+
+    /// The turns' cost, nil when any turn did not report one (`--json` says null, text says `unknown`).
+    public var knownCostUSD: Double? { costUnknown ? nil : totalCostUSD }
 
     public var isActive: Bool { decision == nil }
 
@@ -361,7 +366,7 @@ public struct ThreadState: Sendable, Equatable {
                 switch event.data["cost_usd"] {
                 case .double(let d)?: state.totalCostUSD += d
                 case .int(let i)?: state.totalCostUSD += Double(i)
-                default: break
+                default: state.costUnknown = true
                 }
             case .checkStarted:
                 state.openCheck = event.turn

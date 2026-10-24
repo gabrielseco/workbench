@@ -5,7 +5,7 @@ import Testing
 
 private func goal() -> Goal {
     Goal(
-        id: "g1", title: "mock engine", declaredStatus: .approved, base: "main", budgetUSD: 5, turnTimeoutMin: 30,
+        id: "g1", title: "mock engine", declaredStatus: .approved, base: "main", spend: .hardCap(5), turnTimeoutMin: 30,
         approvedAt: nil, approvedHash: nil, request: "Extract the engine.\n(Plan: names are a suggestion)",
         criteria: [Criterion(id: "c1", text: "Isolation holds.", proof: "isolation test")],
         outOfScope: ["Editing vendor/"], contentHash: "h")

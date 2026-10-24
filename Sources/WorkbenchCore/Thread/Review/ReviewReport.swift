@@ -16,6 +16,10 @@ public struct ReviewReport: Sendable, Equatable {
     public var approval: String?
     /// Why the goal file could not be read; the criteria are then unknown, not empty.
     public var goalProblem: String?
+    /// `hard_cap` or `timeout_only`, nil when the goal file is not valid.
+    public var spendPolicy: String?
+    /// `no dollar cap: bounded by N min per turn`, set only for a `timeout_only` goal (a cap is not shown here).
+    public var spendLine: String?
     public var diff: Diff
     /// The thread's directory, to check that a recorded proof file is still there; nil skips the check.
     public var threadDirectory: URL?
@@ -170,6 +174,7 @@ public struct ReviewReport: Sendable, Equatable {
         if let result = review.turnResult { turns += "  last \(result)" }
         turns += "  " + Self.costText(state)
         lines.append(turns)
+        if let spendLine { lines.append("spend:     \(spendLine)") }
         lines.append(Self.planLine(for: state))
         lines.append(contentsOf: state.agentLines())
 
@@ -302,6 +307,7 @@ public struct ReviewReport: Sendable, Equatable {
     /// A note on one line, cut at 120 characters, for lists.
     /// `$0.3700`, or `$0.4800 (turns $0.3700, plan $0.1100)` when a plan turn cost something.
     public static func costText(_ state: ThreadState) -> String {
+        guard !state.costUnknown else { return "unknown" }
         guard state.planCostUSD > 0 else { return String(format: "$%.4f", state.totalCostUSD) }
         return String(
             format: "$%.4f (turns $%.4f, plan $%.4f)", state.totalCostUSD + state.planCostUSD, state.totalCostUSD,
@@ -373,12 +379,14 @@ public struct ReviewLoader: Sendable {
         var criteria: [Criterion] = []
         var goalBase: String?
         var approval: String?
+        var spend: (name: String, line: String?)?
         var problem: String?
         do {
             let goal = try GoalFile.parse(try String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
             title = goal.title
             criteria = goal.criteria
             goalBase = goal.base
+            spend = (goal.spendPolicyName, goal.isTimeoutOnly ? goal.spendLine : nil)
             switch goal.approval {
             case .approved: approval = "approved"
             case .draft: approval = "draft"
@@ -392,6 +400,7 @@ public struct ReviewLoader: Sendable {
         let commits = await branchCommits(id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
+            spendPolicy: spend?.name, spendLine: spend?.line,
             diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
             threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id),
             proofFreshness: await proofFreshness(state), commits: commits?.commits ?? [],

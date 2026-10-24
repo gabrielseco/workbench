@@ -119,9 +119,15 @@ public actor ThreadRunner {
         let config = try Config.load(from: project.configURL)
         let goalFile = try loadGoal()
         let goal = goalFile.goal
+        if options.budgetOverride != nil, goal.isTimeoutOnly {
+            throw RunnerError.invalidBudget(
+                "this goal has no dollar cap (spend_policy: timeout_only), so there is no budget to override")
+        }
         let skillAvailable = await verifierSkillAvailable(config: config, goal: goal)
         try Self.requireRunnable(goal: goal, config: config, options: options, verifierSkillAvailable: skillAvailable)
-        try Self.requireApprovedAgent(state: store.state(of: threadID), agent: config.resolvedRunAgent(goalModel: goal.model))
+        try Self.requireApprovedAgent(
+            state: store.state(of: threadID),
+            agent: config.resolvedRunAgent(goalModel: goal.model), spendPolicy: goal.spendPolicyName)
         guard
             let claude = ExecutableResolver.resolve(
                 config.claudePath, searchPath: options.parentEnvironment["PATH"])

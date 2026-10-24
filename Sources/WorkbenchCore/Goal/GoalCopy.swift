@@ -3,11 +3,14 @@ import Foundation
 /// The front matter values a new draft takes from elsewhere instead of the config's defaults. `nil` keeps the default.
 public struct GoalSettings: Sendable, Equatable {
     public var budgetUSD: Decimal?
+    /// True when the file says `spend_policy: timeout_only`; the draft then has no `budget_usd`.
+    public var timeoutOnly: Bool
     public var turnTimeoutMin: Int?
     public var model: String?
 
-    public init(budgetUSD: Decimal? = nil, turnTimeoutMin: Int? = nil, model: String? = nil) {
+    public init(budgetUSD: Decimal? = nil, timeoutOnly: Bool = false, turnTimeoutMin: Int? = nil, model: String? = nil) {
         self.budgetUSD = budgetUSD
+        self.timeoutOnly = timeoutOnly
         self.turnTimeoutMin = turnTimeoutMin
         self.model = model
     }
@@ -29,7 +32,7 @@ public struct GoalCopyValueError: Error, Equatable, Sendable, CustomStringConver
 
 extension GoalFile {
     /// The front matter keys `goal new --from` carries into the draft.
-    static let carriedKeys: Set<String> = ["budget_usd", "turn_timeout_min", "model"]
+    static let carriedKeys: Set<String> = ["budget_usd", "spend_policy", "turn_timeout_min", "model"]
 
     /// Reads `text` for `goal new --from`. The front matter keys are not required here (the draft gets its own id,
     /// title, base and status), but the block must be well formed and the body must parse as a goal's. A carried value
@@ -54,6 +57,9 @@ extension GoalFile {
             case "budget_usd":
                 guard let value = budgetValue(entry.value) else { throw GoalCopyValueError(message: budgetProblem(entry.value)) }
                 settings.budgetUSD = value
+            case "spend_policy":
+                guard entry.value == "timeout_only" else { throw GoalCopyValueError(message: spendPolicyProblem(entry.value)) }
+                settings.timeoutOnly = true
             case "turn_timeout_min":
                 guard let value = timeoutValue(entry.value) else {
                     throw GoalCopyValueError(message: timeoutProblem(entry.value))
@@ -63,6 +69,10 @@ extension GoalFile {
                 guard SafeNames.isModelName(entry.value) else { throw GoalCopyValueError(message: modelProblem(entry.value)) }
                 settings.model = entry.value
             }
+        }
+        if settings.timeoutOnly, settings.budgetUSD != nil {
+            throw GoalCopyValueError(
+                message: "'budget_usd' and 'spend_policy: timeout_only' exclude each other: remove 'budget_usd'")
         }
         let body = GoalBody(
             request: parsed.request,

@@ -24,6 +24,10 @@ private func issues(_ agents: [DoctorAgent], _ role: AgentRole) -> [DoctorAgentI
 /// Executables that exist, so only what a test sets up is missing.
 private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"/bin/sh\"\n"
 
+private func doctorGoal(model: String?) -> DoctorGoal {
+    DoctorGoal(thread: "g-1-x", spend: .hardCap(1), turnTimeoutMin: 30, model: model, approvedFor: nil)
+}
+
 @Suite struct DoctorAgentChecksTests {
     @Test func policyWithoutControls() throws {
         let cfg = try config(present)
@@ -57,7 +61,8 @@ private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable 
         let cfg = try config(present)
         var uncapped = ClaudeProvider(config: cfg).capabilities
         uncapped.hardDollarCap = false
-        let goal = DoctorGoal(thread: "g-1-x", budgetUSD: Decimal(string: "0.50")!, model: nil, approvedFor: nil)
+        let goal = DoctorGoal(
+            thread: "g-1-x", spend: .hardCap(Decimal(string: "0.50")!), turnTimeoutMin: 30, model: nil, approvedFor: nil)
         let found = Doctor.agents(cfg, searchPath: "/bin", goal: goal) { _ in uncapped }
         let run = issues(found, .run).filter { $0.kind == "budget_without_cap" }
         #expect(run.count == 1 && run[0].message.contains("g-1-x") && run[0].message.contains("0.5"), "\(run)")
@@ -70,14 +75,35 @@ private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable 
             })
     }
 
+    @Test func budgetWithoutCapNamesTimeoutOnly() throws {
+        let cfg = try config(present)
+        var uncapped = ClaudeProvider(config: cfg).capabilities
+        uncapped.hardDollarCap = false
+        let goal = doctorGoal(model: nil)
+        let found = Doctor.agents(cfg, searchPath: "/bin", goal: goal) { _ in uncapped }
+        let message = try #require(issues(found, .run).first { $0.kind == "budget_without_cap" }).message
+        #expect(message.contains("spend_policy: timeout_only") && message.contains("approve it again"), "\(message)")
+    }
+
+    @Test func timeoutOnlyGoalHasNoBudgetProblem() throws {
+        let cfg = try config(present)
+        var uncapped = ClaudeProvider(config: cfg).capabilities
+        uncapped.hardDollarCap = false
+        var goal = doctorGoal(model: nil)
+        goal.spend = .timeoutOnly
+        let found = Doctor.agents(cfg, searchPath: "/bin", goal: goal) { _ in uncapped }
+        #expect(found.flatMap(\.issues).allSatisfy { $0.kind != "budget_without_cap" })
+        #expect(goal.spendLine == "no dollar cap: bounded by 30 min per turn")
+    }
+
     @Test func theGoalsModelWinsOverTheConfigs() throws {
         let cfg = try config("model = \"haiku\"\n" + present)
         func runModel(_ goal: DoctorGoal?) -> String? {
             Doctor.agents(cfg, searchPath: "/bin", goal: goal).first { $0.role == .run }?.resolved?.model
         }
         #expect(runModel(nil) == "haiku")
-        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: "opus", approvedFor: nil)) == "opus")
-        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: nil, approvedFor: nil)) == "haiku")
+        #expect(runModel(doctorGoal(model: "opus")) == "opus")
+        #expect(runModel(doctorGoal(model: nil)) == "haiku")
     }
 
     @Test func unconfinedReadsStated() throws {

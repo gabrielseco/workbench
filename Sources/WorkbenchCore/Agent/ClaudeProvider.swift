@@ -20,9 +20,9 @@ public struct ClaudeProvider: AgentProvider {
     public func invocation(for request: AgentRequest) throws -> AgentInvocation {
         func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
         if request.policy == .readOnlyEvidence { return try readOnlyInvocation(for: request) }
-        guard case .hardCap(let budget) = request.spend else {
-            throw refuse("Claude coding turns run with a dollar cap; timeout-only spending is not available yet.")
-        }
+        // A timeout-only coding turn runs without `--max-budget-usd`; its cost is still read from the result line.
+        let budget: Decimal?
+        if case .hardCap(let cap) = request.spend { budget = cap } else { budget = nil }
         let sessionID: UUID
         let resume: Bool
         switch request.session {

@@ -24,10 +24,13 @@ extension DoctorReport {
 /// The goal doctor checks: the one of the project's active thread.
 struct DoctorGoal {
     var thread: String
-    var budgetUSD: Decimal
+    var spend: AgentSpend
+    var turnTimeoutMin: Int
     /// The goal's own `model`, which wins over the config when a run resolves its agent.
     var model: String?
     var approvedFor: AgentUse?
+
+    var spendLine: String? { spend == .timeoutOnly ? "no dollar cap: bounded by \(turnTimeoutMin) min per turn" : nil }
 }
 
 extension Doctor {
@@ -49,7 +52,8 @@ extension Doctor {
             let goal = try? GoalFile.parse(text).goal
         else { return nil }
         return DoctorGoal(
-            thread: id, budgetUSD: goal.budgetUSD, model: goal.model, approvedFor: store.state(of: id).approvedFor)
+            thread: id, spend: goal.spend, turnTimeoutMin: goal.turnTimeoutMin, model: goal.model,
+            approvedFor: store.state(of: id).approvedFor)
     }
 
     /// Each responsibility's resolved provider and model with what is wrong or limited about it. Reads the adapters'
@@ -111,11 +115,12 @@ extension Doctor {
                 "policy_without_controls", .problem,
                 "\(provider) has no verified controls for \(policy.rawValue); \(role.rawValue) is refused on it")
         }
-        if role == .run, let goal, !caps.hardDollarCap {
+        if role == .run, let goal, case .hardCap(let budget) = goal.spend, !caps.hardDollarCap {
             add(
                 "budget_without_cap", .problem,
-                "goal \(goal.thread) has budget_usd $\(goal.budgetUSD) and \(provider) cannot enforce a dollar limit; "
-                    + "run is refused on it")
+                "goal \(goal.thread) has budget_usd $\(budget) and \(provider) cannot enforce a dollar limit; "
+                    + "run is refused on it. Change the goal to `spend_policy: timeout_only` (and remove budget_usd), "
+                    + "then approve it again")
         }
         if role != .run, caps.policies.contains(.readOnlyEvidence), !caps.confinesReads {
             add(

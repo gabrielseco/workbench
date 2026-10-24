@@ -12,7 +12,7 @@ private func goal(
     ]
 ) -> Goal {
     Goal(
-        id: "g1", title: title, declaredStatus: .approved, base: "main", budgetUSD: 5, turnTimeoutMin: 30,
+        id: "g1", title: title, declaredStatus: .approved, base: "main", spend: .hardCap(5), turnTimeoutMin: 30,
         approvedAt: nil, approvedHash: nil, request: request, criteria: criteria, outOfScope: [],
         contentHash: "h")
 }
@@ -50,6 +50,15 @@ private let repoTemplate = """
     """
 
 @Suite struct PRBodyTests {
+    @Test func timeoutOnlyGoalSaysNoDollarCap() {
+        var free = goal()
+        free.spend = .timeoutOnly
+        let body = PRBodyBuilder.build(goal: free, check: check("passed"), template: nil).body
+        #expect(body.contains("Spend: no dollar cap: bounded by 30 min per turn"), "\(body)")
+        let capped = PRBodyBuilder.build(goal: goal(), check: check("passed"), template: nil).body
+        #expect(!capped.contains("dollar cap"), "a goal with a cap says nothing new")
+    }
+
     @Test func listsRequestAndEveryCriterionInOrder() {
         let out = PRBodyBuilder.build(goal: goal(), check: check("passed"), template: nil)
         let body = out.body

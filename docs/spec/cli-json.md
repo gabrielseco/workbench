@@ -17,7 +17,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   cost_usd}` each; empty when there are none. `review` has both keys too. Derived from `thread.created`, never stored.
 - `ended`: `accepted`, `discarded`, `abandoned`, or null while the thread is active.
 - `goal`: null when there is no goal file; else `title`, `approval` (`approved`, `draft`, `stale`,
-  `invalid`), `base`, `budget_usd`, `turn_timeout_min`, `problems` (lines, for `invalid`).
+  `invalid`), `base`, `budget_usd` (null for a `timeout_only` goal), `spend_policy` (`hard_cap` or `timeout_only`), `turn_timeout_min`, `problems` (lines, for `invalid`).
 - `check`: `open_turn` and `last` (the latest result).
 - `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict. Only an older log has a verify step (`verify_command` was removed).
 - `agents`: `{run, judge, review}`, each null when that responsibility never ran in the thread, else `{provider, model, recorded,
@@ -27,14 +27,14 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   before anything was started, `outcome` the attempt's `outcome` once it ended (null while open, or when only a start record says it).
   **A log from before these records reads as what the responsibility was then** (`claude` for `run` and `judge`, `codex` for
   `review`, model null) with `recorded: false`: never an error, never blank. `approved_for`: null when the goal was not approved,
-  else `{provider, model, recorded}` from the latest `goal.approved`; an approval without the two keys reads as `claude`, model
+  else `{provider, model, recorded, spend_policy}` from the latest `goal.approved`; an approval without the two keys reads as `claude`, model
   null, `recorded: false`.
 - `notes`: `{turn, seq, text}` for each send-back.
 - `base_gap`: null, or `{base, behind, fetch_note}`.
 - `worktree`: `{state: present | removed | none, path}`.
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
   tool_calls, denied_calls}`, derived from the log on each call (`tool_calls` and `denied_calls` are `null` for a turn of a provider that has not reported any: unknown, not 0). `quiet` is true when the newest event is
-  60 s old or more. `cost_usd` does not include the open turn: `claude` reports cost only in the result line.
+  60 s old or more. `cost_usd` is null when a turn reported none (the total is unknown, never 0) and does not include the open turn: `claude` reports cost only in the result line.
 
 `workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
 cost_usd, parent, root, round}` (the last three null unless it is a review follow-up) (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
@@ -45,7 +45,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spend_policy, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
@@ -81,15 +81,16 @@ codes are the text mode's: 0 when `passed`, 1 when a declared step failed or som
 one printed, with `passed` false), 3 stopped (the usual error object instead), 6 refused. The verifier, `[run]` and editor lines
 of the text mode are not in it.
 
-doctor keys: v, base, passed, claude, model, thread, approved_for, agents, problems, setup, check, review_warnings, cleanup_problem
+doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy, agents, problems, setup, check, review_warnings, cleanup_problem
 
+- `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
 - `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, note, issues}`. `provider` and `model`
   are null for goal drafting with no `[agents.goal]` (it stays manual); a null `model` is the provider's default.
   `issues` is `{kind, severity, message}` each, found before anything is spawned from the adapter's own capabilities:
   `policy_without_controls` (the provider has no verified controls for what the responsibility needs: coding confinement for
   `run`, read-only evidence for the others), `missing_executable` (not on the environment's `PATH`, or the path in
   `[providers.<id>] executable` is not executable), `budget_without_cap` (the active thread's goal has `budget_usd` and the
-  `run` provider cannot enforce a dollar limit), `unconfined_reads` (a read-only judge or review on a provider that can read
+  `run` provider cannot enforce a dollar limit; the message names the fix, `spend_policy: timeout_only`), `unconfined_reads` (a read-only judge or review on a provider that can read
   outside the checkout, as Codex can: a stated limit) and `setting_unused` (a key that is accepted but changes nothing: an
   `allow_unpriced` nothing acts on yet, an executable no responsibility uses). `severity` is `problem` (the responsibility would
   be refused or fail) or `note`. A problem is a warning: it does not make `passed` false.

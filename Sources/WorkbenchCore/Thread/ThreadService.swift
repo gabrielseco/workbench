@@ -125,9 +125,12 @@ public struct ThreadService: Sendable {
             baseBranch = await defaultBase()
         }
         let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
-        let budget = NSDecimalNumber(
-            decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD
-        ).stringValue
+        let spendLine =
+            settings.timeoutOnly
+            ? "spend_policy: timeout_only"
+            : "budget_usd: "
+                + NSDecimalNumber(decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD)
+                .stringValue
         let title = name.replacingOccurrences(of: "-", with: " ")
         let modelLine =
             settings.model.map { "model: \($0)" }
@@ -139,7 +142,7 @@ public struct ThreadService: Sendable {
             title: \(title)
             status: draft
             base: \(baseBranch)\(pushToLine)
-            budget_usd: \(budget)
+            \(spendLine)
             turn_timeout_min: \(settings.turnTimeoutMin ?? 30)
             \(modelLine)
             ---
@@ -186,7 +189,7 @@ public struct ThreadService: Sendable {
         let config = config ?? (try? Config.load(from: project.configURL))
         let agent = config?.resolvedRunAgent(goalModel: file.goal.model)
             ?? ResolvedAgent(provider: .claude, model: file.goal.model, allowUnpriced: false)
-        let binding = ApprovedAgent(agent)
+        let binding = ApprovedAgent(agent, spendPolicy: file.goal.spendPolicyName)
         // An unchanged goal is approved already; it is approved again only for coding settings it was not approved for.
         if file.goal.approval == .approved, store.state(of: id).approvedAgent == binding { return file }
 
@@ -198,7 +201,9 @@ public struct ThreadService: Sendable {
                 .goalApproved,
                 data: [
                     "hash": .string(approved.goal.contentHash),
-                    "budget_usd": .double(NSDecimalNumber(decimal: approved.goal.budgetUSD).doubleValue),
+                    // Absent for a timeout_only goal: there is no cap to record.
+                    "budget_usd": approved.goal.budgetUSD.map { .double(NSDecimalNumber(decimal: $0).doubleValue) } ?? .null,
+                    "spend_policy": .string(binding.spendPolicy),
                     "provider": .string(binding.provider),
                     "model": binding.model.map { .string($0) } ?? .null,
                 ])

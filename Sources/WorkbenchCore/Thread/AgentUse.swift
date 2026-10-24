@@ -17,10 +17,12 @@ public struct AgentUse: Sendable, Equatable {
     public var spawned: Bool
     /// The attempt's `outcome` once it ended; nil while open or when no attempt was recorded.
     public var outcome: String?
+    /// `hard_cap` or `timeout_only` for what a goal was approved for; nil for a use that is not an approval.
+    public var spendPolicy: String?
 
     public init(
         provider: String, model: String?, recorded: Bool, stage: String? = nil, turn: Int = 0, round: Int? = nil,
-        attempt: String? = nil, spawned: Bool = true, outcome: String? = nil
+        attempt: String? = nil, spawned: Bool = true, outcome: String? = nil, spendPolicy: String? = nil
     ) {
         self.provider = provider
         self.model = model
@@ -31,6 +33,7 @@ public struct AgentUse: Sendable, Equatable {
         self.attempt = attempt
         self.spawned = spawned
         self.outcome = outcome
+        self.spendPolicy = spendPolicy
     }
 
     /// `claude, model opus`: the one wording `status`, `review` and `doctor` share.
@@ -41,6 +44,7 @@ public struct AgentUse: Sendable, Equatable {
     public var description: String {
         var text = Self.describe(provider: provider, model: model)
         if let stage { text += ", stage \(stage)" }
+        if spendPolicy == "timeout_only" { text += ", no dollar cap" }
         if !spawned { text += " (refused: nothing was started)" } else if let outcome { text += " (\(outcome))" }
         if !recorded { text += " (not recorded: from before providers were chosen)" }
         return text
@@ -79,8 +83,10 @@ extension ThreadState {
     /// from before provider selection binds nothing and reads as Claude's default, `recorded` false.
     public var approvedFor: AgentUse? {
         guard approvedGoalHash != nil else { return nil }
-        guard let agent = approvedAgent else { return AgentUse(provider: "claude", model: nil, recorded: false) }
-        return AgentUse(provider: agent.provider, model: agent.model, recorded: true)
+        guard let agent = approvedAgent else {
+            return AgentUse(provider: "claude", model: nil, recorded: false, spendPolicy: "hard_cap")
+        }
+        return AgentUse(provider: agent.provider, model: agent.model, recorded: true, spendPolicy: agent.spendPolicy)
     }
 
     /// `approved for:` and one `agent <role>:` line for each responsibility that ran, as `status` and `review` show

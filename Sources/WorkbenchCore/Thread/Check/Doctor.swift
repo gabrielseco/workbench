@@ -127,6 +127,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var thread: String?
     /// What that thread's goal was approved for, nil when it is not approved.
     public var approvedFor: AgentUse?
+    /// `no dollar cap: bounded by N min per turn` when the active goal is `timeout_only`; nil for a goal with a cap.
+    public var spendLine: String?
     /// What the config's `copy` left out of the throwaway worktree, with why.
     public var copySkipped: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
@@ -263,6 +265,7 @@ public final class Doctor: @unchecked Sendable {
         let goal = activeGoal()
         report.thread = goal?.thread
         report.approvedFor = goal?.approvedFor
+        report.spendLine = goal?.spendLine
         report.agents = Self.agents(
             config, searchPath: options.environment["PATH"], goal: goal)
         report.reviewWarnings = Self.reviewWarnings(

@@ -54,12 +54,12 @@ private func problems(in text: String) -> [GoalProblem] {
     }
 
     @Test func approvalBindsThePushTargetAndOnlyWhenItIsSet() {
-        let without = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, body: "body")
-        let with = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: "x", body: "body")
-        let other = GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: "y", body: "body")
+        let without = GoalHash.hash(base: "origin/x", spend: .hardCap(5), turnTimeoutMin: 30, body: "body")
+        let with = GoalHash.hash(base: "origin/x", spend: .hardCap(5), turnTimeoutMin: 30, pushTo: "x", body: "body")
+        let other = GoalHash.hash(base: "origin/x", spend: .hardCap(5), turnTimeoutMin: 30, pushTo: "y", body: "body")
         #expect(without != with)
         #expect(with != other)
-        #expect(without == GoalHash.hash(base: "origin/x", budgetUSD: 5, turnTimeoutMin: 30, pushTo: nil, body: "body"))
+        #expect(without == GoalHash.hash(base: "origin/x", spend: .hardCap(5), turnTimeoutMin: 30, pushTo: nil, body: "body"))
     }
 
     @Test func aDuplicatePushToKeyIsAnError() {

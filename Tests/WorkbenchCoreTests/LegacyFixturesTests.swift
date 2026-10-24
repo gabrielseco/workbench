@@ -147,6 +147,13 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                 #expect(approved["provider"] as? String == "claude" && approved["recorded"] as? Bool == false)
                 current["agents"] = nil
                 current["approved_for"] = nil
+                // PR 12 adds `spend_policy` (a goal with a cap reads `hard_cap`); status has it inside `goal`.
+                #expect(approved["spend_policy"] as? String == "hard_cap")
+                current["spend_policy"] = nil
+                if var goal = current["goal"] as? [String: Any] {
+                    #expect(goal.removeValue(forKey: "spend_policy") as? String == "hard_cap")
+                    current["goal"] = goal
+                }
                 let was = try #require(
                     JSONSerialization.jsonObject(with: Data(try text(scenario.name, "\(command).expected.json").utf8))
                         as? [String: Any])

@@ -11,7 +11,7 @@ id: g-2026-10-12-retry-backoff
 title: Add retry with backoff to the sync client
 status: approved            # draft | approved
 base: main                  # branch the worktree is cut from
-budget_usd: 5.00            # hard cap passed to the CLI
+budget_usd: 5.00            # hard cap passed to the CLI (or `spend_policy: timeout_only` instead, below)
 turn_timeout_min: 30        # runner kills the turn after this
 model: opus                 # optional; --model for every turn of this thread
 push_to: feature/x          # optional; continue this branch of origin (base must be origin/feature/x)
@@ -161,7 +161,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   listed. A `test:` proof (below) is the other way to a verdict. Nothing is ever passed on Claude's say-so, `review` runs nothing, and none of this gates
   `accept` or `ship`. The PR table carries pass or fail only, never check output.
 - **Approval binds a hash.** `approved_hash` covers the body (request, criteria, out of scope) and the front
-  matter fields that change what runs (`base`, `budget_usd`, `turn_timeout_min`). Edit any of them
+  matter fields that change what runs (`base`, `budget_usd` or `spend_policy`, `turn_timeout_min`). Edit any of them
   and the status is `draft` again.
 - **Out of scope is part of the contract.** The runner puts it in the prompt and the review shows it.
 - **`workbench goal new <name>` writes the draft.** Its `base` is `--base` when given, else the repo's default
@@ -169,7 +169,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   branch, else `main` (an unborn repo). It is not simply the checked-out branch, which may be a feature branch.
   `goal new` prints it as `base: <branch>`; `doctor` without `--base` uses the same default.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
-  out of scope, and its `budget_usd`, `turn_timeout_min` and `model`, into the draft. Those three are checked by the
+  out of scope, and its `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are checked by the
   same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.
   One the file does not give keeps the default (`default_budget_usd`, 30 minutes, no `model`). The rest of the front
   matter (`id`, `title`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
@@ -188,7 +188,21 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
 - **Front matter is a small subset, not YAML.** `key: value`, one per line, known keys only (unknown and
   duplicate keys are errors, so a typo like `budjet_usd` is caught). A comment starts at `#` after two or
   more spaces, so `title: Fix #12` stays intact. Quote a value to be safe: `title: "Fix  # twelve"`.
-- **Required:** `id`, `title`, `base`, `budget_usd`, `turn_timeout_min`. `status` defaults to `draft`.
+- **Required:** `id`, `title`, `base`, `turn_timeout_min`, and `budget_usd` unless `spend_policy` is set. `status`
+  defaults to `draft`.
+  **Optional:** `spend_policy`, the single value `timeout_only`. Absent, `budget_usd` is a hard dollar cap, as it
+  always was. `spend_policy: timeout_only` means **no dollar cap**: `turn_timeout_min` is the only bound on a turn.
+  The two exclude each other: a goal with both is an error naming `budget_usd` and `spend_policy` (a kept budget
+  that nothing enforces would be an ignored field), and any other value of `spend_policy` is an error naming the key.
+  A `budget_usd` goal runs only on an adapter that reports a hard dollar cap; on one that does not, `run` is refused
+  before anything starts, with a message that says to change the goal to `spend_policy: timeout_only` and approve it
+  again. A `timeout_only` goal runs on any adapter, Claude included: Claude is then started without
+  `--max-budget-usd` and its cost is still recorded. `run --budget` and `send-back --budget` are refused on such a goal
+  (there is no cap to override). `goal approve`, `status`, `review`, `doctor` and the PR description print
+  `no dollar cap: bounded by N min per turn` where a budget would be. **A cost nobody reported is unknown, never 0:**
+  `turn.ended` has no `cost_usd`, the thread's total says `unknown` in text and is null in `--json`.
+  **An older Workbench fails closed.** Front matter is strict, so a binary from before this key reports
+  `unknown key 'spend_policy'` and refuses the goal instead of running it with a cap it cannot see.
   **Optional:** `model`, a model name or alias (`opus`, `claude-opus-5-5`; no leading `-`, no spaces). It
   wins over the config's `model`, which wins over the CLI default, and applies to every turn of the thread,
   send-backs included. The turn's `argv` in `turn.started` shows what ran.
@@ -221,8 +235,9 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
 - **Approval state** is derived on every read, never trusted from the file:
   `draft` (not approved), `approved` (status is approved and `approved_hash` matches the content), `stale`
   (status says approved but the hash is missing or differs). Only `approved` runs.
-- **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`),
-  `turn_timeout_min`, `model` and `push_to` (each only when set, so a goal without them keeps its hash), and the body after the
+- **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`) or, for a
+  `timeout_only` goal, the line `spend_policy=timeout_only` in its place (so a goal with a cap keeps its hash, and
+  dropping a cap needs a fresh approval), `turn_timeout_min`, `model` and `push_to` (each only when set, so a goal without them keeps its hash), and the body after the
   front matter. Line endings, trailing whitespace and blank
   lines at the edges are normalized first. `title` and `id` are not covered, so renaming a goal does not
   revoke approval.
