@@ -50,8 +50,12 @@ enum Help {
             changes: "asks the live run to stop; it records the turn as stopped itself",
             example: "workbench stop"),
         "log": Extra(changes: "nothing; read-only", example: "workbench log -f"),
-        "status": Extra(changes: "nothing; read-only", example: "workbench status --all --json"),
-        "review": Extra(changes: "nothing; read-only", example: "workbench review --json"),
+        "status": Extra(
+            changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
+            example: "workbench status --all --json"),
+        "review": Extra(
+            changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
+            example: "workbench review --json"),
         "open": Extra(
             changes: "nothing in the thread or its worktree; starts the editor (or, with --print, nothing)",
             example: "workbench open --editor cursor   or   cd \"$(workbench open --print)\""),

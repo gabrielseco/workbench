@@ -33,7 +33,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   else `{provider, model, recorded, spend_policy}` from the latest `goal.approved`; an approval without the two keys reads as `claude`, model
   null, `recorded: false`.
 - `notes`: `{turn, seq, text}` for each send-back.
-- `base_gap`: null, or `{base, behind, fetch_note}`.
+- `base_gap`: null, or `{base, behind, fetch_note, fetched, as_of}`. Without `--fetch` nothing touches the network: `behind` is counted against the `origin/<base>` this repository already has, `fetched` is false and `as_of` is when it was last fetched (the mtime of git's `FETCH_HEAD`; null when git never recorded one). With `--fetch`, origin is asked first, `fetched` is true and `as_of` is null. `fetch_note` says why a requested fetch did not happen.
 - `worktree`: `{state: present | removed | none, path}`.
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
   tool_calls, denied_calls}`, derived from the log on each call (`tool_calls` and `denied_calls` are `null` for a turn of a provider that has not reported any: unknown, not 0). `quiet` is true when the newest event is

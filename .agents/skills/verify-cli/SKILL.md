@@ -45,6 +45,7 @@ bash scripts/verify-cli/run.sh                     # [run]: the verifier's helpe
 bash scripts/verify-cli/thread-setup.sh            # default base, goal new --from, ship refusing a local-only base; a clone, no turn, costs nothing
 bash scripts/verify-cli/commits-visible.sh         # accept -m ignored, branch.ahead on ship, Commits in review; a clone, no turn, costs nothing
 bash scripts/verify-cli/spend-policy.sh          # spend_policy: timeout_only and the no-cap wording; a clone, no turn, costs nothing
+bash scripts/verify-cli/base-gap.sh              # status and review do not fetch unless --fetch; a clone, no turn, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -163,6 +164,16 @@ worktree and one file itself (no turn) and `accept` commits it; `ship --yes --no
 the local-only branch, exits 6, names the base and says to push it or change the goal's base, and the origin has no
 `workbench/` branch. `VERIFY_CLI_SABOTAGE=1` pushes the local base to the origin before `ship`, so the three ship steps
 must FAIL (the push then lands only in the temp folder's origin, and `gh` cannot open a pull request on it).
+
+### base-gap
+
+No turn is run, so it costs nothing: a clone whose origin is a bare copy in the temp folder, and a second clone that pushes a commit to
+that origin. Steps: `init`, `goal new`, `goal approve`; plain `status` exits 0 and says nothing about the gap, and `status --json` has
+`base_gap.fetched` false; `status --fetch` says `main is 1 commit behind origin/main` with no age and `--json --fetch` says `fetched`
+true, `behind` 1, `as_of` null; plain `review` then says it with `(as of the last fetch, ...` and plain `status --json` carries `as_of`; with
+the origin moved away, plain `status` exits 0, still says the gap and prints no `could not fetch` note, while `status --fetch` prints
+`could not fetch origin`; `status --all --fetch` exits 2. `VERIFY_CLI_SABOTAGE=1` adds `--fetch` to every plain command, so the steps that
+say a plain command does not fetch, keeps an age and prints no note must FAIL.
 
 ### open
 
