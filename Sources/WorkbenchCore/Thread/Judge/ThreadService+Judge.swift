@@ -105,7 +105,8 @@ extension ThreadService {
         let request = AgentRequest(
             provider: .claude, model: model ?? config.judgeModel ?? config.model, prompt: Judge.prompt(for: input),
             workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
-            spend: .hardCap(budget), purpose: .judge, environment: environment,
+            spend: .hardCap(budget),
+            session: .start(proposed: UUID().uuidString.lowercased()), purpose: .judge, environment: environment,
             limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
         let provider = ClaudeProvider(config: config)
         // What goes in the log is decided before anything is spent; a refusal is a result, not a spawn.

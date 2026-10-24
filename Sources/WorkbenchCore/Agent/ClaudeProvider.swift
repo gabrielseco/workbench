@@ -65,15 +65,16 @@ public struct ClaudeProvider: AgentProvider {
             throw refuse("A read-only Claude call runs with a dollar cap; timeout-only spending is not available yet.")
         }
         guard request.grants.isEmpty else { throw refuse("A read-only call takes no extra permissions.") }
+        // The id is the caller's, so the argv it logs is the argv that runs.
         let sessionID: UUID
         switch request.session {
-        case .none:
-            sessionID = UUID()
         case .start(let proposed):
             guard let proposed, let uuid = UUID(uuidString: proposed) else {
                 throw refuse("Claude needs a session id chosen up front (a UUID) to start a conversation.")
             }
             sessionID = uuid
+        case .none:
+            throw refuse("A read-only Claude call needs a fresh session id chosen up front.")
         case .resume:
             throw refuse("A read-only call is independent of every earlier conversation and is never resumed.")
         }

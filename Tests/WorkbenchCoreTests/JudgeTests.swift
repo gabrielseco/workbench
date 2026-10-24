@@ -156,6 +156,8 @@ private let good = """
     }
 }
 
+private struct ExpectationFailed: Error {}
+
 private struct Judged {
     var fx: RunnerFixture
     var id: String
@@ -257,6 +259,19 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         #expect(result.verdict == nil && result.failure?.contains("was not found") == true, "\(result.failure ?? "")")
         #expect(try j.fx.events(j.id).filter { $0.kind == .judgeStarted }.isEmpty)
         #expect(try j.fx.events(j.id).last?.kind == .judgeRan)
+    }
+
+    @Test func theLoggedArgvIsTheOneThatRan() async throws {
+        let j = try await judged()
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
+        _ = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
+        let ran = try String(contentsOfFile: dump, encoding: .utf8)
+        let started = try #require(try j.fx.events(j.id).first { $0.kind == .judgeStarted })
+        guard case .array(let items)? = started.data["argv"] else { throw ExpectationFailed() }
+        let logged = items.compactMap(\.stringValue)
+        let id = try #require(logged.firstIndex(of: "--session-id").map { logged[$0 + 1] })
+        #expect(ran.contains(id), "the session id in judge.started is the one claude was given")
     }
 
     @Test func withScreenshotsItGetsReadAndRunsInTheirFolder() async throws {

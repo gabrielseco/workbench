@@ -32,7 +32,7 @@ private func judgeRequest(_ tweak: (inout AgentRequest) -> Void = { _ in }) -> A
     request {
         $0.policy = .readOnlyEvidence
         $0.purpose = .judge
-        $0.session = .none
+        $0.session = .start(proposed: session)
         $0.spend = .hardCap(0.5)
         $0.rules = nil
         tweak(&$0)
@@ -199,10 +199,12 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(without[tools + 1] == "")
     }
 
-    @Test func eachCallGetsItsOwnSession() throws {
+    @Test func theSessionIsTheCallersSoTheLoggedArgvIsTheRunningOne() throws {
         func sessionID(_ args: [String]) throws -> String { args[try #require(args.firstIndex(of: "--session-id")) + 1] }
-        #expect(try sessionID(argv()) != sessionID(argv()))
-        #expect(try sessionID(argv { $0.session = .start(proposed: session) }) == session)
+        #expect(try sessionID(argv()) == session)
+        #expect(try argv() == argv(), "building twice gives the same argv")
+        #expect(throws: AgentFailure.self) { try argv { $0.session = .none } }
+        #expect(throws: AgentFailure.self) { try argv { $0.session = .start(proposed: "nope") } }
     }
 
     @Test func theModelIsWhatTheRequestSaysNotTheConfigs() throws {
