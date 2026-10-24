@@ -59,7 +59,7 @@ enum Help {
             example: "workbench review --json"),
         "compact": Extra(
             changes:
-                "events.jsonl of each ended thread it names (renumbers seq, drops the stream lines) and adds its transcript files",
+                "events.jsonl of each ended thread it names (renumbers seq, drops the stream lines); adds its transcript files",
             example: "workbench compact --all --dry-run   then   workbench compact --all"),
         "open": Extra(
             changes: "nothing in the thread or its worktree; starts the editor (or, with --print, nothing)",

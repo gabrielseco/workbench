@@ -70,7 +70,7 @@ wbp "$SCRATCH/approve.out" goal approve "$ID"
 
 T="$P/.workbench/threads/$ID"
 EVENTS="$T/events.jsonl"
-# The turn an older Workbench logged: 60 stream lines (one is not JSON), a result with a denial, an attempt, a grant that
+# The turn an older Workbench logged: 59 stream lines (one is not JSON), a result with a denial, an attempt, a grant that
 # names the denial's seq, and the decision that ended the thread.
 python3 -I - "$EVENTS" <<'PY' || die "could not write the older log"
 import json, sys

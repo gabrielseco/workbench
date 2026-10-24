@@ -192,7 +192,7 @@ whole-record, `log`, `log --transcript`, `log --json` and the two damaged-file s
 ### compact
 
 Temporary, with the command. No turn is run, so it costs nothing: a clone, and the log of an ended thread written the way an older
-Workbench did (60 stream lines as `claude` events, a result with a denial, an agent attempt, a `grant.added` that names the denial's `seq`).
+Workbench did (59 stream lines as `claude` events, a result with a denial, an agent attempt, a `grant.added` that names the denial's `seq`).
 Steps: the older log loads; `compact --dry-run` says "would move" and changes neither the log nor the folder; `compact <id>` exits 0 and
 says the lines were moved; `events.jsonl` is under a quarter of its size; the transcript is `turn-1.jsonl.gz` with no plain file and
 `gzip -t` passes; the log holds only the result line, has no `seq` gap, the grant's `denial_seq` names the result line and the attempt's
