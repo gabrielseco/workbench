@@ -31,7 +31,8 @@ public enum PRBodyBuilder {
         var criteria = criteriaList(goal.criteria)
         if !goal.criteria.isEmpty {
             let statuses = CriteriaStatus.evaluate(
-                criteria: goal.criteria, check: check, lastTurn: lastTurn ?? check?.turn ?? 0, verifier: verifier, proofAvailable: proofAvailable)
+                criteria: goal.criteria, check: check, lastTurn: lastTurn ?? check?.turn ?? 0, verifier: verifier,
+                proofAvailable: proofAvailable)
             // The checklist stays as the reviewer's to tick; the table says who verifies each line.
             criteria += "\n\n" + CriteriaStatus.summary(statuses, check: check) + "\n\n"
                 + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }
