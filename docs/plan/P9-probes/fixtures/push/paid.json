@@ -1,0 +1,102 @@
+{
+  "codex-confine": {
+    "workspace-write asconfigured": [
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "pushed": true,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "0d1e206d3a9e6b29b2281abc5485079ce2a741d1"
+      },
+      {
+        "attempt": "git_push_only",
+        "exit": 0,
+        "pushed": true,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "e73c88608928289dbf2f9171bb66685750ffe55d"
+      }
+    ],
+    "workspace-write hardened": [
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "pushed": false,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "b10ec6a4465d73129da9e0240f5b2cb8ce34f1b9"
+      },
+      {
+        "attempt": "git_push_only",
+        "exit": 0,
+        "pushed": true,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "cad54ca7e64cadca75fa8cd0c22e81f44eaef48e"
+      }
+    ]
+  },
+  "codex-readonly": {
+    "read-only asconfigured": [
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "pushed": true,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "dcf2642f107561bb8d86a3bd5588ca4e24f5de02"
+      },
+      {
+        "attempt": "git_push_only",
+        "exit": 0,
+        "pushed": true,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "6eb9749fb2564ebce6b4f3f9addc20e75ba38b28"
+      }
+    ],
+    "read-only hardened": [
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "pushed": false,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "865a7ff6bb6cde73a0d609002619683a95ae34dd"
+      },
+      {
+        "attempt": "git_push_only",
+        "exit": 0,
+        "pushed": false,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "b638ba00c2948c10c442a6746b1b17138cb69866"
+      }
+    ]
+  }
+}

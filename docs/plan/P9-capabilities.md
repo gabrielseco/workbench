@@ -16,7 +16,9 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
 |---|---|---|
 | Read-only, writes (tracked, untracked, ignored, outside the repo) | Refused: no write tool exists (`--restricted --tools Read,Grep,Glob`) | Refused with `-s read-only`, **only when the user config is ignored** (below) |
 | Read-only, reads outside the repo | **Refused** (`Read` is confined, listed in `permission_denials`) | **Allowed**: `cat <outside>/secret.txt` returned the secret in every mode |
-| Read-only, `git commit` / `git push` | No Bash tool | Blocked (`.git/index.lock: Operation not permitted`), hardened only |
+| Read-only, `git commit` | No Bash tool | Blocked (`.git/index.lock: Operation not permitted`), hardened only |
+| Read-only, `git push` of an existing commit | No Bash tool | Blocked, hardened only (the remote is outside the writable roots) |
+| `workspace-write`, `git push` of an existing commit | No Bash tool | **Succeeded** even hardened, to a local-path remote under `$TMPDIR`. A GitHub remote would also need network (off hardened) and credentials; not probed |
 | Coding confinement | Confined to the worktree by `--restricted` (P1 spike S3) | `-s workspace-write`: repo writes allowed, writes outside refused, network refused (hardened); **`.git` is not writable**, so the agent cannot commit |
 | Network from the sandbox | No shell tool in read-only; not probed for coding | Off by default; the user config here turned it on (`[sandbox_workspace_write] network_access = true`) |
 | Hard dollar cap | `--max-budget-usd` (`error_max_budget_usd`) | **None.** No flag; `turn.completed.usage` has token counts only, no cost |
@@ -63,6 +65,9 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
 
 ## What the probes got wrong, and what is still open
 
+- The first combined `git commit && git push` attempt never tested push alone: when the commit was denied, push
+  did not run. PR review caught it; `git_push_only` pushes a commit made before the turn and compares the
+  remote's `main` with the local `HEAD` (`P9-probes/fixtures/push/`).
 - The first run put the outside directory under `$TMPDIR`, so a `workspace-write` write there succeeded
   because the sandbox allows it. The second run moved it under `$HOME`.
 - `codex exec --json` does not emit a `command_execution` item when the sandbox refuses a command, so
