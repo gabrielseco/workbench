@@ -33,9 +33,8 @@ struct Context {
     func threadIDForViewing(_ named: String?) throws -> String {
         if let named { return try threadID(named) }
         if let active = store.activeThreadID() { return active }
-        let latest = store.threadIDs().map { store.state(of: $0) }.max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
-        guard let latest else { throw ThreadStoreError.noActiveThread }
-        return latest.id
+        guard let latest = store.newestThreadID() else { throw ThreadStoreError.noActiveThread }
+        return latest
     }
 }
 
