@@ -64,6 +64,7 @@ public actor EventLogWriter {
         do { existing = try handle.readToEnd() ?? Data() } catch {
             throw EventLogError.io("cannot read \(url.path): \(error)")
         }
+        EventLogReadCount.record(url)
         let contents = EventLogReader.parse(existing)
         guard contents.problems.isEmpty else { throw EventLogError.corrupt(contents.problems) }
 

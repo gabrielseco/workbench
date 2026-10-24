@@ -291,7 +291,9 @@ public struct ThreadService: Sendable {
     /// runner, a missing worktree and a thread with nothing to accept.
     public func acceptPlan(id: String) async throws -> AcceptPlan {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
-        let state = store.state(of: id)
+        // One replay serves the decision, the base commit and the review report below.
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        let state = ThreadState.derive(from: events, id: id)
         if let decision = state.decision { throw ThreadServiceError.threadEnded(decision) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
 
@@ -314,7 +316,6 @@ public struct ThreadService: Sendable {
         do { pending = try await Self.pendingChanges(in: worktree, git: git) } catch {
             throw ThreadServiceError.acceptIncomplete("cannot read the worktree's changes: \(error)")
         }
-        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         var commits: [String] = []
         if let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue {
             guard let found = await manager.commits(threadID: id, since: base) else {
@@ -324,7 +325,7 @@ public struct ThreadService: Sendable {
         }
         if pending.isEmpty && commits.isEmpty { throw ThreadServiceError.nothingToAccept }
 
-        let report = await ReviewLoader(project: project, git: git).load(id: id)
+        let report = await ReviewLoader(project: project, git: git).load(id: id, events: events)
         // Same-size edits keep paths and counts, so what was shown is also pinned by file identity.
         var snapshot = ""
         if case .summary(let shown) = report.diff {

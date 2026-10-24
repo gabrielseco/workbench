@@ -74,4 +74,36 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
         #expect(store.followUps(of: "g-root").map(\.id) == ["g-r1", "g-r2"])
         #expect(store.newestThreadID() == "g-r2")
     }
+
+    @Test func aTornLastLineIsNotAnEvent() async throws {
+        let project = try tempProject()
+        let store = ThreadStore(project: project)
+        let log = try openLog("g-e", in: project)
+        try await log.append(.threadCreated)
+        await log.close()
+        // A write cut short: a decision with no newline after it was never stored.
+        let handle = try FileHandle(forWritingTo: project.eventsURL("g-e"))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"kind":"review.decision","data":{"decision":"accepted"}}"#.utf8))
+        try handle.close()
+        #expect(store.summary(of: "g-e").isActive)
+        #expect(store.summary(of: "g-e") == ThreadStore.Summary(
+            id: "g-e", createdAt: store.state(of: "g-e").createdAt, lineage: nil, decision: nil))
+    }
+
+    @Test func aLineQuotingBothKindsAndTheLastDecisionStillWin() async throws {
+        let project = try tempProject()
+        let store = ThreadStore(project: project)
+        let log = try openLog("g-f", in: project)
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        _ = try await log.appendClaudeLine(
+            #"{"type":"user","text":"thread.created and review.decision in one line"}"#, turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.reviewDecision, data: ["decision": "discarded"])
+        let summary = store.summary(of: "g-f")
+        #expect(summary.decision == "discarded")
+        #expect(summary == ThreadStore.Summary(
+            id: "g-f", createdAt: store.state(of: "g-f").createdAt, lineage: nil, decision: "discarded"))
+    }
 }

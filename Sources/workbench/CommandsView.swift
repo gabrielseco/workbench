@@ -138,7 +138,9 @@ extension Commands {
             printJSON(await statusJSON(id: id, ctx: ctx))
             return
         }
-        let state = ctx.store.state(of: id)
+        // Replayed once: the removed-worktree note below reads the same events.
+        let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
+        let state = ThreadState.derive(from: events, id: id)
         out("thread:    \(id)\(state.isActive ? "" : "  (ended: \(state.decision ?? "?"))")")
         for line in lineageLines(state, ctx: ctx) { out(line) }
 
@@ -193,8 +195,7 @@ extension Commands {
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: worktree.path) {
             out("worktree:  \(worktree.path)")
-        } else if let events = try? EventLogReader.read(at: ctx.project.eventsURL(id)).events,
-            events.contains(where: { $0.kind == .worktreeRemoved }) {
+        } else if events.contains(where: { $0.kind == .worktreeRemoved }) {
             out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
         }
     }
