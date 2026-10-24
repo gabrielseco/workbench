@@ -67,7 +67,7 @@ public struct ThreadLog: Sendable {
         do { data = try Data(contentsOf: eventsURL) } catch {
             throw EventLogError.io("cannot read \(eventsURL.path): \(error.localizedDescription)")
         }
-        EventLogReadCount.record(eventsURL)
+        EventLogReadCount.record(eventsURL, bytes: data.count)
         let contents = EventLogReader.parse(data)
         // Split as bytes: a writer that died inside a multibyte character must not hide the events before it.
         var parts = data.split(separator: 0x0A, omittingEmptySubsequences: false)
@@ -186,8 +186,9 @@ public struct ThreadLog: Sendable {
             return false
         }
         for (index, event) in contents.events.enumerated().dropFirst(start.events) {
-            // The turn's `result` line is shown from its transcript when it has one.
-            if event.kind == .claude, event.data["type"]?.stringValue == "result", hasTranscript(event.turn) { continue }
+            // A turn with a transcript file shows its lines from there, whatever `claude` events the log still holds
+            // for it: its `result` line always, and all of them in a log `compact` was interrupted in.
+            if event.kind == .claude, hasTranscript(event.turn) { continue }
             if event.kind == .turnEnded { flush(event.turn) }
             emit(.event(event, index: index))
         }

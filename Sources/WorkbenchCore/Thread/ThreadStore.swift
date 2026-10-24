@@ -64,6 +64,7 @@ public struct ThreadStore: Sendable {
     public func summary(of id: String) -> Summary {
         var summary = Summary(id: id)
         guard let data = try? Data(contentsOf: project.eventsURL(id)) else { return summary }
+        EventLogReadCount.record(project.eventsURL(id), bytes: data.count)
         let decoder = JSONDecoder()
         data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             guard let base = bytes.baseAddress else { return }

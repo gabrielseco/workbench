@@ -55,18 +55,29 @@ public actor EventLogWriter {
             throw EventLogError.io("cannot create \(url.deletingLastPathComponent().path): \(error)")
         }
 
-        let fd = Darwin.open(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
-        guard fd >= 0 else {
-            throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
+        // The file can be replaced while this waits for the lock (`compact` renames a new log over the old one): the
+        // lock is then on a file nobody reads any more, so a writer that finds the path is another file starts again.
+        var opened: (fd: Int32, handle: FileHandle)?
+        for _ in 0..<5 {
+            let fd = Darwin.open(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+            guard fd >= 0 else {
+                throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
+            }
+            let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+            try acquireLock(fd: fd, path: url.path, timeout: lockTimeout)
+            var held = stat(), named = stat()
+            if fstat(fd, &held) == 0, stat(url.path, &named) == 0, held.st_ino == named.st_ino, held.st_dev == named.st_dev {
+                opened = (fd, handle)
+                break
+            }
         }
-        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        try acquireLock(fd: fd, path: url.path, timeout: lockTimeout)
+        guard let (fd, handle) = opened else { throw EventLogError.io("\(url.path) keeps being replaced") }
 
         let existing: Data
         do { existing = try handle.readToEnd() ?? Data() } catch {
             throw EventLogError.io("cannot read \(url.path): \(error)")
         }
-        EventLogReadCount.record(url)
+        EventLogReadCount.record(url, bytes: existing.count)
         let contents = EventLogReader.parse(existing)
         guard contents.problems.isEmpty else { throw EventLogError.corrupt(contents.problems) }
 
@@ -276,12 +287,16 @@ public actor EventLogWriter {
         }
     }
 
+    /// One event as it is stored (no newline). `compact` rebuilds the few lines whose numbers it changes with it.
+    static func encodedLine(_ event: Event, dataJSON: String) throws -> String {
+        "{\"v\":\(event.v),\"seq\":\(event.seq),\"ts\":\(try json(.string(event.ts))),"
+            + "\"turn\":\(event.turn),\"kind\":\(try json(.string(event.kind.rawValue))),"
+            + "\"data\":\(dataJSON)}"
+    }
+
     private func write(_ event: Event, dataJSON: String) throws {
         guard !closed else { throw EventLogError.io("event log is closed") }
-        let line =
-            "{\"v\":\(event.v),\"seq\":\(event.seq),\"ts\":\(try Self.json(.string(event.ts))),"
-            + "\"turn\":\(event.turn),\"kind\":\(try Self.json(.string(event.kind.rawValue))),"
-            + "\"data\":\(dataJSON)}\n"
+        let line = try Self.encodedLine(event, dataJSON: dataJSON) + "\n"
         do { try handle.write(contentsOf: Data(line.utf8)) } catch {
             throw EventLogError.io("append failed: \(error)")
         }

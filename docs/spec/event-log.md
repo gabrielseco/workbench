@@ -90,6 +90,14 @@ instead, one line per stream line, in order:
 - `status` reads the open turn's file for its progress (tool calls, denials, the newest line). A turn that is not
   open needs no file to be understood: its result is in the log.
 - A thread from before transcript files has its lines in the log and no file; both read the same way.
+  `workbench compact (<id> | --all) [--dry-run]` moves such a thread's lines into the files (temporary: it goes with
+  the old shape once the logs are moved). It works on an ended thread only, holds the log's lock, and builds the new
+  log beside the old one: every event but the `claude` lines, each turn's `result` line kept, `seq` numbered again from
+  1 (so there are no gaps), and the two fields that name a `seq` changed with it: `grant.added`'s `denial_seq` and the
+  `a<seq>` ids of agent attempts. A moved turn's `turn.ended` gains `transcript`. Before anything is replaced it checks
+  that the new log replays to the same state (the `seq` numbers apart), that what `grant` lists is the same, and that
+  every transcript line decodes to its event; the transcript files go in place first and the log is renamed over the old
+  one last, so an interrupted run shows no line twice (a turn with a file is shown from it) and running it again finishes.
 
 ## Invariants (tested)
 

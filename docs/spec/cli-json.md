@@ -104,6 +104,13 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
   is none or its goal does not parse.
 - `setup`, `check`: `{command, result, duration_ms}`; `result` is `passed`, `failed`, `timed_out`, `stopped`, `skipped` or `not_declared`.
 
+## seq numbers and `compact`
+
+Every `seq` these outputs carry (`notes[].seq`, `denied_tools[].seq`, the `seqs` of a `grant` entry) is the event's number in
+`events.jsonl`. `workbench compact` (temporary) takes a log's stream lines out and numbers the events that are left again
+from 1, so after it those numbers differ from before and a `seq` written down earlier (`log --seq <n>`) may name another
+event. Nothing else in the outputs changes.
+
 ## log
 
 JSON lines: the stored events, one per line, exactly as in `events.jsonl`. A Claude turn's transcript lines (kept in `transcript/turn-<n>.jsonl`, see the event-log spec) are printed as `claude` events with `"seq":null`, `data` verbatim, just before that turn's `turn.ended`; the turn's `result` line is printed once, from there. A log with a line that is not an event is printed as it is, without transcripts.
