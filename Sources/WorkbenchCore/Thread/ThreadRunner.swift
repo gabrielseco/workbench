@@ -305,9 +305,10 @@ public actor ThreadRunner {
     ) -> ThreadStore.Session? {
         let file = store.session(of: threadID)
         let state = store.state(of: threadID)
-        if let file, let logged = state.sessionID {
+        // Only a Claude session id (a UUID) can be resumed; the file may be missing or unreadable.
+        if let logged = state.sessionID, UUID(uuidString: logged) != nil {
             guard (state.sessionProvider ?? "claude") == "\(provider)" else { return nil }
-            let confirmed = file.sessionID == logged && file.confirmed
+            let confirmed = file?.sessionID == logged && file?.confirmed == true
             return ThreadStore.Session(sessionID: logged, confirmed: confirmed, provider: "\(provider)")
         }
         guard let file, (file.provider ?? "claude") == "\(provider)" else { return nil }

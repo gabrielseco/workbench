@@ -138,11 +138,12 @@ import Testing
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         let store = ThreadStore(project: fx.project)
-        try await logTurn(fx, id, session: "from-log", provider: "claude")
+        try await logTurn(fx, id, session: "22222222-2222-2222-2222-222222222222", provider: "claude")
         try store.save(.init(sessionID: "from-file", confirmed: true, provider: "claude"), for: id)
         let chosen = try #require(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude))
-        #expect(chosen.sessionID == "from-log" && !chosen.confirmed, "an unconfirmed id keeps the safe fallback")
-        try store.save(.init(sessionID: "from-log", confirmed: true, provider: "claude"), for: id)
+        #expect(chosen.sessionID == "22222222-2222-2222-2222-222222222222" && !chosen.confirmed, "an unconfirmed id keeps the safe fallback")
+        let logged = "22222222-2222-2222-2222-222222222222"
+        try store.save(.init(sessionID: logged, confirmed: true, provider: "claude"), for: id)
         #expect(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude)?.confirmed == true)
     }
 
@@ -152,5 +153,18 @@ import Testing
         try await logTurn(fx, id, session: "x", provider: "codex")
         let store = ThreadStore(project: fx.project)
         #expect(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude) == nil)
+    }
+
+    @Test func theLoggedSessionSurvivesAMissingSessionFile() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let store = ThreadStore(project: fx.project)
+        let uuid = "33333333-3333-3333-3333-333333333333"
+        try await logTurn(fx, id, session: uuid, provider: "claude")
+        #expect(store.session(of: id) == nil)
+        let chosen = try #require(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude))
+        #expect(chosen.sessionID == uuid && !chosen.confirmed)
+        try "not json".write(to: fx.project.sessionURL(id), atomically: true, encoding: .utf8)
+        #expect(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude)?.sessionID == uuid)
     }
 }
