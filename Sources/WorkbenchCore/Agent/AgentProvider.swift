@@ -49,6 +49,10 @@ public struct AgentDecoderResult: Sendable, Equatable {
 public protocol AgentDecoder: Sendable {
     /// One complete line. Returns the activity it carries, possibly none.
     mutating func consume(line: String) -> [AgentActivity]
+    /// A line over the size limit was dropped after its first bytes. Required: whether losing it makes the answer
+    /// unusable (a lost result record) or harmless (a long assistant message) is the provider's call, and a
+    /// decoder that ignores it must say so by implementing it.
+    mutating func consume(oversizedPreview preview: String, totalBytes: Int) -> [AgentActivity]
     /// The process ended (`exit.stderrTail` is the end of its stderr). Called exactly once.
     mutating func finish(exit: ProcessExit) -> AgentDecoderResult
 }
@@ -83,6 +87,11 @@ extension AgentRequest {
         }
         if !images.isEmpty, !caps.imageAttachments {
             return refuse("\(provider.id) cannot take images, and there is no text substitute for visual evidence.")
+        }
+        let lim = limits
+        if lim.timeout <= 0 || lim.maxLineBytes <= 0 || lim.maxOutputBytes <= 0 || lim.maxBufferedActivity <= 0
+            || lim.maxRawBytes <= 0 {
+            return refuse("Every limit (timeout, line, output, buffered activity, raw bytes) must be positive.")
         }
         if let model, model.isEmpty || !SafeNames.isModelName(model) {
             return refuse("The model name \"\(model)\" is not a valid model name.")

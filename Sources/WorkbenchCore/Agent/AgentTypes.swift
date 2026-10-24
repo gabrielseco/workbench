@@ -242,6 +242,8 @@ public struct AgentCompletion: Sendable, Equatable {
     /// Activity lost to a slow consumer. The log of what happened is the child's output, not this stream.
     public var droppedActivity: Int
     public var outputTruncated: Bool
+    /// Lines the process layer dropped for size. The decoder was told of each; this is for the record.
+    public var oversizedLines: Int
 
     /// The only definition of "worked": the child ended on its own with status 0, the provider said it
     /// succeeded, and nothing failed. Whether the answer is a usable *result* is the stage's validator.

@@ -27,6 +27,8 @@ private struct ScriptProvider: AgentProvider {
 private struct ScriptDecoder: AgentDecoder {
     var sawDone = false
     var last = ""
+    /// A dropped line may have been the result, so a decoder that cannot tell fails closed.
+    var lostLine = false
 
     mutating func consume(line: String) -> [AgentActivity] {
         if line == "DONE" { sawDone = true }
@@ -34,7 +36,13 @@ private struct ScriptDecoder: AgentDecoder {
         return [.text(line)]
     }
 
+    mutating func consume(oversizedPreview preview: String, totalBytes: Int) -> [AgentActivity] {
+        lostLine = true
+        return []
+    }
+
     mutating func finish(exit: ProcessExit) -> AgentDecoderResult {
+        if lostLine { return AgentDecoderResult(outcome: .unknown) }
         if exit.stderrTail.contains("at capacity") {
             return AgentDecoderResult(
                 outcome: .failed, failure: AgentFailure(.capacity, "The provider is at capacity.", retry: .transient))
@@ -134,12 +142,42 @@ private func finish(_ script: String, _ request: AgentRequest = request()) async
         #expect(completion.droppedActivity > 0)
     }
 
-    @Test func aLineOverTheLimitBecomesADiagnosticNotAHang() async throws {
+    @Test func aLineOverTheLimitIsReportedToTheDecoderAndCanFailTheAnswer() async throws {
         let (completion, seen) = try await finish(
-            "head -c 5000 /dev/zero | tr '\\0' x; echo; echo DONE",
+            "echo DONE; head -c 5000 /dev/zero | tr '\\0' x; echo",
             request { $0.limits.maxLineBytes = 1024 })
         #expect(seen.contains { if case .diagnostic = $0 { true } else { false } })
-        #expect(completion.succeeded)
+        #expect(completion.oversizedLines == 1)
+        #expect(!completion.succeeded, "a usable answer followed by a lost record is not a result")
+        #expect(completion.provider == .unknown)
+    }
+
+    @Test func aStopOrADeadlineBeatsWhatTheProviderSaidBeforeIt() async throws {
+        let script = "echo 'at capacity' >&2; sleep 300"
+        let timed = try await finish(script, request(timeout: 1)).0
+        #expect(timed.failure?.kind == .timeout)
+        #expect(timed.failure?.retry == .never, "a deadline is not a capacity retry")
+        #expect(timed.failure?.diagnostic?.contains("capacity") == true, "the provider's message is kept")
+
+        let execution = try AgentRunner.start(provider: ScriptProvider(script: script), request: request())
+        var iterator = execution.activity.makeAsyncIterator()
+        _ = await iterator.next()  // started
+        execution.stop()
+        let stopped = await execution.completion
+        #expect(stopped.failure?.kind == .cancellation)
+        #expect(stopped.failure?.retry == .never)
+    }
+
+    @Test func negativeLimitsAreRefusedNotTrapped() throws {
+        let provider = ScriptProvider(script: "echo boom >&2; exit 1")
+        for tweak: (inout AgentLimits) -> Void in [
+            { $0.maxRawBytes = -1 }, { $0.timeout = 0 }, { $0.maxLineBytes = 0 }, { $0.maxOutputBytes = -5 },
+            { $0.maxBufferedActivity = 0 },
+        ] {
+            let bad = request { tweak(&$0.limits) }
+            let failure = #expect(throws: AgentFailure.self) { try AgentRunner.start(provider: provider, request: bad) }
+            #expect(failure?.kind == .unsupportedCapability)
+        }
     }
 }
 

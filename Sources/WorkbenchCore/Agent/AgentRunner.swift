@@ -67,6 +67,7 @@ public enum AgentRunner {
     ) async -> AgentCompletion {
         var decoder = initial
         var dropped = 0
+        var oversized = 0
         func emit(_ item: AgentActivity) {
             if case .dropped = continuation.yield(item) { dropped += 1 }
         }
@@ -79,7 +80,9 @@ public enum AgentRunner {
             case .line(let line):
                 for item in decoder.consume(line: line) { emit(item) }
             case .oversizedLine(let preview, let total):
+                oversized += 1
                 emit(.diagnostic("A line of \(total) bytes was over the limit; kept the first \(preview.utf8.count)."))
+                for item in decoder.consume(oversizedPreview: preview, totalBytes: total) { emit(item) }
             case .exited(let e):
                 exit = e
             }
@@ -93,18 +96,28 @@ public enum AgentRunner {
                     outputTruncated: false, lastLineAfterLimit: nil, stderrTail: "", drainTimedOut: false),
                 provider: .unknown, answer: nil, session: nil, usage: nil,
                 failure: AgentFailure(.interrupted, "The process ended with no exit record.", retry: .never),
-                droppedActivity: dropped, outputTruncated: false)
+                droppedActivity: dropped, outputTruncated: false, oversizedLines: oversized)
         }
 
         let result = decoder.finish(exit: exit)
-        let failure = result.failure ?? processFailure(exit, limits: limits)
+        let failure = failure(exit, provider: result.failure, limits: limits)
         continuation.finish()
         return AgentCompletion(
             process: exit, provider: result.outcome, answer: result.answer, session: result.session,
-            usage: result.usage, failure: failure, droppedActivity: dropped, outputTruncated: exit.outputTruncated)
+            usage: result.usage, failure: failure, droppedActivity: dropped, outputTruncated: exit.outputTruncated,
+            oversizedLines: oversized)
     }
 
-    /// Process-level causes the provider's output cannot explain. A provider's own failure wins: it says why.
+    /// A stop or a deadline is what happened, whatever the provider printed before it: it keeps the provider's
+    /// message as its diagnostic and is never retried as, say, a capacity failure. Otherwise the provider's own
+    /// explanation wins over the exit status.
+    private static func failure(_ exit: ProcessExit, provider: AgentFailure?, limits: AgentLimits) -> AgentFailure? {
+        guard exit.cause != .natural else { return provider ?? processFailure(exit, limits: limits) }
+        var failure = processFailure(exit, limits: limits)
+        if let provider { failure?.diagnostic = "\(provider.kind.rawValue): \(provider.message)" }
+        return failure
+    }
+
     private static func processFailure(_ exit: ProcessExit, limits: AgentLimits) -> AgentFailure? {
         switch exit.cause {
         case .timedOut:
@@ -130,6 +143,6 @@ public enum AgentRunner {
 
     private static func tail(_ stderr: String, _ limits: AgentLimits) -> String {
         let text = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? "" : " stderr: " + String(text.suffix(min(limits.maxRawBytes, 512)))
+        return text.isEmpty ? "" : " stderr: " + String(text.suffix(min(max(0, limits.maxRawBytes), 512)))
     }
 }
