@@ -1,0 +1,458 @@
+{
+  "codex-confine": {
+    "workspace-write asconfigured": [
+      {
+        "attempt": "write_tracked",
+        "exit": 0,
+        "tracked_changed": true,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "3423ce55dc2fc6aac554464c0ab15d4d56adef87"
+      },
+      {
+        "attempt": "write_untracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": true,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "b02decabbf27acffcc67ea0cac9d3fc528e41f0f"
+      },
+      {
+        "attempt": "write_ignored",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": true,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "edde1ce4174749ecc63d3cb3f99ad619de4de2a8"
+      },
+      {
+        "attempt": "write_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "78078a3cded7817bfe750a37cc4b053ac7e9f335"
+      },
+      {
+        "attempt": "read_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "a6a5bcd0ccae621e7870acf1e0d9fa8882c53867"
+      },
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "202a017fa98eb05d9490fb57594f8776d2fd2a64"
+      },
+      {
+        "attempt": "gh_comment",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "f7fbb50ab63530ddb2762ff9f16839648d8b32eb"
+      },
+      {
+        "attempt": "network",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "6e9fef4eeb9a896211d69e3806f1aa42bc098a11"
+      }
+    ],
+    "workspace-write hardened": [
+      {
+        "attempt": "write_tracked",
+        "exit": 0,
+        "tracked_changed": true,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "c01ed6cd4501873bdbe53224bcf7ce047c31b02d"
+      },
+      {
+        "attempt": "write_untracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": true,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "3ed547bfe8ade54297ba382c9e9653d212a060c9"
+      },
+      {
+        "attempt": "write_ignored",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": true,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "9c5125e629f5c5b86bb0d18443215851c567db10"
+      },
+      {
+        "attempt": "write_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "4b320a7a44358aeb34af7fce99dd9a2bcc0044de"
+      },
+      {
+        "attempt": "read_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "c745d8dafbed78236af3f75999a24a46daab1270"
+      },
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "7ca8dc52c9fce712994b902d08603b6a61a53660"
+      },
+      {
+        "attempt": "gh_comment",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "4cd17cb5741d2f79478403455229533c23c2b0d5"
+      },
+      {
+        "attempt": "network",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "586cad55b367701149c9eba3a6d53181690bfc4d"
+      }
+    ]
+  },
+  "codex-readonly": {
+    "read-only asconfigured": [
+      {
+        "attempt": "write_tracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "345b9e685d8fd9797d5a4b5812854929af23bb6e"
+      },
+      {
+        "attempt": "write_untracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "cfaa007fdd92c6433e4f128fc9c59e3282439be7"
+      },
+      {
+        "attempt": "write_ignored",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "17f1a29b04a612f85a07088f85c04792c9f2b14e"
+      },
+      {
+        "attempt": "write_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "e2a29df738e6702414c4c3ecd0f78fabf1dcfd7d"
+      },
+      {
+        "attempt": "read_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "1865079d641aa54636433a99985d7ef90949dea6"
+      },
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "eca222794243eeaccbce2e5deef8fd650fc77341"
+      },
+      {
+        "attempt": "gh_comment",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "25d37657fd5815fd6771299fc9eb74b4eefa5f6b"
+      },
+      {
+        "attempt": "network",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "fd6ce8d953dd3862c5791854db1418813dae368f"
+      }
+    ],
+    "read-only hardened": [
+      {
+        "attempt": "write_tracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "9c079ea0649be486da02f668f23b085fae62de10"
+      },
+      {
+        "attempt": "write_untracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "fb49f63ab30530efab5385833b9c02b6d27e1bef"
+      },
+      {
+        "attempt": "write_ignored",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "322b1510e6f95138345da516d3189b79f88dad82"
+      },
+      {
+        "attempt": "write_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "1fbfc5da631298abbd7d001e24071af81448174a"
+      },
+      {
+        "attempt": "read_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "d30bd4c4d908e050cf1b13730afa72459c16029f"
+      },
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "3f1831013e4b7c210a4ba9948fb176e1990a621e"
+      },
+      {
+        "attempt": "gh_comment",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "3fdafa381395f91e97f6ee9306533f729ab6492e"
+      },
+      {
+        "attempt": "network",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "9cd5dce207b720b985bb2499a2b75c01d622a6e9"
+      }
+    ]
+  },
+  "claude-readonly": {
+    "claude read-only tools": [
+      {
+        "attempt": "write_tracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "45008d4c0027c87208ef2a463e907768e43e0daa"
+      },
+      {
+        "attempt": "write_untracked",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "2a5910da670fd1c67466e579b1d90ecf9f635ec1"
+      },
+      {
+        "attempt": "write_ignored",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "e9d8ecd90ffa7c3394a915ca9901b5f771be68a5"
+      },
+      {
+        "attempt": "write_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "59795312c067120db72c728ece2d2fed441f6976"
+      },
+      {
+        "attempt": "read_outside",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "6a9e743a024388020d3f49aad0dce1b02b13ad07"
+      },
+      {
+        "attempt": "git_push",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "e3390dff7d659ef81b37471a67a1a46c19db7d0e"
+      },
+      {
+        "attempt": "gh_comment",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "b8ca86041bcbba4ea54bca8f73b4d06a4fe4232f"
+      },
+      {
+        "attempt": "network",
+        "exit": 0,
+        "tracked_changed": false,
+        "untracked_created": false,
+        "ignored_created": false,
+        "outside_written": [],
+        "outside_secret_changed": false,
+        "remote_head": "5af0efecaaee91cc44bfe5e71cdcafe9576e953e"
+      }
+    ]
+  },
+  "codex-image": {
+    "image": {
+      "exit": 0,
+      "answered_with_word": true
+    }
+  },
+  "codex-session": {
+    "session": {
+      "returned_id": "01a16bc2-708b-7f03-81b4-09d70e16fba9",
+      "first_exit": 0,
+      "resume_exit": 0,
+      "resumed_remembers": true,
+      "ephemeral_resume_exit": 1
+    }
+  },
+  "codex-schema": {
+    "schema": {
+      "exit": 0,
+      "answer_file": "{\"verdict\":\"CLEAN\"}"
+    }
+  },
+  "codex-env": {
+    "env": {
+      "empty": {
+        "exit": 0,
+        "ok": true,
+        "stderr_head": "Reading additional input from stdin...\n"
+      },
+      "path_only": {
+        "exit": 0,
+        "ok": true,
+        "stderr_head": "Reading additional input from stdin...\n"
+      },
+      "path_home": {
+        "exit": 0,
+        "ok": true,
+        "stderr_head": "Reading additional input from stdin...\n"
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a16bc1-4d9b-7d82-8392-c9a86be8e404"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the command and report its exit status."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'gh pr comment 1 --body probe'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'gh pr comment 1 --body probe'","aggregated_output":"none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`\n","exit_code":1,"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Exit status: `1`.\n\nThe command failed because no configured Git remote points to a known GitHub host."}}
+{"type":"turn.completed","usage":{"input_tokens":29922,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":83,"reasoning_output_tokens":0}}
