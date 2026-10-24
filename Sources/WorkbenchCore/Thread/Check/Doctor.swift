@@ -249,7 +249,7 @@ public final class Doctor: @unchecked Sendable {
         report.thread = goal?.thread
         report.approvedFor = goal?.approvedFor
         report.agents = Self.agents(
-            config, searchPath: options.environment["PATH"], goal: goal.map { ($0.thread, $0.budgetUSD) })
+            config, searchPath: options.environment["PATH"], goal: goal)
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         var global: String?

@@ -25,6 +25,8 @@ extension DoctorReport {
 struct DoctorGoal {
     var thread: String
     var budgetUSD: Decimal
+    /// The goal's own `model`, which wins over the config when a run resolves its agent.
+    var model: String?
     var approvedFor: AgentUse?
 }
 
@@ -46,20 +48,21 @@ extension Doctor {
             let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal
         else { return nil }
-        return DoctorGoal(thread: id, budgetUSD: goal.budgetUSD, approvedFor: store.state(of: id).approvedFor)
+        return DoctorGoal(
+            thread: id, budgetUSD: goal.budgetUSD, model: goal.model, approvedFor: store.state(of: id).approvedFor)
     }
 
     /// Each responsibility's resolved provider and model with what is wrong or limited about it. Reads the adapters'
     /// capabilities, not a second list of what they can do. `capabilities` is replaced in tests.
     static func agents(
-        _ config: Config, searchPath: String?, goal: (thread: String, budgetUSD: Decimal)? = nil,
+        _ config: Config, searchPath: String?, goal: DoctorGoal? = nil,
         capabilities: ((AgentProviderID) -> AgentCapabilities?)? = nil
     ) -> [DoctorAgent] {
         var found = [
             DoctorAgent(
                 role: .goal, resolved: config.resolvedGoalAgent,
                 note: config.resolvedGoalAgent == nil ? "goal drafting stays manual" : "drafting is not enabled yet"),
-            DoctorAgent(role: .run, resolved: config.resolvedRunAgent(), note: nil),
+            DoctorAgent(role: .run, resolved: config.resolvedRunAgent(goalModel: goal?.model), note: nil),
             DoctorAgent(role: .judge, resolved: config.resolvedJudgeAgent(), note: nil),
             DoctorAgent(role: .review, resolved: config.resolvedReviewAgent(), note: nil),
         ]
@@ -83,7 +86,7 @@ extension Doctor {
 
     private static func issues(
         role: AgentRole, resolved: ResolvedAgent, config: Config, searchPath: String?,
-        goal: (thread: String, budgetUSD: Decimal)?, caps: AgentCapabilities?
+        goal: DoctorGoal?, caps: AgentCapabilities?
     ) -> [DoctorAgentIssue] {
         var out: [DoctorAgentIssue] = []
         func add(_ kind: String, _ severity: DoctorAgentIssue.Severity, _ message: String) {

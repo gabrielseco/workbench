@@ -57,7 +57,7 @@ private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable 
         let cfg = try config(present)
         var uncapped = ClaudeProvider(config: cfg).capabilities
         uncapped.hardDollarCap = false
-        let goal = (thread: "g-1-x", budgetUSD: Decimal(string: "0.50")!)
+        let goal = DoctorGoal(thread: "g-1-x", budgetUSD: Decimal(string: "0.50")!, model: nil, approvedFor: nil)
         let found = Doctor.agents(cfg, searchPath: "/bin", goal: goal) { _ in uncapped }
         let run = issues(found, .run).filter { $0.kind == "budget_without_cap" }
         #expect(run.count == 1 && run[0].message.contains("g-1-x") && run[0].message.contains("0.5"), "\(run)")
@@ -68,6 +68,16 @@ private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable 
             Doctor.agents(cfg, searchPath: "/bin", goal: nil) { _ in uncapped }.flatMap(\.issues).allSatisfy {
                 $0.kind != "budget_without_cap"
             })
+    }
+
+    @Test func theGoalsModelWinsOverTheConfigs() throws {
+        let cfg = try config("model = \"haiku\"\n" + present)
+        func runModel(_ goal: DoctorGoal?) -> String? {
+            Doctor.agents(cfg, searchPath: "/bin", goal: goal).first { $0.role == .run }?.resolved?.model
+        }
+        #expect(runModel(nil) == "haiku")
+        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: "opus", approvedFor: nil)) == "opus")
+        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: nil, approvedFor: nil)) == "haiku")
     }
 
     @Test func unconfinedReadsStated() throws {

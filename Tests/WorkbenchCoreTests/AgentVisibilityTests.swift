@@ -49,6 +49,29 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
         #expect(review?.outcome == nil, "an attempt with no end has no outcome yet")
     }
 
+    @Test func aLaterStagesStartIsNotHiddenByAnEarlierStagesAttempt() {
+        let events = [
+            ev(
+                1, 1, .agentAttemptStarted,
+                ["attempt": "a1", "role": "review", "round": 1, "provider": "codex", "model": .null]),
+            ev(2, 1, .agentAttemptEnded, ["attempt": "a1", "role": "review", "outcome": "succeeded"]),
+            ev(3, 1, .reviewStageStarted, ["stage": "design", "round": 1, "provider": "codex", "model": .null]),
+        ]
+        let use = ThreadState.derive(from: events, id: "t").agentUse["review"]
+        #expect(
+            use?.stage == "design" && use?.outcome == nil && use?.attempt == nil,
+            "the design start is the latest: \(String(describing: use))")
+        // The same stage's start before its attempt still gives way to it.
+        let same = [
+            events[2],
+            ev(
+                4, 1, .agentAttemptStarted,
+                ["attempt": "a4", "role": "review", "stage": "design", "round": 1, "provider": "codex", "model": .null]),
+            ev(5, 1, .reviewStageStarted, ["stage": "design", "round": 1, "provider": "codex", "model": .null]),
+        ]
+        #expect(ThreadState.derive(from: same, id: "t").agentUse["review"]?.attempt == "a4")
+    }
+
     @Test func derivesApprovedFor() {
         let state = ThreadState.derive(from: attemptsLog, id: "t")
         #expect(state.approvedFor == AgentUse(provider: "claude", model: "opus", recorded: true))

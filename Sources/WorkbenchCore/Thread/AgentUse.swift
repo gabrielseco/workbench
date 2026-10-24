@@ -95,12 +95,14 @@ extension ThreadState {
         return lines
     }
 
-    /// Folds one record into `agentUse`. An attempt record wins over the start record of the same turn and round,
-    /// which carries the same provider and model.
+    /// Folds one record into `agentUse`. An attempt record wins over the start record of the same turn, round and
+    /// stage, which carries the same provider and model; a start of another stage or round replaces it.
     static func applyAgent(_ event: Event, to uses: inout [String: AgentUse]) {
         func start(_ role: String) {
             let use = AgentUse(start: event, role: role)
-            if let known = uses[role], known.attempt != nil, known.turn == use.turn, known.round == use.round { return }
+            if let known = uses[role], known.attempt != nil, known.turn == use.turn, known.round == use.round,
+                known.stage == use.stage
+            { return }
             uses[role] = use
         }
         switch event.kind {
