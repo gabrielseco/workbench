@@ -19,15 +19,22 @@ extension ThreadRunner {
         sessionID: String, resume: Bool, prompt: String, config: Config, goal: Goal, worktree: URL,
         outputDirectory: URL, options: RunOptions
     ) -> AgentRequest {
+        var limits = AgentLimits(timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60)
+        limits.killGrace = options.killGrace
+        let agent = config.resolvedRunAgent(goalModel: goal.model)
+        if agent.provider == .codex {
+            // One fresh process: no session, no model, no tool patterns, and the rules are already at the top of the prompt.
+            return AgentRequest(
+                provider: .codex, prompt: prompt, workingDirectory: worktree, outputDirectory: outputDirectory,
+                policy: .scopedCoding, spend: spend(for: goal, options: options), purpose: .coding,
+                environment: options.parentEnvironment, limits: limits)
+        }
         let session: AgentSessionIntent =
             resume
             ? .resume(AgentSessionHandle(provider: .claude, purpose: .coding, value: sessionID))
             : .start(proposed: sessionID)
-        var limits = AgentLimits(timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60)
-        limits.killGrace = options.killGrace
         return AgentRequest(
-            provider: .claude, model: config.resolvedRunAgent(goalModel: goal.model).model, prompt: prompt,
-            workingDirectory: worktree,
+            provider: .claude, model: agent.model, prompt: prompt, workingDirectory: worktree,
             outputDirectory: outputDirectory, policy: .scopedCoding,
             spend: spend(for: goal, options: options), session: session, purpose: .coding,
             environment: options.parentEnvironment, limits: limits,

@@ -13,6 +13,10 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case invalidBudget(String)
     case alreadyRunning
     case claudeNotFound(String)
+    /// The configured coding provider's executable is not there (`claude` has its own case and wording).
+    case agentNotFound(provider: String, name: String)
+    /// The goal asks for what the coding provider cannot do (a dollar cap, a model); the text says what to change.
+    case codingUnsupported(String)
     case threadEnded(String)
     /// A proof names a command the run could not execute; the lines say which and what to add.
     case unrunnableProofs(String)
@@ -41,6 +45,10 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidBudget(let why): "the budget is not usable: \(why)"
         case .alreadyRunning: "another `workbench run` holds this thread's log."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
+        case .agentNotFound(let provider, let name):
+            "cannot find `\(name)` on PATH. Install \(provider) or set [providers.\(provider)] executable "
+                + "in .workbench/config.toml."
+        case .codingUnsupported(let why): why
         case .threadEnded(let decision): "this thread has ended (\(decision))."
         case .setupFailed(let command, let how, let output, let hint):
             "setup `\(command)` \(how), so no turn was started. The worktree is kept; fix it and run again."

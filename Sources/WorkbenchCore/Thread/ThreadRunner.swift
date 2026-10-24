@@ -83,6 +83,8 @@ public actor ThreadRunner {
     /// The coding turn in progress; `stop()` reaches it the way it reaches `currentRun`.
     var currentExecution: AgentExecution?
     var stopRequested = false
+    /// The provider of the coding turn in progress, set when the turn starts: what its record has and has not got.
+    var codingProvider: AgentProviderID = .claude
 
     public init(
         project: Project, threadID: String, git: GitRunner,
@@ -125,13 +127,17 @@ public actor ThreadRunner {
         }
         let skillAvailable = await verifierSkillAvailable(config: config, goal: goal)
         try Self.requireRunnable(goal: goal, config: config, options: options, verifierSkillAvailable: skillAvailable)
+        let agent = config.resolvedRunAgent(goalModel: goal.model)
+        // What this provider cannot do comes before the approval check: it is what has to change, and approving again
+        // before changing it would only meet it next.
+        try Self.requireProviderCanCode(agent: agent, goal: goal, options: options)
         try Self.requireApprovedAgent(
-            state: store.state(of: threadID),
-            agent: config.resolvedRunAgent(goalModel: goal.model), spendPolicy: goal.spendPolicyName)
-        guard
-            let claude = ExecutableResolver.resolve(
-                config.claudePath, searchPath: options.parentEnvironment["PATH"])
-        else { throw RunnerError.claudeNotFound(config.claudePath) }
+            state: store.state(of: threadID), agent: agent, spendPolicy: goal.spendPolicyName)
+        let name = config.executable(for: agent.provider)
+        guard let executable = ExecutableResolver.resolve(name, searchPath: options.parentEnvironment["PATH"]) else {
+            throw agent.provider == .claude
+                ? RunnerError.claudeNotFound(name) : RunnerError.agentNotFound(provider: "\(agent.provider)", name: name)
+        }
 
         let log: EventLogWriter
         do { log = try EventLogWriter.open(at: project.eventsURL(threadID)) } catch EventLogError.alreadyOpen {
@@ -145,7 +151,7 @@ public actor ThreadRunner {
 
         do {
             let report = try await runLocked(
-                log: log, store: store, config: config, goal: goal, claude: claude, options: options)
+                log: log, store: store, config: config, goal: goal, claude: executable, options: options)
             await log.close()
             return report
         } catch {
@@ -188,6 +194,7 @@ public actor ThreadRunner {
         let lastTurn = await log.lastTurn
         var prompt = ""
         var builtFromGoal = false
+        var codexFollowUp: (feedback: String, check: CheckAttachment?)?
         if let feedback = options.feedback {
             guard lastTurn > 0 else { throw RunnerError.feedbackWithoutPriorTurn }
             // The check's output goes in the prompt (and prompts/turn-N.md), not in the note event.
@@ -206,8 +213,13 @@ public actor ThreadRunner {
                 note["budget_usd"] = .double(NSDecimalNumber(decimal: budget).doubleValue)
             }
             try await log.append(.threadNote, data: .object(note))
-            prompt = PromptBuilder.followUpPrompt(
-                feedback: feedback, check: attachment, granted: grantsForNextTurn(config: config))
+            if config.resolvedRunAgent(goalModel: goal.model).provider == .claude {
+                prompt = PromptBuilder.followUpPrompt(
+                    feedback: feedback, check: attachment, granted: grantsForNextTurn(config: config))
+            } else {
+                // A fresh process remembers nothing: its prompt needs the worktree, so it is built below.
+                codexFollowUp = (feedback, attachment)
+            }
         } else {
             if anySuccess { throw RunnerError.feedbackRequired }
             builtFromGoal = true
@@ -260,15 +272,24 @@ public actor ThreadRunner {
         }
 
         var promptInfo: [String: JSONValue] = [:]
-        if builtFromGoal {
+        let runAgent = config.resolvedRunAgent(goalModel: goal.model)
+        if builtFromGoal || codexFollowUp != nil {
             (prompt, promptInfo) = await firstPrompt(goal: goal, config: config, baseCommit: baseCommit, options: options)
+        }
+        if runAgent.provider == .codex {
+            (prompt, promptInfo) = await codexPrompt(
+                first: prompt, info: promptInfo, followUp: codexFollowUp, worktree: worktree,
+                base: baseCommit ?? goal.base, config: config)
         }
 
         // The session: decided before spawning and written down first (spike S4).
         let sessionID: String
         var attempts: [Bool]  // resume flags to try, in order
-        let runAgent = config.resolvedRunAgent(goalModel: goal.model)
-        if let existing = Self.resumableSession(store: store, threadID: threadID, provider: runAgent.provider) {
+        if runAgent.provider != .claude {
+            // No native resume: every turn is a fresh process, so there is no session to keep or to confirm.
+            sessionID = ""
+            attempts = [false]
+        } else if let existing = Self.resumableSession(store: store, threadID: threadID, provider: runAgent.provider) {
             sessionID = existing.sessionID
             attempts = existing.confirmed ? [true] : [true, false]
         } else {
@@ -303,40 +324,7 @@ public actor ThreadRunner {
         return report!
     }
 
-    /// The session a coding turn may resume. The log names the session of the latest turn and the provider that made
-    /// it; `session.json` only says whether that id was confirmed, and is ignored for any other id. A handle made
-    /// by another provider is never resumed: the turn starts a fresh session.
-    static func resumableSession(
-        store: ThreadStore, threadID: String, provider: AgentProviderID
-    ) -> ThreadStore.Session? {
-        let file = store.session(of: threadID)
-        let state = store.state(of: threadID)
-        // Only a Claude session id (a UUID) can be resumed; the file may be missing or unreadable.
-        if let logged = state.sessionID, UUID(uuidString: logged) != nil {
-            guard (state.sessionProvider ?? "claude") == "\(provider)" else { return nil }
-            let confirmed = file?.sessionID == logged && file?.confirmed == true
-            return ThreadStore.Session(sessionID: logged, confirmed: confirmed, provider: "\(provider)")
-        }
-        guard let file, (file.provider ?? "claude") == "\(provider)" else { return nil }
-        return file
-    }
-
     var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
-
-    /// The commit the worktree was cut from: what `worktree.created` recorded, or for a thread that
-    /// predates that event the point its branch left `base`.
-    func recordedBaseCommit(goal: Goal) async -> String? {
-        if let contents = try? EventLogReader.read(at: project.eventsURL(threadID)),
-            let event = contents.events.last(where: { $0.kind == .worktreeCreated }),
-            let sha = event.data["base_commit"]?.stringValue {
-            return sha
-        }
-        let result = try? await git.run(
-            ["merge-base", WorktreeManager.branch(for: threadID), goal.base], in: project.root)
-        guard let result, result.succeeded else { return nil }
-        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return sha.isEmpty ? nil : sha
-    }
 
     // MARK: One turn
 
@@ -354,7 +342,10 @@ public actor ThreadRunner {
             at: promptURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try prompt.write(to: promptURL, atomically: true, encoding: .utf8)
 
-        let provider = ClaudeProvider(config: config)
+        let agent = config.resolvedRunAgent(goalModel: goal.model)
+        codingProvider = agent.provider
+        let provider: any AgentProvider =
+            agent.provider == .codex ? CodexProvider(executable: config.executable(for: .codex)) : ClaudeProvider(config: config)
         let request = grantedAgentRequest(
             sessionID: sessionID, resume: resume, prompt: prompt, config: config, goal: goal, worktree: worktree,
             outputDirectory: promptURL.deletingLastPathComponent(), options: options)
@@ -362,15 +353,16 @@ public actor ThreadRunner {
         let invocation = try provider.invocation(for: request)
 
         // The prompt and system prompt are in prompts/turn-N.md and the config, not in the log.
-        let agent = config.resolvedRunAgent(goalModel: goal.model)
         let attempts = AttemptLog(log: log, role: "run", turn: turn, agent: agent)
         let startedData: (Int32?) -> JSONValue = { pid in
             var data: [String: JSONValue] = [
-                "session_id": .string(sessionID), "resume": .bool(resume),
+                "resume": .bool(resume),
                 "pid": pid.map { .int(Int($0)) } ?? .null,
                 "argv": .array(([claude.path] + invocation.displayArguments).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
+            // A Codex turn has no session to name: it is one fresh process, and cannot be resumed.
+            if agent.provider == .claude { data["session_id"] = .string(sessionID) }
             data.merge(promptInfo) { _, new in new }
             return .object(ThreadService.agentFields(agent, data))
         }
@@ -391,7 +383,7 @@ public actor ThreadRunner {
         // behind `turn.started`, which carries the pid.
         let recorder = TurnRecorder(
             log: log, turn: turn, sessionID: sessionID, provider: "\(agent.provider)", threadID: threadID, store: store,
-            notify: notify)
+            notify: notify, keepsSession: agent.provider == .claude)
         let execution: AgentExecution
         do {
             execution = try AgentRunner.start(provider: provider, request: request, recorder: recorder, held: true)
@@ -399,7 +391,7 @@ public actor ThreadRunner {
             let attempt = try await begin(nil)
             return try await endTurn(
                 log: log, turn: turn, sessionID: sessionID, result: .failed, started: Date(), attempt: attempt,
-                extra: ["error": .string("could not start claude: \(failure.diagnostic ?? failure.message)")])
+                extra: ["error": .string("could not start \(agent.provider): \(failure.diagnostic ?? failure.message)")])
         }
         currentExecution = execution
         defer { currentExecution = nil }
@@ -452,9 +444,8 @@ public actor ThreadRunner {
             "exit_code": code.map { .int(Int($0)) } ?? .null,
             "signal": signal.map { .int(Int($0)) } ?? .null,
             "duration_ms": .int(duration),
-            "session_id": .string(sessionID),
-            "permission_denials": .int(denials),
         ]
+        data.merge(providerFields(sessionID: sessionID, denials: denials, summary: completion?.summary)) { _, new in new }
         if let cost { data["cost_usd"] = .double(cost) }
         if let exit {
             data["cause"] = .string(String(describing: exit.cause))
