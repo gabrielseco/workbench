@@ -38,8 +38,8 @@ struct PRReviewInput: Sendable, Equatable {
     var files: [PRReviewFile] = []
 }
 
-/// The reviewer: Codex, run read-only on the pull request's head in a throwaway checkout, started by
-/// Workbench itself. A project needs no script of its own (docs/plan/P5-review-loop.md).
+/// The reviewer: an agent (Codex today), run read-only on the pull request's head in a throwaway checkout,
+/// started by Workbench itself through `AgentRunner`. A project needs no script of its own (docs/plan/P5-review-loop.md).
 public enum PRReview {
     /// One Codex run is ended, tree and all, after this long.
     public static let timeout: TimeInterval = 20 * 60
@@ -56,32 +56,10 @@ public enum PRReview {
     public static let cleanLine = "VERDICT: CLEAN"
     public static let fixLine = "VERDICT: FIX"
 
-    /// The environment Codex runs in: the fixed minimal set plus its own login and configuration. Not the
-    /// model's, and nothing from the project's `env_pass`: the checkout is the pull request's, read-only.
-    static let environmentNames: Set<String> = [
-        "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TMPDIR", "TERM", "CODEX_HOME", "OPENAI_API_KEY",
-    ]
-
-    static func environment(from parent: [String: String]) -> [String: String] {
-        parent.filter {
-            environmentNames.contains($0.key) || $0.key.hasPrefix("LC_") || $0.key.hasPrefix("CODEX_")
-                || $0.key.hasPrefix("OPENAI_")
-        }
-    }
-
-    /// The command line. The review text is in the brief file, not here: argv only points at it.
-    static func arguments(tree: String, answer: String, brief: String, images: [String] = []) -> [String] {
-        ["exec", "-s", "read-only", "-C", tree, "--color", "never", "--ephemeral", "-o", answer]
-            // The user's execpolicy rules and approval settings can let a command the sandbox refused run outside
-            // it (P9 task 1: `git push` went through `-s read-only`). Rules are ignored and nothing is approved.
-            + ["--ignore-rules", "-c", "approval_policy=\"never\""]
-            + images.flatMap { ["-i", $0] }
-            // `-i` takes a list of files: without `--` the prompt is read as one more image and Codex finds none.
-            + ["--"]
-            + [
-                "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
-                    + "files and do not post anything anywhere.",
-            ]
+    /// What the reviewer is asked on the command line: the review text is in the brief file, so this only points at it.
+    static func instruction(brief: String) -> String {
+        "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
+            + "files and do not post anything anywhere."
     }
 
     /// The verdict is the last non-empty line, exactly. A missing line, a different last line, or both verdicts
@@ -94,8 +72,6 @@ public enum PRReview {
         guard markers.count == 1, markers[0] == last else { return nil }
         return last == cleanLine ? .clean : .fix
     }
-
-    static func atCapacity(_ text: String) -> Bool { text.lowercased().contains("at capacity") }
 
     /// A fence longer than any run of backticks in `text`, so quoted content cannot close it.
     static func fenced(_ text: String) -> String {

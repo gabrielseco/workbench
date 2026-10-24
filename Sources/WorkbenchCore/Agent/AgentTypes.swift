@@ -147,14 +147,18 @@ public struct AgentRequest: Sendable, Equatable {
     public var grants: [String]
     /// Files in `workingDirectory` a `readOnlyEvidence` agent may open, by name. With none it has no tools at all.
     public var evidenceFiles: [String]
+    /// Where an adapter that has the provider write its answer to a file (Codex `-o`) puts it: inside
+    /// `outputDirectory`, so outside the checkout the agent works in.
+    public var answerFile: URL?
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],
         workingDirectory: URL, outputDirectory: URL, policy: AgentPolicy, spend: AgentSpend,
         session: AgentSessionIntent = .none, purpose: AgentSessionHandle.Purpose,
         environment: [String: String], limits: AgentLimits, rules: String? = nil, grants: [String] = [],
-        evidenceFiles: [String] = []
+        evidenceFiles: [String] = [], answerFile: URL? = nil
     ) {
+        self.answerFile = answerFile
         self.evidenceFiles = evidenceFiles
         self.rules = rules
         self.grants = grants

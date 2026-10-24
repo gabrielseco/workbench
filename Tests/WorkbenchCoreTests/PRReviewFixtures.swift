@@ -109,7 +109,7 @@ struct ReviewedPR {
     func round(
         again: Bool = false, timeout: TimeInterval = 30,
         environment: [String: String]? = nil, codexPath: String? = nil, backoff: TimeInterval = 0,
-        stopRequested: @escaping @Sendable () -> Bool = { false }, attach: @Sendable (ProcessRun) -> Void = { _ in }
+        stopRequested: @escaping @Sendable () -> Bool = { false }, attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         try await fx.service.prReview(
             id: id, config: config, again: again, codexPath: codexPath ?? codex.path,

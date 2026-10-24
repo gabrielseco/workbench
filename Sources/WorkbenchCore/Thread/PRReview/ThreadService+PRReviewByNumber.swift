@@ -21,7 +21,7 @@ extension ThreadService {
         timeout: TimeInterval = PRReview.timeout,
         capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
         stopRequested: @escaping @Sendable () -> Bool = { false },
-        attach: @Sendable (ProcessRun) -> Void = { _ in }
+        attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         // `gh` reads the repository of the directory it runs in, which is where origin is fetched from. A `GH_REPO` in
         // the person's shell would point it at another one.
