@@ -95,8 +95,9 @@ check "an event nobody understood names its provider" "no 'codex event not under
     grep -q "codex event not understood" "$SCRATCH/log.out"
 
 wbp "$SCRATCH/logjson.out" log "$ID" --json
-check "log --json carries the stored agent.activity events" "fewer than 4 agent.activity lines" \
-    bash -c '[ "$(grep -c "\"kind\":\"agent.activity\"" "$1")" = 4 ]' _ "$SCRATCH/logjson.out"
+stored=$(py "print(sum(1 for x in lines if x.get('kind')=='agent.activity' and x['data'].get('provider')=='codex'))" \
+    <"$SCRATCH/logjson.out")
+check "log --json carries the stored agent.activity events" "found '${stored:-?}' agent.activity events, not 4" test "$stored" = 4
 
 wbp "$SCRATCH/status.out" status "$ID" --json
 tools=$(py "print(d['progress']['tool_calls'])" <"$SCRATCH/status.out")
