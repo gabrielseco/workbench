@@ -123,6 +123,8 @@ extension ThreadService {
             // With no screenshots the judge would run in the thread folder, which holds `judge/`: it gets an empty folder
             // of its own instead, so its answer is never inside what it reads.
             let readFolder = screenshots.isEmpty ? answerFolder.appendingPathComponent("empty") : folder
+            // Codex does not create the folder `-o` points into, and with screenshots `readFolder` is not inside it.
+            try? FileManager.default.createDirectory(at: answerFolder, withIntermediateDirectories: true)
             try? FileManager.default.createDirectory(at: readFolder, withIntermediateDirectories: true)
             let answer = answerFolder.appendingPathComponent("turn-\(turn).answer.txt")
             try? FileManager.default.removeItem(at: answer)
@@ -186,7 +188,11 @@ extension ThreadService {
         var written: String?
         if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }
         guard let answer = completion.summary ?? written else {
-            let failure = "the verdict was not usable: no result"
+            var failure = "the verdict was not usable: no result"
+            // A Codex run that wrote no answer file is named by the file it was asked for, not by "no result".
+            if let file = request.answerFile {
+                failure = "the verdict was not usable: \(agent.provider) left no answer in \(file.path)"
+            }
             return try await recordJudge(log, agent: agent, turn: turn, failure: failure, argv: shown)
         }
         do {
