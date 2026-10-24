@@ -11,9 +11,10 @@ if [ "${1:-}" = "--run" ]; then
     run=${2:?run id}
 else
     pr=${1:-$(gh pr view --json number --jq .number)} || exit 1
-    branch=$(gh pr view "$pr" --json headRefName --jq .headRefName) || exit 1
-    run=$(gh run list --branch "$branch" --workflow CI --limit 1 --json databaseId --jq '.[0].databaseId') || exit 1
-    echo "==> PR #$pr, branch $branch"
+    # By head commit, not branch name: a fork or a reused branch name could match another PR's run.
+    sha=$(gh pr view "$pr" --json headRefOid --jq .headRefOid) || exit 1
+    run=$(gh run list --commit "$sha" --workflow CI --event pull_request --limit 1 --json databaseId --jq '.[0].databaseId') || exit 1
+    echo "==> PR #$pr, head $sha"
     gh pr checks "$pr"
 fi
 [ -n "${run:-}" ] || { echo "error: no CI run found" >&2; exit 1; }
