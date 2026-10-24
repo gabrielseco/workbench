@@ -1,0 +1,21 @@
+#!/bin/bash
+# Does the installed Swift toolchain still have the `JumpThreadSimplifyCFG` bug that Package.swift works around? Compiles the case in
+# docs/swift-bugs/ with SIL verification, with and without the pass disabled. Prints "still broken" (the workaround is needed),
+# "fixed" (remove it from Package.swift and this script) or "inconclusive". Exit 0 for the first two, 1 for the last.
+set -u
+dir=$(mktemp -d "${TMPDIR:-/tmp}/swift-bug-repro.XXXXXX") || exit 1
+trap 'rm -rf "$dir"' EXIT
+src="$(cd "$(dirname "$0")/.." && pwd)/docs/swift-bugs/simplify-cfg-async.swift"
+[ -f "$src" ] || { echo "inconclusive: $src is missing"; exit 1; }
+swiftc --version 2>&1 | head -1
+broken=0
+swiftc -O -parse-as-library -Xfrontend -sil-verify-all "$src" -o "$dir/a" >"$dir/with.log" 2>&1 || broken=1
+swiftc -O -parse-as-library -Xfrontend -sil-verify-all -Xllvm -sil-disable-pass=simplify-cfg "$src" -o "$dir/b" >"$dir/without.log" 2>&1
+without=$?
+if [ "$broken" = 1 ] && [ "$without" = 0 ] && grep -q "SIL verification failed" "$dir/with.log"; then
+    echo "still broken: the compiler aborts in JumpThreadSimplifyCFG and compiles with simplify-cfg disabled; keep the workaround"
+elif [ "$broken" = 0 ] && [ "$without" = 0 ]; then
+    echo "fixed: both compile; the workaround in Package.swift can go"
+else
+    echo "inconclusive: see the logs"; sed -n 1,5p "$dir/with.log"; exit 1
+fi
