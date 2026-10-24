@@ -1,0 +1,74 @@
+$ workbench goal approve
+approved g-2026-10-24-real-run
+hash:    526eac1f3076
+spend:   no dollar cap: bounded by 10 min per turn
+coding:  codex, default model, no dollar cap
+next:    workbench run   (doctor first: workbench doctor)
+$ workbench doctor (agent lines)
+agent run:    codex, model the provider's default
+$ workbench run
+turn 1 started (pid 50927), new session
+turn 1 ended: succeeded  13s
+check started: grep -q hello hello.txt
+check passed  0s  ($HOME/.wb-real-run.x2HLvB/.workbench/threads/g-2026-10-24-real-run/checks/turn-1.log)
+
+Created `hello.txt` containing the single line `hello`. Criterion c1 holds: `grep -q hello hello.txt` passed. No other files changed.
+
+review:  workbench log    (worktree: $HOME/.wb-real-run.x2HLvB/.workbench/worktrees/g-2026-10-24-real-run)
+exit 
+$ cat hello.txt (worktree)
+hello
+?? hello.txt
+$ workbench send-back
+turn 2 started (pid 51250), new session
+turn 2 ended: succeeded  17s
+check started: grep -q hello hello.txt
+check passed  0s  ($HOME/.wb-real-run.x2HLvB/.workbench/threads/g-2026-10-24-real-run/checks/turn-2.log)
+
+Updated `hello.txt` to contain:
+```text
+hello
+world
+```
+
+Criterion c1 holds: `grep -q hello hello.txt` passed. The requested second line is added. No other files were changed.
+
+review:  workbench log    (worktree: $HOME/.wb-real-run.x2HLvB/.workbench/worktrees/g-2026-10-24-real-run)
+exit 
+$ cat hello.txt (worktree)
+hello
+world
+$ workbench status
+thread:    g-2026-10-24-real-run
+title:     real run
+goal:      approved
+base:      main
+spend:     no dollar cap: bounded by 10 min per turn
+turns:     2
+last turn: succeeded
+check:     passed
+plan:      none
+approved for: codex, model the provider's default, no dollar cap
+agent run:    codex, model the provider's default (succeeded)
+cost:      unknown (list price; not what a subscription charges)
+note:      turn 2: also add a second line to hello.txt containing the word world
+worktree:  $HOME/.wb-real-run.x2HLvB/.workbench/worktrees/g-2026-10-24-real-run
+$ workbench accept
+accept g-2026-10-24-real-run will commit to workbench/g-2026-10-24-real-run:
+  ?  hello.txt  +2 −0
+  check: passed (exit 0) after turn 2
+accepted g-2026-10-24-real-run: committed c778141616f0 on workbench/g-2026-10-24-real-run. Nothing was pushed.
+the worktree is kept for `ship`, which removes it once the PR is open; the log is kept (`workbench log g-2026-10-24-real-run`)
+$ git log (branch)
+c778141 real codex run
+fdcc883 first
+$ git show --stat
+real codex run
+
+ hello.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+$ turn events
+{"v":1,"seq":5,"ts":"2026-10-24T09:40:14.970Z","turn":1,"kind":"turn.started","data":{"argv":[..],"instructions":null,"model":null,"pid":50927,"plan":null,"prompt_ref":"prompts/turn-1.md","provider":"codex","resume":false}}
+{"v":1,"seq":14,"ts":"2026-10-24T09:40:28.671Z","turn":1,"kind":"turn.ended","data":{"cause":"natural","duration_ms":13712,"exit_code":0,"permission_denials":null,"result":"succeeded","signal":null,"stderr_tail":"Reading additional input from stdin...","summary":"Created `hello.txt` containing the single line `hello`. Criterion 
+{"v":1,"seq":18,"ts":"2026-10-24T09:40:29.014Z","turn":2,"kind":"turn.started","data":{"argv":[..],"continuation":{"diff_bytes":0,"mode":"fresh_with_context","summary":true,"truncated":false,"untracked":1},"instructions":null,"model":null,"pid":51250,"plan":null,"prompt_ref":"prompts/turn-2.md","provider":"codex","resume":false}
+{"v":1,"seq":28,"ts":"2026-10-24T09:40:46.996Z","turn":2,"kind":"turn.ended","data":{"cause":"natural","duration_ms":17982,"exit_code":0,"permission_denials":null,"result":"succeeded","signal":null,"stderr_tail":"Reading additional input from stdin...","summary":"Updated `hello.txt` to contain:\n```text\nhello\nworld\n```\n\nCri

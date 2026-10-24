@@ -149,3 +149,20 @@ emits no item for a command the sandbox refuses before it runs, the model's own 
 
 Not probed: a long edit-and-test loop, reads outside the worktree (Codex does not confine them; see "Findings that change the plan"),
 a resumed session, and Codex's behaviour when `$CODEX_HOME` is unset or unwritable.
+
+## `run` on Codex (P9 PR 16)
+
+`[agents.run] provider = "codex"` selects the adapter above for coding; nothing else about a run changes. Requirements and limits:
+
+- The goal says `spend_policy: timeout_only` and sets no `model`; `[agents.run]` sets none. `run` and `send-back` refuse otherwise before
+  touching the worktree, and `--budget` is refused. A turn is bounded by `turn_timeout_min`; its cost is unknown, never 0.
+- One fresh `codex exec` per turn. A thread's next turn is self-contained: the standing rules, the goal, what the previous turn said,
+  the diff against the base (60 000 bytes at most, cut with a note), the names of untracked files (their contents are not in the
+  prompt: the agent reads them in the worktree), the failed check and the feedback. `turn.started.continuation` records it.
+- `grant` is refused (Codex takes no tool patterns); `plan` and the verifier still run on Claude and need `claude`.
+- **The project must not live under `$TMPDIR` or `/tmp`**: the adapter excludes both from the writable roots, and the worktree is
+  inside the project.
+- Real run, 2026-10-24, codex-cli 0.163.0, ChatGPT login, no dollars, on a throwaway repository under `$HOME`
+  ([`P9-probes/fixtures/codex-run-real.txt`](P9-probes/fixtures/codex-run-real.txt)): goal approved for `codex, no dollar cap`;
+  `run` created `hello.txt` (turn 1, 13 s, check passed); `send-back` ("also add a second line … world") started a fresh process
+  that updated the file (turn 2, 18 s, check passed); `accept` committed it (`hello.txt +2`); `status` showed `cost: unknown`.
