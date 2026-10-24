@@ -356,7 +356,7 @@ public struct ThreadState: Sendable, Equatable {
             case .claude:
                 if event.turn == state.lastTurn {
                     state.progress.markReported()
-                    Self.track(event, in: &state.progress)
+                    if let line = TranscriptLine(event: event) { Self.track(line, in: &state.progress) }
                 }
                 guard event.data["type"]?.stringValue == "result",
                     case .array(let denials)? = event.data["permission_denials"]
@@ -399,29 +399,30 @@ public struct ThreadState: Sendable, Equatable {
     }
 
     /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.
-    static func track(_ event: Event, in progress: inout Progress) {
+    static func track(_ line: TranscriptLine, in progress: inout Progress) {
+        let data = line.data
         // Every line is a sign of life, whatever it carries; the cases below only say it better.
-        progress.note(event.ts, "claude \(safeLine(event.data["type"]?.stringValue ?? "?", limit: 30))")
-        switch event.data["type"]?.stringValue {
+        progress.note(line.ts, "claude \(safeLine(data["type"]?.stringValue ?? "?", limit: 30))")
+        switch data["type"]?.stringValue {
         case "assistant":
-            guard case .array(let blocks)? = event.data["message"]?["content"] else { return }
+            guard case .array(let blocks)? = data["message"]?["content"] else { return }
             for block in blocks where block["type"]?.stringValue == "tool_use" {
                 progress.toolCalls += 1
                 let name = safeLine(block["name"]?.stringValue ?? "tool", limit: 40)
                 let target = denialInput(block["input"]).map { " " + safeLine($0, limit: 60) } ?? ""
-                progress.note(event.ts, "tool_use \(name)\(target)")
+                progress.note(line.ts, "tool_use \(name)\(target)")
             }
         case "user":
-            guard case .array(let blocks)? = event.data["message"]?["content"] else { return }
+            guard case .array(let blocks)? = data["message"]?["content"] else { return }
             for block in blocks where block["type"]?.stringValue == "tool_result" {
                 // The refusal is the one fixed sentence the permission layer gives the model; a command that
                 // merely failed is not counted.
                 let text = block["content"]?.stringValue ?? ""
                 if block["is_error"] == .bool(true), text.hasPrefix("Permission for this tool use was denied") {
                     progress.deniedCalls += 1
-                    progress.note(event.ts, "tool denied")
+                    progress.note(line.ts, "tool denied")
                 } else {
-                    progress.note(event.ts, "tool_result")
+                    progress.note(line.ts, "tool_result")
                 }
             }
         default:
