@@ -170,7 +170,13 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         #expect(log.code == 0 && log.stderr.isEmpty)
         let stored = try String(contentsOf: fx.project.eventsURL(id), encoding: .utf8)
             .split(separator: "\n").map(String.init)
-        #expect(log.stdout == stored)
+        // Every event is its stored line; the `claude` lines are the turn's transcript (seq null, in order), the
+        // log's own copy of the result line is not printed twice.
+        func isClaude(_ line: String) -> Bool { line.contains("\"kind\":\"claude\"") }
+        #expect(log.stdout.filter { !isClaude($0) } == stored.filter { !isClaude($0) })
+        let claude = log.stdout.filter(isClaude)
+        #expect(claude.count == fx.transcript(id).count && claude.allSatisfy { $0.contains("\"seq\":null") })
+        #expect(claude.last?.contains("\"type\":\"result\"") == true)
 
         let one = try await cli(["log", id, "--seq", "1", "--json"], in: fx)
         #expect(one.code == 0)
@@ -198,7 +204,8 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
 
         let log = try await cli(["log", id, "--json"], in: fx)
         #expect(log.code == 0)
-        #expect(log.stdout == stored, "every whole event is still there")
+        let events = log.stdout.filter { !$0.contains("\"kind\":\"claude\"") }
+        #expect(events == stored.filter { !$0.contains("\"kind\":\"claude\"") }, "every whole event is still there")
     }
 
     @Test func anOptionValueThatReadsJSONIsNotTheFlag() async throws {

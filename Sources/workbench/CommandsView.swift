@@ -19,22 +19,13 @@ extension Commands {
             return
         }
 
-        // `--json`: the stored lines themselves, one event each, nothing added.
+        // `--json`: the stored lines themselves, one event each, nothing added. A transcript line is printed as the
+        // `claude` event it would have been.
         if Output.json {
-            var written = 0
-            func rawLines() -> [String] {
-                // Split as bytes: a writer that died inside a multibyte character must not hide the whole
-                // events before it.
-                let data = (try? Data(contentsOf: url)) ?? Data()
-                var parts = data.split(separator: 0x0A, omittingEmptySubsequences: false)
-                _ = parts.popLast()  // the part after the last newline is not a whole event yet
-                return parts.map { String(decoding: $0, as: UTF8.self) }
-            }
-            var contents = try EventLogReader.read(at: url)
-            for line in rawLines() {
-                out(line)
-                written += 1
-            }
+            var threadLog = try ThreadLog.read(at: url)
+            var contents = threadLog.contents
+            var (lines, position) = threadLog.jsonLines(after: ThreadLog.Position())
+            for line in lines { out(line) }
             guard follow else { return }
             let config = try? Config.load(from: ctx.project.configURL)
             let checks = config?.checkCommand != nil
@@ -48,10 +39,10 @@ extension Commands {
             var seen = contents.events.count
             while true {
                 try await Task.sleep(nanoseconds: 300_000_000)
-                contents = try EventLogReader.read(at: url)
-                let lines = rawLines()
-                for line in lines.dropFirst(written) { out(line) }
-                written = lines.count
+                threadLog = try ThreadLog.read(at: url)
+                contents = threadLog.contents
+                (lines, position) = threadLog.jsonLines(after: position)
+                for line in lines { out(line) }
                 for event in contents.events.dropFirst(seen) {
                     if event.kind == .turnStarted { sawStart = true }
                     if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
@@ -81,15 +72,12 @@ extension Commands {
             out(LogFormatter.describe(entry))
         }
 
-        var printed = 0
         var threadLog = try ThreadLog.read(at: url)
         var contents = threadLog.contents
         // Already in the middle of a turn or of its check: follow until that ends.
         let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerifier != nil
-        for entry in threadLog.entries {
-            show(entry)
-            printed += 1
-        }
+        var (shown, position) = threadLog.entries(after: ThreadLog.Position())
+        for entry in shown { show(entry) }
         guard follow else { return }
 
         // A turn is followed to the end of its check and of its verifier, when they will run.
@@ -106,7 +94,8 @@ extension Commands {
             try await Task.sleep(nanoseconds: 300_000_000)
             threadLog = try ThreadLog.read(at: url)
             contents = threadLog.contents
-            for entry in threadLog.entries.dropFirst(printed) {
+            (shown, position) = threadLog.entries(after: position)
+            for entry in shown {
                 show(entry)
                 // Only Workbench's own events say that a run is over.
                 guard case .event(let event) = entry else { continue }
@@ -119,7 +108,6 @@ extension Commands {
                     return
                 }
             }
-            printed = threadLog.entries.count
         }
     }
 
@@ -150,7 +138,7 @@ extension Commands {
         }
         // Replayed once: the removed-worktree note below reads the same events.
         let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
-        let state = ThreadState.derive(from: events, id: id)
+        let state = ctx.store.state(from: events, id: id)
         out("thread:    \(id)\(state.isActive ? "" : "  (ended: \(state.decision ?? "?"))")")
         for line in lineageLines(state, ctx: ctx) { out(line) }
 

@@ -92,6 +92,11 @@ struct RunnerFixture {
 
     func events(_ id: String) throws -> [Event] { try EventLogReader.read(at: project.eventsURL(id)).events }
 
+    /// A turn's transcript lines, from the file beside the log.
+    func transcript(_ id: String, turn: Int = 1) -> [TranscriptLine] {
+        TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(id), turn: turn), turn: turn)
+    }
+
     func contents(_ id: String) throws -> EventLogContents { try EventLogReader.read(at: project.eventsURL(id)) }
 
     func kinds(_ id: String) throws -> [String] { try events(id).map(\.kind.rawValue) }
@@ -129,7 +134,12 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
                 == ["thread.created", "goal.saved", "goal.approved", "worktree.created", "turn.started"])
         #expect(kinds.last == "turn.ended")
         #expect(kinds.filter { $0 == "turn.ended" }.count == 1)
-        #expect(kinds.filter { $0 == "claude" }.count == 5)  // init, 2 stream events, assistant, result
+        // The transcript holds init, 2 stream events, assistant and result; the log only the result.
+        #expect(fx.transcript(id).count == 5)
+        #expect(kinds.filter { $0 == "claude" }.count == 1)
+        let file = TranscriptFile.summary(at: TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1))
+        let ended = try #require(contents.events.last { $0.kind == .turnEnded })
+        #expect(ended.data["transcript"] == file?.json && file?.lines == 5, "turn.ended says what the file holds")
 
         let started = try #require(contents.events.first { $0.kind == .turnStarted })
         #expect(started.data["resume"] == false)
@@ -316,7 +326,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(report.permissionDenials == 1)
         let log = try fx.events(id)
         let denialText = "Permission for this tool use was denied"
-        #expect(log.contains { $0.data["message"]?["content"]?.stringValue == nil && "\($0.data)".contains(denialText) })
+        #expect(fx.transcript(id).contains { "\($0.data)".contains(denialText) })
         #expect(ended(log)[0].data["permission_denials"]?.intValue == 1)
     }
 
@@ -326,10 +336,12 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         let report = try await fx.runner(id).run(fx.options("flood=3000000"))
 
         #expect(report.result == .succeeded)
-        let marker = try #require(try fx.events(id).first { $0.data["truncated"] == true })
+        let marker = try #require(fx.transcript(id).first { $0.data["truncated"] == true })
         #expect((marker.data["original_bytes"]?.intValue ?? 0) > 3_000_000)
-        let size = try FileManager.default.attributesOfItem(atPath: fx.project.eventsURL(id).path)[.size] as? Int
-        #expect((size ?? .max) < 100_000, "the log did not grow by the size of the line")
+        for url in [fx.project.eventsURL(id), TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1)] {
+            let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
+            #expect((size ?? .max) < 100_000, "\(url.lastPathComponent) did not grow by the size of the line")
+        }
     }
 
     @Test func invalidJsonIsLoggedRawAndTheRunContinues() async throws {
@@ -337,7 +349,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         let id = try await fx.approvedThread()
         let report = try await fx.runner(id).run(fx.options("invalid-line"))
         #expect(report.result == .succeeded)
-        #expect(try fx.events(id).contains { $0.data["invalid_json"]?.stringValue == "this is not json {" })
+        #expect(fx.transcript(id).contains { $0.data["invalid_json"]?.stringValue == "this is not json {" })
     }
 
     // MARK: recovery and sessions

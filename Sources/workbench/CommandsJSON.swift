@@ -115,7 +115,7 @@ extension Commands {
     static func statusJSON(id: String, ctx: Context, fetch: Bool) async -> JSONValue {
         // Replayed once: the worktree state below reads the same events.
         let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
-        let state = ThreadState.derive(from: events, id: id)
+        let state = ctx.store.state(from: events, id: id)
         var goalValue: JSONValue = .null
         var base: String?
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {

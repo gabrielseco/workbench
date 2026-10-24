@@ -24,16 +24,18 @@ public actor EventLogWriter {
     public nonisolated let repairedTailBytes: Int
 
     private let handle: FileHandle
+    private let url: URL
     private let maxClaudeLineBytes: Int
     private let now: @Sendable () -> Date
     private var state: LogState
     private var closed = false
 
     private init(
-        handle: FileHandle, state: LogState, repairedTailBytes: Int, maxClaudeLineBytes: Int,
+        handle: FileHandle, url: URL, state: LogState, repairedTailBytes: Int, maxClaudeLineBytes: Int,
         now: @escaping @Sendable () -> Date
     ) {
         self.handle = handle
+        self.url = url
         self.state = state
         self.repairedTailBytes = repairedTailBytes
         self.maxClaudeLineBytes = maxClaudeLineBytes
@@ -80,7 +82,7 @@ public actor EventLogWriter {
         var state = LogState()
         for event in contents.events { state.apply(event) }
         return EventLogWriter(
-            handle: handle, state: state, repairedTailBytes: repaired,
+            handle: handle, url: url, state: state, repairedTailBytes: repaired,
             maxClaudeLineBytes: maxClaudeLineBytes, now: now)
     }
 
@@ -116,37 +118,9 @@ public actor EventLogWriter {
     @discardableResult
     public func appendClaudeLine(_ raw: String, turn: Int) throws -> Int {
         let seq = state.nextSeq
-        let dataJSON: String
-        let size = raw.utf8.count
-        if size > maxClaudeLineBytes {
-            dataJSON = try Self.json([
-                "truncated": true,
-                "original_bytes": .int(size),
-                "prefix": .string(String(raw.prefix(Self.truncationPrefixCharacters))),
-            ])
-        } else if Self.isSingleLineJSON(raw) {
-            dataJSON = raw
-        } else {
-            dataJSON = try Self.json(["invalid_json": .string(raw)])
-        }
+        let dataJSON = try Self.claudeDataJSON(raw, maxBytes: maxClaudeLineBytes)
         let event = Event(seq: seq, ts: timestamp(), turn: turn, kind: .claude, data: .null)
         if let problem = state.check(event) { throw EventLogError.invalid(problem) }
-        try write(event, dataJSON: dataJSON)
-        return seq
-    }
-
-    /// Records a line the process runner already cut short, in the same shape `appendClaudeLine` uses for a
-    /// line over the size limit.
-    @discardableResult
-    public func appendOversizedClaudeLine(preview: String, totalBytes: Int, turn: Int) throws -> Int {
-        let seq = state.nextSeq
-        let event = Event(seq: seq, ts: timestamp(), turn: turn, kind: .claude, data: .null)
-        if let problem = state.check(event) { throw EventLogError.invalid(problem) }
-        let dataJSON = try Self.json([
-            "truncated": true,
-            "original_bytes": .int(totalBytes),
-            "prefix": .string(String(preview.prefix(Self.truncationPrefixCharacters))),
-        ])
         try write(event, dataJSON: dataJSON)
         return seq
     }
@@ -158,9 +132,11 @@ public actor EventLogWriter {
         guard let turn = state.openTurn else { return nil }
         // The turn's own attempt ends first, so no attempt outlives the turn it belongs to.
         try recoverOrphanedAttempts(roles: ["run"])
-        return try append(
-            .turnEnded, turn: turn,
-            data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
+        var data: [String: JSONValue] = ["result": "interrupted", "synthetic": true, "exit_code": nil]
+        // What the dead runner managed to write: a torn last line is dropped, the rest is counted.
+        let transcript = TranscriptFile.url(in: url.deletingLastPathComponent(), turn: turn)
+        if let summary = TranscriptFile.repair(at: transcript) { data["transcript"] = summary.json }
+        return try append(.turnEnded, turn: turn, data: .object(data))
     }
 
     /// Closes an orphaned check (its runner died while the command ran) with a synthetic `interrupted`.
@@ -320,6 +296,29 @@ public actor EventLogWriter {
         do { return String(decoding: try encoder.encode(value), as: UTF8.self) } catch {
             throw EventLogError.io("cannot encode payload: \(error)")
         }
+    }
+
+    /// The `data` stored for one raw `claude` line: the line itself when it is single-line JSON, a truncation
+    /// marker when it is over `maxBytes`, `{"invalid_json": ...}` otherwise. The log and the transcript share it.
+    static func claudeDataJSON(_ raw: String, maxBytes: Int) throws -> String {
+        let size = raw.utf8.count
+        if size > maxBytes {
+            return try json([
+                "truncated": true,
+                "original_bytes": .int(size),
+                "prefix": .string(String(raw.prefix(truncationPrefixCharacters))),
+            ])
+        }
+        return isSingleLineJSON(raw) ? raw : try json(["invalid_json": .string(raw)])
+    }
+
+    /// The `data` for a line the process runner already cut short.
+    static func oversizedDataJSON(preview: String, totalBytes: Int) throws -> String {
+        try json([
+            "truncated": true,
+            "original_bytes": .int(totalBytes),
+            "prefix": .string(String(preview.prefix(truncationPrefixCharacters))),
+        ])
     }
 
     static func isSingleLineJSON(_ raw: String) -> Bool {

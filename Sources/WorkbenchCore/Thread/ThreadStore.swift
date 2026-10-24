@@ -34,8 +34,16 @@ public struct ThreadStore: Sendable {
 
     /// Replays one thread's log. A thread with no log yet is a new one.
     public func state(of id: String) -> ThreadState {
-        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
-        return ThreadState.derive(from: events, id: id)
+        state(from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
+    }
+
+    /// The state for events already replayed. While a turn is open its progress also reads the turn's
+    /// transcript file, since the lines of a turn are not in the log.
+    public func state(from events: [Event], id: String) -> ThreadState {
+        let state = ThreadState.derive(from: events, id: id)
+        guard let open = state.openTurn else { return state }
+        let lines = TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(id), turn: open), turn: open)
+        return lines.isEmpty ? state : ThreadState.derive(from: events, id: id, transcript: lines)
     }
 
     /// What finding the active, newest or related thread needs, without replaying the whole log.

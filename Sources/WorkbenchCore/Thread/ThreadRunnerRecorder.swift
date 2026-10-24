@@ -1,12 +1,14 @@
 import Foundation
 
-/// Writes a coding turn's output to the event log as it arrives, in one of two shapes. Claude: every line verbatim
-/// and in order (`claude` events), which the bounded activity stream cannot promise. Any other provider: the
-/// decoder's normalized activity (`agent.activity` events), at most `AgentActivityRecord.maxPerTurn` of them.
-/// Never both, so a reducer counts each activity once. Also the session's confirmation the first time it is named.
+/// Writes a coding turn's output as it arrives, in one of two shapes. Claude: every line verbatim and in order in
+/// the turn's transcript file, which the bounded activity stream cannot promise, and the `result` line also in the
+/// event log as a `claude` event (cost, session and denials are derived from it). Any other provider: the decoder's
+/// normalized activity (`agent.activity` events), at most `AgentActivityRecord.maxPerTurn` of them. Never both, so
+/// a reducer counts each activity once. Also the session's confirmation the first time it is named.
 /// Called one line at a time by the adapter's driver; read after `completion`, which orders the two.
 final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private let log: EventLogWriter
+    let transcript: TranscriptWriter
     private let turn: Int
     private let sessionID: String
     private let provider: String
@@ -25,13 +27,15 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private var normalized: Bool { provider != "claude" }
 
     init(
-        log: EventLogWriter, turn: Int, sessionID: String, provider: String, threadID: String, store: ThreadStore,
+        log: EventLogWriter, transcript: TranscriptWriter, turn: Int, sessionID: String, provider: String,
+        threadID: String, store: ThreadStore,
         notify: @escaping @Sendable (RunNotice) -> Void, keepsSession: Bool = true,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.keepsSession = keepsSession
         self.now = now
         self.log = log
+        self.transcript = transcript
         self.turn = turn
         self.sessionID = sessionID
         self.provider = provider
@@ -45,7 +49,7 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
         switch line {
         case .line(let text):
             sawOutput = true
-            try await log.appendClaudeLine(text, turn: turn)
+            try await store(text)
             notify(.claudeLine(text))
             // A resume of an id Claude never saw fails at once with no output; a line that names it is the proof.
             if !confirmed, activity.contains(where: { if case .session = $0 { true } else { false } }) {
@@ -54,10 +58,24 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
             }
         case .oversized(let preview, let total):
             sawOutput = true
-            try await log.appendOversizedClaudeLine(preview: preview, totalBytes: total, turn: turn)
+            try transcript.appendOversized(preview: preview, totalBytes: total)
         case .late(let text):
-            try await log.appendClaudeLine(text, turn: turn)
+            try await store(text)
         }
+    }
+
+    /// The line goes to the transcript; the turn's `result` line also to the log, and first: a runner killed between
+    /// the two writes then loses one line of history, not the result that cost and denials are derived from.
+    private func store(_ text: String) async throws {
+        if Self.isResult(text) { try await log.appendClaudeLine(text, turn: turn) }
+        try transcript.append(text)
+    }
+
+    private static func isResult(_ text: String) -> Bool {
+        guard text.contains("\"result\""),
+            case .object(let fields)? = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
+        else { return false }
+        return fields["type"]?.stringValue == "result"
     }
 
     /// Writes the `dropped` record for the activity past the cap not yet counted. Also called once the child has ended.
