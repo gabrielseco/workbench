@@ -79,19 +79,20 @@ import Testing
             stages = ["pr-review", "design"]
             [review.stage.design]
             provider = "codex"
-            model = "m1"
             allow_unpriced = true
             prompt = "docs/D.md"
             [review.stage.pr-review]
             reviewer = "codex"
             """)
         let design = try #require(config.review.stage("design"))
-        #expect(design.provider == .codex && design.model == "m1" && design.allowUnpriced == true)
+        #expect(design.provider == .codex && design.model == nil && design.allowUnpriced == true)
         #expect(config.review.stage("pr-review")?.provider == .codex, "reviewer = \"codex\" is the provider")
         let both = problems("[review.stage.x]\nprompt = \"a.md\"\nreviewer = \"codex\"\nprovider = \"codex\"")
         #expect(both.contains { $0.contains("'reviewer' and 'provider' both choose") })
-        let badModel = problems("[review.stage.x]\nprompt = \"a.md\"\nmodel = \"-bad\"")
-        #expect(badModel.contains { $0.contains("must be a model name") })
+        // The Codex adapter takes no model yet, so a review model is refused at load rather than ignored.
+        let model = problems("[review.stage.x]\nprompt = \"a.md\"\nmodel = \"m1\"")
+        #expect(model.contains { $0.contains("cannot be set yet") && $0.contains("task 4") })
+        #expect(problems("[agents.review]\nmodel = \"m1\"").contains { $0.contains("[agents.review] cannot be set yet") })
         #expect(try parse("[pr_review]\nmax_rounds = 2").review.prReview.provider == nil)
     }
 

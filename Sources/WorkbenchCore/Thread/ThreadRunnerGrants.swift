@@ -20,7 +20,8 @@ extension ThreadRunner {
         var limits = AgentLimits(timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60)
         limits.killGrace = options.killGrace
         return AgentRequest(
-            provider: .claude, model: goal.model, prompt: prompt, workingDirectory: worktree,
+            provider: .claude, model: config.resolvedRunAgent(goalModel: goal.model).model, prompt: prompt,
+            workingDirectory: worktree,
             outputDirectory: outputDirectory, policy: .scopedCoding,
             spend: .hardCap(options.budgetOverride ?? goal.budgetUSD), session: session, purpose: .coding,
             environment: options.parentEnvironment, limits: limits,

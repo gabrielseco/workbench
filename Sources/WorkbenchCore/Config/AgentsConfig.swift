@@ -168,7 +168,12 @@ extension AgentSelection {
         }
         if let entry = table.entries["model"] {
             if case .string(let value) = entry.value {
-                if SafeNames.isModelName(value) {
+                if role == .review {
+                    fail(
+                        .invalidValue, entry.line,
+                        "'model' in [\(name)] cannot be set yet: the Codex adapter takes no model "
+                            + "(docs/plan/P9-agent-providers.md, task 4)")
+                } else if SafeNames.isModelName(value) {
                     selection.model = value
                 } else {
                     fail(.invalidValue, entry.line, "'model' in [\(name)] must be a model name or alias like \"haiku\"")

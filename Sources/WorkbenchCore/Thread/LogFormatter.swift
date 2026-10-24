@@ -64,10 +64,38 @@ public enum LogFormatter {
             return head + "grant (\(scope)): " + ThreadState.safeLine(event.data["pattern"]?.stringValue ?? "?", limit: 300)
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
+        case .agentAttemptStarted, .agentAttemptEnded, .goalDraftStarted, .goalDraftFinished:
+            return head + describeAgent(event)
         case .worktreeRemoved, .branchRemoved, .branchAhead:
             return head + describeBranch(event)
         default:
             return head + event.kind.rawValue
+        }
+    }
+
+    /// An attempt of a provider process, or a goal draft: one line, the provider and model first.
+    static func describeAgent(_ event: Event) -> String {
+        let id = ThreadState.safeLine(event.data["attempt"]?.stringValue ?? "", limit: 20)
+        let provider = ThreadState.safeLine(event.data["provider"]?.stringValue ?? "?", limit: 20)
+        let model = event.data["model"]?.stringValue.map { ThreadState.safeLine($0, limit: 60) } ?? "default model"
+        let role = ThreadState.safeLine(event.data["role"]?.stringValue ?? "", limit: 20)
+        switch event.kind {
+        case .agentAttemptStarted:
+            let stage = event.data["stage"]?.stringValue.map { " \(ThreadState.safeLine($0, limit: 40))" } ?? ""
+            let round = event.data["round"]?.intValue.map { " round \($0)" } ?? ""
+            let spawned = event.data["spawned"] == false ? ", nothing started" : ""
+            return "attempt \(id): \(role)\(stage)\(round) on \(provider), \(model)\(spawned)"
+        case .agentAttemptEnded:
+            var out = "attempt \(id) ended: \(event.data["outcome"]?.stringValue ?? "?")"
+            if let reason = event.data["reason"]?.stringValue { out += " (\(ThreadState.safeLine(reason, limit: 100)))" }
+            if event.data["synthetic"] == true { out += " (recovered)" }
+            return out
+        case .goalDraftStarted:
+            return "goal draft started on \(provider), \(model)"
+        default:
+            var out = "goal draft " + (event.data["ok"] == true ? "finished" : "did not finish")
+            if let reason = event.data["reason"]?.stringValue { out += " (\(ThreadState.safeLine(reason, limit: 100)))" }
+            return out
         }
     }
 

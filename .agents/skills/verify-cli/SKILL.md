@@ -10,7 +10,7 @@ repository, with the real `claude` (never `fake-claude`), and the scenario uses 
 whole thread. Unit tests and the soak prove the code with a test double; this proves the binary, the config
 and the real CLI together, once per change, from its branch.
 
-Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `agents-config` (P9 PR 7), `verifier` (P10 PR 2), `run` (P16) and `thread-setup` (the default base, `goal new --from`'s front matter, `ship` and a base not on origin), `commits-visible` (`accept -m` with nothing to commit, `ship` after a commit added past `accept`, the commits in `review`) and `open` (a thread's worktree in an editor).
+Each feature has one script, `scripts/verify-cli/<feature>.sh`. Today there are `abandon` (P12 task 1), `grant` (P13 task 7), `plan` (P14 task 5) and `doctor` (P15 task 1) `help` (P15 task 2) and `criteria-tests` (P15 task 3) `verifier-config` (P10 PR 1), `agents-config` (P9 PR 7), `agent-recovery` (P9 PR 8), `verifier` (P10 PR 2), `run` (P16) and `thread-setup` (the default base, `goal new --from`'s front matter, `ship` and a base not on origin), `commits-visible` (`accept -m` with nothing to commit, `ship` after a commit added past `accept`, the commits in `review`) and `open` (a thread's worktree in an editor).
 
 ## When to use it
 
@@ -39,6 +39,7 @@ bash scripts/verify-cli/criteria-tests.sh          # a test: proof backed by the
 bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
 bash scripts/verify-cli/verifier-config.sh         # [verifier] and doctor on a clone, no turn, costs nothing
 bash scripts/verify-cli/agents-config.sh           # [providers.*], [agents.*] and doctor on a clone, no turn, costs nothing
+bash scripts/verify-cli/agent-recovery.sh          # a killed judge and review round closed on the next start; a clone, no turn, costs nothing
 bash scripts/verify-cli/verifier.sh                # one real verifier run on a throwaway skill (a coding turn, then the verifier)
 bash scripts/verify-cli/run.sh                     # [run]: the verifier's helper can only reach the app Workbench started, which is gone after
 bash scripts/verify-cli/thread-setup.sh            # default base, goal new --from, ship refusing a local-only base; a clone, no turn, costs nothing

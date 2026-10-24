@@ -335,6 +335,8 @@ public actor ThreadRunner {
         let invocation = try provider.invocation(for: request)
 
         // The prompt and system prompt are in prompts/turn-N.md and the config, not in the log.
+        let agent = config.resolvedRunAgent(goalModel: goal.model)
+        let attempts = AttemptLog(log: log, role: "run", turn: turn, agent: agent)
         let startedData: (Int32?) -> JSONValue = { pid in
             var data: [String: JSONValue] = [
                 "session_id": .string(sessionID), "resume": .bool(resume),
@@ -343,14 +345,19 @@ public actor ThreadRunner {
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
             data.merge(promptInfo) { _, new in new }
-            return .object(data)
+            return .object(ThreadService.agentFields(agent, data))
+        }
+        // `turn.started` and the attempt of the process it starts, in that order; the attempt ends before `turn.ended`.
+        let begin: (Int32?) async throws -> String = { pid in
+            try await log.append(.turnStarted, turn: turn, data: startedData(pid))
+            return try await attempts.start()
         }
 
         // From here on the turn is recorded, whatever happens.
         if stopRequested {
-            try await log.append(.turnStarted, turn: turn, data: startedData(nil))
+            let attempt = try await begin(nil)
             return try await endTurn(
-                log: log, turn: turn, sessionID: sessionID, result: .stopped, started: Date(),
+                log: log, turn: turn, sessionID: sessionID, result: .stopped, started: Date(), attempt: attempt,
                 extra: ["error": "stopped before the process started"])
         }
         // The recorder writes every line to the log as it comes, verbatim and in order; `held` keeps the first one
@@ -361,9 +368,9 @@ public actor ThreadRunner {
         do {
             execution = try AgentRunner.start(provider: provider, request: request, recorder: recorder, held: true)
         } catch let failure as AgentFailure {
-            try await log.append(.turnStarted, turn: turn, data: startedData(nil))
+            let attempt = try await begin(nil)
             return try await endTurn(
-                log: log, turn: turn, sessionID: sessionID, result: .failed, started: Date(),
+                log: log, turn: turn, sessionID: sessionID, result: .failed, started: Date(), attempt: attempt,
                 extra: ["error": .string("could not start claude: \(failure.diagnostic ?? failure.message)")])
         }
         currentExecution = execution
@@ -371,8 +378,9 @@ public actor ThreadRunner {
         if stopRequested { execution.stop() }
 
         let startedAt = Date()
+        let attempt: String
         do {
-            try await log.append(.turnStarted, turn: turn, data: startedData(execution.pid))
+            attempt = try await begin(execution.pid)
         } catch {
             execution.stop()
             _ = await execution.completion
@@ -384,19 +392,19 @@ public actor ThreadRunner {
 
         if let failure = completion.recordingFailure {
             return try await endTurn(
-                log: log, turn: turn, sessionID: sessionID, result: .failed, started: startedAt,
+                log: log, turn: turn, sessionID: sessionID, result: .failed, started: startedAt, attempt: attempt,
                 extra: ["error": .string("recording failed: \(failure)")], completion: completion,
                 sawOutput: recorder.sawOutput)
         }
         let outcome = Self.runResult(
             exit: completion.process, outcome: completion.provider, failure: completion.failure)
         return try await endTurn(
-            log: log, turn: turn, sessionID: sessionID, result: outcome, started: startedAt, completion: completion,
-            sawOutput: recorder.sawOutput)
+            log: log, turn: turn, sessionID: sessionID, result: outcome, started: startedAt, attempt: attempt,
+            completion: completion, sawOutput: recorder.sawOutput)
     }
 
     private func endTurn(
-        log: EventLogWriter, turn: Int, sessionID: String, result: RunResult, started: Date,
+        log: EventLogWriter, turn: Int, sessionID: String, result: RunResult, started: Date, attempt: String,
         extra: [String: JSONValue] = [:], completion: AgentCompletion? = nil, sawOutput: Bool = false
     ) async throws -> TurnOutcome {
         let exit = completion?.process
@@ -432,6 +440,7 @@ public actor ThreadRunner {
         data["denials"] = Self.deniedCalls(completion?.permissionDenials ?? [])
         for (key, value) in extra { data[key] = value }
 
+        try await log.endAttempt(attempt, outcome: result.rawValue)
         try await log.append(.turnEnded, turn: turn, data: .object(data))
         let report = TurnReport(
             turn: turn, result: result, exitCode: code, signal: signal, durationMs: duration, costUSD: cost,

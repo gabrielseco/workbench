@@ -5,6 +5,7 @@ extension ThreadRunner {
     func recoverOrphanedChecks(log: EventLogWriter) async throws {
         if let recovered = try await log.recoverOrphanedCheck() { notify(.recoveredOrphanedCheck(recovered.turn)) }
         _ = try await log.recoverOrphanedVerify()
+        _ = try await log.recoverOrphanedEvaluations()
         try await Plan.recoverOrphan(log: log, project: project, threadID: threadID, git: git)
         try await Verifier.recoverOrphan(log: log, worktree: worktreeManager.path(for: threadID))
     }
