@@ -12,6 +12,7 @@ phase's plan.
 
 ```bash
 scripts/codex-review.sh <pr> [spec]      # Codex reviews a PR with the pr-review skill (read-only)
+scripts/ci-report.sh [<pr>]               # what CI saw: check status, failed-step log, slowest suites/tests (artifact `test-reports`)
 scripts/check.sh                         # what CI runs, minus the soak: banned APIs, SwiftLint, build, tests
 scripts/check-changed.sh [--plan] [base]  the same on what the branch changed: lint those Swift files, test the suites that cover them (default base origin/main)
 swiftlint lint --quiet                   # just the lint (brew install swiftlint); config in .swiftlint.yml

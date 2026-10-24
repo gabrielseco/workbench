@@ -24,8 +24,32 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift test
+        # tee keeps the log for the timings below; pipefail keeps swift's exit code.
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee test.log
       - name: Soak (100 fake runs, failure matrix, no leaks)
         # Its own step, so descriptor counts are not disturbed by other suites running alongside.
-        run: WORKBENCH_SOAK=1 swift test --filter SoakTests
+        run: |
+          set -o pipefail
+          WORKBENCH_SOAK=1 swift test --filter SoakTests 2>&1 | tee soak.log
         timeout-minutes: 15
+      - name: Test timings
+        # Also after a failure: that is when the log matters. scripts/ci-report.sh reads the artifact.
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/test-timings.py test.log --json timings.json --markdown timings.md || true
+          [ -f timings.md ] && cat timings.md >> "$GITHUB_STEP_SUMMARY"
+          true
+      - name: Upload test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            test.log
+            soak.log
+            timings.json
+            timings.md
+          if-no-files-found: ignore
+          retention-days: 14
