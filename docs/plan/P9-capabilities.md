@@ -38,7 +38,9 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
    command re-ran outside it, and the remote's `main` moved in both runs. With
    `--ignore-user-config --ignore-rules -c approval_policy="never"` the same attempts fail. A follow-up probe
    isolated the cause: `--ignore-rules` alone stops the push, while keeping the config and setting only
-   `approval_policy="never"` does not. The user's exec-policy rules are what let it through.
+   `approval_policy="never"` does not. The user's exec-policy rules are what let it through. The production review's exact flags
+   (`--ignore-rules -c approval_policy="never"`, config kept) block all four attempts; results in
+   `P9-probes/fixtures/review/`.
    **Workbench's review passed only `exec -s read-only -C <tree> --color never --ephemeral -o <file>`, so it was
    exposed to this; it now adds `--ignore-rules -c approval_policy="never"`.** The adapter in task 2 must state the policy on
    the command line and ignore user config; the fix for the existing path should not wait for P9.
