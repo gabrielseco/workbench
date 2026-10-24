@@ -12,7 +12,7 @@ extension ThreadService {
     /// - Parameters:
     ///   - codexPath: `codex` by name (looked up on PATH) or by path.
     ///   - capacityBackoff: seconds to wait after the nth "at capacity" answer.
-    ///   - attach: called with each running `codex`, so the caller can stop it (Ctrl-C).
+    ///   - attach: called with each running review agent, so the caller can stop it (Ctrl-C).
     ///   - stopRequested: polled between tries and before `codex` starts, so a stop also ends the parts of a round
     ///     that run no `codex`.
     public func prReview(
@@ -20,7 +20,7 @@ extension ThreadService {
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = PRReview.timeout,
         capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
         stopRequested: @escaping @Sendable () -> Bool = { false },
-        attach: @Sendable (ProcessRun) -> Void = { _ in }
+        attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         let settings = PRReviewSettings(
             codexPath: codexPath, environment: environment, timeout: timeout,
@@ -35,7 +35,7 @@ extension ThreadService {
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = PRReview.timeout,
         capacityBackoff: @escaping @Sendable (Int) -> TimeInterval = { TimeInterval($0 * 20) },
         stopRequested: @escaping @Sendable () -> Bool = { false },
-        attach: @Sendable (ProcessRun) -> Void = { _ in }
+        attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> PRReviewResult {
         guard let stage = ReviewStage.named(name, config: config) else {
             throw PRReviewRefusal.unknownStage(name, listed: config.review.stages)
@@ -49,7 +49,7 @@ extension ThreadService {
     /// Runs one round of `stage` on the thread's pull request; `prReview` is this for the `pr-review` stage.
     func reviewStage(
         _ stage: ReviewStage, id: String, config: Config, again: Bool, settings: PRReviewSettings,
-        attach: @Sendable (ProcessRun) -> Void
+        attach: @Sendable (AgentExecution) -> Void
     ) async throws -> PRReviewResult {
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         do {
@@ -62,7 +62,7 @@ extension ThreadService {
 
     private func reviewStageLocked(
         _ stage: ReviewStage, id: String, log: EventLogWriter, config: Config, again: Bool, settings: PRReviewSettings,
-        attach: @Sendable (ProcessRun) -> Void
+        attach: @Sendable (AgentExecution) -> Void
     ) async throws -> PRReviewResult {
         // A round that was killed leaves its `codex` and its checkout behind, in any stage's folder. This process holds
         // the thread's log, so none of them is live: end them now, before any refusal can leave them for good.
@@ -129,15 +129,15 @@ extension ThreadService {
         }
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
-        let argv = PRReview.arguments(
-            tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path,
-            images: (try? context.proof?.get()) ?? [])
+        let argv =
+            (try? CodexProvider(executable: settings.codexPath)
+                .invocation(for: reviewRequest(context, proof: (try? context.proof?.get()) ?? [])).displayArguments) ?? []
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it; a run or another review is refused).
         var started: [String: JSONValue] = [
             "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
-            "argv": .array(PRDescriber.displayArguments(argv).map { .string($0) }),
+            "argv": .array(argv.map { .string($0) }),
         ]
         if let name = stage.events.stage { started["stage"] = .string(name) }
         // The screenshots this round is given, by name, so the log says what a verdict was based on.
@@ -162,7 +162,7 @@ extension ThreadService {
 
     // MARK: A round
 
-    func runRound(_ round: inout PRReviewRound, attach: @Sendable (ProcessRun) -> Void) async -> PRReviewOutcome {
+    func runRound(_ round: inout PRReviewRound, attach: @Sendable (AgentExecution) -> Void) async -> PRReviewOutcome {
         var outcome = PRReviewOutcome(warnings: round.warnings)
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
@@ -229,14 +229,13 @@ extension ThreadService {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
-        guard let codex = ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"])
-        else { return outcome.failed("`\(round.settings.codexPath)` was not found: install Codex or put it on PATH") }
+        guard ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"]) != nil
+        else { return outcome.failed(Self.codexMissing(round.settings.codexPath)) }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
         let transcript = await runCodex(
-            codex, round: round, attach: attach,
-            argv: PRReview.arguments(
-                tree: paths.tree.path, answer: paths.answer.path, brief: paths.brief.path, images: proof))
+            CodexProvider(executable: round.settings.codexPath), request: reviewRequest(round, proof: proof),
+            round: round, attach: attach)
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
         if let problem = transcript.problem { return outcome.failed(problem, answer: Self.readAnswer(paths.answer)) }
 
@@ -255,50 +254,6 @@ extension ThreadService {
         outcome.verdict = verdict
         outcome.findings = answer
         return outcome
-    }
-
-    /// Runs Codex up to `attempts` times while it answers that its model is at capacity.
-    private func runCodex(
-        _ codex: URL, round: PRReviewRound, attach: @Sendable (ProcessRun) -> Void, argv: [String]
-    ) async -> (text: String, problem: String?) {
-        var transcript = ""
-        for attempt in 1...PRReview.attempts {
-            if round.settings.stopRequested() { return (transcript, "the review was stopped") }
-            try? FileManager.default.removeItem(at: round.paths.answer)
-            var request = SpawnRequest(
-                executable: codex, arguments: argv, environment: PRReview.environment(from: round.settings.environment),
-                workingDirectory: round.paths.tree, timeout: round.settings.timeout)
-            request.maxLineBytes = 1 << 20
-            request.maxOutputBytes = PRReview.transcriptLimit
-            let run: ProcessRun
-            do { run = try ProcessRunner.start(request) } catch {
-                return (transcript, "codex could not be started: \(error)")
-            }
-            attach(run)
-            var lines: [String] = []
-            var exit: ProcessExit?
-            for await event in run.events {
-                switch event {
-                case .line(let line): lines.append(line)
-                case .exited(let e): exit = e
-                case .started, .oversizedLine: break
-                }
-            }
-            let tail = exit?.stderrTail ?? ""
-            transcript += "--- attempt \(attempt) ---\n" + lines.joined(separator: "\n")
-            transcript += "\n--- stderr (end) ---\n" + tail + "\n"
-            let answer = Self.readAnswer(round.paths.answer)
-            if answer == nil, PRReview.atCapacity(tail) || PRReview.atCapacity(lines.joined(separator: "\n")) {
-                if attempt < PRReview.attempts {
-                    let stopped = await Self.sleep(round.settings.capacityBackoff(attempt), stop: round.settings.stopRequested)
-                    if stopped { return (transcript, "the review was stopped") }
-                    continue
-                }
-                return (transcript, "codex's model was at capacity \(PRReview.attempts) times; no review. Try again later.")
-            }
-            return (transcript, Self.codexProcessProblem(exit, timeout: round.settings.timeout))
-        }
-        return (transcript, "codex did not answer")
     }
 
     // MARK: Git
@@ -440,8 +395,7 @@ extension ThreadService {
 
     // MARK: Small helpers
 
-    static func codexProcessProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
-        guard let exit else { return "codex did not report how it ended" }
+    static func codexProcessProblem(_ exit: ProcessExit, timeout: TimeInterval) -> String? {
         switch exit.cause {
         case .stopped: return "the review was stopped"
         case .timedOut: return "codex did not finish within \(Int(timeout))s"

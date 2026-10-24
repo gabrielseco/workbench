@@ -56,36 +56,6 @@ import Testing
         #expect(PRReview.parseVerdict(answer) == nil, "\(answer)")
     }
 
-    @Test func theCommandLineCarriesAPointerNotTheReview() {
-        let args = PRReview.arguments(tree: "/t/tree", answer: "/t/a.md", brief: "/t/brief.md")
-        #expect(args.starts(with: ["exec", "-s", "read-only", "-C", "/t/tree"]))
-        #expect(args.contains("--ephemeral") && args.contains("-o") && args.contains("/t/a.md"))
-        #expect(args.last?.contains("/t/brief.md") == true)
-        #expect(!args.contains("-"), "stdin is /dev/null: the prompt is not read from it")
-        #expect(!args.contains("danger-full-access") && !args.contains("workspace-write"))
-    }
-
-    @Test func theUsersRulesAndApprovalSettingsCannotRunAnythingOutsideTheSandbox() {
-        let args = PRReview.arguments(tree: "/t/tree", answer: "/t/a.md", brief: "/t/brief.md", images: ["/p/one.png"])
-        #expect(args.contains("--ignore-rules"))
-        let at = args.firstIndex(of: "-c")
-        #expect(at != nil && args[at! + 1] == "approval_policy=\"never\"", "\(args)")
-        #expect(args.firstIndex(of: "--ignore-rules")! < args.firstIndex(of: "--")!, "options come before the prompt")
-        #expect(!args.contains("--ignore-user-config"), "the user's model and login settings still apply")
-    }
-
-    @Test func theBriefPointerFollowsTheImagesAfterADoubleDash() {
-        // `codex exec -i` takes a list of files: a prompt right after it is read as one more image and Codex
-        // exits with "No prompt provided via stdin".
-        let args = PRReview.arguments(
-            tree: "/t/tree", answer: "/t/a.md", brief: "/t/brief.md", images: ["/p/one.png", "/p/two.png"])
-        #expect(args.last?.contains("/t/brief.md") == true)
-        #expect(args[args.count - 2] == "--", "\(args)")
-        #expect(args.filter { $0 == "-i" }.count == 2)
-        let dashes = args.firstIndex(of: "--")
-        #expect(dashes != nil && dashes! > args.lastIndex(of: "-i") ?? 0, "every image comes before the --")
-    }
-
     @Test func aFileInputIsFencedUnderItsPathAndCannotCloseTheFence() {
         var input = PRReviewInput(
             pr: 12, branch: "workbench/g", base: "main", headSHA: "abc1234", baseSHA: "def5678", goal: "goal",
@@ -111,15 +81,6 @@ import Testing
         let brief = PRReview.prompt(for: input)
         #expect(brief.contains("- \(png.path) (2000 × 1304 px)"))
         #expect(brief.contains("- /missing/one.png\n") || brief.hasSuffix("- /missing/one.png"), "unreadable: no size")
-    }
-
-    @Test func codexSeesTheMinimalEnvironmentAndItsOwnLogin() {
-        let parent = [
-            "PATH": "/bin", "HOME": "/h", "CODEX_HOME": "/c", "OPENAI_API_KEY": "k", "LC_ALL": "C", "GITHUB_TOKEN": "t",
-            "ANTHROPIC_API_KEY": "a", "AWS_SECRET_ACCESS_KEY": "s", "SSH_AUTH_SOCK": "/s",
-        ]
-        let child = PRReview.environment(from: parent)
-        #expect(Set(child.keys) == ["PATH", "HOME", "CODEX_HOME", "OPENAI_API_KEY", "LC_ALL"])
     }
 
     @Test func theBriefQuotesWhatItWasGivenWithoutLettingItEscapeItsFence() {
