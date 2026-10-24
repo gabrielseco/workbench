@@ -4,6 +4,12 @@ import Testing
 @testable import WorkbenchCore
 
 @Suite(.processGate) struct RecordedDenialsTests {
+    /// What the log records for a parsed `result` line: the adapter bounds and shapes the denials, the runner
+    /// writes them.
+    private func recorded(_ line: [String: Any]) -> JSONValue? {
+        ThreadRunner.deniedCalls(ClaudeDecoder.denials(line).0)
+    }
+
     private func firstDenial(_ fx: RunnerFixture, _ id: String) throws -> JSONValue? {
         guard case .array(let calls)? = ended(try fx.events(id))[0].data["denials"] else { return nil }
         return calls.first
@@ -25,13 +31,13 @@ import Testing
     }
 
     @Test func aVeryLongDeniedCommandIsCutAndSaysSo() {
-        let long = String(repeating: "x", count: ThreadRunner.maxDeniedInputCharacters + 10)
+        let long = String(repeating: "x", count: ClaudeDecoder.maxDeniedInputCharacters + 10)
         let line: [String: Any] = ["permission_denials": [["tool_name": "Bash", "tool_input": ["command": long]]]]
-        guard case .array(let calls)? = ThreadRunner.deniedCalls(line), let call = calls.first else {
+        guard case .array(let calls)? = recorded(line), let call = calls.first else {
             Issue.record("no denials recorded")
             return
         }
-        #expect(call["input"]?.stringValue?.count == ThreadRunner.maxDeniedInputCharacters)
+        #expect(call["input"]?.stringValue?.count == ClaudeDecoder.maxDeniedInputCharacters)
         #expect(call["input_truncated"] == .bool(true))
     }
 
@@ -41,6 +47,6 @@ import Testing
                 ["tool_name": "A"], ["tool_name": "B", "tool_input": 7], ["tool_input": ["command": "x"]], "junk",
             ],
         ]
-        #expect(ThreadRunner.deniedCalls(line) == .array([.object(["tool": "A"]), .object(["tool": "B"])]))
+        #expect(recorded(line) == .array([.object(["tool": "A"]), .object(["tool": "B"])]))
     }
 }

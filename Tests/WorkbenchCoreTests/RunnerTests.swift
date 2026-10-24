@@ -467,26 +467,30 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
             outputTruncated: false, lastLineAfterLimit: nil, stderrTail: "", drainTimedOut: false)
     }
 
+    /// The adapter judges the `result` line, the runner applies stop and deadline: together they are what the
+    /// runner's own classification was before the adapter existed.
+    private func classify(exit: ProcessExit?, result: [String: Any]?) -> RunResult {
+        guard let exit else { return .failed }
+        let (outcome, failure) = ClaudeDecoder.judge(exit: exit, result: result)
+        return ThreadRunner.runResult(exit: exit, outcome: outcome, failure: failure)
+    }
+
     @Test func mapsEveryCase() {
         let success: [String: Any] = ["subtype": "success", "is_error": false]
-        #expect(ThreadRunner.classify(exit: exit(), result: success) == .succeeded)
-        #expect(ThreadRunner.classify(exit: exit(), result: nil) == .failed)
-        #expect(ThreadRunner.classify(exit: nil, result: success) == .failed)
-        #expect(ThreadRunner.classify(exit: exit(.exited(1)), result: success) == .failed)
-        #expect(ThreadRunner.classify(exit: exit(.signaled(9)), result: success) == .failed)
-        #expect(ThreadRunner.classify(exit: exit(.lost), result: nil) == .failed)
+        #expect(classify(exit: exit(), result: success) == .succeeded)
+        #expect(classify(exit: exit(), result: nil) == .failed)
+        #expect(classify(exit: nil, result: success) == .failed)
+        #expect(classify(exit: exit(.exited(1)), result: success) == .failed)
+        #expect(classify(exit: exit(.signaled(9)), result: success) == .failed)
+        #expect(classify(exit: exit(.lost), result: nil) == .failed)
         #expect(
-            ThreadRunner.classify(exit: exit(.exited(1)), result: ["subtype": "error_max_budget_usd", "is_error": true])
+            classify(exit: exit(.exited(1)), result: ["subtype": "error_max_budget_usd", "is_error": true])
                 == .budgetExceeded)
-        #expect(
-            ThreadRunner.classify(exit: exit(.exited(1)), result: ["terminal_reason": "budget_exhausted"])
-                == .budgetExceeded)
-        #expect(ThreadRunner.classify(exit: exit(.exited(143), cause: .stopped), result: success) == .stopped)
-        #expect(ThreadRunner.classify(exit: exit(.signaled(15), cause: .timedOut), result: nil) == .timedOut)
-        #expect(
-            ThreadRunner.classify(exit: exit(), result: ["subtype": "error_during_execution", "is_error": true])
-                == .failed)
-        #expect(ThreadRunner.classify(exit: exit(), result: ["subtype": "success", "is_error": true]) == .failed)
+        #expect(classify(exit: exit(.exited(1)), result: ["terminal_reason": "budget_exhausted"]) == .budgetExceeded)
+        #expect(classify(exit: exit(.exited(143), cause: .stopped), result: success) == .stopped)
+        #expect(classify(exit: exit(.signaled(15), cause: .timedOut), result: nil) == .timedOut)
+        #expect(classify(exit: exit(), result: ["subtype": "error_during_execution", "is_error": true]) == .failed)
+        #expect(classify(exit: exit(), result: ["subtype": "success", "is_error": true]) == .failed)
     }
 }
 

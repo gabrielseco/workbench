@@ -1,0 +1,191 @@
+import Foundation
+
+/// The Claude Code adapter for coding turns. Its argv is still built by `Config.invocation` (flags verified in the
+/// P1 spikes and P9 task 1); this type is the seam between that and `AgentRequest`, plus the decoding of
+/// `stream-json` and the judgement of how a turn ended, which used to live in `ThreadRunner`.
+public struct ClaudeProvider: AgentProvider {
+    public var config: Config
+
+    public init(config: Config) { self.config = config }
+
+    public var id: AgentProviderID { .claude }
+
+    public var capabilities: AgentCapabilities {
+        AgentCapabilities(
+            policies: [.scopedCoding], resume: .callerSuppliedID, streamsActivity: true, imageAttachments: false,
+            structuredOutput: true, reportsUsage: true, hardDollarCap: true, confinesReads: true)
+    }
+
+    public func invocation(for request: AgentRequest) throws -> AgentInvocation {
+        func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
+        guard case .hardCap(let budget) = request.spend else {
+            throw refuse("Claude coding turns run with a dollar cap; timeout-only spending is not available yet.")
+        }
+        let sessionID: UUID
+        let resume: Bool
+        switch request.session {
+        case .start(let proposed):
+            guard let proposed, let uuid = UUID(uuidString: proposed) else {
+                throw refuse("Claude needs a session id chosen up front (a UUID) to start a conversation.")
+            }
+            (sessionID, resume) = (uuid, false)
+        case .resume(let handle):
+            guard let uuid = UUID(uuidString: handle.value) else {
+                throw refuse("The session handle is not a Claude session id.")
+            }
+            (sessionID, resume) = (uuid, true)
+        case .none:
+            throw refuse("Claude coding turns keep a conversation; a one-shot request is for evaluations.")
+        }
+
+        let turn = TurnRequest(
+            sessionID: sessionID, resume: resume, budgetUSD: budget, prompt: request.prompt,
+            appendSystemPrompt: request.rules, model: request.model, extraAllowed: request.grants)
+        let built: ClaudeInvocation
+        do { built = try config.invocation(for: turn) } catch {
+            throw refuse("The Claude command line could not be built: \(error)")
+        }
+
+        // The prompt and the rules are in the thread's files, not in a log line.
+        var shown = built.arguments
+        if let dashes = shown.firstIndex(of: "--") { shown = Array(shown[..<dashes]) }
+        if let i = shown.firstIndex(of: "--append-system-prompt"), i + 1 < shown.count { shown[i + 1] = "<rules>" }
+        return AgentInvocation(
+            executable: built.executable, arguments: built.arguments,
+            environment: config.childEnvironment(from: request.environment), displayArguments: shown)
+    }
+
+    public func makeDecoder(for request: AgentRequest) -> any AgentDecoder {
+        var sessionID: String?
+        switch request.session {
+        case .start(let proposed): sessionID = proposed
+        case .resume(let handle): sessionID = handle.value
+        case .none: break
+        }
+        return ClaudeDecoder(
+            sessionID: sessionID?.lowercased(), purpose: request.purpose, maxRawBytes: request.limits.maxRawBytes)
+    }
+}
+
+/// Reads Claude's `stream-json`. One `result` line ends a turn; everything else is activity or ignored.
+struct ClaudeDecoder: AgentDecoder {
+    static let maxRecordedDenials = 100
+    static let maxDeniedInputCharacters = 4096
+    private static let deniedInputKeys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
+
+    var sessionID: String?
+    var purpose: AgentSessionHandle.Purpose
+    var maxRawBytes: Int
+    /// The last `result` line that parsed, kept as text so the decoder stays `Sendable`.
+    private var resultText: String?
+    private var session: AgentSessionHandle?
+
+    init(sessionID: String?, purpose: AgentSessionHandle.Purpose, maxRawBytes: Int) {
+        self.sessionID = sessionID
+        self.purpose = purpose
+        self.maxRawBytes = maxRawBytes
+    }
+
+    mutating func consume(line: String) -> [AgentActivity] {
+        var items: [AgentActivity] = []
+        // The session is confirmed by the first line that names it: a resume of an id Claude never saw fails
+        // at once with no output, and that is how the runner tells the two apart.
+        if session == nil, let sessionID, line.contains("\"session_id\":\"\(sessionID)\"") {
+            let handle = AgentSessionHandle(provider: .claude, purpose: purpose, value: sessionID)
+            session = handle
+            items.append(.session(handle))
+        }
+        if line.contains("\"type\":\"result\""), Self.object(line) != nil {
+            resultText = line
+        } else if line.contains("\"type\":\"assistant\""), let parsed = Self.object(line) {
+            items += activity(fromAssistant: parsed)
+        } else if !line.hasPrefix("{") {
+            items.append(.unknown(provider: .claude, raw: String(line.prefix(maxRawBytes))))
+        }
+        return items
+    }
+
+    mutating func consume(oversizedPreview preview: String, totalBytes: Int) -> [AgentActivity] { [] }
+
+    mutating func finish(exit: ProcessExit) -> AgentDecoderResult {
+        // Past the output limit the result line may have been dropped from the stream; it is kept aside.
+        var late: String?
+        var resultLine = resultText.flatMap(Self.object)
+        if resultLine == nil, let last = exit.lastLineAfterLimit {
+            late = last
+            if let parsed = Self.object(last), parsed["type"] as? String == "result" { resultLine = parsed }
+        }
+        let (outcome, failure) = Self.judge(exit: exit, result: resultLine)
+
+        var usage: AgentUsage?
+        if let cost = resultLine?["total_cost_usd"] as? NSNumber {
+            usage = AgentUsage(costUSD: cost.doubleValue)
+        }
+        let (denials, count) = Self.denials(resultLine)
+        let summary = (resultLine?["result"] as? String).map { AgentAnswer.text($0) }
+        return AgentDecoderResult(
+            outcome: outcome, answer: summary, session: session, usage: usage, failure: failure,
+            permissionDenials: denials, permissionDenialCount: count, lateLine: late)
+    }
+
+    // MARK: How a turn ended (pure, tested directly)
+
+    /// Stop and deadline are decided by the runner (they outrank anything Claude printed). Past those: a signal
+    /// or no `result` line is a failure, a spent dollar limit is `budgetExceeded`, a success line from a process
+    /// that then exited non-zero is not a success, and only `subtype: success` without `is_error` is.
+    static func judge(exit: ProcessExit, result: [String: Any]?) -> (AgentCompletion.ProviderOutcome, AgentFailure?) {
+        if exit.cause != .natural { return (.failed, nil) }
+        if case .signaled = exit.termination { return (.failed, nil) }
+        guard let result else { return (.failed, nil) }
+
+        let subtype = result["subtype"] as? String
+        let terminal = result["terminal_reason"] as? String
+        if subtype == "error_max_budget_usd" || terminal == "budget_exhausted" {
+            return (.failed, AgentFailure(.budgetExceeded, "Claude's dollar limit for the turn was reached.", retry: .never))
+        }
+        if case .exited(let code) = exit.termination, code != 0 { return (.failed, nil) }
+        if subtype == "success", result["is_error"] as? Bool != true { return (.succeeded, nil) }
+        return (.failed, nil)
+    }
+
+    /// The turn's denied calls from the parsed `result` line, so the full command survives a result line the log
+    /// had to cut for size. Raw text, bounded; whoever prints it makes it safe.
+    static func denials(_ result: [String: Any]?) -> ([AgentDenial], Int) {
+        guard let all = result?["permission_denials"] as? [Any], !all.isEmpty else { return ([], 0) }
+        var calls: [AgentDenial] = []
+        for case let denial as [String: Any] in all.prefix(maxRecordedDenials) {
+            guard let tool = denial["tool_name"] as? String else { continue }
+            var call = AgentDenial(tool: String(tool.prefix(200)))
+            let input = denial["tool_input"] as? [String: Any]
+            if let text = deniedInputKeys.lazy.compactMap({ input?[$0] as? String }).first(where: { !$0.isEmpty }) {
+                call.input = String(text.prefix(maxDeniedInputCharacters))
+                call.inputTruncated = text.count > maxDeniedInputCharacters
+            }
+            calls.append(call)
+        }
+        return (calls, all.count)
+    }
+
+    private func activity(fromAssistant message: [String: Any]) -> [AgentActivity] {
+        guard let content = (message["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return [] }
+        var items: [AgentActivity] = []
+        for block in content {
+            switch block["type"] as? String {
+            case "text":
+                if let text = block["text"] as? String, !text.isEmpty { items.append(.text(String(text.prefix(maxRawBytes)))) }
+            case "tool_use":
+                if let name = block["name"] as? String {
+                    let input = block["input"] as? [String: Any]
+                    let summary = Self.deniedInputKeys.lazy.compactMap { input?[$0] as? String }.first ?? ""
+                    items.append(.tool(name: String(name.prefix(200)), summary: String(summary.prefix(200))))
+                }
+            default: break
+            }
+        }
+        return items
+    }
+
+    private static func object(_ line: String) -> [String: Any]? {
+        (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
+    }
+}
