@@ -4,15 +4,19 @@ import WorkbenchCore
 /// The running `claude`, reachable from a signal handler; a stop that arrives before it has started is kept.
 final class RunHolder: @unchecked Sendable {
     private let lock = NSLock()
-    private var run: ProcessRun?
+    private var stopper: (@Sendable () -> Void)?
     private var stopRequested = false
 
-    func attach(_ new: ProcessRun) {
+    func attach(_ new: ProcessRun) { attach { new.stop() } }
+
+    func attach(_ new: AgentExecution) { attach { new.stop() } }
+
+    private func attach(_ new: @escaping @Sendable () -> Void) {
         lock.lock()
-        run = new
+        stopper = new
         let stop = stopRequested
         lock.unlock()
-        if stop { new.stop() }
+        if stop { new() }
     }
 
     var isStopRequested: Bool {
@@ -24,9 +28,9 @@ final class RunHolder: @unchecked Sendable {
     func stop() {
         lock.lock()
         stopRequested = true
-        let current = run
+        let current = stopper
         lock.unlock()
-        current?.stop()
+        current?()
     }
 }
 

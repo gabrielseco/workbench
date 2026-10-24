@@ -44,11 +44,11 @@ extension ThreadService {
     /// shows: the work in the worktree against where it left the base (committed or not; untracked files are
     /// named), the check, the verify step and the screenshots the verify step left.
     ///
-    /// - Parameter attach: called with the running `claude`, so the caller can stop it (Ctrl-C).
+    /// - Parameter attach: called with the running judge, so the caller can stop it (Ctrl-C).
     public func judge(
         id: String, config: Config, again: Bool = false, budget: Decimal = Judge.budgetUSD, model: String? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = Judge.timeout,
-        attach: @Sendable (ProcessRun) -> Void = { _ in }
+        attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> JudgeResult {
         if let model, !SafeNames.isModelName(model) { throw JudgeRefusal.invalidModel(model) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
@@ -63,7 +63,7 @@ extension ThreadService {
 
     private func judgeLocked(
         id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
-        environment: [String: String], timeout: TimeInterval, attach: @Sendable (ProcessRun) -> Void
+        environment: [String: String], timeout: TimeInterval, attach: @Sendable (AgentExecution) -> Void
     ) async throws -> JudgeResult {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
@@ -102,15 +102,25 @@ extension ThreadService {
                     PNGSize.read(at: folder.appendingPathComponent(name)).map { (name, $0) }
                 }),
             lastTurn: turn, untracked: work.untracked)
-        let arguments = Judge.arguments(
-            config: config, prompt: Judge.prompt(for: input), withScreenshots: !screenshots.isEmpty, budget: budget,
-            model: model)
-        let shown = PRDescriber.displayArguments(arguments)
-
-        guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
-            return try await recordJudge(
-                log, turn: turn, failure: JudgeError.claudeNotFound(config.claudePath).description, argv: shown)
+        let request = AgentRequest(
+            provider: .claude, model: model ?? config.judgeModel ?? config.model, prompt: Judge.prompt(for: input),
+            workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
+            spend: .hardCap(budget), purpose: .judge, environment: environment,
+            limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
+        let provider = ClaudeProvider(config: config)
+        // What goes in the log is decided before anything is spent; a refusal is a result, not a spawn.
+        let shown: [String]
+        do {
+            if let refusal = request.validate(against: provider) { throw refusal }
+            shown = try provider.invocation(for: request).displayArguments
+        } catch {
+            return try await recordJudge(log, turn: turn, failure: Self.judgeFailureText(error), argv: [])
         }
+        // No attempt is logged for a `claude` that is not there: nothing was started.
+        guard ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) != nil else {
+            return try await recordJudge(log, turn: turn, failure: "`\(config.claudePath)` was not found", argv: shown)
+        }
+
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it, a run or another judge is refused). A `claude` a killed judge left behind is
         // found by its working directory and ended before the next one starts.
@@ -119,33 +129,31 @@ extension ThreadService {
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
         try ThreadStore(project: project).requireNoDoctor()
         try await log.append(.judgeStarted, turn: turn, data: ["argv": .array(shown.map { .string($0) })])
-        var request = SpawnRequest(
-            executable: claude, arguments: arguments, environment: config.childEnvironment(from: environment),
-            workingDirectory: folder, timeout: timeout)
-        request.maxLineBytes = 1 << 20
-        let run: ProcessRun
-        do { run = try ProcessRunner.start(request) } catch {
-            return try await recordJudge(log, turn: turn, failure: "claude could not be started", argv: shown)
+        let execution: AgentExecution
+        do { execution = try AgentRunner.start(provider: provider, request: request) } catch {
+            return try await recordJudge(log, turn: turn, failure: Self.judgeFailureText(error), argv: shown)
         }
-        attach(run)
-        var lines: [String] = []
-        var exit: ProcessExit?
-        for await event in run.events {
-            switch event {
-            case .line(let line): lines.append(line)
-            case .exited(let e): exit = e
-            case .started, .oversizedLine: break
-            }
-        }
-        if let why = Self.judgeProcessProblem(exit, timeout: timeout) {
+        attach(execution)
+        let completion = await execution.completion
+        if let why = Self.judgeProcessProblem(completion.process, timeout: timeout) {
             return try await recordJudge(log, turn: turn, failure: why, argv: shown)
         }
+        if let failure = completion.failure {
+            return try await recordJudge(log, turn: turn, failure: failure.message, argv: shown)
+        }
+        guard let answer = completion.summary else {
+            return try await recordJudge(log, turn: turn, failure: "the verdict was not usable: no result", argv: shown)
+        }
         do {
-            let parsed = try Judge.parse(output: lines.joined(separator: "\n"), criteria: goal.criteria)
-            return try await recordJudge(log, turn: turn, verdict: parsed.verdict, cost: parsed.costUSD, argv: shown)
+            let verdict = try Judge.verdict(fromAnswer: answer, criteria: goal.criteria)
+            return try await recordJudge(log, turn: turn, verdict: verdict, cost: completion.usage?.costUSD, argv: shown)
         } catch {
             return try await recordJudge(log, turn: turn, failure: "\(error)", argv: shown)
         }
+    }
+
+    private static func judgeFailureText(_ error: Error) -> String {
+        (error as? AgentFailure)?.message ?? "\(error)"
     }
 
     /// Marks this process as the one using the thread, in the file `runnerPID` reads.
@@ -159,8 +167,7 @@ extension ThreadService {
     }
 
     /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
-    static func judgeProcessProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
-        guard let exit else { return "claude did not report how it ended" }
+    static func judgeProcessProblem(_ exit: ProcessExit, timeout: TimeInterval) -> String? {
         switch exit.cause {
         case .stopped: return "the judge was stopped"
         case .timedOut: return "claude did not answer within \(Int(timeout))s"

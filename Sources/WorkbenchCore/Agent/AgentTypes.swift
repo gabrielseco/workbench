@@ -145,13 +145,17 @@ public struct AgentRequest: Sendable, Equatable {
     /// Extra permissions the user granted this thread, as the provider's own tool patterns. Only for
     /// `scopedCoding`; the adapter never widens them and never revives one the project denies.
     public var grants: [String]
+    /// Files in `workingDirectory` a `readOnlyEvidence` agent may open, by name. With none it has no tools at all.
+    public var evidenceFiles: [String]
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],
         workingDirectory: URL, outputDirectory: URL, policy: AgentPolicy, spend: AgentSpend,
         session: AgentSessionIntent = .none, purpose: AgentSessionHandle.Purpose,
-        environment: [String: String], limits: AgentLimits, rules: String? = nil, grants: [String] = []
+        environment: [String: String], limits: AgentLimits, rules: String? = nil, grants: [String] = [],
+        evidenceFiles: [String] = []
     ) {
+        self.evidenceFiles = evidenceFiles
         self.rules = rules
         self.grants = grants
         self.provider = provider
