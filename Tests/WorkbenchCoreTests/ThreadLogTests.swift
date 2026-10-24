@@ -34,6 +34,8 @@ import Testing
             case .transcript(let line):
                 #expect(event.kind == .claude)
                 #expect(line == TranscriptLine(turn: event.turn, ts: event.ts, seq: event.seq, data: event.data))
+            case .unreadableTranscript:
+                Issue.record("a legacy log has no transcript file to be unreadable")
             }
             // What `log` printed for the event is what it prints for the entry.
             #expect(LogFormatter.describe(entry) == LogFormatter.describe(event))

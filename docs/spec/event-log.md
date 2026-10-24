@@ -77,7 +77,14 @@ instead, one line per stream line, in order:
   truncation marker for a line over the size limit. Nothing is dropped.
 - A line is appended whole; a last line without its newline (a runner that died mid-write) is not a line. Recovery
   cuts it off before writing the synthetic `turn.ended`, whose `transcript` counts the lines that are left.
-- The file is plain while the turn runs, so `workbench log -f` shows lines as they arrive. `workbench log` and
+- The file is plain while the turn runs, so `workbench log -f` shows lines as they arrive. When the turn ends (after
+  `turn.ended`, also in recovery) it is gzipped to `turn-<n>.jsonl.gz` (a standard gzip file: `zcat` and `gzip -t` read
+  it) and the plain file is removed once the compressed one reads back identical. A file over 256 MiB, or one whose
+  compression fails, stays plain; both forms read the same, and `turn.ended`'s counts are those of the plain bytes.
+- `workbench log --transcript [--turn <n>]` prints the stored stream lines, one per line and nothing else, from either form.
+  A transcript file that exists and cannot be read (a damaged `.gz`, one over the limit) is an error, not an empty
+  transcript: `log --transcript` exits 1 naming the turn, `log` prints `transcript cannot be read: <why>` in its place and keeps
+  the log's own `result` line, and `log --json` prints `{"kind":"transcript.unreadable","seq":null,"ts":null,...}` with the reason. `workbench log` and
   `log --json` show a turn's lines just before its `turn.ended`, as `claude` events with `seq` null in JSON; the
   turn's `result` line is shown once, from the file.
 - `status` reads the open turn's file for its progress (tool calls, denials, the newest line). A turn that is not

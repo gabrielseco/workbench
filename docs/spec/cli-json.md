@@ -107,7 +107,7 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
 ## log
 
 JSON lines: the stored events, one per line, exactly as in `events.jsonl`. A Claude turn's transcript lines (kept in `transcript/turn-<n>.jsonl`, see the event-log spec) are printed as `claude` events with `"seq":null`, `data` verbatim, just before that turn's `turn.ended`; the turn's `result` line is printed once, from there. A log with a line that is not an event is printed as it is, without transcripts.
-`log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one stored line.
+`log --transcript [--turn <n>]` prints the stored stream lines, one JSON value each, whatever `--json` says. `log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one stored line.
 
 ## grant
 

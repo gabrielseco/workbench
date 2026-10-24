@@ -24,7 +24,7 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 // An option's value that happens to read `--json` is a value, not the flag.
 let valueOptions: Set = [
     "--feedback", "-f", "-m", "--message", "--budget", "--model", "--base", "--update", "--patch", "--seq", "--timeout",
-    "--interval", "--in", "--seed",
+    "--interval", "--in", "--seed", "--turn",
 ]
 // Help comes before anything else: it needs no project and changes nothing.
 if let query = Help.request(arguments, valueOptions: Help.valueOptions(adding: valueOptions)) {

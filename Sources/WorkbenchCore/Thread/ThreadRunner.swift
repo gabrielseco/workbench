@@ -468,6 +468,8 @@ public actor ThreadRunner {
 
         try await AttemptLog.close(log, attempt, result.rawValue)
         try await log.append(.turnEnded, turn: turn, data: .object(data))
+        // The turn is over, so nobody appends to its transcript again: gzip it. A failure leaves it plain.
+        TranscriptFile.compress(TranscriptFile.url(in: project.threadDirectory(threadID), turn: turn))
         let report = TurnReport(
             turn: turn, result: result, exitCode: code, signal: signal, durationMs: duration, costUSD: cost,
             sessionID: sessionID, permissionDenials: denials, summary: completion?.summary)

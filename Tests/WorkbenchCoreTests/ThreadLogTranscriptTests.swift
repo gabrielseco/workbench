@@ -35,6 +35,7 @@ private func mixedThread() async throws -> URL {
             switch entry {
             case .event(let event): event.kind.rawValue + ":t\(event.turn)"
             case .transcript(let line): "line:t\(line.turn)" + (line.seq == nil ? ":file" : ":log")
+            case .unreadableTranscript(let turn, _): "unreadable:t\(turn)"
             }
         }
         #expect(shape == [
@@ -62,6 +63,7 @@ private func mixedThread() async throws -> URL {
                 switch entry {
                 case .event(let event): event.kind.rawValue
                 case .transcript(let line): line.data["type"]?.stringValue ?? "?"
+                case .unreadableTranscript: "unreadable"
                 }
             }
         }
@@ -142,5 +144,77 @@ private func mixedThread() async throws -> URL {
         #expect(json.lines.count == 3 && json.lines.last == "not an event")
         let again = try ThreadLog.read(at: project.eventsURL(id)).jsonLines(after: json.position)
         #expect(again.lines.isEmpty && again.position == json.position)
+    }
+}
+
+@Suite struct UnreadableTranscriptTests {
+    /// Turn 1 has a gzipped transcript that was then damaged; the log still holds its result line.
+    private func damaged() async throws -> URL {
+        let url = try await mixedThreadForDamage()
+        let file = TranscriptFile.url(in: url.deletingLastPathComponent(), turn: 1)
+        #expect(TranscriptFile.compress(file))
+        var packed = try Data(contentsOf: TranscriptFile.compressedURL(file))
+        packed[packed.count / 2] ^= 0xFF
+        try packed.write(to: TranscriptFile.compressedURL(file))
+        return url
+    }
+
+    private func mixedThreadForDamage() async throws -> URL {
+        let directory = Scratch.url("damaged")
+        let url = directory.appendingPathComponent("events.jsonl")
+        let log = try EventLogWriter.open(at: url)
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        let writer = TranscriptWriter(url: TranscriptFile.url(in: directory, turn: 1))
+        for n in 0..<50 { try writer.append(#"{"type":"assistant","n":\#(n)}"#) }
+        let result = #"{"type":"result","subtype":"success","permission_denials":[]}"#
+        try writer.append(result)
+        writer.close()
+        try await log.appendClaudeLine(result, turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        await log.close()
+        return url
+    }
+
+    @Test func aDamagedTranscriptIsSaidAndTheLogsResultLineIsStillShown() async throws {
+        let url = try await damaged()
+        let entries = try ThreadLog.read(at: url).entries
+        let shape = entries.map { entry -> String in
+            switch entry {
+            case .event(let event): event.kind.rawValue
+            case .transcript(let line): "line:t\(line.turn)"
+            case .unreadableTranscript(let turn, _): "unreadable:t\(turn)"
+            }
+        }
+        // The log's own copy of the result line stays (it is the one a stored line, with a seq), then the note.
+        #expect(shape == ["thread.created", "turn.started", "line:t1", "unreadable:t1", "turn.ended"], "\(shape)")
+        let kept = entries.compactMap { entry -> TranscriptLine? in
+            if case .transcript(let line) = entry { line } else { nil }
+        }
+        #expect(kept.count == 1 && kept[0].seq != nil && kept[0].data["type"] == "result")
+        let entry = try #require(entries.first { if case .unreadableTranscript = $0 { true } else { false } })
+        let said = LogFormatter.describe(entry)
+        #expect(said.contains("t1  transcript cannot be read: damaged"), Comment(rawValue: said))
+    }
+
+    @Test func followingSaysItOnceAndJSONNamesIt() async throws {
+        let url = try await damaged()
+        let threadLog = try ThreadLog.read(at: url)
+        let first = threadLog.entries(after: ThreadLog.Position())
+        let again = threadLog.entries(after: first.position)
+        #expect(again.entries.isEmpty)
+        let (lines, _) = threadLog.jsonLines(after: ThreadLog.Position())
+        #expect(lines.contains { $0.contains("\"kind\":\"transcript.unreadable\"") && $0.contains("\"turn\":1") })
+        #expect(lines.contains { $0.contains("\"kind\":\"claude\"") }, "the log's own result line is still there")
+    }
+
+    @Test func logTranscriptFailsRatherThanPrintingNothing() async throws {
+        let url = try await damaged()
+        #expect(throws: ThreadLogError.self) { try ThreadLog.read(at: url).transcript() }
+        do { _ = try ThreadLog.read(at: url).transcript(turn: 1) } catch let error as ThreadLogError {
+            #expect("\(error)".hasPrefix("the transcript of turn 1 cannot be read: damaged"))
+        }
+        // A turn that is not damaged is still printed.
+        #expect(try ThreadLog.read(at: url).transcript(turn: 2).isEmpty)
     }
 }

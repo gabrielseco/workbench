@@ -49,7 +49,8 @@ enum Help {
         "stop": Extra(
             changes: "asks the live run to stop; it records the turn as stopped itself",
             example: "workbench stop"),
-        "log": Extra(changes: "nothing; read-only", example: "workbench log -f"),
+        "log": Extra(
+            changes: "nothing; read-only", example: "workbench log -f   or   workbench log --transcript --turn 1 | jq ."),
         "status": Extra(
             changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
             example: "workbench status --all --json"),

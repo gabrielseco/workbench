@@ -94,7 +94,8 @@ private func raw(_ n: Int) -> String { #"{"type":"assistant","n":\#(n)}"# }
         let ended = try #require(try await log.recoverOrphanedTurn())
         #expect(ended.data["result"] == "interrupted" && ended.data["synthetic"] == true)
         #expect(ended.data["transcript"] == ["lines": 2, "bytes": .int(whole)])
-        #expect(try Data(contentsOf: url).count == whole, "recovery cut the torn line")
+        // Recovery cut the torn line, then gzipped the file: the same lines and bytes read back from the .gz.
+        #expect(TranscriptFile.summary(at: url) == TranscriptSummary(lines: 2, bytes: whole))
         await log.close()
     }
 
