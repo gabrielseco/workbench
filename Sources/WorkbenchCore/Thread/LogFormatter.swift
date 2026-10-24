@@ -5,8 +5,8 @@ public enum LogFormatter {
     public static func describe(_ event: Event) -> String {
         let head = "\(String(format: "%4d", event.seq))  \(shortTime(event.ts))  t\(event.turn)  "
         switch event.kind {
-        case .claude:
-            return head + (describeClaude(event.data) ?? "claude")
+        case .claude, .agentActivity:
+            return head + describeStream(event)
         case .turnStarted:
             let resume = event.data["resume"] == true ? "resume" : "new session"
             let pid = event.data["pid"]?.intValue.map { " pid \($0)" } ?? ""
@@ -122,6 +122,35 @@ public enum LogFormatter {
             if let exitCode { out += " (exit \(exitCode))" } else if let signal { out += " (signal \(signal))" }
         }
         return out
+    }
+
+    private static func describeStream(_ event: Event) -> String {
+        if event.kind == .agentActivity { return describeActivity(event.data) }
+        return describeClaude(event.data) ?? "claude"
+    }
+
+    /// One line for a normalized `agent.activity`; the text is the provider's, so it is made safe to print.
+    public static func describeActivity(_ data: JSONValue) -> String {
+        func safe(_ key: String, _ limit: Int = 100) -> String {
+            ThreadState.safeLine(data[key]?.stringValue ?? "", limit: limit)
+        }
+        let provider = ThreadState.safeLine(data["provider"]?.stringValue ?? "?", limit: 30)
+        switch data["type"]?.stringValue {
+        case "text": return "\(provider): \(safe("text"))"
+        case "tool": return "tool: \(safe("name", 40)) \(safe("summary", 60))"
+        case "permission_denied": return "tool denied: \(safe("tool", 60))"
+        case "usage":
+            var parts: [String] = []
+            if let n = data["input_tokens"]?.intValue { parts.append("\(n) in") }
+            if let n = data["output_tokens"]?.intValue { parts.append("\(n) out") }
+            if let cost = costText(data["cost_usd"]) { parts.append(cost) }
+            return "usage: " + (parts.isEmpty ? "not reported" : parts.joined(separator: ", "))
+        case "session": return "\(provider) session \(safe("purpose", 20))"
+        case "diagnostic": return "\(provider) note: \(safe("text"))"
+        case "unknown": return "\(provider) event not understood: \(safe("raw", 80))"
+        case "dropped": return "\(data["count"]?.intValue ?? 0) activity item(s) not recorded"
+        default: return "\(provider) activity"
+        }
     }
 
     /// The interesting part of a raw `claude` stream line, or nil for noise (partial messages, hooks).

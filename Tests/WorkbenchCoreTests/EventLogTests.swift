@@ -87,6 +87,20 @@ private func lines(of url: URL) throws -> [String] {
 
     // MARK: invariant 1, turns
 
+    @Test func activityOutsideTurnIsRejected() async throws {
+        let log = try EventLogWriter.open(at: try tempLog())
+        await #expect(throws: EventLogError.invalid(.activityOutsideTurn(turn: 1, line: 0))) {
+            try await log.append(.agentActivity, turn: 1, data: ["type": "text"])
+        }
+        try await log.append(.turnStarted, turn: 1)
+        try await log.append(.agentActivity, turn: 1, data: ["type": "text"])
+        try await log.append(.turnEnded, turn: 1)
+        await #expect(throws: EventLogError.invalid(.activityOutsideTurn(turn: 1, line: 0))) {
+            try await log.append(.agentActivity, turn: 1, data: ["type": "text"])
+        }
+        #expect(await log.nextSeq == 4, "a rejected append consumes no seq, and the accepted one left no gap")
+    }
+
     @Test func writerRejectsTurnRuleViolations() async throws {
         let log = try EventLogWriter.open(at: try tempLog())
 

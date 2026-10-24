@@ -159,7 +159,8 @@ extension Commands {
             "timeout_s": seconds(turnTimeout(id: id, ctx: ctx)),
             "last_event": p.lastEvent.map { .string($0) } ?? .null, "last_event_age_s": seconds(age),
             "quiet": .bool((age ?? 0) >= Progress.quietThreshold),
-            "tool_calls": .int(p.toolCalls), "denied_calls": .int(p.deniedCalls),
+            "tool_calls": p.toolCallsKnown ? .int(p.toolCalls) : .null,
+            "denied_calls": p.deniedCallsKnown ? .int(p.deniedCalls) : .null,
         ]
     }
 
