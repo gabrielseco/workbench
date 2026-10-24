@@ -26,7 +26,8 @@ public enum PRBodyBuilder {
         let request =
             description.map { described($0) }
             ?? scrub(goal.request).trimmingCharacters(in: .whitespacesAndNewlines)
-        let checkLine = checkLine(check)
+        // A goal with no dollar cap says so where the reviewer reads what was checked.
+        let checkLine = checkLine(check) + (goal.isTimeoutOnly ? "\n\nSpend: \(goal.spendLine)" : "")
         var criteria = criteriaList(goal.criteria)
         if !goal.criteria.isEmpty {
             let statuses = CriteriaStatus.evaluate(

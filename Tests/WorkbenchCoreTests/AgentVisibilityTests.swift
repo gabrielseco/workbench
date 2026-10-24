@@ -78,7 +78,7 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
 
     @Test func derivesApprovedFor() {
         let state = ThreadState.derive(from: attemptsLog, id: "t")
-        #expect(state.approvedFor == AgentUse(provider: "claude", model: "opus", recorded: true))
+        #expect(state.approvedFor == AgentUse(provider: "claude", model: "opus", recorded: true, spendPolicy: "hard_cap"))
         let later = attemptsLog + [ev(10, 0, .goalApproved, ["hash": "h", "provider": "claude", "model": .null])]
         #expect(ThreadState.derive(from: later, id: "t").approvedFor?.model == nil, "the latest approval counts")
         #expect(ThreadState.derive(from: [], id: "t").approvedFor == nil)
@@ -97,7 +97,7 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
         #expect(state.agentUse["run"] == AgentUse(provider: "claude", model: nil, recorded: false, turn: 1))
         #expect(state.agentUse["judge"]?.provider == "claude" && state.agentUse["judge"]?.recorded == false)
         #expect(state.agentUse["review"]?.provider == "codex" && state.agentUse["review"]?.recorded == false)
-        #expect(state.approvedFor == AgentUse(provider: "claude", model: nil, recorded: false))
+        #expect(state.approvedFor == AgentUse(provider: "claude", model: nil, recorded: false, spendPolicy: "hard_cap"))
         let lines = state.agentLines()
         #expect(lines.count == 4 && lines.allSatisfy { $0.contains("the provider's default") })
         #expect(lines.allSatisfy { $0.contains("not recorded") })

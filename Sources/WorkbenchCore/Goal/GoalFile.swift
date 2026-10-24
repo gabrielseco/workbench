@@ -12,6 +12,11 @@ public struct GoalFile: Sendable, Equatable {
     // MARK: Parsing
 
     public static func parse(_ text: String) throws -> GoalFile {
+        try parse(text, knownKeys: FrontMatterLine.knownKeys)
+    }
+
+    /// `knownKeys` lets a test read a goal as a binary that predates a key would.
+    static func parse(_ text: String, knownKeys: Set<String>) throws -> GoalFile {
         var problems: [GoalProblem] = []
         func add(_ code: GoalProblem.Code, _ line: Int?, _ message: String) {
             problems.append(GoalProblem(code: code, line: line, message: message))
@@ -20,7 +25,7 @@ public struct GoalFile: Sendable, Equatable {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 
-        let (entries, closing) = try frontMatter(lines, add: add)
+        let (entries, closing) = try frontMatter(lines, knownKeys: knownKeys, add: add)
         func value(_ key: String) -> FrontMatterLine? { entries.first { $0.key == key } }
 
         func required(_ key: String) -> String? {
@@ -54,14 +59,7 @@ public struct GoalFile: Sendable, Equatable {
             }
             return base
         }
-        let budget = required("budget_usd").flatMap { raw -> Decimal? in
-            guard let entry = value("budget_usd") else { return nil }
-            guard let d = budgetValue(raw) else {
-                add(.invalidValue, entry.lineNumber, budgetProblem(raw))
-                return nil
-            }
-            return d
-        }
+        let spend = spendValue(value("spend_policy"), budget: value("budget_usd"), add: add)
         let timeout = required("turn_timeout_min").flatMap { raw -> Int? in
             guard let entry = value("turn_timeout_min") else { return nil }
             guard let n = timeoutValue(raw) else {
@@ -88,25 +86,25 @@ public struct GoalFile: Sendable, Equatable {
         let parsed = parseBody(lines, from: bodyStart, add: add)
         let (request, criteria, outOfScope) = (parsed.request, parsed.criteria, parsed.outOfScope)
 
-        guard problems.isEmpty, let id, let title, let base, let budget, let timeout else {
+        guard problems.isEmpty, let id, let title, let base, let spend, let timeout else {
             throw GoalParseError(problems: problems.sorted { ($0.line ?? .max) < ($1.line ?? .max) })
         }
 
         let body = lines[bodyStart...].joined(separator: "\n")
         let goal = Goal(
-            id: id, title: title, declaredStatus: declared, base: base, budgetUSD: budget,
+            id: id, title: title, declaredStatus: declared, base: base, spend: spend,
             turnTimeoutMin: timeout, model: model, pushTo: pushTo, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
             contentHash: GoalHash.hash(
-                base: base, budgetUSD: budget, turnTimeoutMin: timeout, model: model, pushTo: pushTo, body: body))
+                base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
     /// The front matter block's entries and the index of its closing `---`. Unknown, duplicate and malformed
     /// lines are reported through `add`; a file without the block throws.
     static func frontMatter(
-        _ lines: [String], add: (GoalProblem.Code, Int?, String) -> Void
+        _ lines: [String], knownKeys: Set<String> = FrontMatterLine.knownKeys, add: (GoalProblem.Code, Int?, String) -> Void
     ) throws -> (entries: [FrontMatterLine], closing: Int) {
         guard lines.first == "---" else {
             throw GoalParseError(problems: [
@@ -133,7 +131,7 @@ public struct GoalFile: Sendable, Equatable {
                 add(.malformedFrontMatterLine, number, "expected 'key: value', found '\(trimmed)'")
                 continue
             }
-            if !FrontMatterLine.knownKeys.contains(entry.key) {
+            if !knownKeys.contains(entry.key) {
                 add(.unknownKey, number, "unknown key '\(entry.key)'")
             } else if !seen.insert(entry.key).inserted {
                 add(.duplicateKey, number, "key '\(entry.key)' appears more than once")
@@ -366,7 +364,7 @@ public struct GoalFile: Sendable, Equatable {
 /// One `key: value  # comment` line of the front matter.
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
-        "id", "title", "status", "base", "budget_usd", "turn_timeout_min", "model", "push_to", "approved_at",
+        "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to", "approved_at",
         "approved_hash",
     ]
 

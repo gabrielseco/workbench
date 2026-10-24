@@ -107,6 +107,11 @@ extension AgentRequest {
             return refuse("\(provider.id) has no verified controls for \(policy.rawValue); it is not used for it.")
         }
         if case .hardCap = spend, !caps.hardDollarCap {
+            if purpose == .coding {
+                return refuse(
+                    "\(provider.id) cannot enforce a dollar limit, and this goal has a budget_usd. "
+                        + "Change the goal to `spend_policy: timeout_only` (and remove budget_usd), then approve it again.")
+            }
             return refuse(
                 "\(provider.id) cannot enforce a dollar limit. "
                     + "Choose a timeout-only spending policy explicitly, or another provider.")

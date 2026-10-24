@@ -5,7 +5,7 @@ import Testing
 
 private func goal(request: String) -> Goal {
     Goal(
-        id: "g1", title: "Add retry", declaredStatus: .approved, base: "main", budgetUSD: 5, turnTimeoutMin: 30,
+        id: "g1", title: "Add retry", declaredStatus: .approved, base: "main", spend: .hardCap(5), turnTimeoutMin: 30,
         approvedAt: nil, approvedHash: nil, request: request, criteria: [], outOfScope: [], contentHash: "h")
 }
 

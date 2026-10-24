@@ -5,7 +5,8 @@ public struct TurnRequest: Sendable, Equatable {
     public var sessionID: UUID
     /// False only for the first spawn of a thread (`--session-id`); true for every later one (`--resume`).
     public var resume: Bool
-    public var budgetUSD: Decimal
+    /// Nil starts the turn without `--max-budget-usd`: a `spend_policy: timeout_only` goal, bounded by its timeout.
+    public var budgetUSD: Decimal?
     public var prompt: String
     public var appendSystemPrompt: String?
     /// The goal's model, which wins over the config's.
@@ -14,7 +15,7 @@ public struct TurnRequest: Sendable, Equatable {
     public var extraAllowed: [String]
 
     public init(
-        sessionID: UUID, resume: Bool, budgetUSD: Decimal, prompt: String, appendSystemPrompt: String? = nil,
+        sessionID: UUID, resume: Bool, budgetUSD: Decimal?, prompt: String, appendSystemPrompt: String? = nil,
         model: String? = nil, extraAllowed: [String] = []
     ) {
         self.model = model
@@ -59,7 +60,7 @@ extension Config {
         guard !turn.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InvocationError.emptyPrompt
         }
-        guard turn.budgetUSD > 0 else { throw InvocationError.nonPositiveBudget }
+        if let budget = turn.budgetUSD, budget <= 0 { throw InvocationError.nonPositiveBudget }
 
         var args = [
             "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -68,7 +69,7 @@ extension Config {
         if safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
         let session = turn.sessionID.uuidString.lowercased()
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
-        args += ["--max-budget-usd", NSDecimalNumber(decimal: turn.budgetUSD).stringValue]
+        if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
         if let model = turn.model ?? model { args += ["--model", model] }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools

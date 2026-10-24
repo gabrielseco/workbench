@@ -8,7 +8,7 @@ import Testing
 /// A provider whose "CLI" is a shell script, so the common lifecycle can be tested without a paid agent.
 /// Every line it prints is `.text`; it succeeds when the script printed `DONE` and says `at capacity` on stderr
 /// when that is what the script did.
-private struct ScriptProvider: AgentProvider {
+struct ScriptProvider: AgentProvider {
     var id = AgentProviderID("fake")!
     var capabilities = AgentCapabilities(
         policies: [.scopedCoding, .readOnlyEvidence], resume: .returnedID, streamsActivity: true)
@@ -25,7 +25,7 @@ private struct ScriptProvider: AgentProvider {
     func makeDecoder(for request: AgentRequest) -> any AgentDecoder { ScriptDecoder(late: lateLine) }
 }
 
-private struct ScriptDecoder: AgentDecoder {
+struct ScriptDecoder: AgentDecoder {
     var sawDone = false
     var last = ""
     /// A dropped line may have been the result, so a decoder that cannot tell fails closed.

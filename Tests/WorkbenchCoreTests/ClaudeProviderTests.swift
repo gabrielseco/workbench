@@ -56,6 +56,14 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(built.executable == expected.executable)
     }
 
+    @Test func aTimeoutOnlyTurnRunsWithoutADollarCap() throws {
+        let capped = try provider().invocation(for: request()).arguments
+        #expect(capped.contains("--max-budget-usd"))
+        let free = try provider().invocation(for: request { $0.spend = .timeoutOnly }).arguments
+        #expect(!free.contains("--max-budget-usd"), "nothing enforces a cap, so none is passed")
+        #expect(free.filter { $0 != "--max-budget-usd" } == capped.filter { $0 != "--max-budget-usd" && $0 != "5" })
+    }
+
     @Test func aResumeUsesTheHandleAndNotSessionId() throws {
         let handle = AgentSessionHandle(provider: .claude, purpose: .coding, value: session)
         let args = try provider().invocation(for: request { $0.session = .resume(handle) }).arguments
@@ -79,7 +87,6 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
     @Test func theRequestsThatCannotBeHonouredAreRefusedNotBent() throws {
         let p = try provider()
         #expect(request { $0.spend = .timeoutOnly }.validate(against: p) == nil, "valid in general")
-        #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.spend = .timeoutOnly }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .none }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .start(proposed: "not-a-uuid") }) }
         #expect(request { $0.policy = .readOnlyEvidence }.validate(against: p) == nil, "valid in general")

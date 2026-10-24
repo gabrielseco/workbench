@@ -44,6 +44,7 @@ bash scripts/verify-cli/verifier.sh                # one real verifier run on a 
 bash scripts/verify-cli/run.sh                     # [run]: the verifier's helper can only reach the app Workbench started, which is gone after
 bash scripts/verify-cli/thread-setup.sh            # default base, goal new --from, ship refusing a local-only base; a clone, no turn, costs nothing
 bash scripts/verify-cli/commits-visible.sh         # accept -m ignored, branch.ahead on ship, Commits in review; a clone, no turn, costs nothing
+bash scripts/verify-cli/spend-policy.sh          # spend_policy: timeout_only and the no-cap wording; a clone, no turn, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```

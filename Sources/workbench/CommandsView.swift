@@ -157,7 +157,12 @@ extension Commands {
                 case .stale: approval = "CHANGED since approval, back to draft (run `workbench goal approve`)"
                 }
                 out("goal:      \(approval)")
-                out("base:      \(goal.base)   budget $\(goal.budgetUSD)/turn   timeout \(goal.turnTimeoutMin) min")
+                if goal.isTimeoutOnly {
+                    out("base:      \(goal.base)")
+                    out("spend:     \(goal.spendLine)")
+                } else {
+                    out("base:      \(goal.base)   budget $\(goal.budgetUSD ?? 0)/turn   timeout \(goal.turnTimeoutMin) min")
+                }
                 if let model = goal.model { out("model:     \(model)") }
                 if let pushTo = goal.pushTo { out("push to:   \(pushTo)") }
                 if let line = await baseGapLine(goal.base, ctx: ctx) { out("           \(line)") }
@@ -221,11 +226,16 @@ extension Commands {
             var line = state.decision ?? statusString(state.review.status)
             if let result = state.lastResult { line += " (last turn \(result))" }
             let follows = state.lineage.map { "  (follows \($0.parent), round \($0.round))" } ?? ""
-            out(String(format: "%@  %@  $%.2f%@", state.id, line, state.totalCostUSD, follows))
+            out("\(state.id)  \(line)  \(listCost(state))\(follows)")
         }
     }
 
     /// Where a review follow-up came from, and the follow-ups a thread has: the tree `ship --review-loop` builds.
+    /// A thread's cost in a list: `$0.37`, or `unknown` when a turn reported none (never `$0.00`).
+    static func listCost(_ state: ThreadState) -> String {
+        state.knownCostUSD.map { String(format: "$%.2f", $0) } ?? "unknown"
+    }
+
     static func lineageLines(_ state: ThreadState, ctx: Context) -> [String] {
         var lines: [String] = []
         if let lineage = state.lineage {
@@ -236,7 +246,7 @@ extension Commands {
             lines.append("follow-ups: \(kids.count) from the review loop")
             for kid in kids {
                 let how = kid.decision ?? statusString(kid.review.status)
-                lines.append(String(format: "  round %d  %@  %@  $%.2f", kid.lineage?.round ?? 0, kid.id, how, kid.totalCostUSD))
+                lines.append("  round \(kid.lineage?.round ?? 0)  \(kid.id)  \(how)  \(listCost(kid))")
             }
         }
         return lines

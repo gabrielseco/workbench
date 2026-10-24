@@ -28,6 +28,7 @@ extension Commands {
             "v": .int(jsonVersion), "base": .string(report.base), "passed": .bool(report.passed),
             "claude": report.claude.map { .string($0) } ?? .null, "model": report.model.map { .string($0) } ?? .null,
             "thread": report.thread.map { .string($0) } ?? .null, "approved_for": approved,
+            "spend_policy": report.thread == nil ? .null : .string(report.spendLine == nil ? "hard_cap" : "timeout_only"),
             "agents": .array(
                 report.agents.map { agent in
                     [
@@ -60,6 +61,7 @@ extension Commands {
         if let thread = report.thread, let approved = report.approvedFor {
             out("approved: \(thread) for \(approved.description)")
         }
+        if let spend = report.spendLine { out("spend:    \(spend)") }
         if let pattern = report.checkPattern {
             var note = ""
             if report.checkDenied {

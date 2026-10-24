@@ -49,11 +49,68 @@ import Testing
         #expect(report.result == .succeeded)
     }
 
+    @Test func approvalRecordsSpendPolicy() async throws {
+        let fx = try await RunnerFixture()
+        let other = try await RunnerFixture()
+        let capped = try await other.approvedThread("capped")
+        let cappedFx = other
+        let event = try #require(approvals(cappedFx, capped).last)
+        #expect(event.data["spend_policy"] == "hard_cap" && event.data["budget_usd"] != .null)
+        let free = try await fx.timeoutOnlyThread("free")
+        let freeEvent = try #require(approvals(fx, free).last)
+        #expect(freeEvent.data["spend_policy"] == "timeout_only" && freeEvent.data["budget_usd"] == .null)
+        let binding = try #require(ThreadStore(project: fx.project).state(of: free).approvedAgent)
+        #expect(binding.spendPolicy == "timeout_only" && binding.description.hasSuffix("no dollar cap"))
+        #expect(ThreadStore(project: fx.project).state(of: free).approvedFor?.description.contains("no dollar cap") == true)
+    }
+
+    @Test func changedSpendPolicyNeedsFreshApprove() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        // Dropping the cap in the goal is a goal edit: the approval is stale and nothing runs.
+        let url = fx.project.goalURL(id)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        try text.replacingOccurrences(
+            of: #"budget_usd: [0-9.]+"#, with: "spend_policy: timeout_only", options: .regularExpression
+        ).write(to: url, atomically: true, encoding: .utf8)
+        let error = await #expect(throws: RunnerError.self) { _ = try await fx.runner(id).run(fx.options()) }
+        #expect(error == .goalNotApproved(.stale))
+        #expect(try fx.kinds(id).filter { $0 == "turn.started" }.isEmpty)
+        // A fresh approve records the new policy and the run goes ahead.
+        try await fx.service.approve(id: id)
+        #expect(try approvals(fx, id).last?.data["spend_policy"] == "timeout_only")
+        #expect(try await fx.runner(id).run(fx.options()).result == .succeeded)
+    }
+
+    @Test func anApprovalForADifferentSpendPolicyIsRefusedEvenWithTheSameHash() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let state = ThreadStore(project: fx.project).state(of: id)
+        let agent = ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false)
+        #expect(throws: RunnerError.self) {
+            try ThreadRunner.requireApprovedAgent(state: state, agent: agent, spendPolicy: "timeout_only")
+        }
+        try ThreadRunner.requireApprovedAgent(state: state, agent: agent, spendPolicy: "hard_cap")
+    }
+
     @Test func approveTwiceWritesOnce() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         try await fx.service.approve(id: id)
         #expect(try approvals(fx, id).count == 1)
+    }
+
+    @Test func anApprovalWithoutSpendPolicyReadsAsHardCap() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let url = fx.project.eventsURL(id)
+        let text = try String(contentsOf: url, encoding: .utf8)
+            .replacingOccurrences(of: ",\"spend_policy\":\"hard_cap\"", with: "")
+            .replacingOccurrences(of: "\"spend_policy\":\"hard_cap\",", with: "")
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        let state = ThreadStore(project: fx.project).state(of: id)
+        #expect(state.approvedAgent?.spendPolicy == "hard_cap")
+        #expect(try await fx.runner(id).run(fx.options()).result == .succeeded)
     }
 
     @Test func legacyApprovalStillRuns() async throws {

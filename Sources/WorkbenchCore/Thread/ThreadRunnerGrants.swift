@@ -7,6 +7,12 @@ extension ThreadRunner {
         return GrantLedger(events: events).patternsForNextTurn(tools: config.tools)
     }
 
+    /// A hard cap (the `--budget` override first) or none for a `timeout_only` goal, which has no cap to override.
+    func spend(for goal: Goal, options: RunOptions) -> AgentSpend {
+        guard let budget = goal.budgetUSD else { return .timeoutOnly }
+        return .hardCap(options.budgetOverride ?? budget)
+    }
+
     /// The turn's request with the thread's grants added to what it may run. Read from the log before the turn
     /// starts, so a `once` grant is spent by the turn that follows it.
     func grantedAgentRequest(
@@ -23,7 +29,7 @@ extension ThreadRunner {
             provider: .claude, model: config.resolvedRunAgent(goalModel: goal.model).model, prompt: prompt,
             workingDirectory: worktree,
             outputDirectory: outputDirectory, policy: .scopedCoding,
-            spend: .hardCap(options.budgetOverride ?? goal.budgetUSD), session: session, purpose: .coding,
+            spend: spend(for: goal, options: options), session: session, purpose: .coding,
             environment: options.parentEnvironment, limits: limits,
             rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config))
     }

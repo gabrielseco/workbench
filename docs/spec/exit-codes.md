@@ -66,7 +66,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | thread created |
-| 2 | `usage` | wrong command line, or `--from` names a file whose `budget_usd`, `turn_timeout_min` or `model` is not valid (the message names the key; nothing is created) |
+| 2 | `usage` | wrong command line, or `--from` names a file whose `budget_usd`, `spend_policy`, `turn_timeout_min` or `model` is not valid (the message names the key; nothing is created) |
 | 2 | `invalid-goal` | the `--from` file is not a well-formed goal |
 | 6 | `refused` | the name is taken, another thread is active, or `doctor` is running |
 
