@@ -61,6 +61,9 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     }
 }
 
+/// What `newThread` runs once the thread and its first events exist, holding its log.
+public typealias AfterCreate = @Sendable (_ id: String, _ log: EventLogWriter) async throws -> Void
+
 /// Starting, approving and abandoning threads. Running them is `ThreadRunner`.
 public struct ThreadService: Sendable {
     public let project: Project
@@ -68,6 +71,8 @@ public struct ThreadService: Sendable {
     public let now: @Sendable () -> Date
     /// Four lower-case hex digits that tell a repeated goal's id from the first run's; injectable for tests.
     public let idSuffix: @Sendable () -> String
+    /// Tests only: called with the id of a new draft thread once it exists, to make the rest of its creation fail.
+    var draftFault: (@Sendable (String) throws -> Void)?
 
     public init(
         project: Project, git: GitRunner, now: @escaping @Sendable () -> Date = { Date() },
@@ -104,7 +109,8 @@ public struct ThreadService: Sendable {
     /// thread is active.
     public func newThread(
         name: String, base: String? = nil, updating: String? = nil, config: Config? = nil,
-        lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings()
+        lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings(),
+        title proposedTitle: String? = nil, afterCreate: AfterCreate? = nil
     ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
         if let updating {
@@ -131,7 +137,7 @@ public struct ThreadService: Sendable {
             : "budget_usd: "
                 + NSDecimalNumber(decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD)
                 .stringValue
-        let title = name.replacingOccurrences(of: "-", with: " ")
+        let title = proposedTitle ?? name.replacingOccurrences(of: "-", with: " ")
         let modelLine =
             settings.model.map { "model: \($0)" }
             ?? "# model: opus   (optional; unset = the config's model, else the claude CLI default)"
@@ -166,6 +172,7 @@ public struct ThreadService: Sendable {
         try await withLog(id) { log in
             try await log.append(.threadCreated, data: .object(created))
             try await log.append(.goalSaved, data: ["status": "draft", "hash": .null])
+            try await afterCreate?(id, log)
         }
         return id
     }

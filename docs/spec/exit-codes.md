@@ -70,6 +70,17 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `invalid-goal` | the `--from` file is not a well-formed goal |
 | 6 | `refused` | the name is taken, another thread is active, or `doctor` is running |
 
+### `goal draft`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | a draft goal was written (a new thread, or over the goal of `--replace`) |
+| 1 | `failed` | the agent ran and there is no valid proposal: it failed, timed out, or answered something that is not a goal. Nothing was written |
+| 2 | `usage` | wrong command line: no request or two, `--base` with `--replace`, an unreadable or oversized `--request-file` |
+| 3 | `stopped` | stopped by Ctrl-C; nothing was written |
+| 6 | `refused` | nothing was started: no `[agents.goal]`, Codex without `allow_unpriced`, no executable, an empty or oversized request, another thread is active, `doctor` is running, or with `--replace` the thread has ended or has a live run |
+| 7 | `not-found` | `--replace` names no thread |
+
 ### `goal approve`
 
 | Code | Kind | When |

@@ -24,6 +24,13 @@ let workbenchUsage = """
                                  --from <goal-file> copies its request, criteria and out of scope into the draft,
                                  and its budget_usd, turn_timeout_min and model; prints the front matter it ignored
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
+      goal draft <name> --request "<text>" | --request-file <path>  [--base <branch>] [--replace]
+                                 have the goal agent ([agents.goal]) draft the goal from a rough request, read-only and
+                                 bounded (300 s; $0.50 on Claude; Codex needs allow_unpriced = true); creates a draft
+                                 thread, approves nothing, runs nothing; a failed draft leaves nothing behind
+                                 --replace: <name> is an existing thread (default: the active one); its title, request,
+                                 criteria and out of scope are redrafted and an approved goal returns to draft
+                                 refused (exit 6) with no [agents.goal]: write the goal by hand with goal new
       goal approve [id]          approve the goal; any later edit returns it to draft
                                  refused while a proof names a command a run cannot execute
                                  (--allow-unrunnable-proofs to approve anyway; also on run, send-back)

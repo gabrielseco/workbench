@@ -33,7 +33,10 @@ enum Help {
                 + "verify in a throwaway worktree that it removes",
             example: "workbench doctor --base main"),
         "goal": Extra(
-            changes: "goal new: creates a thread and a draft goal; goal approve: records the approval in the thread's log",
+            changes:
+                "goal new: creates a thread and a draft goal; goal draft: runs the goal agent read-only and creates a "
+                + "draft thread (or, with --replace, rewrites an existing goal and returns it to draft); goal approve: "
+                + "records the approval in the thread's log",
             example: "workbench goal new add-retry && workbench goal approve"),
         "run": Extra(
             changes: "creates the thread's worktree and branch, runs Claude and the project's check there, appends to the log",

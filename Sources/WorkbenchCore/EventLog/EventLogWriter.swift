@@ -230,7 +230,7 @@ public actor EventLogWriter {
         return closed
     }
 
-    /// Closes a judge or review round whose process was killed (a start with no end), and the attempts that belong to
+    /// Closes a goal draft, judge or review round whose process was killed (a start with no end), and the attempts that belong to
     /// them, each as a synthetic `interrupted`. The round still counts toward `max_rounds` (its start is still in
     /// the log) and an interrupted end is never a pass. Run it, holding the log, before any new work; a second call
     /// writes nothing.
@@ -238,8 +238,14 @@ public actor EventLogWriter {
     public func recoverOrphanedEvaluations() throws -> [Event] {
         let judging = state.judgeStarts
         let reviewing = state.reviewStarts
-        guard !judging.isEmpty || !reviewing.isEmpty || !state.openAttempts.isEmpty else { return [] }
-        var closed = try recoverOrphanedAttempts(roles: ["judge", "review"])
+        let drafting = state.draftStarts
+        guard !judging.isEmpty || !reviewing.isEmpty || !drafting.isEmpty || !state.openAttempts.isEmpty else { return [] }
+        var closed = try recoverOrphanedAttempts(roles: ["judge", "review", "goal"])
+        for started in drafting.reversed() {
+            var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
+            for key in ["attempt", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
+            closed.append(try append(.goalDraftFinished, turn: started.turn, data: .object(data)))
+        }
         for started in judging.reversed() {
             var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
             // What the start says was asked for, so the end is attributed too; absent in a log from before provider selection.

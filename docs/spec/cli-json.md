@@ -85,7 +85,9 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
 
 - `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
 - `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, note, issues}`. `provider` and `model`
-  are null for goal drafting with no `[agents.goal]` (it stays manual); a null `model` is the provider's default.
+  are null for goal drafting with no `[agents.goal]` (it stays manual; `note` says so); a null `model` is the provider's default.
+  A Codex goal agent without `allow_unpriced = true` in `[agents.goal]` is an `unpriced_not_allowed` problem with `role: "goal"`,
+  like the judge and review (`workbench goal draft` is refused for the same reason). Nothing in `--json` changed shape.
   `issues` is `{kind, severity, message}` each, found before anything is spawned from the adapter's own capabilities:
   `policy_without_controls` (the provider has no verified controls for what the responsibility needs: coding confinement for
   `run`, read-only evidence for the others), `missing_executable` (not on the environment's `PATH`, or the path in

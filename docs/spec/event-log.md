@@ -61,8 +61,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `review_stage.finished` | that round ended, whatever came of it, or the stage was skipped | `stage`, `round`, `pr`, `head_sha`, `ok`, `verdict`, `reason`, `findings_path`, `transcript_path` |
 | `agent.attempt.started` | a provider process is about to be started (a coding turn, the judge, a review round; a capacity retry is another) | `attempt`, `role`, `stage`, `round`, `provider`, `model`, `spawned` |
 | `agent.attempt.ended` | that attempt ended; exactly one per start | `attempt`, `outcome`, `reason`, `synthetic` |
-| `goal.draft.started` | reserved for goal drafting (P9 task 4); nothing writes it yet | `provider`, `model`, `attempt` |
-| `goal.draft.finished` | reserved: the draft ended, with a reference to the proposal or the failure | `ok`, `proposal_ref`, `provider`, `reason`, `synthetic` |
+| `goal.draft.started` | `workbench goal draft` asked the goal agent for a draft (P9 PR 14); thread-level (`turn` 0), no coding turn | `provider`, `model`, `attempt` |
+| `goal.draft.finished` | the draft ended; one per start. `ok: true` carries the proposal's place, `ok: false` the failure | `ok`, `proposal_ref`, `provider`, `model`, `attempt`, `reason`, `cost_usd`, `synthetic` |
 | `verify.ended` | older logs only: the verify step ended; exactly once per `verify.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated`, `proof_files` |
 
 ## Invariants (tested)
@@ -277,8 +277,32 @@ this change replays as it did; nothing is rewritten.
   count as having judged the turn. A second call writes nothing. A skip (`review_stage.finished` with no start) closes
   nothing. If the log cannot take an attempt's start, no process is started; if it cannot take an end, the error says so
   and the next open recovers from the last durable start.
-- **`goal.draft.started` / `goal.draft.finished`** are known kinds with the shapes in the table. Nothing writes them
-  yet (P9 task 4); the reducer ignores them for turns, approval and review.
+- **`goal.draft.started` / `goal.draft.finished`** (P9 PR 14, event version stays 1: new kinds and fields only) record
+  `workbench goal draft`. Each start has an `agent.attempt` with `role: "goal"`, `turn: 0` and no `round`, and exactly
+  one end. The reducer ignores them for turns, approval and review: a draft opens no `turn.started` and writes no
+  `goal.approved`. `proposal_ref` is the path of the agent's proposal relative to the thread's folder
+  (`goal-draft/proposal.json`); `cost_usd` is absent when the provider did not report one. The drafter works in a folder
+    outside the checkout (the system temporary directory), removed when the draft ends; only a valid proposal is kept. For
+    `--replace` that folder is stable per thread, and a drafter a killed holder left behind is found there by its working
+    directory and ended before the next draft starts.
+  - *Replacing a goal (`--replace`)* has the log already, so it is write-ahead: the attempt and `goal.draft.started` are
+    written before the agent is started, the thread's holder marker is set while it runs (so `stop` reaches it and a run
+    or judge is refused as busy), and the end follows whatever came of it. On success the goal file is rewritten first,
+    then `goal.saved {status: "draft", hash: null}`, then `goal.draft.finished {ok: true}`. On any failure
+    `goal.draft.finished {ok: false, reason}` and the goal file is untouched. `recoverOrphanedEvaluations()` closes a
+    draft whose process was killed (a start with no finish) as `{ok: false, reason: "interrupted", synthetic: true}`
+    with the start's `attempt`, `provider` and `model`, and its `role: "goal"` attempt as `interrupted`; a second call
+    writes nothing. A kill while the agent runs never touches the goal file. The one narrow window is a kill after the
+    goal file was rewritten and before `goal.draft.finished` is written: the file is then already the (draft) replacement,
+    `goal-draft/proposal.json` holds the same proposal, and recovery records the draft as interrupted, since the log cannot
+    be made atomic with the file.
+  - *A new thread* has no log until the proposal is valid, so nothing is written before: the agent runs with no thread on
+    disk, and only a valid proposal creates the thread (`thread.created`, `goal.saved`) and then its draft pair
+    (`agent.attempt.started`, `goal.draft.started`, `agent.attempt.ended`, `goal.draft.finished {ok: true}`), told after
+    the fact. A failed, invalid, timed-out or stopped draft creates no thread, directory, file or branch and is reported
+    on stderr only; a process killed mid-draft leaves no thread and nothing to recover (an agent it had started is not found by a later
+    command, since a new draft has no stable folder: it ends at its own 300 s deadline only while Workbench lives). A refusal before the agent starts (no
+    `[agents.goal]`, no `allow_unpriced`, no executable, an active thread) is recorded nowhere.
 
 ## Sessions and approval (P9 PR 9)
 

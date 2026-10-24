@@ -186,7 +186,7 @@ extension AgentSelection {
                 if SafeNames.isModelName(value) {
                     selection.model = value
                     let effective = selection.provider ?? (inheritsProvider ? nil : role.defaultProvider)
-                    if effective == .codex, role == .judge || role == .review {
+                    if effective == .codex, role != .run {
                         fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexModelReason)")
                     }
                 } else {

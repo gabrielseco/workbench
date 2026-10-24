@@ -51,7 +51,6 @@ import Testing
             """
             [agents.goal]
             provider = "codex"
-            model = "gpt-x"
             allow_unpriced = true
             [agents.judge]
             model = "haiku"
@@ -59,8 +58,11 @@ import Testing
             [agents.review]
             provider = "codex"
             """)
-        #expect(config.agents.goal == AgentSelection(provider: .codex, model: "gpt-x", allowUnpriced: true))
+        #expect(config.agents.goal == AgentSelection(provider: .codex, allowUnpriced: true))
         #expect(config.agents.judge == AgentSelection(provider: nil, model: "haiku", allowUnpriced: true))
+        #expect(
+            problems("[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-x\"").contains { $0.contains("takes no model") },
+            "a Codex drafter with a model is refused when the config loads, not at draft time")
         #expect(problems("[agents.plan]\nmodel = \"x\"").contains { $0.contains("unknown table [agents.plan]") })
         #expect(problems("[agents.judge]\nbogus = 1").contains("unknown key 'bogus' in [agents.judge]"))
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
