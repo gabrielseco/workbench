@@ -20,16 +20,19 @@ public struct EventLogContents: Sendable {
     public var isHealthy: Bool { problems.isEmpty && truncatedTail == nil }
 }
 
-/// How many times each log file was replayed. A command that replays the same log twice pays for it twice
-/// (a log is megabytes of `claude` lines), so tests assert on this count instead of on a wall clock.
+/// How many times each log file was replayed, and how many bytes that read. A command that replays the same log
+/// twice pays for it twice (a log can be megabytes of `claude` lines), so tests assert on these counts instead
+/// of on a wall clock.
 public enum EventLogReadCount {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var counts: [String: Int] = [:]
+    nonisolated(unsafe) private static var byteCounts: [String: Int] = [:]
 
-    static func record(_ url: URL) {
+    static func record(_ url: URL, bytes: Int = 0) {
         lock.lock()
         defer { lock.unlock() }
         counts[url.path, default: 0] += 1
+        byteCounts[url.path, default: 0] += bytes
     }
 
     public static func reads(of url: URL) -> Int {
@@ -37,15 +40,21 @@ public enum EventLogReadCount {
         defer { lock.unlock() }
         return counts[url.path] ?? 0
     }
+
+    public static func bytes(of url: URL) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return byteCounts[url.path] ?? 0
+    }
 }
 
 public enum EventLogReader {
     public static func read(at url: URL) throws -> EventLogContents {
-        EventLogReadCount.record(url)
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
             throw EventLogError.io("cannot read \(url.path): \(error.localizedDescription)")
         }
+        EventLogReadCount.record(url, bytes: data.count)
         return parse(data)
     }
 

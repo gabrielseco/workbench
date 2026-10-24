@@ -66,7 +66,7 @@ public actor EventLogWriter {
         do { existing = try handle.readToEnd() ?? Data() } catch {
             throw EventLogError.io("cannot read \(url.path): \(error)")
         }
-        EventLogReadCount.record(url)
+        EventLogReadCount.record(url, bytes: existing.count)
         let contents = EventLogReader.parse(existing)
         guard contents.problems.isEmpty else { throw EventLogError.corrupt(contents.problems) }
 
@@ -276,12 +276,16 @@ public actor EventLogWriter {
         }
     }
 
+    /// One event as it is stored (no newline). `compact` rebuilds the few lines whose numbers it changes with it.
+    static func encodedLine(_ event: Event, dataJSON: String) throws -> String {
+        "{\"v\":\(event.v),\"seq\":\(event.seq),\"ts\":\(try json(.string(event.ts))),"
+            + "\"turn\":\(event.turn),\"kind\":\(try json(.string(event.kind.rawValue))),"
+            + "\"data\":\(dataJSON)}"
+    }
+
     private func write(_ event: Event, dataJSON: String) throws {
         guard !closed else { throw EventLogError.io("event log is closed") }
-        let line =
-            "{\"v\":\(event.v),\"seq\":\(event.seq),\"ts\":\(try Self.json(.string(event.ts))),"
-            + "\"turn\":\(event.turn),\"kind\":\(try Self.json(.string(event.kind.rawValue))),"
-            + "\"data\":\(dataJSON)}\n"
+        let line = try Self.encodedLine(event, dataJSON: dataJSON) + "\n"
         do { try handle.write(contentsOf: Data(line.utf8)) } catch {
             throw EventLogError.io("append failed: \(error)")
         }
