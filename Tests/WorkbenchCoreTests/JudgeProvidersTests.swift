@@ -51,6 +51,12 @@ private func codexJudged(
         #expect(j.codex.runs == 1)
     }
 
+    @Test func aCodexJudgeWithScreenshotsGetsItsAnswerFolder() async throws {
+        let j = try await codexJudged(screenshots: true)
+        let result = try await j.judge()
+        #expect(result.failure == nil && result.verdict?.criteria.map(\.met) == [true], "\(String(describing: result.failure))")
+    }
+
     @Test func codexJudgeInvocationIsHardened() async throws {
         let j = try await codexJudged(screenshots: true)
         _ = try await j.judge()
@@ -97,7 +103,8 @@ private func codexJudged(
     @Test func codexJudgeWithoutAnAnswerIsNoVerdict() async throws {
         let j = try await codexJudged(answer: nil)
         let result = try await j.judge()
-        #expect(result.verdict == nil && result.failure?.contains("no result") == true, "\(String(describing: result.failure))")
+        #expect(result.verdict == nil && result.failure?.contains("left no answer in") == true,
+                "\(String(describing: result.failure))")
     }
 
     @Test func codexJudgeNeedsAllowUnpriced() async throws {
