@@ -1,0 +1,30 @@
+name: Toolchain watch
+
+# Weekly, and when the workaround or its case changes. The Swift on the runner image can change under us: this says when the
+# optimizer bug that Package.swift works around is fixed (the run fails, so the owner is told: remove the workaround), and checks
+# that a release build with every optimizer pass verified still compiles clean on whatever Swift the runner has now.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - Package.swift
+      - docs/swift-bugs/**
+      - scripts/swift-bug-repro.sh
+      - .github/workflows/toolchain-watch.yml
+
+jobs:
+  watch:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swiftc --version
+      - name: Is the workaround still needed?
+        # Exit 3 means the compiler no longer has the bug: remove the flag from Package.swift and this workflow.
+        run: scripts/swift-bug-repro.sh --fail-when-fixed
+      - name: Release build with every optimizer pass verified
+        run: swift build -c release --product workbench -Xswiftc -Xfrontend -Xswiftc -sil-verify-all

@@ -58,3 +58,28 @@ jobs:
             timings.md
           if-no-files-found: ignore
           retention-days: 14
+
+  # The unit tests only run in debug, and a release build of the same source has behaved differently (Swift's simplify-cfg pass
+  # miscompiled async code: a Claude review was refused in release only; docs/swift-bugs/, Package.swift). This builds the optimized
+  # binary and runs the free scenarios (a fake claude and a fake codex, no money) on it. A separate job, so it adds no time to the first.
+  release-build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain bug check (informational)
+        # Says whether this Swift still has the bug Package.swift works around; never fails the job on its own answer.
+        run: scripts/swift-bug-repro.sh || true
+      - name: Release build with every optimizer pass verified
+        # The compiler checks its own intermediate code after each pass and aborts on invalid code: that is how the bug was found, and
+        # it catches the next one in any function, with no scenario needed to reach it. About two minutes.
+        run: swift build -c release --product workbench -Xswiftc -Xfrontend -Xswiftc -sil-verify-all
+      - name: Git identity (the scenarios commit)
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.com"
+      - name: Review on Claude, release build
+        run: VERIFY_CLI_CI=1 VERIFY_CLI_BUILD=release scripts/verify-cli/claude-review.sh
+      - name: Run on Codex, release build
+        run: VERIFY_CLI_CI=1 VERIFY_CLI_BUILD=release scripts/verify-cli/run-codex.sh
+

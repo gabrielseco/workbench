@@ -8,7 +8,8 @@
 #   check "<step>" "<why>" <command...>
 #   remove_on_pass worktree <path> | branch <name>
 #   finish                         summary, cleanup on pass, RESULT line, exit 0 or 1
-# Environment: VERIFY_CLI_BUDGET_USD (default 0.50), VERIFY_CLI_MODEL (default haiku), VERIFY_CLI_FROM_BRANCH=1
+# Environment: VERIFY_CLI_BUDGET_USD (default 0.50), VERIFY_CLI_MODEL (default haiku), VERIFY_CLI_BUILD (debug, the
+# default, or release: which binary is built and checked), VERIFY_CLI_FROM_BRANCH=1
 # (run from a branch that contains origin's main), VERIFY_CLI_SABOTAGE=cleanup (a cleanup step fails on purpose;
 # a scenario's own VERIFY_CLI_SABOTAGE=1 breaks its feature). See .agents/skills/verify-cli/SKILL.md.
 set -u
@@ -96,29 +97,46 @@ preflight() {
     [[ $BUDGET_USD =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "VERIFY_CLI_BUDGET_USD must be a number of dollars, got '$BUDGET_USD'"
     [[ $MODEL =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "VERIFY_CLI_MODEL is not a model name: '$MODEL'"
 
+    # VERIFY_CLI_CI=1 (a free scenario in CI): the checkout is a pull request's merge commit with no project config and no real
+    # `claude`, so the checks about origin's main, an active thread and the real claude are skipped. Nothing else is.
+    CI_MODE=${VERIFY_CLI_CI:-0}
     local porcelain
     porcelain=$(g status --porcelain) || die "git status failed"
     [ -z "$porcelain" ] || die "the checkout has local changes (git status); commit or set them aside"
-    BASE_SHA=$(g ls-remote origin refs/heads/main | cut -f1)
-    [ -n "$BASE_SHA" ] || die "could not read main from origin"
-    if [ "${VERIFY_CLI_FROM_BRANCH:-0}" = 1 ]; then
-        # Before the merge: the branch under test, which must contain origin's main so the feature being checked is in.
-        g merge-base --is-ancestor "$BASE_SHA" HEAD \
-            || die "VERIFY_CLI_FROM_BRANCH=1: HEAD ($(g rev-parse --short HEAD)) does not contain origin's main ($BASE_SHA)"
-        echo "==> from branch $(g rev-parse --abbrev-ref HEAD) at $(g rev-parse --short HEAD) (VERIFY_CLI_FROM_BRANCH=1)"
+    BASE_SHA=""
+    if [ "$CI_MODE" = 1 ]; then
+        echo "==> CI mode: not checked against origin's main"
     else
-        [ "$(g rev-parse HEAD)" = "$BASE_SHA" ] \
-            || die "HEAD is not origin's main ($BASE_SHA); check it out, or VERIFY_CLI_FROM_BRANCH=1 to run from a branch that contains it"
+        BASE_SHA=$(g ls-remote origin refs/heads/main | cut -f1)
+        [ -n "$BASE_SHA" ] || die "could not read main from origin"
+        if [ "${VERIFY_CLI_FROM_BRANCH:-0}" = 1 ]; then
+            # Before the merge: the branch under test, which must contain origin's main so the feature being checked is in.
+            g merge-base --is-ancestor "$BASE_SHA" HEAD \
+                || die "VERIFY_CLI_FROM_BRANCH=1: HEAD ($(g rev-parse --short HEAD)) does not contain origin's main ($BASE_SHA)"
+            echo "==> from branch $(g rev-parse --abbrev-ref HEAD) at $(g rev-parse --short HEAD) (VERIFY_CLI_FROM_BRANCH=1)"
+        else
+            [ "$(g rev-parse HEAD)" = "$BASE_SHA" ] \
+                || die "HEAD is not origin's main ($BASE_SHA); check it out, or VERIFY_CLI_FROM_BRANCH=1 to run from a branch that contains it"
+        fi
+        [ "$(g rev-parse -q --verify origin/main)" = "$BASE_SHA" ] \
+            || die "origin/main is behind origin; run git fetch origin main"
     fi
-    [ "$(g rev-parse -q --verify origin/main)" = "$BASE_SHA" ] \
-        || die "origin/main is behind origin; run git fetch origin main"
 
     SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/verify-cli-$SCENARIO.XXXXXX") || die "mktemp failed"
-    echo "==> building workbench"
-    with_timeout "$T_BUILD" swift build --product workbench || die "swift build failed"
-    WB="$ROOT/.build/debug/workbench"
+    # `release` builds and checks the optimized binary a user would install: it can behave differently from the debug one that
+    # the unit tests run, and no unit test can tell (they cannot run in release).
+    BUILD=${VERIFY_CLI_BUILD:-debug}
+    case "$BUILD" in
+        debug) BUILD_FLAGS=() ;;
+        release) BUILD_FLAGS=(-c release) ;;
+        *) die "VERIFY_CLI_BUILD must be debug or release, got '$BUILD'" ;;
+    esac
+    echo "==> building workbench ($BUILD)"
+    with_timeout "$T_BUILD" swift build ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} --product workbench || die "swift build failed"
+    WB="$ROOT/.build/$BUILD/workbench"
     [ -x "$WB" ] || die "no $WB after the build"
 
+    if [ "$CI_MODE" = 1 ]; then trap interrupted INT TERM; return 0; fi
     local active claude
     active=$(wb "$T_WB" status --all --json | py "print(' '.join(t['thread'] for t in d['threads'] if t['ended'] is None))") \
         || die "workbench status --all --json failed"
