@@ -222,9 +222,9 @@ Resolution rules:
 - `[providers.<id>].executable` overrides only the validated executable path/name, resolved without a
   shell. Model names, stage names and all paths retain `SafeNames`/`Config` validation. Unknown providers, keys and invalid
   capability combinations fail clearly. Explicit choices never silently fall back to another provider.
-- Existing timeouts and stage limits remain the defaults. Timeout-only coding needs a new explicit
-  approval-bearing policy in the goal schema; until that lands, non-dollar-cap providers cannot run a
-  goal requiring `budget_usd`. No fake unlimited budget or ignored goal field.
+- Existing timeouts and stage limits remain the defaults. Timeout-only coding uses the goal's
+  `spend_policy: timeout_only` ([Decisions from task 1](#decisions-from-task-1)); until it lands,
+  non-dollar-cap providers cannot run a goal requiring `budget_usd`. No fake unlimited budget or ignored goal field.
 
 ## Execution contracts
 
@@ -355,15 +355,79 @@ locally as part of each PR: follow `AGENTS.md`'s changed-file checks; CI owns th
 - [ ] Existing reliability tests and extended CI soak pass; real pilot results and friction are recorded.
 - [ ] Specs and P3's normalized activity/config expectations match the shipped implementation.
 
-## Open questions to resolve in task 1
+## Decisions from task 1
 
-- Which supported CLI versions provide the native coding and read-only boundaries required by the
-  capability matrix? Pin minimums and probe again when invocation flags change.
-- What exact goal-file representation expresses explicitly approved timeout-only coding for providers
-  without a hard dollar cap? It must preserve hashes for existing goals and clearly display lost cost
-  enforcement. Until specified and implemented, refuse that pairing.
-- Can the additive event design remain version 1 for supported historical readers? Decide from fixture
-  tests before task 3 writes new events; document any migration before implementation.
+Task 1 ([P9-capabilities.md](P9-capabilities.md)) probed `claude` 2.1.310 and `codex-cli` 0.163.0. These
+decisions follow from it and from reading the code. Each lands in `docs/spec/` with the slice that
+implements it, not before (the specs describe the shipped CLI).
+
+### Spending without a hard cap: `spend_policy: timeout_only`
+
+A goal says how its spend is bounded, and approval covers it.
+
+- **Front matter.** One optional key, `spend_policy`, with the single value `timeout_only`. Absent means
+  what every goal means today: `budget_usd` is a hard cap. `spend_policy: timeout_only` means no dollar cap;
+  `turn_timeout_min` is the only bound.
+- **`budget_usd` and `timeout_only` are exclusive.** A goal with both is an error naming the key, and
+  `budget_usd` is required only when `spend_policy` is absent. A kept `budget_usd` that nothing enforces is
+  the "ignored goal field" this plan rules out, and a fake large budget is a lie.
+- **The hash.** `spend_policy=timeout_only` is added to the hashed fields when set, and the `budget_usd=`
+  line is left out. A goal without the key hashes exactly as before, so no approved goal goes stale. Editing
+  the key either way returns the goal to draft, so dropping a cap needs a fresh approval.
+- **Providers.** A goal with `budget_usd` runs only on an adapter that reports a hard dollar cap
+  (`--max-budget-usd` on Claude today); on Codex it is refused before spawn with a message that says to
+  change the goal to `timeout_only` and approve again. A `timeout_only` goal runs on any adapter, Claude
+  included; Claude is then started without `--max-budget-usd` and its cost is still recorded.
+- **Visibility.** `goal approve`, `status`, `review`, `doctor` and the PR table print `no dollar cap:
+  bounded by 30 min per turn` instead of a budget. Cost recorded as unknown stays unknown, never `0`;
+  `cost_usd` is absent from `turn.ended` and the thread total says `unknown`, not `$0.00`.
+- **Copying.** `goal new --from` copies `spend_policy` with the other approval-bearing keys.
+- **Older Workbench.** Front matter is strict, so an older binary reading such a goal reports an unknown
+  key and refuses it. That fails closed.
+- **Evaluations and drafting** are not goals and have no approval. They keep `agents.<job>.allow_unpriced`
+  in config, as above.
+
+### Events stay version 1
+
+Evidence: `EventKind` is an open string, readers ignore kinds they do not know, `Event.v` is stored and
+never checked, and `EventLogTests.readerIgnoresUnknownKindsAndFields` pins it. So the additions this plan
+needs (attempt start/end, normalized activity, `goal.draft.*`, provider/model metadata on existing
+records) are new kinds and new fields, which an older reader skips.
+
+- No existing field changes meaning. `claude` events stay verbatim, and Claude runs keep emitting them;
+  new providers' raw lines go in a new kind that names the provider.
+- A reducer that understands both shapes counts each activity once: a run is read through one or the other.
+- An older Workbench reading a newer log cannot see the new attempts, so it will not recover an unfinished
+  one. That is harmless: a log opened by an old binary has no recovery obligation for kinds it does not
+  know.
+- Version 2 is reserved for the day an existing field's meaning must change or a reader must refuse a log
+  it cannot replay. Nothing in this plan needs it. PR 8 adds a fixture test: a log with the new kinds replays
+  to the same `ThreadState` as the log without them.
+
+### Adapter invocations ignore the user's config
+
+Task 1 found that a user's `~/.codex/config.toml` (`approval_policy`, `approvals_reviewer`,
+`sandbox_workspace_write.network_access`) changes what `-s read-only` means, and that a Codex run adds trust
+entries to that file. An adapter therefore states its policy on the command line: `--ignore-user-config
+--ignore-rules -c approval_policy="never"` with the sandbox mode, and no inherited network setting. The
+existing Codex review needs the same, and is the first slice to change (it does not wait for the adapter).
+
+### Read confinement is not a requirement
+
+Codex's `read-only` sandbox can read outside the worktree; Claude's `--restricted` cannot. The plan's
+read-only requirement is no repository writes and no posting, which Codex meets when invoked as above, and
+the existing Codex reviewer already reads this way. The capability is recorded as `confinesReads` and
+`doctor` shows it, so a Codex judge or reviewer is allowed with the limit displayed, not refused.
+Changing this later is a config check, not a redesign.
+
+### Still open after task 1
+
+- Minimum supported versions: only the two probed versions are known. Pin them as the tested versions and
+  raise the floor when an older one is tried.
+- Posting from a read-only turn was not proved (the fixture remote is not a GitHub remote). Task 2's
+  conformance suite tests it against a stub `gh` that records calls.
+- Whether a Codex coding turn can hand over its work: `workspace-write` makes `.git` read-only, so the
+  agent cannot commit. Settle in task 4 before the Codex run adapter; Workbench may commit for it.
 
 ## Demo
 
