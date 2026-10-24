@@ -39,8 +39,8 @@ let workbenchUsage = """
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
       log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
-      status [id] [--all]        where the thread stands; --all: one line per thread
-      review [id] [--patch <path>]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      status [id] [--all] [--fetch]  where the thread stands; --all: one line per thread; --fetch: ask origin if the base moved
+      review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
       open [id] [--editor <name-or-command>] [--print] [--goal]
                                  open the thread's worktree in an editor to read what the run changed (--goal: its
                                  goal file instead, which a draft has before any run): cursor, code,

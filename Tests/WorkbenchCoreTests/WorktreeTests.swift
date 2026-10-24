@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// Isolated from the machine's git config, so results do not depend on who runs the tests.
-private func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
+func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
     try GitRunner.discover(
         extraEnvironment: [
             "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -13,7 +13,7 @@ private func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
         ], timeout: timeout)
 }
 
-private struct TestRepo {
+struct TestRepo {
     let root: URL
     let git: GitRunner
 

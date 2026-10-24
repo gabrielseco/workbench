@@ -63,7 +63,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         _ = try await fx.git.run(["commit", "-q", "-m", "x"], in: clone)
         _ = try await fx.git.run(["push", "-q", "origin", "HEAD:main"], in: clone)
 
-        let review = try await cli(["review", id], in: fx)
+        let review = try await cli(["review", id, "--fetch"], in: fx)
         #expect(review.text.contains("main is 1 commit behind origin/main"), "\(review.text)")
     }
 
@@ -85,9 +85,24 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         _ = try await fx.git.run(["commit", "-q", "-m", "x"], in: clone)
         _ = try await fx.git.run(["push", "-q", "origin", "HEAD:main"], in: clone)
 
-        let status = try await cli(["status", id], in: fx)
+        // Read-only by default: nothing asks origin, so what this repository already knew is still said.
+        let offline = try await cli(["status", id], in: fx)
+        #expect(offline.code == 0 && !offline.text.contains("behind"), "\(offline.text)")
+        let offlineJSON = try await cli(["status", id, "--json"], in: fx)
+        #expect(offlineJSON.text.contains("\"fetched\":false"), "\(offlineJSON.text)")
+
+        let status = try await cli(["status", id, "--fetch"], in: fx)
         #expect(status.text.contains("main is 1 commit behind origin/main"), "\(status.text)")
-        let review = try await cli(["review", id], in: fx)
+        #expect(!status.text.contains("as of the last fetch"), "a fetch just happened: \(status.text)")
+        let review = try await cli(["review", id, "--fetch"], in: fx)
         #expect(review.text.contains("main is 1 commit behind origin/main"), "\(review.text)")
+        let fetchedJSON = try await cli(["status", id, "--json", "--fetch"], in: fx)
+        #expect(fetchedJSON.text.contains("\"fetched\":true"), "\(fetchedJSON.text)")
+
+        // Now the repository knows: without --fetch the line is still there, with the age of that knowledge.
+        let later = try await cli(["review", id], in: fx)
+        #expect(later.text.contains("main is 1 commit behind origin/main (as of the last fetch, just now"), "\(later.text)")
+        let laterJSON = try await cli(["status", id, "--json"], in: fx)
+        #expect(laterJSON.text.contains("\"fetched\":false") && laterJSON.text.contains("\"as_of\":\""), "\(laterJSON.text)")
     }
 }

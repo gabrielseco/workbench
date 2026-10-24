@@ -118,11 +118,13 @@ extension Commands {
     static func status(_ args: [String]) async throws {
         var a = Arguments(args)
         let all = a.flag("--all")
+        let fetch = a.flag("--fetch")
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
         if all {
             if named != nil { throw CLIError.usage("status --all lists every thread; it takes no id") }
+            if fetch { throw CLIError.usage("status --all lists threads; --fetch checks one thread's base") }
             statusAll(ctx: ctx)
             return
         }
@@ -135,7 +137,7 @@ extension Commands {
             return
         }
         if Output.json {
-            printJSON(await statusJSON(id: id, ctx: ctx))
+            printJSON(await statusJSON(id: id, ctx: ctx, fetch: fetch))
             return
         }
         // Replayed once: the removed-worktree note below reads the same events.
@@ -163,7 +165,7 @@ extension Commands {
                 }
                 if let model = goal.model { out("model:     \(model)") }
                 if let pushTo = goal.pushTo { out("push to:   \(pushTo)") }
-                if let line = await baseGapLine(goal.base, ctx: ctx) { out("           \(line)") }
+                if let line = await baseGapLine(goal.base, ctx: ctx, fetch: fetch) { out("           \(line)") }
             } catch let error as GoalParseError {
                 let problems = error.description.split(separator: "\n").map { "           \($0)" }
                 out("goal:      not valid\n\(problems.joined(separator: "\n"))")
@@ -254,6 +256,7 @@ extension Commands {
     static func review(_ args: [String]) async throws {
         var a = Arguments(args)
         let patch = try a.value("--patch")
+        let fetch = a.flag("--fetch")
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
@@ -277,28 +280,46 @@ extension Commands {
         }
         let report = await loader.load(id: id)
         if Output.json {
-            printJSON(await reviewJSON(report, ctx: ctx))
+            printJSON(await reviewJSON(report, ctx: ctx, fetch: fetch))
             return
         }
         for line in report.render() { out(line) }
         for line in lineageLines(report.state, ctx: ctx) { out(line) }
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
-            let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx) {
+            let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx, fetch: fetch) {
             out("")
             out("Base       \(line)")
         }
     }
 
     /// One line when the base branch is behind its origin counterpart or could not be compared; nil when
-    /// there is nothing to say. Fetches that one branch, bounded; offline is a note, not an error.
-    static func baseGapLine(_ base: String, ctx: Context) async -> String? {
+    /// there is nothing to say. Without `fetch` it uses the origin ref this repository already has and says how
+    /// old that is, so a read-only command never waits for the network; with it, fetches that one branch,
+    /// bounded, and offline is a note, not an error.
+    static func baseGapLine(_ base: String, ctx: Context, fetch: Bool) async -> String? {
         let manager = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git)
-        guard let gap = await manager.baseGap(base: base) else { return nil }
+        guard let gap = await manager.baseGap(base: base, fetch: fetch) else { return nil }
         var parts: [String] = []
         if gap.behind > 0 {
-            parts.append("\(base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind origin/\(base)")
+            var line = "\(base) is \(gap.behind) commit\(gap.behind == 1 ? "" : "s") behind origin/\(base)"
+            switch gap.knownFrom {
+            case nil: break
+            case .lastFetch(let date)?:
+                line += " (as of the last fetch, \(ageText(Date().timeIntervalSince(date))); `--fetch` checks now)"
+            case .unknown?: line += " (as of the last fetch; `--fetch` checks now)"
+            }
+            parts.append(line)
         }
         if let note = gap.fetchNote { parts.append(note) }
         return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    static func ageText(_ seconds: TimeInterval) -> String {
+        switch seconds {
+        case ..<60: "just now"
+        case ..<3600: "\(Int(seconds / 60)) min ago"
+        case ..<86400: "\(Int(seconds / 3600)) h ago"
+        default: "\(Int(seconds / 86400)) d ago"
+        }
     }
 }
