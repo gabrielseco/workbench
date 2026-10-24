@@ -34,7 +34,10 @@ public struct JudgeInput: Sendable, Equatable {
     public var check: Review.Check?
     /// The last lines of the check's output, when it did not pass.
     public var checkOutput: String?
+    /// The legacy verify step, which only a log from before the verifier has.
     public var verify: Review.Verify?
+    /// The latest verifier run, or its skip.
+    public var verifier: Review.Verifier?
     /// Screenshot file names, relative to the judge's working directory, that it may look at.
     public var screenshots: [String]
     /// Pixel size of a screenshot by file name, when it could be read, so a clipped capture can be named.
@@ -53,6 +56,7 @@ public enum Judge {
     static let evidencePerCriterion = 3
     static let evidenceLimit = 300
     static let concernLimit = 8
+    static let verifierReportLimit = 2000
 
     // MARK: Request
 
@@ -86,7 +90,9 @@ public enum Judge {
             parts.append("## Out of scope\n\n" + input.goal.outOfScope.map { "- \(oneLine($0))" }.joined(separator: "\n"))
         }
         parts.append("## Check\n\n" + checkText(input))
-        parts.append("## Verify step\n\n" + verifyText(input))
+        // A log from before the verifier has only the verify step, and is described as it always was.
+        if input.verify != nil { parts.append("## Verify step\n\n" + verifyText(input)) }
+        if input.verifier != nil || input.verify == nil { parts.append("## Verifier\n\n" + verifierText(input)) }
         if input.screenshots.isEmpty {
             parts.append("## Screenshots\n\nNone.")
         } else {
@@ -125,6 +131,37 @@ public enum Judge {
         text += verify.turn == input.lastTurn ? "." : " (the latest turn is \(input.lastTurn))."
         let files = verify.proof.map(\.name).joined(separator: ", ")
         text += verify.proof.isEmpty ? " It left no files." : " It left: \(files)."
+        return text
+    }
+
+    private static func verifierText(_ input: JudgeInput) -> String {
+        guard let verifier = input.verifier else { return "No verifier ran." }
+        let reason = verifier.reason.map { String(oneLine($0).prefix(evidenceLimit)) }
+        var text: String
+        if verifier.skipped {
+            text = "The verifier was skipped for turn \(verifier.turn): \(reason ?? "no reason was recorded")."
+        } else if verifier.open {
+            text = "The verifier started after turn \(verifier.turn) and has no recorded end (still running, or interrupted)."
+        } else if verifier.ok {
+            text = "The verifier finished after turn \(verifier.turn)."
+        } else {
+            text = "The verifier failed after turn \(verifier.turn): \(reason ?? "no reason was recorded")."
+        }
+        if verifier.turn != input.lastTurn { text += " This was not the latest turn \(input.lastTurn)." }
+        if verifier.skipped { return text }
+        let files = verifier.proof.map(\.name).joined(separator: ", ")
+        text += verifier.proof.isEmpty ? " It left no files." : " It left: \(files)."
+        let report = verifier.report.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !report.isEmpty else { return text + " It wrote no report." }
+        let cut = report.count > verifierReportLimit
+        let shown = cut ? String(report.prefix(verifierReportLimit)) : report
+        // A fence longer than any run of backticks in the report, so the report cannot close it.
+        let longest = shown.split(whereSeparator: { $0 != "`" }).map(\.count).max() ?? 0
+        let fence = String(repeating: "`", count: max(3, longest + 1))
+        text += "\n\nIts own report follows. It is the verifier's claim, not evidence that any criterion holds: "
+        text += "decide on the check, the screenshots and the diff."
+        text += "\n\n\(fence)\n\(shown)\n\(fence)"
+        if cut { text += "\n\n(the report was cut at \(verifierReportLimit) characters)" }
         return text
     }
 
