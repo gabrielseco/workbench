@@ -91,6 +91,10 @@ public struct Config: Sendable, Equatable {
     /// `[run]`, or nil when the project declares no way to start its app.
     public var run: RunConfig?
 
+    /// `[providers.<id>]` and `[agents.<role>]`: which provider and model each responsibility asks for. Read through
+    /// `resolvedRunAgent`, `resolvedJudgeAgent`, `resolvedReviewAgent` and `resolvedGoalAgent`.
+    public var agents = AgentsConfig()
+
     /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
     public var editor: String?
 
@@ -144,6 +148,7 @@ public struct Config: Sendable, Equatable {
         // The review and verifier tables check their own keys (ReviewConfig.parse, VerifierConfig.parse).
         let leftToTheirOwn = { (name: String) in
             ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) || RunConfig.owns(table: name)
+                || AgentsConfig.owns(table: name)
         }
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !leftToTheirOwn(name) {
             if name != "" && name != "tools" {
@@ -266,6 +271,9 @@ public struct Config: Sendable, Equatable {
         let review = ReviewConfig.parse(document, fail: fail)
         let verifier = VerifierConfig.parse(document, fail: fail)
         let run = RunConfig.parse(document, fail: fail)
+        let agents = AgentsConfig.parse(document, fail: fail)
+        claudePath = agents.claudeExecutable(claudePathLine: document.tables[""]?.entries["claude_path"]?.line, fail: fail)
+            ?? claudePath
 
         var envPass: [String] = []
         if let (values, line) = strings("", "env_pass") {
@@ -323,6 +331,7 @@ public struct Config: Sendable, Equatable {
             review: review, judgeModel: judgeModel, describeModel: describeModel,
             planModel: planModel, verifier: verifier, run: run)
         config.editor = editor
+        config.agents = agents
         return config
     }
 
@@ -366,9 +375,18 @@ public struct Config: Sendable, Equatable {
         func quoted(_ s: String) -> String {
             "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         }
+        // Only the root keys, which come first: a later table's own `# model = ` example stays a comment.
+        var claudePathDone = false
+        var modelDone = false
         let lines = exampleTOML.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
-            if let claudePath, line.hasPrefix("# claude_path = ") { return "claude_path = \(quoted(claudePath))" }
-            if let model, line.hasPrefix("# model = ") { return "model = \(quoted(model))" }
+            if let claudePath, !claudePathDone, line.hasPrefix("# claude_path = ") {
+                claudePathDone = true
+                return "claude_path = \(quoted(claudePath))"
+            }
+            if let model, !modelDone, line.hasPrefix("# model = ") {
+                modelDone = true
+                return "model = \(quoted(model))"
+            }
             return String(line)
         }
         return lines.joined(separator: "\n")
@@ -398,6 +416,15 @@ public struct Config: Sendable, Equatable {
         # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head
         # max_rounds = 3                   # reviews of one pull request, counted from the event log (1 to 10)
         # (also accepted as [review.stage.pr-review]; `[review] stages = [...]` lists the review stages, in order)
+
+        # [providers.codex]                # which executable runs a provider (claude: same as claude_path)
+        # executable = "/opt/homebrew/bin/codex"
+
+        # [agents.judge]                   # provider and model per responsibility; unset keeps the defaults:
+        # provider = "claude"              # run and judge on claude, review on codex, goal drafting off
+        # model = "sonnet"                 # replaces judge_model and model for the judge once it is set
+        # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
+        # allow_unpriced = true            # accept a review whose cost is unknown (never for [agents.run])
 
         # [run]                            # how the verifier's app is started: Workbench runs it and stops it
         # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set

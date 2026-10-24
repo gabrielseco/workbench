@@ -74,6 +74,15 @@ public struct DoctorVerifier: Sendable, Equatable {
     public var screenRecording: String?
 }
 
+/// What one responsibility resolves to, as `doctor` shows it.
+public struct DoctorAgent: Sendable, Equatable {
+    public var role: AgentRole
+    /// Nil only for goal drafting with no `[agents.goal]`: it stays manual.
+    public var resolved: ResolvedAgent?
+    /// Where the model came from when it is not the provider's default.
+    public var note: String?
+}
+
 /// `[run]` as doctor found it.
 public struct DoctorRun: Sendable, Equatable {
     public var config: RunConfig
@@ -103,6 +112,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var run: DoctorRun?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []
+    /// Provider and model per responsibility, goal drafting first. Shown only: no stage reads them yet.
+    public var agents: [DoctorAgent] = []
     /// What the config's `copy` left out of the throwaway worktree, with why.
     public var copySkipped: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
@@ -228,6 +239,7 @@ public final class Doctor: @unchecked Sendable {
             }
         }
         if let run = config.run { report.run = await readRun(run, verifierOn: config.verifier != nil, base: base) }
+        report.agents = Self.agents(config)
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         var global: String?
@@ -306,6 +318,17 @@ public final class Doctor: @unchecked Sendable {
     /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a stage
     /// that reads proof with no verifier to leave any, a table no list names. The project knows its own pipeline,
     /// so each is said and none is refused.
+    static func agents(_ config: Config) -> [DoctorAgent] {
+        [
+            DoctorAgent(
+                role: .goal, resolved: config.resolvedGoalAgent,
+                note: config.resolvedGoalAgent == nil ? "goal drafting stays manual" : "drafting is not enabled yet"),
+            DoctorAgent(role: .run, resolved: config.resolvedRunAgent(), note: nil),
+            DoctorAgent(role: .judge, resolved: config.resolvedJudgeAgent(), note: nil),
+            DoctorAgent(role: .review, resolved: config.resolvedReviewAgent(), note: nil),
+        ]
+    }
+
     static func reviewWarnings(_ review: ReviewConfig, root: URL, hasVerifier: Bool) -> [String] {
         var warnings: [String] = []
         if !review.stages.contains(ReviewConfig.prReviewStage) {
