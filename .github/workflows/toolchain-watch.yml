@@ -24,7 +24,8 @@ jobs:
       - name: Swift version
         run: swiftc --version
       - name: Is the workaround still needed?
-        # Exit 3 means the compiler no longer has the bug: remove the flag from Package.swift and this workflow.
+        # Exit 3 means a compiler at least as new as the one the bug was found on (6.2.1) no longer has it: remove the flag from
+        # Package.swift and this workflow. An older runner Swift prints "not applicable" and passes.
         run: scripts/swift-bug-repro.sh --fail-when-fixed
       - name: Release build with every optimizer pass verified
         run: swift build -c release --product workbench -Xswiftc -Xfrontend -Xswiftc -sil-verify-all
