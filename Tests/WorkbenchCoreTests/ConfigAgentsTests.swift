@@ -38,6 +38,8 @@ import Testing
         #expect(problems("[providers.codex]\nbogus = 1").contains("unknown key 'bogus' in [providers.codex]"))
         let empty = problems("[providers.codex]\nexecutable = \"\"")
         #expect(empty.contains { $0.contains("command name or a path") })
+        let newline = problems("[providers.codex]\nexecutable = \"a\\nb\"")
+        #expect(newline.contains { $0.contains("command name or a path") }, "\(newline)")
         #expect(problems("[providers.codex]\nexecutable = 3").contains { $0.contains("must be a string") })
         #expect(problems("[providers]\nexecutable = \"x\"").contains("unknown table [providers]"))
         let both = problems("claude_path = \"a\"\n[providers.claude]\nexecutable = \"b\"")
