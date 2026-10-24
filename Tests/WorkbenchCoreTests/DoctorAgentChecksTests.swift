@@ -123,7 +123,7 @@ private func doctorGoal(model: String?) -> DoctorGoal {
             let cfg = try config("[providers.claude]\n\(key) = \(value)")
             #expect(cfg.executable(for: .claude) == "/bin/echo", "\(key) is read")
         }
-        let selectionValues: [String: String] = ["model": "\"haiku\"", "allow_unpriced": "true"]
+        let selectionValues: [String: String] = ["model": "\"haiku\"", "reasoning_effort": "\"high\"", "allow_unpriced": "true"]
         for role in AgentRole.allCases {
             for key in AgentsConfig.selectionKeys {
                 // A provider other than the role's default: refused where no adapter exists yet, read where one does.

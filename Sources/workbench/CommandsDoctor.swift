@@ -35,6 +35,7 @@ extension Commands {
                         "role": .string(agent.role.rawValue),
                         "provider": agent.resolved.map { .string("\($0.provider)") } ?? .null,
                         "model": agent.resolved?.model.map { .string($0) } ?? .null,
+                        "reasoning_effort": agent.resolved?.reasoningEffort.map { .string($0) } ?? .null,
                         "note": agent.note.map { .string($0) } ?? .null, "issues": .array(agent.issues.map(issue)),
                     ]
                 }),
@@ -55,7 +56,8 @@ extension Commands {
             let label = "agent \(agent.role.rawValue):".padding(toLength: 14, withPad: " ", startingAt: 0)
             guard let resolved = agent.resolved else { out("\(label)none (\(agent.note ?? ""))"); continue }
             let note = agent.note.map { " (\($0))" } ?? ""
-            out("\(label)\(AgentUse.describe(provider: "\(resolved.provider)", model: resolved.model))\(note)")
+            let effort = resolved.reasoningEffort.map { ", effort \($0)" } ?? ""
+            out("\(label)\(AgentUse.describe(provider: "\(resolved.provider)", model: resolved.model))\(effort)\(note)")
             for issue in agent.issues { out("  \(issue.severity.rawValue): \(issue.message)") }
         }
         if let thread = report.thread, let approved = report.approvedFor {

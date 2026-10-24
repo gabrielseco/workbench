@@ -24,13 +24,14 @@ extension ThreadService {
                 policy: .readOnlyEvidence, spend: spend, session: .start(proposed: round.sessionID),
                 purpose: .review, environment: round.settings.environment, limits: limits,
                 evidenceFiles: [round.paths.brief.lastPathComponent, round.paths.diff.lastPathComponent],
-                answerFile: round.paths.answer)
+                answerFile: round.paths.answer, reasoningEffort: round.agent.reasoningEffort)
         }
         return AgentRequest(
-            provider: round.agent.provider, prompt: PRReview.instruction(brief: round.paths.brief.path), images: images,
+            provider: round.agent.provider, model: round.agent.model,
+            prompt: PRReview.instruction(brief: round.paths.brief.path), images: images,
             workingDirectory: round.paths.tree, outputDirectory: round.paths.folder, policy: .readOnlyEvidence,
             spend: spend, purpose: .review, environment: round.settings.environment, limits: limits,
-            answerFile: round.paths.answer)
+            answerFile: round.paths.answer, reasoningEffort: round.agent.reasoningEffort)
     }
 
     /// Runs the reviewer up to `PRReview.attempts` times while it answers that its model is at capacity. A provider that

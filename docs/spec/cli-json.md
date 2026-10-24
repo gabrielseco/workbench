@@ -85,7 +85,7 @@ of the text mode are not in it.
 doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy, agents, problems, setup, check, review_warnings, cleanup_problem
 
 - `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
-- `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, note, issues}`. `provider` and `model`
+- `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, reasoning_effort, note, issues}`. `provider`, `model` and `reasoning_effort`
   are null for goal drafting with no `[agents.goal]` (it stays manual; `note` says so); a null `model` is the provider's default.
   A Codex goal agent without `allow_unpriced = true` in `[agents.goal]` is an `unpriced_not_allowed` problem with `role: "goal"`,
   like the judge and review (`workbench goal draft` is refused for the same reason). Nothing in `--json` changed shape.

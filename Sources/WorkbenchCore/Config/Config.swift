@@ -272,7 +272,6 @@ public struct Config: Sendable, Equatable {
         let verifier = VerifierConfig.parse(document, fail: fail)
         let run = RunConfig.parse(document, fail: fail)
         let agents = AgentsConfig.parse(document, fail: fail)
-        agents.checkStageModels(review: review, fail: fail)
         claudePath = agents.claudeExecutable(claudePathLine: document.tables[""]?.entries["claude_path"]?.line, fail: fail)
             ?? claudePath
 

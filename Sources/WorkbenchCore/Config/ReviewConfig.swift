@@ -49,6 +49,7 @@ public struct ReviewStageConfig: Sendable, Equatable {
     /// `provider`, `model` and `allow_unpriced` of the stage's table; each overrides `[agents.review]` for this stage.
     public var provider: AgentProviderID?
     public var model: String?
+    public var reasoningEffort: String?
     public var allowUnpriced: Bool?
     /// `provider` came from the P6 `reviewer = "codex"` key, not from a `provider` key.
     public var providerIsReviewerAlias = false
@@ -109,7 +110,7 @@ public struct ReviewConfig: Sendable, Equatable {
 
     static let stageKeys: Set<String> = [
         "skill", "prompt", "checklist", "reviewer", "inputs", "applies_to", "max_rounds",
-        "provider", "model", "allow_unpriced",
+        "provider", "model", "reasoning_effort", "allow_unpriced",
     ]
     static let tablePrefix = "review.stage."
 }
@@ -244,6 +245,7 @@ extension ReviewConfig {
                 table, name: "\(tablePrefix)\(stage.name)", role: .review, inheritsProvider: true, fail: fail)
             stage.provider = selection.provider
             stage.model = selection.model
+            stage.reasoningEffort = selection.reasoningEffort
             stage.modelLine = table.entries["model"]?.line
             stage.allowUnpriced = selection.allowUnpriced
         }

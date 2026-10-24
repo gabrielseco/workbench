@@ -59,10 +59,13 @@ import Testing
             provider = "codex"
             """)
         #expect(config.agents.goal == AgentSelection(provider: .codex, allowUnpriced: true))
+        #expect(problems("[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-x\"\nreasoning_effort = \"high\"").isEmpty)
         #expect(config.agents.judge == AgentSelection(provider: nil, model: "haiku", allowUnpriced: true))
         #expect(
-            problems("[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-x\"").contains { $0.contains("takes no model") },
-            "a Codex drafter with a model is refused when the config loads, not at draft time")
+            problems("[agents.judge]\nreasoning_effort = \"ultra\"")
+                .contains { $0.contains("'reasoning_effort'") && $0.contains("\"xhigh\"") })
+        #expect(problems("[agents.judge]\nreasoning_effort = 3").contains { $0.contains("'reasoning_effort' must be a string") })
+        #expect(problems("[agents.run]\nreasoning_effort = \"low\"").contains { $0.contains("not allowed in [agents.run]") })
         #expect(problems("[agents.plan]\nmodel = \"x\"").contains { $0.contains("unknown table [agents.plan]") })
         #expect(problems("[agents.judge]\nbogus = 1").contains("unknown key 'bogus' in [agents.judge]"))
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
@@ -91,18 +94,18 @@ import Testing
         #expect(config.review.stage("pr-review")?.provider == .codex, "reviewer = \"codex\" is the provider")
         let both = problems("[review.stage.x]\nprompt = \"a.md\"\nreviewer = \"codex\"\nprovider = \"codex\"")
         #expect(both.contains { $0.contains("'reviewer' and 'provider' both choose") })
-        // The Codex adapter takes no model yet, so a model on a Codex judge or review is refused at load, not ignored:
-        // with Codex named, with Codex as the default, and through the stage that inherits the default.
-        let direct = problems("[review.stage.x]\nprompt = \"a.md\"\nprovider = \"codex\"\nmodel = \"m1\"")
-        #expect(direct.contains { $0.contains("takes no model") })
-        let byDefault = problems("[agents.review]\nmodel = \"m1\"")
-        #expect(byDefault.contains { $0.contains("[agents.review]") && $0.contains("takes no model") })
-        #expect(problems("[agents.judge]\nprovider = \"codex\"\nmodel = \"m1\"").contains { $0.contains("takes no model") })
+        // A Codex judge or review takes a model and an effort, from its own table, the default, or the stage that inherits it.
+        let table = "[review.stage.x]\nprompt = \"a.md\"\nprovider = \"codex\"\nmodel = \"m1\"\nreasoning_effort = \"high\""
+        #expect(problems(table).isEmpty)
+        #expect(problems("[agents.review]\nmodel = \"m1\"").isEmpty)
+        #expect(problems("[agents.judge]\nprovider = \"codex\"\nmodel = \"m1\"").isEmpty)
+        let inherited = try parse(
+            "[agents.review]\nmodel = \"m1\"\nreasoning_effort = \"high\"\n[review]\nstages = [\"pr-review\", \"x\"]\n"
+                + "[review.stage.x]\nprompt = \"a.md\"\nprovider = \"claude\"")
         #expect(
-            problems(
-                "[review]\nstages = [\"pr-review\", \"x\"]\n[review.stage.x]\nprompt = \"a.md\"\n"
-                    + "provider = \"codex\"\nmodel = \"m1\"")
-                .contains { $0.contains("takes no model") })
+            inherited.resolvedReviewAgent()
+                == ResolvedAgent(provider: .codex, model: "m1", reasoningEffort: "high", allowUnpriced: false))
+        #expect(inherited.resolvedReviewAgent(stage: "x").model == nil, "a model names one provider's model")
         #expect(
             problems(
                 "[agents.review]\nprovider = \"claude\"\n[review]\nstages = [\"pr-review\", \"x\"]\n"
@@ -172,15 +175,9 @@ import Testing
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
     }
 
-    @Test func aModelInheritingCodexIsRefusedAtItsLine() {
+    @Test func aModelInheritingCodexIsAccepted() throws {
         let text = "[review]\nstages = [\"pr-review\", \"x\"]\n[review.stage.x]\nprompt = \"a.md\"\nmodel = \"haiku\"\n"
-        do {
-            _ = try parse(text)
-            Issue.record("a Codex stage with a model must be refused")
-        } catch let error as ConfigError {
-            let found = error.problems.first { $0.message.contains("takes no model") }
-            #expect(found?.line == 5, "the line of the model key: \(String(describing: found?.line))")
-        } catch { Issue.record("\(error)") }
+        #expect(try parse(text).resolvedReviewAgent(stage: "x").model == "haiku")
     }
 
     @Test func runOnCodexIsAccepted() throws {

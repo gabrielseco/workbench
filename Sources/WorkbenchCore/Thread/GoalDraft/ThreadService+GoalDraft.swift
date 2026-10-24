@@ -191,13 +191,13 @@ extension ThreadService {
             agentRequest = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work,
                 outputDirectory: output, policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment,
-                limits: limits, answerFile: answer)
+                limits: limits, answerFile: answer, reasoningEffort: agent.reasoningEffort)
         } else {
             agentRequest = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work,
                 outputDirectory: output, policy: .readOnlyEvidence, spend: spend,
                 session: .start(proposed: UUID().uuidString.lowercased()), purpose: .goal, environment: environment,
-                limits: limits)
+                limits: limits, reasoningEffort: agent.reasoningEffort)
         }
         do {
             if let refusal = agentRequest.validate(against: provider) { throw refusal }

@@ -189,6 +189,12 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         try ClaudeProvider(config: try Config.parse(config)).invocation(for: judgeRequest(tweak)).arguments
     }
 
+    @Test func anEffortIsPassedToClaudeOnlyWhenChosen() throws {
+        let args = try argv { $0.reasoningEffort = "xhigh" }
+        #expect(args[try #require(args.firstIndex(of: "--effort")) + 1] == "xhigh")
+        #expect(try !argv().contains("--effort"))
+    }
+
     @Test func aJudgeIsConfinedOneShotAndCapped() throws {
         let args = try argv { $0.model = "haiku" }
         #expect(args.contains("--restricted") && args.contains("--permission-prompts"))
