@@ -9,8 +9,17 @@ import Testing
 /// fixture and runs its processes with only a few others competing, so its waits measure the code again. The
 /// gate only orders tests; `Patience.limit` stays the ceiling of every wait.
 final class ProcessGate: @unchecked Sendable {
-    /// Sized from the machine: about one test per core, at least two so a waiting test never runs alone.
-    static let shared = ProcessGate(permits: max(2, ProcessInfo.processInfo.activeProcessorCount))
+    /// Sized from the machine and the environment, see `permits(environment:cores:)`.
+    static let shared = ProcessGate(
+        permits: permits(environment: ProcessInfo.processInfo.environment, cores: ProcessInfo.processInfo.activeProcessorCount))
+
+    /// How many process-spawning tests run at once. `WORKBENCH_TEST_PERMITS` wins when it is a positive number
+    /// (to measure a size; more than one per core made the run no faster and the hang and timeout tests flaky,
+    /// docs/plan/P17-faster-tests.md). Otherwise one per core, at least two so a waiting test never runs alone.
+    static func permits(environment: [String: String], cores: Int) -> Int {
+        if let text = environment["WORKBENCH_TEST_PERMITS"], let value = Int(text), value > 0 { return value }
+        return max(2, cores)
+    }
 
     /// The gates this task holds a permit of; a nested `withPermit` on one of them must not wait for itself.
     @TaskLocal private static var held: Set<ObjectIdentifier> = []

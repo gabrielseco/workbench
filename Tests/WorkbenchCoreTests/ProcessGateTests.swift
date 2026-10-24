@@ -108,9 +108,10 @@ private struct Boom: Error {}
         #expect(!gate.isHeld && gate.holders == 0)
     }
 
-    @Test func theSharedGateIsSizedFromTheCores() {
+    @Test func theSharedGateIsSizedFromTheCoresUnlessTheVariableSaysOtherwise() {
+        let environment = ProcessInfo.processInfo.environment
         let cores = ProcessInfo.processInfo.activeProcessorCount
-        #expect(ProcessGate.shared.permits == max(2, cores))
+        #expect(ProcessGate.shared.permits == ProcessGate.permits(environment: environment, cores: cores))
     }
 }
 
@@ -128,5 +129,23 @@ private struct Boom: Error {}
 
     @Test(arguments: [1, 2]) func eachCaseOfAParameterizedTestHoldsIt(_ n: Int) {
         #expect(ProcessGate.shared.isHeld, "case \(n)")
+    }
+}
+
+@Suite struct ProcessGatePermitsTests {
+    @Test func theVariableWinsWhenItIsAPositiveNumber() {
+        #expect(ProcessGate.permits(environment: ["WORKBENCH_TEST_PERMITS": "7"], cores: 3) == 7)
+        #expect(ProcessGate.permits(environment: ["WORKBENCH_TEST_PERMITS": "7", "CI": "true"], cores: 3) == 7)
+    }
+
+    @Test(arguments: ["0", "-2", "many", ""])
+    func aBadValueIsIgnored(_ value: String) {
+        #expect(ProcessGate.permits(environment: ["WORKBENCH_TEST_PERMITS": value, "CI": "true"], cores: 3) == 3)
+    }
+
+    @Test func withoutTheVariableItIsOnePerCoreWithAFloorOfTwo() {
+        #expect(ProcessGate.permits(environment: [:], cores: 11) == 11)
+        #expect(ProcessGate.permits(environment: ["CI": "true"], cores: 3) == 3)
+        #expect(ProcessGate.permits(environment: [:], cores: 1) == 2)
     }
 }
