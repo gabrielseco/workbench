@@ -440,7 +440,7 @@ public actor ThreadRunner {
         data["denials"] = Self.deniedCalls(completion?.permissionDenials ?? [])
         for (key, value) in extra { data[key] = value }
 
-        try await log.endAttempt(attempt, outcome: result.rawValue)
+        try await AttemptLog.close(log, attempt, result.rawValue)
         try await log.append(.turnEnded, turn: turn, data: .object(data))
         let report = TurnReport(
             turn: turn, result: result, exitCode: code, signal: signal, durationMs: duration, costUSD: cost,

@@ -39,7 +39,11 @@ extension ThreadService {
                 } else {
                     problem = "codex could not be started: \(error)"
                 }
-                if let attemptID { try? await round.attempts?.end(attemptID, "failed", reason: problem) }
+                if let attemptID {
+                    do { try await round.attempts?.end(attemptID, "failed", reason: problem) } catch {
+                        return (transcript, "\(problem); \(error)")
+                    }
+                }
                 return (transcript, problem)
             }
             attach(execution)
@@ -48,7 +52,7 @@ extension ThreadService {
                 do {
                     try await round.attempts?.end(
                         attemptID, AttemptLog.outcome(of: completion.process, failure: completion.failure))
-                } catch { return (transcript, "the end of the attempt was not saved: \(error)") }
+                } catch { return (transcript, "\(error)") }
             }
             let tail = completion.process.stderrTail
             transcript += "--- attempt \(attempt) ---\n" + recorder.lines.joined(separator: "\n")

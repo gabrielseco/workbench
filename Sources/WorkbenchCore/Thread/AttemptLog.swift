@@ -25,7 +25,15 @@ struct AttemptLog: Sendable {
     }
 
     func end(_ id: String, _ outcome: String, reason: String? = nil) async throws {
-        try await log.endAttempt(id, outcome: outcome, reason: reason.map(Self.safe))
+        try await Self.close(log, id, outcome, reason: reason)
+    }
+
+    /// Closes an attempt; a log that cannot take the end says so, instead of passing on a bare I/O error. The next
+    /// open recovers from the last durable start.
+    static func close(_ log: EventLogWriter, _ id: String, _ outcome: String, reason: String? = nil) async throws {
+        do { try await log.endAttempt(id, outcome: outcome, reason: reason.map(safe)) } catch {
+            throw AttemptEndNotSaved(underlying: "\(error)")
+        }
     }
 
     /// What the process did, whatever the answer made of it.
@@ -40,7 +48,13 @@ struct AttemptLog: Sendable {
         return "failed"
     }
 
-    private static func safe(_ text: String) -> String {
+    static func safe(_ text: String) -> String {
         String(ThreadService.withoutCredentials(PRBodyBuilder.scrub(text)).prefix(300))
     }
+}
+
+/// The end of an attempt could not be written. The attempt stays open in the log until recovery closes it.
+struct AttemptEndNotSaved: Error, CustomStringConvertible {
+    var underlying: String
+    var description: String { "the end of the attempt was not saved: \(underlying)" }
 }

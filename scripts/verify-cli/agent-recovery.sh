@@ -6,7 +6,8 @@
 # A thread whose log ends with a judge, a review round and two attempts that never ended (a killed process) is made by
 # appending those events. `workbench log` must show the attempts as one line each, `abandon` (which recovers the log
 # before anything else) must close the attempts, the judge and the round with an `interrupted` end that `log` marks as
-# recovered, the round must still be in the log (it still counts toward the cap), and a second recovery must add nothing.
+# recovered, the round must still be in the log (it still counts toward the cap), and recovery must add those ends and the
+# abandon decision and nothing else (a second recovery adding nothing is tested in AgentRecoveryTests).
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 appends nothing that is open (every start is followed by its end), so the steps that expect a
 # recovery (the synthetic ends, the recovered marks) must FAIL. The frame and the other switches are in lib.sh. Run by hand,
@@ -127,7 +128,14 @@ check "the round is still in the log (it counts toward the cap)" "the pr_review.
 after=$(grep -c . "$LOG")
 wbp "$SCRATCH/log3.out" log "$ID" --json
 check "the log is valid after recovery" "workbench log exited $RC" test "$RC" = 0
-check "recovery wrote the ends and nothing else" "$before lines became $after" test "$after" -gt "$before"
+added=$(python3 -I - "$LOG" "$before" <<'PY'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()][int(sys.argv[2]):]
+print(" ".join(sorted(r["kind"] for r in rows)))
+PY
+)
+want="agent.attempt.ended agent.attempt.ended judge.ran pr_review.finished review.decision"
+check "recovery wrote the ends and the decision, nothing else" "added: '$added'" test "$added" = "$want"
 wbp "$SCRATCH/status.out" status "$ID"
 check "status still works on the recovered thread" "workbench status exited $RC" test "$RC" = 0
 finish

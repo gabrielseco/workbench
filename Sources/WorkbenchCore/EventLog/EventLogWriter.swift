@@ -240,13 +240,16 @@ public actor EventLogWriter {
         var closed = try recoverOrphanedAttempts(roles: ["judge", "review"])
         if let started = judging {
             var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
-            if let argv = started.data["argv"] { data["argv"] = argv }
+            // What the start says was asked for, so the end is attributed too; absent in a log from before provider selection.
+            for key in ["argv", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
             closed.append(try append(.judgeRan, turn: started.turn, data: .object(data)))
         }
         if let started = reviewing {
             let isStage = started.kind == .reviewStageStarted
             var data: [String: JSONValue] = ["ok": false, "verdict": .null, "reason": "interrupted", "synthetic": true]
-            for key in ["round", "pr", "head_sha"] { if let value = started.data[key] { data[key] = value } }
+            for key in ["round", "pr", "head_sha", "provider", "model"] {
+                if let value = started.data[key] { data[key] = value }
+            }
             if isStage, let stage = started.data["stage"] { data["stage"] = stage }
             closed.append(
                 try append(isStage ? .reviewStageFinished : .prReviewFinished, turn: started.turn, data: .object(data)))

@@ -21,7 +21,8 @@ private func tempLog() throws -> URL {
 
     @Test func judgeOrphan() async throws {
         let (log, url) = try await open()
-        try await log.append(.judgeStarted, turn: 1, data: ["argv": ["claude"], "provider": "claude"])
+        try await log.append(
+            .judgeStarted, turn: 1, data: ["argv": ["claude"], "provider": "claude", "model": "haiku"])
         try await log.startAttempt(role: "judge", turn: 1, provider: .claude, model: nil)
         await log.close()
 
@@ -32,6 +33,7 @@ private func tempLog() throws -> URL {
         let ran = closed[1]
         #expect(ran.data["ok"] == false && ran.data["reason"] == "interrupted" && ran.data["synthetic"] == true)
         #expect(ran.turn == 1 && ran.data["argv"] == ["claude"])
+        #expect(ran.data["provider"] == "claude" && ran.data["model"] == "haiku", "the recovered end is attributed too")
         let state = ThreadState.derive(from: try EventLogReader.read(at: url).events, id: "t")
         #expect(state.review.judge?.failure == "interrupted", "no longer 'started and never recorded a result'")
         await reopened.close()
@@ -40,7 +42,8 @@ private func tempLog() throws -> URL {
     @Test func reviewOrphan() async throws {
         let (log, url) = try await open()
         try await log.append(
-            .prReviewStarted, turn: 1, data: ["round": 1, "pr": 7, "head_sha": "abc", "argv": ["codex"]])
+            .prReviewStarted, turn: 1,
+            data: ["round": 1, "pr": 7, "head_sha": "abc", "argv": ["codex"], "provider": "codex", "model": .null])
         try await log.startAttempt(role: "review", turn: 1, round: 1, provider: .codex, model: nil)
         await log.close()
 
@@ -51,6 +54,7 @@ private func tempLog() throws -> URL {
         #expect(finished.data["ok"] == false && finished.data["verdict"] == .null && finished.data["synthetic"] == true)
         #expect(finished.data["round"]?.intValue == 1 && finished.data["pr"]?.intValue == 7)
         #expect(finished.data["head_sha"] == "abc" && finished.data["stage"] == nil)
+        #expect(finished.data["provider"] == "codex" && finished.data["model"] == .null)
         await reopened.close()
     }
 

@@ -99,11 +99,20 @@ private func tempLog() throws -> URL {
         try await log.append(.goalDraftStarted, data: ["provider": "codex"])
         try await log.append(.goalDraftFinished, data: ["ok": false, "reason": "interrupted", "synthetic": true])
         try await log.append(.judgeStarted, turn: 1, data: ["provider": "claude", "model": .null])
+        try await log.append(.prReviewStarted, turn: 1, data: ["round": 1, "pr": 3, "provider": "codex"])
+        try await log.append(.prReviewFinished, turn: 1, data: ["round": 1, "pr": 3, "ok": true, "provider": "codex"])
+        try await log.append(.reviewStageStarted, turn: 1, data: ["stage": "design", "round": 1, "pr": 3, "provider": "codex"])
         try await log.recoverOrphanedEvaluations()
         await log.close()
 
         let contents = try EventLogReader.read(at: url)
         #expect(contents.isHealthy && contents.events.allSatisfy { $0.v == 1 }, "version 1 is kept: every change is additive")
+        let kinds = Set(contents.events.map(\.kind.rawValue))
+        let added = [
+            "agent.attempt.started", "agent.attempt.ended", "goal.draft.started", "goal.draft.finished",
+            "judge.ran", "pr_review.finished", "review_stage.started", "review_stage.finished",
+        ]
+        #expect(kinds.isSuperset(of: added), "the fixture has every new kind and every recovered end")
         let reopened = try EventLogWriter.open(at: url)
         #expect(await reopened.nextSeq == contents.events.count + 1)
         #expect(!(await reopened.hasOpenAttempt))
