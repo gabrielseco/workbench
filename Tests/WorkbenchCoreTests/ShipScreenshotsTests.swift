@@ -56,44 +56,12 @@ private struct Shipped {
     var plan: ShipPlan
 }
 
-/// What one verifier run records for a turn: its `proof.added` lines (marked `source: verifier`) for the files it
-/// wrote, at the work as it is now, and its end. A rerun records only what it wrote again.
-private func recordVerifierProof(_ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1) async throws {
-    let proof = fx.project.proofDirectory(id, turn: turn)
-    try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
-    for (name, text) in files { try Data(text.utf8).write(to: proof.appendingPathComponent(name)) }
-    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
-    let identity = await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil)
-    let commit: JSONValue = identity.map { .string($0.commit) } ?? .null
-    let tree: JSONValue = identity.map { .string($0.tree) } ?? .null
-    let recorded = ProofCollector.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
-        .filter { files[$0.name] != nil }
-    let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
-    try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
-    for file in recorded {
-        try await log.append(
-            .proofAdded, turn: turn,
-            data: [
-                "name": .string(file.name), "path": .string(file.path), "sha256": .string(file.sha256),
-                "bytes": .int(file.bytes), "commit": commit, "tree": tree, "source": "verifier",
-            ])
-    }
-    try await log.append(.verifierEnded, turn: turn, data: ["ok": true, "report": "c1: holds"])
-    await log.close()
-}
-
-private func shippedThread(
-    _ files: [String: String] = ["home.png": "pixels"], verifier: Bool = false
-) async throws -> Shipped {
+private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) async throws -> Shipped {
     let fx = try await RunnerFixture()
-    // The turn itself changes the work, as a real one does, so verify sees the work that is then accepted.
+    // The turn itself changes the work, as a real one does, so the verifier sees the work that is then accepted.
     let id = try await fx.approvedThread()
     _ = try await fx.runner(id).run(fx.options("write=a.txt"))
-    if verifier {
-        try await recordVerifierProof(fx, id, files)
-    } else {
-        try await recordLegacyVerify(fx, id, files)
-    }
+    try await recordVerifierProof(fx, id, files)
     let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
     try await fx.service.accept(id: id, message: "chore: work")
     let plan = ShipPlan(
@@ -103,7 +71,7 @@ private func shippedThread(
 }
 
 @Suite(.processGate) struct ShipScreenshotsTests {
-    @Test func theVerifyStepsPNGsAreCopiedToPrShotsNamesAndPublished() async throws {
+    @Test func theVerifiersPNGsAreCopiedToPrShotsNamesAndPublished() async throws {
         let shipped = try await shippedThread(["home.png": "pixels", "notes.txt": "x", "verdict.json": "{}"])
         let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
         let tool = try FakeShots(in: fx)
@@ -120,31 +88,18 @@ private func shippedThread(
         #expect(event.data["files"] == ["home.png"])
     }
 
-    @Test func theVerifiersPNGsAreAttachedWhenThereIsNoVerifyStep() async throws {
-        let shipped = try await shippedThread(["home.png": "pixels", "report.md": "x"], verifier: true)
-        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
-        let tool = try FakeShots(in: fx)
-        let result = await fx.service.shipScreenshots(id: id, worktree: plan.worktree, number: 7, tool: tool.runner)
-
-        #expect(result == .attached(count: 1))
-        #expect(tool.shot("home") == "pixels")
-        let event = try #require(try fx.events(id).last { $0.kind == .proofPublished })
-        #expect(event.data["number"]?.intValue == 7)
-        #expect(event.data["files"] == ["home.png"])
-    }
-
     @Test func theLatestTurnsVerifierProofIsAttachedAndAnEarlierTurnsAloneIsNot() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options("write=a.txt"))
-        try await recordLegacyVerify(fx, id, ["old.png": "turn one"])
+        try await recordVerifierProof(fx, id, ["old.png": "turn one"])
         _ = try await fx.runner(id).run(fx.options("write=a.txt", feedback: "more"))
         try await recordVerifierProof(fx, id, ["new.png": "turn two"], turn: 2)
         try await fx.service.accept(id: id, message: "chore: work")
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
         let tool = try FakeShots(in: fx)
 
-        // Turn 2's verifier proof is the latest turn's, so it is attached, and turn 1's verify step's is not.
+        // Turn 2's verifier proof is the latest turn's, so it is attached, and turn 1's is not.
         let result = await fx.service.shipScreenshots(id: id, worktree: worktree, number: 7, tool: tool.runner)
         #expect(result == .attached(count: 1))
         #expect(tool.shot("new") == "turn two")
@@ -282,9 +237,12 @@ private func shippedThread(
         #expect(tool.calls.isEmpty)
     }
 
-    @Test func aThreadWithNoVerifyStepIsLeftAlone() async throws {
+    @Test(arguments: [false, true])
+    func aThreadWithNoVerifierRunIsLeftAlone(oldVerifyStep: Bool) async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)
+        // An old log's verify step left a screenshot: it is not the verifier's, so it is not proof.
+        if oldVerifyStep { try await recordLegacyVerify(fx, id, ["home.png": "pixels"]) }
         let plan = ShipPlan(
             id: id, worktree: worktree, branch: "b", remoteBranch: "b", base: "main", head: "abc", origin: "o",
             remote: .absent)
@@ -457,24 +415,5 @@ private func shippedThread(
         guard case .skipped(let why) = result else { Issue.record("expected skipped, got \(result)"); return }
         #expect(why.contains("could not be read"))
         #expect(tool.calls.isEmpty)
-    }
-
-    @Test func reviewStillSaysCurrentOrStaleAfterShipRemovedTheWorktree() async throws {
-        let shipped = try await shippedThread()
-        let (fx, id, plan) = (shipped.fx, shipped.id, shipped.plan)
-        let loader = ReviewLoader(project: fx.project, git: fx.git)
-        #expect(await loader.load(id: id).proofFreshness == .current)
-
-        _ = try await fx.git.run(["worktree", "remove", "--force", plan.worktree.path], in: fx.repo)
-        #expect(!FileManager.default.fileExists(atPath: plan.worktree.path))
-        #expect(await loader.load(id: id).proofFreshness == .current)
-
-        // The branch moves on after the proof: the retained branch shows it.
-        let other = fx.repo.deletingLastPathComponent().appendingPathComponent("later-\(UUID().uuidString)")
-        _ = try await fx.git.run(["worktree", "add", "-q", other.path, "workbench/\(id)"], in: fx.repo)
-        try "later\n".write(to: other.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try await fx.git.run(["commit", "-qam", "later"], in: other)
-        _ = try await fx.git.run(["worktree", "remove", "--force", other.path], in: fx.repo)
-        #expect(await loader.load(id: id).proofFreshness == .stale)
     }
 }

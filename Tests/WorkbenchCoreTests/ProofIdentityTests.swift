@@ -120,15 +120,6 @@ import Testing
     }
 }
 
-@Suite(.processGate) struct ProofFreshnessTextTests {
-    @Test func reviewSaysWhichCommitAProofWasTakenAtAndWhetherItStillHolds() {
-        #expect(ReviewReport.freshnessText(.current, commit: "972aa0f1234").contains("972aa0f: still describes the work"))
-        #expect(ReviewReport.freshnessText(.stale, commit: "972aa0f1234").contains("STALE"))
-        #expect(ReviewReport.freshnessText(.stale, commit: "972aa0f1234").contains("run verify again"))
-        #expect(ReviewReport.freshnessText(.unknown, commit: nil).contains("cannot tell"))
-    }
-}
-
 @Suite(.processGate) struct ProofIdentityRecordTests {
     private func proofAdded(_ extra: [String: JSONValue]) -> Event {
         var data: [String: JSONValue] = ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 4]

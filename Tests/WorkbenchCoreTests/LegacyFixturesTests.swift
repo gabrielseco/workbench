@@ -154,9 +154,12 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                     #expect(goal.removeValue(forKey: "spend_policy") as? String == "hard_cap")
                     current["goal"] = goal
                 }
-                let was = try #require(
+                var was = try #require(
                     JSONSerialization.jsonObject(with: Data(try text(scenario.name, "\(command).expected.json").utf8))
                         as? [String: Any])
+                // The legacy verify step's `verify` key was removed (only the verifier reports proof now).
+                #expect(current["verify"] == nil, "\(scenario.name) \(command)")
+                #expect(was.removeValue(forKey: "verify") != nil, "\(scenario.name) \(command)")
                 #expect(
                     NSDictionary(dictionary: current) == NSDictionary(dictionary: was), "\(scenario.name) \(command)")
             }

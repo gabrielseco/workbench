@@ -67,10 +67,10 @@ private let shotsTemplate = template + """
     ## Related Resources
     """
 
-private func verified(turn: Int, _ names: [String]) -> Review.Verify {
-    Review.Verify(
-        turn: turn, result: "passed", exitCode: 0, durationMs: 1, outputRef: nil, command: nil,
-        proof: names.map { ProofFile(name: $0, path: "proof/\($0)", sha256: "x", bytes: 1) })
+private func verified(turn: Int, _ names: [String]) -> Review.Verifier {
+    Review.Verifier(
+        turn: turn, ok: true, reason: nil, skipped: false, costUSD: nil, durationMs: 1, report: "",
+        proof: names.map { ProofFile(name: $0, path: "proof/\($0)", sha256: "x", bytes: 1) }, open: false)
 }
 
 @Suite struct PRBodySectionsTests {
@@ -80,21 +80,21 @@ private func verified(turn: Int, _ names: [String]) -> Review.Verify {
         #expect(!body.contains("Screenshots") && !body.contains("<here>"), "\(body)")
         #expect(body.contains("## Related Resources"))
         let noPng = PRBodyBuilder.build(
-            goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verify: verified(turn: 1, ["log.txt"])).body
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verifier: verified(turn: 1, ["log.txt"])).body
         #expect(!noPng.contains("Screenshots"), "\(noPng)")
         let gone = PRBodyBuilder.build(
-            goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verify: verified(turn: 1, ["a.png"]),
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 1, verifier: verified(turn: 1, ["a.png"]),
             proofAvailable: { _ in false }).body
         #expect(!gone.contains("Screenshots"), "\(gone)")
         let stale = PRBodyBuilder.build(
-            goal: g, check: nil, template: shotsTemplate, lastTurn: 2, verify: verified(turn: 1, ["a.png"])).body
+            goal: g, check: nil, template: shotsTemplate, lastTurn: 2, verifier: verified(turn: 1, ["a.png"])).body
         #expect(!stale.contains("Screenshots"), "\(stale)")
     }
 
     @Test func withScreenshotsTheSectionIsAPlaceholderPrShotsTakesOver() {
         let body = PRBodyBuilder.build(
             goal: goal(request: "Add retry."), check: nil, template: shotsTemplate, lastTurn: 1,
-            verify: verified(turn: 1, ["a.png"])).body
+            verifier: verified(turn: 1, ["a.png"])).body
         #expect(section("Screenshots", in: body) == "None", "\(body)")
         #expect(!body.contains("<here>"))
     }

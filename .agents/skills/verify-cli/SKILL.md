@@ -176,6 +176,17 @@ unknown id exits 7 and a thread whose worktree was removed exits 6 with the reas
 `VERIFY_CLI_SABOTAGE=1` sets `editor` in the global config before the first step, so the three "no editor set" steps must
 FAIL.
 
+### legacy-verify
+
+No real turn, so it costs nothing: a clone with a `claude` stand-in on the fake-claude test double, whose turn writes a
+file and whose verifier leaves `home.png`. After the run the script appends the verify step an older Workbench wrote
+(`verify.started`, a `proof.added` without `source` for `step.png`, `verify.ended`) to the thread's log. Steps: `log` and
+`log --json` load it with both events; `status`, `status --json`, `review` and `review --json` exit 0; neither JSON object
+has a `verify` field; the verifier's proof is `home.png` alone and `c1` is evidence from it, not from `step.png`; `review`
+prints no `Verify` line and `status` no `verify:` line; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` puts the old
+fields back into what `status --json`, `review --json` and `review` printed, so "status --json has no verify field",
+"review --json has no verify field" and "review prints no Verify line" must FAIL.
+
 ## Adding a scenario for the next feature
 
 One task, one script: `scripts/verify-cli/<feature>.sh`, started with `bash`. Do not copy `abandon.sh`: source

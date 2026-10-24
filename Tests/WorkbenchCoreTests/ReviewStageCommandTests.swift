@@ -154,9 +154,9 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 // MARK: proof
 
 @Suite(.processGate) struct ReviewStageProofTests {
-    @Test func theVerifyStepsTopLevelPNGsAreInTheBriefAndAttachedWithDashI() async throws {
+    @Test func theVerifiersTopLevelPNGsAreInTheBriefAndAttachedWithDashI() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
-        try await recordLegacyVerify(
+        try await recordVerifierProof(
             r.fx, r.id, ["home.png": "pixels", "dark.png": "night", "notes.txt": "x", "sub/deep.png": "d"])
         let result = try await runStage("design", r)
         #expect(result.verdict == .clean, "\(result.failure ?? "")")
@@ -176,7 +176,7 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
 
     @Test func noPNGLeftFailsTheRoundAndCodexDoesNotRun() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"proof\", \"diff\", \"goal\"]"))
-        try await recordLegacyVerify(r.fx, r.id, ["notes.txt": "x"])
+        try await recordVerifierProof(r.fx, r.id, ["notes.txt": "x"])
         let result = try await runStage("design", r)
         #expect(result.verdict == nil)
         #expect(result.failure?.contains("left no PNG") == true, "\(result.failure ?? "")")
@@ -185,16 +185,16 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
         #expect(end.data["ok"] == false && end.data["verdict"] == .null)
     }
 
-    @Test func noVerifyStepFailsTheRound() async throws {
+    @Test func noVerifierRunFailsTheRound() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
         let result = try await runStage("design", r)
-        #expect(result.verdict == nil && result.failure?.contains("no verify step") == true, "\(result.failure ?? "")")
+        #expect(result.verdict == nil && result.failure?.contains("no verifier run") == true, "\(result.failure ?? "")")
         #expect(r.codex.runs == 0)
     }
 
-    @Test func aVerifyStepFromBeforeTheLatestTurnFailsTheRound() async throws {
+    @Test func aVerifierRunFromBeforeTheLatestTurnFailsTheRound() async throws {
         let r = try await reviewedPR(extraConfig: stagesConfig("inputs = [\"diff\", \"goal\", \"proof\"]"))
-        try await recordLegacyVerify(r.fx, r.id, ["home.png": "pixels"])
+        try await recordVerifierProof(r.fx, r.id, ["home.png": "pixels"])
         let log = try EventLogWriter.open(at: r.fx.project.eventsURL(r.id))
         _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
         _ = try await log.append(.turnEnded, turn: 2, data: ["result": "success"])

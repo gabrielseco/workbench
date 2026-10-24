@@ -5,7 +5,7 @@ import Foundation
 public struct CriterionStatus: Sendable, Equatable {
     public enum State: String, Sendable, Equatable {
         case passed, failed, manual
-        /// A screenshot proof whose files the latest turn's verify step or verifier left: for a person to look at,
+        /// A screenshot proof whose files the latest turn's verifier left: for a person to look at,
         /// not a pass.
         case evidence
         /// A screenshot proof with a file missing. Never read as met.
@@ -52,10 +52,10 @@ public enum CriteriaStatus {
     ///     is matched against, so a config changed since the run cannot turn a result into someone else's.
     ///   - lastTurn: the newest turn; a check from an earlier turn says nothing about the current work.
     public static func evaluate(
-        criteria: [Criterion], check: Review.Check?, lastTurn: Int, verify: Review.Verify? = nil,
+        criteria: [Criterion], check: Review.Check?, lastTurn: Int,
         verifier: Review.Verifier? = nil, proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> [CriterionStatus] {
-        let proof = Review.ProofSet(verify: verify, verifier: verifier)
+        let proof = Review.ProofSet(verifier: verifier)
         return criteria.map { criterion in
             if let names = ScreenshotProof.names(in: criterion.proof) {
                 return screenshot(
@@ -122,8 +122,8 @@ public enum CriteriaStatus {
         return status
     }
 
-    /// Screenshots are shown when the latest turn's proof (the verify step, the verifier, or both) has `<name>.png` for
-    /// every name the criterion asks for.
+    /// Screenshots are shown when the latest turn's proof (the verifier's) has `<name>.png` for every name the criterion
+    /// asks for.
     static func screenshot(
         _ criterion: Criterion, names: [String], proof: Review.ProofSet?, lastTurn: Int, available: (ProofFile) -> Bool
     ) -> CriterionStatus {
@@ -132,7 +132,7 @@ public enum CriteriaStatus {
         let wanted = names.map { ScreenshotProof.fileName(for: $0) }
         let list = wanted.joined(separator: ", ")
         guard let proof else {
-            status.note = "no verify step or verifier has run, so \(list) was not produced"
+            status.note = "no verifier has run, so \(list) was not produced"
             return status
         }
         guard proof.turn == lastTurn else {

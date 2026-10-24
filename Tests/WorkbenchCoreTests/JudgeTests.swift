@@ -80,7 +80,7 @@ private let good = """
 @Suite(.processGate) struct JudgeRequestTests {
     private func input(
         screenshots: [String] = [], sizes: [String: PNGSize] = [:], check: Review.Check? = nil,
-        verify: Review.Verify? = nil, verifier: Review.Verifier? = nil, lastTurn: Int = 1
+        verifier: Review.Verifier? = nil, lastTurn: Int = 1
     ) throws -> JudgeInput {
         let text = """
             ---
@@ -106,7 +106,7 @@ private let good = """
             """
         let goal = try GoalFile.parse(text).goal
         return JudgeInput(
-            goal: goal, diff: "+new", diffTruncated: false, check: check, checkOutput: nil, verify: verify,
+            goal: goal, diff: "+new", diffTruncated: false, check: check, checkOutput: nil,
             verifier: verifier, screenshots: screenshots, screenshotSizes: sizes, lastTurn: lastTurn)
     }
 
@@ -153,26 +153,14 @@ private let good = """
         #expect(prompt.contains("(the report was cut at \(Judge.verifierReportLimit) characters)"))
     }
 
-    @Test func withNoVerifierAndNoVerifyStepItSaysNoVerifierRan() throws {
+    @Test func withNoVerifierItSaysNoVerifierRan() throws {
         let prompt = Judge.prompt(for: try input())
         #expect(prompt.contains("## Verifier\n\nNo verifier ran."))
         #expect(!prompt.contains("No verify step ran.") && !prompt.contains("## Verify step"))
     }
 
-    @Test func anOlderLogWithOnlyAVerifyStepGetsTheOldText() throws {
-        let verify = Review.Verify(
-            turn: 1, result: "passed", exitCode: 0, durationMs: 1, outputRef: nil, command: nil,
-            proof: [ProofFile(name: "home.png", path: "proof/turn-1/home.png", sha256: "a", bytes: 1)])
-        let prompt = Judge.prompt(for: try input(verify: verify))
-        #expect(prompt.contains("## Verify step\n\nThe project's verify step ended passed after turn 1. It left: home.png."))
-        #expect(!prompt.contains("## Verifier"))
-    }
-
     @Test func thePromptCarriesTheGoalTheEvidenceAndTheRules() throws {
-        let verify = Review.Verify(
-            turn: 1, result: "passed", exitCode: 0, durationMs: 1, outputRef: nil, command: nil,
-            proof: [ProofFile(name: "income.png", path: "proof/turn-1/income.png", sha256: "a", bytes: 1)])
-        let prompt = Judge.prompt(for: try input(screenshots: ["income.png"], verify: verify))
+        let prompt = Judge.prompt(for: try input(screenshots: ["income.png"], verifier: verifier(proof: ["income.png"])))
         #expect(prompt.contains("[c1] It reads new."))
         #expect(prompt.contains("proof: screenshot: income"))
         #expect(prompt.contains("Open these with Read"))
@@ -233,10 +221,11 @@ private struct Judged {
     }
 }
 
-private func judged(verify: Bool = false) async throws -> Judged {
+private func judged(screenshots: Bool = false, oldVerifyStep: Bool = false) async throws -> Judged {
     let fx = try await RunnerFixture()
     let (id, _) = try await acceptedThread(fx)
-    if verify { try await recordLegacyVerify(fx, id, ["home.png": "pixels"]) }
+    if oldVerifyStep { try await recordLegacyVerify(fx, id, ["step.png": "old"]) }
+    if screenshots { try await recordVerifierProof(fx, id, ["home.png": "pixels"]) }
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("judge-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return Judged(fx: fx, id: id, config: try Config.load(from: fx.project.configURL), dir: dir)
@@ -333,7 +322,7 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
     }
 
     @Test func withScreenshotsItGetsReadAndRunsInTheirFolder() async throws {
-        let j = try await judged(verify: true)
+        let j = try await judged(screenshots: true)
         let dump = j.dir.appendingPathComponent("dump.json").path
         let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
         _ = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
@@ -342,7 +331,19 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         #expect(argv.contains("home.png"), "the prompt lists the screenshot")
         let folder = OrphanSweeper.realPath(j.fx.project.proofDirectory(j.id, turn: 1))
         #expect(argv.contains(folder), "it runs where the screenshots are")
-        #expect(argv.contains("## Verify step"), "an older log's verify step is still described")
+        #expect(argv.contains("The verifier finished after turn 1. It left: home.png."))
+    }
+
+    @Test func anOldLogsVerifyStepIsNeitherDescribedNorShown() async throws {
+        let j = try await judged(oldVerifyStep: true)
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
+        let result = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
+        #expect(result.failure == nil, "\(result.failure ?? "")")
+        let argv = try String(contentsOfFile: dump, encoding: .utf8)
+        #expect(argv.contains("No verifier ran.") && argv.contains("## Screenshots\\n\\nNone."), "\(argv)")
+        #expect(!argv.contains("Verify step") && !argv.contains("No verify step ran.") && !argv.contains("step.png"))
+        #expect(!argv.contains("--allowedTools"), "no screenshots, so no tools")
     }
 
     @Test func theVerifiersRunReachesThePrompt() async throws {

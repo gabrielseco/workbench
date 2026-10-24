@@ -3,13 +3,17 @@
 `workbench status`, `review`, `log`, `grant` and `doctor` take `--json`. Version 1. Within a version keys are added, never
 renamed or removed. Errors are described in [exit-codes.md](exit-codes.md).
 
+One exception, version 1: the `verify` key of `status` and `review` (the legacy verify step, replaced by the verifier skill) was
+removed on 2026-10-24 without a new version, since no project config can produce that step any more. A consumer reads `verifier`
+instead and treats a missing `verify` as null.
+
 Nothing else is printed on stdout, and the command never asks a question.
 
 ## status
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -19,7 +23,6 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `goal`: null when there is no goal file; else `title`, `approval` (`approved`, `draft`, `stale`,
   `invalid`), `base`, `budget_usd` (null for a `timeout_only` goal), `spend_policy` (`hard_cap` or `timeout_only`), `turn_timeout_min`, `problems` (lines, for `invalid`).
 - `check`: `open_turn` and `last` (the latest result).
-- `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict. Only an older log has a verify step (`verify_command` was removed).
 - `agents`: `{run, judge, review}`, each null when that responsibility never ran in the thread, else `{provider, model, recorded,
   stage, spawned, outcome}` for its latest turn or attempt, read from `turn.started`, `judge.started`, `pr_review.started` and
   `review_stage.started`, and from `agent.attempt.started`/`ended`, which follow the start record of their own process; the latest record counts.
@@ -45,7 +48,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spend_policy, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spend_policy, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
@@ -54,8 +57,7 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spe
   latest turn;
   otherwise `manual`; a `test:` proof is `passed` or `failed` from the tests that check saw (goal-file spec). `commands` are the proof's backticked commands; `note` says why a check-shaped proof
   is still `manual`, or which check backs a verdict (null otherwise). A `screenshot: <name>[, <name>…]`
-  proof is `evidence` when the latest turn's proof (the verify step's and the verifier's files together; the
-  verifier's wins a name both left) has `<name>.png` for every name (`files` are their paths relative to the thread
+  proof is `evidence` when the latest turn's proof (the verifier's files) has `<name>.png` for every name (`files` are their paths relative to the thread
   directory, in the order named, `file` the first; a person looks at them, it is never a pass) and `missing`
   otherwise, with `note` saying which and why (`files` then holds the ones that are there).
 - `commits`: the commits on `workbench/<id>` that are not on the commit its worktree was cut from (usually the
@@ -65,7 +67,6 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spe
 - `diff`: `{state: summary | unavailable, base, total_files, truncated, additions, deletions, files, reason}`;
   each file `{path, old_path, status, binary, untracked, staged, additions, deletions}`.
 - `check`: null, or `{turn, result, exit_code, duration_ms}`.
-- `verify`: null when no verify step has run, else `{turn, result, exit_code, duration_ms, proof}` where `proof` is a list of `{name, path, sha256, bytes}`.
 - `verifier`: null when no verifier has run or been skipped, else `{turn, ok, skipped, open, stale, reason, cost_usd, duration_ms, report, proof}`: `ok` is true only for a run that ended on its own with an answer, `skipped` for an automatic run that did not start (`reason` says why), `open` for one that started and has no end on record, `stale` when `turn` is not the latest turn, `report` what it said last (bounded; a note, never a pass), `proof` the PNGs it recorded as `{name, path, sha256, bytes}`.
 - `plan`: null when no plan was kept, else `{source, model, cost_usd, ref, sha256, bytes, truncated, stale, last_failure}`: `source` is `generated` or `edited`, `model` the plan turn's `--model` (null for an edit), `cost_usd` that turn's cost (null for an edit), `ref` the file under the thread's folder, `stale` true when it was made for another version of the goal than the one approved now (`run` leaves it out), `last_failure` why the newest plan turn made nothing (null when it did). `plan_cost_usd` is what all plan turns cost, apart from `cost_usd`, which stays the turns' cost.
 - `judge`: null when the advisory judge has not run, else `{turn, ok, stale, cost_usd, failure, criteria, concerns}`; `criteria` is `{id, met, evidence}` per criterion, `stale` is true when `turn` is not the latest turn, `failure` says why there is no verdict when `ok` is false. Advisory: nothing acts on it.

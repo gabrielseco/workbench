@@ -20,33 +20,20 @@ extension Review {
         public var open: Bool
     }
 
-    /// The proof of one turn: what the verify step and the verifier left, as the log recorded it. The verifier's
-    /// file wins a name both left (both stay in the log); a step of an earlier turn is not part of it.
+    /// The proof of one turn: what the verifier left, as the log recorded it. A skipped run has none.
     public struct ProofSet: Sendable, Equatable {
         public var turn: Int
         public var files: [ProofFile]
-        public var verify: Verify?
-        public var verifier: Verifier?
+        public var verifier: Verifier
 
-        /// Where the proof came from, for a line of the report: `verify passed`, `verifier finished`, or both.
-        public var source: String {
-            var parts: [String] = []
-            if let verify { parts.append("verify \(verify.result.replacingOccurrences(of: "_", with: " "))") }
-            if let verifier, !verifier.skipped {
-                parts.append(verifier.ok ? "verifier finished" : "verifier did not finish")
-            }
-            return parts.joined(separator: ", ")
-        }
+        /// Where the proof came from, for a line of the report.
+        public var source: String { verifier.ok ? "verifier finished" : "verifier did not finish" }
 
-        public init?(verify: Verify?, verifier: Verifier?) {
-            let ranVerifier = verifier.flatMap { $0.skipped ? nil : $0 }
-            guard let turn = [verify?.turn, ranVerifier?.turn].compactMap({ $0 }).max() else { return nil }
-            self.turn = turn
-            self.verify = verify?.turn == turn ? verify : nil
-            self.verifier = ranVerifier?.turn == turn ? ranVerifier : nil
-            let own = self.verifier?.proof ?? []
-            let names = Set(own.map(\.name))
-            files = own + (self.verify?.proof ?? []).filter { !names.contains($0.name) }
+        public init?(verifier: Verifier?) {
+            guard let verifier, !verifier.skipped else { return nil }
+            turn = verifier.turn
+            files = verifier.proof
+            self.verifier = verifier
         }
     }
 }

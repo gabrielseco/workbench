@@ -34,15 +34,13 @@ public struct JudgeInput: Sendable, Equatable {
     public var check: Review.Check?
     /// The last lines of the check's output, when it did not pass.
     public var checkOutput: String?
-    /// The legacy verify step, which only a log from before the verifier has.
-    public var verify: Review.Verify?
     /// The latest verifier run, or its skip.
     public var verifier: Review.Verifier?
     /// Screenshot file names, relative to the judge's working directory, that it may look at.
     public var screenshots: [String]
     /// Pixel size of a screenshot by file name, when it could be read, so a clipped capture can be named.
     public var screenshotSizes: [String: PNGSize] = [:]
-    /// The newest turn, so a check or verify from an earlier one can be called stale.
+    /// The newest turn, so a check or verifier run from an earlier one can be called stale.
     public var lastTurn: Int
     /// Files in the worktree that git does not track, so not in the diff. Names only.
     public var untracked: [String] = []
@@ -90,9 +88,7 @@ public enum Judge {
             parts.append("## Out of scope\n\n" + input.goal.outOfScope.map { "- \(oneLine($0))" }.joined(separator: "\n"))
         }
         parts.append("## Check\n\n" + checkText(input))
-        // A log from before the verifier has only the verify step, and is described as it always was.
-        if input.verify != nil { parts.append("## Verify step\n\n" + verifyText(input)) }
-        if input.verifier != nil || input.verify == nil { parts.append("## Verifier\n\n" + verifierText(input)) }
+        parts.append("## Verifier\n\n" + verifierText(input))
         if input.screenshots.isEmpty {
             parts.append("## Screenshots\n\nNone.")
         } else {
@@ -121,16 +117,6 @@ public enum Judge {
         if let command = check.command { text += " The command was `\(oneLine(command))`." }
         if check.turn != input.lastTurn { text += " This was after turn \(check.turn), not the latest turn \(input.lastTurn)." }
         if let output = input.checkOutput, !output.isEmpty { text += "\n\nEnd of its output:\n\n```\n\(output)\n```" }
-        return text
-    }
-
-    private static func verifyText(_ input: JudgeInput) -> String {
-        guard let verify = input.verify else { return "No verify step ran." }
-        var text = "The project's verify step ended \(verify.result.replacingOccurrences(of: "_", with: " ")) "
-        text += "after turn \(verify.turn)"
-        text += verify.turn == input.lastTurn ? "." : " (the latest turn is \(input.lastTurn))."
-        let files = verify.proof.map(\.name).joined(separator: ", ")
-        text += verify.proof.isEmpty ? " It left no files." : " It left: \(files)."
         return text
     }
 

@@ -22,11 +22,11 @@ private struct CodexJudged {
 }
 
 private func codexJudged(
-    allowUnpriced: Bool = true, answer: String? = oneCriterion, extraConfig: String = "", verify: Bool = false
+    allowUnpriced: Bool = true, answer: String? = oneCriterion, extraConfig: String = "", screenshots: Bool = false
 ) async throws -> CodexJudged {
     let fx = try await RunnerFixture(extraConfig: extraConfig)
     let (id, _) = try await acceptedThread(fx)
-    if verify { try await recordLegacyVerify(fx, id, ["home.png": "pixels"]) }
+    if screenshots { try await recordVerifierProof(fx, id, ["home.png": "pixels"]) }
     let codex = try FakeCodex(in: fx)
     if let answer { try codex.put("answer", answer) }
     var config = try Config.load(from: fx.project.configURL)
@@ -52,7 +52,7 @@ private func codexJudged(
     }
 
     @Test func codexJudgeInvocationIsHardened() async throws {
-        let j = try await codexJudged(verify: true)
+        let j = try await codexJudged(screenshots: true)
         _ = try await j.judge()
         let call = try #require(j.codex.calls.first)
         for flag in ["exec", "-s read-only", "--ephemeral", "--ignore-rules", "approval_policy=\"never\"", "-o ", "-i "] {
@@ -69,7 +69,7 @@ private func codexJudged(
 
     @Test func theCodexAnswerIsNeverInsideTheFolderItReads() async throws {
         for withScreenshots in [false, true] {
-            let j = try await codexJudged(verify: withScreenshots)
+            let j = try await codexJudged(screenshots: withScreenshots)
             _ = try await j.judge()
             let call = try #require(j.codex.calls.first)
             let words = call.split(separator: " ").map(String.init)

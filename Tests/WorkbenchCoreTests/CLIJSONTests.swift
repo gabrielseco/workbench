@@ -102,6 +102,36 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         #expect((r["next"] as? String)?.contains("accept") == true)
     }
 
+    @Test func anOldLogWithAVerifyStepLoadsInEveryReaderAndTheStepIsNotShown() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        try await recordLegacyVerify(fx, id, ["home.png": "pixels"])
+        let events = try fx.events(id)
+        #expect(events.contains { $0.kind == .verifyStarted } && events.contains { $0.kind == .verifyEnded })
+        let state = ThreadState.derive(from: events, id: id)
+        #expect(state.review.verifier == nil && Review.ProofSet(verifier: state.review.verifier) == nil)
+
+        let status = try await cli(["status", id, "--json"], in: fx)
+        #expect(status.code == 0 && status.stderr.isEmpty, "\(status.text)")
+        let s = try object(status.stdout)
+        #expect(s["verify"] == nil)
+        #expect(Set(s.keys) == (try documentedKeys("status")))
+        let review = try await cli(["review", id, "--json"], in: fx)
+        #expect(review.code == 0 && review.stderr.isEmpty, "\(review.text)")
+        let r = try object(review.stdout)
+        #expect(r["verify"] == nil && r["verifier"] is NSNull)
+        #expect(Set(r.keys) == (try documentedKeys("review")))
+
+        for command in [["status", id], ["review", id], ["log", id]] {
+            let out = try await cli(command, in: fx)
+            #expect(out.code == 0 && out.stderr.isEmpty, "\(command): \(out.text)")
+            if command[0] != "log" {
+                #expect(!out.stdout.contains { $0.hasPrefix("verify:") || $0.hasPrefix("Verify ") }, "\(out.text)")
+            }
+        }
+    }
+
     @Test func logJSONIsTheStoredLinesAndNothingElse() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
