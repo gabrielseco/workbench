@@ -38,13 +38,62 @@ public struct ThreadStore: Sendable {
         return ThreadState.derive(from: events, id: id)
     }
 
+    /// What finding the active, newest or related thread needs, without replaying the whole log.
+    public struct Summary: Sendable, Equatable {
+        public var id: String
+        public var createdAt: String?
+        public var lineage: ThreadLineage?
+        public var decision: String?
+        public var isActive: Bool { decision == nil }
+    }
+
+    /// Reads `createdAt`, `lineage` and `decision` the way `ThreadState.derive` does, but decodes only the
+    /// `thread.created` and `review.decision` lines. A log can be megabytes of verbatim `claude` lines, and
+    /// listing threads must not parse all of them; a line that merely quotes those kinds is decoded and ignored.
+    public func summary(of id: String) -> Summary {
+        var summary = Summary(id: id)
+        guard let data = try? Data(contentsOf: project.eventsURL(id)) else { return summary }
+        let needles = [Data("thread.created".utf8), Data("review.decision".utf8)]
+        let decoder = JSONDecoder()
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        while let end = data[lineStart...].firstIndex(of: newline) {
+            let line = data[lineStart..<end]
+            lineStart = data.index(after: end)
+            guard needles.contains(where: { line.range(of: $0) != nil }),
+                let event = try? decoder.decode(Event.self, from: line)
+            else { continue }
+            switch event.kind {
+            case .threadCreated:
+                summary.createdAt = event.ts
+                summary.lineage = ThreadState.lineage(event)
+            case .reviewDecision:
+                if let decision = event.data["decision"]?.stringValue,
+                    ThreadState.terminalDecisions.contains(decision) {
+                    summary.decision = decision
+                }
+            default:
+                break
+            }
+        }
+        return summary
+    }
+
+    /// Every thread's summary, in id order.
+    public func summaries() -> [Summary] { threadIDs().map { summary(of: $0) } }
+
     /// The thread that opened the pull request this thread belongs to: itself, unless it is a review follow-up.
-    public func rootID(of id: String) -> String { state(of: id).lineage?.root ?? id }
+    public func rootID(of id: String) -> String { summary(of: id).lineage?.root ?? id }
+
+    /// The newest thread by creation time, active or not.
+    public func newestThreadID() -> String? {
+        summaries().max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }?.id
+    }
 
     /// The follow-ups of `root`, in the order they were made.
     public func followUps(of root: String) -> [ThreadState] {
-        threadIDs().map { state(of: $0) }
-            .filter { $0.lineage?.root == root }
+        summaries().filter { $0.lineage?.root == root }
+            .map { state(of: $0.id) }
             .sorted { ($0.lineage?.round ?? 0, $0.id) < ($1.lineage?.round ?? 0, $1.id) }
     }
 
@@ -65,8 +114,7 @@ public struct ThreadStore: Sendable {
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
     /// ambiguous, the newest wins; `create` refuses to make a second, so this should be one.
     public func activeThreadID() -> String? {
-        threadIDs()
-            .map { state(of: $0) }
+        summaries()
             .filter(\.isActive)
             .max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }?.id
     }
@@ -74,7 +122,7 @@ public struct ThreadStore: Sendable {
     /// The thread with a live runner (a turn, check, verify, plan or judge in progress), if any. A crashed runner
     /// leaves an open turn in the log but no live process, so the log alone cannot say.
     public func threadWithLiveRunner() -> String? {
-        threadIDs().first { state(of: $0).isActive && runnerPID(id: $0) != nil }
+        threadIDs().first { summary(of: $0).isActive && runnerPID(id: $0) != nil }
     }
 
     /// Doctor holds the project lock for its whole run; taking and dropping it here is the check. A run calls it

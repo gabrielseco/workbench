@@ -217,7 +217,7 @@ public struct ThreadState: Sendable, Equatable {
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
 
     /// The `parent`, `root` and `round` of a follow-up's `thread.created`, nil when any is missing or not a thread id.
-    private static func lineage(_ event: Event) -> ThreadLineage? {
+    static func lineage(_ event: Event) -> ThreadLineage? {
         guard let parent = event.data["parent"]?.stringValue, let root = event.data["root"]?.stringValue,
             let round = event.data["round"]?.intValue, SafeNames.isThreadID(parent), SafeNames.isThreadID(root)
         else { return nil }
