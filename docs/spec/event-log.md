@@ -281,8 +281,10 @@ this change replays as it did; nothing is rewritten.
   `workbench goal draft`. Each start has an `agent.attempt` with `role: "goal"`, `turn: 0` and no `round`, and exactly
   one end. The reducer ignores them for turns, approval and review: a draft opens no `turn.started` and writes no
   `goal.approved`. `proposal_ref` is the path of the agent's proposal relative to the thread's folder
-  (`goal-draft/proposal.json`); `cost_usd` is absent when the provider did not report one. The drafter works in a fresh
-    folder outside the checkout (the system temporary directory), removed when the draft ends; only a valid proposal is kept.
+  (`goal-draft/proposal.json`); `cost_usd` is absent when the provider did not report one. The drafter works in a folder
+    outside the checkout (the system temporary directory), removed when the draft ends; only a valid proposal is kept. For
+    `--replace` that folder is stable per thread, and a drafter a killed holder left behind is found there by its working
+    directory and ended before the next draft starts.
   - *Replacing a goal (`--replace`)* has the log already, so it is write-ahead: the attempt and `goal.draft.started` are
     written before the agent is started, the thread's holder marker is set while it runs (so `stop` reaches it and a run
     or judge is refused as busy), and the end follows whatever came of it. On success the goal file is rewritten first,
@@ -298,7 +300,8 @@ this change replays as it did; nothing is rewritten.
     disk, and only a valid proposal creates the thread (`thread.created`, `goal.saved`) and then its draft pair
     (`agent.attempt.started`, `goal.draft.started`, `agent.attempt.ended`, `goal.draft.finished {ok: true}`), told after
     the fact. A failed, invalid, timed-out or stopped draft creates no thread, directory, file or branch and is reported
-    on stderr only; a process killed mid-draft leaves nothing to recover. A refusal before the agent starts (no
+    on stderr only; a process killed mid-draft leaves no thread and nothing to recover (an agent it had started is not found by a later
+    command, since a new draft has no stable folder: it ends at its own 300 s deadline only while Workbench lives). A refusal before the agent starts (no
     `[agents.goal]`, no `allow_unpriced`, no executable, an active thread) is recorded nowhere.
 
 ## Sessions and approval (P9 PR 9)

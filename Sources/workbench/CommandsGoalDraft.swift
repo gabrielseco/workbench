@@ -24,7 +24,10 @@ extension Commands {
         if let text { request = text } else if let path { request = try readRequestFile(path) } else { request = "" }
 
         let ctx = try await Context.load()
-        let config = try? Config.load(from: ctx.project.configURL)
+        // A config that is there but broken is its error (with the offending key), not "no goal agent".
+        let config: Config? =
+            FileManager.default.fileExists(atPath: ctx.project.configURL.path)
+            ? try Config.load(from: ctx.project.configURL) : nil
         let target: GoalDraftTarget
         if replace {
             target = .replace(id: try ctx.threadID(named))

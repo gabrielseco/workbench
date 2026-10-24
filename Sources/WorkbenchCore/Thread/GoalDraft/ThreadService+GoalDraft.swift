@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Where a drafted goal goes: a new thread, or over the goal of an existing one (explicitly).
@@ -164,7 +165,13 @@ extension ThreadService {
         // what it knows of the repository is the declared context in the prompt.
         // Both targets use a fresh folder outside the checkout (and outside the thread's folder, which sits in it),
         // removed when the draft ends; only a valid proposal is kept, beside the thread.
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("workbench-goal-draft-\(UUID().uuidString)")
+        let root = draftScratch(for: target)
+        // A drafter a killed process left behind is found by where it works, and ended, before another starts. A
+        // replacement has a folder of its own per thread for that; a new draft has no thread yet, so no stable place.
+        if case .replace = target {
+            OrphanSweeper.sweep(inside: root)
+            try? FileManager.default.removeItem(at: root)
+        }
         let scratch: URL? = root
         let work = root.appendingPathComponent("work")
         let output = root.appendingPathComponent("out")
@@ -202,6 +209,16 @@ extension ThreadService {
         return PreparedDraft(
             agent: agent, provider: provider, request: agentRequest, work: work, base: base, scratch: scratch,
             existing: existing)
+    }
+
+    /// The drafter's folder outside the checkout: stable for a replacement (so a leftover can be found), fresh for a new draft.
+    func draftScratch(for target: GoalDraftTarget) -> URL {
+        let temp = FileManager.default.temporaryDirectory
+        guard case .replace(let id) = target else {
+            return temp.appendingPathComponent("workbench-goal-draft-\(UUID().uuidString)")
+        }
+        let digest = SHA256.hash(data: Data(project.root.path.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        return temp.appendingPathComponent("workbench-goal-draft-\(digest)-\(id)")
     }
 
     /// The project's instructions and the tracked paths at the base: the repository context the prompt declares.
@@ -344,13 +361,14 @@ extension ThreadService {
             id: nil, replaced: false, wasApproved: false, proposal: nil, provider: agent.provider, model: agent.model,
             costUSD: run.cost, failure: run.failure)
         guard let proposal = run.proposal else { return result }
-        let known = Set(threadNames())
+        let made = MadeThread()
         do {
             // The thread exists only now. Its log tells the draft after the fact: the process left no thread behind
             // to write ahead into, and a draft that did not produce a goal leaves nothing at all.
             let id = try await newThread(
                 name: name, base: prepared.base, config: config, body: proposal.body, title: proposal.title
             ) { id, log in
+                made.id = id
                 try self.draftFault?(id)
                 let reference = try self.keepProposal(proposal, id: id)
                 let attempts = AttemptLog(log: log, role: "goal", turn: 0, agent: agent)
@@ -367,16 +385,15 @@ extension ThreadService {
             result.proposal = proposal
         } catch {
             // A thread left half made would be an active, goal-less draft that blocks the next one: take it back.
-            for name in threadNames() where !known.contains(name) {
-                try? FileManager.default.removeItem(at: project.threadDirectory(name))
-            }
+            // Only the directory this draft made: another command may have made its own since the preflight.
+            if let id = made.id { try? FileManager.default.removeItem(at: project.threadDirectory(id)) }
             result.failure = "the proposal was valid but no thread could be made for it: \(error)"
         }
         return result
     }
 
-    private func threadNames() -> [String] {
-        (try? FileManager.default.contentsOfDirectory(atPath: project.threadsDirectory.path)) ?? []
+    private final class MadeThread: @unchecked Sendable {
+        var id: String?
     }
 
     // MARK: Text

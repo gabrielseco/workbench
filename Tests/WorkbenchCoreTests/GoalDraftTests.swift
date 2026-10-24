@@ -162,6 +162,42 @@ private func drafting(
         #expect(try await d.draft().id != nil)
     }
 
+    @Test func rollbackTakesBackOnlyItsOwnThread() async throws {
+        let d = try await drafting()
+        var service = d.fx.service
+        struct Disk: Error {}
+        let other = d.fx.project.threadDirectory("made-by-another-command")
+        service.draftFault = { _ in
+            // Another command made its thread after this draft's preflight.
+            try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+            throw Disk()
+        }
+        let result = try await service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, environment: d.environment)
+        #expect(result.id == nil)
+        #expect(d.threads == ["made-by-another-command"], "its own thread is gone and the other one is untouched: \(d.threads)")
+    }
+
+    @Test func aBrokenConfigIsReportedNotTakenForNoGoalAgent() async throws {
+        let fx = try await RunnerFixture(
+            extraConfig: "[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-x\"\nallow_unpriced = true")
+        let ran = try await workbenchCLI(
+            ["goal", "draft", "retry", "--request", "retry uploads"], in: fx.repo,
+            environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
+        #expect(ran.code == 2, "\(ran.code) \(ran.stderr)")
+        #expect(ran.stderr.contains("takes no model") && !ran.stderr.contains("goal drafting is off"), "\(ran.stderr)")
+    }
+
+    @Test func anOversizedProposalIsRefused() {
+        let long = String(repeating: "x", count: GoalDraft.requestTextLimit + 1)
+        let answer = #"{"title": "T", "request": ""# + long + #"", "#
+            + #""criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#
+        #expect(throws: GoalDraftError.self) { _ = try GoalDraft.proposal(fromAnswer: answer) }
+        let many = Array(repeating: #"{"text": "a", "proof": "b"}"#, count: GoalDraft.criteriaLimit + 1).joined(separator: ",")
+        let tooMany = #"{"title": "T", "request": "R", "criteria": ["# + many + #"], "out_of_scope": []}"#
+        #expect(throws: GoalDraftError.self) { _ = try GoalDraft.proposal(fromAnswer: tooMany) }
+    }
+
     @Test func promptIsBounded() throws {
         let paths = (0..<(GoalDraft.pathLimit + 1)).map { "src/file\($0).swift" }
         let prompt = GoalDraft.prompt(
@@ -336,8 +372,34 @@ private func drafting(
         }
         #expect(d.codex?.runs == 0, "no money spent on a draft that cannot be saved")
     }
+}
 
-    // MARK: Replace
+@Suite(.processGate) struct GoalDraftReplaceTests {
+    @Test func aDrafterAKilledHolderLeftBehindIsEndedBeforeTheNextOne() async throws {
+        let d = try await drafting()
+        let id = try await d.fx.approvedThread()
+        let work = d.fx.service.draftScratch(for: .replace(id: id)).appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        // A child whose parent is gone, working in the drafter's folder: what a killed holder leaves.
+        let pidFile = d.dir.appendingPathComponent("leftover.pid")
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        shell.arguments = ["-c", "sleep 60 & echo $! > '\(pidFile.path)'"]
+        shell.currentDirectoryURL = work
+        try shell.run()
+        shell.waitUntilExit()
+        let written = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try #require(Int32(written))
+        defer { kill(pid, SIGKILL) }
+        #expect(!OrphanSweeper.orphans(inside: work).isEmpty, "the leftover works in the drafter's folder")
+        _ = try await d.draft(.replace(id: id))
+        var gone = false
+        for _ in 0..<100 where !gone {
+            gone = kill(pid, 0) != 0
+            if !gone { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        #expect(gone, "it was ended by the next draft")
+    }
 
     @Test func replaceReturnsApprovedToDraft() async throws {
         let d = try await drafting()
