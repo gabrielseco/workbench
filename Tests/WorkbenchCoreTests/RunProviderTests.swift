@@ -36,17 +36,20 @@ private func fakeCodexScript(_ dir: URL) -> String {
     pwd -P > "$D/cwd_$n"
     echo '{"type":"thread.started","thread_id":"thread-'$n'"}'
     if [ -f "$D/hang" ]; then sleep 300 & echo $! > "$D/child.pid"; wait; fi
-    if [ -f "$D/crash" ]; then echo boom >&2; exit 70; fi
     if [ -f "$D/big" ]; then yes "0123456789012345678901234567890123456789" | head -c 100000 >> a.txt; fi
     echo "turn $n" >> a.txt
+    if [ -f "$D/crash" ]; then echo boom >&2; exit 70; fi
     echo '{"type":"item.completed","item":{"id":"i","type":"agent_message","text":"did turn '$n'"}}'
     echo '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":5}}'
     """
 }
 
 /// A thread whose goal is `spend_policy: timeout_only`, approved while the config picks Codex for coding.
+private let skillPath = ".claude/skills/verify/SKILL.md"
+
 private func codexRun(
-    extraConfig: String = "", goalEdit: (String) -> String = { $0 }, approve: Bool = true
+    extraConfig: String = "", root: String = "", verifier: Bool = false, goalEdit: (String) -> String = { $0 },
+    approve: Bool = true
 ) async throws -> CodexRun {
     let dir = Scratch.url("codex-run", ext: "d")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -54,7 +57,16 @@ private func codexRun(
     try fakeCodexScript(dir).write(to: script, atomically: true, encoding: .utf8)
     chmod(script.path, 0o755)
     let fx = try await RunnerFixture(
-        extraConfig: "[providers.codex]\nexecutable = \"\(script.path)\"\n[agents.run]\nprovider = \"codex\"\n\(extraConfig)")
+        extraConfig: root + "[providers.codex]\nexecutable = \"\(script.path)\"\n[agents.run]\nprovider = \"codex\"\n"
+            + (verifier ? "[verifier]\nskill = \"\(skillPath)\"\nmodel = \"sonnet\"\n" : "") + extraConfig)
+    if verifier {
+        // Committed before the thread exists, so the base commit has the skill.
+        let skill = fx.repo.appendingPathComponent(skillPath)
+        try FileManager.default.createDirectory(at: skill.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "# Verify\n\nLook at the result.\n".write(to: skill, atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "skill"], in: fx.repo)
+    }
     let id = try await fx.service.newThread(name: "work", base: "main")
     let url = fx.project.goalURL(id)
     var text = try String(contentsOf: url, encoding: .utf8)
@@ -306,6 +318,48 @@ private func codexRun(
         }
         #expect(cutInfo["truncated"] == true && (cutInfo["diff_bytes"]?.intValue ?? 0) <= ThreadRunner.continuationDiffLimit)
         #expect(big.read("prompt_2")?.contains("cut here") == true)
+    }
+
+    @Test func aRerunWithoutFeedbackStillGetsTheContext() async throws {
+        let c = try await codexRun()
+        try c.put("crash")
+        #expect(try await c.run().result == .failed, "Codex edited a.txt and then crashed")
+        try FileManager.default.removeItem(at: c.dir.appendingPathComponent("crash"))
+        // Allowed without --feedback: no turn has succeeded yet. A fresh process must be told where the work stands.
+        let again = try await c.run()
+        #expect(again.result == .succeeded)
+        let prompt = try #require(c.read("prompt_2"))
+        #expect(prompt.contains("you do not remember") && prompt.contains("+turn 1"), "the work so far, as a diff")
+        #expect(prompt.contains("This is a rerun, not new feedback"))
+        guard case .object(let info)? = c.started().last?.data["continuation"] else {
+            Issue.record("a rerun records its continuation")
+            return
+        }
+        #expect(info["mode"] == "fresh_with_context" && (info["diff_bytes"]?.intValue ?? 0) > 0)
+        let first = try #require(c.started().first)
+        #expect(first.data["continuation"] == nil)
+    }
+
+    @Test func theAutomaticVerifierRunsOnClaudeNotOnCodex() async throws {
+        let c = try await codexRun(root: "check_command = \"true\"\n", verifier: true)
+        let report = try await c.run("proof=shot.png")
+        #expect(report.result == .succeeded && report.check?.result == .passed)
+        let verifier = try #require(report.verifier, "the verifier ran after the passing check")
+        #expect(verifier.ok, "\(verifier)")
+        #expect(c.runs == 1, "codex was started for the coding turn only, never for the verifier")
+        let kinds = c.events.map(\.kind.rawValue).filter { $0.hasPrefix("verifier.") }
+        #expect(kinds == ["verifier.started", "verifier.ended"], "\(kinds)")
+    }
+
+    @Test func aMissingClaudeSkipsTheVerifierWithTheReason() async throws {
+        let c = try await codexRun(root: "check_command = \"true\"\n", verifier: true)
+        var config = try String(contentsOf: c.fx.project.configURL, encoding: .utf8)
+        config = config.replacingOccurrences(of: FakeClaude.executable.path, with: "/nonexistent/claude")
+        try config.write(to: c.fx.project.configURL, atomically: true, encoding: .utf8)
+        let report = try await c.run()
+        #expect(report.result == .succeeded && report.verifier == nil, "the turn is not failed by a verifier that cannot run")
+        let skipped = try #require(c.events.last { $0.kind == .verifierSkipped })
+        #expect(skipped.data["reason"]?.stringValue?.contains("claude was not found") == true)
     }
 
     // MARK: What has no Codex equivalent

@@ -36,7 +36,7 @@ extension ThreadRunner {
     /// The Codex prompt: the standing rules at its head (Codex has no system prompt), and for a thread's next turn the context
     /// a fresh process needs. `info` is what `turn.started` records about the prompt, plus the continuation.
     func codexPrompt(
-        first: String, info: [String: JSONValue], followUp: (feedback: String, check: CheckAttachment?)?, worktree: URL,
+        first: String, info: [String: JSONValue], followUp: (feedback: String?, check: CheckAttachment?)?, worktree: URL,
         base: String, config: Config
     ) async -> (String, [String: JSONValue]) {
         var prompt = first
@@ -49,6 +49,27 @@ extension ThreadRunner {
             info["continuation"] = context.info
         }
         return (PromptBuilder.codexRules(checkCommand: config.checkCommand) + "\n\n" + prompt, info)
+    }
+
+    /// A rerun after a turn that did not finish (allowed without `--feedback` until a turn succeeds): a Codex process is fresh, so
+    /// it is given where the work stands and the failed check, as a follow-up is. Claude resumes its session instead. Nil for
+    /// the first turn and on Claude.
+    func codexRerun(
+        store: ThreadStore, lastTurn: Int, config: Config, goal: Goal
+    ) -> (feedback: String?, check: CheckAttachment?)? {
+        guard lastTurn > 0, config.resolvedRunAgent(goalModel: goal.model).provider == .codex else { return nil }
+        guard let check = store.state(of: threadID).review.check, check.result != "passed" else { return (nil, nil) }
+        let output = CheckAttachment.load(
+            from: project.checkOutputURL(threadID, turn: check.turn), turn: check.turn, result: check.result,
+            exitCode: check.exitCode)
+        return (nil, output)
+    }
+
+    /// The `claude` the automatic verifier runs on: the coding executable when that is Claude, else `claude_path`, which may
+    /// be missing (the verifier is then skipped, with the reason).
+    func verifierClaude(config: Config, executable: URL, options: RunOptions) -> URL? {
+        guard config.resolvedRunAgent().provider != .claude else { return executable }
+        return ExecutableResolver.resolve(config.claudePath, searchPath: options.parentEnvironment["PATH"])
     }
 
     /// What a turn's end record says about the session and the refusals. A Codex turn has no session to resume and reports

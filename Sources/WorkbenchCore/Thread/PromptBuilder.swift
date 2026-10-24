@@ -118,7 +118,7 @@ public enum PromptBuilder {
     /// first prompt, what the last turn said, the work in the tree so far, the failed check, then the feedback.
     public static func codexContinuation(
         first: String, summary: String?, diff: String, diffCut: Bool, untracked: [String], check: CheckAttachment?,
-        feedback: String
+        feedback: String?
     ) -> String {
         var out = first + "\n\n## Where the work stands\n\n"
         out += "This is a new session: you do not remember the earlier turn. What follows is everything Workbench knows.\n\n"
@@ -137,7 +137,9 @@ public enum PromptBuilder {
         if !untracked.isEmpty {
             out += "Files not tracked by git yet (not in the diff): " + untracked.joined(separator: ", ") + "\n\n"
         }
-        return out + followUpPrompt(feedback: feedback, check: check)
+        let rerun = "This is a rerun, not new feedback: the previous turn did not finish. Continue from where the work stands."
+        let note = feedback ?? rerun
+        return out + followUpPrompt(feedback: note, check: check)
     }
 
     /// A code fence longer than any run of backticks in `text`, so the text cannot close it early.

@@ -151,7 +151,7 @@ public actor ThreadRunner {
 
         do {
             let report = try await runLocked(
-                log: log, store: store, config: config, goal: goal, claude: executable, options: options)
+                log: log, store: store, config: config, goal: goal, executable: executable, options: options)
             await log.close()
             return report
         } catch {
@@ -163,7 +163,7 @@ public actor ThreadRunner {
     // MARK: A run, with the log held
 
     private func runLocked(
-        log: EventLogWriter, store: ThreadStore, config: Config, goal: Goal, claude: URL, options: RunOptions
+        log: EventLogWriter, store: ThreadStore, config: Config, goal: Goal, executable: URL, options: RunOptions
     ) async throws -> TurnReport {
         if await log.nextSeq == 1 {
             try await log.append(
@@ -194,7 +194,7 @@ public actor ThreadRunner {
         let lastTurn = await log.lastTurn
         var prompt = ""
         var builtFromGoal = false
-        var codexFollowUp: (feedback: String, check: CheckAttachment?)?
+        var codexFollowUp: (feedback: String?, check: CheckAttachment?)?
         if let feedback = options.feedback {
             guard lastTurn > 0 else { throw RunnerError.feedbackWithoutPriorTurn }
             // The check's output goes in the prompt (and prompts/turn-N.md), not in the note event.
@@ -223,6 +223,7 @@ public actor ThreadRunner {
         } else {
             if anySuccess { throw RunnerError.feedbackRequired }
             builtFromGoal = true
+            codexFollowUp = codexRerun(store: store, lastTurn: lastTurn, config: config, goal: goal)
         }
 
         // The worktree.
@@ -304,7 +305,7 @@ public actor ThreadRunner {
             let turn = await log.lastTurn + 1
             let result = try await executeTurn(
                 turn: turn, resume: resume, sessionID: sessionID, prompt: prompt, config: config, goal: goal,
-                claude: claude, worktree: worktree, promptInfo: promptInfo, log: log, store: store,
+                executable: executable, worktree: worktree, promptInfo: promptInfo, log: log, store: store,
                 options: options)
             report = result.report
             // An unconfirmed session may not exist at all, in which case `--resume` fails at once with no
@@ -316,7 +317,7 @@ public actor ThreadRunner {
             let checked = report?.check
             report?.verifier = try await runVerifier(
                 after: result.report, check: checked, config: config, goal: goal, worktree: worktree, log: log,
-                claude: claude, options: options)
+                claude: verifierClaude(config: config, executable: executable, options: options), options: options)
             break
         }
         // The loop above runs at least once and assigns `report` on every pass.
@@ -334,7 +335,7 @@ public actor ThreadRunner {
     }
 
     private func executeTurn(
-        turn: Int, resume: Bool, sessionID: String, prompt: String, config: Config, goal: Goal, claude: URL,
+        turn: Int, resume: Bool, sessionID: String, prompt: String, config: Config, goal: Goal, executable: URL,
         worktree: URL, promptInfo: [String: JSONValue], log: EventLogWriter, store: ThreadStore, options: RunOptions
     ) async throws -> TurnOutcome {
         let promptURL = project.promptURL(threadID, turn: turn)
@@ -358,7 +359,7 @@ public actor ThreadRunner {
             var data: [String: JSONValue] = [
                 "resume": .bool(resume),
                 "pid": pid.map { .int(Int($0)) } ?? .null,
-                "argv": .array(([claude.path] + invocation.displayArguments).map { .string($0) }),
+                "argv": .array(([executable.path] + invocation.displayArguments).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
             // A Codex turn has no session to name: it is one fresh process, and cannot be resumed.
