@@ -46,6 +46,7 @@ bash scripts/verify-cli/thread-setup.sh            # default base, goal new --fr
 bash scripts/verify-cli/commits-visible.sh         # accept -m ignored, branch.ahead on ship, Commits in review; a clone, no turn, costs nothing
 bash scripts/verify-cli/spend-policy.sh          # spend_policy: timeout_only and the no-cap wording; a clone, no turn, costs nothing
 bash scripts/verify-cli/base-gap.sh              # status and review do not fetch unless --fetch; a clone, no turn, costs nothing
+bash scripts/verify-cli/transcript.sh            # the claude transcript beside the log, plain while a turn runs; a clone with fake-claude, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -174,6 +175,16 @@ true, `behind` 1, `as_of` null; plain `review` then says it with `(as of the las
 the origin moved away, plain `status` exits 0, still says the gap and prints no `could not fetch` note, while `status --fetch` prints
 `could not fetch origin`; `status --all --fetch` exits 2. `VERIFY_CLI_SABOTAGE=1` adds `--fetch` to every plain command, so the steps that
 say a plain command does not fetch, keeps an age, carries `as_of` and prints no note must FAIL.
+
+### transcript
+
+No real turn: a clone with a `claude` stand-in on the fake-claude test double, streaming slowly (800 ms between lines). `run` goes to
+the background; the script waits until `transcript/turn-1.jsonl` has lines while the log has no `turn.ended`, then `log -f` must print
+the stream lines and end with `turn ended`. After the turn: the log holds one `claude` event (the `result` line); `turn.ended`'s
+`transcript` counts are the file's lines and bytes; the file's last line is the result and every line is a whole `{ts, data}` record;
+`log` prints the stream once; `log --json` prints the transcript lines as `claude` events with `"seq":null`; `status`, `status --json`
+and `review` load; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the counts,
+file, whole-record, `log` and `log --json` steps must FAIL.
 
 ### open
 

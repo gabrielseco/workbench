@@ -195,8 +195,10 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
             try await log.append(.turnStarted, turn: 1)
             let store = ThreadStore(project: Project(root: dir))
             try FileManager.default.createDirectory(at: store.project.threadDirectory("t"), withIntermediateDirectories: true)
+            let transcript = TranscriptWriter(url: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1))
             let recorder = TurnRecorder(
-                log: log, turn: 1, sessionID: "s", provider: provider, threadID: "t", store: store, notify: { _ in })
+                log: log, transcript: transcript, turn: 1, sessionID: "s", provider: provider, threadID: "t", store: store,
+                notify: { _ in })
             try await recorder.record(
                 .line(#"{"type":"system"}"#), activity: [.text("hi"), .unknown(provider: .codex, raw: "?")])
             try await recorder.record(.oversized(preview: "abc", totalBytes: 9_000_000), activity: [])
@@ -204,7 +206,14 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
             let events = try EventLogReader.read(at: dir.appendingPathComponent("events.jsonl")).events.dropFirst()
             #expect(recorder.sawOutput)
             if provider == "claude" {
-                #expect(events.map(\.kind) == [.claude, .claude], "verbatim lines, no normalized copy")
+                // The lines are in the turn's transcript, verbatim, in order; neither is the turn's result line, so
+                // the log holds none, and there is no normalized copy.
+                #expect(events.isEmpty)
+                let lines = TranscriptFile.lines(
+                    at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
+                let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
+                #expect(lines.map(\.data) == [["type": "system"], marker])
+                #expect(transcript.summary?.lines == 2)
             } else {
                 #expect(events.map(\.kind) == [.agentActivity, .agentActivity, .agentActivity])
                 #expect(events.map { $0.data["type"]?.stringValue } == ["text", "unknown", "diagnostic"])
@@ -247,7 +256,8 @@ private final class Clock: @unchecked Sendable {
         try await log.append(.turnStarted, turn: 1, data: ["provider": "fake"])
         let clock = Clock()
         let recorder = TurnRecorder(
-            log: log, turn: 1, sessionID: "s", provider: "fake", threadID: "t", store: ThreadStore(project: Project(root: dir)),
+            log: log, transcript: TranscriptWriter(url: dir.appendingPathComponent("t.jsonl")), turn: 1, sessionID: "s",
+            provider: "fake", threadID: "t", store: ThreadStore(project: Project(root: dir)),
             notify: { _ in }, now: { clock.date })
         for _ in 0..<(AgentActivityRecord.maxPerTurn + 5) {
             try await recorder.record(.line("x"), activity: [.tool(name: "shell", summary: "ls")])
@@ -272,7 +282,8 @@ private final class Clock: @unchecked Sendable {
         try await log.append(.turnStarted, turn: 1)
         let store = ThreadStore(project: Project(root: dir))
         let recorder = TurnRecorder(
-            log: log, turn: 1, sessionID: "s", provider: "fake", threadID: "t", store: store, notify: { _ in })
+            log: log, transcript: TranscriptWriter(url: dir.appendingPathComponent("t.jsonl")), turn: 1, sessionID: "s",
+            provider: "fake", threadID: "t", store: store, notify: { _ in })
         let request = AgentRequest(
             provider: AgentProviderID("fake")!, prompt: "go", workingDirectory: dir, outputDirectory: dir,
             policy: .scopedCoding, spend: .timeoutOnly, purpose: .coding, environment: [:],

@@ -25,9 +25,9 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.saved` | goal changed | `status`, `hash` |
 | `goal.approved` | approve | `hash`, `budget_usd`, `provider`, `model`, `reasoning_effort` |
 | `turn.started` | process spawned | `session_id` (Claude only), `resume`, `pid`, `argv` (redacted), `prompt_ref`, `provider`, `continuation` (Codex follow-up only) |
-| `claude` | each stream-json line | the raw line, unmodified |
+| `claude` | the turn's `result` line only (cost, session and `permission_denials` are derived from it). Every other stream line of a Claude turn is in the turn's [transcript file](#transcript-files). A log written before transcript files holds every line here | the raw line, unmodified |
 | `agent.activity` | one normalized item of a turn run by a provider other than `claude` (P9). Claude turns keep `claude` lines and write none | `provider`, `type` (`text`, `tool`, `permission_denied`, `usage`, `session`, `diagnostic`, `unknown`, `dropped`) and that type's fields |
-| `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
+| `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?`, `transcript?` (`{lines, bytes}` of the turn's transcript file; absent when the turn wrote none) |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
 | `check.started` | before the project's check command starts | `command` |
 | `check.ran` | always, exactly once per `check.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated` |
@@ -63,12 +63,33 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.draft.started` | `workbench goal draft` asked the goal agent for a draft (P9 PR 14); thread-level (`turn` 0), no coding turn | `provider`, `model`, `attempt` |
 | `goal.draft.finished` | the draft ended; one per start. `ok: true` carries the proposal's place, `ok: false` the failure | `ok`, `proposal_ref`, `provider`, `model`, `attempt`, `reason`, `cost_usd`, `synthetic` |
 
+## Transcript files
+
+What `claude` printed in a turn is not in `events.jsonl`: a log that holds every stream line is megabytes long, and
+every command that shows a thread replays it. A Claude turn writes `threads/<id>/transcript/turn-<n>.jsonl`
+instead, one line per stream line, in order:
+
+```json
+{"ts":"2026-10-24T10:00:00.120Z","data":{ ...the line as claude wrote it... }}
+```
+
+- `data` is what a `claude` event's `data` was: the line itself, `{"invalid_json": "<raw line>"}`, or the
+  truncation marker for a line over the size limit. Nothing is dropped.
+- A line is appended whole; a last line without its newline (a runner that died mid-write) is not a line. Recovery
+  cuts it off before writing the synthetic `turn.ended`, whose `transcript` counts the lines that are left.
+- The file is plain while the turn runs, so `workbench log -f` shows lines as they arrive. `workbench log` and
+  `log --json` show a turn's lines just before its `turn.ended`, as `claude` events with `seq` null in JSON; the
+  turn's `result` line is shown once, from the file.
+- `status` reads the open turn's file for its progress (tool calls, denials, the newest line). A turn that is not
+  open needs no file to be understood: its result is in the log.
+- A thread from before transcript files has its lines in the log and no file; both read the same way.
+
 ## Invariants (tested)
 
 1. Every `turn.started` is followed by exactly one `turn.ended`, even on crash recovery (the runner writes a
    synthetic `turn.ended` with `result: "interrupted"` for orphans on startup).
 2. `seq` is strictly increasing with no gaps, so truncation is detectable.
-3. `claude` lines are stored verbatim. We never drop information we may want later; derived state is computed.
+3. `claude` lines are stored verbatim, in the turn's transcript file, and the turn's `result` line also in the log. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
@@ -226,12 +247,13 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
   deterministically; do not rely on the writer being deallocated.
 - **Turn numbers** are 1, 2, 3 with no gaps. `turn.started` while a turn is open, `turn.ended` for a turn
   that is not the open one, and `claude` lines outside an open turn are all rejected on append and
-  reported as problems on replay.
+  reported as problems on replay. (A transcript line is not an event and has no `seq`; it belongs to the turn
+  whose file it is in.)
 - **Checks** follow the same rule: `check.started` while a check is open, and `check.ran` when the open
   check is not that turn's (or none is open), are rejected on append and reported as problems on replay.
 - **Rejected appends consume no `seq`.**
-- **Invalid JSON from `claude`** is stored as `{"invalid_json": "<raw line>"}` with `kind: "claude"`, so a bad
-  line is logged raw and the run continues.
+- **Invalid JSON from `claude`** is stored as `{"invalid_json": "<raw line>"}` (as a transcript line's `data`, or
+  as a `claude` event in an older log), so a bad line is logged raw and the run continues.
 - **Oversized lines** (default 1 MiB) are stored as
   `{"truncated": true, "original_bytes": N, "prefix": "<first 4096 characters>"}`.
 - **Opening a damaged log.** A half-written final line (no trailing newline) is cut off and kept in

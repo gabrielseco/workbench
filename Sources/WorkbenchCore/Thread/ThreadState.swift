@@ -290,7 +290,8 @@ public struct ThreadState: Sendable, Equatable {
     }
 
     /// A pure function of the events: no file, git or clock. Unknown kinds and unknown decisions are ignored.
-    public static func derive(from events: [Event], id: String) -> ThreadState {
+    /// `transcript` is the open turn's lines when they are kept outside the log (progress is folded from them).
+    public static func derive(from events: [Event], id: String, transcript: [TranscriptLine] = []) -> ThreadState {
         var state = ThreadState(
             id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
@@ -395,7 +396,17 @@ public struct ThreadState: Sendable, Equatable {
         } else {
             state.review.status = .awaitingReview
         }
+        Self.foldOpenTurn(transcript, into: &state)
         return state
+    }
+
+    /// The open turn's lines, kept outside the log, count towards its progress like the log's own `claude` events.
+    private static func foldOpenTurn(_ transcript: [TranscriptLine], into state: inout ThreadState) {
+        guard let open = state.openTurn else { return }
+        for line in transcript where line.turn == open {
+            state.progress.markReported()
+            track(line, in: &state.progress)
+        }
     }
 
     /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.

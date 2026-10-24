@@ -382,8 +382,11 @@ public actor ThreadRunner {
         }
         // The recorder writes every line to the log as it comes, verbatim and in order; `held` keeps the first one
         // behind `turn.started`, which carries the pid.
+        let transcript = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(threadID), turn: turn))
+        defer { transcript.close() }
         let recorder = TurnRecorder(
-            log: log, turn: turn, sessionID: sessionID, provider: "\(agent.provider)", threadID: threadID, store: store,
+            log: log, transcript: transcript, turn: turn, sessionID: sessionID, provider: "\(agent.provider)",
+            threadID: threadID, store: store,
             notify: notify, keepsSession: agent.provider == .claude)
         let execution: AgentExecution
         do {
@@ -416,18 +419,19 @@ public actor ThreadRunner {
             return try await endTurn(
                 log: log, turn: turn, sessionID: sessionID, result: .failed, started: startedAt, attempt: attempt,
                 extra: ["error": .string("recording failed: \(failure)")], completion: completion,
-                sawOutput: recorder.sawOutput)
+                sawOutput: recorder.sawOutput, transcript: transcript.summary)
         }
         let outcome = Self.runResult(
             exit: completion.process, outcome: completion.provider, failure: completion.failure)
         return try await endTurn(
             log: log, turn: turn, sessionID: sessionID, result: outcome, started: startedAt, attempt: attempt,
-            completion: completion, sawOutput: recorder.sawOutput)
+            completion: completion, sawOutput: recorder.sawOutput, transcript: transcript.summary)
     }
 
     private func endTurn(
         log: EventLogWriter, turn: Int, sessionID: String, result: RunResult, started: Date, attempt: String,
-        extra: [String: JSONValue] = [:], completion: AgentCompletion? = nil, sawOutput: Bool = false
+        extra: [String: JSONValue] = [:], completion: AgentCompletion? = nil, sawOutput: Bool = false,
+        transcript: TranscriptSummary? = nil
     ) async throws -> TurnOutcome {
         let exit = completion?.process
         var code: Int32?, signal: Int32?
@@ -459,6 +463,7 @@ public actor ThreadRunner {
             if !tail.isEmpty { data["stderr_tail"] = .string(String(tail.suffix(2000))) }
         }
         data["denials"] = Self.deniedCalls(completion?.permissionDenials ?? [])
+        if let transcript { data["transcript"] = transcript.json }
         for (key, value) in extra { data[key] = value }
 
         try await AttemptLog.close(log, attempt, result.rawValue)
