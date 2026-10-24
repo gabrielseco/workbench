@@ -37,6 +37,14 @@ struct LogState: Sendable {
     /// The `run.started` no `run.ended` has closed: the verifier's app. Crash recovery only.
     var runStart: Event?
 
+    /// The `judge.started` no `judge.ran` has closed, oldest first. Crash recovery only: a killed judge is closed on the
+    /// next start, so more than one is only in a log from before that existed.
+    var judgeStarts: [Event] = []
+    /// The `pr_review.started` and `review_stage.started` no matching finish has closed, oldest first. Crash recovery only.
+    var reviewStarts: [Event] = []
+    /// Every `agent.attempt.started` no `agent.attempt.ended` has closed, by attempt id. Crash recovery only.
+    var openAttempts: [String: Event] = [:]
+
     func check(_ event: Event, line: Int = 0) -> LogProblem? {
         if event.seq != nextSeq {
             return .seqMismatch(expected: nextSeq, found: event.seq, line: line)
@@ -99,8 +107,28 @@ struct LogState: Sendable {
             verifierStart = event
         case .verifierEnded:
             verifierStart = nil
+        case .judgeStarted:
+            judgeStarts.append(event)
+        case .judgeRan:
+            if !judgeStarts.isEmpty { judgeStarts.removeLast() }
+        case .prReviewStarted, .reviewStageStarted:
+            reviewStarts.append(event)
+        case .prReviewFinished, .reviewStageFinished:
+            // A skip writes a finish with no start, so a finish only closes the latest start it matches.
+            if let at = reviewStarts.lastIndex(where: { Self.finish(event, closes: $0) }) { reviewStarts.remove(at: at) }
+        case .agentAttemptStarted:
+            if let id = event.data["attempt"]?.stringValue { openAttempts[id] = event }
+        case .agentAttemptEnded:
+            if let id = event.data["attempt"]?.stringValue { openAttempts[id] = nil }
         default:
             break
         }
+    }
+
+    private static func finish(_ finish: Event, closes start: Event) -> Bool {
+        let stage = start.kind == .reviewStageStarted ? start.data["stage"]?.stringValue : nil
+        let isStage = finish.kind == .reviewStageFinished
+        guard isStage == (start.kind == .reviewStageStarted) else { return false }
+        return !isStage || finish.data["stage"]?.stringValue == stage
     }
 }

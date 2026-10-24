@@ -67,6 +67,9 @@ extension ThreadService {
         // A round that was killed leaves its `codex` and its checkout behind, in any stage's folder. This process holds
         // the thread's log, so none of them is live: end them now, before any refusal can leave them for good.
         await recoverStageLeftovers(id: id, review: config.review)
+        // A round whose process was killed ends here as `interrupted`; its start still counts toward the cap.
+        try await log.recoverOrphanedEvaluations()
+        let agent = config.resolvedReviewAgent(stage: stage.name)
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         let pr: Int
@@ -116,6 +119,8 @@ extension ThreadService {
             id: id, stage: stage, pr: pr, branch: branch, base: base, recordedBase: recordedBase, goal: goal,
             goalRest: project.goalURL(id).path, tip: tip, paths: paths, config: config, settings: settings)
         if stage.config.needsProof { context.proof = stageProof(stage, state: state, id: id) }
+        context.attempts = AttemptLog(
+            log: log, role: "review", stage: stage.events.stage, turn: state.lastTurn, round: round, agent: agent)
 
         // A skip spends no round, so it writes no `started`; when the changed files cannot be read whole the round runs.
         let applies: ReviewStage.Applies =
@@ -124,7 +129,7 @@ extension ThreadService {
         case .run: break
         case .skip:
             return try await recordSkip(
-                log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip)
+                log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, sha: tip, agent: agent)
         case .unknown(let why): context.warnings.append("applies_to was not checked: \(why); the review ran")
         }
 
@@ -135,10 +140,12 @@ extension ThreadService {
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it; a run or another review is refused).
-        var started: [String: JSONValue] = [
-            "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
-            "argv": .array(argv.map { .string($0) }),
-        ]
+        var started = Self.agentFields(
+            agent,
+            [
+                "round": .int(round), "pr": .int(pr), "head_sha": .string(tip),
+                "argv": .array(argv.map { .string($0) }),
+            ])
         if let name = stage.events.stage { started["stage"] = .string(name) }
         // The screenshots this round is given, by name, so the log says what a verdict was based on.
         if case .success(let files)? = context.proof {
@@ -157,7 +164,7 @@ extension ThreadService {
             ? "\(stage.folder)/\(paths.transcript.lastPathComponent)" : nil
         return try await recordRound(
             log, stage: stage, turn: state.lastTurn, round: round, pr: pr, maxRounds: maxRounds, outcome: outcome,
-            sha: context.reviewedSHA ?? tip, findingsPath: findingsPath, transcript: transcript)
+            sha: context.reviewedSHA ?? tip, findingsPath: findingsPath, transcript: transcript, agent: agent)
     }
 
     // MARK: A round
@@ -230,7 +237,13 @@ extension ThreadService {
         }
 
         guard ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"]) != nil
-        else { return outcome.failed(Self.codexMissing(round.settings.codexPath)) }
+        else {
+            let missing = Self.codexMissing(round.settings.codexPath)
+            do { try await round.attempts?.refused(missing) } catch {
+                return outcome.failed("\(missing); the refusal could not be recorded: \(error)")
+            }
+            return outcome.failed(missing)
+        }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
         let transcript = await runCodex(
@@ -319,13 +332,15 @@ extension ThreadService {
 
     private func recordRound(
         _ log: EventLogWriter, stage: ReviewStage, turn: Int, round: Int, pr: Int, maxRounds: Int,
-        outcome: PRReviewOutcome, sha: String, findingsPath: String?, transcript: String?
+        outcome: PRReviewOutcome, sha: String, findingsPath: String?, transcript: String?, agent: ResolvedAgent
     ) async throws -> PRReviewResult {
         let reason = outcome.failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
-        var data: [String: JSONValue] = [
-            "round": .int(round), "pr": .int(pr), "head_sha": .string(sha), "ok": .bool(outcome.verdict != nil),
-            "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null,
-        ]
+        var data = Self.agentFields(
+            agent,
+            [
+                "round": .int(round), "pr": .int(pr), "head_sha": .string(sha), "ok": .bool(outcome.verdict != nil),
+                "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null,
+            ])
         if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
@@ -338,14 +353,17 @@ extension ThreadService {
 
     /// A stage whose `applies_to` matches none of the changed files: on record as `skipped`, `ok: false`, never a pass.
     private func recordSkip(
-        _ log: EventLogWriter, stage: ReviewStage, turn: Int, round: Int, pr: Int, maxRounds: Int, sha: String
+        _ log: EventLogWriter, stage: ReviewStage, turn: Int, round: Int, pr: Int, maxRounds: Int, sha: String,
+        agent: ResolvedAgent
     ) async throws -> PRReviewResult {
         let globs = stage.config.appliesTo.joined(separator: ", ")
         let reason = "the diff touches no path matching applies_to (\(globs))"
-        var data: [String: JSONValue] = [
-            "round": .int(round), "pr": .int(pr), "head_sha": .string(sha),
-            "ok": .bool(false), "verdict": .string(ReviewStage.skippedVerdict), "reason": .string(reason),
-        ]
+        var data = Self.agentFields(
+            agent,
+            [
+                "round": .int(round), "pr": .int(pr), "head_sha": .string(sha),
+                "ok": .bool(false), "verdict": .string(ReviewStage.skippedVerdict), "reason": .string(reason),
+            ])
         if let name = stage.events.stage { data["stage"] = .string(name) }
         try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
@@ -518,6 +536,8 @@ struct PRReviewRound: Sendable {
     /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
     var proof: Result<[String], PRReviewFailure>?
     var warnings: [String] = []
+    /// Where this round's provider processes are put on record; nil when the round runs outside a thread's log.
+    var attempts: AttemptLog?
 }
 
 struct PRReviewFailure: Error, Sendable {

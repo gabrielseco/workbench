@@ -102,7 +102,9 @@ private let clean = "Nothing left.\nVERDICT: CLEAN"
         #expect(store.state(of: r.id).decision == "accepted")
         let rootKinds = try r.fx.kinds(r.id)
         #expect(rootKinds.filter { $0 == "turn.started" }.count == 1, "no turn was added to the shipped thread")
-        #expect(rootKinds.suffix(2) == ["pr_review.started", "pr_review.finished"])
+        #expect(
+            rootKinds.suffix(4)
+                == ["pr_review.started", "agent.attempt.started", "agent.attempt.ended", "pr_review.finished"])
         // Round 2 was the follow-up's own, counted with round 1.
         let childStarted = try r.fx.events(child).first { $0.kind == .prReviewStarted }
         #expect(childStarted?.data["round"]?.intValue == 2 && childStarted?.data["head_sha"]?.stringValue == after)

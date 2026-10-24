@@ -120,7 +120,9 @@ import Testing
 
         let kinds = try r.fx.kinds(r.id)
         let at = try #require(kinds.firstIndex(of: "pr_review.started"))
-        #expect(kinds[at + 1] == "pr_review.finished" && kinds.last == "pr_review.finished")
+        // The round's one codex process is its attempt, on record between the start and the finish.
+        #expect(
+            Array(kinds[at...]) == ["pr_review.started", "agent.attempt.started", "agent.attempt.ended", "pr_review.finished"])
         let started = try #require(r.started.first)
         #expect(started.data["round"]?.intValue == 1 && started.data["pr"]?.intValue == 12)
         #expect(started.data["head_sha"]?.stringValue == r.head)

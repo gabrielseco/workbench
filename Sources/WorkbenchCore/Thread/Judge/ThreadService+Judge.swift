@@ -65,9 +65,12 @@ extension ThreadService {
         id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
         environment: [String: String], timeout: TimeInterval, attach: @Sendable (AgentExecution) -> Void
     ) async throws -> JudgeResult {
+        // A judge a killed process left open ends here, before anything is read or refused.
+        try await log.recoverOrphanedEvaluations()
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard state.lastTurn > 0 else { throw JudgeRefusal.noTurn }
+        let agent = config.resolvedJudgeAgent(modelFlag: model)
         let turn = state.lastTurn
         if !again, events.contains(where: { $0.kind == .judgeRan && $0.turn == turn && $0.data["ok"] == true }) {
             throw JudgeRefusal.alreadyJudged(turn: turn)
@@ -79,7 +82,7 @@ extension ThreadService {
 
         let recordedBase = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
         guard let work = await judgedWork(id: id, base: recordedBase ?? goal.base, recorded: recordedBase != nil) else {
-            return try await recordJudge(log, turn: turn, failure: "the diff could not be read", argv: [])
+            return try await recordJudge(log, agent: agent, turn: turn, failure: "the diff could not be read", argv: [])
         }
         let cut = work.diff.utf8.count > Judge.diffLimit
         let diffText = cut ? String(decoding: work.diff.utf8.prefix(Judge.diffLimit), as: UTF8.self) : work.diff
@@ -103,23 +106,27 @@ extension ThreadService {
                 }),
             lastTurn: turn, untracked: work.untracked)
         let request = AgentRequest(
-            provider: .claude, model: model ?? config.judgeModel ?? config.model, prompt: Judge.prompt(for: input),
+            provider: .claude, model: agent.model, prompt: Judge.prompt(for: input),
             workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
             spend: .hardCap(budget),
             session: .start(proposed: UUID().uuidString.lowercased()), purpose: .judge, environment: environment,
             limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
         let provider = ClaudeProvider(config: config)
+        let attempts = AttemptLog(log: log, role: "judge", turn: turn, agent: agent)
         // What goes in the log is decided before anything is spent; a refusal is a result, not a spawn.
         let shown: [String]
         do {
             if let refusal = request.validate(against: provider) { throw refusal }
             shown = try provider.invocation(for: request).displayArguments
         } catch {
-            return try await recordJudge(log, turn: turn, failure: Self.judgeFailureText(error), argv: [])
+            try await attempts.refused(Self.judgeFailureText(error))
+            return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: [])
         }
-        // No attempt is logged for a `claude` that is not there: nothing was started.
+        // A `claude` that is not there is a refusal: nothing was started.
         guard ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) != nil else {
-            return try await recordJudge(log, turn: turn, failure: "`\(config.claudePath)` was not found", argv: shown)
+            let missing = "`\(config.claudePath)` was not found"
+            try await attempts.refused(missing)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: missing, argv: shown)
         }
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
@@ -129,28 +136,43 @@ extension ThreadService {
         try? writeHolderMarker(id)
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
         try ThreadStore(project: project).requireNoDoctor()
-        try await log.append(.judgeStarted, turn: turn, data: ["argv": .array(shown.map { .string($0) })])
+        try await log.append(
+            .judgeStarted, turn: turn,
+            data: .object(Self.agentFields(agent, ["argv": .array(shown.map { .string($0) })])))
+        let attempt = try await attempts.start()
         let execution: AgentExecution
         do { execution = try AgentRunner.start(provider: provider, request: request) } catch {
-            return try await recordJudge(log, turn: turn, failure: Self.judgeFailureText(error), argv: shown)
+            try await attempts.end(attempt, "failed", reason: Self.judgeFailureText(error))
+            return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: shown)
         }
         attach(execution)
         let completion = await execution.completion
+        try await attempts.end(attempt, AttemptLog.outcome(of: completion.process, failure: completion.failure))
         if let why = Self.judgeProcessProblem(completion.process, timeout: timeout) {
-            return try await recordJudge(log, turn: turn, failure: why, argv: shown)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
         }
         if let failure = completion.failure {
-            return try await recordJudge(log, turn: turn, failure: failure.message, argv: shown)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: failure.message, argv: shown)
         }
         guard let answer = completion.summary else {
-            return try await recordJudge(log, turn: turn, failure: "the verdict was not usable: no result", argv: shown)
+            let failure = "the verdict was not usable: no result"
+            return try await recordJudge(log, agent: agent, turn: turn, failure: failure, argv: shown)
         }
         do {
             let verdict = try Judge.verdict(fromAnswer: answer, criteria: goal.criteria)
-            return try await recordJudge(log, turn: turn, verdict: verdict, cost: completion.usage?.costUSD, argv: shown)
+            return try await recordJudge(
+                log, agent: agent, turn: turn, verdict: verdict, cost: completion.usage?.costUSD, argv: shown)
         } catch {
-            return try await recordJudge(log, turn: turn, failure: "\(error)", argv: shown)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: "\(error)", argv: shown)
         }
+    }
+
+    /// `provider` and `model` (null: the provider's own default) added to the fields of a start or end record.
+    static func agentFields(_ agent: ResolvedAgent, _ fields: [String: JSONValue]) -> [String: JSONValue] {
+        var data = fields
+        data["provider"] = .string("\(agent.provider)")
+        data["model"] = agent.model.map { .string($0) } ?? .null
+        return data
     }
 
     private static func judgeFailureText(_ error: Error) -> String {
@@ -224,12 +246,11 @@ extension ThreadService {
     }
 
     private func recordJudge(
-        _ log: EventLogWriter, turn: Int, verdict: JudgeVerdict? = nil, cost: Double? = nil, failure: String? = nil,
+        _ log: EventLogWriter, agent: ResolvedAgent, turn: Int, verdict: JudgeVerdict? = nil, cost: Double? = nil,
+        failure: String? = nil,
         argv: [String]
     ) async throws -> JudgeResult {
-        var data: [String: JSONValue] = [
-            "ok": .bool(verdict != nil), "argv": .array(argv.map { .string($0) }),
-        ]
+        var data = Self.agentFields(agent, ["ok": .bool(verdict != nil), "argv": .array(argv.map { .string($0) })])
         if let cost { data["cost_usd"] = .double(cost) }
         if let verdict {
             data["criteria"] = .array(

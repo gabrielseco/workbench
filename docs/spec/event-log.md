@@ -58,6 +58,10 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `pr_review.finished` | the round ended, whatever came of it; one per `pr_review.started`. Also written alone for a skip, as `review_stage.finished` describes (without `stage`) | `round`, `pr`, `head_sha`, `ok`, `verdict`, `reason`, `findings_path`, `transcript_path` |
 | `review_stage.started` | `workbench review-stage <name>` is about to review the pull request as a stage other than `pr-review` | `stage`, `round`, `pr`, `head_sha`, `argv`, `proof` |
 | `review_stage.finished` | that round ended, whatever came of it, or the stage was skipped | `stage`, `round`, `pr`, `head_sha`, `ok`, `verdict`, `reason`, `findings_path`, `transcript_path` |
+| `agent.attempt.started` | a provider process is about to be started (a coding turn, the judge, a review round; a capacity retry is another) | `attempt`, `role`, `stage`, `round`, `provider`, `model`, `spawned` |
+| `agent.attempt.ended` | that attempt ended; exactly one per start | `attempt`, `outcome`, `reason`, `synthetic` |
+| `goal.draft.started` | reserved for goal drafting (P9 task 4); nothing writes it yet | `provider`, `model`, `attempt` |
+| `goal.draft.finished` | reserved: the draft ended, with a reference to the proposal or the failure | `ok`, `proposal_ref`, `provider`, `reason`, `synthetic` |
 | `verify.ended` | older logs only: the verify step ended; exactly once per `verify.started` | `command`, `result`, `exit_code`, `signal`, `duration_ms`, `output_ref`, `output_truncated`, `proof_files` |
 
 ## Invariants (tested)
@@ -71,6 +75,9 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
 6. Every `verify.started` is followed by exactly one `verify.ended`, recovered the same way. Unlike the others
    this is not enforced when appending: a stray `verify.ended` is ignored, not an error.
+7. Every `agent.attempt.started` has exactly one `agent.attempt.ended` (P9 PR 8), and so does every
+   `judge.started`, `pr_review.started` and `review_stage.started`: a killed judge or round is closed on the next
+   start by a synthetic end (see "Agent attempts"). Not enforced when appending, like verify.
 
 ## Fields the runner writes
 
@@ -96,9 +103,9 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `run.started` | `command` as written, `port` (the free port Workbench picked, also given to the command as `WORKBENCH_PORT` and `PORT`; null when none could be found), and the ready check: `ready_url` (with `{port}` as written) or `ready_line` (the regular expression). The command runs in the thread's worktree on the allowlisted environment (`env_pass` applies) plus `WORKBENCH_PORT`, `PORT`, `WORKBENCH_THREAD` and `WORKBENCH_GOAL`; it is read from the project's config, not from the worktree. Followed by exactly one `run.ended`, also on a stop, a timeout, a crash, and after a restart, where the next command that opens the log writes it with `ready: false`, `reason: "interrupted"` and `synthetic: true` before the verifier's own end |
 | `run.ended` | `ready`: whether the ready check passed. When not: `reason` (`the app ended before it was ready (exit <n>)`, `the app was not ready within <n>s`, `the [run] command '<name>' was not found`, `the verifier was stopped`, `no free port could be found for the app`, `the [run] command could not be started`) and `tail`, the last lines of its output (at most 20, scrubbed); the verifier is not started and spends nothing, and its `verifier.ended` carries the same `reason`. When ready: `ready_ms`, `exited_early` (it ended on its own before the turn did), `duration_ms`, `exit_code` or `signal`, `escalated_to_kill` and `swept_processes` when present. The app and everything under it are ended on every ending of the turn |
 | `verifier.skipped` | `reason`: `the turn left no change to look at`, a skill that cannot be read at the base (the refusal's text), `a verifier has ended for this turn already`, `the base commit is unknown, so its skill cannot be read` or `the run was stopped`. Written only for a turn that succeeded and whose check passed (or that has none); after a failed turn or check nothing is written. It spends nothing, and `log -f` stops following at it |
-| `judge.started` | `argv`, the command without the prompt. Followed by exactly one `judge.ran` unless the judge was killed; then `review` shows a judge that "started and never recorded a result", and it does not count as having judged the turn. While it runs, the `workbench judge` process is recorded in `runner.json` like a run, so `stop` reaches it and a run or another judge is refused; a `claude` it left behind is found by its working directory and ended before the next judge starts |
+| `judge.started` | `argv`, the command without the prompt. Followed by exactly one `judge.ran` unless the judge was killed; the next run, judge, review or `abandon` then closes it with a synthetic `judge.ran` (`reason: "interrupted"`, see "Agent attempts"), which does not count as having judged the turn. `provider` and `model` as in "Agent attempts". While it runs, the `workbench judge` process is recorded in `runner.json` like a run, so `stop` reaches it and a run or another judge is refused; a `claude` it left behind is found by its working directory and ended before the next judge starts |
 | `judge.ran` | `ok`; `turn` is the turn judged (the envelope's `turn`). When `ok`: `criteria` (`{id, met, evidence}` once per criterion of the goal, `evidence` at most 3 sentences of at most 300 characters), `concerns` (at most 8), `cost_usd`. When not: `reason` (no `claude`, a stop, a timeout, a budget stop, or an answer that did not read as a verdict for every criterion exactly once, with real booleans and both lists). `argv` is the command without the prompt. Written by `workbench judge`, which holds the log's lock from the once-per-turn check to this record (so a second judge or a run is refused), never inside a numbered turn, so `turns` and the work session are unchanged. A failed run does not count as having judged the turn. Advisory: nothing in Workbench gates on it |
-| `pr_review.started` | `round` (1 for the first review of this pull request, counted as the `pr_review.started` events with the same `pr` before it, plus one), `pr` (the number `pr.opened` recorded), `head_sha` (the branch tip on `origin` when the round began), `argv` (the Codex command line: `exec -s read-only -C <throwaway checkout> ... -o <findings file> <one-line pointer to the brief>`; the review text is in a file, never here). Written after the checks that refuse (no pull request, cap reached, busy, branch unchanged) and before anything is fetched or started. Followed by exactly one `pr_review.finished` unless `workbench` was killed; then `review` shows a round that "started and never recorded a result", and it still counts toward `max_rounds`, so the count is the log's and nothing but the log can reset it. While it runs, the `workbench pr-review` process is recorded in `runner.json` like a run, so `stop` reaches it and a run, a judge or another review is refused; a `codex` or checkout a killed round left behind is found in the thread's `pr-review/` folder and ended at the start of the next `workbench pr-review`, before any refusal |
+| `pr_review.started` | `round` (1 for the first review of this pull request, counted as the `pr_review.started` events with the same `pr` before it, plus one), `pr` (the number `pr.opened` recorded), `head_sha` (the branch tip on `origin` when the round began), `argv` (the Codex command line: `exec -s read-only -C <throwaway checkout> ... -o <findings file> <one-line pointer to the brief>`; the review text is in a file, never here). Written after the checks that refuse (no pull request, cap reached, busy, branch unchanged) and before anything is fetched or started. Followed by exactly one `pr_review.finished` unless `workbench` was killed; the next run, judge, review or `abandon` then closes it with a synthetic `pr_review.finished` (`reason: "interrupted"`, see "Agent attempts"), and the round still counts toward `max_rounds`, so the count is the log's and nothing but the log can reset it. While it runs, the `workbench pr-review` process is recorded in `runner.json` like a run, so `stop` reaches it and a run, a judge or another review is refused; a `codex` or checkout a killed round left behind is found in the thread's `pr-review/` folder and ended at the start of the next `workbench pr-review`, before any refusal |
 | `pr_review.finished` | `round`, `pr`, `ok`, `head_sha` (the commit that was reviewed: the branch tip on `origin` when the round began), `verdict` (`clean`, `fix`, or null), and when they exist `transcript_path` (absent when the round failed before Codex ran), `findings_path` (Codex's final answer) and `reason`. Paths are relative to the thread directory (`pr-review/round-<n>.findings.md`, `.transcript.txt`) and outlive the throwaway checkout, which is removed on every ending. `ok` is true only when the answer's last non-empty line is exactly `VERDICT: CLEAN` or `VERDICT: FIX` and neither appears elsewhere; anything else is `ok: false` with `reason` (no `codex`, the branch moved while the round was starting, "at capacity" three times, a non-zero exit, a stop, a 20 minute timeout, no answer, no verdict line). A failed round is never a pass. Written by `workbench pr-review`, which holds the log's lock from the checks to this record, never inside a numbered turn, so `turns` and the work session are unchanged. Advisory: nothing in Workbench acts on it (`ship --review-loop` is a later task) |
 | `review_stage.started` | As `pr_review.started`, for a stage of `review.stages` other than `pr-review` (which keeps writing `pr_review.*`), plus `stage` (its name). `round` counts only the `review_stage.started` events with the same `stage` and `pr` across the thread tree, so each stage has its own `max_rounds` and `pr-review`'s rounds do not count. `argv` also has `-i <file>` for each screenshot attached when the stage reads `proof`. Leftovers of a killed round are in the thread's `<stage>/` folder | `proof` (stages that read it): the names of the screenshots attached to the round, from the turn's proof.
 | `review_stage.finished` | As `pr_review.finished`, plus `stage`; paths are `<stage>/round-<n>.findings.md` and `.transcript.txt`. A stage that reads `proof` with no verify step, one from before the latest turn, or no top-level PNG left is `ok: false` with `reason`. A stage whose `applies_to` matches none of the files the pull request changes is recorded with this event alone (no `started`, so it spends no round): `verdict: "skipped"`, `ok: false`, `reason` naming the globs, `round` the number the next round would have, no paths. A skip is never a pass. When the list of changed files cannot be read whole (git failed, or its output was cut) no skip is decided: the round runs and its result says so |
@@ -209,6 +216,39 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
   turn rule broken) makes `open` fail with `corrupt` and leaves the file untouched.
 - **Orphaned turns** are state, not damage. `recoverOrphanedTurn()` appends
   `turn.ended {result: "interrupted", synthetic: true}` for the open turn.
+
+## Agent attempts (P9 PR 8)
+
+Event version stays 1: every change is additive (new kinds, new fields), and readers ignore both. A log from before
+this change replays as it did; nothing is rewritten.
+
+- **`provider` and `model`** are on `turn.started`, `judge.started`, `judge.ran`, `pr_review.started`,
+  `pr_review.finished`, `review_stage.started` and `review_stage.finished`: the provider's id (`claude`, `codex`) and the
+  model asked for, `null` for the provider's own default. They are what the process was started with, from the resolved
+  agent of the config (`[agents.*]`), never a guess. A log without them is a log from before provider selection.
+- **`agent.attempt.started`**: `attempt` (`a<seq>`, unique in the log), `role` (`run`, `judge`, `review`), `stage` (a
+  named review stage, absent for `pr-review`), `round` (a review's), `provider`, `model`, and `spawned: false` when the
+  attempt is a refusal (no executable, a request the provider cannot take) and nothing was started. `turn` is the turn it
+  belongs to (the coding turn, or the turn judged or reviewed). Written after the enclosing record (`turn.started`,
+  `judge.started`, `pr_review.started`) and before the process exists.
+- **`agent.attempt.ended`**: `attempt`, `outcome` (`succeeded`, `failed`, `stopped`, `timed_out`, `budget_exceeded`,
+  `interrupted`, `refused`: what the process did, not what its answer said), `reason` (scrubbed, at most 300 characters),
+  `synthetic: true` when recovery wrote it, and `role`, `stage`, `round`, `provider` and `model` copied from the start, so an
+  end stands alone. Written before the enclosing end (`turn.ended`, `judge.ran`,
+  `pr_review.finished`).
+- A review round that retries after "at capacity" has one attempt per physical start, all inside one round: the retry adds
+  no `pr_review.started`, so `max_rounds` is unchanged.
+- **Recovery.** `recoverOrphanedEvaluations()` (every unmatched start, newest first, not only the last), run holding the log before a run, a judge, a review or `abandon`, closes
+  each open attempt as `interrupted` (`synthetic`), then a `judge.started` with no `judge.ran` by `judge.ran {ok: false,
+  reason: "interrupted", synthetic: true}`, and a `pr_review.started` or `review_stage.started` with no finish by the
+  matching finish (`ok: false`, `verdict: null`, `reason: "interrupted"`, `synthetic: true`, with the start's `round`,
+  `pr`, `head_sha` and `stage`). `recoverOrphanedTurn()` closes the turn's run attempt first. The round's start is still in
+  the log, so it still counts toward `max_rounds`; an interrupted end is never a pass, and an interrupted judge does not
+  count as having judged the turn. A second call writes nothing. A skip (`review_stage.finished` with no start) closes
+  nothing. If the log cannot take an attempt's start, no process is started; if it cannot take an end, the error says so
+  and the next open recovers from the last durable start.
+- **`goal.draft.started` / `goal.draft.finished`** are known kinds with the shapes in the table. Nothing writes them
+  yet (P9 task 4); the reducer ignores them for turns, approval and review.
 
 ## Run results
 

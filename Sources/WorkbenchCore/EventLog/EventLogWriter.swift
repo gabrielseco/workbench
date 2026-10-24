@@ -157,6 +157,8 @@ public actor EventLogWriter {
     @discardableResult
     public func recoverOrphanedTurn() throws -> Event? {
         guard let turn = state.openTurn else { return nil }
+        // The turn's own attempt ends first, so no attempt outlives the turn it belongs to.
+        try recoverOrphanedAttempts(roles: ["run"])
         return try append(
             .turnEnded, turn: turn,
             data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
@@ -179,6 +181,82 @@ public actor EventLogWriter {
         return try append(
             .verifyEnded, turn: turn,
             data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
+    }
+
+    /// True while an `agent.attempt.started` has no end.
+    public var hasOpenAttempt: Bool { !state.openAttempts.isEmpty }
+
+    /// Records that a provider process is about to be started for `role`, and returns the attempt's id (`a` and
+    /// the `seq` of its start, so it is unique in this log and stable across a replay). A refusal that spawns
+    /// nothing passes `spawned: false` and is closed at once with `endAttempt`.
+    @discardableResult
+    public func startAttempt(
+        role: String, stage: String? = nil, turn: Int = 0, round: Int? = nil, provider: AgentProviderID, model: String?,
+        spawned: Bool = true
+    ) throws -> String {
+        let id = "a\(state.nextSeq)"
+        var data: [String: JSONValue] = [
+            "attempt": .string(id), "role": .string(role), "provider": .string("\(provider)"),
+            "model": model.map { .string($0) } ?? .null,
+        ]
+        if let stage { data["stage"] = .string(stage) }
+        if let round { data["round"] = .int(round) }
+        if !spawned { data["spawned"] = false }
+        try append(.agentAttemptStarted, turn: turn, data: .object(data))
+        return id
+    }
+
+    /// Closes an attempt. A second call for the same id writes nothing, so recovery and the normal end cannot both
+    /// record one.
+    @discardableResult
+    public func endAttempt(_ id: String, outcome: String, reason: String? = nil, synthetic: Bool = false) throws -> Event? {
+        guard let started = state.openAttempts[id] else { return nil }
+        var data: [String: JSONValue] = ["attempt": .string(id), "outcome": .string(outcome)]
+        // The end stands alone: it says whose attempt it was, as `plan.ended` repeats what its start knew.
+        for key in ["role", "stage", "round", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
+        if let reason { data["reason"] = .string(reason) }
+        if synthetic { data["synthetic"] = true }
+        return try append(.agentAttemptEnded, turn: started.turn, data: .object(data))
+    }
+
+    /// Closes the attempts of `roles` (all when nil) that a runner killed mid-run left open, as `interrupted`.
+    @discardableResult
+    public func recoverOrphanedAttempts(roles: Set<String>? = nil) throws -> [Event] {
+        var closed: [Event] = []
+        for (id, started) in state.openAttempts.sorted(by: { $0.value.seq < $1.value.seq }) {
+            if let roles, !roles.contains(started.data["role"]?.stringValue ?? "") { continue }
+            if let event = try endAttempt(id, outcome: "interrupted", synthetic: true) { closed.append(event) }
+        }
+        return closed
+    }
+
+    /// Closes a judge or review round whose process was killed (a start with no end), and the attempts that belong to
+    /// them, each as a synthetic `interrupted`. The round still counts toward `max_rounds` (its start is still in
+    /// the log) and an interrupted end is never a pass. Run it, holding the log, before any new work; a second call
+    /// writes nothing.
+    @discardableResult
+    public func recoverOrphanedEvaluations() throws -> [Event] {
+        let judging = state.judgeStarts
+        let reviewing = state.reviewStarts
+        guard !judging.isEmpty || !reviewing.isEmpty || !state.openAttempts.isEmpty else { return [] }
+        var closed = try recoverOrphanedAttempts(roles: ["judge", "review"])
+        for started in judging.reversed() {
+            var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
+            // What the start says was asked for, so the end is attributed too; absent in a log from before provider selection.
+            for key in ["argv", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
+            closed.append(try append(.judgeRan, turn: started.turn, data: .object(data)))
+        }
+        for started in reviewing.reversed() {
+            let isStage = started.kind == .reviewStageStarted
+            var data: [String: JSONValue] = ["ok": false, "verdict": .null, "reason": "interrupted", "synthetic": true]
+            for key in ["round", "pr", "head_sha", "provider", "model"] {
+                if let value = started.data[key] { data[key] = value }
+            }
+            if isStage, let stage = started.data["stage"] { data["stage"] = stage }
+            closed.append(
+                try append(isStage ? .reviewStageFinished : .prReviewFinished, turn: started.turn, data: .object(data)))
+        }
+        return closed
     }
 
     /// True while a `plan.started` has no `plan.ended`.

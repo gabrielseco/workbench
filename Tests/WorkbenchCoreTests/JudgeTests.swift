@@ -436,3 +436,79 @@ private final class LockedBox<T>: @unchecked Sendable {
     func set(_ new: T) { lock.withLock { value = new } }
     func get() -> T { lock.withLock { value } }
 }
+
+@Suite(.processGate) struct JudgeAttemptTests {
+    @Test func theJudgeAndItsAttemptCarryTheProviderAndModelItUsed() async throws {
+        var j = try await judged()
+        j.config.agents.judge = AgentSelection(model: "haiku")
+        let answer = try j.file("answer.json", oneCriterion)
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        _ = try await j.fx.service.judge(
+            id: j.id, config: j.config, environment: j.environment("answer=\(answer)", "dump=\(dump)"))
+
+        let events = try j.fx.events(j.id)
+        #expect(
+            events.suffix(4).map(\.kind) == [.judgeStarted, .agentAttemptStarted, .agentAttemptEnded, .judgeRan])
+        for event in events.suffix(4) {
+            #expect(event.data["provider"] == "claude" || event.data["attempt"] != nil, "\(event.kind.rawValue)")
+        }
+        let started = events[events.count - 4], ran = events[events.count - 1]
+        #expect(started.data["provider"] == "claude" && started.data["model"] == "haiku")
+        #expect(ran.data["provider"] == "claude" && ran.data["model"] == "haiku")
+        let attempt = events[events.count - 3], attemptEnd = events[events.count - 2]
+        #expect(attempt.data["role"] == "judge" && attempt.data["model"] == "haiku" && attempt.turn == 1)
+        #expect(attemptEnd.data["outcome"] == "succeeded" && attemptEnd.data["attempt"] == attempt.data["attempt"])
+        let argv = try String(contentsOfFile: dump, encoding: .utf8)
+        #expect(argv.contains("haiku"), "what was recorded is what was asked of claude")
+    }
+
+    @Test func noJudgeModelRecordsNullAndALegacyModelStillApplies() async throws {
+        var j = try await judged()
+        j.config.judgeModel = "sonnet"
+        _ = try await j.fx.service.judge(
+            id: j.id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", oneCriterion))"))
+        let started = try #require(try j.fx.events(j.id).last { $0.kind == .judgeStarted })
+        #expect(started.data["model"] == "sonnet", "judge_model keeps its meaning while [agents.judge] chooses nothing")
+        var plain = try await judged()
+        plain.config.judgeModel = nil
+        plain.config.model = nil
+        _ = try await plain.fx.service.judge(
+            id: plain.id, config: plain.config,
+            environment: plain.environment("answer=\(try plain.file("a.json", oneCriterion))"))
+        let none = try #require(try plain.fx.events(plain.id).last { $0.kind == .judgeStarted })
+        #expect(none.data["model"] == .null)
+    }
+
+    @Test func aKilledJudgeIsClosedBeforeTheNextOneStarts() async throws {
+        let j = try await judged()
+        let log = try EventLogWriter.open(at: j.fx.project.eventsURL(j.id))
+        try await log.append(.judgeStarted, turn: 1, data: ["argv": ["claude"], "provider": "claude", "model": .null])
+        try await log.startAttempt(role: "judge", turn: 1, provider: .claude, model: nil)
+        await log.close()
+
+        _ = try await j.fx.service.judge(
+            id: j.id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", oneCriterion))"))
+        let events = try j.fx.events(j.id)
+        let kinds = events.suffix(8).map(\.kind.rawValue)
+        #expect(
+            kinds == [
+                "judge.started", "agent.attempt.started", "agent.attempt.ended", "judge.ran",
+                "judge.started", "agent.attempt.started", "agent.attempt.ended", "judge.ran",
+            ], "\(kinds)")
+        let synthetic = events.first { $0.kind == .judgeRan && $0.data["synthetic"] == true }
+        #expect(synthetic?.data["reason"] == "interrupted" && synthetic?.data["ok"] == false)
+        #expect(events.last?.data["ok"] == true, "the interrupted judge did not count as having judged the turn")
+        #expect(try j.fx.contents(j.id).isHealthy)
+    }
+
+    @Test func aRefusedLaunchIsARefusedAttemptWithNoProcess() async throws {
+        let j = try await judged()
+        let config = try Config.parse("claude_path = \"/no/such/claude\"\n[tools]\navailable = [\"Read\"]\n")
+        _ = try await j.fx.service.judge(id: j.id, config: config, environment: ["PATH": "/usr/bin:/bin"])
+        let events = try j.fx.events(j.id)
+        let pair = events.filter { $0.kind == .agentAttemptStarted || $0.kind == .agentAttemptEnded }.suffix(2)
+        #expect(pair.first?.data["spawned"] == false && pair.first?.data["role"] == "judge")
+        #expect(pair.last?.data["outcome"] == "refused" && pair.last?.data["reason"]?.stringValue?.contains("not found") == true)
+        #expect(events.last?.kind == .judgeRan && events.last?.data["provider"] == "claude")
+    }
+}

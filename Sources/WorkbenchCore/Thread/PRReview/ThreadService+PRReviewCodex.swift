@@ -26,14 +26,34 @@ extension ThreadService {
             if round.settings.stopRequested() { return (transcript, "the review was stopped") }
             try? FileManager.default.removeItem(at: round.paths.answer)
             let recorder = TranscriptRecorder()
+            // Each physical start is its own attempt, on record before the process exists; a retry adds no round.
+            let attemptID: String?
+            do { attemptID = try await round.attempts?.start() } catch {
+                return (transcript, "the attempt could not be recorded, so codex was not started: \(error)")
+            }
             let execution: AgentExecution
             do { execution = try AgentRunner.start(provider: provider, request: request, recorder: recorder) } catch {
-                guard let failure = error as? AgentFailure else { return (transcript, "codex could not be started: \(error)") }
-                let missing = failure.kind == .missingExecutable
-                return (transcript, missing ? Self.codexMissing(round.settings.codexPath) : failure.message)
+                let problem: String
+                if let failure = error as? AgentFailure {
+                    problem = failure.kind == .missingExecutable ? Self.codexMissing(round.settings.codexPath) : failure.message
+                } else {
+                    problem = "codex could not be started: \(error)"
+                }
+                if let attemptID {
+                    do { try await round.attempts?.end(attemptID, "failed", reason: problem) } catch {
+                        return (transcript, "\(problem); \(error)")
+                    }
+                }
+                return (transcript, problem)
             }
             attach(execution)
             let completion = await execution.completion
+            if let attemptID {
+                do {
+                    try await round.attempts?.end(
+                        attemptID, AttemptLog.outcome(of: completion.process, failure: completion.failure))
+                } catch { return (transcript, "\(error)") }
+            }
             let tail = completion.process.stderrTail
             transcript += "--- attempt \(attempt) ---\n" + recorder.lines.joined(separator: "\n")
             transcript += "\n--- stderr (end) ---\n" + tail + "\n"
