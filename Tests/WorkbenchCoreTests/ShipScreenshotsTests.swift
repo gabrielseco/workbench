@@ -237,12 +237,9 @@ private func shippedThread(_ files: [String: String] = ["home.png": "pixels"]) a
         #expect(tool.calls.isEmpty)
     }
 
-    @Test(arguments: [false, true])
-    func aThreadWithNoVerifierRunIsLeftAlone(oldVerifyStep: Bool) async throws {
+    @Test func aThreadWithNoVerifierRunIsLeftAlone() async throws {
         let fx = try await RunnerFixture()
         let (id, worktree) = try await acceptedThread(fx)
-        // An old log's verify step left a screenshot: it is not the verifier's, so it is not proof.
-        if oldVerifyStep { try await recordLegacyVerify(fx, id, ["home.png": "pixels"]) }
         let plan = ShipPlan(
             id: id, worktree: worktree, branch: "b", remoteBranch: "b", base: "main", head: "abc", origin: "o",
             remote: .absent)

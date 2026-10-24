@@ -55,7 +55,6 @@ extension ThreadService {
             }
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
-            _ = try await log.recoverOrphanedVerify()
             _ = try await log.recoverOrphanedEvaluations()
             try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
             return saved

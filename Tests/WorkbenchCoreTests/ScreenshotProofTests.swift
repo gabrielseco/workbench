@@ -188,17 +188,6 @@ private func status(_ proof: String, verifier: Review.Verifier?, lastTurn: Int =
         #expect(found.map(\.state) == [.evidence, .missing])
         #expect(found[0].file == "proof/turn-1/home.png")
     }
-
-    @Test func anOldLogsVerifyStepIsNotProof() {
-        let shot: JSONValue = ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 3]
-        let old = statuses(
-            turn + [
-                event(3, .verifyStarted, ["command": "scripts/verify.sh"]), event(4, .proofAdded, shot),
-                event(5, .verifyEnded, ["result": "passed", "exit_code": 0, "duration_ms": 10]),
-            ])
-        #expect(old.map(\.state) == [.missing, .missing])
-        #expect(old[0].note?.contains("no verifier has run") == true)
-    }
 }
 
 @Suite struct ScreenshotProofConfigTests {

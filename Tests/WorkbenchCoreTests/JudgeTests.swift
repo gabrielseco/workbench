@@ -221,10 +221,9 @@ private struct Judged {
     }
 }
 
-private func judged(screenshots: Bool = false, oldVerifyStep: Bool = false) async throws -> Judged {
+private func judged(screenshots: Bool = false) async throws -> Judged {
     let fx = try await RunnerFixture()
     let (id, _) = try await acceptedThread(fx)
-    if oldVerifyStep { try await recordLegacyVerify(fx, id, ["step.png": "old"]) }
     if screenshots { try await recordVerifierProof(fx, id, ["home.png": "pixels"]) }
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("judge-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -332,18 +331,6 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         let folder = OrphanSweeper.realPath(j.fx.project.proofDirectory(j.id, turn: 1))
         #expect(argv.contains(folder), "it runs where the screenshots are")
         #expect(argv.contains("The verifier finished after turn 1. It left: home.png."))
-    }
-
-    @Test func anOldLogsVerifyStepIsNeitherDescribedNorShown() async throws {
-        let j = try await judged(oldVerifyStep: true)
-        let dump = j.dir.appendingPathComponent("dump.json").path
-        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
-        let result = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
-        #expect(result.failure == nil, "\(result.failure ?? "")")
-        let argv = try String(contentsOfFile: dump, encoding: .utf8)
-        #expect(argv.contains("No verifier ran.") && argv.contains("## Screenshots\\n\\nNone."), "\(argv)")
-        #expect(!argv.contains("Verify step") && !argv.contains("No verify step ran.") && !argv.contains("step.png"))
-        #expect(!argv.contains("--allowedTools"), "no screenshots, so no tools")
     }
 
     @Test func theVerifiersRunReachesThePrompt() async throws {

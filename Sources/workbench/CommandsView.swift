@@ -43,10 +43,8 @@ extension Commands {
                 guard let config, [.turnEnded, .checkRan].contains(event.kind) else { return false }
                 return await ctx.service.verifierWillRun(id: id, config: config)
             }
-                        var checkPassed = true
             var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
-            var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
-                || contents.openVerifier != nil
+            var sawStart = contents.openTurn != nil || contents.openCheck != nil || contents.openVerifier != nil
             var seen = contents.events.count
             while true {
                 try await Task.sleep(nanoseconds: 300_000_000)
@@ -57,11 +55,9 @@ extension Commands {
                 for event in contents.events.dropFirst(seen) {
                     if event.kind == .turnStarted { sawStart = true }
                     if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
-                    if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
                     let verifiers = await willVerify(event)
                     let done = LogFormatter.followEnds(
-                        event, sawStart: sawStart, checks: checks, turnSucceeded: turnSucceeded,
-                        verifiers: verifiers, checkPassed: checkPassed)
+                        event, sawStart: sawStart, checks: checks, turnSucceeded: turnSucceeded, verifiers: verifiers)
                     if done {
                         return
                     }
@@ -74,14 +70,17 @@ extension Commands {
             if event.kind == .claude, !verbose, LogFormatter.describeClaude(event.data) == nil { return }
             // One line per check: how it ended.
             if event.kind == .checkStarted, !verbose { return }
+            // Only the verifier's files are proof; a line without `source` is an old verify step's.
+            if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
+            // An older log's verify step: the step is gone, so its lines are not described.
+            if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
             out(LogFormatter.describe(event))
         }
 
         var printed = 0
         var contents = try EventLogReader.read(at: url)
         // Already in the middle of a turn or of its check: follow until that ends.
-        let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerify != nil
-            || contents.openVerifier != nil
+        let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerifier != nil
         for event in contents.events {
             show(event)
             printed += 1
@@ -96,7 +95,6 @@ extension Commands {
                 guard let config, [.turnEnded, .checkRan].contains(event.kind) else { return false }
                 return await ctx.service.verifierWillRun(id: id, config: config)
             }
-                var checkPassed = true
         var turnSucceeded = LogFormatter.latestTurnSucceeded(contents.events)
         var sawStart = startedWithOpenTurn
         while true {
@@ -106,11 +104,9 @@ extension Commands {
                 show(event)
                 if event.kind == .turnStarted { sawStart = true }
                 if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
-                if event.kind == .checkRan { checkPassed = event.data["result"]?.stringValue == "passed" }
                 let verifiers = await willVerify(event)
                 let done = LogFormatter.followEnds(
-                    event, sawStart: sawStart, checks: checks, turnSucceeded: turnSucceeded,
-                    verifiers: verifiers, checkPassed: checkPassed)
+                    event, sawStart: sawStart, checks: checks, turnSucceeded: turnSucceeded, verifiers: verifiers)
                 if done {
                     return
                 }

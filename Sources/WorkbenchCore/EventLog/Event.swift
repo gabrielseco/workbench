@@ -24,8 +24,6 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let checkStarted: EventKind = "check.started"
     public static let checkRan: EventKind = "check.ran"
     public static let setupRan: EventKind = "setup.ran"
-    public static let verifyStarted: EventKind = "verify.started"
-    public static let verifyEnded: EventKind = "verify.ended"
     public static let threadNote: EventKind = "thread.note"
     public static let grantAdded: EventKind = "grant.added"
     public static let reviewDecision: EventKind = "review.decision"

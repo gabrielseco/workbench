@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// One file the verify step left in the proof directory, as `proof.added` recorded it.
+/// One file the verifier left in the proof directory, as `proof.added` recorded it.
 public struct ProofFile: Sendable, Equatable {
     /// Relative to the proof directory.
     public var name: String
@@ -9,7 +9,7 @@ public struct ProofFile: Sendable, Equatable {
     public var path: String
     public var sha256: String
     public var bytes: Int
-    /// The commit and tree the worktree held when the verify step ran (`ProofIdentity`), nil in an older log.
+    /// The commit and tree the worktree held when the verifier started (`ProofIdentity`), nil in an older log.
     public var commit: String?
     public var tree: String?
 }

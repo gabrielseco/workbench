@@ -128,7 +128,7 @@ Spec in `docs/spec/event-log.md`, `--json` keys added never renamed.
 
 | Today | After |
 |---|---|
-| `verify_command` (config key, `VerifyRunner`, `verify.started`, `verify_timeout_min`) | removed; `[verifier]` and `verifier.started` / `verifier.ended` |
+| `verify_command` (config key, `VerifyRunner`, the verify step's events, `verify_timeout_min`) | removed; `[verifier]` and `verifier.started` / `verifier.ended` |
 | A project's `scripts/verify.sh` | deleted; the skill does its job |
 | `scripts/verify-steps/*.steps` recipes (Triage #65) | deleted; the skill reads the goal's criteria |
 | The launch-safety half of `verify.sh` (own bundle id, signing, a copy of three settings) | kept as `scripts/verify-app.sh`, a helper the verifier's tool list may allow |
@@ -139,7 +139,7 @@ proof, and P11's `verify` step. Each checks for `[verifier]` instead.
 
 It is a breaking change (a config key and an event). The commit carries a `BREAKING CHANGE:` line, and config load
 says "replace `verify_command` with `[verifier]`" instead of the unknown-key error. Old logs keep their
-`verify.started` lines and still read.
+verify step's lines and still read; since the step's events were removed, those lines are skipped.
 
 **Removal waits for the comparison.** The verifier must beat the recipe on the same criterion first (PR 5), so PR 6
 comes after it. A project with no GUI (expense-tracker, Playwright) needs a skill of its own before it can leave
@@ -167,7 +167,7 @@ since a config nobody can run proves nothing. Size is the diff a reviewer reads:
 | 3. Proof and review **(built)** | Workbench | PNGs recorded as proof; `review` shows the verifier's note; a criterion can name several screenshots; the judge and the design stage get every PNG in the proof directory with its pixel size | `review` and review-stage fixtures; a screenshot criterion satisfied by the verifier's file | M |
 | 4. Triage side | Triage | `verify-app.sh` and the skill's "under Workbench" section; `[verifier]` in Triage's config with `model = "sonnet"` | a recorded verifier run on the Bot finding criterion from Triage #66, including the half the recipe could not show (a finding on someone else's PR has no fix buttons) | S |
 | 5. Pilot and compare | Workbench (docs) | #75's Everything order run with the verifier; the same criterion five times with the recipe and with the verifier, and the model as a variable (Sonnet against Haiku; Opus only if Sonnet fails): cost, time, how often the screenshot shows the state | numbers in this file; the verifier beats the recipe on how often the screenshot shows the state, at a cost the owner accepts, or PR 6 does not start | S |
-| 6. Remove `verify_command` **(built)** | Workbench, then each project | the key, `VerifyRunner`, the `verify.started` event and its readers (the goal-file rule, `doctor`, `ProofCommands`, P6 stages, P11) move to `[verifier]`; the migration message; Triage deletes `verify.sh` and `verify-steps/`; spec and the other plans updated in the same PR | tests: old config refused with the migration message, an old log still reads; `help.sh` and the verifier scenario still PASS; no `verify_command` left under `Sources/` | M |
+| 6. Remove `verify_command` **(built)** | Workbench, then each project | the key, `VerifyRunner`, the verify step's events and their readers (the goal-file rule, `doctor`, `ProofCommands`, P6 stages, P11) move to `[verifier]`; the migration message; Triage deletes `verify.sh` and `verify-steps/`; spec and the other plans updated in the same PR | tests: old config refused with the migration message, an old log still reads; `help.sh` and the verifier scenario still PASS; no `verify_command` left under `Sources/` | M |
 
 Order: 1, 2, 3 in Workbench, then 4 in Triage, then 5, then 6. PR 3 can start once PR 2 has merged; PR 4 only needs PR 2.
 Dropped from scope for now: any provider but Claude (P9).

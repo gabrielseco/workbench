@@ -102,15 +102,41 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         #expect((r["next"] as? String)?.contains("accept") == true)
     }
 
-    @Test func anOldLogWithAVerifyStepLoadsInEveryReaderAndTheStepIsNotShown() async throws {
+    /// The lines an older Workbench wrote for its verify step, which nothing reads any more: a start, a `proof.added`
+    /// without `source` for a file it left, and (unless the runner died during it) an end.
+    private func recordOldVerifyStep(_ fx: RunnerFixture, _ id: String, ended: Bool) async throws {
+        let proof = fx.project.proofDirectory(id, turn: 1)
+        try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
+        try Data("pixels".utf8).write(to: proof.appendingPathComponent("home.png"))
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        try await log.append(
+            EventKind(rawValue: "verify.started"), turn: 1,
+            data: ["command": "scripts/verify.sh", "proof_ref": "proof/turn-1", "commit": "c", "tree": "t"])
+        try await log.append(
+            .proofAdded, turn: 1,
+            data: [
+                "name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 6, "commit": "c",
+                "tree": "t",
+            ])
+        if ended {
+            try await log.append(
+                EventKind(rawValue: "verify.ended"), turn: 1,
+                data: ["result": "passed", "command": "scripts/verify.sh", "exit_code": 0, "proof_files": 1])
+        }
+        await log.close()
+    }
+
+    @Test(arguments: [true, false])
+    func anOldLogWithAVerifyStepLoadsInEveryReaderAndTheStepIsNotShown(ended: Bool) async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
-        try await recordLegacyVerify(fx, id, ["home.png": "pixels"])
-        let events = try fx.events(id)
-        #expect(events.contains { $0.kind == .verifyStarted } && events.contains { $0.kind == .verifyEnded })
-        let state = ThreadState.derive(from: events, id: id)
+        try await recordOldVerifyStep(fx, id, ended: ended)
+        let contents = try EventLogReader.read(at: fx.project.eventsURL(id))
+        #expect(contents.isHealthy, "\(contents.problems)")
+        let state = ThreadState.derive(from: contents.events, id: id)
         #expect(state.review.verifier == nil && Review.ProofSet(verifier: state.review.verifier) == nil)
+        #expect(state.review.status == .awaitingReview, "an old step left open is not a run still going")
 
         let status = try await cli(["status", id, "--json"], in: fx)
         #expect(status.code == 0 && status.stderr.isEmpty, "\(status.text)")
@@ -126,6 +152,9 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         for command in [["status", id], ["review", id], ["log", id]] {
             let out = try await cli(command, in: fx)
             #expect(out.code == 0 && out.stderr.isEmpty, "\(command): \(out.text)")
+            #expect(!out.stdout.contains { $0.contains("home.png") }, "no proof: \(out.text)")
+            let oldStep = out.stdout.contains { $0.contains("verify") && !$0.contains("verifier") }
+            #expect(!oldStep, "no old verify event: \(out.text)")
             if command[0] != "log" {
                 #expect(!out.stdout.contains { $0.hasPrefix("verify:") || $0.hasPrefix("Verify ") }, "\(out.text)")
             }

@@ -21,7 +21,7 @@ struct VerifierRun {
     var environment: [String: String]
     var timeout: TimeInterval
     var killGrace: TimeInterval = 5
-    /// What the worktree held as the run started, recorded on every `proof.added` it writes (as the verify step does).
+    /// What the worktree held as the run started, recorded on every `proof.added` it writes.
     var identity: ProofIdentity?
 
     /// Appends `verifier.started`, runs, sweeps and appends `verifier.ended`. Only a failure to write the log throws.
@@ -226,7 +226,7 @@ struct VerifierRun {
         ThreadService.withoutCredentials(PRBodyBuilder.scrub(text))
     }
 
-    /// The regular files under the proof directory by name, with their hashes; bounded as the verify step's is.
+    /// The regular files under the proof directory by name, with their hashes; bounded by `ProofCollector`.
     static func snapshot(_ proofDirectory: URL, _ threadDirectory: URL) -> [ProofFile] {
         ProofCollector.collect(proofDirectory: proofDirectory, threadDirectory: threadDirectory).files
     }
