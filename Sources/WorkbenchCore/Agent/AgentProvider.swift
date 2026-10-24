@@ -103,6 +103,10 @@ extension AgentRequest {
         guard self.provider == provider.id else {
             return refuse("The request names \(self.provider) but the adapter is \(provider.id).")
         }
+        // Coding edits the worktree and everything else only reads: a mismatch would start the wrong adapter path.
+        guard (purpose == .coding) == (policy == .scopedCoding) else {
+            return refuse("A \(purpose.rawValue) request cannot use the \(policy.rawValue) policy.")
+        }
         guard caps.policies.contains(policy) else {
             return refuse("\(provider.id) has no verified controls for \(policy.rawValue); it is not used for it.")
         }

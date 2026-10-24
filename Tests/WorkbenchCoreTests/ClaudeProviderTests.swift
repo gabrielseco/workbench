@@ -89,7 +89,8 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(request { $0.spend = .timeoutOnly }.validate(against: p) == nil, "valid in general")
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .none }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .start(proposed: "not-a-uuid") }) }
-        #expect(request { $0.policy = .readOnlyEvidence }.validate(against: p) == nil, "valid in general")
+        #expect(request { $0.policy = .readOnlyEvidence }.validate(against: p) != nil, "a coding purpose with a read-only policy")
+        #expect(judgeRequest { $0.spend = .hardCap(1) }.validate(against: p) == nil, "valid in general")
         #expect(throws: AgentFailure.self) { try p.invocation(for: judgeRequest { $0.spend = .timeoutOnly }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: judgeRequest { $0.grants = ["Bash(ls:*)"] }) }
         let handle = AgentSessionHandle(provider: .claude, purpose: .judge, value: session)

@@ -95,3 +95,57 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
   open.
 - **Goal-file form of explicit no-cap approval:** not answered here; PR 2.
 - **Event version 1 stays additive?** Not answered here; PR 2.
+
+## Codex coding adapter (P9 PR 15, built, not selectable by `run` yet)
+
+`CodexProvider` now accepts `scopedCoding`. The invocation is fixed in code and tested byte for byte:
+
+```
+codex exec --json --color never --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules \
+  -c approval_policy="never" -c sandbox_workspace_write.network_access=false \
+  -c sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true \
+  -s workspace-write -C <worktree> -- <prompt>
+```
+
+- **`$TMPDIR` and `/tmp` are excluded from the writable roots.** `workspace-write` otherwise makes them writable (task 1: a push to
+  a remote under `$TMPDIR` succeeded). A control turn with the same argv minus the two `exclude_*` keys did write a file under
+  `$TMPDIR`; with them it is refused. A coding turn therefore cannot change another checkout or push from a temporary one.
+
+- **One-shot, no native resume.** `codex exec resume` takes no `-s` and no `-C`, so a resumed turn cannot state its sandbox on
+  the command line as a first turn does. The adapter declares `resume: .none` and writes no session file (`--ephemeral`); the
+  runner (PR 16) continues a thread with a fresh process and prepared context. Native resume waits for a probe showing
+  `-c sandbox_mode="workspace-write"` holds on a resumed session.
+- **`--ignore-user-config`** is on for coding (not for the review): a coding turn does not inherit the user's sandbox, approval or
+  network settings, and Codex does not write project trust entries into `~/.codex/config.toml`. Login still works.
+- **No dollar cap, no cost.** `turn.completed.usage` has token counts only, so a turn's cost is unknown, never 0. A goal with
+  `budget_usd` is refused by `validate`, naming `spend_policy: timeout_only`.
+- **Success** is `turn.completed` seen and the process ended on its own with status 0.
+- **Refused before any spawn:** a model, extra grants (Claude tool patterns), a caller-supplied or resumed session, images, a
+  relative working directory.
+- **Commits.** `.git` is read-only under `workspace-write`, so the agent cannot commit. `accept` already runs `git add -A` and
+  commits what is pending, so nothing else is needed.
+
+Real probe, run 2026-10-24 with `codex-cli` 0.163.0 through the adapter (`WORKBENCH_CODEX_PROBE=1 swift test --filter
+CodexCodingProbeTests`; ChatGPT login, no dollars). The repository had a commit the remote had not seen and an untracked file,
+so a push or a commit that worked would have shown; each result is read from the filesystem or the remote, not from what the model
+said. Raw streams: `P9-probes/fixtures/codex-coding-*.stdout`, summary `codex-coding-summary.txt`.
+
+| Attempt | Result |
+|---|---|
+| Create a file in the worktree | Allowed |
+| Write a file outside the worktree (under `$HOME`) | Refused (`operation not permitted`) |
+| Append to a tracked file of another checkout (under `$HOME`) | Refused; the file unchanged |
+| Write a file under `$TMPDIR` | Refused (allowed without the `exclude_*` keys: the control turn) |
+| `git push tmpremote main` to a bare remote under `$TMPDIR` | Refused (`remote unpack failed: unable to create temporary object directory`); the remote has no `main` |
+| Write inside `.git` | Refused |
+| `git add -A && git commit` | Refused (`.git/index.lock: Operation not permitted`); HEAD unchanged |
+| `git push origin main` (a local commit the remote lacks) | Refused (`remote unpack failed`); the remote unchanged |
+
+The probe prompts give the command alone (an earlier run ended its sentences with a space and a period, so both pushes ran as `git push … main .` and failed as an invalid refspec before reaching any remote; the Codex review caught it, and the probe now treats such output as inconclusive).
+| `curl` to the internet | No network (`could not resolve host`) |
+
+A result counts only if the turn completed and the attempt is evidenced: a `command_execution` item for it, or, because Codex
+emits no item for a command the sandbox refuses before it runs, the model's own report of the refusal; the summary says which.
+
+Not probed: a long edit-and-test loop, reads outside the worktree (Codex does not confine them; see "Findings that change the plan"),
+a resumed session, and Codex's behaviour when `$CODEX_HOME` is unset or unwritable.

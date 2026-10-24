@@ -1,8 +1,8 @@
 import Foundation
 
-/// The Codex adapter, for read-only evidence work (the automated review). Codex has no dollar cap and cannot confine
-/// reads (docs/plan/P9-capabilities.md), so a request is timeout-only and the limit is stated in `capabilities`.
-/// It is never used to code: that needs its own confinement probes.
+/// The Codex adapter: read-only evidence work (judge, review, goal drafting) and, built but not yet selectable by
+/// `run`, scoped coding. Codex has no dollar cap and cannot confine reads (docs/plan/P9-capabilities.md), so a request
+/// is timeout-only and the limit is stated in `capabilities`.
 public struct CodexProvider: AgentProvider {
     /// `codex` by name (looked up on PATH) or by path.
     public var executable: String
@@ -13,8 +13,8 @@ public struct CodexProvider: AgentProvider {
 
     public var capabilities: AgentCapabilities {
         AgentCapabilities(
-            policies: [.readOnlyEvidence], resume: .none, streamsActivity: false, imageAttachments: true,
-            structuredOutput: false, reportsUsage: false, hardDollarCap: false, confinesReads: false)
+            policies: [.readOnlyEvidence, .scopedCoding], resume: .none, streamsActivity: true, imageAttachments: true,
+            structuredOutput: false, reportsUsage: true, hardDollarCap: false, confinesReads: false)
     }
 
     /// The variables Codex runs with: the fixed minimal set plus its own login and configuration. Nothing of the
@@ -35,6 +35,7 @@ public struct CodexProvider: AgentProvider {
         guard request.spend == .timeoutOnly else {
             throw refuse("Codex cannot enforce a dollar limit; its requests are timeout-only.")
         }
+        if request.policy == .scopedCoding { return try codingInvocation(for: request) }
         guard request.session == .none else { throw refuse("Codex review keeps no conversation.") }
         guard request.grants.isEmpty else { throw refuse("A read-only call takes no extra permissions.") }
         guard request.model == nil else { throw refuse("Choosing a Codex model is not supported yet.") }
@@ -54,8 +55,39 @@ public struct CodexProvider: AgentProvider {
             displayArguments: Array(args[..<(args.firstIndex(of: "--") ?? args.count)]), answerFile: answer)
     }
 
+    /// A coding turn: edits inside the worktree, nothing outside it, no network, and nothing the user's own Codex
+    /// setup could approve or allow (their config and exec-policy rules are ignored, nothing is asked). `.git` is
+    /// read-only under `workspace-write`, so the agent cannot commit; `accept` commits what is pending. No native
+    /// resume (`codex exec resume` takes no `-s` or `-C`), so the turn is one-shot and writes no session file.
+    private func codingInvocation(for request: AgentRequest) throws -> AgentInvocation {
+        func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
+        guard request.session == .none else {
+            throw refuse("Codex coding keeps no conversation yet: each turn is a fresh process with prepared context.")
+        }
+        guard request.grants.isEmpty else { throw refuse("Extra tool permissions are Claude's patterns; Codex takes none.") }
+        guard request.model == nil else { throw refuse("Choosing a Codex model is not supported yet.") }
+        guard request.images.isEmpty else { throw refuse("Images in a Codex coding turn are not supported yet.") }
+        guard request.workingDirectory.path.hasPrefix("/") else {
+            throw refuse("A coding turn needs the worktree's absolute path.")
+        }
+        var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
+        args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
+        args += ["-c", "sandbox_workspace_write.network_access=false"]
+        // `workspace-write` also makes `$TMPDIR` and `/tmp` writable (P9 task 1: a push to a remote there worked),
+        // which would let a turn change another checkout or push from a temporary one.
+        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        args += ["-s", "workspace-write", "-C", request.workingDirectory.path, "--", request.prompt]
+        return AgentInvocation(
+            executable: executable, arguments: args, environment: Self.environment(from: request.environment),
+            displayArguments: Array(args[..<(args.firstIndex(of: "--") ?? args.count)]))
+    }
+
     public func makeDecoder(for request: AgentRequest) -> any AgentDecoder {
-        CodexDecoder(answerFile: request.answerFile)
+        if request.policy == .scopedCoding {
+            return CodexCodingDecoder(purpose: request.purpose, maxRawBytes: request.limits.maxRawBytes)
+        }
+        return CodexDecoder(answerFile: request.answerFile)
     }
 }
 
