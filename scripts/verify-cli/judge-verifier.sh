@@ -116,7 +116,8 @@ GOAL
 wbp "$SCRATCH/new.out" goal new judge-verifier --from "$SCRATCH/goal.md" --base "$BASE"
 ID=$(sed -n 's/^created //p' "$SCRATCH/new.out")
 [[ $ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "goal new printed no thread id ($(head -3 "$SCRATCH/new.out"))"
-wbp "$SCRATCH/approve.out" goal approve "$ID"
+APPROVE=(goal approve "$ID"); [ "$SABOTAGE" = 1 ] && APPROVE+=(--allow-unrunnable-proofs)   # the proof cannot run with the verifier off
+wbp "$SCRATCH/approve.out" "${APPROVE[@]}"
 [ "$RC" = 0 ] || die "goal approve $ID failed: $(cat "$SCRATCH/approve.out")"
 
 wbp "$SCRATCH/run.out" run "$ID"
