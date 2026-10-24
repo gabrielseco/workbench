@@ -42,7 +42,8 @@ public struct ClaudeProvider: AgentProvider {
 
         let turn = TurnRequest(
             sessionID: sessionID, resume: resume, budgetUSD: budget, prompt: request.prompt,
-            appendSystemPrompt: request.rules, model: request.model, extraAllowed: request.grants)
+            appendSystemPrompt: request.rules, model: request.model, extraAllowed: request.grants,
+            reasoningEffort: request.reasoningEffort)
         let built: ClaudeInvocation
         do { built = try config.invocation(for: turn) } catch {
             throw refuse("The Claude command line could not be built: \(error)")

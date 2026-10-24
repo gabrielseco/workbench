@@ -5,11 +5,12 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/agents-config.sh   (the same, on a branch that contains origin/main)
 # Doctor must print one `agent <role>:` line each for goal, run, judge and review: with no tables the defaults (goal
 # manual, run and judge on claude, review on codex); with `[agents.judge] model = "haiku"` the judge line must say haiku.
-# A pair the adapters cannot meet yet (`[agents.run] provider = "codex"`), a stage that sets both `reviewer` and
+# A provider no adapter exists for (`[agents.run] provider = "gemini"`), a stage that sets both `reviewer` and
 # `provider`, and an unknown provider table must each be refused by doctor with a message that names the problem.
+# A coding turn takes `[agents.run]` `model` and `reasoning_effort`: doctor must accept them on codex and name both on the run line.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 leaves the haiku model out and writes valid values in the three refused configs, so the judge
-# line step and the three "refused" steps must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# line step, the three "refused" steps and the coding effort step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -69,15 +70,15 @@ check "[agents.judge] model: the judge line says haiku" "no 'agent judge: claude
 
 # --- 3. refused ------------------------------------------------------------------------------------------
 
-RUNPROVIDER=codex
+RUNPROVIDER=gemini
 [ "$SABOTAGE" = 1 ] && RUNPROVIDER=claude
 config "[agents.run]
 provider = \"$RUNPROVIDER\""
 wbp "$SCRATCH/d3.out" doctor --base "$BASE"
 shown "$SCRATCH/d3.out" 4
-check "run on codex: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
-check "run on codex: the message says it is not possible yet" "no 'cannot use \"codex\" yet' message" \
-    grep -q '\[agents.run\] cannot use "codex" yet' "$SCRATCH/d3.out"
+check "an unknown run provider: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
+check "an unknown run provider: the message names the choices" "no '\"claude\" or \"codex\"' message" \
+    grep -q "'provider' must be \"claude\" or \"codex\"" "$SCRATCH/d3.out"
 
 REVIEWER='reviewer = "codex"
 provider = "codex"'
@@ -100,4 +101,18 @@ shown "$SCRATCH/d5.out" 4
 check "an unknown provider table: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
 check "an unknown provider table: the message names it" "no 'unknown table [providers.gemini]' message" \
     grep -q "unknown table \[providers.gemini\]" "$SCRATCH/d5.out"
+
+# --- 4. a coding model and effort ------------------------------------------------------------------------
+
+EFFORT='reasoning_effort = "high"'
+[ "$SABOTAGE" = 1 ] && EFFORT=""
+config "[agents.run]
+provider = \"codex\"
+model = \"gpt-6-astra\"
+$EFFORT"
+wbp "$SCRATCH/d6.out" doctor --base "$BASE"
+shown "$SCRATCH/d6.out" 6
+check "run on codex with a model and an effort: doctor accepts it" "workbench doctor exited $RC" test "$RC" = 0
+check "the run line names the model and the effort" "no 'agent run: codex, model gpt-6-astra, effort high' line" \
+    grep -q "^agent run: *codex, model gpt-6-astra, effort high" "$SCRATCH/d6.out"
 finish

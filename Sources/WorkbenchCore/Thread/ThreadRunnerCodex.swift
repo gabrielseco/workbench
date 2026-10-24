@@ -20,15 +20,6 @@ extension ThreadRunner {
                 "codex has no dollar cap, so there is no budget to override; the turn is bounded by its timeout "
                     + "(turn_timeout_min in the goal)")
         }
-        if goal.model != nil {
-            throw RunnerError.codingUnsupported(
-                "the goal sets `model: \(goal.model ?? "")`, and the Codex adapter takes no model yet, so it runs on "
-                    + "Codex's own default. Remove `model` from the goal and approve it again.")
-        }
-        if let model = agent.model {
-            throw RunnerError.codingUnsupported(
-                "the config picks the model \"\(model)\" for coding, and the Codex adapter takes no model yet.")
-        }
     }
 
     static let summaryLimit = 4000

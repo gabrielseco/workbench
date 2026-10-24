@@ -60,7 +60,7 @@ private let completed =
 
     @Test func codingRefusals() {
         for tweak: (inout AgentRequest) -> Void in [
-            { $0.model = "gpt" }, { $0.grants = ["Bash(ls:*)"] }, { $0.session = .start(proposed: "abc") },
+            { $0.grants = ["Bash(ls:*)"] }, { $0.session = .start(proposed: "abc") },
             { $0.images = [URL(fileURLWithPath: "/p/one.png")] },
             { $0.workingDirectory = URL(string: "relative/tree") ?? $0.workingDirectory },
         ] {

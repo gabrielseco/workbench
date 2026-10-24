@@ -65,7 +65,6 @@ import Testing
             problems("[agents.judge]\nreasoning_effort = \"ultra\"")
                 .contains { $0.contains("'reasoning_effort'") && $0.contains("\"xhigh\"") })
         #expect(problems("[agents.judge]\nreasoning_effort = 3").contains { $0.contains("'reasoning_effort' must be a string") })
-        #expect(problems("[agents.run]\nreasoning_effort = \"low\"").contains { $0.contains("not allowed in [agents.run]") })
         #expect(problems("[agents.plan]\nmodel = \"x\"").contains { $0.contains("unknown table [agents.plan]") })
         #expect(problems("[agents.judge]\nbogus = 1").contains("unknown key 'bogus' in [agents.judge]"))
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
@@ -188,10 +187,13 @@ import Testing
         #expect(try parse("model = \"opus\"\n[agents.run]\nprovider = \"codex\"").resolvedRunAgent().model == nil)
     }
 
-    @Test func runModelOnCodexIsRefused() {
-        let found = problems("[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-x\"")
-        #expect(found.contains { $0.contains("takes no model") }, "\(found)")
-        #expect(problems("[agents.run]\nprovider = \"claude\"\nmodel = \"opus\"").isEmpty)
+    @Test func runModelAndEffortOnEitherProviderAreRead() throws {
+        let codex = try parse(
+            "[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-x\"\nreasoning_effort = \"high\"").resolvedRunAgent()
+        #expect(codex.model == "gpt-x" && codex.reasoningEffort == "high")
+        let claude = try parse("[agents.run]\nmodel = \"opus\"\nreasoning_effort = \"max\"").resolvedRunAgent(goalModel: "haiku")
+        #expect(claude.model == "haiku" && claude.reasoningEffort == "max", "the goal's model still wins")
+        #expect(problems("[agents.run]\nreasoning_effort = \"ultra\"").contains { $0.contains("'reasoning_effort'") })
     }
 
     @Test func legacyReviewSelection() throws {

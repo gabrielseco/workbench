@@ -105,7 +105,7 @@ opened with `open` shows the goal beside the diff. `.workbench/` is already kept
 | 3 | `stopped` | the turn was stopped |
 | 4 | `timed-out` | the turn timed out |
 | 5 | `budget-exceeded` | the turn went over its budget |
-| 6 | `refused` | a live runner, the goal is not approved, a proof names a command the run cannot execute, or the thread already has a successful turn and no `--feedback` was given; on Codex also a goal with `budget_usd`, a goal `model`, and `--budget`; a `model` under `[agents.run]` with Codex is refused when the config loads (exit 2, `invalid-config`) (Codex has no dollar cap or model choice; the message says what to change) |
+| 6 | `refused` | a live runner, the goal is not approved, a proof names a command the run cannot execute, or the thread already has a successful turn and no `--feedback` was given; on Codex also a goal with `budget_usd` and `--budget` (Codex has no dollar cap; the message says what to change) |
 | 7 | `not-found` | no such thread |
 
 ### `send-back`

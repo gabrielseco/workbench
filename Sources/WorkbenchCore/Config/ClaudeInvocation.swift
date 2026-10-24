@@ -11,14 +11,17 @@ public struct TurnRequest: Sendable, Equatable {
     public var appendSystemPrompt: String?
     /// The goal's model, which wins over the config's.
     public var model: String?
+    /// `--effort` for the turn; nil leaves Claude's own setting.
+    public var reasoningEffort: String?
     /// Patterns the user granted this thread for this turn, on top of the project's (`GrantLedger`).
     public var extraAllowed: [String]
 
     public init(
         sessionID: UUID, resume: Bool, budgetUSD: Decimal?, prompt: String, appendSystemPrompt: String? = nil,
-        model: String? = nil, extraAllowed: [String] = []
+        model: String? = nil, extraAllowed: [String] = [], reasoningEffort: String? = nil
     ) {
         self.model = model
+        self.reasoningEffort = reasoningEffort
         self.extraAllowed = extraAllowed
         self.sessionID = sessionID
         self.resume = resume
@@ -71,6 +74,7 @@ extension Config {
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
         if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
         if let model = turn.model ?? model { args += ["--model", model] }
+        if let effort = turn.reasoningEffort { args += ["--effort", effort] }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools
         // A grant never repeats a pattern or revives one the project denies; `--disallowedTools` still wins.

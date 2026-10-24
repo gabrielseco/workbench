@@ -283,6 +283,17 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(codes("safe_mode = \"yes\"\n[tools]\navailable = [\"Read\"]") == [.wrongType])
     }
 
+    @Test func effortIsPassedToACodingTurnOnlyWhenSet() throws {
+        let config = try Config.parse("[tools]\navailable = [\"Read\"]")
+        func args(_ effort: String?) throws -> [String] {
+            try config.invocation(
+                for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x", reasoningEffort: effort)).arguments
+        }
+        let set = try args("high")
+        #expect(set[try #require(set.firstIndex(of: "--effort")) + 1] == "high")
+        #expect(try !args(nil).contains("--effort"))
+    }
+
     @Test func modelIsPassedWhenSetAndOmittedWhenNot() throws {
         let with = try Config.parse("model = \"haiku\"\n[tools]\navailable = [\"Read\"]")
         let args = try with.invocation(

@@ -23,11 +23,12 @@ extension ThreadRunner {
         limits.killGrace = options.killGrace
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         if agent.provider == .codex {
-            // One fresh process: no session, no model, no tool patterns, and the rules are already at the top of the prompt.
+            // One fresh process: no session, no tool patterns, and the rules are already at the top of the prompt.
             return AgentRequest(
-                provider: .codex, prompt: prompt, workingDirectory: worktree, outputDirectory: outputDirectory,
-                policy: .scopedCoding, spend: spend(for: goal, options: options), purpose: .coding,
-                environment: options.parentEnvironment, limits: limits)
+                provider: .codex, model: agent.model, prompt: prompt, workingDirectory: worktree,
+                outputDirectory: outputDirectory, policy: .scopedCoding, spend: spend(for: goal, options: options),
+                purpose: .coding,
+                environment: options.parentEnvironment, limits: limits, reasoningEffort: agent.reasoningEffort)
         }
         let session: AgentSessionIntent =
             resume
@@ -38,6 +39,7 @@ extension ThreadRunner {
             outputDirectory: outputDirectory, policy: .scopedCoding,
             spend: spend(for: goal, options: options), session: session, purpose: .coding,
             environment: options.parentEnvironment, limits: limits,
-            rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config))
+            rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config),
+            reasoningEffort: agent.reasoningEffort)
     }
 }

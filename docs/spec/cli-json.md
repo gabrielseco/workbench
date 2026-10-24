@@ -95,7 +95,7 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
   `[providers.<id>] executable` is not executable), `budget_without_cap` (the active thread's goal has `budget_usd` and the
   `run` provider cannot enforce a dollar limit; the message names the fix, `spend_policy: timeout_only`), `unpriced_not_allowed` (a
   judge or review on a provider with no dollar cap, chosen with `provider`, and no `allow_unpriced = true` in its table: it is
-  refused before it starts; a review on the default Codex is not reported), `model_unsupported` (the goal sets a `model` and the coding provider is Codex, which takes none; a problem), `unconfined_reads` (a read-only judge or review, or a coding turn on Codex, on a provider that can read
+  refused before it starts; a review on the default Codex is not reported), `unconfined_reads` (a read-only judge or review, or a coding turn on Codex, on a provider that can read
   outside the checkout, as Codex can: a stated limit) and `setting_unused` (a key that changes nothing: `allow_unpriced` on a provider that enforces a dollar limit, or an
   executable no responsibility uses; on Codex `allow_unpriced` is described as what it does, a timeout-only run with unknown cost). `severity` is `problem` (the responsibility would
   be refused or fail) or `note`. A problem is a warning: it does not make `passed` false.

@@ -213,6 +213,7 @@ public struct ThreadService: Sendable {
                     "spend_policy": .string(binding.spendPolicy),
                     "provider": .string(binding.provider),
                     "model": binding.model.map { .string($0) } ?? .null,
+                    "reasoning_effort": binding.reasoningEffort.map { .string($0) } ?? .null,
                 ])
         }
         return approved
