@@ -177,6 +177,18 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(issues(Doctor.agents(claude, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
     }
 
+    @Test func aListedStageOnCodexNeedsItsOwnOptIn() throws {
+        let text =
+            present + "[agents.review]\nprovider = \"claude\"\n[review]\nstages = [\"pr-review\", \"design\"]\n"
+            + "[review.stage.design]\nprompt = \"d.md\"\nprovider = \"codex\"\n"
+        let all = issues(Doctor.agents(try config(text), searchPath: "/bin"), .review)
+        let found = all.filter { $0.kind == "unpriced_not_allowed" }
+        #expect(found.count == 1 && found[0].severity == .problem, "\(found)")
+        #expect(found[0].message.contains("design") && found[0].message.contains("[review.stage.design]"))
+        let allowed = try config(text + "allow_unpriced = true\n")
+        #expect(issues(Doctor.agents(allowed, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
+    }
+
     @Test func legacyCodexReviewIsNotProblem() throws {
         let plain = try config(present)
         #expect(issues(Doctor.agents(plain, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })

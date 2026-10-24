@@ -121,12 +121,15 @@ extension ThreadService {
         if agent.provider == .codex {
             // Codex has no structured output: it is asked for the same JSON as text, and writes its last message to a file
             // beside the evidence, never inside the folder it reads.
-            try? FileManager.default.createDirectory(at: answerFolder, withIntermediateDirectories: true)
+            // With no screenshots the judge would run in the thread folder, which holds `judge/`: it gets an empty folder
+            // of its own instead, so its answer is never inside what it reads.
+            let readFolder = screenshots.isEmpty ? answerFolder.appendingPathComponent("empty") : folder
+            try? FileManager.default.createDirectory(at: readFolder, withIntermediateDirectories: true)
             let answer = answerFolder.appendingPathComponent("turn-\(turn).answer.txt")
             try? FileManager.default.removeItem(at: answer)
             request = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: Judge.prompt(for: input, attachedImages: true),
-                images: screenshots.map { folder.appendingPathComponent($0) }, workingDirectory: folder,
+                images: screenshots.map { folder.appendingPathComponent($0) }, workingDirectory: readFolder,
                 outputDirectory: answerFolder, policy: .readOnlyEvidence, spend: (try? spend.get()) ?? .timeoutOnly,
                 purpose: .judge, environment: environment,
                 limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), answerFile: answer)

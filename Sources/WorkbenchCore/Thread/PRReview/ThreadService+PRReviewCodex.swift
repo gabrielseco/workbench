@@ -21,7 +21,7 @@ extension ThreadService {
                 prompt: PRReview.instruction(
                     brief: round.paths.brief.lastPathComponent, checkout: round.paths.tree.lastPathComponent),
                 images: images, workingDirectory: round.paths.folder, outputDirectory: round.paths.folder,
-                policy: .readOnlyEvidence, spend: spend, session: .start(proposed: UUID().uuidString.lowercased()),
+                policy: .readOnlyEvidence, spend: spend, session: .start(proposed: round.sessionID),
                 purpose: .review, environment: round.settings.environment, limits: limits,
                 evidenceFiles: [round.paths.brief.lastPathComponent, round.paths.diff.lastPathComponent],
                 answerFile: round.paths.answer)

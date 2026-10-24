@@ -43,6 +43,17 @@ import Testing
         try await r.expectNoLeftovers()
     }
 
+    @Test func theSessionOnRecordIsTheSessionThatRan() async throws {
+        let (r, base) = try await claudeReview()
+        let dump = r.codex.dir.appendingPathComponent("dump.json")
+        let env = base.merging(["FAKE_CLAUDE": base["FAKE_CLAUDE"]! + ",dump=\(dump.path)"]) { $1 }
+        _ = try await r.round(environment: env)
+        let logged = argv(r.started.first)
+        let id = try #require(logged.firstIndex(of: "--session-id").map { logged[$0 + 1] })
+        let ran = try String(contentsOf: dump, encoding: .utf8).lowercased()
+        #expect(ran.contains(id), "the id in the log, \(id), is the one claude was started with")
+    }
+
     @Test func claudeReviewSameValidators() async throws {
         let fix = try await claudeReview("- a.txt: wrong.\nVERDICT: FIX\n")
         #expect(try await fix.r.round(environment: fix.env).verdict == .fix)
@@ -103,6 +114,10 @@ import Testing
         #expect(result.verdict == nil)
         #expect(result.failure?.contains("cannot take images") == true, "\(String(describing: result.failure))")
         #expect(r.finished.first?.data["ok"] == false)
+        // Also with no proof to attach: the reason is the provider's, not a missing screenshot.
+        let (bare, bareEnv) = try await claudeReview(extraConfig: "[review.stage.pr-review]\ninputs = [\"diff\", \"proof\"]")
+        let noProof = try await bare.round(environment: bareEnv)
+        #expect(noProof.failure?.contains("cannot take images") == true, "\(String(describing: noProof.failure))")
         let pair = try attempts(r).filter { $0.data["role"] == "review" || $0.kind == .agentAttemptEnded }
         #expect(pair.last?.data["outcome"] == "refused", "nothing was started: \(pair.map(\.data))")
         try await r.expectNoLeftovers()

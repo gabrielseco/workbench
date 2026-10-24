@@ -90,7 +90,8 @@ public struct AgentsConfig: Sendable, Equatable {
         let base = self.review.provider ?? AgentRole.review.defaultProvider
         for stage in review.definitions.values.sorted(by: { $0.name < $1.name })
         where stage.model != nil && (stage.provider ?? base) == .codex {
-            fail(.invalidValue, nil, "'model' in the review stage '\(stage.name)' cannot be set: \(Self.codexModelReason)")
+            let name = stage.name
+            fail(.invalidValue, stage.modelLine, "'model' in the review stage '\(name)' cannot be set: \(Self.codexModelReason)")
         }
     }
 

@@ -170,6 +170,17 @@ import Testing
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
     }
 
+    @Test func aModelInheritingCodexIsRefusedAtItsLine() {
+        let text = "[review]\nstages = [\"pr-review\", \"x\"]\n[review.stage.x]\nprompt = \"a.md\"\nmodel = \"haiku\"\n"
+        do {
+            _ = try parse(text)
+            Issue.record("a Codex stage with a model must be refused")
+        } catch let error as ConfigError {
+            let found = error.problems.first { $0.message.contains("takes no model") }
+            #expect(found?.line == 5, "the line of the model key: \(String(describing: found?.line))")
+        } catch { Issue.record("\(error)") }
+    }
+
     @Test func runStaysClaudeOnly() {
         let found = problems("[agents.run]\nprovider = \"codex\"")
         #expect(found.contains { $0.contains("[agents.run] cannot use \"codex\" yet") }, "\(found)")

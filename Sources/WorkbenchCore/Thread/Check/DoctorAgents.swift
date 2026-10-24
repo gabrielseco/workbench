@@ -77,6 +77,25 @@ extension Doctor {
                 role: found[index].role, resolved: resolved, config: config, searchPath: searchPath, goal: goal,
                 caps: capabilities?(resolved.provider) ?? Self.capabilities(of: resolved.provider, config: config))
         }
+        // Each listed stage resolves on its own: one that moves to a provider without a dollar cap needs its own opt-in.
+        if let at = found.firstIndex(where: { $0.role == .review }) {
+            for name in config.review.stages where name != ReviewConfig.prReviewStage && config.review.stage(name) != nil {
+                let agent = config.resolvedReviewAgent(stage: name)
+                guard let caps = capabilities?(agent.provider) ?? Self.capabilities(of: agent.provider, config: config),
+                    caps.policies.contains(.readOnlyEvidence)
+                else { continue }
+                let spend = AgentSpendPolicy.spend(
+                    role: .review, agent: agent, capabilities: caps, cap: 0,
+                    legacy: config.reviewUsesLegacySelection(stage: name),
+                    table: config.allowUnpricedTable(.review, stage: name))
+                if case .failure(let refusal) = spend {
+                    found[at].issues.append(
+                        DoctorAgentIssue(
+                            role: .review, kind: "unpriced_not_allowed", severity: .problem,
+                            message: "review stage \(name) is refused on \(agent.provider): \(refusal.message)"))
+                }
+            }
+        }
         let used = Set(found.compactMap { $0.resolved?.provider })
         let unusedProviders = config.agents.executables.keys.filter { !used.contains($0) }.sorted { "\($0)" < "\($1)" }
         for provider in unusedProviders {

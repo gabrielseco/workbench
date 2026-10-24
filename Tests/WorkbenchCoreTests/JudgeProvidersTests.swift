@@ -67,6 +67,19 @@ private func codexJudged(
         #expect(!"\(String(describing: argv))".contains("Decide, for each criterion"), "no prompt in the log")
     }
 
+    @Test func theCodexAnswerIsNeverInsideTheFolderItReads() async throws {
+        for withScreenshots in [false, true] {
+            let j = try await codexJudged(verify: withScreenshots)
+            _ = try await j.judge()
+            let call = try #require(j.codex.calls.first)
+            let words = call.split(separator: " ").map(String.init)
+            let cwd = try #require(words.firstIndex(of: "-C").map { words[$0 + 1] })
+            let answer = try #require(words.firstIndex(of: "-o").map { words[$0 + 1] })
+            let read = URL(fileURLWithPath: cwd).resolvingSymlinksInPath().path + "/"
+            #expect(!URL(fileURLWithPath: answer).resolvingSymlinksInPath().path.hasPrefix(read), "\(answer) is inside \(cwd)")
+        }
+    }
+
     @Test(arguments: [
         #"{"criteria": [], "concerns": []}"#,
         #"{"criteria": [{"id": "c1", "met": true, "evidence": []}, {"id": "c1", "met": true, "evidence": []}], "concerns": []}"#,
