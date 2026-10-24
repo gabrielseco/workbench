@@ -426,9 +426,23 @@ struct FrontMatterLine: Sendable, Equatable {
         value = rest.trimmingCharacters(in: .whitespaces)
     }
 
+    private static func needsQuotes(_ value: String) -> Bool {
+        value.contains("  #") || value.hasPrefix("\"") || value.hasPrefix("'")
+    }
+
+    /// The quote that can wrap `value`, nil when it needs quotes and holds both kinds: the parser has no escapes and
+    /// ends a quoted value at the first matching quote.
+    private static func quote(for value: String) -> Character? {
+        if !value.contains("\"") { return "\"" }
+        return value.contains("'") ? nil : "'"
+    }
+
+    /// Whether `rendered` reads back as `value`.
+    static func canRender(_ value: String) -> Bool { !needsQuotes(value) || quote(for: value) != nil }
+
     var rendered: String {
-        let needsQuotes = value.contains("  #") || value.hasPrefix("\"") || value.hasPrefix("'")
-        let shown = needsQuotes ? "\"\(value)\"" : value
+        let quote = Self.needsQuotes(value) ? Self.quote(for: value) : nil
+        let shown = quote.map { "\($0)\(value)\($0)" } ?? value
         return "\(key): \(shown)" + (comment.map { "  # \($0)" } ?? "")
     }
 }

@@ -206,6 +206,19 @@ import Testing
         #expect(try await draftTitle(from: text, name: "twelve") == "Fix  # twelve")
     }
 
+    @Test func aTitleWithAQuoteInItIsWrittenWithTheOtherQuote() async throws {
+        let text = source(title: "'Fix  # \"login\"'")
+        #expect(try await draftTitle(from: text, name: "login") == "Fix  # \"login\"")
+    }
+
+    @Test func aTitleThatNeedsQuotesAndHoldsBothKindsIsRefused() throws {
+        #expect(throws: GoalCopyValueError(
+            message: "'title' needs quotes and holds both \" and ', which a goal file cannot write")
+        ) {
+            try GoalFile.copy(source(title: "\"a'"))
+        }
+    }
+
     @Test func aFileWithoutATitleGetsOneFromTheName() async throws {
         let copy = try GoalFile.copy(source(title: nil))
         #expect(copy.title == nil)

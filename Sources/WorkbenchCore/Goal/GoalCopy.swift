@@ -59,6 +59,10 @@ extension GoalFile {
             switch entry.key {
             case "title":
                 guard !entry.value.isEmpty else { throw GoalCopyValueError(message: "'title' must not be empty") }
+                guard FrontMatterLine.canRender(entry.value) else {
+                    throw GoalCopyValueError(
+                        message: "'title' needs quotes and holds both \" and ', which a goal file cannot write")
+                }
                 title = entry.value
             case "budget_usd":
                 guard let value = budgetValue(entry.value) else { throw GoalCopyValueError(message: budgetProblem(entry.value)) }
