@@ -32,13 +32,15 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
 
 ## Findings that change the plan
 
-1. **A user's Codex config can defeat the sandbox flag.** This machine's `~/.codex/config.toml` has
-   `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`. With it, `-s read-only` and
+1. **A user's Codex setup can defeat the sandbox flag.** This machine has `approval_policy = "on-request"` and
+   `approvals_reviewer = "auto_review"` in `~/.codex/config.toml` and a `~/.codex/rules/default.rules`. With them, `-s read-only` and
    `-s workspace-write` both let `git commit && git push origin main` through: the sandbox refused, the
-   auto-reviewer approved, and the command re-ran outside it (the remote's `main` moved in both runs). With
-   `--ignore-user-config --ignore-rules -c approval_policy="never"` the same attempts fail.
-   **Workbench's current review passes only `exec -s read-only -C <tree> --color never --ephemeral -o <file>`
-   (`PRReview.swift:74`), so it is exposed to this today.** The adapter in task 2 must state the policy on
+   command re-ran outside it, and the remote's `main` moved in both runs. With
+   `--ignore-user-config --ignore-rules -c approval_policy="never"` the same attempts fail. A follow-up probe
+   isolated the cause: `--ignore-rules` alone stops the push, while keeping the config and setting only
+   `approval_policy="never"` does not. The user's exec-policy rules are what let it through.
+   **Workbench's review passed only `exec -s read-only -C <tree> --color never --ephemeral -o <file>`, so it was
+   exposed to this; it now adds `--ignore-rules -c approval_policy="never"`.** The adapter in task 2 must state the policy on
    the command line and ignore user config; the fix for the existing path should not wait for P9.
 2. **Codex cannot confine reads.** Claude's `--restricted` stops a judge or reviewer reading
    `~/.ssh` or another repo; Codex's `read-only` does not. D8 says unsupported combinations fail

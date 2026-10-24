@@ -408,9 +408,11 @@ records) are new kinds and new fields, which an older reader skips.
 
 Task 1 found that a user's `~/.codex/config.toml` (`approval_policy`, `approvals_reviewer`,
 `sandbox_workspace_write.network_access`) changes what `-s read-only` means, and that a Codex run adds trust
-entries to that file. An adapter therefore states its policy on the command line: `--ignore-user-config
---ignore-rules -c approval_policy="never"` with the sandbox mode, and no inherited network setting. The
-existing Codex review needs the same, and is the first slice to change (it does not wait for the adapter).
+entries to that file. An adapter therefore states its policy on the command line: `--ignore-rules -c approval_policy="never"` with the sandbox mode,
+and no inherited network setting. A follow-up probe showed the user's exec-policy rules were what let
+`git push` through a read-only sandbox, and `--ignore-rules` alone stops it, so `--ignore-user-config`
+(which would also drop the user's model) is not needed for that; the adapter decides whether it wants it
+for the trust-entry writes. The existing Codex review already passes both flags.
 
 ### Read confinement is not a requirement
 
