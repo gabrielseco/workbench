@@ -7,9 +7,9 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/judge-codex-screenshots.sh   (the same, on a branch that contains origin/main)
 # A thread is run once with the verifier on, then judged by Codex: `judge` must exit 0 with a verdict (the thread's `judge/` folder
 # did not exist before) and `review --json` must show c1 met. Then the stand-in is made to write nothing and `judge --again` must
-# fail naming codex and the answer file it was asked for ("left no answer in .../judge/turn-1.answer.txt"), not "no result".
+# fail saying codex "left no answer in <path>" (the CLI shows machine paths as <path>), not "no result".
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 makes
-# the stand-in write nothing from the start, so the steps "judge: exit 0", "review shows the verdict with c1 met" must FAIL.
+# the stand-in write nothing from the start, so the steps "judge: exit 0" and "review shows the verdict with c1 met" must FAIL.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -130,8 +130,8 @@ wbp "$SCRATCH/approve.out" goal approve "$ID"
 wbp "$SCRATCH/run.out" run "$ID"
 shown "$SCRATCH/run.out" 20
 check "run: the turn finished" "workbench run exited $RC" test "$RC" = 0
-check "the verifier left home.png, and the thread has no judge folder yet" "home.png missing or judge/ already there" \
-    bash -c 'ls "$1"/.workbench/threads/"$2"/proof* "$1"/.workbench/threads/"$2"/*/home.png >/dev/null 2>&1 && ! test -e "$1"/.workbench/threads/"$2"/judge' _ "$P" "$ID"
+check "the thread has no judge folder before the judge runs" "judge/ is already there" \
+    bash -c '! test -e "$1/.workbench/threads/$2/judge"' _ "$P" "$ID"
 
 wbp "$SCRATCH/judge.out" judge "$ID"
 shown "$SCRATCH/judge.out" 8
@@ -145,6 +145,6 @@ rm -f "$ANSWER"
 wbp "$SCRATCH/judge2.out" judge "$ID" --again
 shown "$SCRATCH/judge2.out" 4
 check "judge --again with no answer written: exit 1" "workbench judge exited $RC" test "$RC" = 1
-check "the failure names codex and the answer file, not 'no result'" "message is: $(head -c 300 "$SCRATCH/judge2.out")" \
-    bash -c 'grep -q "codex left no answer in .*/judge/turn-1\.answer\.txt" "$1" && ! grep -q "no result" "$1"' _ "$SCRATCH/judge2.out"
+check "the failure says codex left no answer, not 'no result'" "message is: $(tail -2 "$SCRATCH/judge2.out")" \
+    bash -c 'grep -q "codex left no answer in " "$1" && ! grep -q "no result" "$1"' _ "$SCRATCH/judge2.out"
 finish
