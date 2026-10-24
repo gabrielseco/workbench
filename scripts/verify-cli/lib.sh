@@ -8,7 +8,8 @@
 #   check "<step>" "<why>" <command...>
 #   remove_on_pass worktree <path> | branch <name>
 #   finish                         summary, cleanup on pass, RESULT line, exit 0 or 1
-# Environment: VERIFY_CLI_BUDGET_USD (default 0.50), VERIFY_CLI_MODEL (default haiku), VERIFY_CLI_FROM_BRANCH=1
+# Environment: VERIFY_CLI_BUDGET_USD (default 0.50), VERIFY_CLI_MODEL (default haiku), VERIFY_CLI_BUILD (debug, the
+# default, or release: which binary is built and checked), VERIFY_CLI_FROM_BRANCH=1
 # (run from a branch that contains origin's main), VERIFY_CLI_SABOTAGE=cleanup (a cleanup step fails on purpose;
 # a scenario's own VERIFY_CLI_SABOTAGE=1 breaks its feature). See .agents/skills/verify-cli/SKILL.md.
 set -u
@@ -114,9 +115,17 @@ preflight() {
         || die "origin/main is behind origin; run git fetch origin main"
 
     SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/verify-cli-$SCENARIO.XXXXXX") || die "mktemp failed"
-    echo "==> building workbench"
-    with_timeout "$T_BUILD" swift build --product workbench || die "swift build failed"
-    WB="$ROOT/.build/debug/workbench"
+    # `release` builds and checks the optimized binary a user would install: it can behave differently from the debug one that
+    # the unit tests run, and no unit test can tell (they cannot run in release).
+    BUILD=${VERIFY_CLI_BUILD:-debug}
+    case "$BUILD" in
+        debug) BUILD_FLAGS=() ;;
+        release) BUILD_FLAGS=(-c release) ;;
+        *) die "VERIFY_CLI_BUILD must be debug or release, got '$BUILD'" ;;
+    esac
+    echo "==> building workbench ($BUILD)"
+    with_timeout "$T_BUILD" swift build ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} --product workbench || die "swift build failed"
+    WB="$ROOT/.build/$BUILD/workbench"
     [ -x "$WB" ] || die "no $WB after the build"
 
     local active claude
