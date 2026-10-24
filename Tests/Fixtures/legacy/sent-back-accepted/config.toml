@@ -1,0 +1,6 @@
+[pr_review]
+max_rounds = 3
+
+[tools]
+available = ["Read", "Edit", "Bash"]
+allowed = ["Read", "Edit"]

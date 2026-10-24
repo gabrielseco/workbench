@@ -1,0 +1,15 @@
+base:     main
+claude:   NOT FOUND (claude)
+model:    the claude CLI default (no `model` in the config)
+agent goal:   none (goal drafting stays manual)
+agent run:    claude, model the provider's default
+agent judge:  claude, model the provider's default
+agent review: codex, model the provider's default
+setup:    none declared: nothing is installed in a new worktree
+check:    none declared: turns will end with no check evidence
+verifier: .claude/skills/verify/SKILL.md
+  model:  the claude CLI default
+  tools:  Read
+  budget: $1  timeout: 10 min
+  warning: the verifier skill .claude/skills/verify/SKILL.md is not a file in the base commit; commit it first, or fix [verifier] skill
+editor:  none set

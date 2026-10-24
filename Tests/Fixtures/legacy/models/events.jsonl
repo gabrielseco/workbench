@@ -1,0 +1,14 @@
+{"data":{"base":"main","branch":"workbench/t","repo":"/r","worktree":"/r/.workbench/worktrees/t"},"kind":"thread.created","seq":1,"ts":"2026-10-13T06:00:01.000Z","turn":0,"v":1}
+{"data":{"hash":null,"status":"draft"},"kind":"goal.saved","seq":2,"ts":"2026-10-13T06:00:02.000Z","turn":0,"v":1}
+{"data":{"budget_usd":5,"hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"kind":"goal.approved","seq":3,"ts":"2026-10-13T06:00:03.000Z","turn":0,"v":1}
+{"data":{"base_commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","branch":"workbench/t","path":"/r/.workbench/worktrees/t"},"kind":"worktree.created","seq":4,"ts":"2026-10-13T06:00:04.000Z","turn":0,"v":1}
+{"data":{"argv":["claude","-p","--output-format","stream-json","--session-id","11111111-2222-3333-4444-555555555555"],"pid":4242,"prompt_ref":"prompts/turn-1.md","resume":false,"session_id":"11111111-2222-3333-4444-555555555555"},"kind":"turn.started","seq":5,"ts":"2026-10-13T06:00:05.000Z","turn":1,"v":1}
+{"data":{"model":"claude-opus-5-5","session_id":"11111111-2222-3333-4444-555555555555","subtype":"init","tools":["Read","Edit","Bash"],"type":"system"},"kind":"claude","seq":6,"ts":"2026-10-13T06:00:06.000Z","turn":1,"v":1}
+{"data":{"message":{"content":[{"id":"t1","input":{"file_path":"a.txt"},"name":"Edit","type":"tool_use"}],"role":"assistant"},"session_id":"11111111-2222-3333-4444-555555555555","type":"assistant"},"kind":"claude","seq":7,"ts":"2026-10-13T06:00:07.000Z","turn":1,"v":1}
+{"data":{"message":{"content":[{"id":"t2","input":{"command":"git push"},"name":"Bash","type":"tool_use"}],"role":"assistant"},"session_id":"11111111-2222-3333-4444-555555555555","type":"assistant"},"kind":"claude","seq":8,"ts":"2026-10-13T06:00:08.000Z","turn":1,"v":1}
+{"data":{"is_error":false,"permission_denials":[{"tool_input":{"command":"git push"},"tool_name":"Bash"}],"session_id":"11111111-2222-3333-4444-555555555555","subtype":"success","total_cost_usd":0.12,"type":"result"},"kind":"claude","seq":9,"ts":"2026-10-13T06:00:09.000Z","turn":1,"v":1}
+{"data":{"cause":"natural","cost_usd":0.12,"duration_ms":4000,"exit_code":0,"permission_denials":1,"result":"succeeded","session_id":"11111111-2222-3333-4444-555555555555"},"kind":"turn.ended","seq":10,"ts":"2026-10-13T06:00:10.000Z","turn":1,"v":1}
+{"data":{"command":"true"},"kind":"check.started","seq":11,"ts":"2026-10-13T06:00:11.000Z","turn":1,"v":1}
+{"data":{"command":"true","duration_ms":10,"exit_code":0,"output_ref":"check/turn-1.log","result":"passed"},"kind":"check.ran","seq":12,"ts":"2026-10-13T06:00:12.000Z","turn":1,"v":1}
+{"data":{"argv":["claude","-p","--model","haiku"]},"kind":"judge.started","seq":13,"ts":"2026-10-13T06:00:13.000Z","turn":1,"v":1}
+{"data":{"concerns":[],"cost_usd":0.03,"criteria":[{"evidence":["a.txt changed"],"id":"c1","met":true}],"ok":true},"kind":"judge.ran","seq":14,"ts":"2026-10-13T06:00:14.000Z","turn":1,"v":1}
