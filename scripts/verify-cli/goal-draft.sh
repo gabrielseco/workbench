@@ -46,7 +46,7 @@ echo "fake codex"
 FAKE_SCRIPT
 chmod +x "$FAKE/codex"
 GOOD='{"title": "Add retry", "request": "Retry uploads with exponential backoff.", "criteria": [{"text": "Delay grows exponentially.", "proof": "cat retry.txt"}, {"text": "It gives up after five tries.", "proof": "cat retry.txt"}], "out_of_scope": ["Changing the request timeout."]}'
-runs() { wc -l <"$FAKE/runs" 2>/dev/null | tr -d ' ' || echo 0; }
+runs() { if [ -f "$FAKE/runs" ]; then wc -l <"$FAKE/runs" | tr -d ' '; else echo 0; fi; }
 threads() { ls "$P/.workbench/threads" 2>/dev/null | wc -l | tr -d ' '; }
 setgoal() { # <extra lines for [agents.goal]>: rewrites the config with a Codex goal agent (none when the argument is "-")
     grep -v -e '^model = ' -e '^claude_path = ' "$SCRATCH/config.base" >"$SCRATCH/config.rest"
@@ -117,7 +117,7 @@ check "the log has the draft pair and an attempt, and no turn or approval" "log 
     bash -c 'grep -q "goal draft started on codex" "$1" && grep -q "goal draft finished" "$1" && grep -q "attempt .*: goal on codex" "$1" && ! grep -q -e "turn 1" -e "approved" "$1"' _ "$SCRATCH/log.out"
 wbp "$SCRATCH/status.json" status --json
 check "status: not approved, no turn" "status says otherwise" \
-    py "assert d['goal']['status']!='approved' and d['turns']==0, d['goal']" <"$SCRATCH/status.json"
+    py "assert d['goal']['approval']=='draft' and d['turns']==0, d['goal']" <"$SCRATCH/status.json"
 
 # --- 5. --replace over an approved goal ---------------------------------------------------------------------
 
@@ -134,7 +134,7 @@ check "--replace: exit 0 and it says the goal needs approving again" "exit $RC o
 check "the goal is a draft again with the new text and no approval" "goal file is not redrafted" \
     bash -c 'grep -q "^status: draft" "$1" && grep -q "^title: Add retry v2" "$1" && ! grep -q "^approved" "$1" && grep -q "^base: $2" "$1"' _ "$GOAL" "$BASE"
 wbp "$SCRATCH/status2.json" status --json
-check "status shows it is not approved" "status says approved" py "assert d['goal']['status']!='approved', d['goal']" <"$SCRATCH/status2.json"
+check "status shows it is not approved" "status says approved" py "assert d['goal']['approval']=='draft', d['goal']" <"$SCRATCH/status2.json"
 echo "I would rather not." >"$FAKE/answer"
 cp "$GOAL" "$SCRATCH/goal.before"
 wbp "$SCRATCH/repfail.out" goal draft "$ID" --replace --request "break it"
