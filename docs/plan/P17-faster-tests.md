@@ -94,14 +94,27 @@ Done when: finding 2 has a cause (it does: sequential git spawns) and the CI bas
 
 Done when: a full run leaves no `wb-*` directory (done).
 
-### 3. Size the gate by measurement
+### 3. Size the gate by measurement (done: the gate is not the limit)
 
-- `ProcessGate.shared` reads `WORKBENCH_TEST_PERMITS`; the default stays the current value on CI (`CI=true`)
-  and becomes about 2 x cores otherwise, if task 1 shows idle CPU.
-- Try 1x, 2x, 3x cores locally; keep the largest value that makes no wait time out. Record the table here.
-- Leave the CI value alone in this PR; change it in task 7 with a 3-core measurement.
+- `WORKBENCH_TEST_PERMITS` overrides `ProcessGate.shared`'s size (a positive number; anything else is ignored);
+  the default stays one per core with a floor of two. `ProcessGate.permits(environment:cores:)` is tested.
+- Measured 2026-10-24, 11 cores, full parallel run of 1468 tests, **load average 17 from other work on the
+  machine** (so absolute times are noisy):
 
-Done when: the local parallel run is faster with zero new failures over 5 runs in a row.
+  | Permits | Wall time | Result |
+  |---:|---:|---|
+  | 11 (1x cores, the default) | 181 s | all pass |
+  | 22 | 170 s | 2 flaky failures (the editor hang test took 143 s, a check CLI test 146 s) |
+  | 33 | 176 s | passes |
+  | 44 | 191 s | the editor hang test took 163 s |
+
+- Conclusion: more permits do not make the run faster and make the timeout tests flaky, so the default stays.
+  The earlier reading (281% CPU of 1100%) does not mean the gate is too small. What limits the parallel run is
+  still unknown; candidates are the cooperative thread pool (as wide as the core count, and a test that blocks a
+  thread holds it), the longest chains of tests in one suite, and the git spawns of finding 2. Measure on a quiet
+  machine and by the CI baseline (task 1) before spending more here.
+
+Done when: the question "is the gate too small?" is answered (it is not).
 
 ### 4. Fewer and parallel git calls in the commands the tests drive
 
