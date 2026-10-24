@@ -7,7 +7,7 @@
 # starting anything and say what the goal was approved for; `goal approve` must bind the new model without touching the goal
 # file, and `log` must show both approvals. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start.
 # VERIFY_CLI_SABOTAGE=1 leaves the config unchanged, so `run` is not refused for its settings (it gets as far as the missing
-# claude) and the steps that expect the refusal, the second approval and its log line must FAIL. The frame and the other
+# claude) and the steps that expect the refusal, the second approval, its log line and the count of approvals must FAIL. The frame and the other
 # switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
