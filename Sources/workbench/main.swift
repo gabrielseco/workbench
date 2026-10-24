@@ -61,8 +61,10 @@ do {
     case "goal":
         switch arguments.dropFirst().first {
         case "new": try await Commands.goalNew(Array(arguments.dropFirst(2)))
+        case "draft": exit(try await Commands.goalDraft(Array(arguments.dropFirst(2))))
         case "approve": try await Commands.goalApprove(Array(arguments.dropFirst(2)))
-        default: throw CLIError.usage("usage: workbench goal new <name> | workbench goal approve [id]")
+        default:
+            throw CLIError.usage("usage: workbench goal new <name> | goal draft <name> | goal approve [id]")
         }
     case "run":
         exit(try await Commands.run(Array(arguments.dropFirst())))

@@ -23,7 +23,19 @@ import Testing
     @Test func aConfiguredSelectionIsShown() async throws {
         let found = try await report("[agents.judge]\nmodel = \"haiku\"\n[agents.goal]\nprovider = \"codex\"").agents
         #expect(found[2].resolved?.model == "haiku")
-        #expect(found[0].resolved?.provider == .codex && found[0].note == "drafting is not enabled yet")
+        #expect(found[0].resolved?.provider == .codex && found[0].note == nil)
+    }
+
+    @Test func goalAgentUnpricedNotAllowed() async throws {
+        let refused = try await report("[agents.goal]\nprovider = \"codex\"")
+        let problem = try #require(refused.agentProblems.first { $0.role == .goal && $0.kind == "unpriced_not_allowed" })
+        #expect(problem.message.contains("allow_unpriced") && problem.message.contains("[agents.goal]"), "\(problem.message)")
+        #expect(refused.agents[0].resolved?.provider == .codex, "the goal agent's provider is shown")
+        let allowed = try await report("[agents.goal]\nprovider = \"codex\"\nallow_unpriced = true")
+        #expect(!allowed.agentProblems.contains { $0.role == .goal && $0.kind == "unpriced_not_allowed" })
+        let claude = try await report("[agents.goal]\nprovider = \"claude\"\nmodel = \"sonnet\"")
+        #expect(!claude.agentProblems.contains { $0.kind == "unpriced_not_allowed" })
+        #expect(claude.agents[0].resolved?.model == "sonnet")
     }
 
     @Test func theCommandPrintsOneLineEach() async throws {

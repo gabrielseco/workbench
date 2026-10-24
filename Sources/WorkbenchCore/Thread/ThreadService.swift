@@ -104,7 +104,9 @@ public struct ThreadService: Sendable {
     /// thread is active.
     public func newThread(
         name: String, base: String? = nil, updating: String? = nil, config: Config? = nil,
-        lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings()
+        lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings(),
+        title proposedTitle: String? = nil,
+        afterCreate: (@Sendable (_ id: String, _ log: EventLogWriter) async throws -> Void)? = nil
     ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
         if let updating {
@@ -131,7 +133,7 @@ public struct ThreadService: Sendable {
             : "budget_usd: "
                 + NSDecimalNumber(decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD)
                 .stringValue
-        let title = name.replacingOccurrences(of: "-", with: " ")
+        let title = proposedTitle ?? name.replacingOccurrences(of: "-", with: " ")
         let modelLine =
             settings.model.map { "model: \($0)" }
             ?? "# model: opus   (optional; unset = the config's model, else the claude CLI default)"
@@ -166,6 +168,7 @@ public struct ThreadService: Sendable {
         try await withLog(id) { log in
             try await log.append(.threadCreated, data: .object(created))
             try await log.append(.goalSaved, data: ["status": "draft", "hash": .null])
+            try await afterCreate?(id, log)
         }
         return id
     }

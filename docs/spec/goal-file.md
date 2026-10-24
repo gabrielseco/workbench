@@ -168,6 +168,24 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   branch: the branch `origin/HEAD` points to, else a local `main`, else a local `master`, else the checked-out
   branch, else `main` (an unborn repo). It is not simply the checked-out branch, which may be a feature branch.
   `goal new` prints it as `base: <branch>`; `doctor` without `--base` uses the same default.
+- **`workbench goal draft <name> (--request "<text>" | --request-file <path>) [--base <branch>]` has the goal agent write
+  the draft** (P9 PR 14). It needs `[agents.goal]` naming a provider (`goal new` stays the only way without one: the
+  command is refused, exit 6, and says so). The agent is read-only, asked once, bounded at 300 s and, on Claude, at $0.50;
+  Codex has no dollar cap and is refused before it starts unless `[agents.goal] allow_unpriced = true`, the message naming
+  that key. It is given the rough request (quoted, at most 16 KiB), the project's instructions file at the base and up to
+  400 tracked paths, and the goal-file shape. It may return only `title`, `request`, `criteria` (`text` and `proof`) and
+  `out_of_scope`; an answer that sets anything else (`id`, `base`, `model`, `budget_usd`, `spend_policy`,
+  `turn_timeout_min`, `push_to`, `status`, `approved…`) is refused, not trimmed. Workbench numbers the criteria `c1`…, and
+  the answer must read back through `GoalFile.parse` as the same words (no criterion without a proof, no heading or
+  `TODO(workbench)` in the text, no code fence). The goal is written through `goal new`'s creation path: `status: draft`,
+  `base` from `--base` or the default, the config's default budget, 30 minutes, no `model`. The drafting model is never the
+  goal's coding `model`. A draft that is not a valid goal (failed, timed out, stopped, malformed) creates no thread and no
+  file, prints `no draft (cost): reason. Nothing was written.` and exits 1 (3 when stopped); the agent is not retried. The
+  agent's proposal is kept beside the thread as `goal-draft/proposal.json`. Nothing here approves the goal or starts a run.
+- **`goal draft [<id>] --replace --request …` redrafts an existing goal.** Only `title` and the three sections change;
+  the id, base, spend, timeout, `model`, `push_to` and comments stay as they are. `status` becomes `draft` and
+  `approved_at` and `approved_hash` are removed, so an approved goal needs `goal approve` again (the command says so). It
+  is refused for an ended thread or a live run. A failed draft leaves the file byte-identical.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
   out of scope, and its `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are checked by the
   same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.

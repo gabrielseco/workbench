@@ -66,7 +66,7 @@ extension Doctor {
         var found = [
             DoctorAgent(
                 role: .goal, resolved: config.resolvedGoalAgent,
-                note: config.resolvedGoalAgent == nil ? "goal drafting stays manual" : "drafting is not enabled yet"),
+                note: config.resolvedGoalAgent == nil ? "goal drafting stays manual" : nil),
             DoctorAgent(role: .run, resolved: config.resolvedRunAgent(goalModel: goal?.model), note: nil),
             DoctorAgent(role: .judge, resolved: config.resolvedJudgeAgent(), note: nil),
             DoctorAgent(role: .review, resolved: config.resolvedReviewAgent(), note: nil),
@@ -149,12 +149,13 @@ extension Doctor {
                     + "repository writes and posting are still refused")
         }
         // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
-        if role == .judge || role == .review, caps.policies.contains(.readOnlyEvidence) {
+        if role != .run, caps.policies.contains(.readOnlyEvidence) {
             let legacy = role == .review && config.reviewUsesLegacySelection()
             let spend = AgentSpendPolicy.spend(
                 role: role, agent: resolved, capabilities: caps, cap: 0, legacy: legacy, table: config.allowUnpricedTable(role))
             if case .failure(let refusal) = spend {
-                add("unpriced_not_allowed", .problem, "\(role.rawValue) is refused on \(provider): \(refusal.message)")
+                let job = role == .goal ? "goal draft" : role.rawValue
+                add("unpriced_not_allowed", .problem, "\(job) is refused on \(provider): \(refusal.message)")
             }
         }
         let selection = config.agents.selection(role)

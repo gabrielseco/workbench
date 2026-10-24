@@ -14,11 +14,12 @@ enum AgentSpendPolicy {
     ) -> Result<AgentSpend, AgentFailure> {
         if capabilities.hardDollarCap { return .success(.hardCap(cap)) }
         if agent.allowUnpriced || legacy { return .success(.timeoutOnly) }
+        let job = role == .goal ? "goal draft" : role.rawValue
         return .failure(
             AgentFailure(
                 .unsupportedCapability,
-                "\(agent.provider) cannot enforce a dollar limit, so the \(role.rawValue) on it has no cap and its cost is "
-                    + "unknown. Set allow_unpriced = true in \(table) to accept a timeout-only \(role.rawValue), "
+                "\(agent.provider) cannot enforce a dollar limit, so the \(job) on it has no cap and its cost is "
+                    + "unknown. Set allow_unpriced = true in \(table) to accept a timeout-only \(job), "
                     + "or choose another provider.",
                 retry: .afterFix))
     }

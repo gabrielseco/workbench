@@ -251,6 +251,24 @@ public struct GoalFile: Sendable, Equatable {
         return try GoalFile.parse(newText)
     }
 
+    // MARK: Redrafting
+
+    /// The file with a new title and body, for `goal draft --replace`. The front matter keeps what Workbench and the
+    /// person set (`id`, `base`, spend, timeout, `model`, `push_to`, comments); `status` becomes `draft` and the approval
+    /// keys go, so an approved goal needs `goal approve` again whatever the new text hashes to.
+    func redrafting(title: String, body: GoalBody) throws -> GoalFile {
+        var updated = frontMatter.filter { $0.key != "approved_at" && $0.key != "approved_hash" }
+        for (key, value) in [("title", title), ("status", GoalStatus.draft.rawValue)] {
+            if let i = updated.firstIndex(where: { $0.key == key }) {
+                updated[i].value = value
+            } else {
+                updated.append(FrontMatterLine(key: key, value: value))
+            }
+        }
+        let header = (["---"] + updated.map(\.rendered) + ["---"]).joined(separator: "\n")
+        return try GoalFile.parse(header + "\n\n\n" + body.rendered + "\n")
+    }
+
     // MARK: Sections
 
     private struct Section {
