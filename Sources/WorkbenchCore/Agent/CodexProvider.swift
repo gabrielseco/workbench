@@ -68,14 +68,13 @@ public struct CodexProvider: AgentProvider {
             throw refuse("Codex coding keeps no conversation yet: each turn is a fresh process with prepared context.")
         }
         guard request.grants.isEmpty else { throw refuse("Extra tool permissions are Claude's patterns; Codex takes none.") }
-        guard request.model == nil, request.reasoningEffort == nil else {
-            throw refuse("Choosing a Codex model or effort is not supported yet for coding turns.")
-        }
         guard request.images.isEmpty else { throw refuse("Images in a Codex coding turn are not supported yet.") }
         guard request.workingDirectory.path.hasPrefix("/") else {
             throw refuse("A coding turn needs the worktree's absolute path.")
         }
         var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
+        if let model = request.model { args += ["-m", model] }
+        if let effort = request.reasoningEffort { args += ["-c", "model_reasoning_effort=\"\(effort)\""] }
         args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
         args += ["-c", "sandbox_workspace_write.network_access=false"]
         // `workspace-write` also makes `$TMPDIR` and `/tmp` writable (P9 task 1: a push to a remote there worked),

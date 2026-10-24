@@ -151,12 +151,6 @@ extension Doctor {
                     : "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
                         + "repository writes and posting are still refused")
         }
-        if role == .run, provider == .codex, let model = goal?.model {
-            add(
-                "model_unsupported", .problem,
-                "goal \(goal?.thread ?? "") sets `model: \(model)` and the Codex adapter takes no model yet; "
-                    + "remove it from the goal and approve it again")
-        }
         // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
         if role != .run, caps.policies.contains(.readOnlyEvidence) {
             let legacy = role == .review && config.reviewUsesLegacySelection()

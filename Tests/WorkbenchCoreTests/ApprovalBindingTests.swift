@@ -93,6 +93,16 @@ import Testing
         try ThreadRunner.requireApprovedAgent(state: state, agent: agent, spendPolicy: "hard_cap")
     }
 
+    @Test func anApprovalForADifferentEffortIsRefused() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let state = ThreadStore(project: fx.project).state(of: id)
+        let now = ResolvedAgent(provider: .claude, model: nil, reasoningEffort: "high", allowUnpriced: false)
+        #expect(throws: RunnerError.self) { try ThreadRunner.requireApprovedAgent(state: state, agent: now) }
+        try ThreadRunner.requireApprovedAgent(
+            state: state, agent: ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
+    }
+
     @Test func approveTwiceWritesOnce() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

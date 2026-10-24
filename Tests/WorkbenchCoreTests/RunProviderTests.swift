@@ -89,17 +89,17 @@ private func codexRun(
 @Suite(.processGate) struct RunProviderTests {
     // MARK: Refusals before anything is touched
 
-    @Test func goalModelOnCodexIsRefused() async throws {
-        let c = try await codexRun(goalEdit: {
-            $0.replacingOccurrences(of: #"# model: opus[^\n]*"#, with: "model: opus", options: .regularExpression)
-        })
-        do {
-            _ = try await c.run()
-            Issue.record("ran with a goal model on Codex")
-        } catch let error as RunnerError {
-            #expect("\(error)".contains("model") && "\(error)".contains("opus"), "\(error)")
-        }
-        #expect(c.runs == 0 && !c.hasWorktree)
+    @Test func theGoalModelAndTheConfiguredEffortReachCodex() async throws {
+        let c = try await codexRun(
+            extraConfig: "reasoning_effort = \"high\"\n",
+            goalEdit: {
+                $0.replacingOccurrences(of: #"# model: opus[^\n]*"#, with: "model: gpt-6-astra", options: .regularExpression)
+            })
+        _ = try await c.run()
+        let args = try #require(c.read("args_1"))
+        #expect(args.contains("-m gpt-6-astra") && args.contains("model_reasoning_effort=\"high\""), "\(args)")
+        let approved = try #require(c.events.last { $0.kind == .goalApproved })
+        #expect(approved.data["model"] == "gpt-6-astra" && approved.data["reasoning_effort"] == "high")
     }
 
     @Test func budgetGoalRefusedOnCodex() async throws {

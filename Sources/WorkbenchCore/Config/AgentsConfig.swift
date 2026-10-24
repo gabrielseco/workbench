@@ -93,8 +93,6 @@ public struct AgentsConfig: Sendable, Equatable {
         return nil
     }
 
-    static let codexCodingReason =
-        "the Codex adapter takes no model or effort for coding turns yet, so it runs on Codex's own default"
     /// What `reasoning_effort` may be: the levels both `claude --effort` and Codex list. Which of them a model supports is its own check.
     static let efforts = ["low", "medium", "high", "xhigh", "max"]
 
@@ -153,11 +151,6 @@ extension AgentsConfig {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [\(tableName)]")
         }
         let selection = AgentSelection.parse(table, name: tableName, role: role, fail: fail)
-        if role == .run, let entry = table.entries["reasoning_effort"] {
-            fail(
-                .invalidValue, entry.line,
-                "'reasoning_effort' is not allowed in [agents.run] yet: coding turns keep the provider's own setting")
-        }
         if role == .run, let entry = table.entries["allow_unpriced"] {
             fail(
                 .invalidValue, entry.line,
@@ -195,10 +188,6 @@ extension AgentSelection {
             if case .string(let value) = entry.value {
                 if SafeNames.isModelName(value) {
                     selection.model = value
-                    let effective = selection.provider ?? (inheritsProvider ? nil : role.defaultProvider)
-                    if effective == .codex, role == .run {
-                        fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexCodingReason)")
-                    }
                 } else {
                     fail(.invalidValue, entry.line, "'model' in [\(name)] must be a model name or alias like \"haiku\"")
                 }
@@ -268,7 +257,8 @@ extension Config {
     public func resolvedRunAgent(goalModel: String? = nil) -> ResolvedAgent {
         let provider = agents.run.provider ?? AgentRole.run.defaultProvider
         let model = goalModel ?? agents.run.model ?? legacyModel(model, for: provider)
-        return ResolvedAgent(provider: provider, model: model, allowUnpriced: false)
+        return ResolvedAgent(
+            provider: provider, model: model, reasoningEffort: agents.run.reasoningEffort, allowUnpriced: false)
     }
 
     /// The judge: `--model`, `[agents.judge]`, then the legacy `judge_model` and `model`, which apply only while

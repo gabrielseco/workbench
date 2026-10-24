@@ -219,8 +219,7 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   `no dollar cap: bounded by N min per turn` where a budget would be. **A cost nobody reported is unknown, never 0:**
   `turn.ended` has no `cost_usd`, the thread's total says `unknown` in text and is null in `--json`.
   **Coding on Codex** (`[agents.run] provider = "codex"`, P9 PR 16) is that case: the goal must say `spend_policy: timeout_only`,
-  and must not set `model` (the Codex adapter takes none, and neither may `[agents.run]`); `run` and `send-back` refuse
-  otherwise, before touching the worktree, naming what to change. A Codex turn is bounded by `turn_timeout_min`. Switching a
+  (and no `budget_usd`); `run` and `send-back` refuse otherwise, before touching the worktree, naming what to change. A Codex turn is bounded by `turn_timeout_min`. Switching a
   thread's provider needs `goal approve` again, as for any change to the coding settings.
   **An older Workbench fails closed.** Front matter is strict, so a binary from before this key reports
   `unknown key 'spend_policy'` and refuses the goal instead of running it with a cap it cannot see.
@@ -493,8 +492,9 @@ path run without a shell; `[providers.claude]` and `claude_path` name the same e
 `reasoning_effort` and `allow_unpriced`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
 `--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
 Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
-`goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes neither on Codex and no `reasoning_effort`
-yet. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
+`goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes both on either provider. A coding turn gets the goal's `model`, else `[agents.run]`'s, and
+`[agents.run]`'s `reasoning_effort` (Codex `-m` and `-c model_reasoning_effort`, Claude `--model` and `--effort`); the goal has
+no effort key. The model and effort are part of what `goal approve` binds, so changing either needs `goal approve` again. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.

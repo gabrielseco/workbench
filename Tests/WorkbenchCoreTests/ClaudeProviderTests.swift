@@ -184,6 +184,15 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
     }
 }
 
+@Suite struct ClaudeCodingEffortTests {
+    @Test func aCodingTurnCarriesTheModelAndEffortToClaude() throws {
+        let args = try provider().invocation(for: request { $0.model = "opus"; $0.reasoningEffort = "high" }).arguments
+        #expect(args[try #require(args.firstIndex(of: "--model")) + 1] == "opus")
+        #expect(args[try #require(args.firstIndex(of: "--effort")) + 1] == "high")
+        #expect(try !provider().invocation(for: request()).arguments.contains("--effort"))
+    }
+}
+
 @Suite struct ClaudeReadOnlyTests {
     private func argv(_ config: String = claudeConfig, _ tweak: (inout AgentRequest) -> Void = { _ in }) throws -> [String] {
         try ClaudeProvider(config: try Config.parse(config)).invocation(for: judgeRequest(tweak)).arguments
