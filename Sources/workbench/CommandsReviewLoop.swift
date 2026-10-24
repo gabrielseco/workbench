@@ -54,7 +54,7 @@ extension Commands {
     /// One review of `id`'s pull request, with Ctrl-C ending it.
     private static func reviewOnce(_ id: String, ctx: Context, config: Config) async throws -> LoopReview {
         out()
-        out("asking Codex to review the pull request (read-only; this can take several minutes)...")
+        out(ReviewProgress.loopRound(config: config))
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the review") { holder.stop() }
         defer {
