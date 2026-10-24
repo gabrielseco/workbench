@@ -54,6 +54,15 @@ private func gzip(_ arguments: [String], input: URL) async throws -> (exit: Proc
         #expect(throws: Gzip.Failure.corrupt("checksum")) { try Gzip.decompress(altered) }
     }
 
+    @Test func aBombIsRefusedWithoutInflatingPastTheLimit() throws {
+        // 8 MiB of zeros is a few KiB gzipped; a reader that allows 1 MiB must stop at it.
+        let bomb = try Gzip.compress(Data(count: 8 << 20))
+        #expect(bomb.count < 20_000)
+        #expect(throws: Gzip.Failure.tooLarge) { try Gzip.decompress(bomb, limit: 1 << 20) }
+        #expect(try Gzip.decompress(bomb, limit: 8 << 20).count == 8 << 20, "exactly at the limit is allowed")
+        #expect(throws: Gzip.Failure.tooLarge) { try Gzip.decompress(bomb, limit: (8 << 20) - 1) }
+    }
+
     @Test func theCRCIsTheStandardOne() {
         #expect(Gzip.crc32(Data("123456789".utf8)) == 0xCBF4_3926)
         #expect(Gzip.crc32(Data()) == 0)

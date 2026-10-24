@@ -37,6 +37,18 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
         #expect(first.lines.count == 40 && TranscriptFile.read(at: plain, from: first.offset).lines.isEmpty)
     }
 
+    @Test func aReaderHalfWayThroughThePlainFileGoesOnInTheCompressedOne() throws {
+        let turn = try finishedTurn()
+        let (plain, original) = (turn.plain, turn.original)
+        // It has seen the first line only, by byte offset, as `log -f` does.
+        let head = try #require(Data(contentsOf: plain).firstIndex(of: 0x0A))
+        #expect(TranscriptFile.compress(plain))
+
+        let rest = TranscriptFile.read(at: plain, from: head + 1)
+        #expect(rest.lines.count == original.count - 1)
+        #expect(rest.lines.map(\.data) == original.dropFirst().map(\.data))
+    }
+
     @Test func aFailureLeavesThePlainFileWhole() throws {
         let turn = try finishedTurn()
         let (plain, original) = (turn.plain, turn.original)

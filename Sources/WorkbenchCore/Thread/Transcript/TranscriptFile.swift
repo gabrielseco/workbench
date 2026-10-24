@@ -32,7 +32,11 @@ public enum TranscriptFile {
     static func contents(_ plain: URL) -> Data? {
         // The plain file goes only after the compressed one is in place, so one of the two is always readable.
         if let data = try? Data(contentsOf: plain) { return data }
-        guard let packed = try? Data(contentsOf: compressedURL(plain)) else { return nil }
+        let packedURL = compressedURL(plain)
+        // A file we wrote is never bigger than the plain one we were allowed to compress.
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: packedURL.path))?[.size] as? Int,
+            size <= maxCompressedBytes, let packed = try? Data(contentsOf: packedURL)
+        else { return nil }
         return try? Gzip.decompress(packed)
     }
 

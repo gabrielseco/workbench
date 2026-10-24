@@ -1,3 +1,4 @@
+import Compression
 import Foundation
 
 /// gzip (RFC 1952) over Foundation's raw DEFLATE, so `zcat` and `gzip -t` read what Workbench writes and no library
@@ -6,6 +7,8 @@ enum Gzip {
     enum Failure: Error, Equatable {
         case notGzip
         case corrupt(String)
+        /// The data would inflate past the cap; nothing past it was produced.
+        case tooLarge
     }
 
     private static let crcTable: [UInt32] = (0..<256).map { n -> UInt32 in
@@ -25,7 +28,7 @@ enum Gzip {
         return out
     }
 
-    static func decompress(_ data: Data) throws -> Data {
+    static func decompress(_ data: Data, limit: Int = TranscriptFile.maxCompressedBytes) throws -> Data {
         let bytes = [UInt8](data)
         guard bytes.count >= 18, bytes[0] == 0x1F, bytes[1] == 0x8B, bytes[2] == 0x08 else { throw Failure.notGzip }
         let flags = bytes[3]
@@ -41,10 +44,7 @@ enum Gzip {
         if flags & 0x02 != 0 { start += 2 }  // header CRC
         guard start <= bytes.count - 8 else { throw Failure.corrupt("truncated") }
         let body = Data(bytes[start..<(bytes.count - 8)])
-        let inflated: Data
-        do { inflated = try (body as NSData).decompressed(using: .zlib) as Data } catch {
-            throw Failure.corrupt("not a DEFLATE stream")
-        }
+        let inflated = try inflate(body, limit: limit)
         let trailer = Array(bytes.suffix(8))
         let crc = trailer[0..<4].enumerated().reduce(UInt32(0)) { $0 | UInt32($1.element) << (8 * UInt32($1.offset)) }
         let size = trailer[4..<8].enumerated().reduce(UInt32(0)) { $0 | UInt32($1.element) << (8 * UInt32($1.offset)) }
@@ -52,6 +52,39 @@ enum Gzip {
             throw Failure.corrupt("checksum")
         }
         return inflated
+    }
+
+    /// Raw DEFLATE to bytes, in chunks, stopping with `tooLarge` as soon as the output would pass `limit`: a file
+    /// that was replaced or made elsewhere cannot make a reader allocate what it likes.
+    private static func inflate(_ body: Data, limit: Int) throws -> Data {
+        let chunk = 1 << 16
+        let scratch = UnsafeMutablePointer<UInt8>.allocate(capacity: chunk)
+        defer { scratch.deallocate() }
+        let stream = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
+        defer { stream.deallocate() }
+        guard compression_stream_init(stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB) != COMPRESSION_STATUS_ERROR else {
+            throw Failure.corrupt("cannot start inflating")
+        }
+        defer { compression_stream_destroy(stream) }
+
+        var out = Data()
+        return try body.withUnsafeBytes { (input: UnsafeRawBufferPointer) -> Data in
+            stream.pointee.src_ptr = input.bindMemory(to: UInt8.self).baseAddress ?? UnsafePointer(scratch)
+            stream.pointee.src_size = input.count
+            while true {
+                stream.pointee.dst_ptr = scratch
+                stream.pointee.dst_size = chunk
+                let status = compression_stream_process(stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+                let produced = chunk - stream.pointee.dst_size
+                if out.count + produced > limit { throw Failure.tooLarge }
+                out.append(scratch, count: produced)
+                switch status {
+                case COMPRESSION_STATUS_END: return out
+                case COMPRESSION_STATUS_OK: continue
+                default: throw Failure.corrupt("not a DEFLATE stream")
+                }
+            }
+        }
     }
 
     private static func le32(_ value: UInt32) -> Data {
