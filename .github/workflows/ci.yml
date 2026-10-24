@@ -21,6 +21,8 @@ jobs:
         run: |
           command -v swiftlint || brew install swiftlint
           swiftlint lint --quiet
+      - name: Timing script check
+        run: scripts/test-timings-check.sh
       - name: Build
         run: swift build
       - name: Test

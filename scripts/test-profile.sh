@@ -5,16 +5,23 @@
 #   scripts/test-profile.sh [out-dir] [-- <swift test args>]
 #
 # Writes test.log, timings.json and timings.md to out-dir (default .workbench/profile) and prints timings.md.
-set -euo pipefail
+# Exit status: the tests' if they failed, else 1 when the report could not be made, else 0.
+set -uo pipefail
 
 cd "$(dirname "$0")/.."
 out=.workbench/profile
 if [ $# -gt 0 ] && [ "$1" != "--" ]; then out=$1; shift; fi
 [ "${1:-}" = "--" ] && shift
 mkdir -p "$out"
+# A report left by an earlier run must never be shown as this run's.
+rm -f "$out/test.log" "$out/timings.json" "$out/timings.md"
 
-status=0
-swift test --no-parallel "$@" 2>&1 | tee "$out/test.log" || status=$?
-python3 scripts/test-timings.py "$out/test.log" --serial --json "$out/timings.json" --markdown "$out/timings.md" || true
-[ -f "$out/timings.md" ] && cat "$out/timings.md"
-exit "$status"
+swift test --no-parallel "$@" 2>&1 | tee "$out/test.log"
+tests=${PIPESTATUS[0]}
+
+report=0
+python3 scripts/test-timings.py "$out/test.log" --serial --json "$out/timings.json" --markdown "$out/timings.md" || report=$?
+[ "$report" -eq 0 ] && cat "$out/timings.md"
+
+if [ "$tests" -ne 0 ]; then exit "$tests"; fi
+exit "$report"

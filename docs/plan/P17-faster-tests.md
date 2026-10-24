@@ -77,7 +77,7 @@ Targets are confirmed against task 1's baseline; a target missed is reported, no
 - Phase timings of a fixture, a turn, a CLI spawn and `accept` were measured with a throwaway test (not kept);
   the result is finding 2.
 
-Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (open).
+Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (open: run the `Test profile` workflow once it is on `main`, then fill in the goals table).
 
 ### 2. Clean up temp directories
 
