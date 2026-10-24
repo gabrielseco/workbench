@@ -1,7 +1,7 @@
-{"type":"thread.started","thread_id":"01a16d24-0a5b-7152-9417-334f60226d86"}
+{"type":"thread.started","thread_id":"01a16d2d-cf12-7e52-ada0-d37b0415a793"}
 {"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll create `ok.txt` containing `hello`."}}
-{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello' > ok.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello' > ok.txt\"","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll create `ok.txt` containing `hello` in the current directory."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello\\\\n' > ok.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello\\\\n' > ok.txt\"","aggregated_output":"","exit_code":0,"status":"completed"}}
 {"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Created `ok.txt` containing `hello`."}}
-{"type":"turn.completed","usage":{"input_tokens":30573,"cached_input_tokens":15104,"cache_write_input_tokens":0,"output_tokens":64,"reasoning_output_tokens":0}}
+{"type":"turn.completed","usage":{"input_tokens":30453,"cached_input_tokens":27776,"cache_write_input_tokens":0,"output_tokens":70,"reasoning_output_tokens":0}}

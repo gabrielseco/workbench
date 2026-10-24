@@ -1,4 +1,4 @@
-{"type":"thread.started","thread_id":"01a16d24-b31e-75e3-b99e-87c664ce789b"}
+{"type":"thread.started","thread_id":"01a16d2f-4e18-7400-baaa-82639ef0a083"}
 {"type":"turn.started"}
 {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the command and report its exit status and the contents of `net.txt`."}}
 {"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"curl -s -m 8 -o /dev/null -w '%{http_code}' https://example.com > net.txt ; echo \"'$?'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
@@ -6,4 +6,4 @@
 {"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc 'cat net.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
 {"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc 'cat net.txt'","aggregated_output":"000","exit_code":0,"status":"completed"}}
 {"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Exit status: `6` (could not resolve host).\n`net.txt` contains: `000`."}}
-{"type":"turn.completed","usage":{"input_tokens":30695,"cached_input_tokens":27904,"cache_write_input_tokens":0,"output_tokens":124,"reasoning_output_tokens":0}}
+{"type":"turn.completed","usage":{"input_tokens":30560,"cached_input_tokens":27904,"cache_write_input_tokens":0,"output_tokens":114,"reasoning_output_tokens":0}}

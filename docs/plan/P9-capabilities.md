@@ -103,8 +103,13 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
 ```
 codex exec --json --color never --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules \
   -c approval_policy="never" -c sandbox_workspace_write.network_access=false \
+  -c sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true \
   -s workspace-write -C <worktree> -- <prompt>
 ```
+
+- **`$TMPDIR` and `/tmp` are excluded from the writable roots.** `workspace-write` otherwise makes them writable (task 1: a push to
+  a remote under `$TMPDIR` succeeded). A control turn with the same argv minus the two `exclude_*` keys did write a file under
+  `$TMPDIR`; with them it is refused. A coding turn therefore cannot change another checkout or push from a temporary one.
 
 - **One-shot, no native resume.** `codex exec resume` takes no `-s` and no `-C`, so a resumed turn cannot state its sandbox on
   the command line as a first turn does. The adapter declares `resume: .none` and writes no session file (`--ephemeral`); the
@@ -129,10 +134,16 @@ said. Raw streams: `P9-probes/fixtures/codex-coding-*.stdout`, summary `codex-co
 |---|---|
 | Create a file in the worktree | Allowed |
 | Write a file outside the worktree (under `$HOME`) | Refused (`operation not permitted`) |
+| Append to a tracked file of another checkout (under `$HOME`) | Refused; the file unchanged |
+| Write a file under `$TMPDIR` | Refused (allowed without the `exclude_*` keys: the control turn) |
+| `git push tmpremote main` to a bare remote under `$TMPDIR` | Refused; the remote has no `main` |
 | Write inside `.git` | Refused |
 | `git add -A && git commit` | Refused (`.git/index.lock: Operation not permitted`); HEAD unchanged |
 | `git push origin main` (a local commit the remote lacks) | Refused (`remote unpack failed`); the remote unchanged |
 | `curl` to the internet | No network (`could not resolve host`) |
+
+A result counts only if the turn completed and the attempt is evidenced: a `command_execution` item for it, or, because Codex
+emits no item for a command the sandbox refuses before it runs, the model's own report of the refusal; the summary says which.
 
 Not probed: a long edit-and-test loop, reads outside the worktree (Codex does not confine them; see "Findings that change the plan"),
 a resumed session, and Codex's behaviour when `$CODEX_HOME` is unset or unwritable.

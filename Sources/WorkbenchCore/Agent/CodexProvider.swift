@@ -70,11 +70,14 @@ public struct CodexProvider: AgentProvider {
         guard request.workingDirectory.path.hasPrefix("/") else {
             throw refuse("A coding turn needs the worktree's absolute path.")
         }
-        let args =
-            ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
-            + ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
-            + ["-c", "sandbox_workspace_write.network_access=false"]
-            + ["-s", "workspace-write", "-C", request.workingDirectory.path, "--", request.prompt]
+        var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
+        args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
+        args += ["-c", "sandbox_workspace_write.network_access=false"]
+        // `workspace-write` also makes `$TMPDIR` and `/tmp` writable (P9 task 1: a push to a remote there worked),
+        // which would let a turn change another checkout or push from a temporary one.
+        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        args += ["-s", "workspace-write", "-C", request.workingDirectory.path, "--", request.prompt]
         return AgentInvocation(
             executable: executable, arguments: args, environment: Self.environment(from: request.environment),
             displayArguments: Array(args[..<(args.firstIndex(of: "--") ?? args.count)]))

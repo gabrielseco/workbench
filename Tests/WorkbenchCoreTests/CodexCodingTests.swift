@@ -46,6 +46,7 @@ private let completed =
         let expected = [
             "exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config",
             "--ignore-rules", "-c", "approval_policy=\"never\"", "-c", "sandbox_workspace_write.network_access=false",
+            "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true", "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
             "-s", "workspace-write", "-C", tree, "--", "# Add a greeting\n\nDo it.",
         ]
         #expect(args == expected, "\(args)")
@@ -65,6 +66,10 @@ private let completed =
         ] {
             #expect(throws: AgentFailure.self) { try provider.invocation(for: coding(tweak)) }
         }
+        // A coding purpose with a read-only policy (or the reverse) would start the wrong adapter path.
+        let readOnly = coding { $0.policy = .readOnlyEvidence; $0.answerFile = URL(fileURLWithPath: "/t/prompts/answer.md") }
+        #expect(readOnly.validate(against: provider)?.kind == .unsupportedCapability)
+        #expect(coding { $0.purpose = .judge }.validate(against: provider)?.kind == .unsupportedCapability)
         // A resume is refused before it gets that far: the adapter keeps no conversation.
         let handle = AgentSessionHandle(provider: .codex, purpose: .coding, value: "x")
         #expect(coding { $0.session = .resume(handle) }.validate(against: provider)?.kind == .unsupportedCapability)
@@ -191,7 +196,7 @@ private let completed =
     }
 
     private func run(
-        _ script: URL, _ work: URL, timeout: TimeInterval = 20, stopAfter: TimeInterval? = nil
+        _ script: URL, _ work: URL, timeout: TimeInterval = 20, stopWhenExists: URL? = nil
     ) async throws -> AgentCompletion {
         let request = coding {
             $0.workingDirectory = work
@@ -200,9 +205,12 @@ private let completed =
             $0.limits = AgentLimits(timeout: timeout, killGrace: 1)
         }
         let execution = try AgentRunner.start(provider: CodexProvider(executable: script.path), request: request)
-        if let stopAfter {
+        if let stopWhenExists {
+            // Stopped once the fake says it has started its child, not after a guess about how long that takes.
             Task {
-                try? await Task.sleep(nanoseconds: UInt64(stopAfter * 1e9))
+                for _ in 0..<600 where !FileManager.default.fileExists(atPath: stopWhenExists.path) {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
                 execution.stop()
             }
         }
@@ -227,7 +235,7 @@ private let completed =
 
     @Test func aStopEndsTheChildAndItsDescendants() async throws {
         let (script, work) = try fake("echo '\(started)'\nsleep 300 &\necho $! > \"$PWD/child.pid\"\nwait")
-        let done = try await run(script, work, stopAfter: 1)
+        let done = try await run(script, work, stopWhenExists: work.appendingPathComponent("child.pid"))
         #expect(done.failure?.kind == .cancellation && !done.succeeded)
         let text = try String(contentsOf: work.appendingPathComponent("child.pid"), encoding: .utf8)
         let pid = try #require(Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -237,6 +245,16 @@ private let completed =
             if !gone { try await Task.sleep(nanoseconds: 50_000_000) }
         }
         #expect(gone, "no child is left behind")
+    }
+
+    @Test func aMissingWorktreeFailsBeforeAnyProcess() throws {
+        let (script, work) = try fake("echo '\(started)'")
+        let request = coding {
+            $0.workingDirectory = work.appendingPathComponent("not-there")
+            $0.environment = ["PATH": "/usr/bin:/bin"]
+        }
+        let provider = CodexProvider(executable: script.path)
+        #expect(throws: AgentFailure.self) { try AgentRunner.start(provider: provider, request: request) }
     }
 
     @Test func theDeadlineEndsAHungTurn() async throws {
