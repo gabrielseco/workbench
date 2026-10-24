@@ -185,7 +185,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **`goal draft [<id>] --replace --request …` redrafts an existing goal.** Only `title` and the three sections change;
   the id, base, spend, timeout, `model`, `push_to` and comments stay as they are. `status` becomes `draft` and
   `approved_at` and `approved_hash` are removed, so an approved goal needs `goal approve` again (the command says so). It
-  is refused for an ended thread or a live run. A failed draft leaves the file byte-identical.
+  is refused for an ended thread or a live run. A failed draft leaves the file byte-identical. A `model` under `[agents.goal]` with `provider = "codex"` is refused when the
+  config loads, as for the judge and review: the Codex adapter takes no model yet.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
   out of scope, and its `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are checked by the
   same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.

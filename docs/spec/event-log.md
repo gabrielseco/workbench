@@ -281,7 +281,8 @@ this change replays as it did; nothing is rewritten.
   `workbench goal draft`. Each start has an `agent.attempt` with `role: "goal"`, `turn: 0` and no `round`, and exactly
   one end. The reducer ignores them for turns, approval and review: a draft opens no `turn.started` and writes no
   `goal.approved`. `proposal_ref` is the path of the agent's proposal relative to the thread's folder
-  (`goal-draft/proposal.json`); `cost_usd` is absent when the provider did not report one.
+  (`goal-draft/proposal.json`); `cost_usd` is absent when the provider did not report one. The drafter works in a fresh
+    folder outside the checkout (the system temporary directory), removed when the draft ends; only a valid proposal is kept.
   - *Replacing a goal (`--replace`)* has the log already, so it is write-ahead: the attempt and `goal.draft.started` are
     written before the agent is started, the thread's holder marker is set while it runs (so `stop` reaches it and a run
     or judge is refused as busy), and the end follows whatever came of it. On success the goal file is rewritten first,
@@ -289,7 +290,10 @@ this change replays as it did; nothing is rewritten.
     `goal.draft.finished {ok: false, reason}` and the goal file is untouched. `recoverOrphanedEvaluations()` closes a
     draft whose process was killed (a start with no finish) as `{ok: false, reason: "interrupted", synthetic: true}`
     with the start's `attempt`, `provider` and `model`, and its `role: "goal"` attempt as `interrupted`; a second call
-    writes nothing, and the goal file was never touched by that draft.
+    writes nothing. A kill while the agent runs never touches the goal file. The one narrow window is a kill after the
+    goal file was rewritten and before `goal.draft.finished` is written: the file is then already the (draft) replacement,
+    `goal-draft/proposal.json` holds the same proposal, and recovery records the draft as interrupted, since the log cannot
+    be made atomic with the file.
   - *A new thread* has no log until the proposal is valid, so nothing is written before: the agent runs with no thread on
     disk, and only a valid proposal creates the thread (`thread.created`, `goal.saved`) and then its draft pair
     (`agent.attempt.started`, `goal.draft.started`, `agent.attempt.ended`, `goal.draft.finished {ok: true}`), told after

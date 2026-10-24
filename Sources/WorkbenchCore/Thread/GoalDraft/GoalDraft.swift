@@ -124,7 +124,11 @@ public enum GoalDraft {
             if trimmed.hasPrefix("##") { throw bad("the request has a heading line; headings belong to the goal file") }
         }
         var criteria: [GoalBody.Criterion] = []
+        var suppliedIDs = Set<String>()
         for (index, entry) in entries.enumerated() {
+            if let supplied = entry["id"] as? String, !suppliedIDs.insert(supplied).inserted {
+                throw bad("two criteria share the id '\(supplied)'")
+            }
             for key in entry.keys.sorted() where key != "text" && key != "proof" && key != "id" {
                 throw bad("criterion \(index + 1) has a key that is not part of a criterion: '\(key)'")
             }

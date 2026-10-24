@@ -130,6 +130,38 @@ private func drafting(
         #expect(prompt.contains("a.txt"), "declared repository context: the tracked files")
     }
 
+    @Test func replacementDraftsAlsoWorkOutsideTheCheckout() async throws {
+        let d = try await drafting()
+        let id = try await d.fx.approvedThread()
+        _ = try await d.draft(.replace(id: id))
+        let call = try #require(d.codex?.calls.first)
+        let words = call.split(separator: " ").map(String.init)
+        let cwd = try #require(words.firstIndex(of: "-C").map { words[$0 + 1] })
+        let answer = try #require(words.firstIndex(of: "-o").map { words[$0 + 1] })
+        for path in [cwd, answer] {
+            let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            #expect(!resolved.hasPrefix(d.fx.repo.path), "\(path) is inside the checkout")
+        }
+        let folder = d.fx.project.threadDirectory(id).appendingPathComponent("goal-draft")
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("work").path), "no work folder is left")
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("proposal.json").path))
+        #expect(!FileManager.default.fileExists(atPath: URL(fileURLWithPath: cwd).path), "the scratch folder is removed")
+    }
+
+    @Test func aThreadThatCouldNotBeFinishedIsTakenBack() async throws {
+        let d = try await drafting()
+        var service = d.fx.service
+        struct Disk: Error {}
+        service.draftFault = { _ in throw Disk() }
+        let result = try await service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, environment: d.environment)
+        let why = String(describing: result.failure)
+        #expect(result.id == nil && why.contains("no thread could be made"), "\(why)")
+        #expect(d.threads.isEmpty, "the half-made thread is gone")
+        #expect(ThreadStore(project: d.fx.project).activeThreadID() == nil, "it does not block the next draft")
+        #expect(try await d.draft().id != nil)
+    }
+
     @Test func promptIsBounded() throws {
         let paths = (0..<(GoalDraft.pathLimit + 1)).map { "src/file\($0).swift" }
         let prompt = GoalDraft.prompt(
@@ -162,6 +194,8 @@ private func drafting(
         #"{"title": "T", "request": "TODO(workbench): fill in", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
         #"{"title": "T", "request": "R", "criteria": [{"text": "a", "proof": "screenshot: bad name!"}], "out_of_scope": []}"#,
         #"{"title": "\"T\" # approved", "request": "R", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
+        #"{"title": "T", "request": "R", "criteria": [{"id": "c1", "text": "a", "proof": "b"}, "#
+            + #"{"id": "c1", "text": "c", "proof": "d"}], "out_of_scope": []}"#,
         #"{"title": "T", "request": "```\nR", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
     ])
     func proposalValidation(answer: String) {

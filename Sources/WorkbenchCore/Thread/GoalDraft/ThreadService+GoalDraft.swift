@@ -68,7 +68,7 @@ extension ThreadService {
         var request: AgentRequest
         var work: URL
         let base: String
-        /// Removed when the draft ends: a draft that has no thread yet keeps nothing.
+        /// Removed when the draft ends.
         var scratch: URL?
         var existing: GoalFile?
     }
@@ -162,21 +162,12 @@ extension ThreadService {
 
         // The drafter works in an empty folder and writes its answer beside it, so it reads none of the checkout:
         // what it knows of the repository is the declared context in the prompt.
-        let scratch: URL?
-        let work: URL
-        let output: URL
-        switch target {
-        case .newThread:
-            let root = FileManager.default.temporaryDirectory.appendingPathComponent("workbench-goal-draft-\(UUID().uuidString)")
-            scratch = root
-            work = root.appendingPathComponent("work")
-            output = root.appendingPathComponent("out")
-        case .replace(let id):
-            scratch = nil
-            let folder = project.threadDirectory(id).appendingPathComponent("goal-draft")
-            work = folder.appendingPathComponent("work")
-            output = folder
-        }
+        // Both targets use a fresh folder outside the checkout (and outside the thread's folder, which sits in it),
+        // removed when the draft ends; only a valid proposal is kept, beside the thread.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("workbench-goal-draft-\(UUID().uuidString)")
+        let scratch: URL? = root
+        let work = root.appendingPathComponent("work")
+        let output = root.appendingPathComponent("out")
         do {
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
@@ -353,12 +344,14 @@ extension ThreadService {
             id: nil, replaced: false, wasApproved: false, proposal: nil, provider: agent.provider, model: agent.model,
             costUSD: run.cost, failure: run.failure)
         guard let proposal = run.proposal else { return result }
+        let known = Set(threadNames())
         do {
             // The thread exists only now. Its log tells the draft after the fact: the process left no thread behind
             // to write ahead into, and a draft that did not produce a goal leaves nothing at all.
             let id = try await newThread(
                 name: name, base: prepared.base, config: config, body: proposal.body, title: proposal.title
             ) { id, log in
+                try self.draftFault?(id)
                 let reference = try self.keepProposal(proposal, id: id)
                 let attempts = AttemptLog(log: log, role: "goal", turn: 0, agent: agent)
                 let attempt = try await attempts.start()
@@ -373,9 +366,17 @@ extension ThreadService {
             result.id = id
             result.proposal = proposal
         } catch {
+            // A thread left half made would be an active, goal-less draft that blocks the next one: take it back.
+            for name in threadNames() where !known.contains(name) {
+                try? FileManager.default.removeItem(at: project.threadDirectory(name))
+            }
             result.failure = "the proposal was valid but no thread could be made for it: \(error)"
         }
         return result
+    }
+
+    private func threadNames() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: project.threadsDirectory.path)) ?? []
     }
 
     // MARK: Text
