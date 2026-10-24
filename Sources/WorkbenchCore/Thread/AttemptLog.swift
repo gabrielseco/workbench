@@ -21,7 +21,7 @@ struct AttemptLog: Sendable {
         let id = try await log.startAttempt(
             role: role, stage: stage, turn: turn, round: round, provider: agent.provider, model: agent.model,
             spawned: false)
-        try await log.endAttempt(id, outcome: "refused", reason: Self.safe(reason))
+        try await Self.close(log, id, "refused", reason: reason)
     }
 
     func end(_ id: String, _ outcome: String, reason: String? = nil) async throws {

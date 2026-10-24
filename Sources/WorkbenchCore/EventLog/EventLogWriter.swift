@@ -212,6 +212,8 @@ public actor EventLogWriter {
     public func endAttempt(_ id: String, outcome: String, reason: String? = nil, synthetic: Bool = false) throws -> Event? {
         guard let started = state.openAttempts[id] else { return nil }
         var data: [String: JSONValue] = ["attempt": .string(id), "outcome": .string(outcome)]
+        // The end stands alone: it says whose attempt it was, as `plan.ended` repeats what its start knew.
+        for key in ["role", "stage", "round", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
         if let reason { data["reason"] = .string(reason) }
         if synthetic { data["synthetic"] = true }
         return try append(.agentAttemptEnded, turn: started.turn, data: .object(data))
@@ -234,17 +236,17 @@ public actor EventLogWriter {
     /// writes nothing.
     @discardableResult
     public func recoverOrphanedEvaluations() throws -> [Event] {
-        let judging = state.judgeStart
-        let reviewing = state.reviewStart
-        guard judging != nil || reviewing != nil || !state.openAttempts.isEmpty else { return [] }
+        let judging = state.judgeStarts
+        let reviewing = state.reviewStarts
+        guard !judging.isEmpty || !reviewing.isEmpty || !state.openAttempts.isEmpty else { return [] }
         var closed = try recoverOrphanedAttempts(roles: ["judge", "review"])
-        if let started = judging {
+        for started in judging.reversed() {
             var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
             // What the start says was asked for, so the end is attributed too; absent in a log from before provider selection.
             for key in ["argv", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
             closed.append(try append(.judgeRan, turn: started.turn, data: .object(data)))
         }
-        if let started = reviewing {
+        for started in reviewing.reversed() {
             let isStage = started.kind == .reviewStageStarted
             var data: [String: JSONValue] = ["ok": false, "verdict": .null, "reason": "interrupted", "synthetic": true]
             for key in ["round", "pr", "head_sha", "provider", "model"] {

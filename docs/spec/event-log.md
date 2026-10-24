@@ -233,11 +233,12 @@ this change replays as it did; nothing is rewritten.
   `judge.started`, `pr_review.started`) and before the process exists.
 - **`agent.attempt.ended`**: `attempt`, `outcome` (`succeeded`, `failed`, `stopped`, `timed_out`, `budget_exceeded`,
   `interrupted`, `refused`: what the process did, not what its answer said), `reason` (scrubbed, at most 300 characters),
-  `synthetic: true` when recovery wrote it. Written before the enclosing end (`turn.ended`, `judge.ran`,
+  `synthetic: true` when recovery wrote it, and `role`, `stage`, `round`, `provider` and `model` copied from the start, so an
+  end stands alone. Written before the enclosing end (`turn.ended`, `judge.ran`,
   `pr_review.finished`).
 - A review round that retries after "at capacity" has one attempt per physical start, all inside one round: the retry adds
   no `pr_review.started`, so `max_rounds` is unchanged.
-- **Recovery.** `recoverOrphanedEvaluations()`, run holding the log before a run, a judge, a review or `abandon`, closes
+- **Recovery.** `recoverOrphanedEvaluations()` (every unmatched start, newest first, not only the last), run holding the log before a run, a judge, a review or `abandon`, closes
   each open attempt as `interrupted` (`synthetic`), then a `judge.started` with no `judge.ran` by `judge.ran {ok: false,
   reason: "interrupted", synthetic: true}`, and a `pr_review.started` or `review_stage.started` with no finish by the
   matching finish (`ok: false`, `verdict: null`, `reason: "interrupted"`, `synthetic: true`, with the start's `round`,

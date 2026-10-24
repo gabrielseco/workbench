@@ -79,6 +79,23 @@ private func tempLog() throws -> URL {
         await log.close()
     }
 
+    @Test func anEarlierOrphanIsNotForgottenByALaterRound() async throws {
+        // A log from before recovery existed: a killed pr-review round, then a design round that completed.
+        let (log, url) = try await open()
+        try await log.append(.prReviewStarted, turn: 1, data: ["round": 1, "pr": 7, "head_sha": "abc"])
+        try await log.append(.reviewStageStarted, turn: 1, data: ["stage": "design", "round": 1, "pr": 7])
+        try await log.append(.reviewStageFinished, turn: 1, data: ["stage": "design", "round": 1, "pr": 7, "ok": true])
+        try await log.append(.judgeStarted, turn: 1)
+        try await log.append(.judgeStarted, turn: 1)
+        try await log.append(.judgeRan, turn: 1, data: ["ok": true])
+        let closed = try await log.recoverOrphanedEvaluations()
+        #expect(closed.map(\.kind) == [.judgeRan, .prReviewFinished], "the first judge and the pr-review round")
+        #expect(closed[1].data["round"]?.intValue == 1 && closed[1].data["head_sha"] == "abc")
+        #expect(try await log.recoverOrphanedEvaluations().isEmpty)
+        #expect(try EventLogReader.read(at: url).isHealthy)
+        await log.close()
+    }
+
     @Test func idempotent() async throws {
         let (log, url) = try await open()
         try await log.append(.judgeStarted, turn: 1)

@@ -37,10 +37,11 @@ struct LogState: Sendable {
     /// The `run.started` no `run.ended` has closed: the verifier's app. Crash recovery only.
     var runStart: Event?
 
-    /// The `judge.started` no `judge.ran` has closed. Crash recovery only: a killed judge is closed on the next start.
-    var judgeStart: Event?
-    /// The `pr_review.started` or `review_stage.started` no matching finish has closed. Crash recovery only.
-    var reviewStart: Event?
+    /// The `judge.started` no `judge.ran` has closed, oldest first. Crash recovery only: a killed judge is closed on the
+    /// next start, so more than one is only in a log from before that existed.
+    var judgeStarts: [Event] = []
+    /// The `pr_review.started` and `review_stage.started` no matching finish has closed, oldest first. Crash recovery only.
+    var reviewStarts: [Event] = []
     /// Every `agent.attempt.started` no `agent.attempt.ended` has closed, by attempt id. Crash recovery only.
     var openAttempts: [String: Event] = [:]
 
@@ -107,14 +108,14 @@ struct LogState: Sendable {
         case .verifierEnded:
             verifierStart = nil
         case .judgeStarted:
-            judgeStart = event
+            judgeStarts.append(event)
         case .judgeRan:
-            judgeStart = nil
+            if !judgeStarts.isEmpty { judgeStarts.removeLast() }
         case .prReviewStarted, .reviewStageStarted:
-            reviewStart = event
+            reviewStarts.append(event)
         case .prReviewFinished, .reviewStageFinished:
-            // A skip writes a finish with no start, so a finish only closes the start it matches.
-            if let open = reviewStart, Self.finish(event, closes: open) { reviewStart = nil }
+            // A skip writes a finish with no start, so a finish only closes the latest start it matches.
+            if let at = reviewStarts.lastIndex(where: { Self.finish(event, closes: $0) }) { reviewStarts.remove(at: at) }
         case .agentAttemptStarted:
             if let id = event.data["attempt"]?.stringValue { openAttempts[id] = event }
         case .agentAttemptEnded:

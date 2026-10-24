@@ -32,6 +32,8 @@ private func tempLog() throws -> URL {
         let ends = events.filter { $0.kind == .agentAttemptEnded }
         #expect(ends.map { $0.data["attempt"]?.stringValue } == [first, second])
         #expect(ends[0].turn == 1, "an end belongs to the turn its start did")
+        #expect(ends[0].data["role"] == "judge" && ends[0].data["provider"] == "claude" && ends[0].data["model"] == "haiku")
+        #expect(ends[1].data["stage"] == "design" && ends[1].data["round"]?.intValue == 2, "an end says whose attempt it was")
         #expect(ends[1].data["outcome"] == "timed_out" && ends[1].data["reason"] == "too slow")
         #expect(!(await log.hasOpenAttempt))
     }
@@ -60,7 +62,7 @@ private func tempLog() throws -> URL {
         #expect(state.lastTurn == 0 && state.decision == nil, "no turn, no approval")
         var logState = LogState()
         for event in events { logState.apply(event) }
-        #expect(logState.openTurn == nil && logState.judgeStart == nil && logState.reviewStart == nil)
+        #expect(logState.openTurn == nil && logState.judgeStarts.isEmpty && logState.reviewStarts.isEmpty)
     }
 
     @Test func oldLogsReplay() throws {
@@ -85,7 +87,7 @@ private func tempLog() throws -> URL {
             #expect(logState.check(event) == nil)
             logState.apply(event)
         }
-        #expect(logState.judgeStart == nil && logState.reviewStart == nil && logState.openAttempts.isEmpty)
+        #expect(logState.judgeStarts.isEmpty && logState.reviewStarts.isEmpty && logState.openAttempts.isEmpty)
     }
 
     @Test func newKindsReplay() async throws {
@@ -116,6 +118,25 @@ private func tempLog() throws -> URL {
         let reopened = try EventLogWriter.open(at: url)
         #expect(await reopened.nextSeq == contents.events.count + 1)
         #expect(!(await reopened.hasOpenAttempt))
+        await reopened.close()
+    }
+
+    @Test func aRefusalWhoseEndCannotBeWrittenSaysSo() async throws {
+        let url = try tempLog()
+        let log = try EventLogWriter.open(at: url)
+        let agent = ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false)
+        let attempts = AttemptLog(log: log, role: "judge", agent: agent)
+        let id = try await attempts.start()
+        await log.close()
+        do {
+            try await attempts.end(id, "failed")
+            Issue.record("expected the write to fail")
+        } catch let error as AttemptEndNotSaved {
+            #expect("\(error)".hasPrefix("the end of the attempt was not saved:"))
+        }
+        let reopened = try EventLogWriter.open(at: url)
+        #expect(await reopened.hasOpenAttempt, "the next open still sees the attempt open and recovers it")
+        #expect(try await reopened.recoverOrphanedAttempts().count == 1)
         await reopened.close()
     }
 
