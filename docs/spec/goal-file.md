@@ -392,8 +392,8 @@ Notes:
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's
   directory. In a stage table `skill`, `prompt`, `checklist` and `inputs` paths stay inside the repository,
-  `skill` and `prompt` exclude each other, `reviewer` is `codex` or absent (`"claude"` is refused: review
-  stages run on Codex, the second AI that checks what Claude wrote), `inputs` entries are
+  `skill` and `prompt` exclude each other, `reviewer` is `codex` or absent (`"claude"` is refused: choose Claude with
+  `provider = "claude"` instead), `inputs` entries are
   `diff`, `goal`, `proof` or a file path (with a `/` or an extension, so a misspelt keyword is refused), and
   `max_rounds` is 1 to 10. `[pr_review]` is the `pr-review` stage's table under its P5 name, with only
   `checklist` and `max_rounds`; it and `[review.stage.pr-review]` together are refused. A stage table not
@@ -470,17 +470,31 @@ Notes:
 path run without a shell; `[providers.claude]` and `claude_path` name the same executable, so both is refused. An
 `[agents.<role>]` table, for `goal`, `run`, `judge` or `review`, takes `provider` (`"claude"` or `"codex"`), `model`
 and `allow_unpriced`. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
-goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `run` and `judge` on
-`claude`, `review` on `codex`; anything else is refused when the config loads, not ignored, until the second
-provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
+goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
+`goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
+coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
 `allow_unpriced` is for evaluations that may run without a dollar cap; `[agents.run]` refuses it, because spending
 is approved in the goal. A model is resolved per role: for the judge `judge --model`, then `[agents.judge]`'s
 `model`, then `judge_model` and `model` (only while `[agents.judge]` sets no provider or model, and only for Claude),
 then the provider's default; for review the stage's `model`, then `[agents.review]`'s, then the default; for coding
 the goal's `model`, `[agents.run]`'s, then `model`; drafting never inherits `model`. `workbench doctor` prints
 `agent goal:`, `agent run:`, `agent judge:` and `agent review:` lines with the provider and model each resolves to.
-In this slice only the executables take effect (`claude_path`'s place for claude, the codex path for the review
-commands); the run, judge and review paths still use their existing settings.
+**Judge and review on either provider (P9 PR 13).** A Claude review runs through the read-only adapter (`--restricted`, only
+the `Read` tool, in the round's folder that holds the brief, the saved diff and the checkout, its own session, a $2 cap);
+its answer text is written to the same `round-<n>.findings.md` a Codex answer goes to, and the same `VERDICT: CLEAN|FIX`
+parser, answer cap, retry on capacity and `max_rounds` count apply. Claude is not given a stage's `proof` screenshots (it has no
+image input and there is no text substitute), so such a stage fails the round. A Codex judge runs read-only with the
+hardened call (`--ignore-rules`, `approval_policy="never"`), is asked for the same JSON as text, has its screenshots attached
+with `-i`, and writes its last message to `judge/turn-<n>.answer.txt` in the thread's folder; the same validator accepts it
+only if it names every criterion once. Codex has no dollar cap and no `model` here (a `model` on a Codex judge or review
+is refused when the config loads, also through a stage that inherits it), so a Codex judge or review is refused before
+anything starts unless its table says `allow_unpriced = true` (`[agents.judge]`, `[agents.review]` or the stage's table,
+which inherits `[agents.review]`'s); the message names the key and the refusal is recorded as a failed judge or round.
+Exception: a review whose provider no `provider` key chose (the default Codex, or P6's `reviewer = "codex"`) keeps
+running timeout-only without the opt-in. A Claude judge or review keeps its dollar cap and `allow_unpriced` changes
+nothing for it. `judge --budget` with a Codex judge is a usage error. A review's `cost_usd` is recorded when its provider
+reports one (Claude); unknown is absent, never 0, and `review` prints a Codex judge's cost as `cost unknown`. The
+executables (`[providers.<id>]`, `claude_path`) take effect for every role; `run` and goal drafting are unchanged.
 
 ## Project instructions
 

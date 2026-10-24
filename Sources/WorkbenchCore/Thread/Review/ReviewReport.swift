@@ -72,7 +72,8 @@ public struct ReviewReport: Sendable, Equatable {
     public func prReviewLines() -> [String] {
         guard let round = state.review.prReview else { return [] }
         let stale = prReviewIsStale ? " · stale: the branch has moved since" : ""
-        let sha = round.headSHA.map { " · \($0.prefix(7))" } ?? ""
+        let cost = round.costUSD.map { String(format: " · $%.4f", $0) } ?? ""
+        let sha = (round.headSHA.map { " · \($0.prefix(7))" } ?? "") + cost
         var lines: [String]
         if let verdict = round.verdict {
             lines = ["PR review  round \(round.round) · \(verdict == "clean" ? "clean" : "findings to fix")\(sha)\(stale)"]
@@ -123,7 +124,8 @@ public struct ReviewReport: Sendable, Equatable {
     public func judgeLines() -> [String] {
         guard let judge = state.review.judge else { return [] }
         let stale = judge.turn == state.lastTurn ? "" : " (turn \(judge.turn); the latest turn is \(state.lastTurn))"
-        let cost = judge.costUSD.map { String(format: " · $%.4f", $0) } ?? ""
+        // A provider that reports no cost (Codex) leaves it unknown, which is not $0.
+        let cost = judge.costUSD.map { String(format: " · $%.4f", $0) } ?? " · cost unknown"
         guard let verdict = judge.verdict else {
             return ["Judge      no verdict\(stale): \(judge.failure ?? "unknown")"]
         }

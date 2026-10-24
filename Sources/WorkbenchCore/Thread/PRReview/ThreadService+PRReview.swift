@@ -135,7 +135,7 @@ extension ThreadService {
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
         let argv =
-            (try? CodexProvider(executable: settings.codexPath)
+            (try? context.makeProvider()?
                 .invocation(for: reviewRequest(context, proof: (try? context.proof?.get()) ?? [])).displayArguments) ?? []
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
@@ -173,6 +173,16 @@ extension ThreadService {
         var outcome = PRReviewOutcome(warnings: round.warnings)
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
+        // Claude takes no images and there is no text substitute: say so before the proof itself is looked for.
+        if round.agent.provider == .claude, round.stage.config.needsProof {
+            let why =
+                "claude cannot take images, and there is no text substitute for visual evidence: "
+                + "the \(round.stage.name) stage reads proof, so it cannot run on claude"
+            do { try await round.attempts?.refused(why) } catch {
+                return outcome.failed("\(why); the refusal could not be recorded: \(error)")
+            }
+            return outcome.failed(why)
+        }
         switch round.proof {
         case .failure(let reason): return outcome.failed(reason)
         case .success(let files): proof = files
@@ -236,20 +246,26 @@ extension ThreadService {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
-        guard ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"]) != nil
-        else {
-            let missing = Self.codexMissing(round.settings.codexPath)
-            do { try await round.attempts?.refused(missing) } catch {
-                return outcome.failed("\(missing); the refusal could not be recorded: \(error)")
+        // Everything that refuses a round comes before a process exists: no adapter, no executable, no opt-in for a
+        // provider without a dollar cap, or a request the adapter cannot honour (screenshots to Claude).
+        func refuse(_ why: String) async -> PRReviewOutcome {
+            do { try await round.attempts?.refused(why) } catch {
+                return outcome.failed("\(why); the refusal could not be recorded: \(error)")
             }
-            return outcome.failed(missing)
+            return outcome.failed(why)
         }
+        guard let provider = round.makeProvider() else { return await refuse("there is no adapter for \(round.agent.provider)") }
+        if case .failure(let failure) = round.spend(capabilities: provider.capabilities) { return await refuse(failure.message) }
+        guard ExecutableResolver.resolve(round.executable, searchPath: round.settings.environment["PATH"]) != nil else {
+            return await refuse(Self.agentMissing(round.executable, provider: round.agent.provider))
+        }
+        let request = reviewRequest(round, proof: proof)
+        if let refusal = request.validate(against: provider) { return await refuse(refusal.message) }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
-        let transcript = await runCodex(
-            CodexProvider(executable: round.settings.codexPath), request: reviewRequest(round, proof: proof),
-            round: round, attach: attach)
+        let transcript = await runAgent(provider, request: request, round: round, attach: attach)
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
+        outcome.costUSD = transcript.costUSD
         if let problem = transcript.problem { return outcome.failed(problem, answer: Self.readAnswer(paths.answer)) }
 
         if Self.answerSize(paths.answer) > PRReview.answerLimit {
@@ -258,7 +274,7 @@ extension ThreadService {
                     + "it was not accepted", answer: Self.readAnswer(paths.answer))
         }
         guard let answer = Self.readAnswer(paths.answer) else {
-            return outcome.failed("codex ended without writing an answer")
+            return outcome.failed("\(round.agent.provider) ended without writing an answer")
         }
         guard let verdict = PRReview.parseVerdict(answer) else {
             return outcome.failed(
@@ -341,6 +357,7 @@ extension ThreadService {
                 "round": .int(round), "pr": .int(pr), "head_sha": .string(sha), "ok": .bool(outcome.verdict != nil),
                 "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null,
             ])
+        if let cost = outcome.costUSD { data["cost_usd"] = .double(cost) }
         if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
@@ -348,7 +365,7 @@ extension ThreadService {
         try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
             round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: outcome.verdict, failure: reason,
-            findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
+            findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings, costUSD: outcome.costUSD)
     }
 
     /// A stage whose `applies_to` matches none of the changed files: on record as `skipped`, `ok: false`, never a pass.
@@ -413,19 +430,19 @@ extension ThreadService {
 
     // MARK: Small helpers
 
-    static func codexProcessProblem(_ exit: ProcessExit, timeout: TimeInterval) -> String? {
+    static func processProblem(_ exit: ProcessExit, timeout: TimeInterval, name: String) -> String? {
         switch exit.cause {
         case .stopped: return "the review was stopped"
-        case .timedOut: return "codex did not finish within \(Int(timeout))s"
+        case .timedOut: return "\(name) did not finish within \(Int(timeout))s"
         case .natural: break
         }
         switch exit.termination {
         case .exited(0): return nil
         case .exited(let code):
             let tail = exit.stderrTail.firstLine
-            return "codex exited with status \(code)" + (tail.isEmpty ? "" : ": \(tail)")
-        case .signaled(let signal): return "codex was ended by signal \(signal)"
-        case .lost: return "codex ended in a way that was not recorded"
+            return "\(name) exited with status \(code)" + (tail.isEmpty ? "" : ": \(tail)")
+        case .signaled(let signal): return "\(name) was ended by signal \(signal)"
+        case .lost: return "\(name) ended in a way that was not recorded"
         }
     }
 
@@ -483,86 +500,5 @@ extension ThreadService {
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: PRReview.checklistLimit + 1) else { return nil }
         return bounded(String(decoding: data, as: UTF8.self), limit: PRReview.checklistLimit, rest: "\(path) in the checkout")
-    }
-}
-
-// MARK: Value types
-
-struct PRReviewSettings: Sendable {
-    var codexPath: String
-    var environment: [String: String]
-    var timeout: TimeInterval
-    var capacityBackoff: @Sendable (Int) -> TimeInterval
-    var stopRequested: @Sendable () -> Bool
-}
-
-struct PRReviewPaths: Sendable {
-    var folder: URL
-    var tree: URL
-    var brief: URL
-    var diff: URL
-    var answer: URL
-    var transcript: URL
-
-    /// `tag` keeps the files of rounds counted apart (before and after the pull request) from sharing a name.
-    init(folder: URL, round: Int, tag: String = "") {
-        self.folder = folder
-        tree = folder.appendingPathComponent("round-\(round)\(tag).tree")
-        brief = folder.appendingPathComponent("round-\(round)\(tag).brief.md")
-        diff = folder.appendingPathComponent("round-\(round)\(tag).diff.patch")
-        answer = folder.appendingPathComponent("round-\(round)\(tag).findings.md")
-        transcript = folder.appendingPathComponent("round-\(round)\(tag).transcript.txt")
-    }
-}
-
-struct PRReviewRound: Sendable {
-    var id: String
-    var stage: ReviewStage
-    var pr: Int
-    var branch: String
-    var base: String
-    var recordedBase: String?
-    var goal: String
-    /// Where the rest of `goal` is, said in the brief when the goal is cut: its file, or the pull request.
-    var goalRest: String
-    var tip: String
-    var paths: PRReviewPaths
-    var config: Config
-    var settings: PRReviewSettings
-    /// The commit that was reviewed: the branch tip on origin when the round began.
-    var reviewedSHA: String?
-    /// The base branch's commit the diff and the instructions come from.
-    var baseSHA: String?
-    /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
-    var proof: Result<[String], PRReviewFailure>?
-    var warnings: [String] = []
-    /// Where this round's provider processes are put on record; nil when the round runs outside a thread's log.
-    var attempts: AttemptLog?
-}
-
-struct PRReviewFailure: Error, Sendable {
-    var reason: String
-    init(_ reason: String) { self.reason = reason }
-}
-
-struct PRReviewOutcome: Sendable {
-    var verdict: PRReviewVerdict?
-    var failure: String?
-    var findings: String?
-    var warnings: [String] = []
-
-    mutating func failed(_ reason: String, answer: String? = nil) -> PRReviewOutcome {
-        failure = reason
-        findings = answer
-        return self
-    }
-
-    mutating func failed(_ reason: PRReviewFailure) -> PRReviewOutcome { failed(reason.reason) }
-}
-
-extension String {
-    /// The first non-empty line, for a one-line reason.
-    var firstLine: String {
-        split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
     }
 }

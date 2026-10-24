@@ -7,13 +7,12 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     case judge
     case review
 
-    /// The providers an adapter exists for today, in the order messages list them.
-    /// Task 4 of P9 widens this; until then a config that names another pair is refused, not ignored.
+    /// The providers an adapter exists for, in the order messages list them. A config that names another pair is
+    /// refused when it loads, not ignored. Coding on Codex waits for its own confinement probes (P9 task 4, run).
     public var supportedProviders: [AgentProviderID] {
         switch self {
-        case .goal: [.claude, .codex]
-        case .run, .judge: [.claude]
-        case .review: [.codex]
+        case .goal, .judge, .review: [.claude, .codex]
+        case .run: [.claude]
         }
     }
 
@@ -86,6 +85,18 @@ public struct AgentsConfig: Sendable, Equatable {
         return nil
     }
 
+    /// A stage's model must belong to the provider the stage ends up on (it may inherit `[agents.review]`'s); Codex takes none.
+    func checkStageModels(review: ReviewConfig, fail: ReviewConfig.Fail) {
+        let base = self.review.provider ?? AgentRole.review.defaultProvider
+        for stage in review.definitions.values.sorted(by: { $0.name < $1.name })
+        where stage.model != nil && (stage.provider ?? base) == .codex {
+            let name = stage.name
+            fail(.invalidValue, stage.modelLine, "'model' in the review stage '\(name)' cannot be set: \(Self.codexModelReason)")
+        }
+    }
+
+    static let codexModelReason = "the Codex adapter takes no model yet, so it runs on Codex's own default"
+
     static func list(_ ids: [AgentProviderID]) -> String {
         ids.map { "\"\($0)\"" }.joined(separator: " or ")
     }
@@ -157,7 +168,11 @@ extension AgentsConfig {
 extension AgentSelection {
     /// `provider`, `model` and `allow_unpriced` of one table; a provider that has no adapter for `role` yet is a
     /// problem here, so no config is accepted that a later stage would have to ignore.
-    static func parse(_ table: TOMLTable, name: String, role: AgentRole, fail: ReviewConfig.Fail) -> AgentSelection {
+    /// `inheritsProvider`: a review stage table, whose missing `provider` comes from `[agents.review]` (checked once
+    /// both are known, in `Config.load`).
+    static func parse(
+        _ table: TOMLTable, name: String, role: AgentRole, inheritsProvider: Bool = false, fail: ReviewConfig.Fail
+    ) -> AgentSelection {
         var selection = AgentSelection()
         if let entry = table.entries["provider"] {
             if case .string(let value) = entry.value {
@@ -168,13 +183,12 @@ extension AgentSelection {
         }
         if let entry = table.entries["model"] {
             if case .string(let value) = entry.value {
-                if role == .review {
-                    fail(
-                        .invalidValue, entry.line,
-                        "'model' in [\(name)] cannot be set yet: the Codex adapter takes no model "
-                            + "(docs/plan/P9-agent-providers.md, task 4)")
-                } else if SafeNames.isModelName(value) {
+                if SafeNames.isModelName(value) {
                     selection.model = value
+                    let effective = selection.provider ?? (inheritsProvider ? nil : role.defaultProvider)
+                    if effective == .codex, role == .judge || role == .review {
+                        fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexModelReason)")
+                    }
                 } else {
                     fail(.invalidValue, entry.line, "'model' in [\(name)] must be a model name or alias like \"haiku\"")
                 }
@@ -204,7 +218,7 @@ extension AgentSelection {
             fail(
                 .invalidValue, line,
                 "[\(table)] cannot use \"\(id)\" yet: \(role.rawValue) runs on \(AgentsConfig.list(role.supportedProviders)) "
-                    + "only until the second provider is enabled (docs/plan/P9-agent-providers.md, task 4)")
+                    + "only until its second provider is enabled (docs/plan/P9-agent-providers.md, task 4)")
             return nil
         }
         return id
@@ -247,10 +261,29 @@ extension Config {
     /// inherited from `[agents.review]` unless the stage sets it.
     public func resolvedReviewAgent(stage name: String = ReviewConfig.prReviewStage) -> ResolvedAgent {
         let stage = review.stage(name)
-        let provider = stage?.provider ?? agents.review.provider ?? AgentRole.review.defaultProvider
+        let base = agents.review.provider ?? AgentRole.review.defaultProvider
+        let provider = stage?.provider ?? base
+        // A model names a provider's own model, so it is only inherited by a stage that keeps that provider.
         return ResolvedAgent(
-            provider: provider, model: stage?.model ?? agents.review.model,
+            provider: provider, model: stage?.model ?? (provider == base ? agents.review.model : nil),
             allowUnpriced: stage?.allowUnpriced ?? agents.review.allowUnpriced ?? false)
+    }
+
+    /// True when the review provider is the one the thread always used (Codex) and no new `provider` key chose it: the
+    /// P9 compatibility exception, which keeps its timeout-only policy without `allow_unpriced`. `reviewer = "codex"`
+    /// (P6) is not a new selection.
+    public func reviewUsesLegacySelection(stage name: String = ReviewConfig.prReviewStage) -> Bool {
+        if agents.review.provider != nil { return false }
+        guard let stage = review.stage(name), stage.provider != nil else { return true }
+        return stage.providerIsReviewerAlias
+    }
+
+    /// The table that holds `allow_unpriced` for `role`, as a config would write it.
+    public func allowUnpricedTable(_ role: AgentRole, stage name: String = ReviewConfig.prReviewStage) -> String {
+        guard role == .review, let stage = review.stage(name), stage.provider != nil, !stage.providerIsReviewerAlias,
+            name != ReviewConfig.prReviewStage
+        else { return "[agents.\(role.rawValue)]" }
+        return "[agents.review] or [review.stage.\(name)]"
     }
 
     private func legacyModel(_ model: String?, for provider: AgentProviderID) -> String? {

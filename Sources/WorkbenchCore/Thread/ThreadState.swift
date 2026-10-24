@@ -63,6 +63,8 @@ public struct Review: Sendable, Equatable {
         public var failure: String?
         /// Relative to the thread's directory.
         public var findingsPath: String?
+        /// What the reviewer's provider reported it cost (Claude); nil when it reports none (Codex), never 0.
+        public var costUSD: Double?
     }
 
     public struct Note: Sendable, Equatable {
@@ -237,7 +239,16 @@ public struct ThreadState: Sendable, Equatable {
             round: event.data["round"]?.intValue ?? 0, pr: event.data["pr"]?.intValue,
             headSHA: event.data["head_sha"]?.stringValue, verdict: ok ? verdict : nil,
             failure: ok ? nil : safeLine(event.data["reason"]?.stringValue ?? "no reason recorded", limit: 300),
-            findingsPath: event.data["findings_path"]?.stringValue)
+            findingsPath: event.data["findings_path"]?.stringValue, costUSD: reportedCost(event))
+    }
+
+    /// The `cost_usd` an event recorded; nil when the provider reported none.
+    private static func reportedCost(_ event: Event) -> Double? {
+        switch event.data["cost_usd"] {
+        case .double(let d)?: d
+        case .int(let i)?: Double(i)
+        default: nil
+        }
     }
 
     /// A `judge.ran` event as the review shows it. Entries that do not read as a verdict are left out, so a

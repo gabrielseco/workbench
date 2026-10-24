@@ -6,7 +6,8 @@ public struct DoctorAgentIssue: Sendable, Equatable {
     public enum Severity: String, Sendable { case problem, note }
 
     public var role: AgentRole
-    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `unconfined_reads` or `setting_unused`.
+    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `unpriced_not_allowed`, `unconfined_reads` or
+    /// `setting_unused`.
     public var kind: String
     public var severity: Severity
     public var message: String
@@ -76,6 +77,25 @@ extension Doctor {
                 role: found[index].role, resolved: resolved, config: config, searchPath: searchPath, goal: goal,
                 caps: capabilities?(resolved.provider) ?? Self.capabilities(of: resolved.provider, config: config))
         }
+        // Each listed stage resolves on its own: one that moves to a provider without a dollar cap needs its own opt-in.
+        if let at = found.firstIndex(where: { $0.role == .review }) {
+            for name in config.review.stages where name != ReviewConfig.prReviewStage && config.review.stage(name) != nil {
+                let agent = config.resolvedReviewAgent(stage: name)
+                guard let caps = capabilities?(agent.provider) ?? Self.capabilities(of: agent.provider, config: config),
+                    caps.policies.contains(.readOnlyEvidence)
+                else { continue }
+                let spend = AgentSpendPolicy.spend(
+                    role: .review, agent: agent, capabilities: caps, cap: 0,
+                    legacy: config.reviewUsesLegacySelection(stage: name),
+                    table: config.allowUnpricedTable(.review, stage: name))
+                if case .failure(let refusal) = spend {
+                    found[at].issues.append(
+                        DoctorAgentIssue(
+                            role: .review, kind: "unpriced_not_allowed", severity: .problem,
+                            message: "review stage \(name) is refused on \(agent.provider): \(refusal.message)"))
+                }
+            }
+        }
         let used = Set(found.compactMap { $0.resolved?.provider })
         let unusedProviders = config.agents.executables.keys.filter { !used.contains($0) }.sorted { "\($0)" < "\($1)" }
         for provider in unusedProviders {
@@ -128,14 +148,25 @@ extension Doctor {
                 "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
                     + "repository writes and posting are still refused")
         }
+        // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
+        if role == .judge || role == .review, caps.policies.contains(.readOnlyEvidence) {
+            let legacy = role == .review && config.reviewUsesLegacySelection()
+            let spend = AgentSpendPolicy.spend(
+                role: role, agent: resolved, capabilities: caps, cap: 0, legacy: legacy, table: config.allowUnpricedTable(role))
+            if case .failure(let refusal) = spend {
+                add("unpriced_not_allowed", .problem, "\(role.rawValue) is refused on \(provider): \(refusal.message)")
+            }
+        }
         let selection = config.agents.selection(role)
         if selection.allowUnpriced != nil {
             add(
                 "setting_unused", .note,
                 caps.hardDollarCap
                     ? "[agents.\(role.rawValue)] allow_unpriced has no effect: \(provider) enforces a dollar limit"
-                    : "[agents.\(role.rawValue)] allow_unpriced is read but nothing acts on it yet: "
-                        + "\(provider) already runs with a timeout only (P9 task 4 enforces it)")
+                    : "[agents.\(role.rawValue)] allow_unpriced = \(selection.allowUnpriced == true) "
+                        + (selection.allowUnpriced == true
+                            ? "lets the \(role.rawValue) run on \(provider) with only a timeout; its cost is unknown"
+                            : "keeps the \(role.rawValue) on \(provider) refused: it has no dollar cap"))
         }
         return out
     }

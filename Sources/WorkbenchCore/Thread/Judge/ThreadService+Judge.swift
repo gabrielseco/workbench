@@ -105,26 +105,54 @@ extension ThreadService {
                     PNGSize.read(at: folder.appendingPathComponent(name)).map { (name, $0) }
                 }),
             lastTurn: turn, untracked: work.untracked)
-        let request = AgentRequest(
-            provider: .claude, model: agent.model, prompt: Judge.prompt(for: input),
-            workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
-            spend: .hardCap(budget),
-            session: .start(proposed: UUID().uuidString.lowercased()), purpose: .judge, environment: environment,
-            limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
-        let provider = ClaudeProvider(config: config)
         let attempts = AttemptLog(log: log, role: "judge", turn: turn, agent: agent)
         // What goes in the log is decided before anything is spent; a refusal is a result, not a spawn.
+        let executable = config.executable(for: agent.provider)
+        guard let provider = config.agentProvider(agent.provider) else {
+            let why = "there is no adapter for \(agent.provider)"
+            try await attempts.refused(why)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: [])
+        }
+        let spend = AgentSpendPolicy.spend(
+            role: .judge, agent: agent, capabilities: provider.capabilities, cap: budget, legacy: false,
+            table: config.allowUnpricedTable(.judge))
+        let answerFolder = project.threadDirectory(id).appendingPathComponent("judge")
+        let request: AgentRequest
+        if agent.provider == .codex {
+            // Codex has no structured output: it is asked for the same JSON as text, and writes its last message to a file
+            // beside the evidence, never inside the folder it reads.
+            // With no screenshots the judge would run in the thread folder, which holds `judge/`: it gets an empty folder
+            // of its own instead, so its answer is never inside what it reads.
+            let readFolder = screenshots.isEmpty ? answerFolder.appendingPathComponent("empty") : folder
+            try? FileManager.default.createDirectory(at: readFolder, withIntermediateDirectories: true)
+            let answer = answerFolder.appendingPathComponent("turn-\(turn).answer.txt")
+            try? FileManager.default.removeItem(at: answer)
+            request = AgentRequest(
+                provider: agent.provider, model: agent.model, prompt: Judge.prompt(for: input, attachedImages: true),
+                images: screenshots.map { folder.appendingPathComponent($0) }, workingDirectory: readFolder,
+                outputDirectory: answerFolder, policy: .readOnlyEvidence, spend: (try? spend.get()) ?? .timeoutOnly,
+                purpose: .judge, environment: environment,
+                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), answerFile: answer)
+        } else {
+            request = AgentRequest(
+                provider: agent.provider, model: agent.model, prompt: Judge.prompt(for: input),
+                workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
+                spend: (try? spend.get()) ?? .hardCap(budget),
+                session: .start(proposed: UUID().uuidString.lowercased()), purpose: .judge, environment: environment,
+                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
+        }
         let shown: [String]
         do {
+            if case .failure(let refusal) = spend { throw refusal }
             if let refusal = request.validate(against: provider) { throw refusal }
             shown = try provider.invocation(for: request).displayArguments
         } catch {
             try await attempts.refused(Self.judgeFailureText(error))
             return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: [])
         }
-        // A `claude` that is not there is a refusal: nothing was started.
-        guard ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) != nil else {
-            let missing = "`\(config.claudePath)` was not found"
+        // An executable that is not there is a refusal: nothing was started.
+        guard ExecutableResolver.resolve(executable, searchPath: environment["PATH"]) != nil else {
+            let missing = Self.agentMissing(executable, provider: agent.provider)
             try await attempts.refused(missing)
             return try await recordJudge(log, agent: agent, turn: turn, failure: missing, argv: shown)
         }
@@ -148,13 +176,15 @@ extension ThreadService {
         attach(execution)
         let completion = await execution.completion
         try await attempts.end(attempt, AttemptLog.outcome(of: completion.process, failure: completion.failure))
-        if let why = Self.judgeProcessProblem(completion.process, timeout: timeout) {
+        if let why = Self.judgeProcessProblem(completion.process, timeout: timeout, name: "\(agent.provider)") {
             return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
         }
         if let failure = completion.failure {
             return try await recordJudge(log, agent: agent, turn: turn, failure: failure.message, argv: shown)
         }
-        guard let answer = completion.summary else {
+        var written: String?
+        if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }
+        guard let answer = completion.summary ?? written else {
             let failure = "the verdict was not usable: no result"
             return try await recordJudge(log, agent: agent, turn: turn, failure: failure, argv: shown)
         }
@@ -190,17 +220,17 @@ extension ThreadService {
     }
 
     /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
-    static func judgeProcessProblem(_ exit: ProcessExit, timeout: TimeInterval) -> String? {
+    static func judgeProcessProblem(_ exit: ProcessExit, timeout: TimeInterval, name: String = "claude") -> String? {
         switch exit.cause {
         case .stopped: return "the judge was stopped"
-        case .timedOut: return "claude did not answer within \(Int(timeout))s"
+        case .timedOut: return "\(name) did not answer within \(Int(timeout))s"
         case .natural: break
         }
         switch exit.termination {
         case .exited(0): return nil
-        case .exited(let code): return "claude exited with status \(code)"
-        case .signaled(let signal): return "claude was ended by signal \(signal)"
-        case .lost: return "claude ended in a way that was not recorded"
+        case .exited(let code): return "\(name) exited with status \(code)"
+        case .signaled(let signal): return "\(name) was ended by signal \(signal)"
+        case .lost: return "\(name) ended in a way that was not recorded"
         }
     }
 

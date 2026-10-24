@@ -272,6 +272,7 @@ public struct Config: Sendable, Equatable {
         let verifier = VerifierConfig.parse(document, fail: fail)
         let run = RunConfig.parse(document, fail: fail)
         let agents = AgentsConfig.parse(document, fail: fail)
+        agents.checkStageModels(review: review, fail: fail)
         claudePath = agents.claudeExecutable(claudePathLine: document.tables[""]?.entries["claude_path"]?.line, fail: fail)
             ?? claudePath
 
@@ -424,7 +425,7 @@ public struct Config: Sendable, Equatable {
         # provider = "claude"              # run and judge on claude, review on codex, goal drafting off
         # model = "sonnet"                 # replaces judge_model and model for the judge once it is set
         # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
-        # allow_unpriced = true            # accept a review whose cost is unknown (never for [agents.run])
+        # allow_unpriced = true            # needed to judge or review on codex (no dollar cap); never for [agents.run]
 
         # [run]                            # how the verifier's app is started: Workbench runs it and stops it
         # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set

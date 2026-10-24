@@ -50,6 +50,10 @@ public struct ReviewStageConfig: Sendable, Equatable {
     public var provider: AgentProviderID?
     public var model: String?
     public var allowUnpriced: Bool?
+    /// `provider` came from the P6 `reviewer = "codex"` key, not from a `provider` key.
+    public var providerIsReviewerAlias = false
+    /// Where the stage's `model` is written, for an error found once the provider it inherits is known.
+    public var modelLine: Int?
     public var inputs: [ReviewStageInput] = ReviewStageInput.defaults
     /// Globs over the files the pull request changes. Empty means every change.
     public var appliesTo: [String] = []
@@ -236,9 +240,11 @@ extension ReviewConfig {
             fail(.conflict, line, "'skill' and 'prompt' are both set in [\(tablePrefix)\(stage.name)]; the rubric comes from one")
         }
         if keys.contains("provider") {
-            let selection = AgentSelection.parse(table, name: "\(tablePrefix)\(stage.name)", role: .review, fail: fail)
+            let selection = AgentSelection.parse(
+                table, name: "\(tablePrefix)\(stage.name)", role: .review, inheritsProvider: true, fail: fail)
             stage.provider = selection.provider
             stage.model = selection.model
+            stage.modelLine = table.entries["model"]?.line
             stage.allowUnpriced = selection.allowUnpriced
         }
         if keys.contains("reviewer"), let entry = table.entries["reviewer"] {
@@ -249,6 +255,7 @@ extension ReviewConfig {
             } else if case .string(let value) = entry.value, let reviewer = ReviewerKind(rawValue: value) {
                 stage.reviewer = reviewer
                 stage.provider = AgentProviderID(value)
+                stage.providerIsReviewerAlias = true
             } else if case .string("claude") = entry.value {
                 fail(
                     .invalidValue, entry.line,

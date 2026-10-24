@@ -57,7 +57,18 @@ extension Commands {
         let ctx = try await Context.load()
         let id = try ctx.threadIDForViewing(named)
         let config = try Config.load(from: ctx.project.configURL)
-        out("judging \(id) (advisory; read-only, up to $\(NSDecimalNumber(decimal: budget).stringValue))...")
+        let agent = config.resolvedJudgeAgent(modelFlag: model)
+        let capped = config.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true
+        if !capped && budgetText != nil {
+            throw CLIError.usage(
+                "--budget has no effect on \(agent.provider): it cannot enforce a dollar limit, so the judge is bounded by "
+                    + "its timeout only (allow_unpriced in [agents.judge])")
+        }
+        out(
+            capped
+                ? "judging \(id) (advisory; read-only, up to $\(NSDecimalNumber(decimal: budget).stringValue))..."
+                : "judging \(id) on \(agent.provider) (advisory; read-only, no dollar cap: "
+                    + "bounded by \(Int(Judge.timeout / 60)) min)...")
         // Ctrl-C stops the judge's `claude` instead of leaving it running on its own budget.
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the judge") { holder.stop() }
@@ -70,9 +81,9 @@ extension Commands {
             if case .invalidModel = error { throw CLIError.usage("\(error)") }
             throw CLIError.refused("\(error)")
         }
-        let cost = result.costUSD.map { String(format: "  $%.4f", $0) } ?? ""
+        let cost = result.costUSD.map { String(format: "  $%.4f", $0) } ?? "  cost unknown"
         guard result.verdict != nil else {
-            out("no verdict for turn \(result.turn)\(cost): \(result.failure ?? "unknown")")
+            out("no verdict for turn \(result.turn)\(result.costUSD == nil ? "" : cost): \(result.failure ?? "unknown")")
             return 1
         }
         out("verdict for turn \(result.turn)\(cost)")
