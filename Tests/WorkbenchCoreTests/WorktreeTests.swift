@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// Isolated from the machine's git config, so results do not depend on who runs the tests.
-private func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
+func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
     try GitRunner.discover(
         extraEnvironment: [
             "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -13,7 +13,7 @@ private func testGit(timeout: TimeInterval = 30) throws -> GitRunner {
         ], timeout: timeout)
 }
 
-private struct TestRepo {
+struct TestRepo {
     let root: URL
     let git: GitRunner
 
@@ -226,35 +226,6 @@ private struct TestRepo {
         #expect(try await repo.head("main") == before, "the local branch is untouched")
         let worktree = try await repo.manager.create(threadID: "t1", base: "main")
         #expect(worktree.baseCommit == before, "still cut from the local base")
-    }
-
-    @Test func withoutAFetchTheGapUsesTheKnownOriginRefAndSaysHowOldItIs() async throws {
-        let repo = try await TestRepo()
-        let bare = repo.root.deletingLastPathComponent().appendingPathComponent("n-\(UUID().uuidString).git")
-        _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
-        try await repo.run("remote", "add", "origin", bare.path)
-        try await repo.run("push", "-q", "origin", "main")
-        let clone = repo.root.deletingLastPathComponent().appendingPathComponent("c-\(UUID().uuidString)")
-        _ = try await repo.git.run(["clone", "-q", "-b", "main", bare.path, clone.path], in: repo.root)
-        try "1\n".write(to: clone.appendingPathComponent("n.txt"), atomically: true, encoding: .utf8)
-        _ = try await repo.git.run(["add", "-A"], in: clone)
-        _ = try await repo.git.run(["commit", "-q", "-m", "n"], in: clone)
-        _ = try await repo.git.run(["push", "-q", "origin", "HEAD:main"], in: clone)
-        let known = try await repo.head("origin/main")
-        // Origin moved, but this repository has not been told: the answer is "not behind", and git was not asked.
-        let quiet = await repo.manager.baseGap(base: "main", fetch: false)
-        #expect(quiet?.behind == 0 && quiet?.fetchNote == nil, "\(String(describing: quiet))")
-        #expect(try await repo.head("origin/main") == known, "nothing was fetched")
-        #expect(quiet?.knownFrom == .unknown, "this repository never fetched, so it cannot say how old that is")
-        let fetched = await repo.manager.baseGap(base: "main")
-        #expect(fetched == WorktreeManager.BaseGap(base: "main", behind: 1, fetchNote: nil))
-        let again = await repo.manager.baseGap(base: "main", fetch: false)
-        #expect(again?.behind == 1, "after a fetch, the known ref says it")
-        if case .lastFetch(let date)? = again?.knownFrom {
-            #expect(Date().timeIntervalSince(date) < 60, "FETCH_HEAD was just rewritten")
-        } else {
-            Issue.record("expected a last-fetch time: \(String(describing: again))")
-        }
     }
 
     @Test func whenTheFetchFailsTheKnownOriginRefIsStillCompared() async throws {

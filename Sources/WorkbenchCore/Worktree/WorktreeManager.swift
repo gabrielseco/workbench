@@ -368,7 +368,7 @@ public struct WorktreeManager: Sendable {
         let count = try? await git.run(["rev-list", "--count", "refs/heads/\(base)..\(remote)"], in: repoRoot)
         let behind = Int(count?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
         return BaseGap(
-            base: base, behind: behind, fetchNote: note, knownFrom: fetch ? nil : await lastFetch())
+            base: base, behind: behind, fetchNote: note, knownFrom: fetch ? nil : await lastFetch(of: base, from: origin.stdout))
     }
 
     /// Fetches `origin/<base>`; why it did not happen, or nil when it did.
@@ -387,14 +387,26 @@ public struct WorktreeManager: Sendable {
         }
     }
 
-    /// When this repository last fetched anything: git rewrites `FETCH_HEAD` on every fetch, even one that
-    /// changed nothing, so its mtime is the age of what `origin/<base>` says.
-    private func lastFetch() async -> BaseGap.KnownFrom {
+    /// When `origin/<base>` was last fetched, as far as git says. `FETCH_HEAD` is rewritten by every fetch, so
+    /// its mtime is the age of `origin/<base>` only when that file names this base fetched from this origin; a
+    /// later fetch of another branch or remote leaves the age unknown, never wrongly fresh.
+    private func lastFetch(of base: String, from originURL: String) async -> BaseGap.KnownFrom {
         let path = try? await git.run(["rev-parse", "--git-path", "FETCH_HEAD"], in: repoRoot)
         guard let path, path.succeeded else { return .unknown }
-        let text = path.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        let file = URL(fileURLWithPath: text, relativeTo: repoRoot).standardizedFileURL
-        guard let modified = try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
+        let file = URL(fileURLWithPath: path.stdout.trimmingCharacters(in: .whitespacesAndNewlines), relativeTo: repoRoot)
+            .standardizedFileURL
+        // git writes the remote without a trailing `.git` or slash.
+        func bare(_ url: String) -> String {
+            var text = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            while text.hasSuffix("/") { text.removeLast() }
+            return text.hasSuffix(".git") ? String(text.dropLast(4)) : text
+        }
+        let suffix = " of \(bare(originURL))"
+        func namesThisBase(_ line: Substring) -> Bool {
+            line.contains("branch '\(base)'") && bare(String(line)).hasSuffix(suffix)
+        }
+        guard let text = try? String(contentsOf: file, encoding: .utf8), text.split(separator: "\n").contains(where: namesThisBase),
+            let modified = try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
         else { return .unknown }
         return .lastFetch(modified)
     }
