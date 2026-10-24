@@ -42,7 +42,7 @@ extension ThreadService {
     /// The thread's log is held from the once-per-turn check to the record, so two judges, or a judge and a
     /// run, cannot both spend money on the same turn: the second is refused as `busy`. It sees what `review`
     /// shows: the work in the worktree against where it left the base (committed or not; untracked files are
-    /// named), the check, the verifier (or an older log's verify step) and the screenshots they left.
+    /// named), the check, the verifier and the screenshots it left.
     ///
     /// - Parameter attach: called with the running judge, so the caller can stop it (Ctrl-C).
     public func judge(
@@ -94,11 +94,10 @@ extension ThreadService {
                 from: project.checkOutputURL(id, turn: check.turn), turn: check.turn, result: check.result,
                 exitCode: check.exitCode)?.text
         }
-        let verify = state.review.verify
         let (screenshots, folder) = judgeScreenshots(
-            id: id, set: Review.ProofSet(verify: verify, verifier: state.review.verifier), lastTurn: turn)
+            id: id, set: Review.ProofSet(verifier: state.review.verifier), lastTurn: turn)
         let input = JudgeInput(
-            goal: goal, diff: diffText, diffTruncated: cut, check: check, checkOutput: checkOutput, verify: verify,
+            goal: goal, diff: diffText, diffTruncated: cut, check: check, checkOutput: checkOutput,
             verifier: state.review.verifier, screenshots: screenshots,
             screenshotSizes: Dictionary(
                 uniqueKeysWithValues: screenshots.compactMap { name in
@@ -261,8 +260,7 @@ extension ThreadService {
         return (diff.stdout, Array(names))
     }
 
-    /// The screenshots of the latest turn's proof (the verify step's and the verifier's, the verifier's winning a
-    /// name both left) that are still there as recorded, as names relative to the folder the judge runs in, and
+    /// The screenshots of the latest turn's proof (the verifier's) that are still there as recorded, as names relative to the folder the judge runs in, and
     /// that folder. With none, the judge runs in the thread directory and has no tools.
     private func judgeScreenshots(id: String, set: Review.ProofSet?, lastTurn: Int) -> (names: [String], folder: URL) {
         let thread = project.threadDirectory(id)

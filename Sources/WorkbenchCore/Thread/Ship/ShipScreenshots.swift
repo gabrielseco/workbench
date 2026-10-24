@@ -14,7 +14,7 @@ extension ThreadService {
     /// Most screenshots attached to one pull request.
     static let maxScreenshots = 20
 
-    /// Puts the PNGs the latest turn's proof holds (the verifier's, or a verify step's) in the pull request's
+    /// Puts the PNGs the latest turn's verifier left in the pull request's
     /// description, through the `pr-shots` tool. Runs after the PR exists and never fails the ship: a missing tool or a failed upload is a note,
     /// and `ship --screenshots` tries again.
     ///
@@ -28,9 +28,7 @@ extension ThreadService {
     public func shipScreenshots(id: String, worktree: URL, number: Int, tool: GitRunner?) async -> ShipScreenshots {
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
-        // The proof of the latest turn, whichever step left it: since the verifier replaced `verify_command` it is
-        // the verifier's, and a thread from before that still has its verify step's.
-        guard let set = Review.ProofSet(verify: state.review.verify, verifier: state.review.verifier),
+        guard let set = Review.ProofSet(verifier: state.review.verifier),
             set.turn == state.lastTurn
         else { return .none }
         let threadDirectory = project.threadDirectory(id)

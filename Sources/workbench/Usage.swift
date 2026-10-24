@@ -54,7 +54,7 @@ let workbenchUsage = """
                                  never granted whole. unsafe needs --allow-dangerous and is once only. A [tools]
                                  denied entry still wins. Written to the log, not to the config.
       judge [id] [--again] [--model <name>] [--budget <usd>]
-                                 ask a second, read-only Claude run whether the check, the verify step, its
+                                 ask a second, read-only Claude run whether the check, the verifier, its
                                  screenshots and the diff show each criterion holds; advisory, shown by review
                                  beside your own checks, never changes accept or ship; once per turn unless --again
       verifier [id] [--again]    run the project's [verifier] skill as its own Claude run: it builds and drives the app to
@@ -87,7 +87,7 @@ let workbenchUsage = """
                                  for a thread from goal new --update it proposes edits to the PR's own
                                  title and sections and applies them only on a second yes, or with
                                  --refresh-description; --no-describe skips the proposal;
-                                 screenshots the verify step left are put in the PR with `pr-shots`, if it
+                                 screenshots the verifier left are put in the PR with `pr-shots`, if it
                                  is installed (--no-screenshots skips it; --screenshots tries again for a shipped thread);
                                  --watch then follows the CI checks (read-only);
                                  --review-loop then has Codex review the pull request and, for each finding round,

@@ -5,15 +5,14 @@ import Testing
 
 private func crit(_ proof: String) -> Criterion { Criterion(id: "c1", text: "shows it", proof: proof) }
 
-private func verify(turn: Int = 1, result: String = "passed", files: [String]) -> Review.Verify {
-    Review.Verify(
-        turn: turn, result: result, exitCode: 0, durationMs: 1000, outputRef: "verify/turn-\(turn).log",
-        command: "scripts/verify.sh",
-        proof: files.map { ProofFile(name: $0, path: "proof/turn-\(turn)/\($0)", sha256: "ab", bytes: 3) })
+private func verifier(turn: Int = 1, ok: Bool = true, files: [String]) -> Review.Verifier {
+    Review.Verifier(
+        turn: turn, ok: ok, reason: ok ? nil : "timed out", skipped: false, costUSD: nil, durationMs: 1000, report: "",
+        proof: files.map { ProofFile(name: $0, path: "proof/turn-\(turn)/\($0)", sha256: "ab", bytes: 3) }, open: false)
 }
 
-private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) -> CriterionStatus {
-    CriteriaStatus.evaluate(criteria: [crit(proof)], check: nil, lastTurn: lastTurn, verify: verify)[0]
+private func status(_ proof: String, verifier: Review.Verifier?, lastTurn: Int = 1) -> CriterionStatus {
+    CriteriaStatus.evaluate(criteria: [crit(proof)], check: nil, lastTurn: lastTurn, verifier: verifier)[0]
 }
 
 @Suite struct ScreenshotProofParsingTests {
@@ -72,47 +71,44 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
 
 @Suite struct ScreenshotProofStatusTests {
     @Test func theFileThereIsEvidenceForAPersonNotAPass() {
-        let s = status("screenshot: home", verify: verify(files: ["home.png", "other.png"]))
+        let s = status("screenshot: home", verifier: verifier(files: ["home.png", "other.png"]))
         #expect(s.state == .evidence)
         #expect(s.file == "proof/turn-1/home.png")
         #expect(s.label == "see screenshot")
     }
 
-    @Test func noVerifyStepMeansMissing() {
-        let s = status("screenshot: home", verify: nil)
+    @Test func noVerifierMeansMissing() {
+        let s = status("screenshot: home", verifier: nil)
         #expect(s.state == .missing)
-        #expect(s.note?.contains("no verify step") == true)
+        #expect(s.note == "no verifier has run, so home.png was not produced")
     }
 
-    @Test func aFileThatIsNotThereIsMissingEvenWhenVerifyPassed() {
-        let s = status("screenshot: home", verify: verify(result: "passed", files: ["other.png"]))
+    @Test func aFileThatIsNotThereIsMissingEvenWhenTheVerifierFinished() {
+        let s = status("screenshot: home", verifier: verifier(files: ["other.png"]))
         #expect(s.state == .missing)
         #expect(s.note?.contains("home.png") == true)
     }
 
-    @Test func aVerifyFromAnEarlierTurnSaysNothingAboutTheLatestWork() {
-        let s = status("screenshot: home", verify: verify(turn: 1, files: ["home.png"]), lastTurn: 2)
+    @Test func aVerifierRunFromAnEarlierTurnSaysNothingAboutTheLatestWork() {
+        let s = status("screenshot: home", verifier: verifier(turn: 1, files: ["home.png"]), lastTurn: 2)
         #expect(s.state == .missing)
         #expect(s.note?.contains("not the latest turn 2") == true)
     }
 
-    @Test func aFailedVerifyThatLeftTheFileStillShowsIt() {
-        let s = status("screenshot: home", verify: verify(result: "failed", files: ["home.png"]))
+    @Test func aVerifierThatDidNotFinishButLeftTheFileStillShowsIt() {
+        let s = status("screenshot: home", verifier: verifier(ok: false, files: ["home.png"]))
         #expect(s.state == .evidence)
-        #expect(s.note?.contains("verify failed") == true)
+        #expect(s.note?.contains("verifier did not finish") == true)
     }
 
     @Test func aSubdirectoryFileDoesNotSatisfyAName() {
-        let v = Review.Verify(
-            turn: 1, result: "passed", exitCode: 0, durationMs: 1, outputRef: nil, command: nil,
-            proof: [ProofFile(name: "flows/home.png", path: "proof/turn-1/flows/home.png", sha256: "a", bytes: 1)])
-        #expect(status("screenshot: home", verify: v).state == .missing)
+        #expect(status("screenshot: home", verifier: verifier(files: ["flows/home.png"])).state == .missing)
     }
 
     @Test func theSummaryCountsThemAndKeepsTheOldWordingWhenThereAreNone() {
         let criteria = [crit("screenshot: a"), Criterion(id: "c2", text: "t", proof: "read it"), crit("screenshot: b")]
         let statuses = CriteriaStatus.evaluate(
-            criteria: criteria, check: nil, lastTurn: 1, verify: verify(files: ["a.png"]))
+            criteria: criteria, check: nil, lastTurn: 1, verifier: verifier(files: ["a.png"]))
         #expect(
             CriteriaStatus.summary(statuses, check: nil)
                 == "Criteria: 0 passed · 0 failed · 1 for you to check · 1 with a screenshot · 1 missing (check did not run)")
@@ -124,7 +120,7 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
 
     @Test func theMarkdownTablePointsAtTheScreenshotAndSaysWhenItIsMissing() {
         let criteria = [crit("screenshot: a"), Criterion(id: "c2", text: "t", proof: "screenshot: b")]
-        let statuses = CriteriaStatus.evaluate(criteria: criteria, check: nil, lastTurn: 1, verify: verify(files: ["a.png"]))
+        let statuses = CriteriaStatus.evaluate(criteria: criteria, check: nil, lastTurn: 1, verifier: verifier(files: ["a.png"]))
         let table = CriteriaStatus.markdown(statuses) { $0 }
         #expect(table.contains("| c1 | see screenshot | look at the screenshot"))
         #expect(table.contains("| c2 | ✘ missing | no screenshot"))
@@ -139,7 +135,7 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
         defer { try? FileManager.default.removeItem(at: thread) }
         let file = dir.appendingPathComponent("home.png")
         try Data("abc".utf8).write(to: file)
-        let v = verify(files: ["home.png"])  // recorded as 3 bytes
+        let v = verifier(files: ["home.png"])  // recorded as 3 bytes
 
         func report() -> ReviewReport {
             ReviewReport(
@@ -148,7 +144,7 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
         }
         func eval(_ available: (ProofFile) -> Bool) -> CriterionStatus {
             CriteriaStatus.evaluate(
-                criteria: [crit("screenshot: home")], check: nil, lastTurn: 1, verify: v, proofAvailable: available)[0]
+                criteria: [crit("screenshot: home")], check: nil, lastTurn: 1, verifier: v, proofAvailable: available)[0]
         }
         #expect(eval { $0.isAvailable(in: thread) }.state == .evidence)
 
@@ -167,23 +163,41 @@ private func status(_ proof: String, verify: Review.Verify?, lastTurn: Int = 1) 
 }
 
 @Suite struct ScreenshotProofFromTheLogTests {
-    @Test func theLogsVerifyEventsDecideWhetherTheScreenshotIsThere() {
-        func event(_ seq: Int, _ kind: EventKind, _ data: JSONValue) -> Event {
-            Event(seq: seq, ts: "t", turn: 1, kind: kind, data: data)
-        }
-        let events = [
-            event(1, .turnStarted, ["session_id": "s"]),
-            event(2, .turnEnded, ["result": "succeeded"]),
-            event(3, .verifyStarted, ["command": "scripts/verify.sh"]),
-            event(4, .proofAdded, ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 3]),
-            event(5, .verifyEnded, ["result": "passed", "exit_code": 0, "duration_ms": 10]),
-        ]
+    private func event(_ seq: Int, _ kind: EventKind, _ data: JSONValue) -> Event {
+        Event(seq: seq, ts: "t", turn: 1, kind: kind, data: data)
+    }
+
+    private let turn = [
+        Event(seq: 1, ts: "t", turn: 1, kind: .turnStarted, data: ["session_id": "s"]),
+        Event(seq: 2, ts: "t", turn: 1, kind: .turnEnded, data: ["result": "succeeded"]),
+    ]
+
+    private func statuses(_ events: [Event]) -> [CriterionStatus] {
         let state = ThreadState.derive(from: events, id: "g-1")
-        let statuses = CriteriaStatus.evaluate(
+        return CriteriaStatus.evaluate(
             criteria: [crit("screenshot: home"), crit("screenshot: nope")], check: nil, lastTurn: state.lastTurn,
-            verify: state.review.verify)
-        #expect(statuses.map(\.state) == [.evidence, .missing])
-        #expect(statuses[0].file == "proof/turn-1/home.png")
+            verifier: state.review.verifier)
+    }
+
+    @Test func theLogsVerifierEventsDecideWhetherTheScreenshotIsThere() {
+        let shot: JSONValue = [
+            "name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 3, "source": "verifier",
+        ]
+        let found = statuses(
+            turn + [event(3, .verifierStarted, [:]), event(4, .proofAdded, shot), event(5, .verifierEnded, ["ok": true])])
+        #expect(found.map(\.state) == [.evidence, .missing])
+        #expect(found[0].file == "proof/turn-1/home.png")
+    }
+
+    @Test func anOldLogsVerifyStepIsNotProof() {
+        let shot: JSONValue = ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 3]
+        let old = statuses(
+            turn + [
+                event(3, .verifyStarted, ["command": "scripts/verify.sh"]), event(4, .proofAdded, shot),
+                event(5, .verifyEnded, ["result": "passed", "exit_code": 0, "duration_ms": 10]),
+            ])
+        #expect(old.map(\.state) == [.missing, .missing])
+        #expect(old[0].note?.contains("no verifier has run") == true)
     }
 }
 

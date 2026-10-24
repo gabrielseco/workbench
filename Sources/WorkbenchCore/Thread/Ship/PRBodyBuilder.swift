@@ -20,7 +20,7 @@ public enum PRBodyBuilder {
     ///   - lastTurn: the newest turn; a check from an earlier turn does not back a verdict.
     public static func build(
         goal: Goal, check: Review.Check?, template: String?, lastTurn: Int? = nil, description: PRDescription? = nil,
-        verify: Review.Verify? = nil, verifier: Review.Verifier? = nil, changes: [FileChange] = [], judge: Review.Judge? = nil,
+        verifier: Review.Verifier? = nil, changes: [FileChange] = [], judge: Review.Judge? = nil,
         proofAvailable: (ProofFile) -> Bool = { _ in true }
     ) -> PRBody {
         let request =
@@ -31,8 +31,7 @@ public enum PRBodyBuilder {
         var criteria = criteriaList(goal.criteria)
         if !goal.criteria.isEmpty {
             let statuses = CriteriaStatus.evaluate(
-                criteria: goal.criteria, check: check, lastTurn: lastTurn ?? check?.turn ?? 0, verify: verify,
-                verifier: verifier, proofAvailable: proofAvailable)
+                criteria: goal.criteria, check: check, lastTurn: lastTurn ?? check?.turn ?? 0, verifier: verifier, proofAvailable: proofAvailable)
             // The checklist stays as the reviewer's to tick; the table says who verifies each line.
             criteria += "\n\n" + CriteriaStatus.summary(statuses, check: check) + "\n\n"
                 + CriteriaStatus.markdown(statuses) { oneLine(scrub($0)) }
@@ -40,8 +39,8 @@ public enum PRBodyBuilder {
         let lastTurnNumber = lastTurn ?? check?.turn ?? 0
         let concerns = judgeConcerns(judge, lastTurn: lastTurnNumber)
         let testing = [checkLine, criteria, concerns].filter { !$0.isEmpty }.joined(separator: "\n\n")
-        // `ship` attaches the PNGs of the latest turn's proof (the verifier's, or a verify step's) after the PR exists.
-        let proof = Review.ProofSet(verify: verify, verifier: verifier).flatMap { $0.turn == lastTurnNumber ? $0 : nil }
+        // `ship` attaches the PNGs of the latest turn's verifier proof after the PR exists.
+        let proof = Review.ProofSet(verifier: verifier).flatMap { $0.turn == lastTurnNumber ? $0 : nil }
         let hasScreenshots = proof?.files.contains { $0.name.hasSuffix(".png") && proofAvailable($0) } == true
 
         let body: String

@@ -109,7 +109,7 @@ import Testing
 
     @Test func claudeReviewRefusesProof() async throws {
         let (r, env) = try await claudeReview(extraConfig: "[review.stage.pr-review]\ninputs = [\"diff\", \"goal\", \"proof\"]")
-        try await recordLegacyVerify(r.fx, r.id, ["home.png": "pixels"])
+        try await recordVerifierProof(r.fx, r.id, ["home.png": "pixels"])
         let result = try await r.round(environment: env)
         #expect(result.verdict == nil)
         #expect(result.failure?.contains("cannot take images") == true, "\(String(describing: result.failure))")

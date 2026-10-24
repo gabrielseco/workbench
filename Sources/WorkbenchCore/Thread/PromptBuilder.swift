@@ -44,7 +44,7 @@ public enum PromptBuilder {
 
                 ## Verification
 
-                After you finish, Workbench runs the project's verify step itself. Criteria whose proof is \
+                After you finish, Workbench runs the project's verifier itself. Criteria whose proof is \
                 `screenshot: <name>` are captured by it, so you do not need to take those screenshots, and \
                 you should not report them as unverified: say whether the change you made should satisfy them.
 

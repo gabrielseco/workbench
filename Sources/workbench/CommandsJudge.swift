@@ -36,7 +36,7 @@ final class RunHolder: @unchecked Sendable {
 
 extension Commands {
     /// `judge [id] [--again] [--model <name>] [--budget <usd>]`: ask a second, read-only Claude run whether the
-    /// evidence (the check, the verify step, its screenshots and the diff) shows each criterion holds. Advisory:
+    /// evidence (the check, the verifier, its screenshots and the diff) shows each criterion holds. Advisory:
     /// it prints and records a verdict next to your own ticks and never changes what `accept` or `ship` do. It
     /// costs money, so it runs once per turn unless `--again`.
     static func judge(_ args: [String]) async throws -> Int32 {

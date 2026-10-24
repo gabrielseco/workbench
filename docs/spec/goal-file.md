@@ -54,25 +54,23 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **A screenshot proof is `proof: screenshot: <name>[, <name>…]`.** Each `<name>` is one token of letters, digits,
   `.`, `_` and `-` (at most 64, not starting with a symbol), up to 16 names, a name listed twice counting once; a
   malformed list is a goal error. It is satisfied when the latest turn's proof has `<name>.png` at the top of the
-  proof directory for every name. The turn's proof is what the verifier (`[verifier]`, below) left in it, recorded and still there as recorded (and,
-  in a log written before `verify_command` was removed, what its verify step left; when both left a file of the same
-  name the verifier's is the one used, and both stay in the log). `review` shows `see screenshot` and the files in the
+  proof directory for every name. The turn's proof is what the verifier (`[verifier]`, below) left in it, recorded and still there as recorded (what
+  a verify step left in a log written before `verify_command` was removed is not proof). `review` shows `see screenshot` and the files in the
   order named, or `✘ missing` with the reason and the files that are there: no verifier run, a proof
   from an earlier turn, a name with no file, or a recorded file that is gone, unreadable, a link or a different size
   than recorded. One of three missing is `✘ missing`. A screenshot is never `passed`: a person looks at it, and what
   the verifier said about it is a note. `approve` and `run` refuse such a proof when the project has no `[verifier]`
   whose skill is in the base commit (`--allow-unrunnable-proofs` overrides), because nothing could produce it.
 - **`ship` puts the screenshots in the pull request.** After the PR exists, the top-level `*.png` files of the
-  latest verify step (recorded, and still there as recorded) are copied into a fresh folder that is the
+  latest turn's verifier proof (recorded, and still there as recorded) are copied into a fresh folder that is the
   tool's whole screenshot folder (`PR_SHOTS_DIR`, so no older screenshot is uploaded), under the names
   `pr-shots path <name>` gives, and `pr-shots pr <number>` writes the `## Screenshots` section. `pr-shots`
   runs in the thread's worktree on Workbench's own environment (plus the person's `gh` login and
   `PR_SHOTS_*`/`AWS_*`/`CLOUDFLARE_*` settings), never the model's, with `GH_REPO` dropped. Because the model
   can write in the worktree, a `.pr-shots.json` there that differs from the project checkout's stops the
-  upload with a note. A proof belongs to the work it was taken at: when the tree the verify step recorded is not the
-  tree of what was committed (the work changed after verify), nothing is uploaded and the note says so; a log with
-  no tree recorded is "unknown" and uploads as before. `review` prints the same verdict (`current`, `stale`,
-  `unknown`) under the proof files, and `--json` has it as `verify.proof_freshness`. It is a note, not an error, when the tool is missing or fails: the PR is open, the
+  upload with a note. A proof belongs to the work it was taken at: when the tree a screenshot recorded is not the
+  tree of what was committed (the work changed after the verifier took it), that file is not uploaded and the note
+  says so; a file with no tree recorded is "unknown" and uploads as before. It is a note, not an error, when the tool is missing or fails: the PR is open, the
   worktree is kept and `workbench ship --screenshots` tries again. `--no-screenshots` skips it. At most 20 files.
 - **`workbench plan` writes the approach before any edit.** A separate, read-only `claude` run is given the approved
   goal (request, criteria, out of scope), the project's instructions as they were at the base commit, and a
@@ -92,7 +90,7 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **`workbench judge` is an advisory second opinion.** A separate, read-only `claude` run is given the goal, the
   work against the base (the worktree as `review` shows it, from the commit it was cut from, committed or not, cut at 120 KB,
   with untracked files named), the check (with the end of its output when it did not
-  pass), what the verify step left and, with screenshots, `Read` on them in the folder they are in
+  pass), what the verifier did and left (or "No verifier ran.") and, with screenshots, `Read` on them in the folder they are in
   (`--restricted` makes that the only place it can read); with none it has no tools. It answers with one
   JSON object: per criterion `{id, met, evidence}`, and `concerns`. The answer is accepted only if it names
   every criterion once and no other, with real JSON booleans and both lists present; anything else is recorded
@@ -365,7 +363,7 @@ Notes:
 - **`verify_command` and `verify_timeout_min` are gone.** A config that still has either is refused at load with
   "'verify_command' was removed: replace it with a [verifier] table" (not the unknown-key message), so nothing runs
   on a half-migrated project. The project's evidence is made by the verifier ([P10](../plan/P10-skill-verifier.md)),
-  a `claude` turn on the project's skill; a project with no skill at the base has no verify step. When a goal has a
+  a `claude` turn on the project's skill; a project with no skill at the base has no verifier. When a goal has a
   `screenshot:` proof and the verifier will run (on, the default, with its skill in the base commit), the first prompt
   says the verifier captures it, so Claude does not report it as unverified.
 - **`[run]` is checked when the config loads** ([P16](../plan/P16-run.md)). `command` is one plain command like `check_command`
@@ -406,10 +404,10 @@ Notes:
   with no skill file at the base gets no verifier and no event, and any other reason it cannot start (a symlinked or
   oversized skill, no change) is a `verifier.skipped` with the reason and a note; none fails the turn. An answer that is empty is not a success. Every PNG the run adds to, or changes in, the turn's proof folder
   is recorded as `proof.added` (with `source: "verifier"`, the commit and tree it ran at) before `verifier.ended`;
-  other files are only listed in `files`. `review` prints a `Verifier` section (and, for an older log, the verify step's): advisory,
+  other files are only listed in `files`. `review` prints a `Verifier` section (an older log's verify step is not shown): advisory,
   the turn, its cost and time, the screenshots, and what it said as a note (twelve lines at most, each cut), never
   a pass; `review --json` has it as `verifier`. The judge and a review stage that reads `proof` are given every PNG of
-  the turn's proof (both sources, bounded as before: eight for the judge, twenty for a stage), each with its pixel
+  the turn's proof (bounded: eight for the judge, twenty for a stage), each with its pixel
   size, and `review_stage.started` names them in `proof`.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
@@ -428,7 +426,7 @@ Notes:
   A stage table may also set `provider`, `model` and `allow_unpriced`, which override `[agents.review]` for that stage;
   `reviewer = "codex"` is read as `provider = "codex"`, and a stage with both keys is refused.
   `workbench review-stage <name>` runs one round of a listed stage (`pr-review` is `workbench pr-review`).
-  `proof` attaches the top-level `*.png` files of the thread's latest proof (the verifier's, or an older log's verify step) to the Codex run (`-i`, at
+  `proof` attaches the top-level `*.png` files of the thread's latest proof (the verifier's) to the Codex run (`-i`, at
   most 20) and lists their paths in the brief; with no proof, one from before the latest turn, or no
   PNG left, the round fails, never passes, and `doctor` warns when such a stage has no verifier skill at the base.
   `applies_to` globs (`**` any run of folders, `*` within one name) are matched against the files the pull

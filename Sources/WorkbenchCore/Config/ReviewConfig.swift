@@ -5,7 +5,7 @@ public enum ReviewerKind: String, Sendable, Equatable, CaseIterable {
     case codex
 }
 
-/// What a review stage may read: the diff against the base, the approved goal, the verify step's proof, or a file
+/// What a review stage may read: the diff against the base, the approved goal, the verifier's proof, or a file
 /// of the repository.
 public enum ReviewStageInput: Sendable, Equatable, CustomStringConvertible {
     case diff
@@ -72,7 +72,7 @@ public struct ReviewStageConfig: Sendable, Equatable {
         inputs.compactMap { if case .path(let path) = $0 { path } else { nil } }
     }
 
-    /// Whether the stage reads the verify step's proof.
+    /// Whether the stage reads the verifier's proof.
     public var needsProof: Bool { inputs.contains(.proof) }
 }
 

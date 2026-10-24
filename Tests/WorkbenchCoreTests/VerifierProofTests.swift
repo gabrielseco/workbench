@@ -11,11 +11,6 @@ private func file(_ name: String, sha: String = "s", turn: Int = 1) -> ProofFile
     ProofFile(name: name, path: "proof/turn-\(turn)/\(name)", sha256: sha, bytes: 10, commit: "c", tree: "t")
 }
 
-private func verify(_ names: [String], turn: Int = 1, result: String = "passed") -> Review.Verify {
-    Review.Verify(
-        turn: turn, result: result, exitCode: 0, durationMs: 1, outputRef: nil, command: "v", proof: names.map { file($0) })
-}
-
 private func verifier(
     _ files: [ProofFile], turn: Int = 1, ok: Bool = true, skipped: Bool = false, report: String = "", reason: String? = nil,
     open: Bool = false
@@ -26,15 +21,15 @@ private func verifier(
 }
 
 private func evaluate(
-    _ proofs: [String], verify: Review.Verify? = nil, verifier: Review.Verifier? = nil, lastTurn: Int = 1,
+    _ proofs: [String], verifier: Review.Verifier? = nil, lastTurn: Int = 1,
     available: @escaping (ProofFile) -> Bool = { _ in true }
 ) -> [CriterionStatus] {
     CriteriaStatus.evaluate(
         criteria: proofs.enumerated().map { crit("c\($0.offset + 1)", $0.element) }, check: nil, lastTurn: lastTurn,
-        verify: verify, verifier: verifier, proofAvailable: available)
+        verifier: verifier, proofAvailable: available)
 }
 
-// MARK: several screenshots, from either source
+// MARK: several screenshots
 
 @Suite struct ScreenshotNamesTests {
     @Test func aProofMayNameSeveralScreenshots() {
@@ -93,11 +88,11 @@ private func evaluate(
     }
 
     @Test func everyNamedScreenshotMustBeThereAndTheOnesThatAreAreListed() {
-        let all = evaluate(["screenshot: a, b, c"], verify: verify(["c.png", "a.png", "b.png"]))
+        let all = evaluate(["screenshot: a, b, c"], verifier: verifier(["c.png", "a.png", "b.png"].map { file($0) }))
         #expect(all[0].state == .evidence && all[0].files == ["proof/turn-1/a.png", "proof/turn-1/b.png", "proof/turn-1/c.png"])
         #expect(all[0].file == "proof/turn-1/a.png" && all[0].screenshots.allSatisfy(\.present))
 
-        let partial = evaluate(["screenshot: a, b, c"], verify: verify(["a.png", "c.png"]))
+        let partial = evaluate(["screenshot: a, b, c"], verifier: verifier([file("a.png"), file("c.png")]))
         #expect(partial[0].state == .missing, "one of three missing is never read as shown")
         #expect(partial[0].screenshots.map(\.name) == ["a", "b", "c"])
         #expect(partial[0].screenshots.map(\.present) == [true, false, true])
@@ -108,7 +103,7 @@ private func evaluate(
     }
 
     @Test func aFileThatChangedSinceItWasRecordedIsMissingAndNamed() {
-        let status = evaluate(["screenshot: a, b"], verify: verify(["a.png", "b.png"])) { $0.name != "b.png" }
+        let status = evaluate(["screenshot: a, b"], verifier: verifier([file("a.png"), file("b.png")])) { $0.name != "b.png" }
         #expect(status[0].state == .missing && status[0].note?.contains("b.png was recorded in turn 1") == true)
         #expect(status[0].files == ["proof/turn-1/a.png"])
     }
@@ -126,42 +121,26 @@ private func evaluate(
         let failed = evaluate(["screenshot: home"], verifier: verifier([file("home.png")], ok: false, reason: "stopped"))
         #expect(failed[0].state == .evidence && failed[0].note == "verifier did not finish, turn 1")
         let skipped = evaluate(["screenshot: home"], verifier: verifier([], skipped: true, reason: "no change"))
-        #expect(skipped[0].state == .missing && skipped[0].note?.contains("no verify step or verifier has run") == true)
+        #expect(skipped[0].state == .missing && skipped[0].note?.contains("no verifier has run") == true)
     }
 
-    @Test func bothSourcesAreMergedAndTheVerifiersFileWinsAName() throws {
-        let set = try #require(
-            Review.ProofSet(
-                verify: verify(["shot.png", "other.png"]), verifier: verifier([file("shot.png", sha: "from-verifier")])))
-        #expect(set.files.map(\.name) == ["shot.png", "other.png"])
-        #expect(set.files.first { $0.name == "shot.png" }?.sha256 == "from-verifier")
-        #expect(set.source == "verify passed, verifier finished")
-        let status = evaluate(["screenshot: shot, other"], verify: verify(["shot.png", "other.png"]),
-            verifier: verifier([file("shot.png", sha: "from-verifier")]))
-        #expect(status[0].state == .evidence)
-        #expect(status[0].note == "verify passed, verifier finished, turn 1")
+    @Test func theSetIsTheVerifiersFilesAndSaysHowItEnded() throws {
+        let set = try #require(Review.ProofSet(verifier: verifier([file("shot.png"), file("other.png")], turn: 2)))
+        #expect(set.turn == 2 && set.files.map(\.name) == ["shot.png", "other.png"])
+        #expect(set.source == "verifier finished")
+        #expect(Review.ProofSet(verifier: verifier([file("shot.png")], ok: false))?.source == "verifier did not finish")
     }
 
-    @Test func theAvailabilityOfTheWinningFileDecides() {
-        let status = evaluate(
-            ["screenshot: shot"], verify: verify(["shot.png"]), verifier: verifier([file("shot.png", sha: "v")])
-        ) { $0.sha256 == "v" }
-        #expect(status[0].state == .evidence, "the verify step's overwritten file is not the one asked about")
-    }
-
-    @Test func proofOfAnEarlierTurnIsStaleForBothSources() {
+    @Test func proofOfAnEarlierTurnIsStale() {
         let v = evaluate(["screenshot: home"], verifier: verifier([file("home.png")], turn: 1), lastTurn: 2)
         #expect(v[0].state == .missing && v[0].note == "the proof is of turn 1, not the latest turn 2")
-        // A newer step wins: a verify step of turn 2 hides the verifier's files of turn 1.
-        let set = Review.ProofSet(verify: verify(["a.png"], turn: 2), verifier: verifier([file("b.png")], turn: 1))
-        #expect(set?.turn == 2 && set?.files.map(\.name) == ["a.png"] && set?.verifier == nil)
     }
 
     @Test func nothingRanIsNoProofSet() {
-        #expect(Review.ProofSet(verify: nil, verifier: nil) == nil)
-        #expect(Review.ProofSet(verify: nil, verifier: verifier([], skipped: true)) == nil)
+        #expect(Review.ProofSet(verifier: nil) == nil)
+        #expect(Review.ProofSet(verifier: verifier([], skipped: true)) == nil)
         let none = evaluate(["screenshot: home"])
-        #expect(none[0].state == .missing && none[0].note?.contains("no verify step or verifier has run") == true)
+        #expect(none[0].state == .missing && none[0].note == "no verifier has run, so home.png was not produced")
     }
 
     @Test func theVerifiersWordsNeverMakeACriterionPass() {
@@ -171,7 +150,7 @@ private func evaluate(
             criteria: [
                 crit("c1", "unit test with injected clock"), crit("c2", "`npm run ci` passes"), crit("c3", "screenshot: home"),
             ],
-            check: nil, lastTurn: 1, verify: nil, verifier: claim)
+            check: nil, lastTurn: 1, verifier: claim)
         #expect(status[0].state == .manual && status[0].label == "you check")
         #expect(status[1].state == .manual, "no check ran: a claim of success is not one")
         #expect(status[2].state == .evidence && status[2].label == "see screenshot", "shown to a person, never a pass")
@@ -207,8 +186,9 @@ private func evaluate(
         #expect(review.verify?.proof.map(\.name) == ["step.png"])
         #expect(review.verifier?.proof.map(\.name) == ["seen.png"])
         #expect(review.verifier?.ok == true && review.verifier?.report == "c1: holds" && review.verifier?.costUSD == 0.0015)
-        let set = Review.ProofSet(verify: review.verify, verifier: review.verifier)
-        #expect(set?.files.map(\.name) == ["seen.png", "step.png"])
+        // The step's file stays in the log, but the proof is the verifier's alone.
+        let set = Review.ProofSet(verifier: review.verifier)
+        #expect(set?.files.map(\.name) == ["seen.png"])
     }
 
     @Test func aRunAgainKeepsTheEarlierRunsFilesAndANewerFileOfTheSameNameReplacesIt() {

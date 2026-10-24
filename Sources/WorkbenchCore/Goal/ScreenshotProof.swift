@@ -1,7 +1,7 @@
 import Foundation
 
 /// `proof: screenshot: <name>[, <name>…]` is satisfied by `<name>.png` for every name in the latest turn's proof (what
-/// the verify step or the verifier left), shown to a person and never counted as met on its own
+/// the verifier left), shown to a person and never counted as met on its own
 /// (docs/spec/goal-file.md).
 public enum ScreenshotProof {
     /// Most names one criterion may list.

@@ -4,7 +4,8 @@ import Testing
 @testable import WorkbenchCore
 
 /// A thread's log as an older Workbench wrote a verify step: `verify.started`, one `proof.added` per file (a `/` in a name
-/// makes folders), `verify.ended`. Workbench no longer runs one, but the readers of an old log still show it.
+/// makes folders), `verify.ended`. Workbench no longer runs one, and nothing that reads the log uses it: an old log
+/// with one must still load, and its files are never proof.
 func recordLegacyVerify(
     _ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1
 ) async throws {

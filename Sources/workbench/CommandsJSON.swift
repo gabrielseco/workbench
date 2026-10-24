@@ -150,10 +150,6 @@ extension Commands {
                 "open_turn": state.openCheck.map { .int($0) } ?? .null,
                 "last": state.lastCheck.map { .string($0) } ?? .null,
             ],
-            "verify": [
-                "open_turn": state.openVerify.map { .int($0) } ?? .null,
-                "last": state.review.verify.map { .string($0.result) } ?? .null,
-            ],
             "cost_usd": state.knownCostUSD.map { .double($0) } ?? .null, "plan": planJSON(state),
             "plan_cost_usd": .double(state.planCostUSD),
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
@@ -246,24 +242,6 @@ extension Commands {
         } else {
             check = .null
         }
-        let verify: JSONValue
-        if let v = review.verify {
-            verify = [
-                "turn": .int(v.turn), "result": .string(v.result), "exit_code": v.exitCode.map { .int($0) } ?? .null,
-                "duration_ms": v.durationMs.map { .int($0) } ?? .null,
-                "commit": v.commit.map { .string($0) } ?? .null, "tree": v.tree.map { .string($0) } ?? .null,
-                "proof_freshness": report.proofFreshness.map { .string($0.rawValue) } ?? .null,
-                "proof": .array(
-                    v.proof.map {
-                        [
-                            "name": .string($0.name), "path": .string($0.path), "sha256": .string($0.sha256),
-                            "bytes": .int($0.bytes),
-                        ]
-                    }),
-            ]
-        } else {
-            verify = .null
-        }
         let verifier = verifierJSON(review.verifier, lastTurn: state.lastTurn)
         let judge: JSONValue
         if let j = review.judge {
@@ -323,7 +301,7 @@ extension Commands {
                     ]
                 }),
             "commits": .array(report.commits.map { ["sha": .string($0.sha), "subject": .string($0.subject)] }),
-            "diff": diff, "check": check, "verify": verify, "verifier": verifier, "judge": judge,
+            "diff": diff, "check": check, "verifier": verifier, "judge": judge,
             "pr_review": prReview, "review_stages": .array(reviewStages),
             "denied_tools": .array(
                 review.deniedTools.map {

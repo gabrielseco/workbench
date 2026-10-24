@@ -3,8 +3,6 @@ import Testing
 
 @testable import WorkbenchCore
 
-/// Writes `files` into the turn's proof folder and records them as the verifier's: `proof.added` for each PNG, between
-/// `verifier.started` and `verifier.ended`, exactly as `VerifierRun` does.
 /// The head of a PNG, enough for its size to be read: signature, then an IHDR of `width` x `height`.
 private func png(_ width: Int, _ height: Int, tag: String = "") -> Data {
     func big(_ n: Int) -> [UInt8] { [UInt8(n >> 24 & 255), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] }
@@ -13,18 +11,29 @@ private func png(_ width: Int, _ height: Int, tag: String = "") -> Data {
     return Data(bytes) + Data(tag.utf8)
 }
 
-private func recordVerifierProof(
+func recordVerifierProof(
     _ fx: RunnerFixture, _ id: String, _ files: [String: String], turn: Int = 1
 ) async throws {
     try await recordVerifierProof(fx, id, files.mapValues { Data($0.utf8) }, turn: turn)
 }
 
-private func recordVerifierProof(
+/// Writes `files` into the turn's proof folder and records them as the verifier's: `proof.added` for each PNG, at the
+/// work as it is now, between `verifier.started` and `verifier.ended`, as `VerifierRun` does. A rerun records only what
+/// it wrote again.
+func recordVerifierProof(
     _ fx: RunnerFixture, _ id: String, _ files: [String: Data], turn: Int = 1
 ) async throws {
     let proof = fx.project.proofDirectory(id, turn: turn)
     try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)
-    for (name, data) in files { try data.write(to: proof.appendingPathComponent(name)) }
+    for (name, data) in files {
+        let url = proof.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url)
+    }
+    let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+    let identity = await ProofIdentity.of(worktree: worktree, git: fx.git, attributesFrom: nil)
+    let commit: JSONValue = identity.map { .string($0.commit) } ?? .null
+    let tree: JSONValue = identity.map { .string($0.tree) } ?? .null
     let recorded = ProofCollector.collect(proofDirectory: proof, threadDirectory: fx.project.threadDirectory(id)).files
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     try await log.append(.verifierStarted, turn: turn, data: ["argv": ["claude"]])
@@ -33,7 +42,7 @@ private func recordVerifierProof(
             .proofAdded, turn: turn,
             data: [
                 "name": .string(file.name), "path": .string(file.path), "sha256": .string(file.sha256),
-                "bytes": .int(file.bytes), "commit": "c", "tree": "t", "source": "verifier",
+                "bytes": .int(file.bytes), "commit": commit, "tree": tree, "source": "verifier",
             ])
     }
     try await log.append(.verifierEnded, turn: turn, data: ["ok": true, "report": "c1: holds"])
@@ -75,7 +84,6 @@ private let designStage = """
 
         let verifier = try #require(ThreadState.derive(from: events, id: v.id).review.verifier)
         #expect(verifier.proof.map(\.name) == ["shot.png"] && verifier.ok && !verifier.report.isEmpty)
-        #expect(ThreadState.derive(from: events, id: v.id).review.verify == nil, "not the verify step's")
     }
 
     @Test func aFileThatIsNotAPNGIsListedButNotRecordedAsProof() async throws {
@@ -94,36 +102,8 @@ private let designStage = """
         #expect(events.filter { $0.kind == .proofAdded }.count == 1)
         let verifier = try #require(ThreadState.derive(from: events, id: v.id).review.verifier)
         #expect(!verifier.ok && verifier.proof.map(\.name) == ["shot.png"] && verifier.reason?.contains("budget") == true)
-        let set = try #require(Review.ProofSet(verify: nil, verifier: verifier))
+        let set = try #require(Review.ProofSet(verifier: verifier))
         #expect(set.source == "verifier did not finish", "a person is told the run did not finish")
-    }
-
-    @Test func theVerifiersFileWinsANameTheVerifyStepLeftAndBothAreRecorded() async throws {
-        let v = try await VerifierFixture()
-        try await recordLegacyVerify(v.fx, v.id, ["shot.png": "from the verify step"])
-        _ = try await v.verify("proof=shot.png")
-
-        let events = try v.fx.events(v.id)
-        let added = events.filter { $0.kind == .proofAdded && $0.data["name"]?.stringValue == "shot.png" }
-        #expect(added.count == 2, "both are recorded")
-        #expect(added.compactMap { $0.data["source"]?.stringValue } == ["verifier"], "only the verifier's says so")
-        let shas = added.compactMap { $0.data["sha256"]?.stringValue }
-        #expect(shas.count == 2 && shas[0] != shas[1])
-
-        let review = ThreadState.derive(from: events, id: v.id).review
-        let set = try #require(Review.ProofSet(verify: review.verify, verifier: review.verifier))
-        let winner = try #require(set.files.first { $0.name == "shot.png" })
-        #expect(set.files.filter { $0.name == "shot.png" }.count == 1)
-        #expect(winner.sha256 == added.last?.data["sha256"]?.stringValue, "the verifier's")
-        // The file on disk is the verifier's, so only it is "still there as recorded".
-        let thread = v.fx.project.threadDirectory(v.id)
-        #expect(winner.isAvailable(in: thread))
-        let theirs = try #require(review.verify?.proof.first { $0.name == "shot.png" })
-        #expect(!theirs.isAvailable(in: thread))
-        let status = CriteriaStatus.evaluate(
-            criteria: [Criterion(id: "c1", text: "t", proof: "screenshot: shot")], check: nil, lastTurn: 1, verify: review.verify,
-            verifier: review.verifier, proofAvailable: { $0.isAvailable(in: thread) })
-        #expect(status[0].state == .evidence && status[0].files == ["proof/turn-1/shot.png"])
     }
 }
 
@@ -215,12 +195,12 @@ private let designStage = """
         #expect(!after.ok && after.proof == first.proof)
         let thread = v.fx.project.threadDirectory(v.id)
         let status = CriteriaStatus.evaluate(
-            criteria: [Criterion(id: "c1", text: "t", proof: "screenshot: shot")], check: nil, lastTurn: 1, verify: nil,
+            criteria: [Criterion(id: "c1", text: "t", proof: "screenshot: shot")], check: nil, lastTurn: 1,
             verifier: after, proofAvailable: { $0.isAvailable(in: thread) })
         #expect(status[0].state == .evidence)
     }
 
-    @Test func theStageIsGivenBothSourcesAtOnce() async throws {
+    @Test func theStageIsGivenOnlyTheVerifiersFilesNotAnOldVerifyStepsOnes() async throws {
         let r = try await reviewedPR(extraConfig: designStage)
         try await recordLegacyVerify(r.fx, r.id, ["step.png": "a"])
         try await recordVerifierProof(r.fx, r.id, ["seen.png": "pixels"])
@@ -230,13 +210,16 @@ private let designStage = """
             Issue.record("proof missing")
             return
         }
-        #expect(Set(given.compactMap(\.stringValue)) == ["seen.png", "step.png"])
+        #expect(Set(given.compactMap(\.stringValue)) == ["seen.png"])
     }
 
-    @Test func aStageWithNoProofAtAllFailsTheRoundAndNamesBothWays() async throws {
+    @Test func aStageWithNoVerifierRunFailsTheRoundAndSaysSo() async throws {
         let r = try await reviewedPR(extraConfig: designStage)
+        // An old log's verify step is not proof: the round still has none.
+        try await recordLegacyVerify(r.fx, r.id, ["step.png": "a"])
         let result = try await stage(r)
-        #expect(result.verdict == nil && result.failure?.contains("no verify step or verifier run on record") == true)
+        #expect(result.verdict == nil && result.failure?.contains("no verifier run on record") == true)
+        #expect(result.failure?.contains("verify step") == false)
         #expect(r.codex.runs == 0)
     }
 
@@ -322,7 +305,7 @@ private let designStage = """
                 goal: goal, checkCommand: nil, instructions: nil,
                 verifies: c.verifier != nil, plan: nil)
         }
-        #expect(try prompt("[verifier]\nskill = \"s.md\"\n").contains("Workbench runs the project's verify step"))
-        #expect(try !prompt("[verifier]\nenabled = false\n").contains("Workbench runs the project's verify step"))
+        #expect(try prompt("[verifier]\nskill = \"s.md\"\n").contains("Workbench runs the project's verifier itself"))
+        #expect(try !prompt("[verifier]\nenabled = false\n").contains("Workbench runs the project's verifier"))
     }
 }

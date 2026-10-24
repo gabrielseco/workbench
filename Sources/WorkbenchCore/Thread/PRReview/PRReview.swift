@@ -32,7 +32,7 @@ struct PRReviewInput: Sendable, Equatable {
     /// The stage's own rubric, from its `skill` or `prompt` file; nil for the built-in report instructions.
     var rubric: String?
     var rubricPath: String?
-    /// The verify step's screenshots, absolute paths, each also attached to the Codex run as an image.
+    /// The verifier's screenshots, absolute paths, each also attached to the Codex run as an image.
     var proof: [String] = []
     /// The files the stage's `inputs` names, in order, each already bounded.
     var files: [PRReviewFile] = []
@@ -136,7 +136,7 @@ public enum PRReview {
         if !input.proof.isEmpty {
             lines += [
                 "", "## Proof", "",
-                "Screenshots the project's verify step took of this change; each is attached to this run as an image.",
+                "Screenshots the project's verifier took of this change; each is attached to this run as an image.",
                 "",
             ]
             // The size lets the reviewer name a capture that is clipped or too small to read.

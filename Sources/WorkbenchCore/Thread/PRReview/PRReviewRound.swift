@@ -47,7 +47,7 @@ struct PRReviewRound: Sendable {
     var reviewedSHA: String?
     /// The base branch's commit the diff and the instructions come from.
     var baseSHA: String?
-    /// The verify step's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
+    /// The verifier's screenshots for a stage that reads `proof`, or why there are none; nil for other stages.
     var proof: Result<[String], PRReviewFailure>?
     var warnings: [String] = []
     /// The session a Claude reviewer is started with, chosen once so the argv on record is the argv that runs.

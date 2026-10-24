@@ -399,13 +399,13 @@ extension ThreadService {
             ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", "\(baseSHA)...\(round.tip)"], in: project.root)
     }
 
-    /// The screenshots of the thread's latest verify step: its top-level PNGs, still there as recorded. Only a verify
-    /// step of the latest turn counts, as an older one shows code the pull request may no longer have.
+    /// The screenshots of the thread's latest verifier run: its top-level PNGs, still there as recorded. Only a run
+    /// of the latest turn counts, as an older one shows code the pull request may no longer have.
     func stageProof(_ stage: ReviewStage, state: ThreadState, id: String) -> Result<[String], PRReviewFailure> {
-        guard let set = Review.ProofSet(verify: state.review.verify, verifier: state.review.verifier) else {
+        guard let set = Review.ProofSet(verifier: state.review.verifier) else {
             return .failure(
                 PRReviewFailure(
-                    "the \(stage.name) stage reads proof, and this thread has no verify step or verifier run on record "
+                    "the \(stage.name) stage reads proof, and this thread has no verifier run on record "
                         + "(set up [verifier] and run a turn)"))
         }
         guard set.turn == state.lastTurn else {
