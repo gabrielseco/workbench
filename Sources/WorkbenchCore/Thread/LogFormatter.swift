@@ -11,6 +11,8 @@ public enum LogFormatter {
         case .transcript(let line):
             let seq = line.seq.map { String(format: "%4d", $0) } ?? "   -"
             return "\(seq)  \(shortTime(line.ts))  t\(line.turn)  " + (describeClaude(line.data) ?? "claude")
+        case .unreadableTranscript(let turn, let reason):
+            return "   -  --:--:--  t\(turn)  transcript cannot be read: \(reason)"
         }
     }
 

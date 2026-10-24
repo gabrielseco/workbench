@@ -29,7 +29,11 @@ extension Commands {
                 guard let found = Int(turnText), found > 0 else { throw CLIError.usage("--turn needs a turn number") }
                 turn = found
             }
-            for line in try ThreadLog.read(at: url).transcript(turn: turn) { out(line) }
+            do {
+                for line in try ThreadLog.read(at: url).transcript(turn: turn) { out(line) }
+            } catch let error as ThreadLogError {
+                throw CLIError.message("\(error); `gzip -t` on its .gz says more")
+            }
             return
         }
         if turnText != nil { throw CLIError.usage("--turn goes with --transcript") }
@@ -76,6 +80,8 @@ extension Commands {
             switch entry {
             case .transcript(let line):
                 if !verbose, LogFormatter.describeClaude(line.data) == nil { return }
+            case .unreadableTranscript:
+                break
             case .event(let event):
                 // One line per check: how it ended.
                 if event.kind == .checkStarted, !verbose { return }

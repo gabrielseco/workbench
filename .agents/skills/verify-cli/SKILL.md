@@ -184,8 +184,9 @@ the stream lines and end with `turn ended`. After the turn: the file is gzipped 
 the log holds one `claude` event (the `result` line); `turn.ended`'s `transcript` counts are the lines and bytes `gzip -dc` gives; the last
 line is the result and every line is a whole `{ts, data}` record; `log` prints the stream once; `log --transcript` prints the stored lines
 as they are; `log --json` prints the transcript lines as `claude` events with `"seq":null`; `status`, `status --json` and `review` load;
-`abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the gzip, counts, file, whole-record,
-`log`, `log --transcript` and `log --json` steps must FAIL.
+then a byte of the `.gz` is flipped: `log --transcript` exits non-zero naming the turn, and `log` says `transcript cannot be read` and still
+exits 0; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the gzip, counts, file,
+whole-record, `log`, `log --transcript`, `log --json` and the two damaged-file steps must FAIL.
 
 ### open
 

@@ -28,16 +28,38 @@ public enum TranscriptFile {
     /// A turn's transcript is gzipped when it ends unless it is bigger than this; a file left plain reads the same.
     public static let maxCompressedBytes = 256 << 20
 
-    /// The file's bytes, plain or (once the turn has ended) gzipped. nil when the turn has no transcript.
-    static func contents(_ plain: URL) -> Data? {
+    /// What a turn's transcript is on disk: not there, its bytes, or there and not readable (a damaged or altered
+    /// `.gz`), which must not read as "nothing was said".
+    enum Contents {
+        case missing
+        case data(Data)
+        case unreadable(String)
+    }
+
+    /// The file's bytes, plain or (once the turn has ended) gzipped.
+    static func load(_ plain: URL) -> Contents {
         // The plain file goes only after the compressed one is in place, so one of the two is always readable.
-        if let data = try? Data(contentsOf: plain) { return data }
+        if let data = try? Data(contentsOf: plain) { return .data(data) }
         let packedURL = compressedURL(plain)
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: packedURL.path))?[.size] as? Int else {
+            return .missing
+        }
         // A file we wrote is never bigger than the plain one we were allowed to compress.
-        guard let size = (try? FileManager.default.attributesOfItem(atPath: packedURL.path))?[.size] as? Int,
-            size <= maxCompressedBytes, let packed = try? Data(contentsOf: packedURL)
-        else { return nil }
-        return try? Gzip.decompress(packed)
+        guard size <= maxCompressedBytes else { return .unreadable("the file is over the size limit") }
+        guard let packed = try? Data(contentsOf: packedURL) else { return .unreadable("the file cannot be read") }
+        do { return .data(try Gzip.decompress(packed)) } catch let failure as Gzip.Failure {
+            switch failure {
+            case .notGzip: return .unreadable("not a gzip file")
+            case .corrupt(let why): return .unreadable("damaged (\(why))")
+            case .tooLarge: return .unreadable("it inflates past the size limit")
+            }
+        } catch { return .unreadable("\(error)") }
+    }
+
+    /// The bytes when there are some; nil for a turn with no transcript or one that cannot be read.
+    static func contents(_ plain: URL) -> Data? {
+        if case .data(let data) = load(plain) { return data }
+        return nil
     }
 
     /// Whether the turn has a transcript, in either form.
@@ -78,7 +100,12 @@ public enum TranscriptFile {
     /// The complete lines from byte `offset` on, and the offset after them. A torn last line is not a line yet:
     /// the next read, from the returned offset, finds it whole.
     static func read(at url: URL, from offset: Int = 0) -> (lines: [Stored], offset: Int) {
-        guard let data = contents(url), offset <= data.count else { return ([], offset) }
+        guard let data = contents(url) else { return ([], offset) }
+        return parse(data, from: offset)
+    }
+
+    static func parse(_ data: Data, from offset: Int) -> (lines: [Stored], offset: Int) {
+        guard offset <= data.count else { return ([], offset) }
         let decoder = JSONDecoder()
         var lines: [Stored] = []
         var start = data.startIndex + offset

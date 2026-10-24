@@ -13,7 +13,8 @@
 # thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 removes the transcript folder after the turn, so "the transcript was gzipped", "turn.ended's counts
 # are the file's", "the file holds the stream lines", "every line of the file is a whole record", "log prints each stream
-# line", "log --transcript prints the stored lines" and "log --json prints the transcript lines" must FAIL. The frame is in
+# line", "log --transcript prints the stored lines", "log --json prints the transcript lines", "log --transcript on a damaged .gz
+# fails" and "log says the transcript cannot be read" must FAIL. The frame is in
 # lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -171,6 +172,20 @@ wbp "$SCRATCH/status.json" status "$ID" --json
 check "status --json loads the thread" "workbench status --json exited $RC" test "$RC" = 0
 wbp "$SCRATCH/review.out" review "$ID"
 check "review loads the thread" "workbench review exited $RC" test "$RC" = 0
+
+# A damaged file is said, not printed as nothing.
+python3 -I - "$GZ" 2>/dev/null <<'PY' || true
+import sys
+data = bytearray(open(sys.argv[1], "rb").read())
+data[len(data) // 2] ^= 0xFF
+open(sys.argv[1], "wb").write(data)
+PY
+wbp "$SCRATCH/damaged.out" log "$ID" --transcript
+check "log --transcript on a damaged .gz fails and names the turn" "exit $RC, output: $(head -c 120 "$SCRATCH/damaged.out")" \
+    bash -c '[ "$1" != 0 ] && grep -q "transcript of turn 1 cannot be read" "$2"' _ "$RC" "$SCRATCH/damaged.out"
+wbp "$SCRATCH/damaged-log.out" log "$ID"
+check "log says the transcript cannot be read and still loads" "exit $RC or no 'cannot be read' line" \
+    bash -c '[ "$1" = 0 ] && grep -q "transcript cannot be read" "$2"' _ "$RC" "$SCRATCH/damaged-log.out"
 
 wbp "$SCRATCH/abandon.out" abandon "$ID"
 check "abandon ends the thread" "workbench abandon exited $RC" test "$RC" = 0

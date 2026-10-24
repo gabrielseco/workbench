@@ -27,6 +27,18 @@ public struct TranscriptLine: Sendable, Equatable {
 public enum LogEntry: Sendable, Equatable {
     case event(Event)
     case transcript(TranscriptLine)
+    /// A turn's transcript file exists and cannot be read; said once, in place of its lines.
+    case unreadableTranscript(turn: Int, reason: String)
+}
+
+public enum ThreadLogError: Error, Equatable, CustomStringConvertible {
+    case unreadableTranscript(turn: Int, reason: String)
+
+    public var description: String {
+        switch self {
+        case .unreadableTranscript(let turn, let reason): "the transcript of turn \(turn) cannot be read: \(reason)"
+        }
+    }
 }
 
 /// A thread's log as `workbench log` reads it: `events.jsonl` and the transcript files beside it. Every reader
@@ -74,6 +86,7 @@ public struct ThreadLog: Sendable {
         let position = walk(after: position) { item in
             switch item {
             case .event(let event, _): out.append(TranscriptLine(event: event).map(LogEntry.transcript) ?? .event(event))
+            case .unreadable(let turn, let reason): out.append(.unreadableTranscript(turn: turn, reason: reason))
             case .transcript(let turn, let stored):
                 out.append(.transcript(TranscriptLine(turn: turn, ts: stored.ts, seq: nil, data: stored.data)))
             }
@@ -95,6 +108,10 @@ public struct ThreadLog: Sendable {
         let position = walk(after: position) { item in
             switch item {
             case .event(_, let index): out.append(rawEventLines[index])
+            case .unreadable(let turn, let reason):
+                out.append(
+                    "{\"v\":\(Event.currentVersion),\"seq\":null,\"ts\":null,\"turn\":\(turn),"
+                        + "\"kind\":\"transcript.unreadable\",\"data\":{\"reason\":\(Self.quoted(reason))}}")
             case .transcript(let turn, let stored):
                 out.append(
                     "{\"v\":\(Event.currentVersion),\"seq\":null,\"ts\":\(Self.quoted(stored.ts)),\"turn\":\(turn),"
@@ -107,15 +124,20 @@ public struct ThreadLog: Sendable {
     /// The stream lines of the thread as they were stored, one string each, oldest turn first (`turn` limits it
     /// to one). The lines of a turn with a transcript file come from there, gzipped or not; those of an older
     /// log from its `claude` events, whose `data` is cut out of the stored line.
-    public func transcript(turn only: Int? = nil) -> [String] {
+    public func transcript(turn only: Int? = nil) throws -> [String] {
         let aligned = rawEventLines.count == contents.events.count
         var out: [String] = []
         let turns = Set(contents.events.filter { $0.kind == .turnStarted }.map(\.turn)).sorted()
         for turn in turns where only == nil || only == turn {
             let file = TranscriptFile.url(in: threadDirectory, turn: turn)
-            if TranscriptFile.exists(file) {
-                out += TranscriptFile.read(at: file).lines.map(\.rawData)
+            switch TranscriptFile.load(file) {
+            case .data(let data):
+                out += TranscriptFile.parse(data, from: 0).lines.map(\.rawData)
                 continue
+            case .unreadable(let reason):
+                throw ThreadLogError.unreadableTranscript(turn: turn, reason: reason)
+            case .missing:
+                break
             }
             for (index, event) in contents.events.enumerated() where event.kind == .claude && event.turn == turn {
                 if aligned, let open = rawEventLines[index].range(of: "\"data\":") {
@@ -131,22 +153,37 @@ public struct ThreadLog: Sendable {
     private enum Item {
         case event(Event, index: Int)
         case transcript(turn: Int, TranscriptFile.Stored)
+        case unreadable(turn: Int, reason: String)
     }
 
     private func walk(after start: Position, _ emit: (Item) -> Void) -> Position {
         var position = start
-        func flush(_ turn: Int) {
-            let url = TranscriptFile.url(in: threadDirectory, turn: turn)
-            let (lines, offset) = TranscriptFile.read(at: url, from: position.transcript[turn] ?? 0)
-            for line in lines { emit(.transcript(turn: turn, line)) }
-            if offset > 0 { position.transcript[turn] = offset }
-        }
-        var hasFile: [Int: Bool] = [:]
-        func hasTranscript(_ turn: Int) -> Bool {
-            if let known = hasFile[turn] { return known }
-            let found = TranscriptFile.exists(TranscriptFile.url(in: threadDirectory, turn: turn))
-            hasFile[turn] = found
+        // Each turn's file is read (and, once ended, inflated) once per walk.
+        var loaded: [Int: TranscriptFile.Contents] = [:]
+        func transcriptFile(_ turn: Int) -> TranscriptFile.Contents {
+            if let known = loaded[turn] { return known }
+            let found = TranscriptFile.load(TranscriptFile.url(in: threadDirectory, turn: turn))
+            loaded[turn] = found
             return found
+        }
+        func flush(_ turn: Int) {
+            switch transcriptFile(turn) {
+            case .missing:
+                return
+            case .unreadable(let reason):
+                // Said once; the marker keeps a follower from saying it again.
+                if position.transcript[turn] != Int.max { emit(.unreadable(turn: turn, reason: reason)) }
+                position.transcript[turn] = Int.max
+            case .data(let data):
+                let (lines, offset) = TranscriptFile.parse(data, from: position.transcript[turn] ?? 0)
+                for line in lines { emit(.transcript(turn: turn, line)) }
+                if offset > 0 { position.transcript[turn] = offset }
+            }
+        }
+        // Only a transcript that reads is shown in place of the log's own `result` line.
+        func hasTranscript(_ turn: Int) -> Bool {
+            if case .data = transcriptFile(turn) { return true }
+            return false
         }
         for (index, event) in contents.events.enumerated().dropFirst(start.events) {
             // The turn's `result` line is shown from its transcript when it has one.

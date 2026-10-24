@@ -53,6 +53,26 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> Ou
         #expect(json.lines.filter { $0.contains("\"kind\":\"claude\"") }.count == stored.count)
     }
 
+    @Test func aDamagedGzipIsReportedNotPrintedAsNothing() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let packed = TranscriptFile.compressedURL(TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1))
+        var bytes = try Data(contentsOf: packed)
+        bytes[bytes.count / 2] ^= 0xFF
+        try bytes.write(to: packed)
+
+        let printed = try await cli(["log", id, "--transcript"], in: fx)
+        #expect(printed.code == 1 && printed.lines.isEmpty, "\(printed)")
+        #expect(printed.stderr.contains("the transcript of turn 1 cannot be read: damaged"), "\(printed.stderr)")
+        // The ordinary views still work, say so, and keep the log's own result line.
+        let log = try await cli(["log", id], in: fx)
+        #expect(log.code == 0 && log.lines.contains { $0.contains("transcript cannot be read") }, "\(log)")
+        #expect(log.lines.contains { $0.contains("result") })
+        let json = try await cli(["log", id, "--json"], in: fx)
+        #expect(json.lines.contains { $0.contains("\"kind\":\"transcript.unreadable\"") })
+    }
+
     @Test func anOlderLogsClaudeEventsArePrintedAsTheyWereStored() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
