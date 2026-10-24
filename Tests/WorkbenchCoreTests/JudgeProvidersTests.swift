@@ -51,6 +51,16 @@ private func codexJudged(
         #expect(j.codex.runs == 1)
     }
 
+    @Test func aChosenModelAndEffortReachTheCodexJudge() async throws {
+        var j = try await codexJudged()
+        j.config.agents.judge.model = "gpt-6-astra"
+        j.config.agents.judge.reasoningEffort = "high"
+        _ = try await j.judge()
+        let call = try #require(j.codex.calls.first)
+        #expect(call.contains("-m gpt-6-astra") && call.contains("model_reasoning_effort=\"high\""), "\(call)")
+        #expect(j.events.last { $0.kind == .judgeRan }?.data["model"] == "gpt-6-astra")
+    }
+
     @Test func codexJudgeInvocationIsHardened() async throws {
         let j = try await codexJudged(screenshots: true)
         _ = try await j.judge()
