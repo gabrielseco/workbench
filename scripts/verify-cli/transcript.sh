@@ -143,7 +143,8 @@ check "log prints each stream line once" "'session started' x$INIT_LINES, result
 wbp "$SCRATCH/log.json" log "$ID" --json
 JSON_CLAUDE=$(py "print(sum(1 for l in lines if l['kind'] == 'claude' and l['seq'] is None))" <"$SCRATCH/log.json" 2>/dev/null)
 check "log --json prints the transcript lines as claude events with seq null" \
-    "log --json has '$JSON_CLAUDE' such lines, the file $FILE_LINES" test "$JSON_CLAUDE" = "$FILE_LINES"
+    "log --json has '$JSON_CLAUDE' such lines, turn.ended counted ${ENDED%% *}" \
+    bash -c '[ -n "$1" ] && [ "$1" -gt 0 ] && [ "$1" = "$2" ]' _ "$JSON_CLAUDE" "${ENDED%% *}"
 
 wbp "$SCRATCH/status.out" status "$ID"
 check "status loads the thread" "workbench status exited $RC" test "$RC" = 0
