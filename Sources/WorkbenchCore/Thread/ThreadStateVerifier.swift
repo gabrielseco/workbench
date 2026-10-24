@@ -60,6 +60,9 @@ extension ThreadState {
     /// The verifier's events: its `proof.added` lines gather until `verifier.ended` closes the run.
     static func applyVerifier(_ event: Event, to state: inout ThreadState, pending: inout [ProofFile]) {
         switch event.kind {
+        case .proofAdded:
+            // A line without `source` is an old verify step's, which is not read.
+            if event.data["source"]?.stringValue == "verifier", let file = proofFile(event) { pending.append(file) }
         case .verifierStarted:
             // A run again for the same turn keeps what an earlier run left: a file it did not change is not
             // recorded again, and it is still the turn's proof (the files are checked against the disk when read).

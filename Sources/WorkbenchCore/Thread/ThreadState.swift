@@ -341,15 +341,10 @@ public struct ThreadState: Sendable, Equatable {
                         outputRef: event.data["output_ref"]?.stringValue,
                         command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
-            case .proofAdded:
-                // Only the verifier's files count; a line without `source` is an old verify step's, which is not read.
-                if event.data["source"]?.stringValue == "verifier", let file = proofFile(event) {
-                    verifierProof.append(file)
-                }
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
-            case .verifierStarted, .verifierEnded, .verifierSkipped:
+            case .verifierStarted, .verifierEnded, .verifierSkipped, .proofAdded:
                 Self.applyVerifier(event, to: &state, pending: &verifierProof)
             case .threadNote:
                 if let text = event.data["text"]?.stringValue {
