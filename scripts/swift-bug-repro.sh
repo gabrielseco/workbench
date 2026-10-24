@@ -8,7 +8,8 @@ fail_when_fixed=0
 [ "${1:-}" = "--fail-when-fixed" ] && fail_when_fixed=1
 dir=$(mktemp -d "${TMPDIR:-/tmp}/swift-bug-repro.XXXXXX") || exit 1
 trap 'rm -rf "$dir"' EXIT
-src="$(cd "$(dirname "$0")/.." && pwd)/docs/swift-bugs/simplify-cfg-async.swift"
+# SWIFT_BUG_REPRO_SRC replaces the case, to test this script's own branches with a file that compiles.
+src=${SWIFT_BUG_REPRO_SRC:-"$(cd "$(dirname "$0")/.." && pwd)/docs/swift-bugs/simplify-cfg-async.swift"}
 [ -f "$src" ] || { echo "inconclusive: $src is missing"; exit 1; }
 swiftc --version 2>&1 | head -1
 broken=0
@@ -17,9 +18,11 @@ swiftc -O -parse-as-library -Xfrontend -sil-verify-all -Xllvm -sil-disable-pass=
 without=$?
 if [ "$broken" = 1 ] && [ "$without" = 0 ] && grep -q "SIL verification failed" "$dir/with.log"; then
     echo "still broken: the compiler aborts in JumpThreadSimplifyCFG and compiles with simplify-cfg disabled; keep the workaround"
+    exit 0
 elif [ "$broken" = 0 ] && [ "$without" = 0 ]; then
     echo "fixed: both compile; the workaround in Package.swift can go"
-    [ "$fail_when_fixed" = 1 ] && exit 3
+    if [ "$fail_when_fixed" = 1 ]; then exit 3; fi
+    exit 0
 else
     echo "inconclusive: see the logs"; sed -n 1,5p "$dir/with.log"; exit 1
 fi
