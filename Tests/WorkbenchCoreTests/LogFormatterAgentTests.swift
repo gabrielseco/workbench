@@ -38,4 +38,12 @@ import Testing
         let text = line(.agentAttemptEnded, ["attempt": "a1", "outcome": "failed", "reason": "bad\u{1B}[31m\nred"])
         #expect(!text.contains("\u{1B}") && !text.contains("\n"), "\(text)")
     }
+
+    @Test func goalApprovedShowsAgent() {
+        #expect(line(.goalApproved, ["hash": "h", "provider": "claude", "model": "opus"])
+            .hasSuffix("goal approved for coding on claude, opus"))
+        #expect(line(.goalApproved, ["hash": "h", "provider": "claude", "model": .null])
+            .hasSuffix("on claude, default model"))
+        #expect(line(.goalApproved, ["hash": "h"]).hasSuffix("goal.approved"), "an older approval prints as before")
+    }
 }

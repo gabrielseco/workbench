@@ -131,7 +131,7 @@ extension ThreadService {
             name: ReviewLoop.followUpName(root: root, round: round), updating: branch, config: config,
             lineage: ThreadLineage(parent: parent, root: root, round: round),
             body: ReviewLoop.body(findings: findings, reviewRound: reviewRound, checkCommand: config.checkCommand))
-        try await approve(id: id)
+        try await approve(id: id, config: config)
         return id
     }
 

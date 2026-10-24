@@ -252,6 +252,7 @@ public struct ThreadState: Sendable, Equatable {
     public var lastResult: String?
     public var totalCostUSD: Double
     public var sessionID: String?
+    public var sessionProvider: String?  // nil: a log from before turns named one (Claude)
     public var review: Review
     /// What the latest turn has done so far; for `status`, which asks "working or stuck".
     public var progress: Progress
@@ -265,6 +266,7 @@ public struct ThreadState: Sendable, Equatable {
     public var planCostUSD: Double = 0
     /// The hash the latest `goal.approved` bound, so a plan made for another version reads as stale.
     public var approvedGoalHash: String?
+    public var approvedAgent: ApprovedAgent?  // what the latest `goal.approved` bound; nil before P9
 
     public var isActive: Bool { decision == nil }
 
@@ -380,7 +382,7 @@ public struct ThreadState: Sendable, Equatable {
             if record.ok { state.currentPlan = record }
             if event.kind == .planEnded { state.planCostUSD += record.costUSD ?? 0 }
         case .goalApproved:
-            state.approvedGoalHash = event.data["hash"]?.stringValue
+            (state.approvedGoalHash, state.approvedAgent) = (event.data["hash"]?.stringValue, ApprovedAgent(event))
         default:
             state.review.prReview = prReviewRound(event)
         }
@@ -408,6 +410,7 @@ public struct ThreadState: Sendable, Equatable {
                 state.openTurn = event.turn
                 state.progress = Progress(turnStartedAt: event.ts, lastEventAt: event.ts, lastEvent: "turn started")
                 noteIsLatest = false
+                state.sessionProvider = event.data["provider"]?.stringValue
                 if let session = event.data["session_id"]?.stringValue { state.sessionID = session }
             case .turnEnded:
                 if state.openTurn == event.turn { state.openTurn = nil }

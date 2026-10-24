@@ -103,10 +103,13 @@ public struct ThreadStore: Sendable {
         public var sessionID: String
         /// True once a stream line carrying this session id has been seen: the CLI has the session.
         public var confirmed: Bool
+        /// The provider that made the handle; absent in a file written before P9, which only Claude wrote.
+        public var provider: String?
 
         enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case confirmed
+            case provider
         }
     }
 

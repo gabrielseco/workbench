@@ -64,7 +64,7 @@ public enum LogFormatter {
             return head + "grant (\(scope)): " + ThreadState.safeLine(event.data["pattern"]?.stringValue ?? "?", limit: 300)
         case .reviewDecision:
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
-        case .agentAttemptStarted, .agentAttemptEnded, .goalDraftStarted, .goalDraftFinished:
+        case .agentAttemptStarted, .agentAttemptEnded, .goalDraftStarted, .goalDraftFinished, .goalApproved:
             return head + describeAgent(event)
         case .worktreeRemoved, .branchRemoved, .branchAhead:
             return head + describeBranch(event)
@@ -75,11 +75,14 @@ public enum LogFormatter {
 
     /// An attempt of a provider process, or a goal draft: one line, the provider and model first.
     static func describeAgent(_ event: Event) -> String {
+        if event.kind == .goalApproved, event.data["provider"] == nil { return event.kind.rawValue }
         let id = ThreadState.safeLine(event.data["attempt"]?.stringValue ?? "", limit: 20)
         let provider = ThreadState.safeLine(event.data["provider"]?.stringValue ?? "?", limit: 20)
         let model = event.data["model"]?.stringValue.map { ThreadState.safeLine($0, limit: 60) } ?? "default model"
         let role = ThreadState.safeLine(event.data["role"]?.stringValue ?? "", limit: 20)
         switch event.kind {
+        case .goalApproved:
+            return "goal approved for coding on \(provider), \(model)"
         case .agentAttemptStarted:
             let stage = event.data["stage"]?.stringValue.map { " \(ThreadState.safeLine($0, limit: 40))" } ?? ""
             let round = event.data["round"]?.intValue.map { " round \($0)" } ?? ""

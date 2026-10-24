@@ -5,6 +5,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case goalMissing(String)
     case goalInvalid(String)
     case goalNotApproved(ApprovalState)
+    /// The goal is approved, but not for the provider and model the config now picks for coding.
+    case codingSettingsChanged(approved: String, now: String)
     case feedbackRequired
     case feedbackWithoutPriorTurn
     case emptyFeedback
@@ -29,6 +31,9 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
                 "the goal changed since it was approved. Review it and run `workbench goal approve` again."
             default: "the goal is not approved. Run `workbench goal approve`."
             }
+        case .codingSettingsChanged(let approved, let now):
+            "the goal was approved for \(approved), and the config now picks \(now) for coding. "
+                + "Run `workbench goal approve` again to approve it for \(now)."
         case .feedbackRequired:
             "this thread already has a successful turn. Say what to change: `workbench run --feedback \"...\"`."
         case .feedbackWithoutPriorTurn: "there is nothing to send feedback on yet; run the goal first."

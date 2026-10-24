@@ -172,7 +172,7 @@ public struct ThreadService: Sendable {
     /// Binds the current content of the goal with its hash. Nothing runs before this, and any later edit
     /// to the parts that matter returns it to draft.
     @discardableResult
-    public func approve(id: String) async throws -> GoalFile {
+    public func approve(id: String, config: Config? = nil) async throws -> GoalFile {
         if let decision = store.state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
         let url = project.goalURL(id)
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
@@ -183,10 +183,15 @@ public struct ThreadService: Sendable {
             throw ThreadServiceError.goalInvalid(error.description)
         }
         if text.contains("TODO(workbench)") { throw ThreadServiceError.goalPlaceholdersRemain }
-        if file.goal.approval == .approved { return file }
+        let config = config ?? (try? Config.load(from: project.configURL))
+        let agent = config?.resolvedRunAgent(goalModel: file.goal.model)
+            ?? ResolvedAgent(provider: .claude, model: file.goal.model, allowUnpriced: false)
+        let binding = ApprovedAgent(agent)
+        // An unchanged goal is approved already; it is approved again only for coding settings it was not approved for.
+        if file.goal.approval == .approved, store.state(of: id).approvedAgent == binding { return file }
 
-        let approved = try file.approving(at: now())
-        try approved.text.write(to: url, atomically: true, encoding: .utf8)
+        let approved = file.goal.approval == .approved ? file : try file.approving(at: now())
+        if file.goal.approval != .approved { try approved.text.write(to: url, atomically: true, encoding: .utf8) }
 
         try await withLog(id) { log in
             try await log.append(
@@ -194,6 +199,8 @@ public struct ThreadService: Sendable {
                 data: [
                     "hash": .string(approved.goal.contentHash),
                     "budget_usd": .double(NSDecimalNumber(decimal: approved.goal.budgetUSD).doubleValue),
+                    "provider": .string(binding.provider),
+                    "model": binding.model.map { .string($0) } ?? .null,
                 ])
         }
         return approved

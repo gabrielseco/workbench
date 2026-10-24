@@ -7,6 +7,7 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private let log: EventLogWriter
     private let turn: Int
     private let sessionID: String
+    private let provider: String
     private let threadID: String
     private let store: ThreadStore
     private let notify: @Sendable (RunNotice) -> Void
@@ -14,12 +15,13 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private var confirmed = false
 
     init(
-        log: EventLogWriter, turn: Int, sessionID: String, threadID: String, store: ThreadStore,
+        log: EventLogWriter, turn: Int, sessionID: String, provider: String, threadID: String, store: ThreadStore,
         notify: @escaping @Sendable (RunNotice) -> Void
     ) {
         self.log = log
         self.turn = turn
         self.sessionID = sessionID
+        self.provider = provider
         self.threadID = threadID
         self.store = store
         self.notify = notify
@@ -34,7 +36,7 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
             // A resume of an id Claude never saw fails at once with no output; a line that names it is the proof.
             if !confirmed, activity.contains(where: { if case .session = $0 { true } else { false } }) {
                 confirmed = true
-                try store.save(.init(sessionID: sessionID, confirmed: true), for: threadID)
+                try store.save(.init(sessionID: sessionID, confirmed: true, provider: provider), for: threadID)
             }
         case .oversized(let preview, let total):
             sawOutput = true

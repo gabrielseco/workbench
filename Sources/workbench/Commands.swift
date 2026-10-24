@@ -258,9 +258,12 @@ enum Commands {
             if !unrunnable.isEmpty { throw CLIError.refused(ProofWarning.refusal(unrunnable)) }
         }
         let approved = try await ctx.service.approve(id: id)
+        let binding = ThreadStore(project: ctx.project).state(of: id).approvedAgent
         if before?.goal.approval == .approved {
             out("\(id) is already approved (\(approved.goal.contentHash.prefix(12)))")
+            if let binding { out("coding:  \(binding.description)") }
         } else {
+            defer { if let binding { out("coding:  \(binding.description)") } }
             out("approved \(id)")
             out("hash:    \(approved.goal.contentHash.prefix(12))")
             out("budget:  $\(approved.goal.budgetUSD) per turn, timeout \(approved.goal.turnTimeoutMin) min")
