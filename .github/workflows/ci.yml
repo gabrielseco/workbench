@@ -67,6 +67,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 26.1 (Swift 6.2.1)
+        # The runner's default Xcode has Swift 6.1.2, which predates the simplify-cfg bug (docs/swift-bugs/), so CI could not see it.
+        run: sudo xcode-select -s /Applications/Xcode_26.1.app
       - name: Toolchain bug check (informational)
         # Says whether this Swift still has the bug Package.swift works around; never fails the job on its own answer.
         run: scripts/swift-bug-repro.sh || true
