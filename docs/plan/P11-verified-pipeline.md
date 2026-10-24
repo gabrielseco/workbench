@@ -49,7 +49,7 @@ screenshot, the criteria table and the check result. So the steps work; what dri
 | # | What the plan assumed | What happened | Fix |
 |---|---|---|---|
 | 1 | The design stage runs before `ship` | `review-stage design` before `ship`: "refused: this thread has no recorded pull request. Run `workbench ship` first". It only runs on a PR | Stages take the thread's branch and worktree when there is no PR (friction row 61 is the same gap for `pr-review`) |
-| 2 | A proof belongs to a commit | `proof.added` has name, path, bytes and sha256, no commit. `pr-shots` names the file by the branch head *when it publishes* (`...-972aa0f.png`), not when it was taken | Record the head at `verify.started`; publish refuses a proof whose commit is not the head (task 1) |
+| 2 | A proof belongs to a commit | `proof.added` has name, path, bytes and sha256, no commit. `pr-shots` names the file by the branch head *when it publishes* (`...-972aa0f.png`), not when it was taken | Record the head when the proof is taken; publish refuses a proof whose commit is not the head (task 1) |
 | 3 | Something says which step is next | Nine commands, each with its output read by hand, and nothing says which comes next except a hint after some | The lifecycle document and `workbench next` (task 6); not a runner |
 | 4 | A fix after the PR is re-verified | `ship` removes the worktree once the PR is open (`--keep-worktree` keeps it), so a later verify needs a follow-up thread's own worktree | Say it in the document: a fix is always a follow-up thread; `--keep-worktree` is not needed |
 | 5 | The judge catches a proof that does not show the criterion | It answered `met` on all five, and wrote as concerns that the screenshot shows only the viewer's own PRs, so the order of the others' is never seen, and that no test covers `visibleItems` using the order. The design stage said the same. A gate on `met: false` would never have fired | Not gated: a partial proof is for the person to see. The judge's concerns go into the PR description (task 0.3) |
@@ -93,7 +93,7 @@ The loop is not built before these join problems are fixed, each its own PR:
 
 | Task | Result | Gate |
 |---|---|---|
-| 0.1 Proof knows its commit (row 2) **(built, #114)** | the commit and tree on `verify.started` and `proof.added`; `ship` skips the screenshots when the committed tree is not the proof's, or when the pull request's branch on `origin` is not this thread's head; `review` says current, stale or unknown | tests: commit after verify then ship, proof at head, a moved PR branch, an old log reads "unknown", a worktree filter is not run |
+| 0.1 Proof knows its commit (row 2) **(built, #114)** | the commit and tree on the verify step's start (removed since, P10) and `proof.added`; `ship` skips the screenshots when the committed tree is not the proof's, or when the pull request's branch on `origin` is not this thread's head; `review` says current, stale or unknown | tests: commit after verify then ship, proof at head, a moved PR branch, an old log reads "unknown", a worktree filter is not run |
 | 0.2 Stages without a PR (row 1) | `review-stage <name>` and `pr-review` run on the thread's branch when no PR is recorded, in the same throwaway checkout. **Done:** such a round is counted under `pr` 0, reads the local branch tip and diffs against the recorded base commit | the existing stage tests plus a thread with no `pr.opened` |
 | 0.3 Judge concerns reach the PR (row 5) | the judge's `concerns` (and the proof's pixel size, row 10) are given to it and written, bounded, into the PR description under the criteria | `ship` fixtures: with concerns, without, over the limit |
 | 0.4 Triage fixture state (rows 6, 7, 9 and 10) | `verify.sh` can launch with a fixed PR list, no Keychain read and a fixed window size, and the goal names more than one capture | a recorded run with the ordering visible across the own/others boundary and no Keychain dialog and a window no part of which is cut. **Done:** window size and the Keychain prompt in Triage #72; the fixed PR list is shown in the recorded run, so the task counts as done |
@@ -130,7 +130,7 @@ follow-up mechanism; phase 0 is unchanged, because those are joins a document ca
 1. **Verify, judge and design run before the PR.** For a project whose app starts in seconds (a Mac app, a mocked
    web app) proving the change early is cheap, and a change that does not show its criteria never becomes a PR.
    `pr-review` needs the PR, so it is the only stage after `ship`.
-2. **A proof belongs to a commit.** `proof.added`, `verify.started` and `verifier.started` record the head commit
+2. **A proof belongs to a commit.** `proof.added` and `verifier.started` record the head commit
    they ran at. A proof whose commit is not the thread's head is *stale*: `review` says so, the judge and design
    stage refuse to read it, and `ship` / the publish step refuse to publish it. Nothing re-takes it silently; the
    loop re-runs verify.
@@ -201,7 +201,7 @@ tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Ba
 
 | Where | Change |
 |---|---|
-| Events (`docs/spec/event-log.md`) | `commit` on `proof.added`, `verify.started`, `verifier.started`; `pipeline.started`, `pipeline.step`, `pipeline.ended` with `reason` (clean, round cap, cost cap, stopped, failed) |
+| Events (`docs/spec/event-log.md`) | `commit` on `proof.added`, `verifier.started`; `pipeline.started`, `pipeline.step`, `pipeline.ended` with `reason` (clean, round cap, cost cap, stopped, failed) |
 | Proof | `ProofSet.head(commit:)` and a stale check used by `review`, judge, design and publish |
 | `Verify` | a failed or missing-criterion result builds a follow-up request; runs the verifier ([P10](P10-skill-verifier.md)); `verify_command` is removed in P10 PR 6 |
 | `Judge` | `--gate` returns the not-met criteria with evidence as the follow-up request |

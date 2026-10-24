@@ -95,8 +95,6 @@ public actor EventLogWriter {
     public var openTurn: Int? { state.openTurn }
     /// The turn whose check started and has not ended, if any.
     public var openCheck: Int? { state.openCheck }
-    /// The turn whose verify step started and has not ended, if any.
-    public var openVerify: Int? { state.openVerify }
     /// The `seq` the next append will get.
     public var nextSeq: Int { state.nextSeq }
     /// The highest turn number started so far, 0 for a thread with no turns.
@@ -171,15 +169,6 @@ public actor EventLogWriter {
         guard let turn = state.openCheck else { return nil }
         return try append(
             .checkRan, turn: turn,
-            data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
-    }
-
-    /// Closes an orphaned verify step (its runner died while the command ran) with a synthetic `interrupted`.
-    @discardableResult
-    public func recoverOrphanedVerify() throws -> Event? {
-        guard let turn = state.openVerify else { return nil }
-        return try append(
-            .verifyEnded, turn: turn,
             data: ["result": "interrupted", "synthetic": true, "exit_code": nil])
     }
 

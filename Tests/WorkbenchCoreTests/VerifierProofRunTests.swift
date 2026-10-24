@@ -200,26 +200,10 @@ private let designStage = """
         #expect(status[0].state == .evidence)
     }
 
-    @Test func theStageIsGivenOnlyTheVerifiersFilesNotAnOldVerifyStepsOnes() async throws {
-        let r = try await reviewedPR(extraConfig: designStage)
-        try await recordLegacyVerify(r.fx, r.id, ["step.png": "a"])
-        try await recordVerifierProof(r.fx, r.id, ["seen.png": "pixels"])
-        _ = try await stage(r)
-        let started = try #require(try r.fx.events(r.id).first { $0.kind == .reviewStageStarted && $0.data["stage"] != nil })
-        guard case .array(let given)? = started.data["proof"] else {
-            Issue.record("proof missing")
-            return
-        }
-        #expect(Set(given.compactMap(\.stringValue)) == ["seen.png"])
-    }
-
     @Test func aStageWithNoVerifierRunFailsTheRoundAndSaysSo() async throws {
         let r = try await reviewedPR(extraConfig: designStage)
-        // An old log's verify step is not proof: the round still has none.
-        try await recordLegacyVerify(r.fx, r.id, ["step.png": "a"])
         let result = try await stage(r)
         #expect(result.verdict == nil && result.failure?.contains("no verifier run on record") == true)
-        #expect(result.failure?.contains("verify step") == false)
         #expect(r.codex.runs == 0)
     }
 

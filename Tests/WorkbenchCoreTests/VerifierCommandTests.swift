@@ -121,9 +121,6 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
         ("check.ran", true, true, true, true, false),
         ("check.ran", true, true, false, true, true),
         ("check.ran", true, true, true, false, true),
-        ("verify.ended", true, true, true, true, false),
-        ("verify.ended", true, true, true, false, true),
-        ("verify.ended", true, true, false, true, true),
         ("turn.ended", true, false, true, true, false),
         ("turn.ended", false, false, true, true, true),
         ("verifier.ended", true, true, true, true, true),
@@ -136,8 +133,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
         let event = Event(seq: 9, ts: "t", turn: 1, kind: EventKind(rawValue: kind), data: ["result": .string(result)])
         #expect(
             LogFormatter.followEnds(
-                event, sawStart: true, checks: checks, turnSucceeded: succeeded, verifiers: verifiers,
-                checkPassed: checkPassed) == ends)
+                event, sawStart: true, checks: checks, turnSucceeded: succeeded, verifiers: verifiers) == ends)
     }
 
     @Test func theLogFormatterNamesTheVerifierEvents() {

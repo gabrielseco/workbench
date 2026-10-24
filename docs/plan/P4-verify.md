@@ -69,7 +69,7 @@ Rules:
 
 ### Events and storage
 
-`verify.started`, `verify.ended` (`exit_code`, `duration_ms`, `result`) and one `proof.added` per file (`name`,
+A start and an end event for the step (`exit_code`, `duration_ms`, `result`; removed since, see P10) and one `proof.added` per file (`name`,
 `path`, `sha256`, `bytes`). The proof dir lives under the thread folder, so `discard` keeps the log and drops
 the worktree as it does today. The event log stays the source of truth: the gallery reads `proof.added`,
 not the folder. Spec in `docs/spec/event-log.md`; `--json` keys are added, never renamed.
@@ -124,7 +124,7 @@ Docs travel with the code.
 
 ## Done when
 
-- [ ] A thread on expense-tracker ends with a PNG shown by `review` and a recorded `verify.ended`.
+- [ ] A thread on expense-tracker ends with a PNG shown by `review` and a recorded end of the verify step.
 - [ ] A verify that hangs, crashes or is killed still ends the turn's thread in a recorded state, and leaves
       no dev server running (tested, then checked by hand with `lsof` on the pilot).
 - [ ] A criterion with `screenshot:` proof and no file shows "missing".

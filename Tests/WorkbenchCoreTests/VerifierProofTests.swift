@@ -174,19 +174,15 @@ private func evaluate(
         return event(seq, .proofAdded, .object(data))
     }
 
-    @Test func theVerifiersScreenshotsAreKeptApartFromTheVerifyStepsInTheSameTurn() {
+    @Test func theVerifiersRunIsReadWithItsScreenshots() {
         let events = [
             event(1, .turnStarted, ["resume": false]), event(2, .turnEnded, ["result": "succeeded"]),
-            event(3, .verifyStarted, ["command": "v"]), proofAdded(4, "step.png"),
-            event(5, .verifyEnded, ["result": "passed", "command": "v"]),
-            event(6, .verifierStarted, ["argv": ["claude"]]), proofAdded(7, "seen.png", source: "verifier"),
-            event(8, .verifierEnded, ["ok": true, "report": "c1: holds", "cost_usd": .double(0.0015), "duration_ms": 9000]),
+            event(3, .verifierStarted, ["argv": ["claude"]]), proofAdded(4, "seen.png", source: "verifier"),
+            event(5, .verifierEnded, ["ok": true, "report": "c1: holds", "cost_usd": .double(0.0015), "duration_ms": 9000]),
         ]
         let review = ThreadState.derive(from: events, id: "t").review
-        #expect(review.verify?.proof.map(\.name) == ["step.png"])
         #expect(review.verifier?.proof.map(\.name) == ["seen.png"])
         #expect(review.verifier?.ok == true && review.verifier?.report == "c1: holds" && review.verifier?.costUSD == 0.0015)
-        // The step's file stays in the log, but the proof is the verifier's alone.
         let set = Review.ProofSet(verifier: review.verifier)
         #expect(set?.files.map(\.name) == ["seen.png"])
     }

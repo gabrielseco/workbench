@@ -122,32 +122,33 @@ import Testing
 
 @Suite(.processGate) struct ProofIdentityRecordTests {
     private func proofAdded(_ extra: [String: JSONValue]) -> Event {
-        var data: [String: JSONValue] = ["name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 4]
+        var data: [String: JSONValue] = [
+            "name": "home.png", "path": "proof/turn-1/home.png", "sha256": "ab", "bytes": 4, "source": "verifier",
+        ]
         for (key, value) in extra { data[key] = value }
         return Event(seq: 3, ts: "t", turn: 1, kind: .proofAdded, data: .object(data))
     }
 
-    private func state(_ added: Event) -> ThreadState {
-        let started = Event(seq: 2, ts: "t", turn: 1, kind: .verifyStarted, data: ["command": "v.sh"])
-        let ended = Event(seq: 4, ts: "t", turn: 1, kind: .verifyEnded, data: ["result": "passed"])
-        return ThreadState.derive(from: [started, added, ended], id: "g-x")
+    private func file(_ added: Event) -> ProofFile? {
+        let started = Event(seq: 2, ts: "t", turn: 1, kind: .verifierStarted, data: [:])
+        let ended = Event(seq: 4, ts: "t", turn: 1, kind: .verifierEnded, data: ["ok": true])
+        return ThreadState.derive(from: [started, added, ended], id: "g-x").review.verifier?.proof.first
     }
 
-    @Test func theStepKeepsTheCommitAndTreeItsProofFilesRecorded() {
-        let verify = state(proofAdded(["commit": "c1", "tree": "t1"])).review.verify
-        #expect(verify?.commit == "c1")
-        #expect(verify?.tree == "t1")
+    @Test func aFileKeepsTheCommitAndTreeItRecorded() {
+        let proof = file(proofAdded(["commit": "c1", "tree": "t1"]))
+        #expect(proof?.commit == "c1")
+        #expect(proof?.tree == "t1")
     }
 
     @Test func anOlderLogWithNeitherReadsAsNoIdentity() {
-        let verify = state(proofAdded([:])).review.verify
-        #expect(verify?.commit == nil)
-        #expect(verify?.tree == nil)
-        #expect(ProofFreshness.of(recordedTree: verify?.tree, current: ProofIdentity(commit: "c", tree: "t")) == .unknown)
+        let proof = file(proofAdded([:]))
+        #expect(proof != nil && proof?.commit == nil && proof?.tree == nil)
+        #expect(ProofFreshness.of(recordedTree: proof?.tree, current: ProofIdentity(commit: "c", tree: "t")) == .unknown)
     }
 
     @Test func aNullTreeFromAWorktreeGitCouldNotReadIsNotAString() {
-        let verify = state(proofAdded(["commit": .null, "tree": .null])).review.verify
-        #expect(verify?.tree == nil)
+        let proof = file(proofAdded(["commit": .null, "tree": .null]))
+        #expect(proof != nil && proof?.tree == nil)
     }
 }

@@ -29,21 +29,6 @@ public struct Review: Sendable, Equatable {
         public var tests: CheckTests?
     }
 
-    /// The verify step of a turn, as `verify.ended` and its `proof.added` events recorded it.
-    public struct Verify: Sendable, Equatable {
-        public var turn: Int
-        public var result: String
-        public var exitCode: Int?
-        public var durationMs: Int?
-        public var outputRef: String?
-        public var command: String?
-        public var proof: [ProofFile]
-
-        /// The commit and tree the proof was taken at; every file of a step shares them.
-        public var commit: String? { proof.lazy.compactMap(\.commit).first }
-        public var tree: String? { proof.lazy.compactMap(\.tree).first }
-    }
-
     /// The latest `judge.ran`: the advisory judge's verdict for a turn, or why there was none.
     public struct Judge: Sendable, Equatable {
         public var turn: Int
@@ -97,8 +82,6 @@ public struct Review: Sendable, Equatable {
     public var turnResult: String?
     /// The latest completed check, nil when none has run.
     public var check: Check?
-    /// The latest completed verify step, nil when none has run.
-    public var verify: Verify?
     /// The latest verifier run, nil when none has run or been skipped. Advisory.
     public var verifier: Verifier?
     /// The latest judge run, nil when none has run. Advisory.
@@ -177,7 +160,6 @@ public struct ThreadState: Sendable, Equatable {
     public var lastTurn: Int
     public var openTurn: Int?
     public var openCheck: Int?
-    public var openVerify: Int?
     /// The latest check's `result`, nil when no check has run.
     public var lastCheck: String?
     /// `accepted`, `discarded` or `abandoned` once the thread has ended.
@@ -285,40 +267,6 @@ public struct ThreadState: Sendable, Equatable {
             truncated: event.data["tests_truncated"] == true)
     }
 
-    /// The verify step's events: `proof.added` lines gather until `verify.ended` closes the step.
-    private static func applyVerify(
-        _ event: Event, to state: inout ThreadState, pending: inout [ProofFile], verifierPending: inout [ProofFile]
-    ) {
-        // The verifier's screenshots are told apart by `source`; they gather for its own end, not the verify step's.
-        if event.kind == .proofAdded, event.data["source"]?.stringValue == "verifier" {
-            if let file = proofFile(event) { verifierPending.append(file) }
-            return
-        }
-        switch event.kind {
-        case .verifyStarted:
-            state.openVerify = event.turn
-            pending = []
-            state.progress.note(event.ts, "verify started")
-        case .proofAdded:
-            guard let name = event.data["name"]?.stringValue, let path = event.data["path"]?.stringValue else { return }
-            pending.append(
-                ProofFile(
-                    name: name, path: path, sha256: event.data["sha256"]?.stringValue ?? "",
-                    bytes: event.data["bytes"]?.intValue ?? 0, commit: event.data["commit"]?.stringValue,
-                    tree: event.data["tree"]?.stringValue))
-        default:
-            if state.openVerify == event.turn { state.openVerify = nil }
-            state.progress.note(event.ts, "verify \(event.data["result"]?.stringValue ?? "ran")")
-            if let result = event.data["result"]?.stringValue {
-                state.review.verify = Review.Verify(
-                    turn: event.turn, result: result, exitCode: event.data["exit_code"]?.intValue,
-                    durationMs: event.data["duration_ms"]?.intValue, outputRef: event.data["output_ref"]?.stringValue,
-                    command: event.data["command"]?.stringValue, proof: pending)
-            }
-            pending = []
-        }
-    }
-
     /// The runs that only advise: the judge, the plan and the pull request review. Each start is replaced by the
     /// end that follows; if none does, the run was cut off.
     private static func applyAdvisory(_ event: Event, to state: inout ThreadState) {
@@ -344,14 +292,13 @@ public struct ThreadState: Sendable, Equatable {
     /// A pure function of the events: no file, git or clock. Unknown kinds and unknown decisions are ignored.
     public static func derive(from events: [Event], id: String) -> ThreadState {
         var state = ThreadState(
-            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, openVerify: nil, lastCheck: nil,
+            id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
             review: Review(
-                status: .empty, turnResult: nil, check: nil, verify: nil, verifier: nil, judge: nil, notes: [], deniedTools: [],
+                status: .empty, turnResult: nil, check: nil, verifier: nil, judge: nil, notes: [], deniedTools: [],
                 prReview: nil),
             progress: Progress())
         var noteIsLatest = false
-        var pendingProof: [ProofFile] = []
         var verifierProof: [ProofFile] = []
         // A turn is read through one shape: verbatim `claude` lines when it has any, else `agent.activity`.
         let legacyTurns = Set(events.filter { $0.kind == .claude }.map(\.turn))
@@ -394,8 +341,11 @@ public struct ThreadState: Sendable, Equatable {
                         outputRef: event.data["output_ref"]?.stringValue,
                         command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
-            case .verifyStarted, .proofAdded, .verifyEnded:
-                Self.applyVerify(event, to: &state, pending: &pendingProof, verifierPending: &verifierProof)
+            case .proofAdded:
+                // Only the verifier's files count; a line without `source` is an old verify step's, which is not read.
+                if event.data["source"]?.stringValue == "verifier", let file = proofFile(event) {
+                    verifierProof.append(file)
+                }
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)
@@ -441,7 +391,7 @@ public struct ThreadState: Sendable, Equatable {
         state.review.turnResult = state.lastResult
         if let decision = state.decision {
             state.review.status = .decided(decision)
-        } else if state.openTurn != nil || state.openCheck != nil || state.openVerify != nil {
+        } else if state.openTurn != nil || state.openCheck != nil {
             state.review.status = .running
         } else if state.lastTurn == 0 {
             state.review.status = .empty
