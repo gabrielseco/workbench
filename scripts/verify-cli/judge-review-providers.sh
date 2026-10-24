@@ -5,7 +5,9 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/judge-review-providers.sh   (the same, on a branch that contains origin/main)
 # With `[agents.judge] provider = "codex"` and `[agents.review] provider = "claude"`: doctor must name both, report the Codex judge
 # without `allow_unpriced` as a problem that names the key, and `judge` must be refused before it starts (recorded, exit 1) with the
-# same message; `judge --budget` on it is a usage error (exit 2); `[agents.review] model` with Codex is refused when the config loads.
+# same message; `judge --budget` on it is a usage error
+# (exit 2). `[agents.review]` on Codex takes a `model` and a `reasoning_effort` (doctor names both); an effort that is no level is
+# refused when the config loads. SABOTAGE also writes that bad effort in the config that must be accepted.
 # With `allow_unpriced = true` the problem goes, and `judge` gets as far as looking for `codex` (not installed: that is the failure).
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 writes `allow_unpriced =
 # true` already in the first config and leaves the review on codex, so the steps that expect the refusal and the Claude review
@@ -100,14 +102,23 @@ shown "$SCRATCH/budget.out" 3
 check "judge --budget on a Codex judge is a usage error: exit 2" "workbench judge --budget exited $RC" test "$RC" = 2
 check "the usage error says --budget has no effect on codex" "no such message" grep -q -- "--budget has no effect on codex" "$SCRATCH/budget.out"
 
-# --- 2. a model on a Codex review is refused when the config loads ---------------------------------------------
+# --- 2. a model and an effort on a Codex review are accepted, a bad effort is refused when the config loads -------
 
 setagents "allow_unpriced = true" 'provider = "codex"
-model = "gpt-x"'
+model = "gpt-6-astra"
+reasoning_effort = "high"'
+[ "$SABOTAGE" = 1 ] && setagents "allow_unpriced = true" 'provider = "codex"
+reasoning_effort = "ultra"'
 wbp "$SCRATCH/doctor2.out" doctor
-shown "$SCRATCH/doctor2.out" 4
-check "a model on a Codex review: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
-check "the message says Codex takes no model" "no 'takes no model' message" grep -q "takes no model" "$SCRATCH/doctor2.out"
+shown "$SCRATCH/doctor2.out" 6
+check "a model and an effort on a Codex review: doctor accepts the config" "workbench doctor exited $RC" test "$RC" = 0
+check "doctor names the model and the effort" "agent review line lacks gpt-6-astra and effort high" \
+    bash -c 'grep "^agent review:" "$1" | grep -q "gpt-6-astra" && grep "^agent review:" "$1" | grep -q "effort high"' _ "$SCRATCH/doctor2.out"
+setagents "allow_unpriced = true" 'provider = "codex"
+reasoning_effort = "ultra"'
+wbp "$SCRATCH/doctor2b.out" doctor
+check "an effort Workbench has no level for is refused when the config loads" "workbench doctor exited $RC" test "$RC" != 0
+check "the message names reasoning_effort" "no 'reasoning_effort' message" grep -q "reasoning_effort" "$SCRATCH/doctor2b.out"
 
 # --- 3. with the opt-in the judge goes as far as looking for codex ------------------------------------------
 

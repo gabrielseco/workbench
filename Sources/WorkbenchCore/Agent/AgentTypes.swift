@@ -128,6 +128,8 @@ public struct AgentLimits: Sendable, Equatable {
 public struct AgentRequest: Sendable, Equatable {
     public var provider: AgentProviderID
     public var model: String?
+    /// How hard the model thinks (`low` … `max`); nil is the provider's own setting. Read-only calls only.
+    public var reasoningEffort: String?
     public var prompt: String
     public var images: [URL]
     public var workingDirectory: URL
@@ -156,8 +158,9 @@ public struct AgentRequest: Sendable, Equatable {
         workingDirectory: URL, outputDirectory: URL, policy: AgentPolicy, spend: AgentSpend,
         session: AgentSessionIntent = .none, purpose: AgentSessionHandle.Purpose,
         environment: [String: String], limits: AgentLimits, rules: String? = nil, grants: [String] = [],
-        evidenceFiles: [String] = [], answerFile: URL? = nil
+        evidenceFiles: [String] = [], answerFile: URL? = nil, reasoningEffort: String? = nil
     ) {
+        self.reasoningEffort = reasoningEffort
         self.answerFile = answerFile
         self.evidenceFiles = evidenceFiles
         self.rules = rules

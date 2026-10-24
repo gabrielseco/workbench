@@ -180,12 +180,12 @@ private func drafting(
 
     @Test func aBrokenConfigIsReportedNotTakenForNoGoalAgent() async throws {
         let fx = try await RunnerFixture(
-            extraConfig: "[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-x\"\nallow_unpriced = true")
+            extraConfig: "[agents.goal]\nprovider = \"codex\"\nreasoning_effort = \"ultra\"\nallow_unpriced = true")
         let ran = try await workbenchCLI(
             ["goal", "draft", "retry", "--request", "retry uploads"], in: fx.repo,
             environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
         #expect(ran.code == 2, "\(ran.code) \(ran.stderr)")
-        #expect(ran.stderr.contains("takes no model") && !ran.stderr.contains("goal drafting is off"), "\(ran.stderr)")
+        #expect(ran.stderr.contains("reasoning_effort") && !ran.stderr.contains("goal drafting is off"), "\(ran.stderr)")
     }
 
     @Test func anOversizedProposalIsRefused() {

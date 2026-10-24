@@ -19,12 +19,17 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
 public struct AgentSelection: Sendable, Equatable {
     public var provider: AgentProviderID?
     public var model: String?
+    /// `low` … `max`; nil is the provider's own setting (for Codex, whatever `~/.codex/config.toml` says).
+    public var reasoningEffort: String?
     /// Timeout-only spending is accepted for this evaluation. Nil means the table did not say.
     public var allowUnpriced: Bool?
 
-    public init(provider: AgentProviderID? = nil, model: String? = nil, allowUnpriced: Bool? = nil) {
+    public init(
+        provider: AgentProviderID? = nil, model: String? = nil, reasoningEffort: String? = nil, allowUnpriced: Bool? = nil
+    ) {
         self.provider = provider
         self.model = model
+        self.reasoningEffort = reasoningEffort
         self.allowUnpriced = allowUnpriced
     }
 
@@ -38,7 +43,15 @@ public struct ResolvedAgent: Sendable, Equatable {
     public var provider: AgentProviderID
     /// Nil is the provider's own default.
     public var model: String?
+    public var reasoningEffort: String?
     public var allowUnpriced: Bool
+
+    public init(provider: AgentProviderID, model: String?, reasoningEffort: String? = nil, allowUnpriced: Bool) {
+        self.provider = provider
+        self.model = model
+        self.reasoningEffort = reasoningEffort
+        self.allowUnpriced = allowUnpriced
+    }
 }
 
 /// `[providers.<id>]` and `[agents.<role>]`.
@@ -63,7 +76,7 @@ public struct AgentsConfig: Sendable, Equatable {
     static let providerPrefix = "providers."
     static let agentPrefix = "agents."
     static let providerKeys: Set<String> = ["executable"]
-    static let selectionKeys: Set<String> = ["provider", "model", "allow_unpriced"]
+    static let selectionKeys: Set<String> = ["provider", "model", "reasoning_effort", "allow_unpriced"]
     /// Providers that can be named at all, whatever role they are named for.
     static let knownProviders: [AgentProviderID] = [.claude, .codex]
 
@@ -80,20 +93,17 @@ public struct AgentsConfig: Sendable, Equatable {
         return nil
     }
 
-    /// A stage's model must belong to the provider the stage ends up on (it may inherit `[agents.review]`'s); Codex takes none.
-    func checkStageModels(review: ReviewConfig, fail: ReviewConfig.Fail) {
-        let base = self.review.provider ?? AgentRole.review.defaultProvider
-        for stage in review.definitions.values.sorted(by: { $0.name < $1.name })
-        where stage.model != nil && (stage.provider ?? base) == .codex {
-            let name = stage.name
-            fail(.invalidValue, stage.modelLine, "'model' in the review stage '\(name)' cannot be set: \(Self.codexModelReason)")
-        }
-    }
-
-    static let codexModelReason = "the Codex adapter takes no model yet, so it runs on Codex's own default"
+    static let codexCodingReason =
+        "the Codex adapter takes no model or effort for coding turns yet, so it runs on Codex's own default"
+    /// What `reasoning_effort` may be: the levels both `claude --effort` and Codex list. Which of them a model supports is its own check.
+    static let efforts = ["low", "medium", "high", "xhigh", "max"]
 
     static func list(_ ids: [AgentProviderID]) -> String {
         ids.map { "\"\($0)\"" }.joined(separator: " or ")
+    }
+
+    static func list(_ names: [String], joiner: String) -> String {
+        names.map { "\"\($0)\"" }.joined(separator: joiner)
     }
 }
 
@@ -143,6 +153,11 @@ extension AgentsConfig {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [\(tableName)]")
         }
         let selection = AgentSelection.parse(table, name: tableName, role: role, fail: fail)
+        if role == .run, let entry = table.entries["reasoning_effort"] {
+            fail(
+                .invalidValue, entry.line,
+                "'reasoning_effort' is not allowed in [agents.run] yet: coding turns keep the provider's own setting")
+        }
         if role == .run, let entry = table.entries["allow_unpriced"] {
             fail(
                 .invalidValue, entry.line,
@@ -181,14 +196,26 @@ extension AgentSelection {
                 if SafeNames.isModelName(value) {
                     selection.model = value
                     let effective = selection.provider ?? (inheritsProvider ? nil : role.defaultProvider)
-                    if effective == .codex {
-                        fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexModelReason)")
+                    if effective == .codex, role == .run {
+                        fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexCodingReason)")
                     }
                 } else {
                     fail(.invalidValue, entry.line, "'model' in [\(name)] must be a model name or alias like \"haiku\"")
                 }
             } else {
                 fail(.wrongType, entry.line, "'model' must be a string, found \(entry.value.typeName)")
+            }
+        }
+        if let entry = table.entries["reasoning_effort"] {
+            if case .string(let value) = entry.value {
+                if AgentsConfig.efforts.contains(value) {
+                    selection.reasoningEffort = value
+                } else {
+                    let levels = AgentsConfig.list(AgentsConfig.efforts, joiner: ", ")
+                    fail(.invalidValue, entry.line, "'reasoning_effort' in [\(name)] must be one of \(levels)")
+                }
+            } else {
+                fail(.wrongType, entry.line, "'reasoning_effort' must be a string, found \(entry.value.typeName)")
             }
         }
         if let entry = table.entries["allow_unpriced"] {
@@ -231,7 +258,9 @@ extension Config {
     /// Drafting: only when `[agents.goal]` exists. It never inherits the coding `model`.
     public var resolvedGoalAgent: ResolvedAgent? {
         guard let goal = agents.goal, let provider = goal.provider else { return nil }
-        return ResolvedAgent(provider: provider, model: goal.model, allowUnpriced: goal.allowUnpriced ?? false)
+        return ResolvedAgent(
+            provider: provider, model: goal.model, reasoningEffort: goal.reasoningEffort,
+            allowUnpriced: goal.allowUnpriced ?? false)
     }
 
     /// Coding: the goal's `model`, `[agents.run]`, the root `model`, then the provider's default. The root `model`
@@ -249,7 +278,7 @@ extension Config {
         let legacy = agents.judge.isSet ? nil : legacyModel(judgeModel ?? model, for: provider)
         return ResolvedAgent(
             provider: provider, model: modelFlag ?? agents.judge.model ?? legacy,
-            allowUnpriced: agents.judge.allowUnpriced ?? false)
+            reasoningEffort: agents.judge.reasoningEffort, allowUnpriced: agents.judge.allowUnpriced ?? false)
     }
 
     /// A review stage: its own table, then `[agents.review]`, then the provider's default. `allow_unpriced` is
@@ -261,6 +290,7 @@ extension Config {
         // A model names a provider's own model, so it is only inherited by a stage that keeps that provider.
         return ResolvedAgent(
             provider: provider, model: stage?.model ?? (provider == base ? agents.review.model : nil),
+            reasoningEffort: stage?.reasoningEffort ?? (provider == base ? agents.review.reasoningEffort : nil),
             allowUnpriced: stage?.allowUnpriced ?? agents.review.allowUnpriced ?? false)
     }
 

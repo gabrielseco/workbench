@@ -38,7 +38,6 @@ public struct CodexProvider: AgentProvider {
         if request.policy == .scopedCoding { return try codingInvocation(for: request) }
         guard request.session == .none else { throw refuse("Codex review keeps no conversation.") }
         guard request.grants.isEmpty else { throw refuse("A read-only call takes no extra permissions.") }
-        guard request.model == nil else { throw refuse("Choosing a Codex model is not supported yet.") }
         guard let answer = request.answerFile,
             answer.deletingLastPathComponent().standardizedFileURL.path == request.outputDirectory.standardizedFileURL.path
         else { throw refuse("Codex writes its answer to a file in the output directory, outside the checkout.") }
@@ -46,8 +45,12 @@ public struct CodexProvider: AgentProvider {
         // The rules and approval settings of the user's own Codex setup can let a command the sandbox refused run
         // outside it (P9 task 1: `git push` went through `-s read-only`): rules are ignored, nothing is approved.
         // `-i` takes a list of files, so without `--` the prompt would be read as one more image.
+        // A model and an effort are set here or Codex uses `~/.codex/config.toml`, which may be low effort.
+        let chosen =
+            (request.model.map { ["-m", $0] } ?? [])
+            + (request.reasoningEffort.map { ["-c", "model_reasoning_effort=\"\($0)\""] } ?? [])
         let args =
-            ["exec", "-s", "read-only", "-C", request.workingDirectory.path, "--color", "never", "--ephemeral"]
+            ["exec", "-s", "read-only", "-C", request.workingDirectory.path, "--color", "never", "--ephemeral"] + chosen
             + ["-o", answer.path, "--ignore-rules", "-c", "approval_policy=\"never\""]
             + request.images.flatMap { ["-i", $0.path] } + ["--", request.prompt]
         return AgentInvocation(
@@ -65,7 +68,9 @@ public struct CodexProvider: AgentProvider {
             throw refuse("Codex coding keeps no conversation yet: each turn is a fresh process with prepared context.")
         }
         guard request.grants.isEmpty else { throw refuse("Extra tool permissions are Claude's patterns; Codex takes none.") }
-        guard request.model == nil else { throw refuse("Choosing a Codex model is not supported yet.") }
+        guard request.model == nil, request.reasoningEffort == nil else {
+            throw refuse("Choosing a Codex model or effort is not supported yet for coding turns.")
+        }
         guard request.images.isEmpty else { throw refuse("Images in a Codex coding turn are not supported yet.") }
         guard request.workingDirectory.path.hasPrefix("/") else {
             throw refuse("A coding turn needs the worktree's absolute path.")

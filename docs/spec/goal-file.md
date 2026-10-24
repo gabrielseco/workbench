@@ -183,8 +183,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **`goal draft [<id>] --replace --request …` redrafts an existing goal.** Only `title` and the three sections change;
   the id, base, spend, timeout, `model`, `push_to` and comments stay as they are. `status` becomes `draft` and
   `approved_at` and `approved_hash` are removed, so an approved goal needs `goal approve` again (the command says so). It
-  is refused for an ended thread or a live run. A failed draft leaves the file byte-identical. A `model` under `[agents.goal]` with `provider = "codex"` is refused when the
-  config loads, as for the judge and review: the Codex adapter takes no model yet.
+  is refused for an ended thread or a live run. A failed draft leaves the file byte-identical. A Codex drafter takes `model` (passed as `-m`) and `reasoning_effort`
+  (passed as `-c model_reasoning_effort=…`), as for the judge and review.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
   out of scope, and its `title`, `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are
   checked by the same rules as in any goal (below; an empty `title` is one); a bad one is a usage error (exit 2) naming the
@@ -489,8 +489,12 @@ Notes:
 
 **Providers and agents (P9 PR 7).** `[providers.claude]` and `[providers.codex]` take `executable`, a command name or
 path run without a shell; `[providers.claude]` and `claude_path` name the same executable, so both is refused. An
-`[agents.<role>]` table, for `goal`, `run`, `judge` or `review`, takes `provider` (`"claude"` or `"codex"`), `model`
-and `allow_unpriced`. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
+`[agents.<role>]` table, for `goal`, `run`, `judge` or `review`, takes `provider` (`"claude"` or `"codex"`), `model`,
+`reasoning_effort` and `allow_unpriced`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
+`--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
+Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
+`goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes neither on Codex and no `reasoning_effort`
+yet. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
@@ -507,8 +511,7 @@ parser, answer cap, retry on capacity and `max_rounds` count apply. Claude is no
 image input and there is no text substitute), so such a stage fails the round. A Codex judge runs read-only with the
 hardened call (`--ignore-rules`, `approval_policy="never"`), is asked for the same JSON as text, has its screenshots attached
 with `-i`, and writes its last message to `judge/turn-<n>.answer.txt` in the thread's folder; the same validator accepts it
-only if it names every criterion once. Codex has no dollar cap and no `model` here (a `model` on a Codex judge or review
-is refused when the config loads, also through a stage that inherits it), so a Codex judge or review is refused before
+only if it names every criterion once. Codex has no dollar cap, so a Codex judge or review is refused before
 anything starts unless its table says `allow_unpriced = true` (`[agents.judge]`, `[agents.review]` or the stage's table,
 which inherits `[agents.review]`'s); the message names the key and the refusal is recorded as a failed judge or round.
 Exception: a review whose provider no `provider` key chose (the default Codex, or P6's `reviewer = "codex"`) keeps

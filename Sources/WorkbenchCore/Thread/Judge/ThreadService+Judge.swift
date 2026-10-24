@@ -133,14 +133,16 @@ extension ThreadService {
                 images: screenshots.map { folder.appendingPathComponent($0) }, workingDirectory: readFolder,
                 outputDirectory: answerFolder, policy: .readOnlyEvidence, spend: (try? spend.get()) ?? .timeoutOnly,
                 purpose: .judge, environment: environment,
-                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), answerFile: answer)
+                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), answerFile: answer,
+                reasoningEffort: agent.reasoningEffort)
         } else {
             request = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: Judge.prompt(for: input),
                 workingDirectory: folder, outputDirectory: project.threadDirectory(id), policy: .readOnlyEvidence,
                 spend: (try? spend.get()) ?? .hardCap(budget),
                 session: .start(proposed: UUID().uuidString.lowercased()), purpose: .judge, environment: environment,
-                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots)
+                limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots,
+                reasoningEffort: agent.reasoningEffort)
         }
         let shown: [String]
         do {

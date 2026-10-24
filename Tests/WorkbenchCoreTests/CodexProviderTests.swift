@@ -74,12 +74,22 @@ private func exit(_ termination: Termination = .exited(0), cause: StopCause = .n
         #expect(request { $0.spend = .hardCap(1) }.validate(against: p)?.kind == .unsupportedCapability, "no dollar cap")
         #expect(request { $0.provider = .claude }.validate(against: p) != nil)
         for tweak: (inout AgentRequest) -> Void in [
-            { $0.model = "gpt" }, { $0.grants = ["Bash(ls:*)"] }, { $0.session = .start(proposed: nil) },
+            { $0.grants = ["Bash(ls:*)"] }, { $0.session = .start(proposed: nil) },
             { $0.answerFile = nil }, { $0.answerFile = URL(fileURLWithPath: "/t/pr-review/round-1.tree/answer.md") },
             { $0.answerFile = URL(fileURLWithPath: "/elsewhere/answer.md") },
         ] {
             #expect(throws: AgentFailure.self) { try p.invocation(for: request(tweak)) }
         }
+    }
+
+    @Test func aModelAndAnEffortAreHandedToCodexOrLeftToItsConfig() throws {
+        let plain = try provider.invocation(for: request()).arguments
+        #expect(!plain.contains("-m") && !plain.contains { $0.contains("model_reasoning_effort") })
+        let chosen = try provider.invocation(for: request { $0.model = "gpt-6-astra"; $0.reasoningEffort = "high" }).arguments
+        let at = try #require(chosen.firstIndex(of: "-m"))
+        #expect(chosen[at + 1] == "gpt-6-astra")
+        #expect(chosen.contains("model_reasoning_effort=\"high\""))
+        #expect(at < (chosen.firstIndex(of: "--") ?? 0), "before the prompt, which `--` protects")
     }
 
     @Test func theLimitsOfThisProviderAreStatedNotHidden() {
