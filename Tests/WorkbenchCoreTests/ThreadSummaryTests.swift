@@ -75,20 +75,22 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
         #expect(store.newestThreadID() == "g-r2")
     }
 
-    @Test func aTornLastLineIsNotAnEvent() async throws {
+    @Test func aLastLineWithoutItsNewlineIsNotAnEvent() async throws {
         let project = try tempProject()
         let store = ThreadStore(project: project)
         let log = try openLog("g-e", in: project)
         try await log.append(.threadCreated)
         await log.close()
-        // A write cut short: a decision with no newline after it was never stored.
+        // A complete event whose newline never reached the disk: the writer's repair drops it, so does a summary.
+        let decision = Event(
+            seq: 2, ts: "2026-10-24T00:00:00.000Z", turn: 0, kind: .reviewDecision, data: ["decision": "accepted"])
         let handle = try FileHandle(forWritingTo: project.eventsURL("g-e"))
         try handle.seekToEnd()
-        try handle.write(contentsOf: Data(#"{"kind":"review.decision","data":{"decision":"accepted"}}"#.utf8))
-        try handle.close()
+        try handle.write(contentsOf: JSONEncoder().encode(decision))
         #expect(store.summary(of: "g-e").isActive)
-        #expect(store.summary(of: "g-e") == ThreadStore.Summary(
-            id: "g-e", createdAt: store.state(of: "g-e").createdAt, lineage: nil, decision: nil))
+        try handle.write(contentsOf: Data("\n".utf8))
+        try handle.close()
+        #expect(store.summary(of: "g-e").decision == "accepted")
     }
 
     @Test func aLineQuotingBothKindsAndTheLastDecisionStillWin() async throws {

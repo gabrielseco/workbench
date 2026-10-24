@@ -109,7 +109,9 @@ extension Commands {
     }
 
     static func statusJSON(id: String, ctx: Context) async -> JSONValue {
-        let state = ctx.store.state(of: id)
+        // Replayed once: the worktree state below reads the same events.
+        let events = (try? EventLogReader.read(at: ctx.project.eventsURL(id)))?.events ?? []
+        let state = ThreadState.derive(from: events, id: id)
         var goalValue: JSONValue = .null
         var base: String?
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {
@@ -136,7 +138,7 @@ extension Commands {
                 ]
             } catch {}
         }
-        let worktreeValue = worktreeJSON(id: id, ctx: ctx)
+        let worktreeValue = worktreeJSON(id: id, ctx: ctx, events: events)
         let progressValue = progressJSON(state: state, id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx) } else { .null }
         return [
@@ -189,12 +191,13 @@ extension Commands {
         ]
     }
 
-    private static func worktreeJSON(id: String, ctx: Context) -> JSONValue {
+    /// `events` is the thread's replayed log when the caller already has it.
+    private static func worktreeJSON(id: String, ctx: Context, events known: [Event]? = nil) -> JSONValue {
         let worktree = ctx.project.worktreesDirectory.appendingPathComponent(id)
         var state = "none"
         if FileManager.default.fileExists(atPath: worktree.path) {
             state = "present"
-        } else if let events = try? EventLogReader.read(at: ctx.project.eventsURL(id)).events,
+        } else if let events = known ?? (try? EventLogReader.read(at: ctx.project.eventsURL(id)).events),
             events.contains(where: { $0.kind == .worktreeRemoved }) {
             state = "removed"
         }
