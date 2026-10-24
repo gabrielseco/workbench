@@ -1,0 +1,15 @@
+base:     main
+claude:   NOT FOUND (/nonexistent/legacy-claude)
+model:    opus
+agent goal:   none (goal drafting stays manual)
+agent run:    claude, model opus
+agent judge:  claude, model haiku
+agent review: codex, model the provider's default
+setup:    none declared: nothing is installed in a new worktree
+check:    none declared: turns will end with no check evidence
+verifier: .claude/skills/verify/SKILL.md
+  model:  opus
+  tools:  Read
+  budget: $1  timeout: 10 min
+  warning: the verifier skill .claude/skills/verify/SKILL.md is not a file in the base commit; commit it first, or fix [verifier] skill
+editor:  none set

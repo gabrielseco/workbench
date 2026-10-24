@@ -195,7 +195,7 @@ enum Commands {
 
         let handlers = installStopHandlers(what: "the doctor run") { doctor.stop() }
         defer { handlers.forEach { $0.cancel() } }
-        out("base:     \(resolved)")
+        if !Output.json { out("base:     \(resolved)") }
         let report: DoctorReport
         do { report = try await doctor.run(base: resolved, options: options) } catch let error as DoctorError {
             switch error {
@@ -203,10 +203,21 @@ enum Commands {
             case .noConfig, .runnerLive, .alreadyRunning: throw CLIError.refused("\(error)")
             }
         }
+        let verdict = report.verdict
+        if Output.json {
+            // A stop is the usual error object; any other result is the one report object (a checkout left behind is
+            // its `cleanup_problem`), with the exit code the text mode has.
+            if verdict == .stopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
+            printJSON(doctorJSON(report))
+            return verdict == .passed ? 0 : FailureKind.failed.code
+        }
         printDoctor(report)
-        if let problem = report.cleanupProblem { return fail(.failed, problem) }
-        if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
-        return report.passed ? 0 : fail(.failed, "the declared setup or check did not pass")
+        switch verdict {
+        case .cleanupFailed(let problem): return fail(.failed, problem)
+        case .stopped: return fail(.stopped, "doctor was stopped; the worktree was removed")
+        case .stepsFailed: return fail(.failed, "the declared setup or check did not pass")
+        case .passed: return 0
+        }
     }
 
     static func goalNew(_ args: [String]) async throws {

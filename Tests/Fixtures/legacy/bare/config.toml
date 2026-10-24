@@ -1,0 +1,3 @@
+[tools]
+available = ["Read", "Edit", "Bash"]
+allowed = ["Read", "Edit"]

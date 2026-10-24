@@ -1,0 +1,7 @@
+claude_path = "/nonexistent/legacy-claude"
+model = "opus"
+judge_model = "haiku"
+
+[tools]
+available = ["Read", "Edit", "Bash"]
+allowed = ["Read", "Edit"]

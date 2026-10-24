@@ -198,6 +198,9 @@ public struct ThreadState: Sendable, Equatable {
     /// The hash the latest `goal.approved` bound, so a plan made for another version reads as stale.
     public var approvedGoalHash: String?
     public var approvedAgent: ApprovedAgent?  // what the latest `goal.approved` bound; nil before P9
+    /// The provider and model each responsibility (`run`, `judge`, `review`) last used, keyed by name. A role that
+    /// never ran has no entry; one whose records predate provider selection reads as its old default (`recorded` false).
+    public var agentUse: [String: AgentUse] = [:]
     /// Usage the `agent.activity` events of non-Claude turns reported, summed per field. A field no provider ever
     /// reported is nil, never 0; nil when none did. Claude's cost is in `totalCostUSD`.
     public var reportedUsage: AgentUsage?
@@ -337,6 +340,7 @@ public struct ThreadState: Sendable, Equatable {
         // A turn is read through one shape: verbatim `claude` lines when it has any, else `agent.activity`.
         let legacyTurns = Set(events.filter { $0.kind == .claude }.map(\.turn))
         for event in events {
+            Self.applyAgent(event, to: &state.agentUse)
             switch event.kind {
             case .threadCreated:
                 state.createdAt = event.ts

@@ -171,6 +171,7 @@ public struct ReviewReport: Sendable, Equatable {
         turns += "  " + Self.costText(state)
         lines.append(turns)
         lines.append(Self.planLine(for: state))
+        lines.append(contentsOf: state.agentLines())
 
         lines.append("")
         lines.append("Criteria")

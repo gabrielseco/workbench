@@ -81,6 +81,8 @@ public struct DoctorAgent: Sendable, Equatable {
     public var resolved: ResolvedAgent?
     /// Where the model came from when it is not the provider's default.
     public var note: String?
+    /// What would be refused or limited before anything is spawned (see `DoctorAgentIssue`).
+    public var issues: [DoctorAgentIssue] = []
 }
 
 /// `[run]` as doctor found it.
@@ -88,6 +90,13 @@ public struct DoctorRun: Sendable, Equatable {
     public var config: RunConfig
     /// Why the app could not be started as configured, when it cannot. A warning, like the verifier's.
     public var problem: String?
+}
+
+public enum DoctorVerdict: Sendable, Equatable {
+    case passed
+    case cleanupFailed(String)
+    case stopped
+    case stepsFailed
 }
 
 public struct DoctorReport: Sendable, Equatable {
@@ -114,6 +123,10 @@ public struct DoctorReport: Sendable, Equatable {
     public var reviewWarnings: [String] = []
     /// Provider and model per responsibility, goal drafting first. Shown only: no stage reads them yet.
     public var agents: [DoctorAgent] = []
+    /// The active thread doctor looked at for the goal checks, nil when there is none or its goal does not parse.
+    public var thread: String?
+    /// What that thread's goal was approved for, nil when it is not approved.
+    public var approvedFor: AgentUse?
     /// What the config's `copy` left out of the throwaway worktree, with why.
     public var copySkipped: [String] = []
     /// Set when the throwaway worktree could not be removed, with what to run by hand.
@@ -133,6 +146,14 @@ public struct DoctorReport: Sendable, Equatable {
                 default: false
                 }
             }
+    }
+
+    /// How the run ended, for the exit code: a checkout left behind comes before a stop, which comes before a step that
+    /// did not pass, so a stop cannot hide a cleanup failure.
+    public var verdict: DoctorVerdict {
+        if let problem = cleanupProblem { return .cleanupFailed(problem) }
+        if wasStopped { return .stopped }
+        return passed ? .passed : .stepsFailed
     }
 
     /// A step ended by a stop, or was skipped because one arrived between steps.
@@ -169,9 +190,9 @@ public final class Doctor: @unchecked Sendable {
         public init() {}
     }
 
-    private let project: Project
+    let project: Project
     private let git: GitRunner
-    private let store: ThreadStore
+    let store: ThreadStore
     private let lock = NSLock()
     private var current: ProcessRun?
     private var stopRequested = false
@@ -239,7 +260,11 @@ public final class Doctor: @unchecked Sendable {
             }
         }
         if let run = config.run { report.run = await readRun(run, verifierOn: config.verifier != nil, base: base) }
-        report.agents = Self.agents(config)
+        let goal = activeGoal()
+        report.thread = goal?.thread
+        report.approvedFor = goal?.approvedFor
+        report.agents = Self.agents(
+            config, searchPath: options.environment["PATH"], goal: goal)
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         var global: String?
@@ -318,17 +343,6 @@ public final class Doctor: @unchecked Sendable {
     /// The review stages as declared: a list without `pr-review`, a rubric file that is not in the checkout, a stage
     /// that reads proof with no verifier to leave any, a table no list names. The project knows its own pipeline,
     /// so each is said and none is refused.
-    static func agents(_ config: Config) -> [DoctorAgent] {
-        [
-            DoctorAgent(
-                role: .goal, resolved: config.resolvedGoalAgent,
-                note: config.resolvedGoalAgent == nil ? "goal drafting stays manual" : "drafting is not enabled yet"),
-            DoctorAgent(role: .run, resolved: config.resolvedRunAgent(), note: nil),
-            DoctorAgent(role: .judge, resolved: config.resolvedJudgeAgent(), note: nil),
-            DoctorAgent(role: .review, resolved: config.resolvedReviewAgent(), note: nil),
-        ]
-    }
-
     static func reviewWarnings(_ review: ReviewConfig, root: URL, hasVerifier: Bool) -> [String] {
         var warnings: [String] = []
         if !review.stages.contains(ReviewConfig.prReviewStage) {

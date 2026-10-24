@@ -1,0 +1,228 @@
+import Foundation
+import Testing
+
+@testable import WorkbenchCore
+
+private let tools = "\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
+
+private func config(_ text: String) throws -> Config { try Config.parse(text + tools) }
+
+private func documentedKeys(_ name: String) throws -> Set<String> {
+    let url = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("docs/spec/cli-json.md")
+    let line = try #require(
+        try String(contentsOf: url, encoding: .utf8).split(separator: "\n").first { $0.hasPrefix("\(name) keys:") })
+    return Set(
+        line.dropFirst("\(name) keys:".count).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+}
+
+private func issues(_ agents: [DoctorAgent], _ role: AgentRole) -> [DoctorAgentIssue] {
+    agents.first { $0.role == role }?.issues ?? []
+}
+
+/// Executables that exist, so only what a test sets up is missing.
+private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"/bin/sh\"\n"
+
+@Suite struct DoctorAgentChecksTests {
+    @Test func policyWithoutControls() throws {
+        let cfg = try config(present)
+        var claude = ClaudeProvider(config: cfg).capabilities
+        claude.policies = [.readOnlyEvidence]
+        let found = Doctor.agents(cfg, searchPath: "/bin") { $0 == .claude ? claude : CodexProvider().capabilities }
+        let run = issues(found, .run).filter { $0.kind == "policy_without_controls" }
+        #expect(run.count == 1 && run[0].severity == .problem && run[0].message.contains("scopedCoding"), "\(run)")
+        #expect(
+            issues(found, .judge).allSatisfy { $0.kind != "policy_without_controls" }, "read-only is still verified")
+        // Codex has no controls for coding: asked to code, it is reported from its own capabilities.
+        let real = Doctor.agents(cfg, searchPath: "/bin")
+        #expect(
+            real.flatMap(\.issues).allSatisfy { $0.kind != "policy_without_controls" },
+            "the shipped pairs are all verified")
+    }
+
+    @Test func missingExecutable() throws {
+        let cfg = try config("claude_path = \"/nowhere/claude\"\n[providers.codex]\nexecutable = \"/bin/sh\"")
+        let found = Doctor.agents(cfg, searchPath: "/bin")
+        let missing = found.flatMap(\.issues).filter { $0.kind == "missing_executable" }
+        #expect(Set(missing.map(\.role)) == [.run, .judge], "claude is run and judge; codex is present: \(missing)")
+        #expect(missing.allSatisfy { $0.severity == .problem && $0.message.contains("/nowhere/claude") })
+        // A bare name is looked up on the environment's PATH, without a shell.
+        let bare = try config("claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"nothing-here\"")
+        let review = issues(Doctor.agents(bare, searchPath: "/bin"), .review)
+        #expect(review.contains { $0.kind == "missing_executable" && $0.message.contains("nothing-here") })
+    }
+
+    @Test func budgetOnUncappedAdapter() throws {
+        let cfg = try config(present)
+        var uncapped = ClaudeProvider(config: cfg).capabilities
+        uncapped.hardDollarCap = false
+        let goal = DoctorGoal(thread: "g-1-x", budgetUSD: Decimal(string: "0.50")!, model: nil, approvedFor: nil)
+        let found = Doctor.agents(cfg, searchPath: "/bin", goal: goal) { _ in uncapped }
+        let run = issues(found, .run).filter { $0.kind == "budget_without_cap" }
+        #expect(run.count == 1 && run[0].message.contains("g-1-x") && run[0].message.contains("0.5"), "\(run)")
+        #expect(issues(found, .judge).allSatisfy { $0.kind != "budget_without_cap" }, "only coding has a goal budget")
+        let capped = Doctor.agents(cfg, searchPath: "/bin", goal: goal)
+        #expect(capped.flatMap(\.issues).allSatisfy { $0.kind != "budget_without_cap" }, "claude enforces it")
+        #expect(
+            Doctor.agents(cfg, searchPath: "/bin", goal: nil) { _ in uncapped }.flatMap(\.issues).allSatisfy {
+                $0.kind != "budget_without_cap"
+            })
+    }
+
+    @Test func theGoalsModelWinsOverTheConfigs() throws {
+        let cfg = try config("model = \"haiku\"\n" + present)
+        func runModel(_ goal: DoctorGoal?) -> String? {
+            Doctor.agents(cfg, searchPath: "/bin", goal: goal).first { $0.role == .run }?.resolved?.model
+        }
+        #expect(runModel(nil) == "haiku")
+        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: "opus", approvedFor: nil)) == "opus")
+        #expect(runModel(DoctorGoal(thread: "g-1-x", budgetUSD: 1, model: nil, approvedFor: nil)) == "haiku")
+    }
+
+    @Test func unconfinedReadsStated() throws {
+        let found = Doctor.agents(try config(present), searchPath: "/bin")
+        let review = issues(found, .review).filter { $0.kind == "unconfined_reads" }
+        #expect(review.count == 1 && review[0].severity == .note && review[0].message.contains("outside the checkout"))
+        #expect(issues(found, .judge).allSatisfy { $0.kind != "unconfined_reads" }, "claude confines reads")
+        #expect(found.flatMap(\.problems).isEmpty, "a stated limit is not a problem")
+    }
+
+    /// A key under [providers.*] or [agents.*] is read by a resolver or refused when the config loads; a key this
+    /// table does not know fails here, so a new one cannot be added without saying which.
+    @Test func everyKeyHonouredOrReported() throws {
+        let providerValues: [String: String] = ["executable": "\"/bin/echo\""]
+        for key in AgentsConfig.providerKeys {
+            let value = try #require(providerValues[key], "[providers.*] key '\(key)' has no case in this test")
+            let cfg = try config("[providers.claude]\n\(key) = \(value)")
+            #expect(cfg.executable(for: .claude) == "/bin/echo", "\(key) is read")
+        }
+        let selectionValues: [String: String] = ["model": "\"haiku\"", "allow_unpriced": "true"]
+        for role in AgentRole.allCases {
+            for key in AgentsConfig.selectionKeys {
+                // A provider other than the role's default: refused where no adapter exists yet, read where one does.
+                let other = role == .review ? "\"claude\"" : "\"codex\""
+                let value = try #require(
+                    key == "provider" ? other : selectionValues[key], "[agents.*] key '\(key)' has no case in this test"
+                )
+                let providerLine = role == .goal && key != "provider" ? "provider = \"claude\"\n" : ""
+                let text = "[agents.\(role.rawValue)]\n\(providerLine)\(key) = \(value)"
+                let cfg: Config
+                do { cfg = try config(text) } catch is ConfigError { continue }  // reported
+                let baseline = try config(role == .goal ? "[agents.goal]\nprovider = \"claude\"" : "")
+                #expect(
+                    resolved(cfg, role) != resolved(baseline, role),
+                    "\(role.rawValue) \(key) is neither read nor refused")
+            }
+        }
+    }
+
+    @Test func allowUnpricedIsReportedWhenNothingActsOnIt() throws {
+        let cfg = try config(present + "[agents.judge]\nallow_unpriced = true\n[agents.review]\nallow_unpriced = true")
+        let found = Doctor.agents(cfg, searchPath: "/bin")
+        let judge = issues(found, .judge).filter { $0.kind == "setting_unused" }
+        #expect(judge.count == 1 && judge[0].message.contains("enforces a dollar limit"))
+        let review = issues(found, .review).filter { $0.kind == "setting_unused" }
+        #expect(review.count == 1 && review[0].message.contains("nothing acts on it yet"))
+        let unused = try config(
+            "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"/bin/sh\"\n[agents.review]\nprovider = \"codex\""
+        )
+        #expect(issues(Doctor.agents(unused, searchPath: "/bin"), .review).allSatisfy { $0.kind != "setting_unused" })
+    }
+
+    private func resolved(_ cfg: Config, _ role: AgentRole) -> ResolvedAgent? {
+        switch role {
+        case .goal: cfg.resolvedGoalAgent
+        case .run: cfg.resolvedRunAgent()
+        case .judge: cfg.resolvedJudgeAgent()
+        case .review: cfg.resolvedReviewAgent()
+        }
+    }
+}
+
+@Suite struct DoctorVerdictTests {
+    private func report(setup: DoctorStep.Outcome, cleanup: String?) -> DoctorReport {
+        DoctorReport(
+            base: "main", claude: nil, claudePath: "claude", model: nil, bashAvailable: true, checkPattern: nil,
+            setup: DoctorStep(command: "make", outcome: setup, tail: "", hint: ""),
+            check: DoctorStep(command: nil, outcome: .notDeclared, tail: "", hint: ""), cleanupProblem: cleanup)
+    }
+
+    @Test func aCleanupFailureComesBeforeAStop() {
+        #expect(report(setup: .stopped, cleanup: "remove it by hand").verdict == .cleanupFailed("remove it by hand"))
+        #expect(report(setup: .stopped, cleanup: nil).verdict == .stopped)
+        #expect(report(setup: .failed(how: "exit 1"), cleanup: nil).verdict == .stepsFailed)
+        #expect(report(setup: .passed, cleanup: nil).verdict == .passed)
+    }
+}
+
+@Suite(.processGate) struct DoctorAgentChecksCLITests {
+    private func doctor(_ extraConfig: String, json: Bool) async throws -> (CLIRan, [String: Any]?) {
+        let fx = try await RunnerFixture(extraConfig: extraConfig)
+        let ran = try await workbenchCLI(
+            ["doctor"] + (json ? ["--json"] : []), in: fx.repo,
+            environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
+        guard json else { return (ran, nil) }
+        return (ran, try JSONSerialization.jsonObject(with: Data(ran.stdout.utf8)) as? [String: Any])
+    }
+
+    @Test func jsonShape() async throws {
+        let (ran, object) = try await doctor("model = \"opus\"", json: true)
+        #expect(ran.code == 0, "\(ran.stdout) \(ran.stderr)")
+        #expect(ran.stdout.split(separator: "\n").count == 1 && ran.stderr.isEmpty, "one object, nothing else")
+        let doc = try #require(object)
+        #expect(Set(doc.keys) == (try documentedKeys("doctor")))
+        #expect(doc["v"] as? Int == 1 && doc["passed"] as? Bool == true)
+        let agents = try #require(doc["agents"] as? [[String: Any]])
+        #expect(agents.compactMap { $0["role"] as? String } == ["goal", "run", "judge", "review"])
+        #expect(agents[0]["provider"] is NSNull && agents[0]["note"] as? String == "goal drafting stays manual")
+        #expect(agents[1]["provider"] as? String == "claude" && agents[1]["model"] as? String == "opus")
+        #expect(agents[3]["provider"] as? String == "codex" && agents[3]["model"] is NSNull)
+        let review = try #require(agents[3]["issues"] as? [[String: Any]])
+        #expect(review.contains { $0["kind"] as? String == "unconfined_reads" && $0["severity"] as? String == "note" })
+        #expect(doc["thread"] is NSNull && doc["approved_for"] is NSNull, "no active thread")
+        #expect((doc["setup"] as? [String: Any])?["result"] as? String == "not_declared")
+    }
+
+    @Test func approvedForOfTheActiveThread() async throws {
+        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let id = try await fx.approvedThread()
+        let ran = try await workbenchCLI(
+            ["doctor", "--json"], in: fx.repo,
+            environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
+        let doc = try #require(JSONSerialization.jsonObject(with: Data(ran.stdout.utf8)) as? [String: Any])
+        #expect(doc["thread"] as? String == id)
+        #expect((doc["approved_for"] as? [String: Any])?["model"] as? String == "opus")
+        let text = try await workbenchCLI(
+            ["doctor"], in: fx.repo, environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
+        #expect(text.stdout.contains("approved: \(id) for claude, model opus"), "\(text.stdout)")
+    }
+
+    @Test func exitCodesUnchanged() async throws {
+        for json in [false, true] {
+            let passing = try await doctor("", json: json)
+            #expect(passing.0.code == 0, "json \(json): \(passing.0.stderr)")
+            let failing = try await doctor("check_command = \"false\"", json: json)
+            #expect(
+                failing.0.code == 1, "json \(json): a failed check exits 1: \(failing.0.stdout) \(failing.0.stderr)")
+            if json {
+                #expect(
+                    failing.1?["passed"] as? Bool == false && failing.1?["error"] == nil,
+                    "the report, not an error object")
+                #expect((failing.1?["check"] as? [String: Any])?["result"] as? String == "failed")
+            }
+        }
+    }
+
+    @Test func problemsDoNotFailDoctorByThemselves() async throws {
+        let (ran, object) = try await doctor("[providers.codex]\nexecutable = \"/nowhere/codex\"", json: true)
+        #expect(ran.code == 0, "a missing executable is reported, the declared steps decide: \(ran.stderr)")
+        let doc = try #require(object)
+        #expect(doc["passed"] as? Bool == true)
+        let problems = try #require(doc["problems"] as? [[String: Any]])
+        #expect(
+            problems.contains { $0["kind"] as? String == "missing_executable" && $0["role"] as? String == "review" })
+        let text = try await doctor("[providers.codex]\nexecutable = \"/nowhere/codex\"", json: false)
+        #expect(text.0.stdout.contains("problem: codex is not installed"), "\(text.0.stdout)")
+    }
+}

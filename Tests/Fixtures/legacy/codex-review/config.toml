@@ -1,0 +1,7 @@
+[review.stage.pr-review]
+reviewer = "codex"
+max_rounds = 2
+
+[tools]
+available = ["Read", "Edit", "Bash"]
+allowed = ["Read", "Edit"]
