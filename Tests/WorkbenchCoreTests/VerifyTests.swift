@@ -44,7 +44,7 @@ func recordLegacyVerify(
 
 @Suite(.processGate) struct ProofCollectorTests {
     @Test func collectingProofIsBoundedInEntriesFileSizeAndTotalBytes() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-proof-\(UUID().uuidString)")
+        let dir = Scratch.url("proof")
         let thread = dir.appendingPathComponent("thread")
         let proof = thread.appendingPathComponent("proof/turn-1")
         try FileManager.default.createDirectory(at: proof, withIntermediateDirectories: true)

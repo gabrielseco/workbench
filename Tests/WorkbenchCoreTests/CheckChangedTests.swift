@@ -10,8 +10,7 @@ import Testing
         let dir: URL
 
         init() throws {
-            dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("wb-changed-\(UUID().uuidString)").resolvingSymlinksInPath()
+            dir = Scratch.url("changed").resolvingSymlinksInPath()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let source = URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

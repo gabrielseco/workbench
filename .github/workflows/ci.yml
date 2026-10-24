@@ -21,6 +21,8 @@ jobs:
         run: |
           command -v swiftlint || brew install swiftlint
           swiftlint lint --quiet
+      - name: Timing script check
+        run: scripts/test-timings-check.sh
       - name: Build
         run: swift build
       - name: Test
@@ -34,6 +36,9 @@ jobs:
           set -o pipefail
           WORKBENCH_SOAK=1 swift test --filter SoakTests 2>&1 | tee soak.log
         timeout-minutes: 15
+      - name: Test leftovers
+        # The tests remove their scratch directory at exit; a root left behind is a leak.
+        run: scripts/check-test-leftovers.sh
       - name: Test timings
         # Also after a failure: that is when the log matters. scripts/ci-report.sh reads the artifact.
         if: ${{ !cancelled() }}

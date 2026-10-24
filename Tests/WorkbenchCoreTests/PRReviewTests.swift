@@ -69,7 +69,7 @@ import Testing
     }
 
     @Test func theProofListGivesEachPNGsPixelSize() throws {
-        let png = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString).png")
+        let png = Scratch.url("wb", ext: "png")
         defer { try? FileManager.default.removeItem(at: png) }
         let header = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13]) + Data("IHDR".utf8)
             + Data([0, 0, 0x07, 0xD0, 0, 0, 0x05, 0x18])

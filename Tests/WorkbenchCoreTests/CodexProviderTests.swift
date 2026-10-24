@@ -92,7 +92,7 @@ private func exit(_ termination: Termination = .exited(0), cause: StopCause = .n
 
 @Suite struct CodexDecoderTests {
     private func answer(_ text: String?) throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("codex-\(UUID().uuidString).md")
+        let url = Scratch.url("codex", ext: "md")
         if let text { try text.write(to: url, atomically: true, encoding: .utf8) }
         return url
     }

@@ -1,0 +1,35 @@
+name: Test profile
+
+# Manual: a serial `swift test` (about 16 minutes on a loaded runner) so each time is the cost of that test alone.
+# A parallel run's times include the wait for a ProcessGate permit. Not part of CI; run it before and after a
+# change that is meant to make the tests faster (docs/plan/P17-faster-tests.md).
+on:
+  workflow_dispatch:
+
+jobs:
+  profile:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner hardware
+        run: |
+          echo "cores: $(sysctl -n hw.ncpu)"
+          swift --version
+      - name: Build
+        run: swift build --build-tests
+      - name: Profile
+        run: scripts/test-profile.sh profile
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f profile/timings.md ] && cat profile/timings.md >> "$GITHUB_STEP_SUMMARY"
+          true
+      - name: Upload profile
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-profile
+          path: profile/
+          if-no-files-found: ignore
+          retention-days: 14

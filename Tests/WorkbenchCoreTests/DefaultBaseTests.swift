@@ -21,7 +21,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 
 /// A scratch repository whose first branch is `branch`, with one commit unless `unborn`.
 private func repo(on branch: String, unborn: Bool = false) async throws -> (URL, GitRunner) {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-base-\(UUID().uuidString)")
+    let dir = Scratch.url("base")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let root = dir.resolvingSymlinksInPath()
     let git = try isolatedGit()

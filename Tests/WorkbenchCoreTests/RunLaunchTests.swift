@@ -299,7 +299,7 @@ extension VerifierFixture {
 
 @Suite(.processGate) struct RunRecoveryTests {
     @Test func anAppLeftOpenByADeadRunnerIsClosedBeforeTheVerifierIs() async throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-runlog-\(UUID().uuidString).jsonl")
+        let url = Scratch.url("runlog", ext: "jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = try EventLogWriter.open(at: url)
         try await log.append(.verifierStarted, turn: 2, data: ["argv": ["claude"]])

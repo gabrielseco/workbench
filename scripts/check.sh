@@ -1,6 +1,6 @@
 #!/bin/sh
 # The single command that says whether the repository is healthy: the CI "Banned process APIs", "SwiftLint",
-# "Build" and "Test" steps (.github/workflows/ci.yml), in that order. Stops at the first step that fails.
+# "Build" and "Test" steps (plus the leftover check) (.github/workflows/ci.yml), in that order. Stops at the first step that fails.
 # The soak test is not run here; CI keeps it as its own step.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -25,4 +25,5 @@ fi
 step 'SwiftLint' swiftlint lint --quiet
 step 'Build' swift build
 step 'Test' swift test
+step 'Test leftovers' scripts/check-test-leftovers.sh
 echo "==> All checks passed"

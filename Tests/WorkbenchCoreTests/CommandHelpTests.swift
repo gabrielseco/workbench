@@ -29,7 +29,7 @@ private func workbench(_ arguments: [String], in directory: URL) async throws ->
 }
 
 private func emptyDirectory() throws -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-help-\(UUID().uuidString)")
+    let url = Scratch.url("help")
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
 }

@@ -29,7 +29,7 @@ private func patchURL(_ id: String, _ fx: RunnerFixture) -> URL {
 
 /// The patch applied to a fresh checkout of the branch tip, which is where it is meant to go.
 private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throws -> URL {
-    let checkout = FileManager.default.temporaryDirectory.appendingPathComponent("abandon-apply-\(UUID().uuidString)")
+    let checkout = Scratch.url("abandon-apply")
     _ = try await fx.git.run(["worktree", "add", "--detach", checkout.path, "refs/heads/workbench/\(id)"], in: fx.repo)
     let applied = try await fx.git.run(["apply", "--binary", patch.path], in: checkout)
     #expect(applied.succeeded, "git apply: \(applied.stderr)")
@@ -125,7 +125,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         let (id, worktree) = try await workedThread(fx)
         try write("new\n", "untracked.txt", in: worktree)
         let before = try await fx.git.run(["rev-parse", "HEAD"], in: worktree).stdout
-        let patch = FileManager.default.temporaryDirectory.appendingPathComponent("p-\(UUID().uuidString).patch")
+        let patch = Scratch.url("p", ext: "patch")
         defer { try? FileManager.default.removeItem(at: patch) }
 
         _ = try await WorktreePatch.save(
@@ -200,7 +200,7 @@ private func apply(_ patch: URL, to id: String, _ fx: RunnerFixture) async throw
         let fx = try await RunnerFixture()
         let (_, worktree) = try await workedThread(fx)
         try write("loose\n", "loose.txt", in: worktree)
-        let patch = FileManager.default.temporaryDirectory.appendingPathComponent("p-\(UUID().uuidString).patch")
+        let patch = Scratch.url("p", ext: "patch")
         defer { try? FileManager.default.removeItem(at: patch) }
 
         let saved = try #require(try await WorktreePatch.save(

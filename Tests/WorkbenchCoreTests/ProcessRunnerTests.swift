@@ -204,8 +204,7 @@ private func readJSON(_ path: String) throws -> [String: Any] {
     @Test func theChildHoldsNoDescriptorsButStdio_notEvenTheEventLog() async throws {
         // An open event log holds a descriptor and an exclusive lock in this process. A child must not
         // inherit either: the intermittent `alreadyOpen` seen in the worktree PR came from exactly this.
-        let logURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("wb-fd-\(UUID().uuidString)/events.jsonl")
+        let logURL = Scratch.url("fd").appendingPathComponent("events.jsonl")
         let log = try EventLogWriter.open(at: logURL)
         try await log.append(.threadCreated)
         let stray = open("/dev/null", O_RDONLY)  // an arbitrary extra descriptor of ours

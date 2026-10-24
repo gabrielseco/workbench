@@ -49,7 +49,7 @@ enum FakeClaude {
     }
 
     static func scratch(_ name: String) -> String {
-        FileManager.default.temporaryDirectory.appendingPathComponent("fc-\(UUID().uuidString)-\(name)").path
+        Scratch.url("fc-\(name)").path
     }
 
     static func alive(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 }

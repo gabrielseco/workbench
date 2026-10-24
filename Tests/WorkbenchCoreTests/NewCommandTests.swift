@@ -9,7 +9,7 @@ private struct NewHome {
     let work: URL
 
     init(globalConfig: String? = nil) throws {
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("wb-newcmd-\(UUID().uuidString)")
+        let base = Scratch.url("newcmd")
         home = base.appendingPathComponent("home").resolvingSymlinksInPath()
         work = base.appendingPathComponent("work").resolvingSymlinksInPath()
         for url in [home, work] { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
