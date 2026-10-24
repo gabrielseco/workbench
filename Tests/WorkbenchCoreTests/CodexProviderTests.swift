@@ -72,7 +72,6 @@ private func exit(_ termination: Termination = .exited(0), cause: StopCause = .n
         let p = provider
         #expect(request().validate(against: p) == nil)
         #expect(request { $0.spend = .hardCap(1) }.validate(against: p)?.kind == .unsupportedCapability, "no dollar cap")
-        #expect(request { $0.policy = .scopedCoding }.validate(against: p)?.kind == .unsupportedCapability, "never codes")
         #expect(request { $0.provider = .claude }.validate(against: p) != nil)
         for tweak: (inout AgentRequest) -> Void in [
             { $0.model = "gpt" }, { $0.grants = ["Bash(ls:*)"] }, { $0.session = .start(proposed: nil) },
@@ -86,7 +85,7 @@ private func exit(_ termination: Termination = .exited(0), cause: StopCause = .n
     @Test func theLimitsOfThisProviderAreStatedNotHidden() {
         let caps = provider.capabilities
         #expect(!caps.hardDollarCap && !caps.confinesReads && caps.imageAttachments && caps.resume == .none)
-        #expect(caps.policies == [.readOnlyEvidence])
+        #expect(caps.policies == [.readOnlyEvidence, .scopedCoding])
     }
 }
 

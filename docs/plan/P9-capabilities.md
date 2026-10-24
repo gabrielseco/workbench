@@ -95,3 +95,44 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
   open.
 - **Goal-file form of explicit no-cap approval:** not answered here; PR 2.
 - **Event version 1 stays additive?** Not answered here; PR 2.
+
+## Codex coding adapter (P9 PR 15, built, not selectable by `run` yet)
+
+`CodexProvider` now accepts `scopedCoding`. The invocation is fixed in code and tested byte for byte:
+
+```
+codex exec --json --color never --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules \
+  -c approval_policy="never" -c sandbox_workspace_write.network_access=false \
+  -s workspace-write -C <worktree> -- <prompt>
+```
+
+- **One-shot, no native resume.** `codex exec resume` takes no `-s` and no `-C`, so a resumed turn cannot state its sandbox on
+  the command line as a first turn does. The adapter declares `resume: .none` and writes no session file (`--ephemeral`); the
+  runner (PR 16) continues a thread with a fresh process and prepared context. Native resume waits for a probe showing
+  `-c sandbox_mode="workspace-write"` holds on a resumed session.
+- **`--ignore-user-config`** is on for coding (not for the review): a coding turn does not inherit the user's sandbox, approval or
+  network settings, and Codex does not write project trust entries into `~/.codex/config.toml`. Login still works.
+- **No dollar cap, no cost.** `turn.completed.usage` has token counts only, so a turn's cost is unknown, never 0. A goal with
+  `budget_usd` is refused by `validate`, naming `spend_policy: timeout_only`.
+- **Success** is `turn.completed` seen and the process ended on its own with status 0.
+- **Refused before any spawn:** a model, extra grants (Claude tool patterns), a caller-supplied or resumed session, images, a
+  relative working directory.
+- **Commits.** `.git` is read-only under `workspace-write`, so the agent cannot commit. `accept` already runs `git add -A` and
+  commits what is pending, so nothing else is needed.
+
+Real probe, run 2026-10-24 with `codex-cli` 0.163.0 through the adapter (`WORKBENCH_CODEX_PROBE=1 swift test --filter
+CodexCodingProbeTests`; ChatGPT login, no dollars). The repository had a commit the remote had not seen and an untracked file,
+so a push or a commit that worked would have shown; each result is read from the filesystem or the remote, not from what the model
+said. Raw streams: `P9-probes/fixtures/codex-coding-*.stdout`, summary `codex-coding-summary.txt`.
+
+| Attempt | Result |
+|---|---|
+| Create a file in the worktree | Allowed |
+| Write a file outside the worktree (under `$HOME`) | Refused (`operation not permitted`) |
+| Write inside `.git` | Refused |
+| `git add -A && git commit` | Refused (`.git/index.lock: Operation not permitted`); HEAD unchanged |
+| `git push origin main` (a local commit the remote lacks) | Refused (`remote unpack failed`); the remote unchanged |
+| `curl` to the internet | No network (`could not resolve host`) |
+
+Not probed: a long edit-and-test loop, reads outside the worktree (Codex does not confine them; see "Findings that change the plan"),
+a resumed session, and Codex's behaviour when `$CODEX_HOME` is unset or unwritable.
