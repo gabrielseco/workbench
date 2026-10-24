@@ -30,7 +30,7 @@ extension Commands {
             throw CLIError.refused("`gh` is not on PATH; it reads the pull request's branch and text")
         }
         let spec = try specPath.map { try readSpec($0) }
-        out("asking Codex to review pull request #\(number) (read-only; this can take several minutes)...")
+        out(ReviewProgress.pullRequest(number, config: config))
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the review") { holder.stop() }
         defer { signals.forEach { $0.cancel() } }
@@ -106,11 +106,7 @@ extension Commands {
             throw CLIError.refused("\(PRReviewRefusal.unknownStage(name, listed: config.review.stages))")
         }
         let isPRReview = name == ReviewConfig.prReviewStage
-        out(
-            isPRReview
-                ? "asking Codex to review the pull request of \(id) (read-only; this can take several minutes)..."
-                : "asking Codex to review the pull request of \(id) as the \(name) stage (read-only; this can take "
-                    + "several minutes)...")
+        out(ReviewProgress.stage(name, thread: id, config: config))
         // Ctrl-C stops Codex instead of leaving it running.
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the review") { holder.stop() }
