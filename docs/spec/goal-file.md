@@ -220,6 +220,10 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   (there is no cap to override). `goal approve`, `status`, `review`, `doctor` and the PR description print
   `no dollar cap: bounded by N min per turn` where a budget would be. **A cost nobody reported is unknown, never 0:**
   `turn.ended` has no `cost_usd`, the thread's total says `unknown` in text and is null in `--json`.
+  **Coding on Codex** (`[agents.run] provider = "codex"`, P9 PR 16) is that case: the goal must say `spend_policy: timeout_only`,
+  and must not set `model` (the Codex adapter takes none, and neither may `[agents.run]`); `run` and `send-back` refuse
+  otherwise, before touching the worktree, naming what to change. A Codex turn is bounded by `turn_timeout_min`. Switching a
+  thread's provider needs `goal approve` again, as for any change to the coding settings.
   **An older Workbench fails closed.** Front matter is strict, so a binary from before this key reports
   `unknown key 'spend_policy'` and refuses the goal instead of running it with a cap it cannot see.
   **Optional:** `model`, a model name or alias (`opus`, `claude-opus-5-5`; no leading `-`, no spaces). It

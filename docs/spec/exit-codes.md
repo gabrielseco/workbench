@@ -100,12 +100,12 @@ opened with `open` shows the goal beside the diff. `.workbench/` is already kept
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the turn succeeded |
-| 1 | `failed` | the turn ended `failed` or `interrupted`, setup failed, or `claude` was not found |
+| 1 | `failed` | the turn ended `failed` or `interrupted`, setup failed, or the coding provider's executable (`claude`, or `codex`) was not found |
 | 2 | `invalid-goal`, `invalid-config` | the goal or config is wrong |
 | 3 | `stopped` | the turn was stopped |
 | 4 | `timed-out` | the turn timed out |
 | 5 | `budget-exceeded` | the turn went over its budget |
-| 6 | `refused` | a live runner, the goal is not approved, a proof names a command the run cannot execute, or the thread already has a successful turn and no `--feedback` was given |
+| 6 | `refused` | a live runner, the goal is not approved, a proof names a command the run cannot execute, or the thread already has a successful turn and no `--feedback` was given; on Codex also a goal with `budget_usd`, a goal or config `model`, and `--budget` (Codex has no dollar cap or model choice; the message says what to change) |
 | 7 | `not-found` | no such thread |
 
 ### `send-back`
@@ -155,7 +155,7 @@ criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sh
 |---|---|---|
 | 0 | | listed, or the decision is on record (also when the same decision already was) |
 | 2 | `usage` | no or more than one of `--once`, `--thread`, `--never`; a scope without a number; a target that is not a number like `3` or `3.2` |
-| 6 | `refused` | the thread has ended or a run is live; a compound named whole (grant a part); text that cannot be written as a fixed pattern; a pattern `[tools] denied` covers or the project's tools cannot take; `unsafe` without `--allow-dangerous`, or `unsafe` with `--thread` |
+| 6 | `refused` | the coding provider is Codex, which takes no tool grants (nothing is recorded); the thread has ended or a run is live; a compound named whole (grant a part); text that cannot be written as a fixed pattern; a pattern `[tools] denied` covers or the project's tools cannot take; `unsafe` without `--allow-dangerous`, or `unsafe` with `--thread` |
 | 7 | `not-found` | no such thread, denial number or part |
 
 ### `judge`

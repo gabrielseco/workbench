@@ -113,6 +113,7 @@ func failureKind(of error: Error) -> FailureKind {
         }
     case let e as RunnerError:
         if case .claudeNotFound = e { return .failed }
+        if case .agentNotFound = e { return .failed }
         if case .goalInvalid = e { return .invalidGoal }
         if case .setupFailed = e { return .failed }
         return .refused
