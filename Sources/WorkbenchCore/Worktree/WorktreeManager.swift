@@ -406,9 +406,15 @@ public struct WorktreeManager: Sendable {
             line.contains("branch '\(base)'") && bare(String(line)).hasSuffix(suffix)
         }
         guard let text = try? String(contentsOf: file, encoding: .utf8),
-            text.split(separator: "\n").contains(where: namesThisBase),
             let modified = try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
         else { return .unknown }
+        let lines = text.split(separator: "\n")
+        // One entry for this base is an explicit fetch of it. A plain `git fetch` writes every branch as
+        // `not-for-merge`. Anything mixed may be an appended fetch that kept an older entry of this base
+        // while the file's mtime moved on, so it dates nothing.
+        let explicit = lines.count == 1 && namesThisBase(lines[0])
+        let plain = lines.contains(where: namesThisBase) && lines.allSatisfy { $0.contains("\tnot-for-merge\t") }
+        guard explicit || plain else { return .unknown }
         return .lastFetch(modified)
     }
 

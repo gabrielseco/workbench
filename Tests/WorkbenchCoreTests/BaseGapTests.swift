@@ -57,4 +57,23 @@ import Testing
         try await repo.run("fetch", "-q", "--no-tags", "elsewhere", "+refs/heads/main:refs/remotes/elsewhere/main")
         #expect(await repo.manager.baseGap(base: "main", fetch: false)?.knownFrom == .unknown)
     }
+
+    @Test func anAppendedFetchThatKeptAnOlderEntryLeavesTheAgeUnknown() async throws {
+        let repo = try await TestRepo()
+        let bare = repo.root.deletingLastPathComponent().appendingPathComponent("p-\(UUID().uuidString).git")
+        _ = try await repo.git.run(["init", "-q", "--bare", bare.path], in: repo.root)
+        try await repo.run("remote", "add", "origin", bare.path)
+        try await repo.run("push", "-q", "origin", "main")
+        try await repo.run("push", "-q", "origin", "main:other")
+        _ = await repo.manager.baseGap(base: "main")
+        // `--append` keeps main's old entry in FETCH_HEAD and moves the file's mtime.
+        try await repo.run("fetch", "-q", "--no-tags", "--append", "origin", "+refs/heads/other:refs/remotes/origin/other")
+        #expect(await repo.manager.baseGap(base: "main", fetch: false)?.knownFrom == .unknown)
+
+        // A plain `git fetch` of everything dates main again.
+        try await repo.run("fetch", "-q", "--no-tags", "origin")
+        if case .lastFetch? = await repo.manager.baseGap(base: "main", fetch: false)?.knownFrom {} else {
+            Issue.record("a plain fetch dates origin/main")
+        }
+    }
 }
