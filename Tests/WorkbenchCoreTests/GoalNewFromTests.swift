@@ -54,7 +54,7 @@ private func write(_ text: String, in fx: RunnerFixture) throws -> String {
         let fx = try await RunnerFixture()
         let result = try await cli(["goal", "new", "copy", "--from", try write(source(), in: fx)], in: fx)
         #expect(result.code == 0, "\(result.text)")
-        #expect(result.text.contains("ignored from the file: id, title, status, base"))
+        #expect(result.text.contains("ignored from the file: id, status, base"))
         let id = try #require(ThreadStore(project: fx.project).threadIDs().first)
         let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
         #expect(goal.budgetUSD == 8)
@@ -76,7 +76,7 @@ private func write(_ text: String, in fx: RunnerFixture) throws -> String {
         let file = source().replacingOccurrences(of: "budget_usd: 8", with: "spend_policy: timeout_only")
         let result = try await cli(["goal", "new", "copy", "--from", try write(file, in: fx)], in: fx)
         #expect(result.code == 0, "\(result.text)")
-        #expect(!result.text.contains("ignored from the file: id, title, status, base, spend_policy"))
+        #expect(!result.text.contains("ignored from the file: id, status, base, spend_policy"))
         let id = try #require(ThreadStore(project: fx.project).threadIDs().first)
         let text = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
         #expect(text.contains("spend_policy: timeout_only") && !text.contains("budget_usd:"), "no budget line beside the key")
