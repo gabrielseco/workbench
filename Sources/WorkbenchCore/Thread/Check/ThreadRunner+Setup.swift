@@ -58,6 +58,14 @@ extension ThreadRunner {
         return await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: ref)
     }
 
+    /// The approval also binds the coding provider and model, which live in the config and not in the goal's hash.
+    /// An approval from before they were recorded binds nothing.
+    static func requireApprovedAgent(state: ThreadState, agent: ResolvedAgent) throws {
+        guard let approved = state.approvedAgent else { return }
+        let now = ApprovedAgent(agent)
+        if approved != now { throw RunnerError.codingSettingsChanged(approved: approved.description, now: now.description) }
+    }
+
     /// A run needs an approved goal, and proofs the tool set can execute. The config is not in the approval
     /// hash, so the proofs are judged again here, where a turn gets paid for.
     static func requireRunnable(

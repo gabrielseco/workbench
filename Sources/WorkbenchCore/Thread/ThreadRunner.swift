@@ -121,6 +121,7 @@ public actor ThreadRunner {
         let goal = goalFile.goal
         let skillAvailable = await verifierSkillAvailable(config: config, goal: goal)
         try Self.requireRunnable(goal: goal, config: config, options: options, verifierSkillAvailable: skillAvailable)
+        try Self.requireApprovedAgent(state: store.state(of: threadID), agent: config.resolvedRunAgent(goalModel: goal.model))
         guard
             let claude = ExecutableResolver.resolve(
                 config.claudePath, searchPath: options.parentEnvironment["PATH"])
@@ -260,13 +261,15 @@ public actor ThreadRunner {
         // The session: decided before spawning and written down first (spike S4).
         let sessionID: String
         var attempts: [Bool]  // resume flags to try, in order
-        if let existing = store.session(of: threadID) {
+        let runAgent = config.resolvedRunAgent(goalModel: goal.model)
+        if let existing = Self.resumableSession(store: store, threadID: threadID, provider: runAgent.provider) {
             sessionID = existing.sessionID
             attempts = existing.confirmed ? [true] : [true, false]
         } else {
             sessionID = UUID().uuidString.lowercased()
             attempts = [false]
-            try store.save(.init(sessionID: sessionID, confirmed: false), for: threadID)
+            try store.save(
+                .init(sessionID: sessionID, confirmed: false, provider: "\(runAgent.provider)"), for: threadID)
         }
 
         var report: TurnReport?
@@ -292,6 +295,23 @@ public actor ThreadRunner {
         // The loop above runs at least once and assigns `report` on every pass.
         // swiftlint:disable:next force_unwrapping
         return report!
+    }
+
+    /// The session a coding turn may resume. The log names the session of the latest turn and the provider that made
+    /// it; `session.json` only says whether that id was confirmed, and is ignored for any other id. A handle made
+    /// by another provider is never resumed: the turn starts a fresh session.
+    static func resumableSession(
+        store: ThreadStore, threadID: String, provider: AgentProviderID
+    ) -> ThreadStore.Session? {
+        let file = store.session(of: threadID)
+        let state = store.state(of: threadID)
+        if let file, let logged = state.sessionID {
+            guard (state.sessionProvider ?? "claude") == "\(provider)" else { return nil }
+            let confirmed = file.sessionID == logged && file.confirmed
+            return ThreadStore.Session(sessionID: logged, confirmed: confirmed, provider: "\(provider)")
+        }
+        guard let file, (file.provider ?? "claude") == "\(provider)" else { return nil }
+        return file
     }
 
     var worktreeManager: WorktreeManager { WorktreeManager(repoRoot: project.root, git: git) }
@@ -363,7 +383,8 @@ public actor ThreadRunner {
         // The recorder writes every line to the log as it comes, verbatim and in order; `held` keeps the first one
         // behind `turn.started`, which carries the pid.
         let recorder = TurnRecorder(
-            log: log, turn: turn, sessionID: sessionID, threadID: threadID, store: store, notify: notify)
+            log: log, turn: turn, sessionID: sessionID, provider: "\(agent.provider)", threadID: threadID, store: store,
+            notify: notify)
         let execution: AgentExecution
         do {
             execution = try AgentRunner.start(provider: provider, request: request, recorder: recorder, held: true)

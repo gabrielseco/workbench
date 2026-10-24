@@ -23,7 +23,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 |---|---|---|
 | `thread.created` | once | `repo`, `base`, `worktree`, `branch`, and for a review follow-up `parent`, `root`, `round` |
 | `goal.saved` | goal changed | `status`, `hash` |
-| `goal.approved` | approve | `hash`, `budget_usd` |
+| `goal.approved` | approve | `hash`, `budget_usd`, `provider`, `model` |
 | `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref` |
 | `claude` | each stream-json line | the raw line, unmodified |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
@@ -85,7 +85,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 |---|---|
 | `thread.created` | `repo`, `base`, `worktree`, `branch`. A follow-up that `ship --review-loop` made also has `parent` (the thread it follows; itself a follow-up from the second round on), `root` (the thread that opened the pull request) and `round` (1 for the root's first follow-up, 2 for the next). Creating a follow-up writes nothing to the parent's log (reviews of the pull request are recorded in whichever thread ran them): the tree of follow-ups is derived from these three fields, and `status`/`review` show it. The follow-up's `pr_review.*` rounds continue the numbering of the whole tree, and `max_rounds` counts the `pr_review.started` events of every thread with the same `root` for the same pull request |
 | `goal.saved` | `status`, `hash` (null for a new draft) |
-| `goal.approved` | `hash`, `budget_usd` |
+| `goal.approved` | `hash`, `budget_usd`, and the coding settings the approval is for: `provider` and `model` (null: the provider's own default), resolved from the goal's `model`, `[agents.run]` and the root `model` at the time. `run` refuses when the config now resolves to another pair ("approved for claude, opus … now claude, haiku") and `goal approve` binds the new pair with another `goal.approved` with the same `hash`, leaving the goal file alone; the latest one counts. Judge, review and drafting settings are not part of it. An approval without the two keys (written before P9) binds nothing and is accepted until the next `goal approve` |
 | `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off, and `plan`: `{sha256, bytes, source}` (`generated` or `edited`) of the plan the prompt carried, or `null` when it carried none (there is none, it was made for another version of the goal, its file is missing or no longer what the log recorded, or `run --no-plan`). A follow-up turn has neither key |
 | `worktree.created` | `path`, `branch`, `base_commit`: the commit the worktree was cut from, also where the project's instructions are read; `copied` (repo-relative paths) when the config's `copy` put files in, absent otherwise |
 | `thread.note` | `text`: the feedback that started a follow-up turn; when the latest check did not pass also `check_turn` and `check_omitted_bytes` (its output, last 16 KiB, is in `prompts/turn-N.md`, not here); `budget_usd` when `workbench send-back --budget` set one for that turn only |
@@ -249,6 +249,16 @@ this change replays as it did; nothing is rewritten.
   and the next open recovers from the last durable start.
 - **`goal.draft.started` / `goal.draft.finished`** are known kinds with the shapes in the table. Nothing writes them
   yet (P9 task 4); the reducer ignores them for turns, approval and review.
+
+## Sessions and approval (P9 PR 9)
+
+A coding session belongs to the provider that made it. `turn.started` names the session (`session_id`) and the `provider`
+(absent in a log from before: Claude); the latest one is the log's session, and `session.json` (`session_id`, `confirmed`,
+and now `provider`, absent meaning Claude) only says whether that id was confirmed. If the two ids differ the log's wins and
+the session counts as unconfirmed, which keeps the safe fresh-session fallback. A session whose provider is not the one the
+config now picks for coding is not resumed: the turn starts a new session (`resume: false`, a new id). Only Claude can run
+today, so this changes nothing for a thread that was never switched; a prepared continuation for a switched thread comes
+with the second provider (P9 task 4). A model change inside Claude keeps the session.
 
 ## Run results
 
