@@ -5,11 +5,12 @@
 #   bash scripts/verify-cli/thread-setup.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/thread-setup.sh   (the same, on a branch that contains origin/main)
 # With a feature branch checked out in the clone, `goal new` without --base must base the thread on main (origin/HEAD)
-# and print `base: main`; `goal new --from` a file with `budget_usd: 7`, `base` and `status` must report 7 in
-# `status --json` and name base and status as ignored; `ship` of an accepted thread whose base exists only in the clone
-# must exit 6 (refused), name the base, and push nothing. Exit 0 only when every step passed, 1 when one failed, 2 when
-# it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 pushes the local base to the origin before `ship`, so the
-# steps that expect the refusal (exit 6, the base named, nothing pushed) must FAIL. The frame is in lib.sh.
+# and print `base: main`; `goal new --from` a file with a `title`, `budget_usd: 7`, `base` and `status` must report that
+# title and 7 in `status --json`, name base and status as ignored and not name title; `ship` of an accepted thread whose
+# base exists only in the clone must exit 6 (refused), name the base, and push nothing. Exit 0 only when every step
+# passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 drops the title from the
+# --from file and pushes the local base to the origin before `ship`, so the title step and the steps that expect the
+# refusal (exit 6, the base named, nothing pushed) must FAIL. The frame is in lib.sh.
 # Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -56,7 +57,7 @@ check "the thread's base is main, not the checked-out $FEATURE" "status --json s
 wbp "$SCRATCH/ab1.out" abandon
 check "abandon ends the first thread" "workbench abandon exited $RC" test "$RC" = 0
 
-# --- 2. goal new --from carries the budget ------------------------------------------------------------------
+# --- 2. goal new --from carries the title and the budget ----------------------------------------------------
 
 cat >"$SCRATCH/goal.md" <<'GOAL'
 ---
@@ -81,14 +82,21 @@ Nothing runs: this thread only checks how it is set up and shipped.
 
 - Any change to the code.
 GOAL
+if [ "$SABOTAGE" = 1 ]; then
+    echo "    VERIFY_CLI_SABOTAGE=1: the --from file loses its title"
+    sed -i '' '/^title: /d' "$SCRATCH/goal.md"
+fi
 wbp "$SCRATCH/new2.out" goal new from-file --from "$SCRATCH/goal.md" --base "$LOCAL_BASE"
 shown "$SCRATCH/new2.out" 5
 check "goal new --from: exit 0" "workbench goal new exited $RC" test "$RC" = 0
-check "goal new --from names the ignored keys" "no 'ignored from the file:' line naming base and status" \
-    bash -c 'grep "^ignored from the file: " "$1" | grep -q "base" && grep "^ignored from the file: " "$1" | grep -q "status"' \
+check "goal new --from names the ignored keys, not title" "no 'ignored from the file:' line naming base and status alone" \
+    bash -c 'l=$(grep "^ignored from the file: " "$1"); [[ $l == *base* && $l == *status* && $l != *title* ]]' \
     _ "$SCRATCH/new2.out"
 ID2=$(created "$SCRATCH/new2.out")
 wbp "$SCRATCH/st2.json" status "$ID2" --json
+title=$(py "print(d['goal']['title'])" <"$SCRATCH/st2.json" 2>/dev/null)
+check "status --json reports the file's title: From another repo" "status --json says title '$title'" \
+    test "$title" = "From another repo"
 budget=$(py "print(d['goal']['budget_usd'])" <"$SCRATCH/st2.json" 2>/dev/null)
 check "status --json reports the file's budget_usd: 7" "status --json says budget_usd '$budget'" \
     python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) == 7 else 1)" "${budget:-0}"
