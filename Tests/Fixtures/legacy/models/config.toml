@@ -1,3 +1,4 @@
+claude_path = "/nonexistent/legacy-claude"
 model = "opus"
 judge_model = "haiku"
 

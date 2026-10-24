@@ -22,7 +22,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict. Only an older log has a verify step (`verify_command` was removed).
 - `agents`: `{run, judge, review}`, each null when that responsibility never ran in the thread, else `{provider, model, recorded,
   stage, spawned, outcome}` for its latest turn or attempt, read from `turn.started`, `judge.started`, `pr_review.started` and
-  `review_stage.started`, and from `agent.attempt.started`/`ended`, which win over the start record of the same turn and round.
+  `review_stage.started`, and from `agent.attempt.started`/`ended`, which follow the start record of their own process; the latest record counts.
   `model` null is the provider's own default. `stage` is the named review stage, `spawned` false for an attempt that was refused
   before anything was started, `outcome` the attempt's `outcome` once it ended (null while open, or when only a start record says it).
   **A log from before these records reads as what the responsibility was then** (`claude` for `run` and `judge`, `codex` for

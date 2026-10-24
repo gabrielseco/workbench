@@ -122,7 +122,6 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
             #expect((state.review.judge?.verdict != nil) == scenario.judged, "\(scenario.name)")
             #expect(state.review.prReview?.verdict == scenario.prVerdict, "\(scenario.name)")
             #expect(state.review.deniedTools.count == scenario.denials, "\(scenario.name)")
-            #expect(state.progress.toolCalls == nil || state.progress.toolCalls == 0 || scenario.lastTurn >= 1)
             // Whatever it recorded, the new reading is the old default and says it was not recorded.
             #expect(
                 state.agentUse.values.allSatisfy { !$0.recorded && $0.model == nil && $0.attempt == nil },

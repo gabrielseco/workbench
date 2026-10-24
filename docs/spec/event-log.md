@@ -145,7 +145,8 @@ events (`AgentActivityEventsTests`).
 
 `ThreadState.agentUse` reads, per responsibility (`run`, `judge`, `review`), the provider and model of the latest record that
 names one: `turn.started`, `judge.started`, `pr_review.started` and `review_stage.started` carry them, and `agent.attempt.started`
-(with its `agent.attempt.ended` outcome) wins over the start record of the same turn and round. `ThreadState.approvedFor` is the
+(with its `agent.attempt.ended` outcome) follows the start record of its own process, so the latest record counts: a rerun, a
+later round or another review stage replaces what an earlier one showed. `ThreadState.approvedFor` is the
 latest `goal.approved`. A log from before any of these records reads as what the responsibility was then, never as blank or an
 error: Claude with the provider's default model for `run` and `judge`, Codex for `review`, and an approval without `provider` and
 `model` as Claude's default; each is marked `recorded: false` in `status --json` and `review --json` (cli-json.md) and shown as

@@ -1,5 +1,5 @@
 base:     main
-claude:   NOT FOUND (claude)
+claude:   NOT FOUND (/nonexistent/legacy-claude)
 model:    opus
 agent goal:   none (goal drafting stays manual)
 agent run:    claude, model opus

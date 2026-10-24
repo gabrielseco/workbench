@@ -61,15 +61,19 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
         #expect(
             use?.stage == "design" && use?.outcome == nil && use?.attempt == nil,
             "the design start is the latest: \(String(describing: use))")
-        // The same stage's start before its attempt still gives way to it.
-        let same = [
-            events[2],
-            ev(
-                4, 1, .agentAttemptStarted,
-                ["attempt": "a4", "role": "review", "stage": "design", "round": 1, "provider": "codex", "model": .null]),
-            ev(5, 1, .reviewStageStarted, ["stage": "design", "round": 1, "provider": "codex", "model": .null]),
+    }
+
+    @Test func aJudgeRerunReplacesTheEarlierJudgment() {
+        let events = [
+            ev(1, 1, .judgeStarted, ["provider": "claude", "model": "haiku"]),
+            ev(2, 1, .agentAttemptStarted, ["attempt": "a2", "role": "judge", "provider": "claude", "model": "haiku"]),
+            ev(3, 1, .agentAttemptEnded, ["attempt": "a2", "role": "judge", "outcome": "succeeded"]),
+            ev(4, 1, .judgeRan, ["ok": true]),
+            // `judge --again --model opus`, killed before its attempt was written.
+            ev(5, 1, .judgeStarted, ["provider": "claude", "model": "opus"]),
         ]
-        #expect(ThreadState.derive(from: same, id: "t").agentUse["review"]?.attempt == "a4")
+        let use = ThreadState.derive(from: events, id: "t").agentUse["judge"]
+        #expect(use?.model == "opus" && use?.outcome == nil && use?.attempt == nil, "\(String(describing: use))")
     }
 
     @Test func derivesApprovedFor() {

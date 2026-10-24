@@ -95,17 +95,11 @@ extension ThreadState {
         return lines
     }
 
-    /// Folds one record into `agentUse`. An attempt record wins over the start record of the same turn, round and
-    /// stage, which carries the same provider and model; a start of another stage or round replaces it.
+    /// Folds one record into `agentUse`: the latest record that names a provider counts. Every writer puts the start
+    /// record (`turn.started`, `judge.started`, ...) before the attempt of its process, so the attempt completes it with
+    /// its stage, `spawned` and outcome, and a rerun's or another stage's start replaces the earlier one.
     static func applyAgent(_ event: Event, to uses: inout [String: AgentUse]) {
-        func start(_ role: String) {
-            let use = AgentUse(start: event, role: role)
-            if let known = uses[role], known.attempt != nil {
-                let sameStart = known.turn == use.turn && known.round == use.round && known.stage == use.stage
-                if sameStart { return }
-            }
-            uses[role] = use
-        }
+        func start(_ role: String) { uses[role] = AgentUse(start: event, role: role) }
         switch event.kind {
         case .turnStarted: start("run")
         case .judgeStarted: start("judge")

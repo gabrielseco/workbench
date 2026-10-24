@@ -140,6 +140,22 @@ private let present = "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable 
     }
 }
 
+@Suite struct DoctorVerdictTests {
+    private func report(setup: DoctorStep.Outcome, cleanup: String?) -> DoctorReport {
+        DoctorReport(
+            base: "main", claude: nil, claudePath: "claude", model: nil, bashAvailable: true, checkPattern: nil,
+            setup: DoctorStep(command: "make", outcome: setup, tail: "", hint: ""),
+            check: DoctorStep(command: nil, outcome: .notDeclared, tail: "", hint: ""), cleanupProblem: cleanup)
+    }
+
+    @Test func aCleanupFailureComesBeforeAStop() {
+        #expect(report(setup: .stopped, cleanup: "remove it by hand").verdict == .cleanupFailed("remove it by hand"))
+        #expect(report(setup: .stopped, cleanup: nil).verdict == .stopped)
+        #expect(report(setup: .failed(how: "exit 1"), cleanup: nil).verdict == .stepsFailed)
+        #expect(report(setup: .passed, cleanup: nil).verdict == .passed)
+    }
+}
+
 @Suite(.processGate) struct DoctorAgentChecksCLITests {
     private func doctor(_ extraConfig: String, json: Bool) async throws -> (CLIRan, [String: Any]?) {
         let fx = try await RunnerFixture(extraConfig: extraConfig)

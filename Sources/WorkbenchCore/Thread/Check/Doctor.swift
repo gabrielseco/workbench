@@ -92,6 +92,13 @@ public struct DoctorRun: Sendable, Equatable {
     public var problem: String?
 }
 
+public enum DoctorVerdict: Sendable, Equatable {
+    case passed
+    case cleanupFailed(String)
+    case stopped
+    case stepsFailed
+}
+
 public struct DoctorReport: Sendable, Equatable {
     public var base: String
     /// Where `claude_path` resolved, or nil.
@@ -139,6 +146,14 @@ public struct DoctorReport: Sendable, Equatable {
                 default: false
                 }
             }
+    }
+
+    /// How the run ended, for the exit code: a checkout left behind comes before a stop, which comes before a step that
+    /// did not pass, so a stop cannot hide a cleanup failure.
+    public var verdict: DoctorVerdict {
+        if let problem = cleanupProblem { return .cleanupFailed(problem) }
+        if wasStopped { return .stopped }
+        return passed ? .passed : .stepsFailed
     }
 
     /// A step ended by a stop, or was skipped because one arrived between steps.
