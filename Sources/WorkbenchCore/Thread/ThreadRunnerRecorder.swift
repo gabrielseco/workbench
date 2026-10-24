@@ -64,10 +64,11 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
         }
     }
 
-    /// The line goes to the transcript; the turn's `result` line also to the log.
+    /// The line goes to the transcript; the turn's `result` line also to the log, and first: a runner killed between
+    /// the two writes then loses one line of history, not the result that cost and denials are derived from.
     private func store(_ text: String) async throws {
-        try transcript.append(text)
         if Self.isResult(text) { try await log.appendClaudeLine(text, turn: turn) }
+        try transcript.append(text)
     }
 
     private static func isResult(_ text: String) -> Bool {

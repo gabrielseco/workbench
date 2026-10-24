@@ -106,4 +106,24 @@ private func raw(_ n: Int) -> String { #"{"type":"assistant","n":\#(n)}"# }
         #expect(ended.data["transcript"] == nil)
         await log.close()
     }
+
+    @Test func aResultLineReachesTheLogEvenIfTheTranscriptCannotBeWritten() async throws {
+        let directory = try thread()
+        let log = try EventLogWriter.open(at: directory.appendingPathComponent("events.jsonl"))
+        try await log.append(.turnStarted, turn: 1)
+        // The transcript's folder is a file, so its first write fails: the runner dying between the two writes.
+        let blocked = directory.appendingPathComponent("transcript")
+        try Data().write(to: blocked)
+        let store = ThreadStore(project: Project(root: directory))
+        let recorder = TurnRecorder(
+            log: log, transcript: TranscriptWriter(url: blocked.appendingPathComponent("turn-1.jsonl")), turn: 1,
+            sessionID: "s", provider: "claude", threadID: "t", store: store, notify: { _ in })
+
+        await #expect(throws: (any Error).self) {
+            try await recorder.record(.line(#"{"type":"result","permission_denials":[]}"#), activity: [])
+        }
+        await log.close()
+        let events = try EventLogReader.read(at: directory.appendingPathComponent("events.jsonl")).events
+        #expect(events.contains { $0.kind == .claude && $0.data["type"] == "result" }, "denials are derived from it")
+    }
 }
