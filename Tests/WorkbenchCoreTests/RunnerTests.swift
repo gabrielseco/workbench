@@ -26,7 +26,9 @@ struct RunnerFixture {
 
     init(extraConfig: String = "", sourceLocation: SourceLocation = #_sourceLocation) async throws {
         expectProcessGate("RunnerFixture", sourceLocation: sourceLocation)
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("wb-run-\(UUID().uuidString)")
+        // The repo sits in a directory of its own: the fakes tests put beside it (`gh-*`, `codex-*`, `origin-*`)
+        // go there too and are removed with the run, instead of piling up in the temporary directory.
+        let base = Scratch.url("run").appendingPathComponent("repo")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         repo = base.resolvingSymlinksInPath()
         git = try isolatedGit()

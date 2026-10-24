@@ -10,8 +10,7 @@ struct CheckScript {
     let directory: URL
 
     init() throws {
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("wb-check-\(UUID().uuidString)").resolvingSymlinksInPath()
+        directory = Scratch.url("check").resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -447,7 +446,7 @@ private let truncationMarker = "[output truncated at 1048576 bytes]\n"
 
 @Suite(.processGate) struct CheckEventTests {
     private func tempLog() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString)")
+        let dir = Scratch.url("wb")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("events.jsonl")
     }

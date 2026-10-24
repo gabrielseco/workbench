@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 private func scratch(_ label: String = "new") throws -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(label)-\(UUID().uuidString)")
+    let url = Scratch.url(label)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url.resolvingSymlinksInPath()
 }

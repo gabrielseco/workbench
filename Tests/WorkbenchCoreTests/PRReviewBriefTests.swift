@@ -72,9 +72,9 @@ import Testing
     }
 
     @Test func aChecklistThatIsASymlinkOutOfTheTreeIsNotRead() throws {
-        let tree = FileManager.default.temporaryDirectory.appendingPathComponent("tree-\(UUID().uuidString)")
+        let tree = Scratch.url("tree")
         try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
-        let secret = FileManager.default.temporaryDirectory.appendingPathComponent("secret-\(UUID().uuidString)")
+        let secret = Scratch.url("secret")
         try "top secret".write(to: secret, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(at: tree.appendingPathComponent("REVIEW.md"), withDestinationURL: secret)
         #expect(ThreadService.readChecklist("REVIEW.md", in: tree) == nil)

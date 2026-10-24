@@ -85,7 +85,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
 
 @Suite(.processGate) struct VerifierLogTests {
     @Test func anOpenVerifierIsClosedOnceWithItsTurn() async throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vlog-\(UUID().uuidString).jsonl")
+        let url = Scratch.url("vlog", ext: "jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = try EventLogWriter.open(at: url)
         #expect(await log.hasOpenVerifier == false)
@@ -106,7 +106,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
     }
 
     @Test func aStartWithoutAnEndIsStillOpenAfterAReopen() async throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vlog-\(UUID().uuidString).jsonl")
+        let url = Scratch.url("vlog", ext: "jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = try EventLogWriter.open(at: url)
         try await log.append(.verifierStarted, turn: 1, data: [:])
@@ -159,7 +159,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture, fake: String = "")
 
 @Suite(.processGate) struct VerifierFollowTests {
     @Test func aLogJoinedWhileTheVerifierRunsReportsItAsOpen() async throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-vfollow-\(UUID().uuidString).jsonl")
+        let url = Scratch.url("vfollow", ext: "jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = try EventLogWriter.open(at: url)
         try await log.append(.verifierStarted, turn: 2, data: [:])

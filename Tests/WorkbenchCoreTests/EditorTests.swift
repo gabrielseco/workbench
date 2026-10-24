@@ -8,7 +8,7 @@ private struct Bin {
     let url: URL
 
     init() throws {
-        url = FileManager.default.temporaryDirectory.appendingPathComponent("wb-editor-\(UUID().uuidString)")
+        url = Scratch.url("editor")
             .resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
@@ -208,7 +208,7 @@ private struct Bin {
     }
 
     @Test func whatALauncherPrintsIsKeptToItsLastFewKilobytes() throws {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("wb-trim-\(UUID().uuidString)")
+        let file = Scratch.url("trim")
         defer { try? FileManager.default.removeItem(at: file) }
         let fd = open(file.path, O_RDWR | O_CREAT | O_APPEND, 0o600)
         defer { close(fd) }

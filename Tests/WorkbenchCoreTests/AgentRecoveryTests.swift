@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 private func tempLog() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-\(UUID().uuidString)")
+    let dir = Scratch.url("wb")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir.appendingPathComponent("events.jsonl")
 }

@@ -38,7 +38,7 @@ struct OpenFixture {
     init(worktree: Bool = true) async throws {
         fx = try await RunnerFixture()
         id = try await fx.approvedThread()
-        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("wb-open-\(UUID().uuidString)")
+        let scratch = Scratch.url("open")
             .resolvingSymlinksInPath()
         home = scratch.appendingPathComponent("home")
         bin = scratch.appendingPathComponent("bin")

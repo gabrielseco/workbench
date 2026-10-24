@@ -19,7 +19,7 @@ private struct DiffRepo {
     var provider: DiffProvider { DiffProvider(git: git) }
 
     init() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wb-diff-\(UUID().uuidString)")
+        let dir = Scratch.url("diff")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         root = dir.resolvingSymlinksInPath()
         git = try testGit()
