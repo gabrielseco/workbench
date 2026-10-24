@@ -15,6 +15,8 @@ public struct Progress: Sendable, Equatable {
     /// streams no tool or denial events says nothing about them): the count is then unknown, not 0.
     public var toolCallsKnown = true
     public var deniedCallsKnown = true
+    /// Activity of the turn was left out (a `dropped` record): later items do not make the counts known again.
+    var hasGap = false
 
     /// Seconds since `turnStartedAt`, nil when there is no turn or the stamp does not parse.
     public func elapsed(now: Date) -> TimeInterval? { Self.seconds(from: turnStartedAt, to: now) }
@@ -113,17 +115,18 @@ extension ThreadState {
         switch type {
         case "tool":
             state.progress.toolCalls += 1
-            state.progress.toolCallsKnown = true
+            state.progress.toolCallsKnown = !state.progress.hasGap
             let name = safeLine(event.data["name"]?.stringValue ?? "tool", limit: 40)
             let summary = event.data["summary"]?.stringValue.map { " " + safeLine($0, limit: 60) } ?? ""
             state.progress.note(event.ts, "tool_use \(name)\(summary)")
         case "dropped":
             // Items were left out, so the counts so far are a floor and no longer known; the marker is still a sign of life.
             (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
+            state.progress.hasGap = true
             state.progress.note(event.ts, "\(provider) \(event.data["count"]?.intValue ?? 0) activity item(s) not recorded")
         case "permission_denied":
             state.progress.deniedCalls += 1
-            state.progress.deniedCallsKnown = true
+            state.progress.deniedCallsKnown = !state.progress.hasGap
             state.progress.note(event.ts, "tool denied")
         default:
             state.progress.note(event.ts, "\(provider) \(safeLine(type, limit: 30))")

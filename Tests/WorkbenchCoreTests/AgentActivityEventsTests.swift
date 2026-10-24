@@ -98,6 +98,18 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(state.reportedUsage == AgentUsage(inputTokens: Int.max), "a negative count is ignored")
     }
 
+    @Test func aGapKeepsTheCountsUnknown() {
+        let progress = ThreadState.derive(
+            from: [
+                ev(1, 0, .threadCreated), ev(2, 1, .turnStarted, ["provider": "codex"]),
+                ev(3, 1, .agentActivity, activity("tool", ["name": "shell"])),
+                ev(4, 1, .agentActivity, activity("dropped", ["count": 40])),
+                ev(5, 1, .agentActivity, activity("tool", ["name": "shell"])),
+                ev(6, 1, .agentActivity, activity("permission_denied", ["tool": "Bash"])),
+            ], id: "t").progress
+        #expect(!progress.toolCallsKnown && !progress.deniedCallsKnown, "what was dropped cannot be counted back in")
+    }
+
     @Test func aReplayThroughTheFileMatchesTheEventsWithoutActivity() async throws {
         let url = try tempDir().appendingPathComponent("events.jsonl")
         let log = try EventLogWriter.open(at: url)
