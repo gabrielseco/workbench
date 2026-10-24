@@ -17,6 +17,8 @@ OUTSIDE_DIRS = []
 CODEX_VARIANTS = {
     "asconfigured": [],
     "hardened": ["--ignore-user-config", "--ignore-rules", "-c", 'approval_policy="never"'],
+    # Exactly what PRReview.arguments passes: the user's config still loads, rules and approvals are off.
+    "review": ["--ignore-rules", "-c", 'approval_policy="never"'],
 }
 CODEX_COMMON = ["--json", "--color", "never", "--skip-git-repo-check"]
 

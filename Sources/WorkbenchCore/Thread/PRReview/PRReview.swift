@@ -72,6 +72,9 @@ public enum PRReview {
     /// The command line. The review text is in the brief file, not here: argv only points at it.
     static func arguments(tree: String, answer: String, brief: String, images: [String] = []) -> [String] {
         ["exec", "-s", "read-only", "-C", tree, "--color", "never", "--ephemeral", "-o", answer]
+            // The user's execpolicy rules and approval settings can let a command the sandbox refused run outside
+            // it (P9 task 1: `git push` went through `-s read-only`). Rules are ignored and nothing is approved.
+            + ["--ignore-rules", "-c", "approval_policy=\"never\""]
             + images.flatMap { ["-i", $0] }
             // `-i` takes a list of files: without `--` the prompt is read as one more image and Codex finds none.
             + ["--"]

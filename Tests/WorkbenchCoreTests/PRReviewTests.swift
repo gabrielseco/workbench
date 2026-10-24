@@ -65,6 +65,15 @@ import Testing
         #expect(!args.contains("danger-full-access") && !args.contains("workspace-write"))
     }
 
+    @Test func theUsersRulesAndApprovalSettingsCannotRunAnythingOutsideTheSandbox() {
+        let args = PRReview.arguments(tree: "/t/tree", answer: "/t/a.md", brief: "/t/brief.md", images: ["/p/one.png"])
+        #expect(args.contains("--ignore-rules"))
+        let at = args.firstIndex(of: "-c")
+        #expect(at != nil && args[at! + 1] == "approval_policy=\"never\"", "\(args)")
+        #expect(args.firstIndex(of: "--ignore-rules")! < args.firstIndex(of: "--")!, "options come before the prompt")
+        #expect(!args.contains("--ignore-user-config"), "the user's model and login settings still apply")
+    }
+
     @Test func theBriefPointerFollowsTheImagesAfterADoubleDash() {
         // `codex exec -i` takes a list of files: a prompt right after it is read as one more image and Codex
         // exits with "No prompt provided via stdin".
@@ -171,6 +180,7 @@ import Testing
         let call = try #require(r.codex.calls.first)
         #expect(call.hasPrefix("exec -s read-only -C "))
         #expect(call.contains("--color never --ephemeral -o "))
+        #expect(call.contains("--ignore-rules -c approval_policy=\"never\""), "nothing runs outside the sandbox: \(call)")
         #expect(!call.contains("hello") && !call.contains("Add a greeting"), "no review text in argv: \(call)")
         let tree = try #require(call.split(separator: " ").drop { $0 != "-C" }.dropFirst().first)
         #expect(tree.hasSuffix("/pr-review/round-1.tree") && !tree.contains("/worktrees/"))
