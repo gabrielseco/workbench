@@ -141,7 +141,7 @@ import Testing
         try await logTurn(fx, id, session: "22222222-2222-2222-2222-222222222222", provider: "claude")
         try store.save(.init(sessionID: "from-file", confirmed: true, provider: "claude"), for: id)
         let chosen = try #require(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude))
-        #expect(chosen.sessionID == "22222222-2222-2222-2222-222222222222" && !chosen.confirmed, "an unconfirmed id keeps the safe fallback")
+        #expect(chosen.sessionID == "22222222-2222-2222-2222-222222222222" && !chosen.confirmed, "unconfirmed: safe fallback")
         let logged = "22222222-2222-2222-2222-222222222222"
         try store.save(.init(sessionID: logged, confirmed: true, provider: "claude"), for: id)
         #expect(ThreadRunner.resumableSession(store: store, threadID: id, provider: .claude)?.confirmed == true)
