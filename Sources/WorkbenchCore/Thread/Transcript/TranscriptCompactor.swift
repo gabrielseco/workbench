@@ -76,6 +76,12 @@ public struct TranscriptCompactor: Sendable {
         if let pid = store.runnerPID(id: id) { throw Failure.running(pid: pid) }
 
         let url = project.eventsURL(id)
+        // Looked at before the writer is opened: opening repairs a torn tail, which a dry run must not do.
+        let contents = try EventLogReader.read(at: url)
+        guard contents.isHealthy else {
+            let why = contents.truncatedTail != nil ? "it ends in a half-written event" : "\(contents.problems.count) problem(s)"
+            throw Failure.unhealthy(why)
+        }
         let writer: EventLogWriter
         do { writer = try EventLogWriter.open(at: url) } catch EventLogError.corrupt(let problems) {
             throw Failure.unhealthy("\(problems.count) problem(s)")
@@ -280,13 +286,19 @@ public struct TranscriptCompactor: Sendable {
 }
 
 extension ThreadState {
-    /// The state with what a rewrite of the log is allowed to change taken out: the `seq` it numbers events by, and the
-    /// progress folded from stream lines (an ended thread's is not shown).
+    /// The state with what a rewrite of the log is allowed to change taken out: the `seq` it numbers events by (and the
+    /// attempt ids made of one), and the progress folded from stream lines (an ended thread's is not shown).
     fileprivate var comparable: ThreadState {
         var copy = self
         copy.review.notes = copy.review.notes.map { var note = $0; note.seq = 0; return note }
         copy.review.deniedTools = copy.review.deniedTools.map { var tool = $0; tool.seq = 0; return tool }
         copy.progress = Progress()
+        // An attempt is named a<seq of its start>, and the seq changes.
+        copy.agentUse = copy.agentUse.mapValues { use in
+            var use = use
+            use.attempt = use.attempt == nil ? nil : "a"
+            return use
+        }
         return copy
     }
 }

@@ -55,12 +55,23 @@ public actor EventLogWriter {
             throw EventLogError.io("cannot create \(url.deletingLastPathComponent().path): \(error)")
         }
 
-        let fd = Darwin.open(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
-        guard fd >= 0 else {
-            throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
+        // The file can be replaced while this waits for the lock (`compact` renames a new log over the old one): the
+        // lock is then on a file nobody reads any more, so a writer that finds the path is another file starts again.
+        var opened: (fd: Int32, handle: FileHandle)?
+        for _ in 0..<5 {
+            let fd = Darwin.open(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+            guard fd >= 0 else {
+                throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
+            }
+            let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+            try acquireLock(fd: fd, path: url.path, timeout: lockTimeout)
+            var held = stat(), named = stat()
+            if fstat(fd, &held) == 0, stat(url.path, &named) == 0, held.st_ino == named.st_ino, held.st_dev == named.st_dev {
+                opened = (fd, handle)
+                break
+            }
         }
-        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        try acquireLock(fd: fd, path: url.path, timeout: lockTimeout)
+        guard let (fd, handle) = opened else { throw EventLogError.io("\(url.path) keeps being replaced") }
 
         let existing: Data
         do { existing = try handle.readToEnd() ?? Data() } catch {

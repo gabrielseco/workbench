@@ -246,4 +246,74 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         let kept = try #require(after.events.last { $0.kind == .turnEnded && $0.turn == 2 })
         #expect(kept.data["transcript"] == summary.json)
     }
+
+    @Test func aTornTailIsRefusedByADryRunTooAndNothingIsRepaired() async throws {
+        let thread = try await legacyThread()
+        let url = thread.project.eventsURL(thread.id)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"v":1,"seq":99,"ts":"x","turn":0,"kind":"thre"#.utf8))
+        try handle.close()
+        let before = try Data(contentsOf: url)
+
+        for dryRun in [true, false] {
+            await #expect(throws: TranscriptCompactor.Failure.self) {
+                try await TranscriptCompactor(project: thread.project).compact(id: thread.id, dryRun: dryRun)
+            }
+        }
+        #expect(try Data(contentsOf: url) == before, "the half-written event is still there for its owner to see")
+        #expect(!FileManager.default.fileExists(atPath: url.appendingPathExtension("truncated").path))
+    }
+
+    @Test func attemptsInSeveralTurnsKeepTheirIdsOnceTheEarlierTurnsLinesAreGone() async throws {
+        let project = Project(root: Scratch.url("attempts"))
+        let id = "g-attempts"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        for turn in 1...2 {
+            try await log.append(.turnStarted, turn: turn)
+            let attempt = try await log.startAttempt(role: "run", turn: turn, provider: AgentProviderID("claude")!, model: nil)
+            for n in 0..<10 { try await log.appendClaudeLine(#"{"type":"stream_event","n":\#(n)}"#, turn: turn) }
+            try await log.appendClaudeLine(#"{"type":"result","permission_denials":[]}"#, turn: turn)
+            try await log.endAttempt(attempt, outcome: "succeeded")
+            try await log.append(.turnEnded, turn: turn, data: ["result": "succeeded"])
+        }
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+
+        guard case .compacted = try await TranscriptCompactor(project: project).compact(id: id) else {
+            Issue.record("not compacted")
+            return
+        }
+        let events = try read(project, id).events
+        let starts = events.filter { $0.kind == .agentAttemptStarted }
+        let ends = events.filter { $0.kind == .agentAttemptEnded }
+        #expect(starts.count == 2 && ends.count == 2)
+        #expect(starts.allSatisfy { $0.data["attempt"] == .string("a\($0.seq)") })
+        #expect(starts.map { $0.data["attempt"] } == ends.map { $0.data["attempt"] })
+        #expect(ThreadState.derive(from: events, id: id).agentUse["run"]?.attempt == starts[1].data["attempt"]?.stringValue)
+    }
+
+    @Test func aWriterWaitingForTheLogEndsUpOnTheLogThatReplacedIt() async throws {
+        let directory = Scratch.url("replaced")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("events.jsonl")
+        let first = try EventLogWriter.open(at: url)
+        try await first.append(.threadCreated)
+        let waiting = Task.detached { try EventLogWriter.open(at: url, lockTimeout: 20) }
+        try await Task.sleep(for: .milliseconds(300))
+
+        // The log is replaced by another file, as `compact` does, and only then is the old one let go.
+        let replacement = directory.appendingPathComponent("events.jsonl.new")
+        try Data(contentsOf: url).write(to: replacement)
+        #expect(Darwin.rename(replacement.path, url.path) == 0)
+        await first.close()
+
+        let second = try await waiting.value
+        try await second.append(.threadNote, data: ["text": "written after the swap"])
+        await second.close()
+        let events = try EventLogReader.read(at: url).events
+        let kinds = events.map(\.kind)
+        #expect(kinds == [.threadCreated, .threadNote], "the event is in the log that is there, not in the one that was")
+    }
 }
