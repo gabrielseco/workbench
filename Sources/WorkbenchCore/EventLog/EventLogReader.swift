@@ -20,8 +20,28 @@ public struct EventLogContents: Sendable {
     public var isHealthy: Bool { problems.isEmpty && truncatedTail == nil }
 }
 
+/// How many times each log file was replayed. A command that replays the same log twice pays for it twice
+/// (a log is megabytes of `claude` lines), so tests assert on this count instead of on a wall clock.
+public enum EventLogReadCount {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var counts: [String: Int] = [:]
+
+    static func record(_ url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        counts[url.path, default: 0] += 1
+    }
+
+    public static func reads(of url: URL) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return counts[url.path] ?? 0
+    }
+}
+
 public enum EventLogReader {
     public static func read(at url: URL) throws -> EventLogContents {
+        EventLogReadCount.record(url)
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
             throw EventLogError.io("cannot read \(url.path): \(error.localizedDescription)")

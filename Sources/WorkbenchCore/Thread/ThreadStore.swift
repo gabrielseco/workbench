@@ -50,33 +50,62 @@ public struct ThreadStore: Sendable {
     /// Reads `createdAt`, `lineage` and `decision` the way `ThreadState.derive` does, but decodes only the
     /// `thread.created` and `review.decision` lines. A log can be megabytes of verbatim `claude` lines, and
     /// listing threads must not parse all of them; a line that merely quotes those kinds is decoded and ignored.
+    /// The search is `memmem` over a copy of the file, not a mapping (the writer truncates a torn tail, and a
+    /// page of a mapping past the new end raises SIGBUS): splitting into lines and searching each through Foundation
+    /// cost about a second over 94 MB of logs.
     public func summary(of id: String) -> Summary {
         var summary = Summary(id: id)
         guard let data = try? Data(contentsOf: project.eventsURL(id)) else { return summary }
-        let needles = [Data("thread.created".utf8), Data("review.decision".utf8)]
         let decoder = JSONDecoder()
-        let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
-        while let end = data[lineStart...].firstIndex(of: newline) {
-            let line = data[lineStart..<end]
-            lineStart = data.index(after: end)
-            guard needles.contains(where: { line.range(of: $0) != nil }),
-                let event = try? decoder.decode(Event.self, from: line)
-            else { continue }
-            switch event.kind {
-            case .threadCreated:
-                summary.createdAt = event.ts
-                summary.lineage = ThreadState.lineage(event)
-            case .reviewDecision:
-                if let decision = event.data["decision"]?.stringValue,
-                    ThreadState.terminalDecisions.contains(decision) {
-                    summary.decision = decision
+        data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            guard let base = bytes.baseAddress else { return }
+            // Only a line ended by a newline counts, as in a replay: a torn last line is not an event.
+            var pos = 0
+            let needles = [Array("thread.created".utf8), Array("review.decision".utf8)]
+            var next = [Int?](repeating: nil, count: needles.count)
+            var searched = [Bool](repeating: false, count: needles.count)
+            while pos < bytes.count {
+                var hit: Int?
+                for index in needles.indices {
+                    if !searched[index] || (next[index].map { $0 < pos } ?? false) {
+                        next[index] = Self.find(needles[index], in: base, from: pos, count: bytes.count)
+                        searched[index] = true
+                    }
+                    if let found = next[index], hit.map({ found < $0 }) ?? true { hit = found }
                 }
-            default:
-                break
+                guard let hit else { return }
+                let start = Self.lineStart(before: hit, in: base)
+                guard let end = memchr(base + hit, 0x0A, bytes.count - hit) else { return }
+                let lineEnd = base.distance(to: UnsafeRawPointer(end))
+                pos = lineEnd + 1
+                let line = Data(bytes: base + start, count: lineEnd - start)
+                guard let event = try? decoder.decode(Event.self, from: line) else { continue }
+                switch event.kind {
+                case .threadCreated:
+                    summary.createdAt = event.ts
+                    summary.lineage = ThreadState.lineage(event)
+                case .reviewDecision:
+                    if let decision = event.data["decision"]?.stringValue,
+                        ThreadState.terminalDecisions.contains(decision) {
+                        summary.decision = decision
+                    }
+                default:
+                    break
+                }
             }
         }
         return summary
+    }
+
+    private static func find(_ needle: [UInt8], in base: UnsafeRawPointer, from: Int, count: Int) -> Int? {
+        guard from < count, let found = memmem(base + from, count - from, needle, needle.count) else { return nil }
+        return base.distance(to: UnsafeRawPointer(found))
+    }
+
+    private static func lineStart(before offset: Int, in base: UnsafeRawPointer) -> Int {
+        var index = offset
+        while index > 0, base.load(fromByteOffset: index - 1, as: UInt8.self) != 0x0A { index -= 1 }
+        return index
     }
 
     /// Every thread's summary, in id order.

@@ -348,8 +348,12 @@ public struct ReviewLoader: Sendable {
         self.git = git
     }
 
-    public func load(id: String, includeIgnored: Bool = false) async -> ReviewReport {
-        let state = ThreadStore(project: project).state(of: id)
+    /// `events` is the thread's replayed log when the caller already has it, so it is not read again.
+    public func load(id: String, includeIgnored: Bool = false, events known: [Event]? = nil) async -> ReviewReport {
+        // One replay of the log serves the state, the recorded base and the removed-worktree note.
+        let events = known ?? readEvents(id)
+        let state = ThreadState.derive(from: events, id: id)
+        let base = Self.recordedBase(in: events)
         var title: String?
         var criteria: [Criterion] = []
         var goalBase: String?
@@ -372,22 +376,25 @@ public struct ReviewLoader: Sendable {
         } catch {
             problem = "cannot read the goal file: \(error.localizedDescription)"
         }
-        let commits = await branchCommits(id)
+        let commits = await branchCommits(id, base: base)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
-            diff: await diff(id: id, goalBase: goalBase, includeIgnored: includeIgnored),
+            diff: await diff(
+                id: id, goalBase: goalBase, events: events, includeIgnored: includeIgnored),
             threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id),
             commits: commits?.commits ?? [],
             commitCount: commits?.count ?? 0)
     }
 
     /// How many commits `workbench/<id>` holds past its base; nil when unknown.
-    public func branchCommitCount(id: String) async -> Int? { await branchCommits(id)?.count }
+    public func branchCommitCount(id: String) async -> Int? {
+        await branchCommits(id, base: Self.recordedBase(in: readEvents(id)))?.count
+    }
 
     /// The commits on `workbench/<id>` since the commit its worktree was cut from; nil when unknown.
-    private func branchCommits(_ id: String) async -> (count: Int, commits: [BranchCommit])? {
-        guard SafeNames.isThreadID(id), let base = recordedBase(id),
+    private func branchCommits(_ id: String, base: String?) async -> (count: Int, commits: [BranchCommit])? {
+        guard SafeNames.isThreadID(id), let base,
             base.range(of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil,
             await branchTip(id) != nil
         else { return nil }
@@ -405,7 +412,7 @@ public struct ReviewLoader: Sendable {
 
     /// One file's patch, by its path in the diff.
     public func patch(id: String, path: String) async throws -> FilePatch? {
-        guard case .summary(let summary) = await diff(id: id, goalBase: nil, limit: Int.max),
+        guard case .summary(let summary) = await diff(id: id, goalBase: nil, events: readEvents(id), limit: Int.max),
             let file = summary.files.first(where: { $0.path == path })
         else { return nil }
         return try await DiffProvider(git: git).patch(
@@ -413,18 +420,18 @@ public struct ReviewLoader: Sendable {
     }
 
     private func diff(
-        id: String, goalBase: String?, limit: Int = DiffProvider.fileLimit, includeIgnored: Bool = false
+        id: String, goalBase: String?, events: [Event], limit: Int = DiffProvider.fileLimit,
+        includeIgnored: Bool = false
     ) async -> ReviewReport.Diff {
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else {
-            let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
             if events.contains(where: { $0.kind == .worktreeRemoved }) {
                 return .unavailable(
                     reason: "the worktree was removed after shipping; \(WorktreeManager.branch(for: id)) is kept")
             }
             return .unavailable(reason: "the worktree no longer exists")
         }
-        guard let base = recordedBase(id) ?? goalBase else { return .unavailable(reason: "no base commit recorded") }
+        guard let base = Self.recordedBase(in: events) ?? goalBase else { return .unavailable(reason: "no base commit recorded") }
         do {
             return .summary(
                 try await DiffProvider(git: git).summary(
@@ -435,8 +442,11 @@ public struct ReviewLoader: Sendable {
         }
     }
 
-    private func recordedBase(_ id: String) -> String? {
-        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
-        return events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
+    private func readEvents(_ id: String) -> [Event] {
+        (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+    }
+
+    private static func recordedBase(in events: [Event]) -> String? {
+        events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
     }
 }
