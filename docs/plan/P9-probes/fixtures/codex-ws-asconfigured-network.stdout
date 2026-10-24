@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a16bbe-63a9-7882-8ed9-ff3ce6946041"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the command and report its exit status."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -sS -m 5 -o /dev/null https://example.com'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -sS -m 5 -o /dev/null https://example.com'","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Exit status: `0` (success)."}}
+{"type":"turn.completed","usage":{"input_tokens":34064,"cached_input_tokens":14336,"cache_write_input_tokens":0,"output_tokens":79,"reasoning_output_tokens":0}}

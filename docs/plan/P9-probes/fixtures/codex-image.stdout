@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a16bc2-5808-78f1-a8e0-ff5e966fc440"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"PELICAN-7731"}}
+{"type":"turn.completed","usage":{"input_tokens":16795,"cached_input_tokens":7168,"cache_write_input_tokens":0,"output_tokens":10,"reasoning_output_tokens":0}}

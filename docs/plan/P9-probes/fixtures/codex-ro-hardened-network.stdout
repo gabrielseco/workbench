@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a16bc1-69b3-7cc2-91d8-c1a362b04977"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the command and report its exit status."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -sS -m 5 -o /dev/null https://example.com'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -sS -m 5 -o /dev/null https://example.com'","aggregated_output":"curl: (6) Could not resolve host: example.com\n","exit_code":6,"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Exit status: `6` — curl could not resolve host `example.com`."}}
+{"type":"turn.completed","usage":{"input_tokens":29925,"cached_input_tokens":14720,"cache_write_input_tokens":0,"output_tokens":86,"reasoning_output_tokens":0}}

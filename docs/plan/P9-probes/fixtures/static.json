@@ -1,0 +1,43 @@
+{
+  "claude": {
+    "path": "/Users/gabriel/.local/bin/claude",
+    "version": "2.1.310 (Claude Code)"
+  },
+  "codex": {
+    "path": "/opt/homebrew/bin/codex",
+    "version": "codex-cli 0.163.0"
+  },
+  "gemini": {
+    "path": null,
+    "version": null
+  },
+  "flags": {
+    "codex": {
+      "--sandbox": true,
+      "--json": true,
+      "--output-last-message": true,
+      "--output-schema": true,
+      "--image": true,
+      "--ephemeral": true,
+      "--ignore-user-config": true,
+      "--ignore-rules": true,
+      "--cd": true,
+      "--add-dir": true,
+      "--model": true,
+      "resume subcommand": true,
+      "dollar cap flag": false
+    },
+    "claude": {
+      "--restricted": true,
+      "--permission-prompts": true,
+      "--max-budget-usd": true,
+      "--json-schema": true,
+      "--session-id": true,
+      "--resume": true,
+      "--no-session-persistence": true,
+      "--tools": true,
+      "--safe-mode": true,
+      "--model": true
+    }
+  }
+}
