@@ -96,6 +96,13 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
             + #"{"type":"tool_use","name":"Bash","input":{"command":"ls -la"}}]}}"#
         #expect(d.consume(line: line) == [.text("Looking"), .tool(name: "Bash", summary: "ls -la")])
         #expect(d.consume(line: "plain noise") == [.unknown(provider: .claude, raw: "plain noise")])
+        let future = #"{"type":"future_diagnostic","message":"look"}"#
+        #expect(d.consume(line: future) == [.unknown(provider: .claude, raw: future)], "a newer Claude's event is kept")
+        let untyped = #"{"message":"no type"}"#
+        #expect(d.consume(line: untyped) == [.unknown(provider: .claude, raw: untyped)])
+        let typeLater = #"{"session":"x","type":"future"}"#
+        #expect(d.consume(line: typeLater) == [.unknown(provider: .claude, raw: typeLater)])
+        #expect(d.consume(line: #"{"session":"x","type":"user"}"#).isEmpty, "a known type is found even when not first")
         #expect(d.consume(line: #"{"type":"stream_event"}"#).isEmpty, "partial messages are not flooded into activity")
     }
 

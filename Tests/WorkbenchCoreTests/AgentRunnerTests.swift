@@ -243,6 +243,17 @@ private final class Collector: AgentRecorder, @unchecked Sendable {
         #expect(collector.recorded.count == 2)
     }
 
+    @Test func aLostRecordIsNeverSuccessEvenAfterACleanExit() async throws {
+        let collector = Collector()
+        collector.failAfter = 3  // two lines, then the late one
+        var provider = ScriptProvider(script: "echo one; echo two")
+        provider.lateLine = true
+        let completion = await (try AgentRunner.start(provider: provider, request: request(), recorder: collector)).completion
+        #expect(completion.process.termination == .exited(0) && completion.provider == .succeeded)
+        #expect(completion.recordingFailure != nil)
+        #expect(!completion.succeeded, "the durable record was lost")
+    }
+
     @Test func aLateLineIsRecordedAfterTheStream() async throws {
         let collector = Collector()
         var provider = ScriptProvider(script: "echo one; echo two")

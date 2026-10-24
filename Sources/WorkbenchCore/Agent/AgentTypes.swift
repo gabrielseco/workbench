@@ -281,9 +281,11 @@ public struct AgentCompletion: Sendable, Equatable {
     }
 
     /// The only definition of "worked": the child ended on its own with status 0, the provider said it
-    /// succeeded, and nothing failed. Whether the answer is a usable *result* is the stage's validator.
+    /// succeeded, nothing failed, and everything it printed was recorded. Whether the answer is a usable *result* is the stage's validator.
     public var succeeded: Bool {
-        guard failure == nil, provider == .succeeded, process.cause == .natural else { return false }
+        guard failure == nil, recordingFailure == nil, provider == .succeeded, process.cause == .natural else {
+            return false
+        }
         if case .exited(0) = process.termination { return true }
         return false
     }

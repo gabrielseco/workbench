@@ -73,6 +73,11 @@ struct ClaudeDecoder: AgentDecoder {
     static let maxDeniedInputCharacters = 4096
     private static let deniedInputKeys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
 
+    /// Event types the adapter knows. `stream_event` (partial messages) and the rest are deliberately not activity.
+    private static let knownTypes: Set<String> = [
+        "system", "stream_event", "assistant", "user", "result", "rate_limit_event",
+    ]
+
     var sessionID: String?
     var purpose: AgentSessionHandle.Purpose
     var maxRawBytes: Int
@@ -99,7 +104,8 @@ struct ClaudeDecoder: AgentDecoder {
             resultText = line
         } else if line.contains("\"type\":\"assistant\""), let parsed = Self.object(line) {
             items += activity(fromAssistant: parsed)
-        } else if !line.hasPrefix("{") {
+        } else if !Self.knownTypes.contains(Self.eventType(of: line) ?? "") {
+            // Not a line this adapter understands: kept, bounded, so a diagnostic from a newer Claude is not lost.
             items.append(.unknown(provider: .claude, raw: String(line.prefix(maxRawBytes))))
         }
         return items
@@ -183,6 +189,16 @@ struct ClaudeDecoder: AgentDecoder {
             }
         }
         return items
+    }
+
+    /// The `type` of a stream line. Claude writes it first, so the common case is a prefix read, not a parse.
+    static func eventType(of line: String) -> String? {
+        let lead = #"{"type":""#
+        if line.hasPrefix(lead) {
+            let rest = line.dropFirst(lead.count)
+            if let end = rest.firstIndex(of: "\"") { return String(rest[..<end]) }
+        }
+        return object(line)?["type"] as? String
     }
 
     private static func object(_ line: String) -> [String: Any]? {
