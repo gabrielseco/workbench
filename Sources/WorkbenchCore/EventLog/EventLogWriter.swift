@@ -136,7 +136,9 @@ public actor EventLogWriter {
         // What the dead runner managed to write: a torn last line is dropped, the rest is counted.
         let transcript = TranscriptFile.url(in: url.deletingLastPathComponent(), turn: turn)
         if let summary = TranscriptFile.repair(at: transcript) { data["transcript"] = summary.json }
-        return try append(.turnEnded, turn: turn, data: .object(data))
+        let ended = try append(.turnEnded, turn: turn, data: .object(data))
+        TranscriptFile.compress(transcript)
+        return ended
     }
 
     /// Closes an orphaned check (its runner died while the command ran) with a synthetic `interrupted`.

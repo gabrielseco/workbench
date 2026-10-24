@@ -38,7 +38,8 @@ let workbenchUsage = """
                                  (local edits in your checkout are left out; --allow-dirty is ignored)
       send-back "<note>" [--budget <usd>]  next turn with your note and the failed check's output
       stop                       ask the running turn to stop cleanly
-      log [-f] [-v] [--seq <n>]  what happened; -f follows, -v shows every stream line, --seq one event in full
+      log [-f] [-v] [--seq <n>] [--transcript [--turn <n>]]  what happened; -f follows, -v shows every stream line,
+                                 --seq one event in full, --transcript what claude printed, as stored
       status [id] [--all] [--fetch]  where the thread stands; --all: one line per thread; --fetch: ask origin if the base moved
       review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
       open [id] [--editor <name-or-command>] [--print] [--goal]

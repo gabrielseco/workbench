@@ -22,6 +22,48 @@ public enum TranscriptFile {
         directory(in: threadDirectory).appendingPathComponent("turn-\(turn).jsonl")
     }
 
+    /// Where the turn's file goes once the turn has ended: the same bytes, gzipped.
+    public static func compressedURL(_ plain: URL) -> URL { plain.appendingPathExtension("gz") }
+
+    /// A turn's transcript is gzipped when it ends unless it is bigger than this; a file left plain reads the same.
+    public static let maxCompressedBytes = 256 << 20
+
+    /// The file's bytes, plain or (once the turn has ended) gzipped. nil when the turn has no transcript.
+    static func contents(_ plain: URL) -> Data? {
+        // The plain file goes only after the compressed one is in place, so one of the two is always readable.
+        if let data = try? Data(contentsOf: plain) { return data }
+        guard let packed = try? Data(contentsOf: compressedURL(plain)) else { return nil }
+        return try? Gzip.decompress(packed)
+    }
+
+    /// Whether the turn has a transcript, in either form.
+    public static func exists(_ plain: URL) -> Bool {
+        FileManager.default.fileExists(atPath: plain.path)
+            || FileManager.default.fileExists(atPath: compressedURL(plain).path)
+    }
+
+    /// Gzips a finished turn's transcript next to the plain file, then removes the plain one. A failure of any
+    /// step leaves the plain file, which reads the same; returns whether the turn now has a compressed file.
+    @discardableResult
+    public static func compress(_ plain: URL, limit: Int = maxCompressedBytes) -> Bool {
+        let packed = compressedURL(plain)
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: plain.path))?[.size] as? Int,
+            size <= limit, let data = try? Data(contentsOf: plain), let gz = try? Gzip.compress(data)
+        else { return FileManager.default.fileExists(atPath: packed.path) }
+        let partial = packed.appendingPathExtension("partial")
+        do {
+            try gz.write(to: partial)
+            // What was written must read back as what was compressed, or the plain file is the only copy.
+            guard try Gzip.decompress(Data(contentsOf: partial)) == data else { throw Gzip.Failure.corrupt("verify") }
+            try FileManager.default.moveItem(at: partial, to: packed)
+        } catch {
+            try? FileManager.default.removeItem(at: partial)
+            return false
+        }
+        try? FileManager.default.removeItem(at: plain)
+        return true
+    }
+
     /// One stored line: its time, the `data` as stored (verbatim text, for `log --json`) and decoded.
     struct Stored {
         var ts: String
@@ -32,7 +74,7 @@ public enum TranscriptFile {
     /// The complete lines from byte `offset` on, and the offset after them. A torn last line is not a line yet:
     /// the next read, from the returned offset, finds it whole.
     static func read(at url: URL, from offset: Int = 0) -> (lines: [Stored], offset: Int) {
-        guard let data = try? Data(contentsOf: url), offset <= data.count else { return ([], offset) }
+        guard let data = contents(url), offset <= data.count else { return ([], offset) }
         let decoder = JSONDecoder()
         var lines: [Stored] = []
         var start = data.startIndex + offset
@@ -55,7 +97,7 @@ public enum TranscriptFile {
 
     /// How many complete lines and bytes the file holds; nil when there is no file.
     public static func summary(at url: URL) -> TranscriptSummary? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let data = contents(url) else { return nil }
         guard let last = data.lastIndex(of: 0x0A) else { return TranscriptSummary(lines: 0, bytes: 0) }
         let complete = data[...last]
         return TranscriptSummary(lines: complete.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }, bytes: complete.count)

@@ -8,6 +8,8 @@ extension Commands {
         let follow = a.flag("--follow", "-f")
         let verbose = a.flag("--verbose", "-v", "--raw")
         let seqText = try a.value("--seq")
+        let transcript = a.flag("--transcript")
+        let turnText = try a.value("--turn")
         let named = a.positional()
         try a.requireEmpty()
         let ctx = try await Context.load()
@@ -18,6 +20,19 @@ extension Commands {
             try showEvent(seqText, in: id, url: url)
             return
         }
+
+        // `--transcript`: what claude printed, as stored, one stream line each. Nothing of Workbench's own.
+        if transcript {
+            if follow { throw CLIError.usage("log --transcript prints what is stored; it does not follow (use log -f)") }
+            var turn: Int?
+            if let turnText {
+                guard let found = Int(turnText), found > 0 else { throw CLIError.usage("--turn needs a turn number") }
+                turn = found
+            }
+            for line in try ThreadLog.read(at: url).transcript(turn: turn) { out(line) }
+            return
+        }
+        if turnText != nil { throw CLIError.usage("--turn goes with --transcript") }
 
         // `--json`: the stored lines themselves, one event each, nothing added. A transcript line is printed as the
         // `claude` event it would have been.

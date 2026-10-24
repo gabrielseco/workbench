@@ -180,11 +180,12 @@ say a plain command does not fetch, keeps an age, carries `as_of` and prints no 
 
 No real turn: a clone with a `claude` stand-in on the fake-claude test double, streaming slowly (800 ms between lines). `run` goes to
 the background; the script waits until `transcript/turn-1.jsonl` has lines while the log has no `turn.ended`, then `log -f` must print
-the stream lines and end with `turn ended`. After the turn: the log holds one `claude` event (the `result` line); `turn.ended`'s
-`transcript` counts are the file's lines and bytes; the file's last line is the result and every line is a whole `{ts, data}` record;
-`log` prints the stream once; `log --json` prints the transcript lines as `claude` events with `"seq":null`; `status`, `status --json`
-and `review` load; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the counts,
-file, whole-record, `log` and `log --json` steps must FAIL.
+the stream lines and end with `turn ended`. After the turn: the file is gzipped (`turn-1.jsonl.gz`, no plain file, `gzip -t` passes);
+the log holds one `claude` event (the `result` line); `turn.ended`'s `transcript` counts are the lines and bytes `gzip -dc` gives; the last
+line is the result and every line is a whole `{ts, data}` record; `log` prints the stream once; `log --transcript` prints the stored lines
+as they are; `log --json` prints the transcript lines as `claude` events with `"seq":null`; `status`, `status --json` and `review` load;
+`abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the gzip, counts, file, whole-record,
+`log`, `log --transcript` and `log --json` steps must FAIL.
 
 ### open
 

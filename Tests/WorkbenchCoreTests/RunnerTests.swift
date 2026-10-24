@@ -338,10 +338,10 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(report.result == .succeeded)
         let marker = try #require(fx.transcript(id).first { $0.data["truncated"] == true })
         #expect((marker.data["original_bytes"]?.intValue ?? 0) > 3_000_000)
-        for url in [fx.project.eventsURL(id), TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1)] {
-            let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
-            #expect((size ?? .max) < 100_000, "\(url.lastPathComponent) did not grow by the size of the line")
-        }
+        let log = try FileManager.default.attributesOfItem(atPath: fx.project.eventsURL(id).path)[.size] as? Int
+        #expect((log ?? .max) < 100_000, "the log did not grow by the size of the line")
+        let file = TranscriptFile.summary(at: TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1))
+        #expect((file?.bytes ?? .max) < 100_000, "the transcript did not grow by the size of the line")
     }
 
     @Test func invalidJsonIsLoggedRawAndTheRunContinues() async throws {

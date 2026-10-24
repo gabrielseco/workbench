@@ -5,13 +5,16 @@
 #   bash scripts/verify-cli/transcript.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/transcript.sh   (the same, on a branch that contains origin/main)
 # While the turn runs, `threads/<id>/transcript/turn-1.jsonl` must already hold lines and the log must not yet have
-# `turn.ended`, and `log -f` must print the stream lines and end with `turn ended`. After the turn the log must hold one
-# `claude` event (the result line), `turn.ended` must carry `transcript` with the file's line and byte counts, and the
-# file's lines must be the stream, verbatim. `log` must print each stream line once, `log --json` the transcript lines as
-# `claude` events with `"seq":null` and `status`, `status --json` and `review` must still load the thread. Exit 0 only when
-# every step passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 removes the
-# transcript folder after the turn, so "turn.ended's counts are the file's", "the file holds the stream lines", "every line of
-# the file is a whole record", "log prints each stream line" and "log --json prints the transcript lines" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# `turn.ended`, and `log -f` must print the stream lines and end with `turn ended`. When the turn has ended the file must be
+# gzipped (`turn-1.jsonl.gz`, the plain file gone, `gzip -t` passes). The log must hold one `claude` event (the result line),
+# `turn.ended` must carry `transcript` with the line and byte counts of what `gzip -dc` gives, and those lines must be the
+# stream, verbatim. `log` must print each stream line once, `log --transcript` the stored lines as they are, `log --json`
+# the transcript lines as `claude` events with `"seq":null`, and `status`, `status --json` and `review` must still load the
+# thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
+# VERIFY_CLI_SABOTAGE=1 removes the transcript folder after the turn, so "the transcript was gzipped", "turn.ended's counts
+# are the file's", "the file holds the stream lines", "every line of the file is a whole record", "log prints each stream
+# line", "log --transcript prints the stored lines" and "log --json prints the transcript lines" must FAIL. The frame is in
+# lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -117,6 +120,12 @@ fi
 
 # --- after the turn --------------------------------------------------------------------------------------
 
+GZ="$FILE.gz"
+check "the transcript was gzipped when the turn ended: no plain file, gzip -t passes" "plain file or .gz missing, or not gzip" \
+    bash -c '[ ! -e "$1" ] && [ -f "$2" ] && gzip -t "$2"' _ "$FILE" "$GZ"
+FILE="$SCRATCH/transcript-turn-1.jsonl"   # from here on, the decompressed copy
+[ -f "$GZ" ] && gzip -dc "$GZ" >"$FILE" 2>/dev/null
+
 LINES=$(py "print(sum(1 for l in lines if l['kind'] == 'claude'))" <"$EVENTS" 2>/dev/null)
 FILE_LINES=$( [ -f "$FILE" ] && wc -l <"$FILE" | tr -d ' ' || echo 0 )
 echo "    events.jsonl: $LINES claude event(s); transcript file: $FILE_LINES line(s)"
@@ -140,6 +149,16 @@ INIT_LINES=$(grep -c "session started" "$SCRATCH/log.out")
 RESULT_LINES=$(grep -c "result" "$SCRATCH/log.out")
 check "log prints each stream line once" "'session started' x$INIT_LINES, result lines x$RESULT_LINES" \
     bash -c '[ "$1" = 1 ] && [ "$2" -le 2 ]' _ "$INIT_LINES" "$RESULT_LINES"
+wbp "$SCRATCH/transcript.out" log "$ID" --transcript
+SAME=$(python3 -I - "$FILE" "$SCRATCH/transcript.out" 2>/dev/null <<'PY'
+import sys
+want = [l.rstrip("\n")[l.index('"data":') + 7:-1] for l in open(sys.argv[1])]
+got = [l.rstrip("\n") for l in open(sys.argv[2])]
+print(bool(got) and want == got)
+PY
+)
+check "log --transcript prints the stored lines as they are" "its output is not the file's data, line for line ('$SAME')" \
+    test "$SAME" = True
 wbp "$SCRATCH/log.json" log "$ID" --json
 JSON_CLAUDE=$(py "print(sum(1 for l in lines if l['kind'] == 'claude' and l['seq'] is None))" <"$SCRATCH/log.json" 2>/dev/null)
 check "log --json prints the transcript lines as claude events with seq null" \

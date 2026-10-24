@@ -104,6 +104,30 @@ public struct ThreadLog: Sendable {
         return (out, position)
     }
 
+    /// The stream lines of the thread as they were stored, one string each, oldest turn first (`turn` limits it
+    /// to one). The lines of a turn with a transcript file come from there, gzipped or not; those of an older
+    /// log from its `claude` events, whose `data` is cut out of the stored line.
+    public func transcript(turn only: Int? = nil) -> [String] {
+        let aligned = rawEventLines.count == contents.events.count
+        var out: [String] = []
+        let turns = Set(contents.events.filter { $0.kind == .turnStarted }.map(\.turn)).sorted()
+        for turn in turns where only == nil || only == turn {
+            let file = TranscriptFile.url(in: threadDirectory, turn: turn)
+            if TranscriptFile.exists(file) {
+                out += TranscriptFile.read(at: file).lines.map(\.rawData)
+                continue
+            }
+            for (index, event) in contents.events.enumerated() where event.kind == .claude && event.turn == turn {
+                if aligned, let open = rawEventLines[index].range(of: "\"data\":") {
+                    out.append(String(rawEventLines[index][open.upperBound...].dropLast()))
+                } else if let json = try? EventLogWriter.json(event.data) {
+                    out.append(json)
+                }
+            }
+        }
+        return out
+    }
+
     private enum Item {
         case event(Event, index: Int)
         case transcript(turn: Int, TranscriptFile.Stored)
@@ -120,7 +144,7 @@ public struct ThreadLog: Sendable {
         var hasFile: [Int: Bool] = [:]
         func hasTranscript(_ turn: Int) -> Bool {
             if let known = hasFile[turn] { return known }
-            let found = FileManager.default.fileExists(atPath: TranscriptFile.url(in: threadDirectory, turn: turn).path)
+            let found = TranscriptFile.exists(TranscriptFile.url(in: threadDirectory, turn: turn))
             hasFile[turn] = found
             return found
         }
