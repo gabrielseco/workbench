@@ -16,13 +16,17 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private(set) var sawOutput = false
     private var confirmed = false
     private var written = 0
+    /// Items past the cap not yet counted in a `dropped` record.
     private var overCap = 0
+    private var lastMark = Date()
+    private let now: @Sendable () -> Date
     private var normalized: Bool { provider != "claude" }
 
     init(
         log: EventLogWriter, turn: Int, sessionID: String, provider: String, threadID: String, store: ThreadStore,
-        notify: @escaping @Sendable (RunNotice) -> Void
+        notify: @escaping @Sendable (RunNotice) -> Void, now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.now = now
         self.log = log
         self.turn = turn
         self.sessionID = sessionID
@@ -52,12 +56,13 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
         }
     }
 
-    /// Writes the `dropped` record for activity past the cap. Called once, after the child has ended.
+    /// Writes the `dropped` record for the activity past the cap not yet counted. Also called once the child has ended.
     func flush() async throws {
         guard normalized, overCap > 0 else { return }
         try await log.append(
             .agentActivity, turn: turn, data: AgentActivityRecord.droppedData(count: overCap, provider: provider))
         overCap = 0
+        lastMark = now()
     }
 
     private func recordNormalized(_ line: AgentRawLine, activity: [AgentActivity]) async throws {
@@ -72,8 +77,11 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
             guard let data = AgentActivityRecord.data(for: item, provider: provider) else { continue }
             if written >= AgentActivityRecord.maxPerTurn {
                 overCap += 1
+                // A turn that keeps working past the cap still shows signs of life: one count per interval.
+                if now().timeIntervalSince(lastMark) >= AgentActivityRecord.dropMarkInterval { try await flush() }
             } else {
                 written += 1
+                if written == AgentActivityRecord.maxPerTurn { lastMark = now() }
                 try await log.append(.agentActivity, turn: turn, data: data)
             }
             if !confirmed, case .session = item {

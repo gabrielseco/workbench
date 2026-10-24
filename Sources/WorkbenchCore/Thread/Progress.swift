@@ -92,9 +92,11 @@ extension ThreadState {
         let type = event.data["type"]?.stringValue ?? "?"
         if type == "usage" {
             var usage = state.reportedUsage ?? AgentUsage()
+            // A provider's count is untrusted: a negative one is ignored and a sum stops at Int.max rather than trapping.
             func add(_ old: Int?, _ key: String) -> Int? {
-                guard let n = event.data[key]?.intValue else { return old }
-                return (old ?? 0) + n
+                guard let n = event.data[key]?.intValue, n >= 0 else { return old }
+                let (sum, overflow) = (old ?? 0).addingReportingOverflow(n)
+                return overflow ? Int.max : sum
             }
             usage.inputTokens = add(usage.inputTokens, "input_tokens")
             usage.outputTokens = add(usage.outputTokens, "output_tokens")
@@ -115,6 +117,10 @@ extension ThreadState {
             let name = safeLine(event.data["name"]?.stringValue ?? "tool", limit: 40)
             let summary = event.data["summary"]?.stringValue.map { " " + safeLine($0, limit: 60) } ?? ""
             state.progress.note(event.ts, "tool_use \(name)\(summary)")
+        case "dropped":
+            // Items were left out, so the counts so far are a floor and no longer known; the marker is still a sign of life.
+            (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
+            state.progress.note(event.ts, "\(provider) \(event.data["count"]?.intValue ?? 0) activity item(s) not recorded")
         case "permission_denied":
             state.progress.deniedCalls += 1
             state.progress.deniedCallsKnown = true

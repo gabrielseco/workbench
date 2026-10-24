@@ -88,6 +88,35 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(state.progress.deniedCalls == 0 && state.progress.deniedCallsKnown)
     }
 
+    @Test func hugeCountsSaturateInsteadOfTrapping() {
+        let state = ThreadState.derive(
+            from: [
+                ev(1, 0, .threadCreated), ev(2, 1, .turnStarted, ["provider": "codex"]),
+                ev(3, 1, .agentActivity, activity("usage", ["input_tokens": .int(Int.max), "output_tokens": -4])),
+                ev(4, 1, .agentActivity, activity("usage", ["input_tokens": 1])),
+            ], id: "t")
+        #expect(state.reportedUsage == AgentUsage(inputTokens: Int.max), "a negative count is ignored")
+    }
+
+    @Test func aReplayThroughTheFileMatchesTheEventsWithoutActivity() async throws {
+        let url = try tempDir().appendingPathComponent("events.jsonl")
+        let log = try EventLogWriter.open(at: url)
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "codex"])
+        let mark = try await log.nextSeq
+        for item: AgentActivity in [.text("hi"), .tool(name: "shell", summary: "ls"), .diagnostic("note")] {
+            try await log.append(.agentActivity, turn: 1, data: try #require(data(item)))
+        }
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        let events = try EventLogReader.read(at: url).events
+        #expect(mark == 3)
+        var with = ThreadState.derive(from: events, id: "t")
+        var without = ThreadState.derive(from: events.filter { $0.kind != .agentActivity }, id: "t")
+        #expect(with.progress.toolCalls == 1 && without.progress.toolCalls == 0)
+        (with.progress, without.progress) = (Progress(), Progress())
+        #expect(with == without)
+    }
+
     @Test func normalizedTurnProgress() {
         let start = [ev(1, 0, .threadCreated), ev(2, 1, .turnStarted, ["provider": "codex"])]
         let quiet = ThreadState.derive(from: start, id: "t").progress
@@ -194,7 +223,36 @@ private struct NoisyDecoder: AgentDecoder {
     mutating func finish(exit: ProcessExit) -> AgentDecoderResult { AgentDecoderResult(outcome: .succeeded) }
 }
 
+private final class Clock: @unchecked Sendable {
+    var date = Date(timeIntervalSince1970: 1_000_000)
+}
+
 @Suite(.processGate) struct AgentActivityCapTests {
+    @Test func aTurnPastTheCapStillShowsSignsOfLife() async throws {
+        let dir = try tempDir()
+        let url = dir.appendingPathComponent("events.jsonl")
+        let log = try EventLogWriter.open(at: url)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "fake"])
+        let clock = Clock()
+        let recorder = TurnRecorder(
+            log: log, turn: 1, sessionID: "s", provider: "fake", threadID: "t", store: ThreadStore(project: Project(root: dir)),
+            notify: { _ in }, now: { clock.date })
+        for _ in 0..<(AgentActivityRecord.maxPerTurn + 5) {
+            try await recorder.record(.line("x"), activity: [.tool(name: "shell", summary: "ls")])
+        }
+        func dropped() throws -> [Event] {
+            try EventLogReader.read(at: url).events.filter { $0.data["type"] == "dropped" }
+        }
+        #expect(try dropped().isEmpty, "inside the interval nothing more is written")
+        clock.date.addTimeInterval(AgentActivityRecord.dropMarkInterval + 1)
+        try await recorder.record(.line("x"), activity: [.text("still going")])
+        let marks = try dropped()
+        #expect(marks.count == 1 && marks[0].data["count"]?.intValue == 6)
+        let state = ThreadState.derive(from: try EventLogReader.read(at: url).events, id: "t")
+        #expect(state.progress.lastEvent?.hasSuffix("6 activity item(s) not recorded") == true)
+        #expect(!state.progress.toolCallsKnown, "past the cap the count is a floor, so it is not shown as known")
+    }
+
     @Test func capAndSlowConsumer() async throws {
         let dir = try tempDir()
         let url = dir.appendingPathComponent("events.jsonl")

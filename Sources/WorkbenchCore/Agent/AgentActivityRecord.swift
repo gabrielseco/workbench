@@ -7,6 +7,8 @@ public enum AgentActivityRecord {
     public static let maxTextCharacters = 4096
     /// Persisted activity events per turn. The rest are counted in one `dropped` event.
     public static let maxPerTurn = 1000
+    /// Past the cap, a `dropped` record at most this often (seconds) while the turn goes on, so it does not read as stuck.
+    public static let dropMarkInterval: TimeInterval = 30
 
     /// The event's `data`, or nil for activity the log does not keep (`started`: `turn.started` has the pid).
     public static func data(for activity: AgentActivity, provider: String) -> JSONValue? {
