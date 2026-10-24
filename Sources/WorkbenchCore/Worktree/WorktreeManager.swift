@@ -405,7 +405,8 @@ public struct WorktreeManager: Sendable {
         func namesThisBase(_ line: Substring) -> Bool {
             line.contains("branch '\(base)'") && bare(String(line)).hasSuffix(suffix)
         }
-        guard let text = try? String(contentsOf: file, encoding: .utf8), text.split(separator: "\n").contains(where: namesThisBase),
+        guard let text = try? String(contentsOf: file, encoding: .utf8),
+            text.split(separator: "\n").contains(where: namesThisBase),
             let modified = try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
         else { return .unknown }
         return .lastFetch(modified)
