@@ -116,4 +116,31 @@ private func mixedThread() async throws -> URL {
         #expect(state.progress.toolCalls == 2 && state.progress.toolCallsKnown)
         #expect(state.progress.lastEvent?.hasPrefix("tool_use Read") == true)
     }
+
+    @Test func aLogWithALineThatIsNotAnEventStillFollowsItsTranscriptWithoutRepeats() async throws {
+        let project = Project(root: Scratch.url("fallback"))
+        let id = "g-fallback"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        await log.close()
+        // A whole line that is not an event: the raw lines and the events no longer line up.
+        let handle = try FileHandle(forWritingTo: project.eventsURL(id))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("not an event\n".utf8))
+        try handle.close()
+        let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
+        try writer.append(#"{"type":"system"}"#)
+
+        let first = try ThreadLog.read(at: project.eventsURL(id)).entries(after: ThreadLog.Position())
+        #expect(first.entries.contains { if case .transcript = $0 { true } else { false } })
+        try writer.append(#"{"type":"assistant"}"#)
+        let second = try ThreadLog.read(at: project.eventsURL(id)).entries(after: first.position)
+        #expect(second.entries.count == 1, "only the new line, not the first again")
+        // `--json` prints the stored lines as they are here, once, and a later poll gives only what was added.
+        let json = try ThreadLog.read(at: project.eventsURL(id)).jsonLines(after: ThreadLog.Position())
+        #expect(json.lines.count == 3 && json.lines.last == "not an event")
+        let again = try ThreadLog.read(at: project.eventsURL(id)).jsonLines(after: json.position)
+        #expect(again.lines.isEmpty && again.position == json.position)
+    }
 }

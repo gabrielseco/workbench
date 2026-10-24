@@ -50,9 +50,15 @@ public struct ThreadLog: Sendable {
     }
 
     public static func read(at eventsURL: URL) throws -> ThreadLog {
-        let contents = try EventLogReader.read(at: eventsURL)
+        // One read serves the events and the raw lines: a log that grows between two reads would make them disagree.
+        let data: Data
+        do { data = try Data(contentsOf: eventsURL) } catch {
+            throw EventLogError.io("cannot read \(eventsURL.path): \(error.localizedDescription)")
+        }
+        EventLogReadCount.record(eventsURL)
+        let contents = EventLogReader.parse(data)
         // Split as bytes: a writer that died inside a multibyte character must not hide the events before it.
-        var parts = ((try? Data(contentsOf: eventsURL)) ?? Data()).split(separator: 0x0A, omittingEmptySubsequences: false)
+        var parts = data.split(separator: 0x0A, omittingEmptySubsequences: false)
         _ = parts.popLast()  // the part after the last newline is not a whole event yet
         return ThreadLog(
             contents: contents, threadDirectory: eventsURL.deletingLastPathComponent(),
@@ -81,7 +87,9 @@ public struct ThreadLog: Sendable {
     /// line is which, so it is printed as it is, without transcripts.
     public func jsonLines(after position: Position) -> (lines: [String], position: Position) {
         guard rawEventLines.count == contents.events.count else {
-            return (Array(rawEventLines.dropFirst(position.events)), Position(events: rawEventLines.count))
+            var next = position
+            next.events = rawEventLines.count
+            return (Array(rawEventLines.dropFirst(position.events)), next)
         }
         var out: [String] = []
         let position = walk(after: position) { item in
@@ -129,12 +137,5 @@ public struct ThreadLog: Sendable {
 
     private static func quoted(_ text: String) -> String {
         (try? EventLogWriter.json(.string(text))) ?? "\"\""
-    }
-}
-
-extension ThreadLog.Position {
-    init(events: Int) {
-        self.init()
-        self.events = events
     }
 }
