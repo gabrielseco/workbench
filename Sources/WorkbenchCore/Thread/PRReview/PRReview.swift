@@ -45,6 +45,8 @@ public enum PRReview {
     public static let timeout: TimeInterval = 20 * 60
     /// Tries when Codex says its model is at capacity.
     public static let attempts = 3
+    /// The dollar cap of a review on a provider that can enforce one (Claude); there is no config key for it.
+    public static let claudeBudgetUSD: Decimal = 2
     public static let answerLimit = 256 << 10
     public static let transcriptLimit = 2 << 20
     public static let diffLimit = 400 << 10
@@ -60,6 +62,14 @@ public enum PRReview {
     static func instruction(brief: String) -> String {
         "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
             + "files and do not post anything anywhere."
+    }
+
+    /// The same pointer for a reviewer that cannot work inside the checkout: it runs in the round's folder, which holds
+    /// the brief, the saved diff and the checkout, and may only read files there.
+    static func instruction(brief: String, checkout: String) -> String {
+        "Read the review brief at \(brief) and follow it exactly. Your working directory holds the brief, the diff and the "
+            + "checkout of the head, which is the directory \(checkout); where the brief speaks of the working directory "
+            + "it means that checkout. You can only read files. Do not change files and do not post anything anywhere."
     }
 
     /// The verdict is the last non-empty line, exactly. A missing line, a different last line, or both verdicts
@@ -217,9 +227,11 @@ public struct PRReviewResult: Sendable, Equatable {
     public var failure: String?
     /// Relative to the thread's directory.
     public var findingsPath: String?
-    /// Codex's answer, as stored.
+    /// The reviewer's answer, as stored.
     public var findings: String?
     public var warnings: [String]
     /// Why the stage did not run: its `applies_to` matches nothing the pull request changes. Never a pass.
     public var skipped: String?
+    /// What the reviewer's provider reported it cost; nil when it reports none, which is not 0.
+    public var costUSD: Double?
 }

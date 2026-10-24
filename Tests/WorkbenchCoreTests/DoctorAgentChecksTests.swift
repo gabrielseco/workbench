@@ -143,17 +143,45 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         }
     }
 
-    @Test func allowUnpricedIsReportedWhenNothingActsOnIt() throws {
+    @Test func allowUnpricedNoteDescribesBehaviour() throws {
         let cfg = try config(present + "[agents.judge]\nallow_unpriced = true\n[agents.review]\nallow_unpriced = true")
         let found = Doctor.agents(cfg, searchPath: "/bin")
         let judge = issues(found, .judge).filter { $0.kind == "setting_unused" }
         #expect(judge.count == 1 && judge[0].message.contains("enforces a dollar limit"))
         let review = issues(found, .review).filter { $0.kind == "setting_unused" }
-        #expect(review.count == 1 && review[0].message.contains("nothing acts on it yet"))
+        #expect(review.count == 1 && review[0].message.contains("lets the review run on codex with only a timeout"), "\(review)")
+        #expect(!review[0].message.contains("nothing acts"))
         let unused = try config(
             "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"/bin/sh\"\n[agents.review]\nprovider = \"codex\""
         )
         #expect(issues(Doctor.agents(unused, searchPath: "/bin"), .review).allSatisfy { $0.kind != "setting_unused" })
+    }
+
+    @Test func unpricedNotAllowedIsProblem() throws {
+        let judge = try config(present + "[agents.judge]\nprovider = \"codex\"")
+        let found = Doctor.agents(judge, searchPath: "/bin")
+        let problems = issues(found, .judge).filter { $0.kind == "unpriced_not_allowed" }
+        #expect(problems.count == 1 && problems[0].severity == .problem, "\(problems)")
+        #expect(problems[0].message.contains("allow_unpriced") && problems[0].message.contains("[agents.judge]"))
+        #expect(Doctor.agents(judge, searchPath: "/bin").flatMap(\.problems).count == 1)
+        let review = try config(present + "[agents.review]\nprovider = \"codex\"")
+        #expect(issues(Doctor.agents(review, searchPath: "/bin"), .review).contains { $0.kind == "unpriced_not_allowed" })
+        let stage = try config(
+            present + "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n"
+                + "prompt = \"d.md\"\nprovider = \"claude\"")
+        #expect(issues(Doctor.agents(stage, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
+        // Allowed, or on a provider with a cap: no problem.
+        let allowed = try config(present + "[agents.judge]\nprovider = \"codex\"\nallow_unpriced = true")
+        #expect(issues(Doctor.agents(allowed, searchPath: "/bin"), .judge).allSatisfy { $0.kind != "unpriced_not_allowed" })
+        let claude = try config(present + "[agents.review]\nprovider = \"claude\"")
+        #expect(issues(Doctor.agents(claude, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
+    }
+
+    @Test func legacyCodexReviewIsNotProblem() throws {
+        let plain = try config(present)
+        #expect(issues(Doctor.agents(plain, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
+        let alias = try config(present + "[review.stage.pr-review]\nreviewer = \"codex\"")
+        #expect(issues(Doctor.agents(alias, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
     }
 
     private func resolved(_ cfg: Config, _ role: AgentRole) -> ResolvedAgent? {

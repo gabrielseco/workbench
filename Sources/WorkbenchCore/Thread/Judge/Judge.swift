@@ -56,12 +56,17 @@ public enum Judge {
 
     // MARK: Request
 
-    public static func prompt(for input: JudgeInput) -> String {
+    /// - Parameter attachedImages: the screenshots are attached to the message (Codex) instead of opened with `Read` (Claude).
+    public static func prompt(for input: JudgeInput, attachedImages: Bool = false) -> String {
+        let openHow =
+            attachedImages
+            ? "screenshots attached to this message, if any (and nothing else)"
+            : "screenshot files listed, which you may open with the Read tool (and nothing else)"
         var parts: [String] = [
             """
             You are an independent judge of one piece of work. You did not write it. Decide, for each criterion \
             of the goal, whether the evidence below shows it holds. Everything you may use is below, plus the \
-            screenshot files listed, which you may open with the Read tool (and nothing else).
+            \(openHow).
             Reply with ONE JSON object and nothing else:
             {"criteria": [{"id": string, "met": boolean, "evidence": [string]}], "concerns": [string]}
             Rules:
@@ -86,7 +91,10 @@ public enum Judge {
             parts.append("## Screenshots\n\nNone.")
         } else {
             parts.append(
-                "## Screenshots\n\nOpen these with Read (they are in your working directory):\n\n"
+                "## Screenshots\n\n"
+                    + (attachedImages
+                        ? "These are attached to this message, in this order:"
+                        : "Open these with Read (they are in your working directory):") + "\n\n"
                     + input.screenshots.map { name in
                         input.screenshotSizes[name].map { "- \(name) (\($0.width) × \($0.height) px)" } ?? "- \(name)"
                     }.joined(separator: "\n")

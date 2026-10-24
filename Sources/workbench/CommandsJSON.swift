@@ -285,7 +285,7 @@ extension Commands {
                 "round": .int(r.round), "pr": r.pr.map { .int($0) } ?? .null, "verdict": r.verdict.map { .string($0) } ?? .null,
                 "ok": .bool(r.verdict != nil), "stale": .bool(report.prReviewIsStale),
                 "head_sha": r.headSHA.map { .string($0) } ?? .null, "findings_path": r.findingsPath.map { .string($0) } ?? .null,
-                "failure": r.failure.map { .string($0) } ?? .null,
+                "failure": r.failure.map { .string($0) } ?? .null, "cost_usd": r.costUSD.map { .double($0) } ?? .null,
             ]
         } else {
             prReview = .null

@@ -135,7 +135,7 @@ extension ThreadService {
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
         let argv =
-            (try? CodexProvider(executable: settings.codexPath)
+            (try? context.makeProvider()?
                 .invocation(for: reviewRequest(context, proof: (try? context.proof?.get()) ?? [])).displayArguments) ?? []
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
@@ -236,20 +236,26 @@ extension ThreadService {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
-        guard ExecutableResolver.resolve(round.settings.codexPath, searchPath: round.settings.environment["PATH"]) != nil
-        else {
-            let missing = Self.codexMissing(round.settings.codexPath)
-            do { try await round.attempts?.refused(missing) } catch {
-                return outcome.failed("\(missing); the refusal could not be recorded: \(error)")
+        // Everything that refuses a round comes before a process exists: no adapter, no executable, no opt-in for a
+        // provider without a dollar cap, or a request the adapter cannot honour (screenshots to Claude).
+        func refuse(_ why: String) async -> PRReviewOutcome {
+            do { try await round.attempts?.refused(why) } catch {
+                return outcome.failed("\(why); the refusal could not be recorded: \(error)")
             }
-            return outcome.failed(missing)
+            return outcome.failed(why)
         }
+        guard let provider = round.makeProvider() else { return await refuse("there is no adapter for \(round.agent.provider)") }
+        if case .failure(let failure) = round.spend(capabilities: provider.capabilities) { return await refuse(failure.message) }
+        guard ExecutableResolver.resolve(round.executable, searchPath: round.settings.environment["PATH"]) != nil else {
+            return await refuse(Self.agentMissing(round.executable, provider: round.agent.provider))
+        }
+        let request = reviewRequest(round, proof: proof)
+        if let refusal = request.validate(against: provider) { return await refuse(refusal.message) }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
-        let transcript = await runCodex(
-            CodexProvider(executable: round.settings.codexPath), request: reviewRequest(round, proof: proof),
-            round: round, attach: attach)
+        let transcript = await runAgent(provider, request: request, round: round, attach: attach)
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
+        outcome.costUSD = transcript.costUSD
         if let problem = transcript.problem { return outcome.failed(problem, answer: Self.readAnswer(paths.answer)) }
 
         if Self.answerSize(paths.answer) > PRReview.answerLimit {
@@ -258,7 +264,7 @@ extension ThreadService {
                     + "it was not accepted", answer: Self.readAnswer(paths.answer))
         }
         guard let answer = Self.readAnswer(paths.answer) else {
-            return outcome.failed("codex ended without writing an answer")
+            return outcome.failed("\(round.agent.provider) ended without writing an answer")
         }
         guard let verdict = PRReview.parseVerdict(answer) else {
             return outcome.failed(
@@ -341,6 +347,7 @@ extension ThreadService {
                 "round": .int(round), "pr": .int(pr), "head_sha": .string(sha), "ok": .bool(outcome.verdict != nil),
                 "verdict": outcome.verdict.map { .string($0.rawValue) } ?? .null,
             ])
+        if let cost = outcome.costUSD { data["cost_usd"] = .double(cost) }
         if let transcript { data["transcript_path"] = .string(transcript) }
         if let findingsPath { data["findings_path"] = .string(findingsPath) }
         if let reason { data["reason"] = .string(reason) }
@@ -348,7 +355,7 @@ extension ThreadService {
         try await log.append(stage.events.finished, turn: turn, data: .object(data))
         return PRReviewResult(
             round: round, pr: pr, maxRounds: maxRounds, headSHA: sha, verdict: outcome.verdict, failure: reason,
-            findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
+            findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings, costUSD: outcome.costUSD)
     }
 
     /// A stage whose `applies_to` matches none of the changed files: on record as `skipped`, `ok: false`, never a pass.
@@ -413,19 +420,19 @@ extension ThreadService {
 
     // MARK: Small helpers
 
-    static func codexProcessProblem(_ exit: ProcessExit, timeout: TimeInterval) -> String? {
+    static func processProblem(_ exit: ProcessExit, timeout: TimeInterval, name: String) -> String? {
         switch exit.cause {
         case .stopped: return "the review was stopped"
-        case .timedOut: return "codex did not finish within \(Int(timeout))s"
+        case .timedOut: return "\(name) did not finish within \(Int(timeout))s"
         case .natural: break
         }
         switch exit.termination {
         case .exited(0): return nil
         case .exited(let code):
             let tail = exit.stderrTail.firstLine
-            return "codex exited with status \(code)" + (tail.isEmpty ? "" : ": \(tail)")
-        case .signaled(let signal): return "codex was ended by signal \(signal)"
-        case .lost: return "codex ended in a way that was not recorded"
+            return "\(name) exited with status \(code)" + (tail.isEmpty ? "" : ": \(tail)")
+        case .signaled(let signal): return "\(name) was ended by signal \(signal)"
+        case .lost: return "\(name) ended in a way that was not recorded"
         }
     }
 
@@ -538,6 +545,21 @@ struct PRReviewRound: Sendable {
     var warnings: [String] = []
     /// Where this round's provider processes are put on record; nil when the round runs outside a thread's log.
     var attempts: AttemptLog?
+
+    /// Provider and model this stage resolves to.
+    var agent: ResolvedAgent { config.resolvedReviewAgent(stage: stage.name) }
+    var executable: String { agent.provider == .codex ? settings.codexPath : config.executable(for: agent.provider) }
+
+    func makeProvider() -> (any AgentProvider)? {
+        agent.provider == .codex ? CodexProvider(executable: settings.codexPath) : config.agentProvider(agent.provider)
+    }
+
+    func spend(capabilities: AgentCapabilities) -> Result<AgentSpend, AgentFailure> {
+        AgentSpendPolicy.spend(
+            role: .review, agent: agent, capabilities: capabilities, cap: PRReview.claudeBudgetUSD,
+            legacy: config.reviewUsesLegacySelection(stage: stage.name),
+            table: config.allowUnpricedTable(.review, stage: stage.name))
+    }
 }
 
 struct PRReviewFailure: Error, Sendable {
@@ -550,6 +572,8 @@ struct PRReviewOutcome: Sendable {
     var failure: String?
     var findings: String?
     var warnings: [String] = []
+    /// What the provider reported; nil when it reports none (Codex), never 0.
+    var costUSD: Double?
 
     mutating func failed(_ reason: String, answer: String? = nil) -> PRReviewOutcome {
         failure = reason

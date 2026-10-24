@@ -89,10 +89,23 @@ import Testing
         #expect(config.review.stage("pr-review")?.provider == .codex, "reviewer = \"codex\" is the provider")
         let both = problems("[review.stage.x]\nprompt = \"a.md\"\nreviewer = \"codex\"\nprovider = \"codex\"")
         #expect(both.contains { $0.contains("'reviewer' and 'provider' both choose") })
-        // The Codex adapter takes no model yet, so a review model is refused at load rather than ignored.
-        let model = problems("[review.stage.x]\nprompt = \"a.md\"\nmodel = \"m1\"")
-        #expect(model.contains { $0.contains("cannot be set yet") && $0.contains("task 4") })
-        #expect(problems("[agents.review]\nmodel = \"m1\"").contains { $0.contains("[agents.review] cannot be set yet") })
+        // The Codex adapter takes no model yet, so a model on a Codex judge or review is refused at load, not ignored:
+        // with Codex named, with Codex as the default, and through the stage that inherits the default.
+        let direct = problems("[review.stage.x]\nprompt = \"a.md\"\nprovider = \"codex\"\nmodel = \"m1\"")
+        #expect(direct.contains { $0.contains("takes no model") })
+        let byDefault = problems("[agents.review]\nmodel = \"m1\"")
+        #expect(byDefault.contains { $0.contains("[agents.review]") && $0.contains("takes no model") })
+        #expect(problems("[agents.judge]\nprovider = \"codex\"\nmodel = \"m1\"").contains { $0.contains("takes no model") })
+        #expect(
+            problems(
+                "[review]\nstages = [\"pr-review\", \"x\"]\n[review.stage.x]\nprompt = \"a.md\"\n"
+                    + "provider = \"codex\"\nmodel = \"m1\"")
+                .contains { $0.contains("takes no model") })
+        #expect(
+            problems(
+                "[agents.review]\nprovider = \"claude\"\n[review]\nstages = [\"pr-review\", \"x\"]\n"
+                    + "[review.stage.x]\nprovider = \"claude\"\nmodel = \"haiku\"\nprompt = \"a.md\"")
+                .isEmpty)
         #expect(try parse("[pr_review]\nmax_rounds = 2").review.prReview.provider == nil)
     }
 
@@ -133,11 +146,51 @@ import Testing
         #expect(config.resolvedReviewAgent(stage: "unknown").model == "review-model")
     }
 
+    @Test func agentsReviewJudgeProviders() throws {
+        let both = try parse(
+            "[agents.judge]\nprovider = \"codex\"\nallow_unpriced = true\n"
+                + "[agents.review]\nprovider = \"claude\"\nmodel = \"haiku\"")
+        #expect(both.resolvedJudgeAgent() == ResolvedAgent(provider: .codex, model: nil, allowUnpriced: true))
+        #expect(both.resolvedReviewAgent() == ResolvedAgent(provider: .claude, model: "haiku", allowUnpriced: false))
+        let stage = try parse(
+            """
+            [agents.review]
+            provider = "claude"
+            model = "haiku"
+            [review]
+            stages = ["pr-review", "design"]
+            [review.stage.design]
+            prompt = "d.md"
+            provider = "codex"
+            allow_unpriced = true
+            """)
+        // A model belongs to its provider: the stage that moves to Codex does not inherit Claude's.
+        #expect(stage.resolvedReviewAgent(stage: "design") == ResolvedAgent(provider: .codex, model: nil, allowUnpriced: true))
+        #expect(stage.resolvedReviewAgent().model == "haiku")
+        #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
+    }
+
+    @Test func runStaysClaudeOnly() {
+        let found = problems("[agents.run]\nprovider = \"codex\"")
+        #expect(found.contains { $0.contains("[agents.run] cannot use \"codex\" yet") }, "\(found)")
+    }
+
+    @Test func legacyReviewSelection() throws {
+        #expect(try parse("").reviewUsesLegacySelection())
+        #expect(try parse("[pr_review]\nmax_rounds = 2").reviewUsesLegacySelection())
+        #expect(try parse("[agents.review]\nallow_unpriced = true").reviewUsesLegacySelection(), "no provider chosen")
+        #expect(try parse("[review.stage.pr-review]\nreviewer = \"codex\"").reviewUsesLegacySelection(), "P6's key is not new")
+        #expect(!(try parse("[agents.review]\nprovider = \"codex\"").reviewUsesLegacySelection()))
+        #expect(!(try parse("[review.stage.pr-review]\nprovider = \"codex\"").reviewUsesLegacySelection()))
+        let named = try parse(
+            "[agents.review]\nprovider = \"claude\"\n[review]\nstages = [\"pr-review\", \"x\"]\n"
+                + "[review.stage.x]\nprompt = \"a.md\"\nprovider = \"codex\"")
+        #expect(named.allowUnpricedTable(.review, stage: "x") == "[agents.review] or [review.stage.x]")
+        #expect(named.allowUnpricedTable(.judge) == "[agents.judge]")
+    }
+
     @Test(arguments: [
         ("[agents.run]\nprovider = \"codex\"", "[agents.run] cannot use \"codex\" yet"),
-        ("[agents.judge]\nprovider = \"codex\"", "[agents.judge] cannot use \"codex\" yet"),
-        ("[agents.review]\nprovider = \"claude\"", "[agents.review] cannot use \"claude\" yet"),
-        ("[review.stage.x]\nprompt = \"a.md\"\nprovider = \"claude\"", "[review.stage.x] cannot use \"claude\" yet"),
     ])
     func unsupported(text: String, message: String) {
         let found = problems(text)

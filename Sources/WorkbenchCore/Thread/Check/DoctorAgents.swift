@@ -6,7 +6,8 @@ public struct DoctorAgentIssue: Sendable, Equatable {
     public enum Severity: String, Sendable { case problem, note }
 
     public var role: AgentRole
-    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `unconfined_reads` or `setting_unused`.
+    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `unpriced_not_allowed`, `unconfined_reads` or
+    /// `setting_unused`.
     public var kind: String
     public var severity: Severity
     public var message: String
@@ -128,14 +129,25 @@ extension Doctor {
                 "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
                     + "repository writes and posting are still refused")
         }
+        // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
+        if role == .judge || role == .review, caps.policies.contains(.readOnlyEvidence) {
+            let legacy = role == .review && config.reviewUsesLegacySelection()
+            let spend = AgentSpendPolicy.spend(
+                role: role, agent: resolved, capabilities: caps, cap: 0, legacy: legacy, table: config.allowUnpricedTable(role))
+            if case .failure(let refusal) = spend {
+                add("unpriced_not_allowed", .problem, "\(role.rawValue) is refused on \(provider): \(refusal.message)")
+            }
+        }
         let selection = config.agents.selection(role)
         if selection.allowUnpriced != nil {
             add(
                 "setting_unused", .note,
                 caps.hardDollarCap
                     ? "[agents.\(role.rawValue)] allow_unpriced has no effect: \(provider) enforces a dollar limit"
-                    : "[agents.\(role.rawValue)] allow_unpriced is read but nothing acts on it yet: "
-                        + "\(provider) already runs with a timeout only (P9 task 4 enforces it)")
+                    : "[agents.\(role.rawValue)] allow_unpriced = \(selection.allowUnpriced == true) "
+                        + (selection.allowUnpriced == true
+                            ? "lets the \(role.rawValue) run on \(provider) with only a timeout; its cost is unknown"
+                            : "keeps the \(role.rawValue) on \(provider) refused: it has no dollar cap"))
         }
         return out
     }
