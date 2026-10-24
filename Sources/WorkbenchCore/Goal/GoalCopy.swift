@@ -58,7 +58,9 @@ extension GoalFile {
         for entry in entries where carriedKeys.contains(entry.key) {
             switch entry.key {
             case "title":
-                guard !entry.value.isEmpty else { throw GoalCopyValueError(message: "'title' must not be empty") }
+                guard !entry.value.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    throw GoalCopyValueError(message: "'title' must not be empty")
+                }
                 guard FrontMatterLine.canRender(entry.value) else {
                     throw GoalCopyValueError(
                         message: "'title' needs quotes and holds both \" and ', which a goal file cannot write")

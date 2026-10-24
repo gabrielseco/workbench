@@ -219,6 +219,12 @@ import Testing
         }
     }
 
+    @Test(arguments: ["\"Fix\t\t#12\"", "\"  padded  \""])
+    func aTitleThatTheParserWouldCutOrTrimIsQuotedWhenWritten(title: String) async throws {
+        let expected = try #require(GoalFile.copy(source(title: title)).title)
+        #expect(try await draftTitle(from: source(title: title), name: "tabs") == expected)
+    }
+
     @Test func aFileWithoutATitleGetsOneFromTheName() async throws {
         let copy = try GoalFile.copy(source(title: nil))
         #expect(copy.title == nil)
@@ -226,7 +232,7 @@ import Testing
     }
 
     /// The rule `parse` applies to a goal's title.
-    @Test(arguments: ["", "   ", "\"\""])
+    @Test(arguments: ["", "   ", "\"\"", "\" \""])
     func anEmptyTitleIsRefusedNamingTheKey(title: String) throws {
         #expect(throws: GoalCopyValueError(message: "'title' must not be empty")) {
             try GoalFile.copy(source(title: title))

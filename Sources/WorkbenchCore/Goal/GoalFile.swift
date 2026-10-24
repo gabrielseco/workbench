@@ -427,7 +427,9 @@ struct FrontMatterLine: Sendable, Equatable {
     }
 
     private static func needsQuotes(_ value: String) -> Bool {
-        value.contains("  #") || value.hasPrefix("\"") || value.hasPrefix("'")
+        // The parser's own rules: a comment starts at `\s{2,}#`, and unquoted values are trimmed.
+        value.range(of: #"\s{2,}#"#, options: .regularExpression) != nil || value.hasPrefix("\"") || value.hasPrefix("'")
+            || value != value.trimmingCharacters(in: .whitespaces)
     }
 
     /// The quote that can wrap `value`, nil when it needs quotes and holds both kinds: the parser has no escapes and
