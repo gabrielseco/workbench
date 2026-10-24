@@ -57,6 +57,19 @@ private struct FakeViewGH {
         r.fx.project.workbenchDirectory.appendingPathComponent("reviews/pr-12-\(r.head.prefix(7))")
     }
 
+    @Test func aClaudeReviewOfAPullRequestByNumberNeverPassesAProofStageWithoutImages() async throws {
+        var r = try await reviewedPR(extraConfig: "[review.stage.pr-review]\ninputs = [\"diff\", \"proof\"]")
+        r.config.agents.review = AgentSelection(provider: .claude)
+        _ = try await r.fx.git.run(["push", "-q", "origin", "main:refs/heads/main"], in: r.fx.repo)
+        let answer = r.codex.dir.appendingPathComponent("a.txt")
+        try "Fine.\nVERDICT: CLEAN\n".write(to: answer, atomically: true, encoding: .utf8)
+        let result = try await r.fx.service.reviewPullRequest(
+            number: 12, spec: nil, config: r.config, gh: FakeViewGH(in: r).runner, codexPath: r.codex.path,
+            environment: r.codex.environment(["FAKE_CLAUDE": "answer=\(answer.path)"]), timeout: 30, capacityBackoff: { _ in 0 })
+        #expect(result.verdict == nil, "a clean verdict without the screenshots the stage asked for")
+        #expect(result.failure?.contains("cannot take images") == true, "\(String(describing: result.failure))")
+    }
+
     @Test func aPullRequestWithNoThreadIsReviewedFromItsOwnTextAndKeptUnderReviews() async throws {
         let r = try await reviewedPR()
         let before = try r.fx.events(r.id).count
