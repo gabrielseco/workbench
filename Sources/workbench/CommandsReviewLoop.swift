@@ -64,7 +64,8 @@ extension Commands {
         let result: PRReviewResult
         do {
             result = try await ctx.service.prReview(
-                id: id, config: config, stopRequested: { holder.isStopRequested }, attach: { holder.attach($0) })
+                id: id, config: config, codexPath: config.executable(for: .codex),
+                stopRequested: { holder.isStopRequested }, attach: { holder.attach($0) })
         } catch let error as PRReviewRefusal {
             return try await resume(after: error, id: id, ctx: ctx, config: config)
         }

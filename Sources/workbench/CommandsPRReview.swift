@@ -38,6 +38,7 @@ extension Commands {
         do {
             result = try await ctx.service.reviewPullRequest(
                 number: number, spec: spec, config: config, gh: gh, again: again,
+                codexPath: config.executable(for: .codex),
                 stopRequested: { holder.isStopRequested }, attach: { holder.attach($0) })
         } catch let error as PRReviewRefusal {
             switch error {
@@ -117,7 +118,8 @@ extension Commands {
         let result: PRReviewResult
         do {
             result = try await ctx.service.reviewStage(
-                named: name, id: id, config: config, again: again, stopRequested: { holder.isStopRequested },
+                named: name, id: id, config: config, again: again, codexPath: config.executable(for: .codex),
+                stopRequested: { holder.isStopRequested },
                 attach: { holder.attach($0) })
         } catch let error as PRReviewRefusal {
             switch error {

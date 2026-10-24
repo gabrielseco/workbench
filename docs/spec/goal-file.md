@@ -257,6 +257,10 @@ default_budget_usd = 5.00               # used when drafting a goal
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
+# [providers.codex]                     # P9: the executable of a provider (claude: the same as claude_path)
+# executable = "/opt/homebrew/bin/codex"
+# [agents.judge]                        # P9: provider, model and allow_unpriced for goal, run, judge and review
+# model = "haiku"                       # also [review.stage.<name>] provider, model and allow_unpriced
 # [run]                                 # P16: how the verifier's app is started; Workbench runs it and stops it
 # command = "npm run dev:mock"          # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
 # ready_url = "http://localhost:{port}/"  # or ready_line = "on mock data"; exactly one. Any HTTP answer is up
@@ -383,6 +387,8 @@ Notes:
   pull request's checkout and puts its rubric in the brief in place of the built-in report instructions (a
   skill's `## Rubric` section when it has one, else the whole skill under a header saying to ignore steps that
   build, run or post; a prompt file whole); when that file is missing or empty the round fails.
+  A stage table may also set `provider`, `model` and `allow_unpriced`, which override `[agents.review]` for that stage;
+  `reviewer = "codex"` is read as `provider = "codex"`, and a stage with both keys is refused.
   `workbench review-stage <name>` runs one round of a listed stage (`pr-review` is `workbench pr-review`).
   `proof` attaches the top-level `*.png` files of the thread's latest proof (the verifier's, or an older log's verify step) to the Codex run (`-i`, at
   most 20) and lists their paths in the brief; with no proof, one from before the latest turn, or no
@@ -444,6 +450,22 @@ Notes:
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3
   (18 of 18). We do not re-implement any of that; the worktree and the absence of credentials cover the rest.
+
+**Providers and agents (P9 PR 7).** `[providers.claude]` and `[providers.codex]` take `executable`, a command name or
+path run without a shell; `[providers.claude]` and `claude_path` name the same executable, so both is refused. An
+`[agents.<role>]` table, for `goal`, `run`, `judge` or `review`, takes `provider` (`"claude"` or `"codex"`), `model`
+and `allow_unpriced`. With none of these tables a thread behaves as before: Claude runs and judges, Codex reviews, and
+goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `run` and `judge` on
+`claude`, `review` on `codex`; anything else is refused when the config loads, not ignored, until the second
+provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
+`allow_unpriced` is for evaluations that may run without a dollar cap; `[agents.run]` refuses it, because spending
+is approved in the goal. A model is resolved per role: for the judge `judge --model`, then `[agents.judge]`'s
+`model`, then `judge_model` and `model` (only while `[agents.judge]` sets no provider or model, and only for Claude),
+then the provider's default; for review the stage's `model`, then `[agents.review]`'s, then the default; for coding
+the goal's `model`, `[agents.run]`'s, then `model`; drafting never inherits `model`. `workbench doctor` prints
+`agent goal:`, `agent run:`, `agent judge:` and `agent review:` lines with the provider and model each resolves to.
+In this slice only the executables take effect (`claude_path`'s place for claude, the codex path for the review
+commands); the run, judge and review paths still use their existing settings.
 
 ## Project instructions
 

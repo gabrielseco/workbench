@@ -46,6 +46,10 @@ public struct ReviewStageConfig: Sendable, Equatable {
     public var prompt: String?
     public var checklist: String?
     public var reviewer: ReviewerKind = .codex
+    /// `provider`, `model` and `allow_unpriced` of the stage's table; each overrides `[agents.review]` for this stage.
+    public var provider: AgentProviderID?
+    public var model: String?
+    public var allowUnpriced: Bool?
     public var inputs: [ReviewStageInput] = ReviewStageInput.defaults
     /// Globs over the files the pull request changes. Empty means every change.
     public var appliesTo: [String] = []
@@ -101,6 +105,7 @@ public struct ReviewConfig: Sendable, Equatable {
 
     static let stageKeys: Set<String> = [
         "skill", "prompt", "checklist", "reviewer", "inputs", "applies_to", "max_rounds",
+        "provider", "model", "allow_unpriced",
     ]
     static let tablePrefix = "review.stage."
 }
@@ -230,9 +235,20 @@ extension ReviewConfig {
         if stage.skill != nil, stage.prompt != nil, let line = table.entries["prompt"]?.line {
             fail(.conflict, line, "'skill' and 'prompt' are both set in [\(tablePrefix)\(stage.name)]; the rubric comes from one")
         }
+        if keys.contains("provider") {
+            let selection = AgentSelection.parse(table, name: "\(tablePrefix)\(stage.name)", role: .review, fail: fail)
+            stage.provider = selection.provider
+            stage.model = selection.model
+            stage.allowUnpriced = selection.allowUnpriced
+        }
         if keys.contains("reviewer"), let entry = table.entries["reviewer"] {
-            if case .string(let value) = entry.value, let reviewer = ReviewerKind(rawValue: value) {
+            if let provider = table.entries["provider"] {
+                fail(
+                    .conflict, max(entry.line, provider.line),
+                    "'reviewer' and 'provider' both choose the reviewer of [\(tablePrefix)\(stage.name)]; keep 'provider'")
+            } else if case .string(let value) = entry.value, let reviewer = ReviewerKind(rawValue: value) {
                 stage.reviewer = reviewer
+                stage.provider = AgentProviderID(value)
             } else if case .string("claude") = entry.value {
                 fail(
                     .invalidValue, entry.line,
