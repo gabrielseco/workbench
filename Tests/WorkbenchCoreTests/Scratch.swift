@@ -40,8 +40,8 @@ enum Scratch {
         if let rootURL { try? FileManager.default.removeItem(at: rootURL) }
     }
 
-    /// Removes scratch roots of processes that no longer run (a killed run), and any `wb-*` directory older than
-    /// a day left by the versions of the tests that made them directly.
+    /// Removes scratch roots of processes that no longer run (a killed run), and any `wb-*` directory (never a file)
+    /// older than a day left by the versions of the tests that made them directly.
     static func sweepStale(in tmp: URL = FileManager.default.temporaryDirectory, now: Date = Date()) {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []
         for name in names where name.hasPrefix("wb-") {
@@ -50,8 +50,11 @@ enum Scratch {
                 let parts = name.split(separator: "-")
                 if parts.count > 2, let pid = Int32(parts[2]), kill(pid, 0) == 0 || errno == EPERM { continue }
             } else {
-                let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                guard let modified, now.timeIntervalSince(modified) > 86_400 else { continue }
+                // Directories only: a `wb-*` file belongs to someone else.
+                let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isDirectoryKey])
+                guard values?.isDirectory == true, let modified = values?.contentModificationDate,
+                    now.timeIntervalSince(modified) > 86_400
+                else { continue }
             }
             try? FileManager.default.removeItem(at: url)
         }
