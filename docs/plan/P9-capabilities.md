@@ -136,10 +136,12 @@ said. Raw streams: `P9-probes/fixtures/codex-coding-*.stdout`, summary `codex-co
 | Write a file outside the worktree (under `$HOME`) | Refused (`operation not permitted`) |
 | Append to a tracked file of another checkout (under `$HOME`) | Refused; the file unchanged |
 | Write a file under `$TMPDIR` | Refused (allowed without the `exclude_*` keys: the control turn) |
-| `git push tmpremote main` to a bare remote under `$TMPDIR` | Refused; the remote has no `main` |
+| `git push tmpremote main` to a bare remote under `$TMPDIR` | Refused (`remote unpack failed: unable to create temporary object directory`); the remote has no `main` |
 | Write inside `.git` | Refused |
 | `git add -A && git commit` | Refused (`.git/index.lock: Operation not permitted`); HEAD unchanged |
 | `git push origin main` (a local commit the remote lacks) | Refused (`remote unpack failed`); the remote unchanged |
+
+The probe prompts give the command alone (an earlier run ended its sentences with a space and a period, so both pushes ran as `git push … main .` and failed as an invalid refspec before reaching any remote; the Codex review caught it, and the probe now treats such output as inconclusive).
 | `curl` to the internet | No network (`could not resolve host`) |
 
 A result counts only if the turn completed and the attempt is evidenced: a `command_execution` item for it, or, because Codex
