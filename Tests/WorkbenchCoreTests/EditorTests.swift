@@ -182,14 +182,17 @@ private struct Bin {
         try #require(FileManager.default.isExecutableFile(atPath: "/usr/bin/perl"))
         let bin = try Bin()
         let pidFile = bin.url.appendingPathComponent("escaped")
-        // The helper leaves the launcher's process group (a new session), so a group kill alone would miss it.
+        // The helper leaves the launcher's process group (a new session), so a group kill alone would miss it. It writes
+        // its pid only after `setsid` succeeded, so a pid file means the escape happened.
         let ed = try bin.script(
             "ed",
             """
             perl -MPOSIX -e '
-              my $p = fork;
-              if (!$p) { POSIX::setsid(); exec "sleep", "300" }
-              open(my $f, ">", $ARGV[0]); print $f $p; close $f;
+              if (!fork) {
+                POSIX::setsid() or exit 1;
+                open(my $f, ">", $ARGV[0]); print $f $$; close $f;
+                exec "sleep", "300";
+              }
               sleep 300' '\(pidFile.path)'
             """)
         // The timeout is the launcher's only stop, so it must outlast perl starting (a few ms, but 1 s did not on a
