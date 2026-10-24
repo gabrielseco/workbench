@@ -7,11 +7,24 @@ public final class AgentExecution: Sendable {
     public let activity: AsyncStream<AgentActivity>
     private let run: ProcessRun
     private let task: Task<AgentCompletion, Never>
+    private let gate: AsyncStream<Void>.Continuation
 
-    fileprivate init(run: ProcessRun, activity: AsyncStream<AgentActivity>, task: Task<AgentCompletion, Never>) {
+    fileprivate init(
+        run: ProcessRun, activity: AsyncStream<AgentActivity>, task: Task<AgentCompletion, Never>,
+        gate: AsyncStream<Void>.Continuation
+    ) {
         self.run = run
         self.activity = activity
         self.task = task
+        self.gate = gate
+    }
+
+    /// Starts reading the child's output. Only needed after `start(held: true)`, which lets the caller write what
+    /// must come first (the log's `turn.started`, with the pid) before any line is recorded. Output waits in the
+    /// pipe layer meanwhile. Idempotent.
+    public func begin() {
+        gate.yield(())
+        gate.finish()
     }
 
     public var pid: Int32 { run.pid }
@@ -22,13 +35,18 @@ public final class AgentExecution: Sendable {
     }
 
     /// SIGTERM now, SIGKILL and a sweep of descendants after the grace period. Idempotent.
-    public func stop() { run.stop() }
+    public func stop() {
+        run.stop()
+        begin()  // a held execution that is stopped must still end
+    }
 }
 
 public enum AgentRunner {
     /// Validates, resolves the executable, spawns, and returns at once. A refusal or a failed launch throws an
     /// `AgentFailure` before any handle exists; the caller records it as a failed attempt, not as a process.
-    public static func start(provider: any AgentProvider, request: AgentRequest) throws -> AgentExecution {
+    public static func start(
+        provider: any AgentProvider, request: AgentRequest, recorder: (any AgentRecorder)? = nil, held: Bool = false
+    ) throws -> AgentExecution {
         if let refusal = request.validate(against: provider) { throw refusal }
         let invocation = try provider.invocation(for: request)
 
@@ -46,26 +64,42 @@ public enum AgentRunner {
             workingDirectory: request.workingDirectory, timeout: request.limits.timeout)
         spawn.maxLineBytes = request.limits.maxLineBytes
         spawn.maxOutputBytes = request.limits.maxOutputBytes
+        spawn.killGrace = request.limits.killGrace
         let process: ProcessRun
         do {
             process = try ProcessRunner.start(spawn)
         } catch {
-            throw AgentFailure(.process, "The process did not start: \(error)", retry: .never)
+            throw AgentFailure(.process, "The process did not start: \(error)", retry: .never, diagnostic: "\(error)")
         }
 
         let (stream, continuation) = AsyncStream.makeStream(
             of: AgentActivity.self, bufferingPolicy: .bufferingNewest(max(1, request.limits.maxBufferedActivity)))
         let decoder = provider.makeDecoder(for: request)
         let limits = request.limits
-        let task = Task.detached { await drive(process, decoder: decoder, limits: limits, continuation: continuation) }
-        return AgentExecution(run: process, activity: stream, task: task)
+        let (gate, gateContinuation) = AsyncStream.makeStream(of: Void.self)
+        if !held { gateContinuation.finish() }
+        let task = Task.detached {
+            var open = gate.makeAsyncIterator()
+            _ = await open.next()
+            return await drive(
+                process, decoder: decoder, limits: limits, continuation: continuation, recorder: recorder)
+        }
+        return AgentExecution(run: process, activity: stream, task: task, gate: gateContinuation)
     }
 
     private static func drive(
         _ process: ProcessRun, decoder initial: any AgentDecoder, limits: AgentLimits,
-        continuation: AsyncStream<AgentActivity>.Continuation
+        continuation: AsyncStream<AgentActivity>.Continuation, recorder: (any AgentRecorder)?
     ) async -> AgentCompletion {
         var decoder = initial
+        var recordingFailure: String?
+        func record(_ line: AgentRawLine, _ items: [AgentActivity]) async {
+            guard let recorder, recordingFailure == nil else { return }
+            do { try await recorder.record(line, activity: items) } catch {
+                recordingFailure = "\(error)"
+                process.stop()
+            }
+        }
         var dropped = 0
         var oversized = 0
         func emit(_ item: AgentActivity) {
@@ -78,11 +112,15 @@ public enum AgentRunner {
             case .started(let pid):
                 emit(.started(pid: pid))
             case .line(let line):
-                for item in decoder.consume(line: line) { emit(item) }
+                let items = decoder.consume(line: line)
+                for item in items { emit(item) }
+                await record(.line(line), items)
             case .oversizedLine(let preview, let total):
                 oversized += 1
                 emit(.diagnostic("A line of \(total) bytes was over the limit; kept the first \(preview.utf8.count)."))
-                for item in decoder.consume(oversizedPreview: preview, totalBytes: total) { emit(item) }
+                let items = decoder.consume(oversizedPreview: preview, totalBytes: total)
+                for item in items { emit(item) }
+                await record(.oversized(preview: preview, totalBytes: total), items)
             case .exited(let e):
                 exit = e
             }
@@ -96,16 +134,19 @@ public enum AgentRunner {
                     outputTruncated: false, lastLineAfterLimit: nil, stderrTail: "", drainTimedOut: false),
                 provider: .unknown, answer: nil, session: nil, usage: nil,
                 failure: AgentFailure(.interrupted, "The process ended with no exit record.", retry: .never),
-                droppedActivity: dropped, outputTruncated: false, oversizedLines: oversized)
+                droppedActivity: dropped, outputTruncated: false, oversizedLines: oversized,
+                recordingFailure: recordingFailure)
         }
 
         let result = decoder.finish(exit: exit)
+        if let late = result.lateLine { await record(.late(late), []) }
         let failure = failure(exit, provider: result.failure, limits: limits)
         continuation.finish()
         return AgentCompletion(
             process: exit, provider: result.outcome, answer: result.answer, session: result.session,
             usage: result.usage, failure: failure, droppedActivity: dropped, outputTruncated: exit.outputTruncated,
-            oversizedLines: oversized)
+            oversizedLines: oversized, permissionDenials: result.permissionDenials,
+            permissionDenialCount: result.permissionDenialCount, recordingFailure: recordingFailure)
     }
 
     /// A stop or a deadline is what happened, whatever the provider printed before it: it keeps the provider's

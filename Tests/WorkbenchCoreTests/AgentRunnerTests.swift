@@ -14,6 +14,7 @@ private struct ScriptProvider: AgentProvider {
         policies: [.scopedCoding, .readOnlyEvidence], resume: .returnedID, streamsActivity: true)
     var script: String
     var executable = "/bin/sh"
+    var lateLine = false
 
     func invocation(for request: AgentRequest) throws -> AgentInvocation {
         AgentInvocation(
@@ -21,7 +22,7 @@ private struct ScriptProvider: AgentProvider {
             displayArguments: ["-c", "<script>"])
     }
 
-    func makeDecoder(for request: AgentRequest) -> any AgentDecoder { ScriptDecoder() }
+    func makeDecoder(for request: AgentRequest) -> any AgentDecoder { ScriptDecoder(late: lateLine) }
 }
 
 private struct ScriptDecoder: AgentDecoder {
@@ -29,6 +30,7 @@ private struct ScriptDecoder: AgentDecoder {
     var last = ""
     /// A dropped line may have been the result, so a decoder that cannot tell fails closed.
     var lostLine = false
+    var late = false
 
     mutating func consume(line: String) -> [AgentActivity] {
         if line == "DONE" { sawDone = true }
@@ -42,6 +44,7 @@ private struct ScriptDecoder: AgentDecoder {
     }
 
     mutating func finish(exit: ProcessExit) -> AgentDecoderResult {
+        if late { return AgentDecoderResult(outcome: .succeeded, lateLine: "the last line") }
         if lostLine { return AgentDecoderResult(outcome: .unknown) }
         if exit.stderrTail.contains("at capacity") {
             return AgentDecoderResult(
@@ -178,6 +181,86 @@ private func finish(_ script: String, _ request: AgentRequest = request()) async
             let failure = #expect(throws: AgentFailure.self) { try AgentRunner.start(provider: provider, request: bad) }
             #expect(failure?.kind == .unsupportedCapability)
         }
+    }
+}
+
+// MARK: the recorder
+
+private final class Collector: AgentRecorder, @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [AgentRawLine] = []
+    var failAfter: Int?
+    func record(_ line: AgentRawLine, activity: [AgentActivity]) async throws {
+        let count = lock.withLock { () -> Int in lines.append(line); return lines.count }
+        if let failAfter, count >= failAfter { throw RecorderError.refused }
+    }
+    var recorded: [AgentRawLine] { lock.withLock { lines } }
+    enum RecorderError: Error { case refused }
+}
+
+@Suite(.processGate) struct AgentRecorderTests {
+    @Test func everyLineIsRecordedInOrderEvenWhenTheActivityStreamDropsMost() async throws {
+        let collector = Collector()
+        let script = "i=0; while [ $i -lt 3000 ]; do echo line$i; i=$((i+1)); done; echo DONE"
+        let execution = try AgentRunner.start(
+            provider: ScriptProvider(script: script), request: request(buffered: 4), recorder: collector)
+        let completion = await execution.completion
+        #expect(completion.droppedActivity > 0, "the bounded stream lost activity")
+        let lines = collector.recorded.compactMap { if case .line(let l) = $0 { l } else { nil } }
+        #expect(lines.count == 3001 && lines.first == "line0" && lines.last == "DONE", "the recorder lost nothing")
+        #expect(lines == (0..<3000).map { "line\($0)" } + ["DONE"])
+    }
+
+    @Test func aHeldExecutionRecordsNothingUntilItIsBegun() async throws {
+        let collector = Collector()
+        let execution = try AgentRunner.start(
+            provider: ScriptProvider(script: "echo one; echo DONE"), request: request(), recorder: collector, held: true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(collector.recorded.isEmpty, "the caller writes what must come first, then begins")
+        execution.begin()
+        execution.begin()
+        let completion = await execution.completion
+        #expect(completion.succeeded)
+        #expect(collector.recorded.count == 2)
+    }
+
+    @Test func aHeldExecutionThatIsStoppedStillEnds() async throws {
+        let execution = try AgentRunner.start(
+            provider: ScriptProvider(script: "sleep 300"), request: request(), recorder: Collector(), held: true)
+        execution.stop()
+        let completion = await execution.completion
+        #expect(completion.failure?.kind == .cancellation)
+    }
+
+    @Test func aRecorderThatThrowsStopsTheChildAndTheRestIsNotRecorded() async throws {
+        let collector = Collector()
+        collector.failAfter = 2
+        let execution = try AgentRunner.start(
+            provider: ScriptProvider(script: "echo a; echo b; echo c; sleep 300"), request: request(), recorder: collector)
+        let completion = await execution.completion
+        #expect(completion.recordingFailure?.contains("refused") == true)
+        #expect(completion.process.cause == .stopped, "the child did not run on")
+        #expect(collector.recorded.count == 2)
+    }
+
+    @Test func aLostRecordIsNeverSuccessEvenAfterACleanExit() async throws {
+        let collector = Collector()
+        collector.failAfter = 3  // two lines, then the late one
+        var provider = ScriptProvider(script: "echo one; echo two")
+        provider.lateLine = true
+        let completion = await (try AgentRunner.start(provider: provider, request: request(), recorder: collector)).completion
+        #expect(completion.process.termination == .exited(0) && completion.provider == .succeeded)
+        #expect(completion.recordingFailure != nil)
+        #expect(!completion.succeeded, "the durable record was lost")
+    }
+
+    @Test func aLateLineIsRecordedAfterTheStream() async throws {
+        let collector = Collector()
+        var provider = ScriptProvider(script: "echo one; echo two")
+        provider.lateLine = true
+        let execution = try AgentRunner.start(provider: provider, request: request(), recorder: collector)
+        _ = await execution.completion
+        #expect(collector.recorded.last == .late("the last line"))
     }
 }
 

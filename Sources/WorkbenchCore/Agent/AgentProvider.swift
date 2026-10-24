@@ -32,17 +32,43 @@ public struct AgentDecoderResult: Sendable, Equatable {
     public var usage: AgentUsage?
     /// A failure the provider's own output explains (capacity, auth). Process-level ones are added by the runner.
     public var failure: AgentFailure?
+    public var permissionDenials: [AgentDenial]
+    public var permissionDenialCount: Int
+    /// A last line the process layer kept aside past the output limit and the decoder used because the stream
+    /// had no result of its own. The recorder gets it after the stream, so the log holds what the decision used.
+    public var lateLine: String?
 
     public init(
         outcome: AgentCompletion.ProviderOutcome, answer: AgentAnswer? = nil, session: AgentSessionHandle? = nil,
-        usage: AgentUsage? = nil, failure: AgentFailure? = nil
+        usage: AgentUsage? = nil, failure: AgentFailure? = nil, permissionDenials: [AgentDenial] = [],
+        permissionDenialCount: Int = 0, lateLine: String? = nil
     ) {
+        self.permissionDenials = permissionDenials
+        self.permissionDenialCount = permissionDenialCount
+        self.lateLine = lateLine
         self.outcome = outcome
         self.answer = answer
         self.session = session
         self.usage = usage
         self.failure = failure
     }
+}
+
+/// What the process layer saw, before any decoding.
+public enum AgentRawLine: Sendable, Equatable {
+    case line(String)
+    /// Over the size limit: its start and its real size.
+    case oversized(preview: String, totalBytes: Int)
+    /// The last line the process layer kept aside past the output limit, delivered after the stream when the
+    /// decoder used it (`AgentDecoderResult.lateLine`).
+    case late(String)
+}
+
+/// Receives every raw line, in order and losslessly, with the activity the decoder drew from it. This is how a
+/// stage keeps the verbatim record (the event log) that the bounded activity stream cannot promise. Each call is
+/// awaited before the next line is read; a throw stops the child, and the rest of its output is drained, not recorded.
+public protocol AgentRecorder: Sendable {
+    func record(_ line: AgentRawLine, activity: [AgentActivity]) async throws
 }
 
 /// Reads one child's stdout. Created per execution, so it may keep state.

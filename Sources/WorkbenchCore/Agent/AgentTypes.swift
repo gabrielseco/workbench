@@ -107,11 +107,14 @@ public struct AgentLimits: Sendable, Equatable {
     public var maxBufferedActivity: Int
     /// Raw text kept on an activity item or a failure message.
     public var maxRawBytes: Int
+    /// After SIGTERM, how long before SIGKILL.
+    public var killGrace: TimeInterval
 
     public init(
         timeout: TimeInterval, maxLineBytes: Int = 1 << 20, maxOutputBytes: Int = 64 << 20,
-        maxBufferedActivity: Int = 1024, maxRawBytes: Int = 4096
+        maxBufferedActivity: Int = 1024, maxRawBytes: Int = 4096, killGrace: TimeInterval = 5
     ) {
+        self.killGrace = killGrace
         self.timeout = timeout
         self.maxLineBytes = maxLineBytes
         self.maxOutputBytes = maxOutputBytes
@@ -137,13 +140,20 @@ public struct AgentRequest: Sendable, Equatable {
     /// The environment the stage allows. An adapter takes only the variables its provider needs.
     public var environment: [String: String]
     public var limits: AgentLimits
+    /// Standing rules for the agent, appended to its system prompt where the provider has one.
+    public var rules: String?
+    /// Extra permissions the user granted this thread, as the provider's own tool patterns. Only for
+    /// `scopedCoding`; the adapter never widens them and never revives one the project denies.
+    public var grants: [String]
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],
         workingDirectory: URL, outputDirectory: URL, policy: AgentPolicy, spend: AgentSpend,
         session: AgentSessionIntent = .none, purpose: AgentSessionHandle.Purpose,
-        environment: [String: String], limits: AgentLimits
+        environment: [String: String], limits: AgentLimits, rules: String? = nil, grants: [String] = []
     ) {
+        self.rules = rules
+        self.grants = grants
         self.provider = provider
         self.model = model
         self.prompt = prompt
@@ -163,10 +173,10 @@ public struct AgentUsage: Sendable, Equatable, Codable {
     public var inputTokens: Int?
     public var outputTokens: Int?
     public var cachedInputTokens: Int?
-    /// Unknown stays nil: it is never 0.
-    public var costUSD: Decimal?
+    /// As the provider reported it (a float, and the log keeps it as one). Unknown stays nil: it is never 0.
+    public var costUSD: Double?
 
-    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, cachedInputTokens: Int? = nil, costUSD: Decimal? = nil) {
+    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, cachedInputTokens: Int? = nil, costUSD: Double? = nil) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cachedInputTokens = cachedInputTokens
@@ -202,6 +212,8 @@ public struct AgentFailure: Error, Sendable, Equatable {
     public enum Kind: String, Sendable, Codable {
         case missingExecutable, authOrConfig, unsupportedCapability, capacity, protocolError, process
         case timeout, cancellation, interrupted
+        /// The provider's own dollar limit ended the work (Claude `--max-budget-usd`).
+        case budgetExceeded
     }
 
     public var kind: Kind
@@ -225,6 +237,19 @@ public enum AgentAnswer: Sendable, Equatable {
     case file(URL)
 }
 
+/// A tool call the policy refused, bounded: enough to offer a grant or explain the turn.
+public struct AgentDenial: Sendable, Equatable {
+    public var tool: String
+    public var input: String?
+    public var inputTruncated: Bool
+
+    public init(tool: String, input: String? = nil, inputTruncated: Bool = false) {
+        self.tool = tool
+        self.input = input
+        self.inputTruncated = inputTruncated
+    }
+}
+
 /// How the process ended and what the provider said about the work, kept apart: exit 0 is not success.
 public struct AgentCompletion: Sendable, Equatable {
     public enum ProviderOutcome: String, Sendable, Codable {
@@ -244,11 +269,23 @@ public struct AgentCompletion: Sendable, Equatable {
     public var outputTruncated: Bool
     /// Lines the process layer dropped for size. The decoder was told of each; this is for the record.
     public var oversizedLines: Int
+    /// The calls the policy refused, at most the first 100, and how many there were in all.
+    public var permissionDenials: [AgentDenial] = []
+    public var permissionDenialCount: Int = 0
+    /// Set when the recorder threw: the child was stopped and the rest of the output was not recorded.
+    public var recordingFailure: String?
+
+    /// What the agent said last, when the provider gave a text answer.
+    public var summary: String? {
+        if case .text(let text)? = answer { text } else { nil }
+    }
 
     /// The only definition of "worked": the child ended on its own with status 0, the provider said it
-    /// succeeded, and nothing failed. Whether the answer is a usable *result* is the stage's validator.
+    /// succeeded, nothing failed, and everything it printed was recorded. Whether the answer is a usable *result* is the stage's validator.
     public var succeeded: Bool {
-        guard failure == nil, provider == .succeeded, process.cause == .natural else { return false }
+        guard failure == nil, recordingFailure == nil, provider == .succeeded, process.cause == .natural else {
+            return false
+        }
         if case .exited(0) = process.termination { return true }
         return false
     }

@@ -57,22 +57,17 @@ extension ThreadRunner {
 
     // MARK: Classification (pure, tested directly)
 
-    static func classify(exit: ProcessExit?, result: [String: Any]?) -> RunResult {
-        guard let exit else { return .failed }
+    /// A stop or a deadline is what happened, whatever Claude printed before it. Past those the adapter's own
+    /// judgement of the `result` line decides (`ClaudeDecoder.judge`); a spent dollar limit is its own result.
+    static func runResult(
+        exit: ProcessExit, outcome: AgentCompletion.ProviderOutcome, failure: AgentFailure?
+    ) -> RunResult {
         switch exit.cause {
         case .stopped: return .stopped
         case .timedOut: return .timedOut
         case .natural: break
         }
-        if case .signaled = exit.termination { return .failed }
-        guard let result else { return .failed }
-
-        let subtype = result["subtype"] as? String
-        let terminal = result["terminal_reason"] as? String
-        if subtype == "error_max_budget_usd" || terminal == "budget_exhausted" { return .budgetExceeded }
-        // A success line from a process that then exited non-zero is not a success.
-        if case .exited(let code) = exit.termination, code != 0 { return .failed }
-        if subtype == "success", result["is_error"] as? Bool != true { return .succeeded }
-        return .failed
+        if failure?.kind == .budgetExceeded { return .budgetExceeded }
+        return outcome == .succeeded ? .succeeded : .failed
     }
 }
