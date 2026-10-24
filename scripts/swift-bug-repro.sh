@@ -24,7 +24,10 @@ without=$?
 if [ "$broken" = 1 ] && [ "$without" = 0 ] && grep -q "SIL verification failed" "$dir/with.log"; then
     echo "still broken: the compiler aborts in JumpThreadSimplifyCFG and compiles with simplify-cfg disabled; keep the workaround"
     exit 0
-elif [ "$broken" = 0 ] && [ "$without" = 0 ] && [ -n "$version" ] && [ "$(printf '%s\n%s\n' "$found_on" "$version" | sort -V | head -1)" != "$found_on" ]; then
+elif [ "$broken" = 0 ] && [ "$without" = 0 ] && [ -z "$version" ]; then
+    echo "inconclusive: could not read the Swift version from: $version_line"
+    exit 1
+elif [ "$broken" = 0 ] && [ "$without" = 0 ] && [ "$(printf '%s\n%s\n' "$found_on" "$version" | sort -V | head -1)" != "$found_on" ]; then
     echo "not applicable: Swift $version is older than $found_on, where the bug was found; this says nothing about a fix"
     exit 0
 elif [ "$broken" = 0 ] && [ "$without" = 0 ]; then
