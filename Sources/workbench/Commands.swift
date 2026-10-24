@@ -236,7 +236,7 @@ enum Commands {
         let config = try? Config.load(from: ctx.project.configURL)
         let id = try await ctx.service.newThread(
             name: name, base: base, updating: updating, config: config, body: copy?.body,
-            settings: copy?.settings ?? GoalSettings())
+            settings: copy?.settings ?? GoalSettings(), title: copy?.title)
         out("created \(id)")
         if let ignored = copy?.ignoredKeys, !ignored.isEmpty {
             out("ignored from the file: \(ignored.joined(separator: ", "))")

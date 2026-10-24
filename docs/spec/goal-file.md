@@ -188,10 +188,10 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   is refused for an ended thread or a live run. A failed draft leaves the file byte-identical. A `model` under `[agents.goal]` with `provider = "codex"` is refused when the
   config loads, as for the judge and review: the Codex adapter takes no model yet.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
-  out of scope, and its `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are checked by the
-  same rules as in any goal (below); a bad one is a usage error (exit 2) naming the key, and nothing is created.
-  One the file does not give keeps the default (`default_budget_usd`, 30 minutes, no `model`). The rest of the front
-  matter (`id`, `title`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
+  out of scope, and its `title`, `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are
+  checked by the same rules as in any goal (below; an empty `title` is one); a bad one is a usage error (exit 2) naming the
+  key, and nothing is created. One the file does not give keeps the default (the title from `<name>`, `default_budget_usd`,
+  30 minutes, no `model`). The rest of the front matter (`id`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
   thread and is ignored; `goal new` prints one line naming what it ignored (`ignored from the file: base, status`),
   nothing when there is none. The file's front matter must still be well formed (unknown or repeated keys are goal
   errors) but no key is required in it, and its body must parse as a goal's. The draft is always a draft.

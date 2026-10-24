@@ -177,4 +177,65 @@ import Testing
         #expect(outcome == .skipped("goal-copy in the worktree is not a plain folder"))
         #expect(try String(contentsOf: folder, encoding: .utf8) == "not a folder\n")
     }
+
+    // MARK: The title `goal new --from` carries
+
+    private func source(title: String?) -> String {
+        "---\nid: g-2026-01-01-source\n" + (title.map { "title: \($0)\n" } ?? "") + "status: draft\nbase: main\n---\n\n"
+            + "## Request\n\nMake it work.\n\n## Criteria\n\n- [c1] It works.\n  - proof: swift test\n"
+    }
+
+    private func draftTitle(from text: String, name: String) async throws -> String {
+        let fx = try await RunnerFixture()
+        let copy = try GoalFile.copy(text)
+        let id = try await ThreadService(project: fx.project, git: fx.git).newThread(
+            name: name, body: copy.body, settings: copy.settings, title: copy.title)
+        return try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal.title
+    }
+
+    @Test func theFilesTitleIsCarriedAndNotIgnored() async throws {
+        let copy = try GoalFile.copy(source(title: "Fix the login page"))
+        #expect(copy.title == "Fix the login page")
+        #expect(copy.ignoredKeys == ["id", "status", "base"])
+        #expect(try await draftTitle(from: source(title: "Fix the login page"), name: "login") == "Fix the login page")
+    }
+
+    @Test func aQuotedTitleKeepsWhatTheQuotesProtect() async throws {
+        let text = source(title: "\"Fix  # twelve\"")
+        #expect(try GoalFile.copy(text).title == "Fix  # twelve")
+        #expect(try await draftTitle(from: text, name: "twelve") == "Fix  # twelve")
+    }
+
+    @Test func aTitleWithAQuoteInItIsWrittenWithTheOtherQuote() async throws {
+        let text = source(title: "'Fix  # \"login\"'")
+        #expect(try await draftTitle(from: text, name: "login") == "Fix  # \"login\"")
+    }
+
+    @Test func aTitleThatNeedsQuotesAndHoldsBothKindsIsRefused() throws {
+        #expect(throws: GoalCopyValueError(
+            message: "'title' needs quotes and holds both \" and ', which a goal file cannot write")
+        ) {
+            try GoalFile.copy(source(title: "\"a'"))
+        }
+    }
+
+    @Test(arguments: ["\"Fix\t\t#12\"", "\"  padded  \""])
+    func aTitleThatTheParserWouldCutOrTrimIsQuotedWhenWritten(title: String) async throws {
+        let expected = try #require(GoalFile.copy(source(title: title)).title)
+        #expect(try await draftTitle(from: source(title: title), name: "tabs") == expected)
+    }
+
+    @Test func aFileWithoutATitleGetsOneFromTheName() async throws {
+        let copy = try GoalFile.copy(source(title: nil))
+        #expect(copy.title == nil)
+        #expect(try await draftTitle(from: source(title: nil), name: "fix-login") == "fix login")
+    }
+
+    /// The rule `parse` applies to a goal's title.
+    @Test(arguments: ["", "   ", "\"\"", "\" \""])
+    func anEmptyTitleIsRefusedNamingTheKey(title: String) throws {
+        #expect(throws: GoalCopyValueError(message: "'title' must not be empty")) {
+            try GoalFile.copy(source(title: title))
+        }
+    }
 }

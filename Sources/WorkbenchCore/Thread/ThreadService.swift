@@ -145,7 +145,7 @@ public struct ThreadService: Sendable {
         let header = """
             ---
             id: \(id)
-            title: \(title)
+            \(FrontMatterLine(key: "title", value: title).rendered)
             status: draft
             base: \(baseBranch)\(pushToLine)
             \(spendLine)

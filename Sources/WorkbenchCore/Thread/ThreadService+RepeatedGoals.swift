@@ -36,9 +36,9 @@ extension ThreadService {
         return probe.succeeded
     }
 
-    /// The request, criteria and out of scope of an existing goal file, for `goal new --from`, with its
-    /// `budget_usd`, `turn_timeout_min` and `model`. The rest of its front matter (the id, title, base, status,
-    /// approval) belongs to that file's thread and is named in `ignoredKeys`.
+    /// The request, criteria and out of scope of an existing goal file, for `goal new --from`, with its `title`,
+    /// `budget_usd`, `turn_timeout_min` and `model`. The rest of its front matter (the id, base, status, approval)
+    /// belongs to that file's thread and is named in `ignoredKeys`.
     public static func goalCopy(copying url: URL) throws -> GoalCopy {
         let text = try readBounded(url)
         do { return try GoalFile.copy(text) } catch let error as GoalParseError {

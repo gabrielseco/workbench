@@ -149,7 +149,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
             + "- [c1] It works.\n  - proof: swift test\n"
         let copy = try ThreadService.goalCopy(copying: try write(text, in: fx))
         #expect(copy.settings == GoalSettings())
-        #expect(copy.ignoredKeys == ["title"])
+        #expect(copy.ignoredKeys == [])
         let id = try await service.newThread(name: "copy", body: copy.body, settings: copy.settings)
         let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
         #expect(goal.budgetUSD == Config.defaultBudgetUSD)
@@ -161,7 +161,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         let (fx, _) = try await fixture(suffixes: ["cafe"])
         let approved = try GoalFile.parse(goalFile()).approving()
         let copy = try ThreadService.goalCopy(copying: try write(approved.text, in: fx))
-        #expect(copy.ignoredKeys == ["id", "title", "status", "base", "approved_at", "approved_hash"])
+        #expect(copy.ignoredKeys == ["id", "status", "base", "approved_at", "approved_hash"])
     }
 
     @Test(arguments: [
