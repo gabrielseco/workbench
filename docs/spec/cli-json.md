@@ -24,7 +24,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `base_gap`: null, or `{base, behind, fetch_note}`.
 - `worktree`: `{state: present | removed | none, path}`.
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
-  tool_calls, denied_calls}`, derived from the log on each call. `quiet` is true when the newest event is
+  tool_calls, denied_calls}`, derived from the log on each call (`tool_calls` and `denied_calls` are `null` for a turn of a provider that has not reported any: unknown, not 0). `quiet` is true when the newest event is
   60 s old or more. `cost_usd` does not include the open turn: `claude` reports cost only in the result line.
 
 `workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,

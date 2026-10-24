@@ -46,4 +46,19 @@ import Testing
             .hasSuffix("on claude, default model"))
         #expect(line(.goalApproved, ["hash": "h"]).hasSuffix("goal.approved"), "an older approval prints as before")
     }
+
+    @Test func describesActivity() {
+        func describe(_ data: JSONValue) -> String { line(.agentActivity, data) }
+        #expect(describe(["provider": "codex", "type": "text", "text": "done"]).hasSuffix("codex: done"))
+        let tool: JSONValue = ["provider": "codex", "type": "tool", "name": "shell", "summary": "ls -la"]
+        #expect(describe(tool).hasSuffix("tool: shell ls -la"))
+        #expect(describe(["provider": "codex", "type": "permission_denied", "tool": "rm"]).hasSuffix("tool denied: rm"))
+        #expect(describe(["provider": "codex", "type": "usage", "input_tokens": 7]).hasSuffix("usage: 7 in"))
+        let unknown: JSONValue = ["provider": "gemini", "type": "unknown", "raw": "{\"x\":1}"]
+        #expect(describe(unknown).hasSuffix("gemini event not understood: {\"x\":1}"))
+        #expect(describe(["provider": "codex", "type": "dropped", "count": 4]).hasSuffix("4 activity item(s) not recorded"))
+        #expect(describe(["provider": "codex", "type": "future"]).hasSuffix("codex activity"))
+        let unsafe = describe(["provider": "codex", "type": "text", "text": "a\u{1B}[31m\nb"])
+        #expect(!unsafe.contains("\u{1B}") && !unsafe.contains("\n"), "\(unsafe)")
+    }
 }

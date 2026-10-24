@@ -19,6 +19,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let goalApproved: EventKind = "goal.approved"
     public static let turnStarted: EventKind = "turn.started"
     public static let claude: EventKind = "claude"
+    public static let agentActivity: EventKind = "agent.activity"
     public static let turnEnded: EventKind = "turn.ended"
     public static let checkStarted: EventKind = "check.started"
     public static let checkRan: EventKind = "check.ran"

@@ -26,6 +26,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.approved` | approve | `hash`, `budget_usd`, `provider`, `model` |
 | `turn.started` | process spawned | `session_id`, `resume`, `pid`, `argv` (redacted), `prompt_ref` |
 | `claude` | each stream-json line | the raw line, unmodified |
+| `agent.activity` | one normalized item of a turn run by a provider other than `claude` (P9). Claude turns keep `claude` lines and write none | `provider`, `type` (`text`, `tool`, `permission_denied`, `usage`, `session`, `diagnostic`, `unknown`, `dropped`) and that type's fields |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?` |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
 | `check.started` | before the project's check command starts | `command` |
@@ -87,6 +88,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.saved` | `status`, `hash` (null for a new draft) |
 | `goal.approved` | `hash`, `budget_usd`, and the coding settings the approval is for: `provider` and `model` (null: the provider's own default), resolved from the goal's `model`, `[agents.run]` and the root `model` at the time. `run` refuses when the config now resolves to another pair ("approved for claude, opus … now claude, haiku") and `goal approve` binds the new pair with another `goal.approved` with the same `hash`, leaving the goal file alone; the latest one counts. Judge, review and drafting settings are not part of it. An approval without the two keys (written before P9) binds nothing and is accepted until the next `goal approve` |
 | `turn.started` | `session_id`, `resume`, `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off, and `plan`: `{sha256, bytes, source}` (`generated` or `edited`) of the plan the prompt carried, or `null` when it carried none (there is none, it was made for another version of the goal, its file is missing or no longer what the log recorded, or `run --no-plan`). A follow-up turn has neither key |
+| `agent.activity` | Inside an open turn only (rejected on append, a problem on replay, like `claude`); one event per item, in order. `provider` and `type` always. `text`: `text`. `tool`: `name`, `summary`. `permission_denied`: `tool`. `usage`: any of `input_tokens`, `output_tokens`, `cached_input_tokens`, `cost_usd`; **a count the provider did not report is absent, never 0**. `session`: `value`, `purpose`. `diagnostic`: `text`. `unknown`: an event the adapter did not understand; `provider` names it, `raw` is the original line, `raw_truncated` when cut. `dropped`: `count` (items since the last record), `reason` (`cap`): items past the cap. From the first one, a reader no longer knows the turn's tool and denial counts (`status` shows them as unknown). Every string is cut at 4096 characters and `truncated` is set when one was. At most 1000 items per turn; the rest are counted in `dropped` records, one every 30 s while the turn goes on (so a busy turn does not read as stuck) and one when the child has ended, so a slow or absent reader of the in-memory stream neither holds the child open nor grows the log. A `started` item is not stored (`turn.started` has the pid). Activity of judge, review and draft attempts is not logged; their transcripts are files |
 | `worktree.created` | `path`, `branch`, `base_commit`: the commit the worktree was cut from, also where the project's instructions are read; `copied` (repo-relative paths) when the config's `copy` put files in, absent otherwise |
 | `thread.note` | `text`: the feedback that started a follow-up turn; when the latest check did not pass also `check_turn` and `check_omitted_bytes` (its output, last 16 KiB, is in `prompts/turn-N.md`, not here); `budget_usd` when `workbench send-back --budget` set one for that turn only |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
@@ -124,6 +126,20 @@ A turn's `result` is derived from the `result` line and the exit, in this order:
 signal is `failed`, no `result` line is `failed`, a budget error is `budget_exceeded`, a non-zero exit is
 `failed`, a success line is `succeeded`, anything else `failed`. Denied tool calls do **not** make a turn
 fail; they are counted in `permission_denials`.
+
+### Two shapes, counted once
+
+A turn is recorded in one of two shapes. Claude: `claude` lines, verbatim (invariant 3). Any other provider:
+`agent.activity` events. The runner writes only the one that matches the turn's provider. A reader that meets both in
+one turn (a log written by something else) reads the `claude` lines and ignores that turn's `agent.activity`, so no
+tool call or denial is counted twice. `ThreadState` does this per turn. `progress.tool_calls` and `denied_calls` of a
+non-Claude turn are `null` in `status --json` until the provider has reported one: a provider that streams no tool or
+denial events has not said there were none, and neither is one that dropped items. Usage from `agent.activity` is summed per field in
+`ThreadState.reportedUsage`; a field never reported stays nil.
+
+Event version stays 1: a reader that does not know `agent.activity` ignores it (envelope rule), and every earlier
+log replays unchanged, since only the new kind carries the new data. Tested by replaying a log with and without the
+events (`AgentActivityEventsTests`).
 
 ## Checks
 

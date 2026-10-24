@@ -157,75 +157,6 @@ public struct PlanRecord: Sendable, Equatable {
     }
 }
 
-/// How far the latest turn has got, from the log alone. Nothing is stored; `status` derives it per call.
-public struct Progress: Sendable, Equatable {
-    /// `ts` of the latest `turn.started`.
-    public var turnStartedAt: String?
-    /// `ts` and a one-line, terminal-safe description of the newest event after that start.
-    public var lastEventAt: String?
-    public var lastEvent: String?
-    /// `tool_use` blocks the model emitted in the latest turn.
-    public var toolCalls = 0
-    /// Calls the permission layer refused in the latest turn: seen in the stream as they happen.
-    public var deniedCalls = 0
-
-    /// Seconds since `turnStartedAt`, nil when there is no turn or the stamp does not parse.
-    public func elapsed(now: Date) -> TimeInterval? { Self.seconds(from: turnStartedAt, to: now) }
-
-    /// Seconds since the newest event, nil when there is none.
-    public func quietFor(now: Date) -> TimeInterval? { Self.seconds(from: lastEventAt, to: now) }
-
-    /// Past this, `status` says the turn has been quiet, so stuck reads differently from slow.
-    public static let quietThreshold: TimeInterval = 60
-
-    static func seconds(from stamp: String?, to now: Date) -> TimeInterval? {
-        guard let stamp, let date = parse(stamp) else { return nil }
-        return max(0, now.timeIntervalSince(date))
-    }
-
-    static func parse(_ stamp: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: stamp) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: stamp)
-    }
-}
-
-extension Progress {
-    /// `4m12s`, `38s`, `1h02m`.
-    public static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        if total < 60 { return "\(total)s" }
-        if total < 3600 { return "\(total / 60)m\(String(format: "%02d", total % 60))s" }
-        return "\(total / 3600)h\(String(format: "%02d", total % 3600 / 60))m"
-    }
-
-    /// The lines `status` shows under a running turn. `timeout` is the turn's limit in seconds.
-    public func lines(timeout: TimeInterval?, now: Date) -> [String] {
-        var lines: [String] = []
-        if let elapsed = elapsed(now: now) {
-            lines.append("elapsed:   \(Self.duration(elapsed))" + (timeout.map { " of \(Self.duration($0))" } ?? ""))
-        }
-        if let lastEvent {
-            let age = quietFor(now: now)
-            var line = "last:      \(lastEvent)"
-            if let age { line += "  (\(Self.duration(age)) ago)" }
-            lines.append(line)
-            if let age, age >= Self.quietThreshold {
-                lines.append("quiet:     nothing for \(Self.duration(age)); slow or stuck, the log has no more to say")
-            }
-        }
-        lines.append("tools:     \(toolCalls) calls, \(deniedCalls) denied")
-        return lines
-    }
-
-    mutating func note(_ at: String, _ what: String) {
-        lastEventAt = at
-        lastEvent = what
-    }
-}
-
 /// Where a review follow-up thread came from, as its `thread.created` recorded it. The tree is derived from these
 /// links; nothing stores it twice.
 public struct ThreadLineage: Sendable, Equatable {
@@ -267,6 +198,9 @@ public struct ThreadState: Sendable, Equatable {
     /// The hash the latest `goal.approved` bound, so a plan made for another version reads as stale.
     public var approvedGoalHash: String?
     public var approvedAgent: ApprovedAgent?  // what the latest `goal.approved` bound; nil before P9
+    /// Usage the `agent.activity` events of non-Claude turns reported, summed per field. A field no provider ever
+    /// reported is nil, never 0; nil when none did. Claude's cost is in `totalCostUSD`.
+    public var reportedUsage: AgentUsage?
 
     public var isActive: Bool { decision == nil }
 
@@ -400,6 +334,8 @@ public struct ThreadState: Sendable, Equatable {
         var noteIsLatest = false
         var pendingProof: [ProofFile] = []
         var verifierProof: [ProofFile] = []
+        // A turn is read through one shape: verbatim `claude` lines when it has any, else `agent.activity`.
+        let legacyTurns = Set(events.filter { $0.kind == .claude }.map(\.turn))
         for event in events {
             switch event.kind {
             case .threadCreated:
@@ -411,6 +347,7 @@ public struct ThreadState: Sendable, Equatable {
                 state.progress = Progress(turnStartedAt: event.ts, lastEventAt: event.ts, lastEvent: "turn started")
                 noteIsLatest = false
                 state.sessionProvider = event.data["provider"]?.stringValue
+                state.progress.markUnreported(provider: state.sessionProvider)
                 if let session = event.data["session_id"]?.stringValue { state.sessionID = session }
             case .turnEnded:
                 if state.openTurn == event.turn { state.openTurn = nil }
@@ -452,7 +389,10 @@ public struct ThreadState: Sendable, Equatable {
                     noteIsLatest = state.openTurn == nil
                 }
             case .claude:
-                if event.turn == state.lastTurn { Self.track(event, in: &state.progress) }
+                if event.turn == state.lastTurn {
+                    state.progress.markReported()
+                    Self.track(event, in: &state.progress)
+                }
                 guard event.data["type"]?.stringValue == "result",
                     case .array(let denials)? = event.data["permission_denials"]
                 else { break }
@@ -468,6 +408,8 @@ public struct ThreadState: Sendable, Equatable {
                             turn: event.turn, tool: Self.safeLine(tool, limit: 60), seq: event.seq,
                             input: Self.denialInput(denial["tool_input"]), identity: String(identity.hashValue)))
                 }
+            case .agentActivity:
+                Self.fold(activity: event, legacyTurns: legacyTurns, into: &state)
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
                     state.decision = decision

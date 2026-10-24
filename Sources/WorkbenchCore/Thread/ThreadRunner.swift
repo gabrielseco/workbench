@@ -411,6 +411,7 @@ public actor ThreadRunner {
         notify(.turnStarted(turn: turn, pid: execution.pid, resume: resume))
         execution.begin()
         let completion = await execution.completion
+        try await recorder.flush()
 
         if let failure = completion.recordingFailure {
             return try await endTurn(
