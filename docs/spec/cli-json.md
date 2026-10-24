@@ -3,6 +3,10 @@
 `workbench status`, `review`, `log`, `grant` and `doctor` take `--json`. Version 1. Within a version keys are added, never
 renamed or removed. Errors are described in [exit-codes.md](exit-codes.md).
 
+One exception, version 1: the `verify` key of `status` and `review` (the legacy verify step, replaced by the verifier skill) was
+removed on 2026-10-24 without a new version, since no project config can produce that step any more. A consumer reads `verifier`
+instead and treats a missing `verify` as null.
+
 Nothing else is printed on stdout, and the command never asks a question.
 
 ## status
