@@ -50,11 +50,12 @@ public struct ThreadStore: Sendable {
     /// Reads `createdAt`, `lineage` and `decision` the way `ThreadState.derive` does, but decodes only the
     /// `thread.created` and `review.decision` lines. A log can be megabytes of verbatim `claude` lines, and
     /// listing threads must not parse all of them; a line that merely quotes those kinds is decoded and ignored.
-    /// The search is `memmem` over a mapped file: splitting into lines and searching each through Foundation
+    /// The search is `memmem` over a copy of the file, not a mapping (the writer truncates a torn tail, and a
+    /// page of a mapping past the new end raises SIGBUS): splitting into lines and searching each through Foundation
     /// cost about a second over 94 MB of logs.
     public func summary(of id: String) -> Summary {
         var summary = Summary(id: id)
-        guard let data = try? Data(contentsOf: project.eventsURL(id), options: .mappedIfSafe) else { return summary }
+        guard let data = try? Data(contentsOf: project.eventsURL(id)) else { return summary }
         let decoder = JSONDecoder()
         data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             guard let base = bytes.baseAddress else { return }
