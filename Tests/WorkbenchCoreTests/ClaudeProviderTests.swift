@@ -28,6 +28,17 @@ private func request(
     return r
 }
 
+private func judgeRequest(_ tweak: (inout AgentRequest) -> Void = { _ in }) -> AgentRequest {
+    request {
+        $0.policy = .readOnlyEvidence
+        $0.purpose = .judge
+        $0.session = .start(proposed: session)
+        $0.spend = .hardCap(0.5)
+        $0.rules = nil
+        tweak(&$0)
+    }
+}
+
 private func exit(_ termination: Termination = .exited(0), tail: String = "", last: String? = nil) -> ProcessExit {
     ProcessExit(
         termination: termination, cause: .natural, durationMs: 1, escalatedToKill: false, sweptProcesses: 0,
@@ -71,7 +82,11 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.spend = .timeoutOnly }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .none }) }
         #expect(throws: AgentFailure.self) { try p.invocation(for: request { $0.session = .start(proposed: "not-a-uuid") }) }
-        #expect(request { $0.policy = .readOnlyEvidence }.validate(against: p)?.kind == .unsupportedCapability)
+        #expect(request { $0.policy = .readOnlyEvidence }.validate(against: p) == nil, "valid in general")
+        #expect(throws: AgentFailure.self) { try p.invocation(for: judgeRequest { $0.spend = .timeoutOnly }) }
+        #expect(throws: AgentFailure.self) { try p.invocation(for: judgeRequest { $0.grants = ["Bash(ls:*)"] }) }
+        let handle = AgentSessionHandle(provider: .claude, purpose: .judge, value: session)
+        #expect(throws: AgentFailure.self) { try p.invocation(for: judgeRequest { $0.session = .resume(handle) }) }
         #expect(request { $0.images = [URL(fileURLWithPath: "/tmp/a.png")] }.validate(against: p) != nil)
     }
 }
@@ -158,5 +173,79 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         var d = decoder()
         _ = d.consume(line: #"{"type":"system"}"#)
         #expect(d.finish(exit: exit()).outcome == .failed)
+    }
+}
+
+@Suite struct ClaudeReadOnlyTests {
+    private func argv(_ config: String = claudeConfig, _ tweak: (inout AgentRequest) -> Void = { _ in }) throws -> [String] {
+        try ClaudeProvider(config: try Config.parse(config)).invocation(for: judgeRequest(tweak)).arguments
+    }
+
+    @Test func aJudgeIsConfinedOneShotAndCapped() throws {
+        let args = try argv { $0.model = "haiku" }
+        #expect(args.contains("--restricted") && args.contains("--permission-prompts"))
+        #expect(!args.contains("--resume") && !args.contains("--append-system-prompt"))
+        #expect(args[try #require(args.firstIndex(of: "--max-budget-usd")) + 1] == "0.5")
+        #expect(args[try #require(args.firstIndex(of: "--model")) + 1] == "haiku")
+        #expect(args.suffix(2) == ["--", "Do the thing"])
+    }
+
+    @Test func withEvidenceFilesItGetsReadAndOtherwiseNoTools() throws {
+        let with = try argv { $0.evidenceFiles = ["home.png"] }
+        #expect(with.contains("--allowedTools") && with.contains("Read") && !with.contains("Bash"))
+        let without = try argv()
+        #expect(!without.contains("--allowedTools"))
+        let tools = try #require(without.firstIndex(of: "--tools"))
+        #expect(without[tools + 1] == "")
+    }
+
+    @Test func theSessionIsTheCallersSoTheLoggedArgvIsTheRunningOne() throws {
+        func sessionID(_ args: [String]) throws -> String { args[try #require(args.firstIndex(of: "--session-id")) + 1] }
+        #expect(try sessionID(argv()) == session)
+        #expect(try argv() == argv(), "building twice gives the same argv")
+        #expect(throws: AgentFailure.self) { try argv { $0.session = .none } }
+        #expect(throws: AgentFailure.self) { try argv { $0.session = .start(proposed: "nope") } }
+    }
+
+    @Test func theModelIsWhatTheRequestSaysNotTheConfigs() throws {
+        #expect(try !argv("model = \"opus\"\njudge_model = \"sonnet\"\n[tools]\navailable = [\"Read\"]\n").contains("--model"))
+    }
+
+    @Test func theLogShowsNeitherThePromptNorACredential() throws {
+        let built = try ClaudeProvider(config: try Config.parse(claudeConfig)).invocation(for: judgeRequest())
+        #expect(!built.displayArguments.contains("Do the thing") && !built.displayArguments.contains("--"))
+        #expect(built.environment["AWS_SECRET"] == nil)
+    }
+
+    private func decode(_ lines: [String], exit status: ProcessExit = exit()) -> AgentDecoderResult {
+        var d = ClaudeEnvelopeDecoder(maxRawBytes: 4096)
+        for line in lines { _ = d.consume(line: line) }
+        return d.finish(exit: status)
+    }
+
+    @Test func theEnvelopeIsUnwrappedWithItsCost() {
+        let done = decode([#"{"type":"result","is_error":false,"result":"{\"x\":1}","total_cost_usd":0.0123}"#])
+        #expect(done.outcome == .succeeded && done.answer == .text("{\"x\":1}") && done.usage?.costUSD == 0.0123)
+        #expect(done.failure == nil)
+        let pretty = decode(["{", #""type":"result","result":"hi""#, "}"])
+        #expect(pretty.answer == .text("hi"), "an object spread over lines is still one object")
+    }
+
+    @Test func anErrorAnEmptyOutputAndAMissingResultAreFailuresNotAnswers() {
+        let error = decode([#"{"type":"result","is_error":true,"result":"x"}"#])
+        #expect(error.outcome == .failed && error.answer == nil && error.failure?.message == "claude reported an error")
+        let budget = decode([#"{"type":"result","subtype":"error_max_budget_usd","is_error":true}"#])
+        #expect(budget.failure?.kind == .budgetExceeded)
+        for bad in [[], ["not json"], [#"{"type":"result"}"#]] {
+            let r = decode(bad)
+            #expect(r.outcome == .unknown && r.answer == nil && r.failure?.kind == .protocolError, "\(bad)")
+        }
+    }
+
+    @Test func aLostLineMeansNoAnswer() {
+        var d = ClaudeEnvelopeDecoder(maxRawBytes: 4096)
+        _ = d.consume(oversizedPreview: #"{"type":"result","result":"#, totalBytes: 5 << 20)
+        let r = d.finish(exit: exit())
+        #expect(r.answer == nil && r.failure?.message.contains("line limit") == true)
     }
 }

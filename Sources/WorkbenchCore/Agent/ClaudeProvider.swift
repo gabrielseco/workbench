@@ -1,8 +1,9 @@
 import Foundation
 
-/// The Claude Code adapter for coding turns. Its argv is still built by `Config.invocation` (flags verified in the
-/// P1 spikes and P9 task 1); this type is the seam between that and `AgentRequest`, plus the decoding of
-/// `stream-json` and the judgement of how a turn ended, which used to live in `ThreadRunner`.
+/// The Claude Code adapter. Coding turns build their argv with `Config.invocation` (flags verified in the P1
+/// spikes and P9 task 1) and decode `stream-json`; this type is the seam between that and `AgentRequest`, plus
+/// the judgement of how a turn ended, which used to live in `ThreadRunner`. A `readOnlyEvidence` request is a
+/// one-shot `--output-format json` call that `--restricted` confines to its working directory.
 public struct ClaudeProvider: AgentProvider {
     public var config: Config
 
@@ -12,12 +13,13 @@ public struct ClaudeProvider: AgentProvider {
 
     public var capabilities: AgentCapabilities {
         AgentCapabilities(
-            policies: [.scopedCoding], resume: .callerSuppliedID, streamsActivity: true, imageAttachments: false,
-            structuredOutput: true, reportsUsage: true, hardDollarCap: true, confinesReads: true)
+            policies: [.scopedCoding, .readOnlyEvidence], resume: .callerSuppliedID, streamsActivity: true,
+            imageAttachments: false, structuredOutput: true, reportsUsage: true, hardDollarCap: true, confinesReads: true)
     }
 
     public func invocation(for request: AgentRequest) throws -> AgentInvocation {
         func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
+        if request.policy == .readOnlyEvidence { return try readOnlyInvocation(for: request) }
         guard case .hardCap(let budget) = request.spend else {
             throw refuse("Claude coding turns run with a dollar cap; timeout-only spending is not available yet.")
         }
@@ -55,7 +57,43 @@ public struct ClaudeProvider: AgentProvider {
             environment: config.childEnvironment(from: request.environment), displayArguments: shown)
     }
 
+    /// A judge or reviewer: no repository writes and no posting. With evidence files it gets `Read` and, under
+    /// `--restricted`, can read only the folder it runs in; with none it has no tools. Its own session and budget.
+    private func readOnlyInvocation(for request: AgentRequest) throws -> AgentInvocation {
+        func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
+        guard case .hardCap(let budget) = request.spend else {
+            throw refuse("A read-only Claude call runs with a dollar cap; timeout-only spending is not available yet.")
+        }
+        guard request.grants.isEmpty else { throw refuse("A read-only call takes no extra permissions.") }
+        // The id is the caller's, so the argv it logs is the argv that runs.
+        let sessionID: UUID
+        switch request.session {
+        case .start(let proposed):
+            guard let proposed, let uuid = UUID(uuidString: proposed) else {
+                throw refuse("Claude needs a session id chosen up front (a UUID) to start a conversation.")
+            }
+            sessionID = uuid
+        case .none:
+            throw refuse("A read-only Claude call needs a fresh session id chosen up front.")
+        case .resume:
+            throw refuse("A read-only call is independent of every earlier conversation and is never resumed.")
+        }
+        var args = [
+            "-p", "--output-format", "json", "--permission-prompts", "none", "--restricted",
+            "--session-id", sessionID.uuidString.lowercased(),
+            "--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue,
+        ]
+        if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
+        if let model = request.model { args += ["--model", model] }
+        args += request.evidenceFiles.isEmpty ? ["--tools", ""] : ["--tools", "Read", "--allowedTools", "Read"]
+        args += ["--", request.prompt]
+        return AgentInvocation(
+            executable: config.claudePath, arguments: args, environment: config.childEnvironment(from: request.environment),
+            displayArguments: PRDescriber.displayArguments(args))
+    }
+
     public func makeDecoder(for request: AgentRequest) -> any AgentDecoder {
+        if request.policy == .readOnlyEvidence { return ClaudeEnvelopeDecoder(maxRawBytes: request.limits.maxRawBytes) }
         var sessionID: String?
         switch request.session {
         case .start(let proposed): sessionID = proposed
@@ -203,5 +241,71 @@ struct ClaudeDecoder: AgentDecoder {
 
     private static func object(_ line: String) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
+    }
+}
+
+/// What `claude -p --output-format json` prints: one object whose `result` is the model's answer.
+struct ClaudeEnvelope: Equatable {
+    var answer: String?
+    var isError: Bool
+    var budgetExhausted: Bool
+    var costUSD: Double?
+
+    /// nil when `output` holds no JSON object at all.
+    static func decode(_ output: String) -> ClaudeEnvelope? {
+        guard let outer = PRDescriber.object(from: output) else { return nil }
+        return ClaudeEnvelope(
+            answer: outer["result"] as? String, isError: outer["is_error"] as? Bool == true,
+            budgetExhausted: outer["subtype"] as? String == "error_max_budget_usd"
+                || outer["terminal_reason"] as? String == "budget_exhausted",
+            costUSD: (outer["total_cost_usd"] as? NSNumber)?.doubleValue)
+    }
+}
+
+/// Reads the single-object output of a read-only call. It unwraps the envelope and nothing more: whether the
+/// answer is a usable verdict is the stage's validator.
+struct ClaudeEnvelopeDecoder: AgentDecoder {
+    var maxRawBytes: Int
+    private var lines: [String] = []
+    private var lostLine = false
+
+    init(maxRawBytes: Int) { self.maxRawBytes = maxRawBytes }
+
+    mutating func consume(line: String) -> [AgentActivity] {
+        lines.append(line)
+        return []
+    }
+
+    /// The one object is the answer, so losing a line of it leaves nothing to read.
+    mutating func consume(oversizedPreview preview: String, totalBytes: Int) -> [AgentActivity] {
+        lostLine = true
+        return []
+    }
+
+    mutating func finish(exit: ProcessExit) -> AgentDecoderResult {
+        let output = lines.joined(separator: "\n")
+        guard !lostLine, let envelope = ClaudeEnvelope.decode(output) else {
+            let why = lostLine ? "its answer was over the line limit" : "its output was not a JSON object"
+            return AgentDecoderResult(
+                outcome: .unknown,
+                failure: AgentFailure(.protocolError, "claude's answer was not usable: \(why)", retry: .never))
+        }
+        let usage = envelope.costUSD.map { AgentUsage(costUSD: $0) }
+        if envelope.budgetExhausted {
+            return AgentDecoderResult(
+                outcome: .failed, usage: usage,
+                failure: AgentFailure(.budgetExceeded, "Claude's dollar limit for the call was reached.", retry: .never))
+        }
+        if envelope.isError {
+            return AgentDecoderResult(
+                outcome: .failed, usage: usage,
+                failure: AgentFailure(.protocolError, "claude reported an error", retry: .never))
+        }
+        guard let answer = envelope.answer else {
+            return AgentDecoderResult(
+                outcome: .unknown, usage: usage,
+                failure: AgentFailure(.protocolError, "claude's answer was not usable: no result", retry: .never))
+        }
+        return AgentDecoderResult(outcome: .succeeded, answer: .text(answer), usage: usage)
     }
 }

@@ -19,22 +19,21 @@ private let good = """
      "concerns": ["The filtered label was left alone."]}
     """
 
-@Suite(.processGate) struct JudgeParseTests {
-    @Test func aGoodVerdictIsReadInTheGoalsOrderWithItsCost() throws {
-        let parsed = try Judge.parse(output: output(good), criteria: criteria("c1", "c2"))
-        #expect(parsed.verdict.criteria.map(\.id) == ["c1", "c2"])
-        #expect(parsed.verdict.criteria.map(\.met) == [true, false])
-        #expect(parsed.verdict.criteria[0].evidence == ["The card reads Received this month."])
-        #expect(parsed.verdict.concerns == ["The filtered label was left alone."])
-        #expect(parsed.costUSD == 0.0123)
+@Suite struct JudgeParseTests {
+    @Test func aGoodVerdictIsReadInTheGoalsOrder() throws {
+        let verdict = try Judge.verdict(fromAnswer: good, criteria: criteria("c1", "c2"))
+        #expect(verdict.criteria.map(\.id) == ["c1", "c2"])
+        #expect(verdict.criteria.map(\.met) == [true, false])
+        #expect(verdict.criteria[0].evidence == ["The card reads Received this month."])
+        #expect(verdict.concerns == ["The filtered label was left alone."])
         let swapped = #"{"criteria":[{"id":"c2","met":true,"evidence":[]},{"id":"c1","met":true,"evidence":[]}],"concerns":[]}"#
-        let reordered = try Judge.parse(output: output(swapped), criteria: criteria("c1", "c2"))
-        #expect(reordered.verdict.criteria.map(\.id) == ["c1", "c2"])
+        let reordered = try Judge.verdict(fromAnswer: swapped, criteria: criteria("c1", "c2"))
+        #expect(reordered.criteria.map(\.id) == ["c1", "c2"])
     }
 
     @Test func aVerdictInAFenceOrWithAnIntroIsStillRead() throws {
         let wrapped = "Here is my verdict:\n```json\n" + good + "\n```"
-        #expect(try Judge.parse(output: output(wrapped), criteria: criteria("c1", "c2")).verdict.criteria.count == 2)
+        #expect(try Judge.verdict(fromAnswer: wrapped, criteria: criteria("c1", "c2")).criteria.count == 2)
     }
 
     private static func answer(_ entries: String..., tail: String = ", \"concerns\": []") -> String {
@@ -60,14 +59,9 @@ private let good = """
     ])
     func anUnusableAnswerIsRefusedWithAReason(answer: String, why: String) {
         do {
-            _ = try Judge.parse(output: output(answer), criteria: criteria("c1", "c2"))
+            _ = try Judge.verdict(fromAnswer: answer, criteria: criteria("c1", "c2"))
             Issue.record("expected a refusal for \(answer)")
         } catch { #expect("\(error)".contains(why), "\(error)") }
-    }
-
-    @Test func anErrorFromClaudeAndAMissingResultAreRefused() {
-        #expect(throws: JudgeError.self) { try Judge.parse(output: output(good, error: true), criteria: criteria("c1", "c2")) }
-        #expect(throws: JudgeError.self) { try Judge.parse(output: #"{"type":"result"}"#, criteria: criteria("c1")) }
     }
 
     @Test func evidenceAndConcernsAreBounded() throws {
@@ -76,7 +70,7 @@ private let good = """
         let answer = """
             {"criteria": [{"id": "c1", "met": true, "evidence": ["\(long)", "b", "c", "d", "e"]}], "concerns": [\(many)]}
             """
-        let verdict = try Judge.parse(output: output(answer), criteria: criteria("c1")).verdict
+        let verdict = try Judge.verdict(fromAnswer: answer, criteria: criteria("c1"))
         #expect(verdict.criteria[0].evidence.count == 3)
         #expect(verdict.criteria[0].evidence[0].count == 300)
         #expect(verdict.concerns.count == 8)
@@ -160,28 +154,9 @@ private let good = """
         request.diff = "+path /Users/gabriel/secret/file"
         #expect(!Judge.prompt(for: request).contains("/Users/gabriel"))
     }
-
-    @Test func screenshotsGetReadAndTheirFolderOtherwiseNoTools() throws {
-        let config = try Config.parse("[tools]\navailable = [\"Read\"]\n")
-        let with = Judge.arguments(config: config, prompt: "p", withScreenshots: true)
-        #expect(with.contains("Read") && with.contains("--allowedTools") && with.contains("--restricted"))
-        #expect(!with.contains("Bash") && !with.contains("--resume"))
-        let without = Judge.arguments(config: config, prompt: "p", withScreenshots: false)
-        #expect(without.contains("--tools") && !without.contains("--allowedTools"))
-        #expect(without.suffix(2) == ["--", "p"])
-        let tuned = Judge.arguments(config: config, prompt: "p", withScreenshots: false, budget: 2, model: "haiku")
-        #expect(tuned.contains("haiku") && tuned.contains("2"))
-    }
-
-    @Test func theJudgeModelBeatsTheConfigModelAndTheFlagBeatsBoth() throws {
-        let config = try Config.parse("model = \"opus\"\njudge_model = \"sonnet\"\n[tools]\navailable = [\"Read\"]\n")
-        func model(_ args: [String]) throws -> String { args[try #require(args.firstIndex(of: "--model")) + 1] }
-        #expect(try model(Judge.arguments(config: config, prompt: "p", withScreenshots: false)) == "sonnet")
-        #expect(try model(Judge.arguments(config: config, prompt: "p", withScreenshots: false, model: "haiku")) == "haiku")
-        let plain = try Config.parse("model = \"opus\"\n[tools]\navailable = [\"Read\"]\n")
-        #expect(try model(Judge.arguments(config: plain, prompt: "p", withScreenshots: false)) == "opus")
-    }
 }
+
+private struct ExpectationFailed: Error {}
 
 private struct Judged {
     var fx: RunnerFixture
@@ -275,6 +250,28 @@ private let oneCriterion = #"{"criteria": [{"id": "c1", "met": true, "evidence":
         // A failure does not count as having judged the turn.
         let retry = j.environment("answer=\(try j.file("b.json", oneCriterion))")
         _ = try await j.fx.service.judge(id: j.id, config: j.config, environment: retry)
+    }
+
+    @Test func aMissingClaudeIsAResultAndNoAttemptIsLogged() async throws {
+        let j = try await judged()
+        let config = try Config.parse("claude_path = \"/no/such/claude\"\n[tools]\navailable = [\"Read\"]\n")
+        let result = try await j.fx.service.judge(id: j.id, config: config, environment: ["PATH": "/usr/bin:/bin"])
+        #expect(result.verdict == nil && result.failure?.contains("was not found") == true, "\(result.failure ?? "")")
+        #expect(try j.fx.events(j.id).filter { $0.kind == .judgeStarted }.isEmpty)
+        #expect(try j.fx.events(j.id).last?.kind == .judgeRan)
+    }
+
+    @Test func theLoggedArgvIsTheOneThatRan() async throws {
+        let j = try await judged()
+        let dump = j.dir.appendingPathComponent("dump.json").path
+        let env = j.environment("answer=\(try j.file("a.json", oneCriterion))", "dump=\(dump)")
+        _ = try await j.fx.service.judge(id: j.id, config: j.config, environment: env)
+        let ran = try String(contentsOfFile: dump, encoding: .utf8)
+        let started = try #require(try j.fx.events(j.id).first { $0.kind == .judgeStarted })
+        guard case .array(let items)? = started.data["argv"] else { throw ExpectationFailed() }
+        let logged = items.compactMap(\.stringValue)
+        let id = try #require(logged.firstIndex(of: "--session-id").map { logged[$0 + 1] })
+        #expect(ran.contains(id), "the session id in judge.started is the one claude was given")
     }
 
     @Test func withScreenshotsItGetsReadAndRunsInTheirFolder() async throws {

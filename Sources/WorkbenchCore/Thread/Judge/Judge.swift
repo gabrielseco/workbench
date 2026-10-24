@@ -16,14 +16,10 @@ public struct JudgeVerdict: Sendable, Equatable {
 }
 
 public enum JudgeError: Error, Equatable, Sendable, CustomStringConvertible {
-    case claudeNotFound(String)
-    case claudeFailed(String)
     case invalidOutput(String)
 
     public var description: String {
         switch self {
-        case .claudeNotFound(let name): "`\(name)` was not found"
-        case .claudeFailed(let why): why
         case .invalidOutput(let why): "the verdict was not usable: \(why)"
         }
     }
@@ -124,33 +120,11 @@ public enum Judge {
         return text
     }
 
-    /// The argv for the judge: read-only, its own session and budget. With screenshots it gets `Read` and
-    /// runs in the folder that holds them, which `--restricted` then makes the only place it can read; with
-    /// none it has no tools. The prompt follows `--`.
-    public static func arguments(
-        config: Config, prompt: String, withScreenshots: Bool, budget: Decimal = budgetUSD, model: String? = nil,
-        sessionID: UUID = UUID()
-    ) -> [String] {
-        var args = [
-            "-p", "--output-format", "json", "--permission-prompts", "none", "--restricted",
-            "--session-id", sessionID.uuidString.lowercased(),
-            "--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue,
-        ]
-        if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
-        if let model = model ?? config.judgeModel ?? config.model { args += ["--model", model] }
-        args += withScreenshots ? ["--tools", "Read", "--allowedTools", "Read"] : ["--tools", ""]
-        args += ["--", prompt]
-        return args
-    }
-
     // MARK: Answer
 
-    /// Reads `claude -p --output-format json`, whose `result` is the JSON object asked for, and checks it against
-    /// the goal: every criterion exactly once, no id the goal does not have.
-    public static func parse(output: String, criteria: [Criterion]) throws -> (verdict: JudgeVerdict, costUSD: Double?) {
-        guard let outer = PRDescriber.object(from: output) else { throw JudgeError.invalidOutput("not JSON") }
-        if outer["is_error"] as? Bool == true { throw JudgeError.claudeFailed("claude reported an error") }
-        guard let text = outer["result"] as? String else { throw JudgeError.invalidOutput("no result") }
+    /// Checks the model's answer text against the goal: every criterion exactly once, no id the goal does not
+    /// have. Knows nothing of the provider that produced the text; the adapter has already unwrapped its envelope.
+    public static func verdict(fromAnswer text: String, criteria: [Criterion]) throws -> JudgeVerdict {
         guard let json = PRDescriber.object(from: text) else {
             throw JudgeError.invalidOutput("the answer is not a JSON object")
         }
@@ -187,7 +161,7 @@ public enum Judge {
         let concerns = list.map(oneLine).filter { !$0.isEmpty }.prefix(concernLimit).map { String($0.prefix(evidenceLimit)) }
         let order = Dictionary(uniqueKeysWithValues: criteria.enumerated().map { ($1.id, $0) })
         verdicts.sort { (order[$0.id] ?? 0) < (order[$1.id] ?? 0) }
-        return (JudgeVerdict(criteria: verdicts, concerns: concerns), (outer["total_cost_usd"] as? NSNumber)?.doubleValue)
+        return JudgeVerdict(criteria: verdicts, concerns: concerns)
     }
 
     /// A JSON `true` or `false`, and not the number 1 or 0 that Foundation would also bridge to a Bool.
