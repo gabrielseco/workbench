@@ -8,13 +8,8 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     case review
 
     /// The providers an adapter exists for, in the order messages list them. A config that names another pair is
-    /// refused when it loads, not ignored. Coding on Codex waits for its own confinement probes (P9 task 4, run).
-    public var supportedProviders: [AgentProviderID] {
-        switch self {
-        case .goal, .judge, .review: [.claude, .codex]
-        case .run: [.claude]
-        }
-    }
+    /// refused when it loads, not ignored.
+    public var supportedProviders: [AgentProviderID] { [.claude, .codex] }
 
     /// What the thread did before `[agents]` existed, used when the config names nothing.
     public var defaultProvider: AgentProviderID { self == .review ? .codex : .claude }
@@ -186,7 +181,7 @@ extension AgentSelection {
                 if SafeNames.isModelName(value) {
                     selection.model = value
                     let effective = selection.provider ?? (inheritsProvider ? nil : role.defaultProvider)
-                    if effective == .codex, role != .run {
+                    if effective == .codex {
                         fail(.invalidValue, entry.line, "'model' in [\(name)] cannot be set: \(AgentsConfig.codexModelReason)")
                     }
                 } else {

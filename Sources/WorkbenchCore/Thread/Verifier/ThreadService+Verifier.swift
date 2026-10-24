@@ -134,7 +134,7 @@ extension ThreadRunner {
     /// unless it runs. After a failed turn or check it is silent: a follower of the log knows from those.
     func runVerifier(
         after report: TurnReport, check: CheckReport?, config: Config, goal: Goal, worktree: URL, log: EventLogWriter,
-        claude: URL, options: RunOptions
+        claude: URL?, options: RunOptions
     ) async throws -> VerifierReport? {
         guard let verifier = config.verifier, report.result == .succeeded else { return nil }
         if let check, check.result != .passed { return nil }
@@ -155,6 +155,9 @@ extension ThreadRunner {
         }
         guard await hasChange(worktree: worktree, base: base) else {
             return try await skip("the turn left no change to look at", turn: turn, log: log)
+        }
+        guard let claude else {
+            return try await skip("claude was not found (claude_path), and the verifier runs on it", turn: turn, log: log)
         }
         let run = VerifierRun(
             config: config, verifier: verifier, run: config.run, skill: skill, goal: goal, threadID: threadID,

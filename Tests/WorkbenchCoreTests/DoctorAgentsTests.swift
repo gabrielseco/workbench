@@ -38,6 +38,18 @@ import Testing
         #expect(claude.agents[0].resolved?.model == "sonnet")
     }
 
+    @Test func runOnCodexIsExplained() async throws {
+        let found = try await report("[agents.run]\nprovider = \"codex\"")
+        let run = try #require(found.agents.first { $0.role == .run })
+        #expect(run.resolved?.provider == .codex)
+        let note = try #require(run.issues.first { $0.kind == "unconfined_reads" })
+        #expect(note.severity == .note && note.message.contains("outside the worktree"), "\(note.message)")
+        #expect(!found.agentProblems.contains { $0.role == .run && $0.kind == "policy_without_controls" })
+        // Claude confines reads, so it says nothing of the kind.
+        let claude = try await report("")
+        #expect(!claude.agents.flatMap(\.issues).contains { $0.role == .run && $0.kind == "unconfined_reads" })
+    }
+
     @Test func theCommandPrintsOneLineEach() async throws {
         let fx = try await RunnerFixture(extraConfig: "model = \"opus\"\n[agents.judge]\nmodel = \"haiku\"")
         let ran = try await workbenchCLI(

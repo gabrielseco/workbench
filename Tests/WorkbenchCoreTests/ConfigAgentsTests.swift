@@ -183,9 +183,18 @@ import Testing
         } catch { Issue.record("\(error)") }
     }
 
-    @Test func runStaysClaudeOnly() {
-        let found = problems("[agents.run]\nprovider = \"codex\"")
-        #expect(found.contains { $0.contains("[agents.run] cannot use \"codex\" yet") }, "\(found)")
+    @Test func runOnCodexIsAccepted() throws {
+        let config = try parse("[agents.run]\nprovider = \"codex\"")
+        #expect(config.resolvedRunAgent().provider == .codex)
+        #expect(config.resolvedRunAgent().model == nil)
+        // The legacy root `model` is a Claude alias and never reaches Codex.
+        #expect(try parse("model = \"opus\"\n[agents.run]\nprovider = \"codex\"").resolvedRunAgent().model == nil)
+    }
+
+    @Test func runModelOnCodexIsRefused() {
+        let found = problems("[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-x\"")
+        #expect(found.contains { $0.contains("takes no model") }, "\(found)")
+        #expect(problems("[agents.run]\nprovider = \"claude\"\nmodel = \"opus\"").isEmpty)
     }
 
     @Test func legacyReviewSelection() throws {
@@ -200,13 +209,5 @@ import Testing
                 + "[review.stage.x]\nprompt = \"a.md\"\nprovider = \"codex\"")
         #expect(named.allowUnpricedTable(.review, stage: "x") == "[agents.review] or [review.stage.x]")
         #expect(named.allowUnpricedTable(.judge) == "[agents.judge]")
-    }
-
-    @Test(arguments: [
-        ("[agents.run]\nprovider = \"codex\"", "[agents.run] cannot use \"codex\" yet"),
-    ])
-    func unsupported(text: String, message: String) {
-        let found = problems(text)
-        #expect(found.contains { $0.contains(message) && $0.contains("task 4") }, "\(found)")
     }
 }

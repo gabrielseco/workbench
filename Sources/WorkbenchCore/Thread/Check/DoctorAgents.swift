@@ -6,7 +6,7 @@ public struct DoctorAgentIssue: Sendable, Equatable {
     public enum Severity: String, Sendable { case problem, note }
 
     public var role: AgentRole
-    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `unpriced_not_allowed`, `unconfined_reads` or
+    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `model_unsupported`, `unpriced_not_allowed`, `unconfined_reads` or
     /// `setting_unused`.
     public var kind: String
     public var severity: Severity
@@ -142,11 +142,20 @@ extension Doctor {
                     + "run is refused on it. Change the goal to `spend_policy: timeout_only` (and remove budget_usd), "
                     + "then approve it again")
         }
-        if role != .run, caps.policies.contains(.readOnlyEvidence), !caps.confinesReads {
+        if caps.policies.contains(policy), !caps.confinesReads {
             add(
                 "unconfined_reads", .note,
-                "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
-                    + "repository writes and posting are still refused")
+                role == .run
+                    ? "a coding turn on \(provider) can read files outside the worktree; its sandbox refuses writes outside it, "
+                        + "commits, pushes and network"
+                    : "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
+                        + "repository writes and posting are still refused")
+        }
+        if role == .run, provider == .codex, let model = goal?.model {
+            add(
+                "model_unsupported", .problem,
+                "goal \(goal?.thread ?? "") sets `model: \(model)` and the Codex adapter takes no model yet; "
+                    + "remove it from the goal and approve it again")
         }
         // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
         if role != .run, caps.policies.contains(.readOnlyEvidence) {

@@ -19,6 +19,12 @@ extension Commands {
         }
         try a.requireEmpty()
         let ctx = try await Context.load()
+        // A grant is a Claude tool pattern; the coding turn that would receive it is Codex's, which takes none.
+        if let config = try? Config.load(from: ctx.project.configURL), config.resolvedRunAgent().provider != .claude {
+            throw CLIError.refused(
+                "\(config.resolvedRunAgent().provider) takes no tool grants: its sandbox decides what a coding turn may do. "
+                    + "Nothing was recorded.")
+        }
 
         guard let target else {
             if !chosen.isEmpty || dangerous {

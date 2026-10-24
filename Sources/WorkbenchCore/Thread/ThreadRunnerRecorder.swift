@@ -13,6 +13,8 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private let threadID: String
     private let store: ThreadStore
     private let notify: @Sendable (RunNotice) -> Void
+    /// False for a provider that cannot resume: its session is not written to `session.json`.
+    private let keepsSession: Bool
     private(set) var sawOutput = false
     private var confirmed = false
     private var written = 0
@@ -24,8 +26,10 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
 
     init(
         log: EventLogWriter, turn: Int, sessionID: String, provider: String, threadID: String, store: ThreadStore,
-        notify: @escaping @Sendable (RunNotice) -> Void, now: @escaping @Sendable () -> Date = { Date() }
+        notify: @escaping @Sendable (RunNotice) -> Void, keepsSession: Bool = true,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.keepsSession = keepsSession
         self.now = now
         self.log = log
         self.turn = turn
@@ -84,7 +88,7 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
                 if written == AgentActivityRecord.maxPerTurn { lastMark = now() }
                 try await log.append(.agentActivity, turn: turn, data: data)
             }
-            if !confirmed, case .session = item {
+            if keepsSession, !confirmed, case .session = item {
                 confirmed = true
                 try store.save(.init(sessionID: sessionID, confirmed: true, provider: provider), for: threadID)
             }
