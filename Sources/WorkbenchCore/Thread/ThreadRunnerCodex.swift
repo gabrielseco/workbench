@@ -86,28 +86,37 @@ extension ThreadRunner {
     func codexContinuationContext(worktree: URL, base: String) async -> CodexContinuation {
         let events = (try? EventLogReader.read(at: project.eventsURL(threadID)))?.events ?? []
         let summary = events.last { $0.kind == .turnEnded && $0.data["summary"] != nil }?.data["summary"]?.stringValue
-        var diff = ""
+        // This runs on the host, outside Codex's sandbox, on files Codex may have changed: no external diff and no text
+        // conversion, so a converter a gitattributes line selects is never started.
+        var diff: String?
         var cut = false
-        if let result = try? await git.run(["diff", "--no-ext-diff", "--no-color", base], in: worktree), result.succeeded {
+        let changes = ["diff", "--no-ext-diff", "--no-textconv", "--no-color", base]
+        if let result = try? await git.run(changes, in: worktree), result.succeeded {
             let all = result.stdout
             cut = all.utf8.count > Self.continuationDiffLimit
             diff = cut ? String(decoding: all.utf8.prefix(Self.continuationDiffLimit), as: UTF8.self) : all
         }
         var untracked: [String] = []
+        var untrackedKnown = false
         if let others = try? await git.run(["ls-files", "--others", "--exclude-standard"], in: worktree), others.succeeded {
+            untrackedKnown = true
             untracked = others.stdout.split(separator: "\n").map(String.init).prefix(Self.continuationUntrackedLimit).map { $0 }
         }
+        // A git that failed is not an empty tree: the prompt and the record say the changes could not be read.
+        let readable = diff != nil && untrackedKnown
         let info: JSONValue = [
-            "mode": "fresh_with_context", "diff_bytes": .int(diff.utf8.count), "truncated": .bool(cut),
-            "summary": .bool(summary != nil), "untracked": .int(untracked.count),
+            "mode": "fresh_with_context", "diff_bytes": .int(diff?.utf8.count ?? 0), "truncated": .bool(cut),
+            "summary": .bool(summary != nil), "untracked": .int(untracked.count), "changes_read": .bool(readable),
         ]
-        return CodexContinuation(summary: summary, diff: diff, diffCut: cut, untracked: untracked, info: info)
+        return CodexContinuation(
+            summary: summary, diff: readable ? diff : nil, diffCut: cut, untracked: untracked, info: info)
     }
 }
 
 struct CodexContinuation {
     var summary: String?
-    var diff: String
+    /// Nil when git could not be asked: unknown, not "no changes".
+    var diff: String?
     var diffCut: Bool
     var untracked: [String]
     var info: JSONValue

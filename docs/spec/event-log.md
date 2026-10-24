@@ -325,7 +325,9 @@ Claude turn's only where the provider differs:
   goal's prompt, what the previous turn said (`turn.ended.summary`), the work in the tree as a diff against the recorded base
   commit (at most 60 000 bytes, cut with a note), the names of untracked files (at most 20), the failed check's output and the
   feedback, under the standing rules. `turn.started.continuation` is `{mode: "fresh_with_context", diff_bytes, truncated,
-  summary, untracked}`; the first turn has none. Workbench never says Codex remembers more than this.
+  summary, untracked, changes_read}`; the first turn has none. The diff is read with `--no-ext-diff --no-textconv`, outside the sandbox, so no converter a
+  `.gitattributes` line selects is started. If git cannot be asked, `changes_read` is false and the prompt says the changes could not
+  be read (never "no changes"). Workbench never says Codex remembers more than this.
 - `turn.ended` has no `session_id` and no `cost_usd` (Codex reports tokens only), so the thread's cost is `unknown`, and
   `permission_denials` is `null`. Nothing is written to `session.json`.
 - Crash recovery, stop and the orphan sweep are the Claude turn's: one `turn.ended` per `turn.started`, the attempt closed once.

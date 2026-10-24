@@ -49,7 +49,7 @@ private let skillPath = ".claude/skills/verify/SKILL.md"
 
 private func codexRun(
     extraConfig: String = "", root: String = "", verifier: Bool = false, goalEdit: (String) -> String = { $0 },
-    approve: Bool = true
+    approve: Bool = true, prepare: (RunnerFixture) async throws -> Void = { _ in }
 ) async throws -> CodexRun {
     let dir = Scratch.url("codex-run", ext: "d")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -67,6 +67,7 @@ private func codexRun(
         _ = try await fx.git.run(["add", "-A"], in: fx.repo)
         _ = try await fx.git.run(["commit", "-q", "-m", "skill"], in: fx.repo)
     }
+    try await prepare(fx)
     let id = try await fx.service.newThread(name: "work", base: "main")
     let url = fx.project.goalURL(id)
     var text = try String(contentsOf: url, encoding: .utf8)
@@ -338,6 +339,44 @@ private func codexRun(
         #expect(info["mode"] == "fresh_with_context" && (info["diff_bytes"]?.intValue ?? 0) > 0)
         let first = try #require(c.started().first)
         #expect(first.data["continuation"] == nil)
+    }
+
+    @Test func aConverterTheRepositorySelectsIsNeverStartedByTheContinuation() async throws {
+        let marker = Scratch.url("textconv", ext: "marker")
+        let converter = Scratch.url("textconv", ext: "sh")
+        try "#!/bin/sh\ntouch '\(marker.path)'\ncat \"$1\"\n".write(to: converter, atomically: true, encoding: .utf8)
+        chmod(converter.path, 0o755)
+        let c = try await codexRun(prepare: { fx in
+            try "*.txt diff=custom\n".write(
+                to: fx.repo.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+            _ = try await fx.git.run(["config", "diff.custom.textconv", converter.path], in: fx.repo)
+            _ = try await fx.git.run(["add", "-A"], in: fx.repo)
+            _ = try await fx.git.run(["commit", "-q", "-m", "attributes"], in: fx.repo)
+        })
+        _ = try await c.run()
+        let second = try await c.run(feedback: "again")
+        #expect(second.result == .succeeded)
+        #expect(c.read("prompt_2")?.contains("+turn 1") == true, "the diff was read")
+        #expect(!FileManager.default.fileExists(atPath: marker.path), "the converter was started on the host")
+    }
+
+    @Test func gitThatCannotBeAskedIsNotAnEmptyTree() async throws {
+        let c = try await codexRun()
+        _ = try await c.run()
+        let worktree = c.fx.project.worktreesDirectory.appendingPathComponent(c.id)
+        let context = await c.fx.runner(c.id).codexContinuationContext(worktree: worktree, base: "no-such-revision")
+        #expect(context.diff == nil)
+        guard case .object(let info) = context.info else {
+            Issue.record("\(context.info)")
+            return
+        }
+        #expect(info["changes_read"] == false)
+        let prompt = PromptBuilder.codexContinuation(
+            first: "goal", summary: nil, diff: context.diff, diffCut: false, untracked: [], check: nil, feedback: "again")
+        #expect(prompt.contains("could not read the changes") && !prompt.contains("has no changes"), "\(prompt)")
+        let healthy = await c.fx.runner(c.id).codexContinuationContext(worktree: worktree, base: "main")
+        #expect(healthy.diff?.contains("+turn 1") == true)
+        if case .object(let ok) = healthy.info { #expect(ok["changes_read"] == true) }
     }
 
     @Test func theAutomaticVerifierRunsOnClaudeNotOnCodex() async throws {
