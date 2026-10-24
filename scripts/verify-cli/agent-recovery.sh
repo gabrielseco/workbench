@@ -10,7 +10,7 @@
 # abandon decision and nothing else (a second recovery adding nothing is tested in AgentRecoveryTests).
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 appends nothing that is open (every start is followed by its end), so the steps that expect a
-# recovery (the synthetic ends, the recovered marks) must FAIL. The frame and the other switches are in lib.sh. Run by hand,
+# recovery (the recovered marks, the synthetic ends, the exact set of events added) must FAIL. The frame and the other switches are in lib.sh. Run by hand,
 # not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
