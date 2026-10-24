@@ -2,6 +2,18 @@ import Foundation
 
 /// One-line descriptions of events, for `workbench log` and the live output of `workbench run`.
 public enum LogFormatter {
+    /// A `log` line for an entry: an event as `describe(_ event:)` has it, a transcript line the same way with
+    /// its `seq` (a dash when the line is not in `events.jsonl`).
+    public static func describe(_ entry: LogEntry) -> String {
+        switch entry {
+        case .event(let event):
+            return describe(event)
+        case .transcript(let line):
+            let seq = line.seq.map { String(format: "%4d", $0) } ?? "   -"
+            return "\(seq)  \(shortTime(line.ts))  t\(line.turn)  " + (describeClaude(line.data) ?? "claude")
+        }
+    }
+
     public static func describe(_ event: Event) -> String {
         let head = "\(String(format: "%4d", event.seq))  \(shortTime(event.ts))  t\(event.turn)  "
         switch event.kind {

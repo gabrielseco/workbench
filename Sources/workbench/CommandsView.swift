@@ -66,23 +66,28 @@ extension Commands {
             }
         }
 
-        func show(_ event: Event) {
-            if event.kind == .claude, !verbose, LogFormatter.describeClaude(event.data) == nil { return }
-            // One line per check: how it ended.
-            if event.kind == .checkStarted, !verbose { return }
-            // Only the verifier's files are proof; a line without `source` is an old verify step's.
-            if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
-            // An older log's verify step: the step is gone, so its lines are not described.
-            if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
-            out(LogFormatter.describe(event))
+        func show(_ entry: LogEntry) {
+            switch entry {
+            case .transcript(let line):
+                if !verbose, LogFormatter.describeClaude(line.data) == nil { return }
+            case .event(let event):
+                // One line per check: how it ended.
+                if event.kind == .checkStarted, !verbose { return }
+                // Only the verifier's files are proof; a line without `source` is an old verify step's.
+                if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
+                // An older log's verify step: the step is gone, so its lines are not described.
+                if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
+            }
+            out(LogFormatter.describe(entry))
         }
 
         var printed = 0
-        var contents = try EventLogReader.read(at: url)
+        var threadLog = try ThreadLog.read(at: url)
+        var contents = threadLog.contents
         // Already in the middle of a turn or of its check: follow until that ends.
         let startedWithOpenTurn = contents.openTurn != nil || contents.openCheck != nil || contents.openVerifier != nil
-        for event in contents.events {
-            show(event)
+        for entry in threadLog.entries {
+            show(entry)
             printed += 1
         }
         guard follow else { return }
@@ -99,9 +104,12 @@ extension Commands {
         var sawStart = startedWithOpenTurn
         while true {
             try await Task.sleep(nanoseconds: 300_000_000)
-            contents = try EventLogReader.read(at: url)
-            for event in contents.events.dropFirst(printed) {
-                show(event)
+            threadLog = try ThreadLog.read(at: url)
+            contents = threadLog.contents
+            for entry in threadLog.entries.dropFirst(printed) {
+                show(entry)
+                // Only Workbench's own events say that a run is over.
+                guard case .event(let event) = entry else { continue }
                 if event.kind == .turnStarted { sawStart = true }
                 if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
                 let verifiers = await willVerify(event)
@@ -111,7 +119,7 @@ extension Commands {
                     return
                 }
             }
-            printed = contents.events.count
+            printed = threadLog.entries.count
         }
     }
 
