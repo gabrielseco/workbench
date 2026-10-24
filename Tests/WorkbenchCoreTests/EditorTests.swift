@@ -142,9 +142,10 @@ private struct Bin {
         let pidFile = bin.url.appendingPathComponent("pid")
         let ed = try bin.script("ed", "echo $$ > '\(pidFile.path)'\nexec sleep 60")
         let started = Date()
-        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: 1)) {
+        // The timeout must outlast the script writing its pid, or the test would read a file that was never written.
+        await #expect(throws: EditorError.timedOut(editor: "ed", seconds: 3)) {
             try await EditorLauncher.launch(
-                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:], timeout: 1,
+                EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:], timeout: 3,
                 killGrace: 1)
         }
         // Generous: CI runs the suites in parallel and a stop can wait seconds. It only has to return, not be quick.
@@ -178,24 +179,25 @@ private struct Bin {
     }
 
     @Test func aStoppedLauncherTakesWhatItStartedInANewSessionWithIt() async throws {
-        try #require(FileManager.default.isExecutableFile(atPath: "/usr/bin/python3"))
+        try #require(FileManager.default.isExecutableFile(atPath: "/usr/bin/perl"))
         let bin = try Bin()
         let pidFile = bin.url.appendingPathComponent("escaped")
-        // The helper leaves the launcher's process group (a new session), so a group kill alone would miss it.
+        // The helper leaves the launcher's process group (a new session), so a group kill alone would miss it. It writes
+        // its pid only after `setsid` succeeded, so a pid file means the escape happened.
         let ed = try bin.script(
             "ed",
             """
-            python3 - '\(pidFile.path)' <<'PY'
-            import subprocess, sys, time
-            helper = subprocess.Popen(['sleep', '300'], start_new_session=True)
-            open(sys.argv[1], 'w').write(str(helper.pid))
-            time.sleep(300)
-            PY
+            perl -MPOSIX -e '
+              if (!fork) {
+                POSIX::setsid() or exit 1;
+                open(my $f, ">", $ARGV[0]); print $f $$; close $f;
+                exec "sleep", "300";
+              }
+              sleep 300' '\(pidFile.path)'
             """)
-        // The timeout is the launcher's only stop, so it must outlast python starting: 2 s did not on a loaded
-        // machine. It is also how long this test takes, so it is not the 60 s `Patience.limit`; the suite's gate
-        // keeps python from waiting for the CPU that long.
-        let timeout: TimeInterval = 20
+        // The timeout is the launcher's only stop, so it must outlast perl starting (a few ms, but 1 s did not on a
+        // loaded machine). It is also how long this test takes; the suite's gate keeps perl from waiting long.
+        let timeout: TimeInterval = 3
         await #expect(throws: EditorError.timedOut(editor: "ed", seconds: Int(timeout))) {
             try await EditorLauncher.launch(
                 EditorCommand(executable: ed, arguments: []), editor: "ed", in: here, environment: [:],
