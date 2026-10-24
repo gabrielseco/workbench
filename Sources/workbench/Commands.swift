@@ -195,13 +195,19 @@ enum Commands {
 
         let handlers = installStopHandlers(what: "the doctor run") { doctor.stop() }
         defer { handlers.forEach { $0.cancel() } }
-        out("base:     \(resolved)")
+        if !Output.json { out("base:     \(resolved)") }
         let report: DoctorReport
         do { report = try await doctor.run(base: resolved, options: options) } catch let error as DoctorError {
             switch error {
             case .invalidBase: throw CLIError.usage("\(error)")
             case .noConfig, .runnerLive, .alreadyRunning: throw CLIError.refused("\(error)")
             }
+        }
+        if Output.json {
+            // A stop is the usual error object; a report that did not pass is the one object, with its exit code.
+            if report.wasStopped { return fail(.stopped, "doctor was stopped; the worktree was removed") }
+            printJSON(doctorJSON(report))
+            return report.passed ? 0 : FailureKind.failed.code
         }
         printDoctor(report)
         if let problem = report.cleanupProblem { return fail(.failed, problem) }

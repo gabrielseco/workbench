@@ -54,6 +54,32 @@ extension Commands {
         ]
     }
 
+    /// `{run, judge, review}`: the provider and model each responsibility last used, null for one that never ran.
+    /// A thread from before provider selection reads as its old default with `recorded` false.
+    static func agentsJSON(_ state: ThreadState) -> JSONValue {
+        func entry(_ role: String) -> JSONValue {
+            guard let use = state.agentUse[role] else { return .null }
+            return [
+                "provider": .string(use.provider), "model": use.model.map { .string($0) } ?? .null,
+                "recorded": .bool(use.recorded), "stage": use.stage.map { .string($0) } ?? .null,
+                "spawned": .bool(use.spawned), "outcome": use.outcome.map { .string($0) } ?? .null,
+            ]
+        }
+        return ["run": entry("run"), "judge": entry("judge"), "review": entry("review")]
+    }
+
+    /// What the goal was approved for, null when it was not approved.
+    static func approvedForJSON(_ state: ThreadState) -> JSONValue {
+        state.approvedFor.map(approvedJSON) ?? .null
+    }
+
+    static func approvedJSON(_ use: AgentUse) -> JSONValue {
+        [
+            "provider": .string(use.provider), "model": use.model.map { .string($0) } ?? .null,
+            "recorded": .bool(use.recorded),
+        ]
+    }
+
     /// Where a review follow-up came from: `{parent, root, round}`, null for a thread someone started.
     static func lineageJSON(_ state: ThreadState) -> JSONValue {
         guard let lineage = state.lineage else { return .null }
@@ -128,6 +154,7 @@ extension Commands {
                 "last": state.review.verify.map { .string($0.result) } ?? .null,
             ],
             "cost_usd": .double(state.totalCostUSD), "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
+            "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
         ]
@@ -288,6 +315,7 @@ extension Commands {
             "goal_problem": report.goalProblem.map { .string($0) } ?? .null, "turns": .int(state.lastTurn),
             "last_result": review.turnResult.map { .string($0) } ?? .null, "cost_usd": .double(state.totalCostUSD),
             "plan": planJSON(state), "plan_cost_usd": .double(state.planCostUSD),
+            "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "base": base.map { .string($0) } ?? .null, "worktree": worktreeJSON(id: state.id, ctx: ctx),
             "criteria": .array(
                 zip(report.criteria, report.criterionStatuses).map { criterion, status in

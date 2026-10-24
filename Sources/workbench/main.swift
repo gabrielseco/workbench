@@ -38,8 +38,9 @@ if let at = arguments.indices.first(where: {
 }) {
     arguments.remove(at: at)
     Output.json = true
-    if !["status", "review", "log", "grant"].contains(arguments.first ?? "") {
-        exit(fail(.usage, Help.withSynopsis("--json is available on status, review, log and grant", arguments: arguments)))
+    if !["status", "review", "log", "grant", "doctor"].contains(arguments.first ?? "") {
+        let available = "--json is available on status, review, log, grant and doctor"
+        exit(fail(.usage, Help.withSynopsis(available, arguments: arguments)))
     }
 }
 

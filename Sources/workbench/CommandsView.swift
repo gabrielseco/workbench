@@ -191,6 +191,7 @@ extension Commands {
             for line in state.progress.lines(timeout: turnTimeout(id: id, ctx: ctx), now: Date()) { out(line) }
         }
         out(ReviewReport.planLine(for: state))
+        for line in state.agentLines() { out(line) }
         out("cost:      \(ReviewReport.costText(state)) (list price; not what a subscription charges)")
         if state.openTurn != nil { out("           the open turn's cost is reported when it ends") }
         for note in state.review.notes { out("note:      turn \(note.turn): " + ReviewReport.oneLine(note.text)) }

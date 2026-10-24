@@ -12,7 +12,7 @@ let workbenchUsage = """
                                  non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
-      doctor [--base <branch>] [--editor <name-or-command>]
+      doctor [--base <branch>] [--editor <name-or-command>] [--json]
                                  run the declared setup and check in a throwaway worktree; changes nothing;
                                  works before goal new and after goal approve, refused only while a run is live;
                                  base without --base: the default branch (origin/HEAD, else main, else master,
@@ -94,7 +94,7 @@ let workbenchUsage = """
       abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
                              are saved as abandon.patch in the thread folder first, the branch is kept
 
-      --json on status, review, log and grant; exit codes: docs/spec/exit-codes.md
+      --json on status, review, log, grant and doctor; exit codes: docs/spec/exit-codes.md
 
       version
     """

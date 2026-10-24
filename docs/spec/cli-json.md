@@ -1,6 +1,6 @@
 # `--json`
 
-`workbench status`, `review`, `log` and `grant` take `--json`. Version 1. Within a version keys are added, never
+`workbench status`, `review`, `log`, `grant` and `doctor` take `--json`. Version 1. Within a version keys are added, never
 renamed or removed. Errors are described in [exit-codes.md](exit-codes.md).
 
 Nothing else is printed on stdout, and the command never asks a question.
@@ -9,7 +9,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, plan, plan_cost_usd, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, verify, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -20,6 +20,15 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   `invalid`), `base`, `budget_usd`, `turn_timeout_min`, `problems` (lines, for `invalid`).
 - `check`: `open_turn` and `last` (the latest result).
 - `verify`: `open_turn` and `last`, as for `check`; `last` is the verify step's result, not a verdict. Only an older log has a verify step (`verify_command` was removed).
+- `agents`: `{run, judge, review}`, each null when that responsibility never ran in the thread, else `{provider, model, recorded,
+  stage, spawned, outcome}` for its latest turn or attempt, read from `turn.started`, `judge.started`, `pr_review.started` and
+  `review_stage.started`, and from `agent.attempt.started`/`ended`, which win over the start record of the same turn and round.
+  `model` null is the provider's own default. `stage` is the named review stage, `spawned` false for an attempt that was refused
+  before anything was started, `outcome` the attempt's `outcome` once it ended (null while open, or when only a start record says it).
+  **A log from before these records reads as what the responsibility was then** (`claude` for `run` and `judge`, `codex` for
+  `review`, model null) with `recorded: false`: never an error, never blank. `approved_for`: null when the goal was not approved,
+  else `{provider, model, recorded}` from the latest `goal.approved`; an approval without the two keys reads as `claude`, model
+  null, `recorded: false`.
 - `notes`: `{turn, seq, text}` for each send-back.
 - `base_gap`: null, or `{base, behind, fetch_note}`.
 - `worktree`: `{state: present | removed | none, path}`.
@@ -36,7 +45,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verify, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
@@ -64,6 +73,30 @@ review keys: v, thread, lineage, follow_ups, status, ended, title, approval, goa
 - `review_stages`: one entry per stage of `review.stages`, in its order (`["pr-review"]` with no `[review]` config, or when the config does not load), each the stage's latest round for the thread's pull request `{name, round, verdict, stale, skipped, findings_path}`; `[]` when the thread has no pull request. `round` and `verdict` are null when the stage has not run; `verdict` is `clean`, `fix`, `skipped` or null (a round without a verdict); `skipped` is true when the stage did not run because its `applies_to` matches no changed file (never clean); `stale` is as in `pr_review` (false when the stage has not run). The `pr-review` entry is read from the `pr_review.*` events, the others from `review_stage.*`. `pr_review` above stays as it is.
 - `denied_tools`: `{turn, tool, seq, input, input_full}`. `input_full` is the whole input from `turn.ended.denials` made safe to print (one line, at most 4096 characters); null for a turn that did not record it.
 - `next`: what can be done, as the text mode says it.
+
+## doctor
+
+One object. `workbench doctor [--base <branch>] --json`. Nothing else is printed on stdout (the text mode's `base:` line is not). Exit
+codes are the text mode's: 0 when `passed`, 1 when a declared step failed or something was left behind (the object is still the
+one printed, with `passed` false), 3 stopped (the usual error object instead), 6 refused. The verifier, `[run]` and editor lines
+of the text mode are not in it.
+
+doctor keys: v, base, passed, claude, model, thread, approved_for, agents, problems, setup, check, review_warnings, cleanup_problem
+
+- `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, note, issues}`. `provider` and `model`
+  are null for goal drafting with no `[agents.goal]` (it stays manual); a null `model` is the provider's default.
+  `issues` is `{kind, severity, message}` each, found before anything is spawned from the adapter's own capabilities:
+  `policy_without_controls` (the provider has no verified controls for what the responsibility needs: coding confinement for
+  `run`, read-only evidence for the others), `missing_executable` (not on the environment's `PATH`, or the path in
+  `[providers.<id>] executable` is not executable), `budget_without_cap` (the active thread's goal has `budget_usd` and the
+  `run` provider cannot enforce a dollar limit), `unconfined_reads` (a read-only judge or review on a provider that can read
+  outside the checkout, as Codex can: a stated limit) and `setting_unused` (a key that is accepted but changes nothing: an
+  `allow_unpriced` nothing acts on yet, an executable no responsibility uses). `severity` is `problem` (the responsibility would
+  be refused or fail) or `note`. A problem is a warning: it does not make `passed` false.
+- `problems`: every `problem` issue, `{role, kind, message}`.
+- `thread`, `approved_for`: the project's active thread and what its goal was approved for (as in `status`), both null when there
+  is none or its goal does not parse.
+- `setup`, `check`: `{command, result, duration_ms}`; `result` is `passed`, `failed`, `timed_out`, `stopped`, `skipped` or `not_declared`.
 
 ## log
 

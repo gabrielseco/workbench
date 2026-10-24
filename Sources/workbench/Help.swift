@@ -101,7 +101,7 @@ enum Help {
     ]
 
     /// The commands whose output `--json` turns into JSON (main.swift refuses it elsewhere).
-    static let jsonCommands: Set<String> = ["status", "review", "log", "grant"]
+    static let jsonCommands: Set<String> = ["status", "review", "log", "grant", "doctor"]
 
     static let exitLine =
         "exit: 0 done; 2 usage; 6 refused (nothing was changed); 7 not found; the rest per command in docs/spec/exit-codes.md"

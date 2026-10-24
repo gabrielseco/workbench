@@ -141,6 +141,19 @@ Event version stays 1: a reader that does not know `agent.activity` ignores it (
 log replays unchanged, since only the new kind carries the new data. Tested by replaying a log with and without the
 events (`AgentActivityEventsTests`).
 
+### Which agent a thread used (P9)
+
+`ThreadState.agentUse` reads, per responsibility (`run`, `judge`, `review`), the provider and model of the latest record that
+names one: `turn.started`, `judge.started`, `pr_review.started` and `review_stage.started` carry them, and `agent.attempt.started`
+(with its `agent.attempt.ended` outcome) wins over the start record of the same turn and round. `ThreadState.approvedFor` is the
+latest `goal.approved`. A log from before any of these records reads as what the responsibility was then, never as blank or an
+error: Claude with the provider's default model for `run` and `judge`, Codex for `review`, and an approval without `provider` and
+`model` as Claude's default; each is marked `recorded: false` in `status --json` and `review --json` (cli-json.md) and shown as
+"not recorded". Nothing is written back and no historical log is changed. `session.json` without a `provider` is Claude's. Pinned
+by `LegacyFixturesTests` over `Tests/Fixtures/legacy/`: old configs (no `[agents]`) and logs (claude lines only, no attempt
+records, no provider in `turn.started`) that replay to the state, `status --json`, `review --json` and `doctor` output the
+pre-P9 build gave, apart from the keys and lines this adds.
+
 ## Checks
 
 Implemented in `Sources/WorkbenchCore/Thread/Check/CheckRunner.swift`, called by `ThreadRunner` after a turn.
