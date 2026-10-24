@@ -173,7 +173,7 @@ that origin. Steps: `init`, `goal new`, `goal approve`; plain `status` exits 0 a
 true, `behind` 1, `as_of` null; plain `review` then says it with `(as of the last fetch, ...` and plain `status --json` carries `as_of`; with
 the origin moved away, plain `status` exits 0, still says the gap and prints no `could not fetch` note, while `status --fetch` prints
 `could not fetch origin`; `status --all --fetch` exits 2. `VERIFY_CLI_SABOTAGE=1` adds `--fetch` to every plain command, so the steps that
-say a plain command does not fetch, keeps an age and prints no note must FAIL.
+say a plain command does not fetch, keeps an age, carries `as_of` and prints no note must FAIL.
 
 ### open
 

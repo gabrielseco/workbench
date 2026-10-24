@@ -11,7 +11,7 @@
 # must print "could not fetch origin". `status --all --fetch` must exit 2. Exit 0 only when every step passed, 1 when one
 # failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 adds `--fetch` to every plain command, as
 # the old behaviour did, so "plain status does not fetch", "plain status --json says fetched false", "plain review keeps
-# the age" and "with the origin gone plain status prints no fetch note" must FAIL. The frame is in lib.sh. Run by hand,
+# the age", "plain status --json carries as_of" and "with the origin gone plain status prints no fetch note" must FAIL. The frame is in lib.sh. Run by hand,
 # not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
