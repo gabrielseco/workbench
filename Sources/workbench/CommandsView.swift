@@ -72,6 +72,8 @@ extension Commands {
             if event.kind == .checkStarted, !verbose { return }
             // Only the verifier's files are proof; a line without `source` is an old verify step's.
             if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
+            // An older log's verify step: the step is gone, so its lines are not described.
+            if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
             out(LogFormatter.describe(event))
         }
 

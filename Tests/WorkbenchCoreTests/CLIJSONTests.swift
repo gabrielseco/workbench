@@ -153,7 +153,8 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
             let out = try await cli(command, in: fx)
             #expect(out.code == 0 && out.stderr.isEmpty, "\(command): \(out.text)")
             #expect(!out.stdout.contains { $0.contains("home.png") }, "no proof: \(out.text)")
-            #expect(!out.stdout.contains { $0.contains("verify started") || $0.contains("verify passed") }, "\(out.text)")
+            let oldStep = out.stdout.contains { $0.contains("verify") && !$0.contains("verifier") }
+            #expect(!oldStep, "no old verify event: \(out.text)")
             if command[0] != "log" {
                 #expect(!out.stdout.contains { $0.hasPrefix("verify:") || $0.hasPrefix("Verify ") }, "\(out.text)")
             }
