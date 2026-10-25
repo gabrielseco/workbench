@@ -46,8 +46,8 @@ import Testing
         }
         // The race this prevents: a lock file present while the template is copied.
         let template = try await RunnerTemplate.repository(git: fx.git)
-        let git = template.appendingPathComponent("repo/.git")
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: git.path)) ?? []
+        let names = try FileManager.default.contentsOfDirectory(atPath: template.appendingPathComponent(".git").path)
+        #expect(names.contains("HEAD"), "this is the template's .git: \(names)")
         #expect(!names.contains { $0.hasSuffix(".lock") || $0 == "gc.pid" }, "\(names)")
     }
 
