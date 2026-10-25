@@ -62,7 +62,7 @@ func json(_ object: [String: Any]) -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
-func path(ofDescriptor fd: Int32) -> String? {
+func descriptorPath(_ fd: Int32) -> String? {
     #if canImport(Darwin)
     var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
     guard fcntl(fd, F_GETPATH, &buffer) != -1 else { return nil }
@@ -96,7 +96,7 @@ let prompt = args.firstIndex(of: "--").flatMap { $0 + 1 < args.count ? args[$0 +
 if let path = d.string("dump") {
     var fds: [[String: Any]] = []
     for fd in 0..<256 where fcntl(Int32(fd), F_GETFD) != -1 {
-        fds.append(["fd": fd, "path": path(ofDescriptor: Int32(fd)) ?? ""])
+        fds.append(["fd": fd, "path": descriptorPath(Int32(fd)) ?? ""])
     }
     // stdin is read to completion: /dev/null (or a closed pipe) returns at once, an open terminal or pipe
     // would block here, which is exactly what the test wants to notice.
