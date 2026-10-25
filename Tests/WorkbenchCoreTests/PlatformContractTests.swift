@@ -50,6 +50,22 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         #expect(!ProcessTree.isAlive(recycled), "the same pid with another start is another process")
     }
 
+    @Test func theStartIsReadFromTheKernelNotInventedSoALaterProcessStartsLater() async throws {
+        let dir = try Scratch.directory("contract")
+        let (first, _) = try spawn("sleep 300", in: dir)
+        defer { end(first) }
+        let earlier = try #require(platform.member(for: first))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        let (second, _) = try spawn("sleep 300", in: dir)
+        defer { end(second) }
+        let later = try #require(platform.member(for: second))
+        #expect(earlier.startSeconds > 0, "a start is reported")
+        #expect(platform.member(for: first) == earlier, "a process keeps its start while it runs")
+        #expect(
+            (later.startSeconds, later.startMicros) > (earlier.startSeconds, earlier.startMicros),
+            "a process that began 150 ms later has a later start: \(earlier) \(later)")
+    }
+
     @Test func theWorkingDirectoryIsTheRealPathTheChildWasStartedIn() async throws {
         let dir = try Scratch.directory("contract")
         let (pid, _) = try spawn("sleep 300", in: dir)
