@@ -65,6 +65,22 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(tools[2].input == nil)
     }
 
+    @Test func aDenialTurnEndedCutIsNotRatedOrGrantedAsItsPrefix() {
+        let long = "git status" + String(repeating: " ", count: 4_100) + "; git push origin main"
+        let cut: JSONValue = ["tool": "Bash", "input": .string(String(long.prefix(4096))), "input_truncated": true]
+        let events = [
+            Event(seq: 1, ts: "2026-10-25T10:00:00.000Z", turn: 0, kind: .threadCreated, data: [:]),
+            Event(seq: 2, ts: "2026-10-25T10:00:00.000Z", turn: 1, kind: .turnStarted, data: ["provider": "claude"]),
+            Event(
+                seq: 3, ts: "2026-10-25T10:00:01.000Z", turn: 1, kind: .turnEnded,
+                data: ["result": "succeeded", "denials": .array([cut])]),
+        ]
+        let candidate = GrantCandidates.derive(events: events).first
+        #expect(candidate?.assessment.level == .unsafe)
+        #expect(candidate?.assessment.grantable.isEmpty == true, "no pattern: the prefix is not what was denied")
+        #expect(candidate?.assessment.reasons.contains { $0.contains("cut") } == true)
+    }
+
     @Test func grantCandidatesReadATurnEndedWithNoClaudeLines() {
         let push: JSONValue = ["tool": "Bash", "input": "git push origin main"]
         let calls: JSONValue = .array([push, push])

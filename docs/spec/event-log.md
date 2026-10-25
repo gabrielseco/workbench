@@ -77,20 +77,17 @@ every command that shows a thread replays it. Every coding turn, whatever the pr
   truncation marker for a line over the size limit. Nothing is dropped.
 - A line is appended whole; a last line without its newline (a runner that died mid-write) is not a line. Recovery
   cuts it off before writing the synthetic `turn.ended`, whose `transcript` counts the lines that are left.
-- The file is plain while the turn runs, so `workbench log -f` shows lines as they arrive. When the turn ends (after
+- The file is plain while the turn runs (`workbench log --transcript` reads it then). When the turn ends (after
   `turn.ended`, also in recovery) it is gzipped to `turn-<n>.jsonl.gz` (a standard gzip file: `zcat` and `gzip -t` read
   it) and the plain file is removed once the compressed one reads back identical. A file over 256 MiB, or one whose
   compression fails, stays plain; both forms read the same, and `turn.ended`'s counts are those of the plain bytes.
 - `workbench log --transcript [--turn <n>]` prints the stored stream lines, one per line and nothing else, from either form.
   A transcript file that exists and cannot be read (a damaged `.gz`, one over the limit) is an error, not an empty
-  transcript: `log --transcript` exits 1 naming the turn, `log` prints `transcript cannot be read: <why>` in its place and keeps
-  the log's own `result` line, and `log --json` prints `{"kind":"transcript.unreadable","seq":null,"ts":null,...}` with the reason. `workbench log` and
-  `log --json` show a Claude turn's lines just before its `turn.ended`, as `claude` events with `seq` null in JSON; the
-  turn's `result` line is shown once, from the file. A turn of another provider shows its `agent.activity` events
-  instead and its file only through `log --transcript` (a turn with no file prints `no transcript is stored for
-  turn <n>` on stderr and nothing on stdout).
-- `status` reads an open Claude turn's file for its progress (another provider's progress is its `agent.activity` events) (tool calls, denials, the newest line). A turn that is not
-  open needs no file to be understood: its result is in the log.
+  transcript: `log --transcript` exits 1 naming the turn. `log`, `log --json`, `status` and `review` do not read the
+  file of a turn written now: they show its `agent.activity` events (a turn with no file prints `no transcript is
+  stored for turn <n>` on stderr and nothing on stdout). For a turn of an older log, which has a `claude` event, `log`
+  also shows the file's lines just before its `turn.ended` (as `claude` events with `seq` null in `--json`), says
+  `transcript cannot be read: <why>` in their place when it is damaged, and shows the `result` line once, from the file.
 - A thread from before transcript files has its lines in the log and no file; both read the same way.
   `workbench compact (<id> | --all) [--dry-run]` moves such a thread's lines into the files (temporary: it goes with
   the old shape once the logs are moved). It works on an ended thread only, holds the log's lock, and builds the new
@@ -106,7 +103,7 @@ every command that shows a thread replays it. Every coding turn, whatever the pr
 1. Every `turn.started` is followed by exactly one `turn.ended`, even on crash recovery (the runner writes a
    synthetic `turn.ended` with `result: "interrupted"` for orphans on startup).
 2. `seq` is strictly increasing with no gaps, so truncation is detectable.
-3. The agent's lines are stored verbatim, in the turn's transcript file (every provider), and a Claude turn's `result` line also in the log. We never drop information we may want later; derived state is computed.
+3. The agent's lines are stored verbatim, in the turn's transcript file (every provider); the log holds the normalized `agent.activity` and, on `turn.ended`, what only the end knows. A turn of an older log also has its `result` line in the log. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
