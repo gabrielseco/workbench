@@ -1,6 +1,6 @@
 # P17: Faster tests
 
-Status: plan; task 1 (profile) built. Written 2026-10-24. Complements [P8](P8-faster-checks.md), which is about the
+Status: tasks 1 to 5d built or settled, 6 dropped, 7 to 9 narrowed (see "Where it stands"). Written 2026-10-24. Complements [P8](P8-faster-checks.md), which is about the
 check a *thread* runs; this is about the repo's own `swift test`. Builds on the `ci-test-timings` branch
 (`scripts/test-timings.py`, `scripts/ci-report.sh`), the `ProcessGate` (#161, #169) and `Patience`.
 
@@ -40,6 +40,25 @@ suites all read 165 to 177 s, the length of the run). Only the serial run gives 
 5. **Fixtures leak.** `$TMPDIR` held 4647 `wb-*` directories (1.1 GB) after a few runs.
 6. **No result cache.** Only the manual `--filter` rule (AGENTS.md, `check-changed.sh`) limits what runs.
 
+## Where it stands (2026-10-25)
+
+Serial seconds (`--no-parallel`, the true cost of a test) are not the CI test step: CI runs the suite about twice as
+fast as serial (451 s in CI against 907 s serial; 178 s on the 11-core Mac), so a serial saving shows up as about half
+of it in CI. CI job on `main`: build 39 s, test 451 s, soak 79 s, 9m42s in all, on a macOS runner.
+
+| Task | Result |
+|---|---|
+| 4: git calls | `acceptPlan` 17 to 10 processes (`AcceptTests` 23 to 12.6 s serial). `review` (6 processes), `shipPreflight` (7) and `shipPush` (8) have no repeated call, so there is nothing more to cut |
+| 5: waits by design | Doctor holds 25 s, a hung agent (`expire()`) 8 s, a hung push (`CommandExpiry`) 7.5 s |
+| 5d: setup | a template repository per fixture: 0.12 s to 0.008 s, about 40 s serial. Running no turn in `acceptedThread` and copying an accepted thread were tried and dropped (below) |
+| Kill-grace tests | dropped: only two tests wait on the 5 s grace, about 9 s serial |
+| 6: fewer processes | dropped: a `workbench` spawn costs 0.014 to 0.04 s, about 10 s serial in all |
+
+Done so far is about 100 s serial. What remains in the suite is the work the tests do on purpose (fake turns, git,
+shell fakes, `gh` stand-ins); more per-test tuning returns little. The levers left are structural and are in P18
+(Linux, sharding, the soak as a parallel job) because they only pay on Linux: a second macOS job holds another of the
+scarce macOS slots, which is what P18 exists to stop.
+
 ## Goal
 
 | Measure | Now | Target |
@@ -77,7 +96,7 @@ Targets are confirmed against task 1's baseline; a target missed is reported, no
 - Phase timings of a fixture, a turn, a CLI spawn and `accept` were measured with a throwaway test (not kept);
   the result is finding 2.
 
-Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (open: run the `Test profile` workflow once it is on `main`, then fill in the goals table).
+Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (done as the CI job's step times in "Where it stands": test 451 s, soak 79 s, build 39 s; a per-test CI profile was not needed, since a parallel log cannot rank tests anyway).
 
 ### 2. Clean up temp directories (built)
 
@@ -222,24 +241,26 @@ other work, so a handle would save about a second.
 Serial seconds are not CI seconds: the CI test step (451 s) runs the suite about twice as fast as `--no-parallel`
 (907 s), so a serial saving shows up as about half of it in CI.
 
-### 6. Fewer processes per test
+### 6. Fewer processes per test (dropped)
 
-- Where a test checks logic, call `ThreadService` (or the command's type) in-process instead of spawning the
-  `workbench` binary. Keep one real-CLI test per command for its output, flags and exit code.
-- Start with `AcceptTests`, `Ship*Tests`, `Review*Tests` (largest suites); list each conversion in the PR.
-- Never convert a test whose point is process behaviour (signals, exit codes, process groups, leftovers).
+Measured 2026-10-25: a warm `workbench` spawn costs 0.014 s (`--help`) to 0.04 s (`status`, `review`), so the 250 call
+sites that spawn the binary cost about 10 s serial (about 5 s of the CI test step). The 383 s in the 62 suites that
+spawn it is the work the commands do (a loop test runs a Codex review, a fake-claude turn, a push, a check and several
+`gh` calls), which an in-process call runs as well. Not worth the second path. A test that wants speed from this should
+drop the work it does not assert on, not the spawn.
 
-Done when: spawns of `WorkbenchBinary.executable` are down by at least a third, and the PR names the real-CLI
-test that still covers each command.
+### 7. CI (narrowed)
 
-### 7. CI
+No new job: a second macOS job holds another macOS slot per PR. What can be done in the one job:
 
-- Apply the measured permits to CI (task 3); compare 3 consecutive runs before and after.
-- Cache `.build` keyed on `Package.resolved` and the Swift version, if the build step is a large part of the
-  run (read it from the timings artifact first).
-- Keep the soak as its own step.
+- Measure what limits the parallel run (the cooperative thread pool, the longest suite chain, git spawns). It sets
+  the shard design in P18: shards cannot finish faster than the longest suite (about 57 s serial).
+- Cache `.build` keyed on `Package.resolved` and the Swift version, only if it pays (the build step is 39 s).
+- Apply measured permits (task 3 found the gate is not the limit, so likely none).
+- The soak (79 s) stays a step of this job until Linux is the PR gate; then it becomes its own parallel Linux job
+  (P18).
 
-Done when: the CI test step is at least 30% faster, or the PR says what stopped it.
+Done when: the limiter is named, or the PR says what stopped it.
 
 ### 8. Make the local loop fast
 
@@ -249,10 +270,26 @@ Done when: the CI test step is at least 30% faster, or the PR says what stopped 
 
 Done when: a typical diff checks in 15 s or less, or the remaining cost is explained.
 
+### 9. Keep it fast as the app grows (planned, last)
+
+The suite grows with every feature, so a total-time ratchet is the wrong guard. What makes a test expensive is what it
+spawns and waits on, so budget that, by tier:
+
+- Pure and in-process tests (parsing, state, the event log): milliseconds; most new tests belong here.
+- Tests that spawn git, `sh` or the fakes: under 1 s, with a spawn count a test can assert (as `AcceptGitCallsTests`).
+- A few named end-to-end tests above that, listed in "Tests that stay slow".
+
+Enforced from the test log (`scripts/test-timings.py` already parses it) in the existing test job, with no new job:
+a serial run fails when a test is over 5 s and not listed. Set the numbers from the final profile, after P18, so
+they lock in what was reached. The answer to a growing total is P18: PR time follows the slowest shard, and
+`scripts/check-changed.sh` (impact-based) keeps the local loop short.
+
+Done when: a new test over its budget fails the test job and names the rule.
+
 ## Order
 
 1 first (everything is guided by it), then 2 (independent, small), then 3 and 4 (can run in parallel; 4 touches
-product code, not tests), then 5 and 6 (independent of each other), then 5c, then 7, then 8. Task 4 is the one with the
+product code, not tests), then 5 and 5c (6 and the kill-grace tests were measured and dropped), then 7 narrowed, then 8, then 9 after P18. Task 4 is the one with the
 most to gain: each git process saved is saved in every test that runs the command.
 
 ## Risks
@@ -272,7 +309,13 @@ most to gain: each git process saved is saved in every test that runs the comman
 - Changing the product's own timeouts or grace periods; only tests choose shorter ones.
 - Anything about the cost of a Workbench run (P8).
 
-## Tests that stay slow (fill in during task 5)
+## Tests that stay slow
+
+Tests over 5 s in the 2026-10-25 serial profile that were measured and left: the multi-round review-loop and
+stage tests (`twoRoundsOfFindingsMakeAChain…` 7.9 s, `aStageMatchingAChangedFileRuns` 7.8 s over 4 cases,
+`pullRequestReviewMatchingAChangedFile…` 5.7 s over 3 cases, `findingsLeftAtTheCap…` 5.8 s, `aFixRoundStartsAFollowUp…`
+5.3 s). They are loops of real work (a review, a turn, a push, a check per round), not waits, so they stay; task 9
+lists them as named end-to-end tests. The timeout and grace tests (7.5, 7.2, 4.9 s) are the kill-grace result above.
 
 | Test | Time | Why it cannot be shorter |
 |---|---|---|
