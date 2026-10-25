@@ -58,5 +58,7 @@ struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapi
     }
 
     func becomeSubreaper() -> Bool { false }
+
+    var orphanAdopters: Set<pid_t> { [1] }
 }
 #endif

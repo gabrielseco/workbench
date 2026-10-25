@@ -65,4 +65,10 @@ protocol ExitNotifying {
 protocol Subreaping {
     /// True when this process now adopts the orphans beneath it. macOS has no such thing and says false.
     func becomeSubreaper() -> Bool
+
+    /// The pids that adopt a process whose parent has died, as seen from this process: PID 1 on macOS, and on Linux PID 1
+    /// or the nearest ancestor that is a subreaper (a user's `systemd --user`, a supervisor, a container's init). A
+    /// leftover of a runner that was killed has one of these as its parent; a shell the user has open has a live parent
+    /// that is not one of them, which is how the two are told apart.
+    var orphanAdopters: Set<pid_t> { get }
 }

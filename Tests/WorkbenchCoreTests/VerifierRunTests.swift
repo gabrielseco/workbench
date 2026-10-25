@@ -327,8 +327,7 @@ private func pid(in path: String) throws -> pid_t {
         #expect(swept >= 1, "\(ended)")
     }
 
-    @Test(.disabled(if: onLinux, "an orphan on Linux is adopted by a subreaper, not PID 1: P18 task 4"))
-    func anAppAKilledVerifierLeftIsEndedBeforeTheNextOne() async throws {
+    @Test func anAppAKilledVerifierLeftIsEndedBeforeTheNextOne() async throws {
         let v = try await VerifierFixture()
         let pidFile = FakeClaude.scratch("verifier-left")
         defer { try? FileManager.default.removeItem(atPath: pidFile) }

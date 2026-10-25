@@ -190,13 +190,15 @@ final class ChildExitWatcher: @unchecked Sendable {
 
 enum ProcessTree {
     /// Every descendant of `root` (children, their children, ...) that exists right now.
-    static func descendants(of root: pid_t) -> [ProcessMember] {
+    static func descendants(of root: pid_t) -> [ProcessMember] { descendants(of: root, on: platform) }
+
+    static func descendants(of root: pid_t, on host: some ProcessInspecting) -> [ProcessMember] {
         var found: [ProcessMember] = []
         var queue: [pid_t] = [root]
         var seen: Set<pid_t> = [root]
         while let parent = queue.popLast() {
-            for child in platform.children(of: parent) where seen.insert(child).inserted {
-                if let member = member(for: child) { found.append(member) }
+            for child in host.children(of: parent) where seen.insert(child).inserted {
+                if let member = host.member(for: child) { found.append(member) }
                 queue.append(child)
             }
         }
