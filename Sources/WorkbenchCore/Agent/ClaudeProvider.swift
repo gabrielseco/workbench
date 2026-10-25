@@ -110,6 +110,8 @@ public struct ClaudeProvider: AgentProvider {
 /// Reads Claude's `stream-json`. One `result` line ends a turn; everything else is activity or ignored.
 struct ClaudeDecoder: AgentDecoder {
     static let maxRecordedDenials = 100
+    /// Tool ids remembered for naming a refusal; past this the table starts over rather than grow.
+    private static let maxRememberedTools = 512
     static let maxDeniedInputCharacters = 4096
     private static let deniedInputKeys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
 
@@ -124,6 +126,10 @@ struct ClaudeDecoder: AgentDecoder {
     /// The last `result` line that parsed, kept as text so the decoder stays `Sendable`.
     private var resultText: String?
     private var session: AgentSessionHandle?
+    /// `tool_use` ids to tool names, so a refusal in a later `user` line can say which tool was refused.
+    private var toolNames: [String: String] = [:]
+    /// The one fixed sentence the permission layer gives the model when it refuses a call.
+    private static let denialText = "Permission for this tool use was denied"
 
     init(sessionID: String?, purpose: AgentSessionHandle.Purpose, maxRawBytes: Int) {
         self.sessionID = sessionID
@@ -144,6 +150,8 @@ struct ClaudeDecoder: AgentDecoder {
             resultText = line
         } else if line.contains("\"type\":\"assistant\""), let parsed = Self.object(line) {
             items += activity(fromAssistant: parsed)
+        } else if line.contains("\"type\":\"user\""), line.contains(Self.denialText), let parsed = Self.object(line) {
+            items += denials(inUser: parsed)
         } else if !Self.knownTypes.contains(Self.eventType(of: line) ?? "") {
             // Not a line this adapter understands: kept, bounded, so a diagnostic from a newer Claude is not lost.
             items.append(.unknown(provider: .claude, raw: String(line.prefix(maxRawBytes))))
@@ -212,7 +220,7 @@ struct ClaudeDecoder: AgentDecoder {
         return (calls, all.count)
     }
 
-    private func activity(fromAssistant message: [String: Any]) -> [AgentActivity] {
+    private mutating func activity(fromAssistant message: [String: Any]) -> [AgentActivity] {
         guard let content = (message["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return [] }
         var items: [AgentActivity] = []
         for block in content {
@@ -221,6 +229,10 @@ struct ClaudeDecoder: AgentDecoder {
                 if let text = block["text"] as? String, !text.isEmpty { items.append(.text(String(text.prefix(maxRawBytes)))) }
             case "tool_use":
                 if let name = block["name"] as? String {
+                    if let id = block["id"] as? String {
+                        if toolNames.count >= Self.maxRememberedTools { toolNames.removeAll() }
+                        toolNames[id] = String(name.prefix(200))
+                    }
                     let input = block["input"] as? [String: Any]
                     let summary = Self.deniedInputKeys.lazy.compactMap { input?[$0] as? String }.first ?? ""
                     items.append(.tool(name: String(name.prefix(200)), summary: String(summary.prefix(200))))
@@ -229,6 +241,19 @@ struct ClaudeDecoder: AgentDecoder {
             }
         }
         return items
+    }
+
+    /// A refused call is a `tool_result` flagged as an error that carries the permission layer's sentence; a command
+    /// that merely failed is not one.
+    private func denials(inUser message: [String: Any]) -> [AgentActivity] {
+        guard let content = (message["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return [] }
+        return content.compactMap { block in
+            guard block["type"] as? String == "tool_result", block["is_error"] as? Bool == true,
+                (block["content"] as? String)?.hasPrefix(Self.denialText) == true
+            else { return nil }
+            let name = (block["tool_use_id"] as? String).flatMap { toolNames[$0] }
+            return .permissionDenied(tool: name ?? "tool")
+        }
     }
 
     /// The `type` of a stream line. Claude writes it first, so the common case is a prefix read, not a parse.

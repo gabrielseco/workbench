@@ -170,24 +170,20 @@ private func documentedKeys(_ name: String) throws -> Set<String> {
         #expect(log.code == 0 && log.stderr.isEmpty)
         let stored = try String(contentsOf: fx.project.eventsURL(id), encoding: .utf8)
             .split(separator: "\n").map(String.init)
-        // Every event is its stored line; the `claude` lines are the turn's transcript (seq null, in order), the
-        // log's own copy of the result line is not printed twice.
-        func isClaude(_ line: String) -> Bool { line.contains("\"kind\":\"claude\"") }
-        #expect(log.stdout.filter { !isClaude($0) } == stored.filter { !isClaude($0) })
-        let claude = log.stdout.filter(isClaude)
-        #expect(claude.count == fx.transcript(id).count && claude.allSatisfy { $0.contains("\"seq\":null") })
-        #expect(claude.last?.contains("\"type\":\"result\"") == true)
+        // Every event is its stored line, and a turn written now has no stream line among them: those are in its
+        // transcript file (`log --transcript`).
+        #expect(log.stdout == stored)
+        #expect(!log.stdout.contains { $0.contains("\"kind\":\"claude\"") })
 
         let one = try await cli(["log", id, "--seq", "1", "--json"], in: fx)
         #expect(one.code == 0)
         #expect(one.stdout.count == 1, "one stored line")
         #expect(one.stdout.first == stored.first)
 
-        // A raw `claude` line comes back byte for byte.
-        let claudeSeq = try #require(
-            try fx.events(id).first { $0.kind == .claude }?.seq)
-        let raw = try await cli(["log", id, "--seq", String(claudeSeq), "--json"], in: fx)
-        #expect(raw.stdout.count == 1 && raw.stdout.first == stored[claudeSeq - 1])
+        // One activity event comes back byte for byte.
+        let activitySeq = try #require(try fx.events(id).first { $0.kind == .agentActivity }?.seq)
+        let raw = try await cli(["log", id, "--seq", String(activitySeq), "--json"], in: fx)
+        #expect(raw.stdout.count == 1 && raw.stdout.first == stored[activitySeq - 1])
     }
 
     @Test func aHalfWrittenMultibyteTailHidesNothingBeforeIt() async throws {

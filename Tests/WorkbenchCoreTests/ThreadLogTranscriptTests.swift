@@ -42,6 +42,24 @@ private func codexThread() async throws -> (project: Project, id: String) {
 }
 
 @Suite struct ThreadLogTranscriptTests {
+    @Test func anOlderTurnKilledBeforeItsResultStillShowsItsFileAtItsEnd() async throws {
+        let project = Project(root: Scratch.url("killed"))
+        let id = "g-killed"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "claude"])
+        let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
+        try writer.append(#"{"type":"system","subtype":"init"}"#)
+        writer.close()
+        try await log.append(.turnEnded, turn: 1, data: ["result": "interrupted"])
+        await log.close()
+        let kinds = try ThreadLog.read(at: project.eventsURL(id)).entries.map { entry -> String in
+            if case .event(let event) = entry { return event.kind.rawValue }
+            return "line"
+        }
+        #expect(kinds == ["thread.created", "turn.started", "line", "turn.ended"])
+    }
+
     @Test func aCodexTurnShowsItsActivityNotItsRawLinesAndKeepsThemForTranscript() async throws {
         let (project, id) = try await codexThread()
         let log = try EventLogWriter.open(at: project.eventsURL(id))
@@ -88,6 +106,8 @@ private func codexThread() async throws -> (project: Project, id: String) {
         let log = try EventLogWriter.open(at: project.eventsURL(id))
         try await log.append(.threadCreated)
         try await log.append(.turnStarted, turn: 1)
+        // A turn is shown through its file only when the log holds a `claude` line for it (the older shape).
+        try await log.appendClaudeLine(#"{"type":"result"}"#, turn: 1)
         let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
         try writer.append(#"{"type":"system","subtype":"init"}"#)
 
@@ -137,12 +157,16 @@ private func codexThread() async throws -> (project: Project, id: String) {
         #expect(lines[7] == stored.first { $0.contains("\"turn\":2") && $0.contains("\"claude\"") })
     }
 
-    @Test func anOpenTurnsLinesDriveItsProgress() async throws {
+    @Test func anOpenClaudeTurnsProgressIsItsActivityNotItsFile() async throws {
         let project = Project(root: Scratch.url("progress"))
         let id = "g-progress"
         let log = try EventLogWriter.open(at: project.eventsURL(id))
         try await log.append(.threadCreated)
-        try await log.append(.turnStarted, turn: 1)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "claude"])
+        for _ in 0..<2 {
+            try await log.append(
+                .agentActivity, turn: 1, data: ["provider": "claude", "type": "tool", "name": "Read", "summary": "a.swift"])
+        }
         await log.close()
         let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
         for _ in 0..<2 {
@@ -152,8 +176,8 @@ private func codexThread() async throws -> (project: Project, id: String) {
 
         let state = ThreadStore(project: project).state(of: id)
         #expect(state.openTurn == 1)
-        #expect(state.progress.toolCalls == 2 && state.progress.toolCallsKnown)
-        #expect(state.progress.lastEvent?.hasPrefix("tool_use Read") == true)
+        #expect(state.progress.toolCalls == 2 && state.progress.toolCallsKnown, "the file is not counted again")
+        #expect(state.progress.lastEvent == "tool_use Read a.swift")
     }
 
     @Test func aLogWithALineThatIsNotAnEventStillFollowsItsTranscriptWithoutRepeats() async throws {
@@ -162,6 +186,7 @@ private func codexThread() async throws -> (project: Project, id: String) {
         let log = try EventLogWriter.open(at: project.eventsURL(id))
         try await log.append(.threadCreated)
         try await log.append(.turnStarted, turn: 1)
+        try await log.appendClaudeLine(#"{"type":"result"}"#, turn: 1)
         await log.close()
         // A whole line that is not an event: the raw lines and the events no longer line up.
         let handle = try FileHandle(forWritingTo: project.eventsURL(id))
@@ -178,7 +203,7 @@ private func codexThread() async throws -> (project: Project, id: String) {
         #expect(second.entries.count == 1, "only the new line, not the first again")
         // `--json` prints the stored lines as they are here, once, and a later poll gives only what was added.
         let json = try ThreadLog.read(at: project.eventsURL(id)).jsonLines(after: ThreadLog.Position())
-        #expect(json.lines.count == 3 && json.lines.last == "not an event")
+        #expect(json.lines.count == 4 && json.lines.last == "not an event")
         let again = try ThreadLog.read(at: project.eventsURL(id)).jsonLines(after: json.position)
         #expect(again.lines.isEmpty && again.position == json.position)
     }

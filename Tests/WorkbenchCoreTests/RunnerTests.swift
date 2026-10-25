@@ -134,9 +134,9 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
                 == ["thread.created", "goal.saved", "goal.approved", "worktree.created", "turn.started"])
         #expect(kinds.last == "turn.ended")
         #expect(kinds.filter { $0 == "turn.ended" }.count == 1)
-        // The transcript holds init, 2 stream events, assistant and result; the log only the result.
+        // The transcript holds init, 2 stream events, assistant and result; the log the activity they carried and no line.
         #expect(fx.transcript(id).count == 5)
-        #expect(kinds.filter { $0 == "claude" }.count == 1)
+        #expect(!kinds.contains("claude") && kinds.contains("agent.activity"))
         let file = TranscriptFile.summary(at: TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1))
         let ended = try #require(contents.events.last { $0.kind == .turnEnded })
         #expect(ended.data["transcript"] == file?.json && file?.lines == 5, "turn.ended says what the file holds")

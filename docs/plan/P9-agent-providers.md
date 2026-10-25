@@ -394,8 +394,8 @@ never checked, and `EventLogTests.readerIgnoresUnknownKindsAndFields` pins it. S
 needs (attempt start/end, normalized activity, `goal.draft.*`, provider/model metadata on existing
 records) are new kinds and new fields, which an older reader skips.
 
-- No existing field changes meaning. `claude` events stay verbatim, and Claude runs keep emitting them;
-  new providers' raw lines go in a new kind that names the provider.
+- No existing field changes meaning. `claude` events of older logs stay verbatim and are still read; a Claude run now
+  records `agent.activity` like every provider, with its raw lines in the turn's transcript file.
 - A reducer that understands both shapes counts each activity once: a run is read through one or the other.
 - An older Workbench reading a newer log cannot see the new attempts, so it will not recover an unfinished
   one. That is harmless: a log opened by an old binary has no recovery obligation for kinds it does not

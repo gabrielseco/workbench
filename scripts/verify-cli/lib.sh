@@ -187,7 +187,7 @@ start_thread() {
     check "goal approved with a $BUDGET_USD USD cap" "approval is '${approval:-?}'" test "${approval:-}" = approved
 }
 
-# One real turn: `workbench run`, then the log must show the real claude (turn.started argv, system/init line).
+# One real turn: `workbench run`, then the log and transcript must show the real claude (turn.started argv, system/init line).
 run_thread() {
     local run_exit log argv0 stream
     wb "$T_RUN" run "$ID"
@@ -196,11 +196,12 @@ run_thread() {
 
     log=$(wb "$T_WB" log "$ID" --json)
     argv0=$(echo "$log" | py "s=[e for e in lines if e['kind']=='turn.started']; print(s[-1]['data']['argv'][0] if s else '')")
-    stream=$(echo "$log" | py "c=[e['data'] for e in lines if e['kind']=='claude']
+    # The stream lines are the turn's transcript, not events of the log.
+    stream=$(wb "$T_WB" log "$ID" --transcript | py "c=lines
 init=[x for x in c if isinstance(x,dict) and x.get('type')=='system' and x.get('subtype')=='init']
 print(len(c), init[0].get('model','?') if init else '-', init[0].get('claude_code_version','?') if init else '-')")
     echo "    turn argv[0]: $argv0; claude lines, model, version: $stream"
-    check "run: real claude stream lines in the log" "argv[0] '$argv0', stream '$stream'" \
+    check "run: real claude stream lines in the transcript" "argv[0] '$argv0', stream '$stream'" \
         bash -c '[ -n "$1" ] && [[ $1 != *fake-claude* ]] && [ "${2%% *}" -gt 0 ] && [[ $2 != *" - -" ]]' _ "$argv0" "$stream"
 
     WT=$(wb "$T_WB" status "$ID" --json | py "print(d['worktree']['path'] or '')")
