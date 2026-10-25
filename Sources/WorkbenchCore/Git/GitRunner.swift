@@ -207,8 +207,7 @@ private final class ShortCommand: @unchecked Sendable {
     private func timeOut() {
         guard !timedOut, !finished else { return }
         timedOut = true
-        killpg(pid, SIGTERM)
-        kill(pid, SIGTERM)
+        if killpg(pid, SIGTERM) != 0 { kill(pid, SIGTERM) }
         killTimer = timer(after: 2) { [self] in
             killpg(pid, SIGKILL)
             kill(pid, SIGKILL)
