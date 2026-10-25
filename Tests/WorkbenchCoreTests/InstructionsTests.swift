@@ -44,6 +44,62 @@ private struct InstructionsRepo {
 }
 
 @Suite(.processGate) struct ProjectInstructionsTests {
+    @Test func aCutListingIsNotTrustedAndEachCandidateIsAskedForOnItsOwn() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", "agents\n")
+        try repo.write("CLAUDE.md", "claude\n")
+        let commit = try await repo.commit()
+        // A git whose listing of several paths is over the output cap, as it can be when a directory is among them.
+        let script = Scratch.url("cutgit").appendingPathExtension("sh")
+        try """
+            #!/bin/sh
+            if [ "$1" = ls-tree ]; then
+              n=0; after=0
+              for a in "$@"; do [ $after = 1 ] && n=$((n+1)); [ "$a" = -- ] && after=1; done
+              if [ $n -gt 1 ]; then head -c 5242880 /dev/zero | tr '\\0' 'x'; exit 0; fi
+            fi
+            exec \(repo.git.executable.path) "$@"
+            """.write(to: script, atomically: true, encoding: .utf8)
+        chmod(script.path, 0o755)
+        let cut = GitRunner(executable: script, environment: repo.git.environment)
+
+        let loaded = await ProjectInstructions.load(git: cut, repo: repo.root, commit: commit)
+        #expect(loaded?.file == "AGENTS.md" && loaded?.text == "agents", "a cut listing must not hide a file that is there")
+    }
+
+    @Test func theCandidatesAreLookedUpWithOneGitCommandNotOnePerFile() async throws {
+        let repo = try await InstructionsRepo()
+        let none = try await repo.commit()
+        try repo.write("CLAUDE.md", "claude\n")
+        let onlyClaude = try await repo.commit()
+        try repo.write("AGENTS.md", "agents\n")
+        let both = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        #expect(await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: none) == nil)
+        #expect(counting.calls.count == 1, "neither file: one ls-tree, not one per name: \(counting.calls)")
+
+        let claude = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: onlyClaude)
+        #expect(claude?.file == "CLAUDE.md" && claude?.text == "claude")
+        #expect(counting.calls.count == 1 + 3, "one ls-tree, then the size and the blob: \(counting.calls)")
+
+        let agents = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: both)
+        #expect(agents?.file == "AGENTS.md" && agents?.text == "agents", "AGENTS.md still wins over CLAUDE.md")
+        #expect(counting.calls.count == 1 + 3 + 3, "\(counting.calls)")
+    }
+
+    @Test func aCandidateThatIsNotARegularFileFallsBackToTheNext() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.symlink("AGENTS.md", to: "README.md")
+        try repo.write("CLAUDE.md", "claude\n")
+        let commit = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        let loaded = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: commit)
+        #expect(loaded?.file == "CLAUDE.md" && loaded?.text == "claude")
+        #expect(counting.calls.count == 3, "one ls-tree sees the symlink, then CLAUDE.md's size and blob: \(counting.calls)")
+    }
+
     @Test func replacedImportPathsDoNotConsumeTheSizeLimit() async throws {
         let repo = try await InstructionsRepo()
         let prefix = String(repeating: "./", count: 150)
