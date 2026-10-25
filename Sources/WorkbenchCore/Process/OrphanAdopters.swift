@@ -113,6 +113,8 @@ final class AdopterCache: @unchecked Sendable {
     func adopters(on host: some ProcessInspecting) -> Set<pid_t> {
         lock.lock()
         defer { lock.unlock() }
+        // An adopter that has since exited hands its orphans to the next one up, which has to be found again.
+        if let gone = measured, host.member(for: gone.pid) != gone, gone.pid > 1 { measured = nil }
         if measured == nil, failedAt.map({ Date().timeIntervalSince($0) >= retryAfter }) ?? true {
             if let found = measure() {
                 measured = found

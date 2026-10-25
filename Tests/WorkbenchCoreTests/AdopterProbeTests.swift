@@ -92,4 +92,17 @@ import Testing
         _ = cache.adopters(on: machine)
         #expect(calls.count == 1, "a stuck probe does not cost its wait on every sweep")
     }
+
+    @Test func anAdopterThatExitedIsMeasuredAgain() {
+        final class Calls: @unchecked Sendable { var count = 0 }
+        let calls = Calls()
+        let machine = Machine([900: .init(parent: 1, cwd: "/"), 1000: .init(parent: 1, cwd: "/")])
+        let cache = AdopterCache(ledger: ledger(), retryAfter: 0) {
+            calls.count += 1
+            return ProcessMember(pid: calls.count == 1 ? 900 : 1000, startSeconds: 100, startMicros: 0)
+        }
+        #expect(cache.adopters(on: machine) == [1, 900])
+        machine.table[900] = nil
+        #expect(cache.adopters(on: machine) == [1, 1000], "its orphans went to the next subreaper up")
+    }
 }
