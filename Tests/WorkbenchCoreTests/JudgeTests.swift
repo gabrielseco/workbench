@@ -162,7 +162,7 @@ private let good = """
     @Test func theRulesLeaveHandCheckedCriteriaAndMissingFilesAlone() throws {
         let prompt = Judge.prompt(for: try input())
         #expect(prompt.contains("run or checked by hand"))
-        #expect(prompt.contains("Do not mark it unmet and do not raise a concern that its evidence is missing"))
+        #expect(prompt.contains("Do not mark it unmet and do not raise a concern because that evidence is missing"))
         #expect(prompt.contains("because the diff does not show it, or about how fast the check ran"))
         #expect(
             prompt.contains("mark it unmet if they show a violation"),
