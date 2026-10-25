@@ -1,0 +1,172 @@
+name: Linux build experiment
+
+# Throwaway (P18): how long does the Linux build take with no cache, a cache, and a cache plus restored file timestamps?
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/linux-build-exp]
+
+concurrency:
+  group: linux-build-exp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-nocache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          start=$(date +%s)
+          swift build --build-tests 2>&1 | tail -3
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  populate-b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          start=$(date +%s)
+          swift build --build-tests 2>&1 | tail -3
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: exp-${{ github.run_id }}-b
+
+  populate-c:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python for the timestamp script
+        run: apt-get update -qq && apt-get install -y -qq python3 git
+      - name: Restore file timestamps to each file's last commit time
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          log = subprocess.run(["git", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
+                               capture_output=True, text=True).stdout
+          seen, ts = {}, None
+          for line in log.splitlines():
+              if line.startswith("#"): ts = int(line[1:])
+              elif line and line not in seen: seen[line] = ts
+          n = 0
+          for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.splitlines():
+              if path in seen and os.path.exists(path):
+                  os.utime(path, (seen[path], seen[path])); n += 1
+          print("timestamps restored for", n, "files")
+          PY
+      - name: Build
+        run: |
+          start=$(date +%s)
+          swift build --build-tests 2>&1 | tail -3
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: exp-${{ github.run_id }}-c
+
+  warm-b:
+    needs: populate-b
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: .build
+          key: exp-${{ github.run_id }}-b
+      - name: Build
+        run: |
+          start=$(date +%s)
+          swift build --build-tests 2>&1 | tail -3
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  warm-c:
+    needs: populate-c
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python for the timestamp script
+        run: apt-get update -qq && apt-get install -y -qq python3 git
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: .build
+          key: exp-${{ github.run_id }}-c
+      - name: Restore file timestamps to each file's last commit time
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          log = subprocess.run(["git", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
+                               capture_output=True, text=True).stdout
+          seen, ts = {}, None
+          for line in log.splitlines():
+              if line.startswith("#"): ts = int(line[1:])
+              elif line and line not in seen: seen[line] = ts
+          n = 0
+          for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.splitlines():
+              if path in seen and os.path.exists(path):
+                  os.utime(path, (seen[path], seen[path])); n += 1
+          print("timestamps restored for", n, "files")
+          PY
+      - name: Build
+        run: |
+          start=$(date +%s)
+          swift build --build-tests 2>&1 | tail -3
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
