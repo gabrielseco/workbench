@@ -157,15 +157,19 @@ struct ClaudeDecoder: AgentDecoder {
         // Past the output limit the result line may have been dropped from the stream; it is kept aside.
         var late: String?
         var resultLine = resultText.flatMap(Self.object)
+        var resultSource = resultText
         if resultLine == nil, let last = exit.lastLineAfterLimit {
             late = last
-            if let parsed = Self.object(last), parsed["type"] as? String == "result" { resultLine = parsed }
+            if let parsed = Self.object(last), parsed["type"] as? String == "result" {
+                resultLine = parsed
+                resultSource = last
+            }
         }
         let (outcome, failure) = Self.judge(exit: exit, result: resultLine)
 
         var usage: AgentUsage?
-        if let cost = resultLine?["total_cost_usd"] as? NSNumber {
-            usage = AgentUsage(costUSD: cost.doubleValue)
+        if let cost = Self.cost(in: resultSource) ?? (resultLine?["total_cost_usd"] as? NSNumber)?.doubleValue {
+            usage = AgentUsage(costUSD: cost)
         }
         let (denials, count) = Self.denials(resultLine)
         let summary = (resultLine?["result"] as? String).map { AgentAnswer.text($0) }
@@ -244,6 +248,17 @@ struct ClaudeDecoder: AgentDecoder {
     private static func object(_ line: String) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
     }
+
+    private struct CostField: Decodable {
+        var totalCostUSD: Double?
+        enum CodingKeys: String, CodingKey { case totalCostUSD = "total_cost_usd" }
+    }
+
+    /// The cost exactly as the line wrote it. `JSONSerialization` on Linux can be one digit off in the last place,
+    /// and the log's cost must be the number the result line had.
+    static func cost(in line: String?) -> Double? {
+        line.flatMap { try? JSONDecoder().decode(CostField.self, from: Data($0.utf8)).totalCostUSD }
+    }
 }
 
 /// What `claude -p --output-format json` prints: one object whose `result` is the model's answer.
@@ -260,7 +275,7 @@ struct ClaudeEnvelope: Equatable {
             answer: outer["result"] as? String, isError: outer["is_error"] as? Bool == true,
             budgetExhausted: outer["subtype"] as? String == "error_max_budget_usd"
                 || outer["terminal_reason"] as? String == "budget_exhausted",
-            costUSD: (outer["total_cost_usd"] as? NSNumber)?.doubleValue)
+            costUSD: ClaudeDecoder.cost(in: output) ?? (outer["total_cost_usd"] as? NSNumber)?.doubleValue)
     }
 }
 
