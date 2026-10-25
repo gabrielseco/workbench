@@ -57,15 +57,16 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         #expect(platform.workingDirectory(of: pid) == OrphanSweeper.realPath(dir))
     }
 
-    @Test func aGrandchildIsFoundBelowItsParentWhateverItsDirectoryOrGroup() async throws {
+    @Test func aDescendantTwoLevelsDownIsFoundWhateverItsDirectoryOrGroup() async throws {
         let dir = try Scratch.directory("contract")
-        let (pid, _) = try spawn("sh -c 'cd /; exec sleep 300' & wait", in: dir)
+        // shell -> shell (own job, so its own process group, in another directory) -> sleep
+        let (pid, _) = try spawn("set -m; (cd /; sh -c 'exec sleep 300' & wait) & wait", in: dir)
         defer { end(pid) }
-        #expect(await wait { !platform.children(of: pid).isEmpty }, "the shell's child is listed")
-        let child = try #require(platform.children(of: pid).first)
-        #expect(platform.allPIDs().contains(child))
-        #expect(await wait { ProcessTree.descendants(of: pid).contains { platform.parent(of: $0.pid) != nil } })
-        #expect(ProcessTree.descendants(of: pid).map(\.pid).contains(child))
+        func deep() -> [ProcessMember] { ProcessTree.descendants(of: pid).filter { platform.parent(of: $0.pid) != pid } }
+        #expect(await wait { !deep().isEmpty }, "a descendant that is not a direct child is found")
+        let direct = platform.children(of: pid)
+        #expect(!direct.isEmpty && direct.allSatisfy { platform.parent(of: $0) == pid }, "children are direct children only")
+        #expect(platform.allPIDs().contains(direct[0]))
     }
 
     @Test func aChildHoldsStdinStdoutAndStderrAndNoDescriptorOfOurs() async throws {
@@ -73,14 +74,23 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         let leaked = Scratch.url("contract-leak")
         let fd = open(leaked.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
         defer { close(fd) }
-        // Descriptor 7 is open here without close-on-exec; the child must not have it.
-        #expect(dup2(fd, 7) == 7)
-        defer { close(7) }
-        let (pid, output) = try spawn("echo to-stdout; echo to-seven >&7", in: dir)
-        let exited = await wait { kill(pid, 0) != 0 || waitpidNoHang(pid) }
+        // A spare descriptor above anything another test is likely to hold, open here without close-on-exec.
+        let spare = fcntl(fd, F_DUPFD, 100)
+        #expect(spare >= 100)
+        defer { close(spare) }
+        let script = "read line; echo \"stdin:[$line]\"; echo to-stderr >&2; echo leaked >&\(spare) || echo cannot-write; ls /dev/fd"
+        let (pid, output) = try spawn(script, in: dir)
+        let exited = await wait { waitpidNoHang(pid) }
         #expect(exited)
-        #expect(try String(contentsOf: output, encoding: .utf8).contains("to-stdout"), "stdout is the file we gave")
-        #expect(try String(contentsOf: leaked, encoding: .utf8).isEmpty, "descriptor 7 did not reach the child")
+        let text = try String(contentsOf: output, encoding: .utf8)
+        #expect(text.contains("stdin:[]"), "stdin is /dev/null: \(text)")
+        #expect(text.contains("to-stderr"), "stderr is the file we gave: \(text)")
+        #expect(text.contains("cannot-write"), "our spare descriptor did not reach the child: \(text)")
+        #expect(try String(contentsOf: leaked, encoding: .utf8).isEmpty)
+        // What the child lists in /dev/fd: 0, 1, 2 and the few handles `ls` opens for itself, nothing like ours (the spare
+        // is 100 or more, and the descriptors we hold above the standard three are all well past `ls`'s own).
+        let listed = Set(text.split(separator: "\n").compactMap { Int($0) })
+        #expect(listed.isSuperset(of: [0, 1, 2]) && listed.allSatisfy { $0 < 10 }, "descriptors in the child: \(listed.sorted())")
     }
 
     @Test func anExitIsReportedPromptlyWhereThePlatformHasAnEventAndNeverWrongly() async throws {
@@ -92,6 +102,9 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(!heard.value, "a running child is not reported as exited")
         kill(pid, SIGKILL)
+        #if canImport(Darwin)
+        #expect(watch != nil, "macOS has the kqueue event")
+        #endif
         if watch != nil { #expect(await wait { heard.value }, "the platform's event arrives") }
     }
 

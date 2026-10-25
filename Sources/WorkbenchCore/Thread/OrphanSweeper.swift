@@ -11,8 +11,11 @@ enum OrphanSweeper {
         let prefix = realPath(directory)
         var roots: [ProcessMember] = []
         for pid in platform.allPIDs() where pid > 1 && pid != getpid() {
-            guard platform.parent(of: pid) == 1, let cwd = platform.workingDirectory(of: pid),
-                cwd == prefix || cwd.hasPrefix(prefix + "/"), let member = platform.member(for: pid)
+            // The identity is read first and checked again after the rest: a process that left and whose pid was reused
+            // in between must not be taken for the orphan.
+            guard let member = platform.member(for: pid), platform.parent(of: pid) == 1,
+                let cwd = platform.workingDirectory(of: pid), cwd == prefix || cwd.hasPrefix(prefix + "/"),
+                platform.member(for: pid) == member
             else { continue }
             roots.append(member)
         }
