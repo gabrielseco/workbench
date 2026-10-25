@@ -448,25 +448,8 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         return try GoalFile.parse(text).goal
     }
 
-    @Test func theFirstPromptPrefersANarrowCheckAndNamesTheFullOne() throws {
-        let prompt = PromptBuilder.firstPrompt(goal: try goal(), checkCommand: "scripts/check.sh")
-        let section = try #require(prompt.range(of: "## Checking your work"))
-        let text = String(prompt[section.lowerBound...])
-        #expect(text.contains("narrowest command you are allowed to run"))
-        #expect(text.contains("`scripts/check.sh`"))
-        #expect(text.contains("Workbench runs it itself when you finish"))
-        #expect(text.contains("you do not need to run it"))
-        #expect(text.contains("only if you changed something after that run"))
-    }
-
     @Test func noCheckCommandMeansNoSection() throws {
         let prompt = PromptBuilder.firstPrompt(goal: try goal(), checkCommand: nil)
         #expect(!prompt.contains("## Checking your work"))
-    }
-
-    @Test func theRulesNameTheFullCheckWithoutForbiddingNarrowTests() {
-        let rules = PromptBuilder.rules(checkCommand: "scripts/check.sh")
-        #expect(rules.contains("The project's full check is `scripts/check.sh`"))
-        #expect(!rules.contains("use exactly"))
     }
 }

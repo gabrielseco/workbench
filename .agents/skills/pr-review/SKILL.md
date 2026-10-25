@@ -62,6 +62,8 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 - Each failure case the phase plan lists has a test: hang, crash, SIGTERM ignored, leftover children,
   truncation, kill mid-run, stop before start. Prefer the fake claude (`Sources/fake-claude`) over
   sleeps; a timing assertion needs margin under parallel load (this suite runs in parallel).
+- A test that only asserts a prompt or instruction text contains a phrase is a finding: it checks wording, not
+  behaviour (`AGENTS.md`, step 2).
 - A test for a bug fix fails without the fix. Stream-handling changes are checked against the real
   fixtures in `docs/plan/P1-spikes/fixtures/`.
 

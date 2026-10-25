@@ -4,13 +4,6 @@ import Testing
 @testable import WorkbenchCore
 
 @Suite(.processGate) struct GrantPromptTests {
-    @Test func theRulesSayOnlyTheUserCanAllowADeniedCommandAndNoWorkaround() {
-        let rules = PromptBuilder.rules(checkCommand: nil)
-        #expect(rules.contains("do not retry it and do not do the same thing another way"))
-        #expect(rules.contains("say exactly which command you needed and why"))
-        #expect(rules.contains("Only the user can allow it"))
-        #expect(rules.contains("file tools, never with shell redirects or heredocs"))
-    }
 
     @Test func aFollowUpListsWhatTheUserHasNowAllowedAsData() {
         let prompt = PromptBuilder.followUpPrompt(

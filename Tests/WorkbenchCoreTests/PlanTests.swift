@@ -107,7 +107,7 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
             """
         ).goal
         let prompt = Plan.prompt(for: PlanInput(goal: goal, baseCommit: "0123456789abcdef", instructions: nil))
-        for part in ["Add a greeting.", "[c1] a.txt says hello", "other files", "0123456789ab", "do not ask questions", "Risks"] {
+        for part in ["Add a greeting.", "[c1] a.txt says hello", "other files", "0123456789ab"] {
             #expect(prompt.contains(part), "\(part)")
         }
     }
