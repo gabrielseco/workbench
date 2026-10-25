@@ -4,7 +4,7 @@
 # prompt it was given), and `claude` is /usr/bin/false, so no real agent is started and it costs nothing.
 #   bash scripts/verify-cli/run-codex.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/run-codex.sh   (the same, on a branch that contains origin/main)
-# With `[agents.run] provider = "codex"`: a goal with budget_usd is refused by `run` (exit 6, naming spend_policy: timeout_only) before
+# With `[agents.run] provider = "codex"`: a goal with budget_usd is refused by `goal approve` (naming spend_policy: timeout_only) before
 # the fake is started; after the goal is changed to `spend_policy: timeout_only` and approved again, `run` succeeds, the turn is on
 # record as codex with no session and an unknown cost, the fake's prompt starts with the standing rules, `grant` is refused, a
 # `send-back` starts a fresh process whose prompt holds the previous turn, the diff and the note, and `accept` commits what the
@@ -84,15 +84,14 @@ wbp "$SCRATCH/new.out" goal new verify-cli-codex --base "$BASE" --from "$SCRATCH
 ID=$(sed -n 's/^created //p' "$SCRATCH/new.out")
 [[ $ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "goal new printed no thread id ($(head -3 "$SCRATCH/new.out"))"
 GOAL_FILE="$P/.workbench/threads/$ID/goal.md"
+# --- 1. a goal with a dollar budget is not approved on Codex ----------------------------------------------------
+
 wbp "$SCRATCH/approve1.out" goal approve "$ID"
-
-# --- 1. a goal with a dollar budget is refused on Codex ---------------------------------------------------------
-
-wbp "$SCRATCH/run0.out" run
-shown "$SCRATCH/run0.out" 3
-check "a budget_usd goal on Codex: run is refused, exit 6" "workbench run exited $RC" test "$RC" = 6
+shown "$SCRATCH/approve1.out" 3
+check "a budget_usd goal on Codex: approve is refused" "goal approve exited $RC" test "$RC" != 0
 check "the refusal says to use spend_policy: timeout_only" "no such message" \
-    bash -c 'grep -q "spend_policy: timeout_only" "$1" && grep -q "budget_usd" "$1"' _ "$SCRATCH/run0.out"
+    bash -c 'grep -q "spend_policy: timeout_only" "$1" && grep -q "budget_usd" "$1"' _ "$SCRATCH/approve1.out"
+check "the goal stays a draft" "the goal was approved" bash -c '! grep -q "^status: approved" "$1"' _ "$GOAL_FILE"
 check "the fake was not started" "the fake ran $(runs) time(s)" test "$(runs)" = 0
 check "no worktree was made" "the thread's worktree exists" bash -c '! git -C "$1" worktree list | grep -q "$2"' _ "$P" "$ID"
 
