@@ -42,6 +42,11 @@ private let completed =
         #expect(refusal?.message.contains("spend_policy: timeout_only") == true, "\(String(describing: refusal?.message))")
     }
 
+    @Test func tomlStringEscapesQuotesBackslashesAndControls() {
+        #expect(CodexProvider.tomlString("/a/b") == "\"/a/b\"")
+        #expect(CodexProvider.tomlString("/a\"b\\t\tc") == "\"/a\\\"b\\\\t\\u0009c\"")
+    }
+
     @Test func codingInvocationIsHardened() throws {
         let args = try provider.invocation(for: coding()).arguments
         let expected = [
