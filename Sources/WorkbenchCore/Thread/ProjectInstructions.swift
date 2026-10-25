@@ -1,8 +1,4 @@
-#if canImport(CryptoKit)
-import CryptoKit
-#else
 import Crypto
-#endif
 import Foundation
 
 /// The project's own instructions file (`AGENTS.md`, else `CLAUDE.md`), read from the commit a thread was

@@ -1,8 +1,4 @@
-#if canImport(CryptoKit)
-import CryptoKit
-#else
 import Crypto
-#endif
 import Foundation
 
 /// Where a drafted goal goes: a new thread, or over the goal of an existing one (explicitly).

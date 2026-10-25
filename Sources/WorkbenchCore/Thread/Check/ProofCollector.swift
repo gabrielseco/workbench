@@ -1,8 +1,4 @@
-#if canImport(CryptoKit)
-import CryptoKit
-#else
 import Crypto
-#endif
 import Foundation
 
 /// One file the verifier left in the proof directory, as `proof.added` recorded it.

@@ -19,20 +19,20 @@ let package = Package(
         .executable(name: "workbench", targets: ["workbench"]),
     ],
     dependencies: [
-        // CryptoKit is Apple-only; swift-crypto has the same API under the module name `Crypto`.
+        // Same API as CryptoKit on every platform (it wraps CryptoKit on Apple ones), so no `#if` at the call sites.
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
     ],
     targets: [
         .target(
             name: "WorkbenchCore",
-            dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))],
+            dependencies: [.product(name: "Crypto", package: "swift-crypto")],
             swiftSettings: simplifyCFGWorkaround),
         .executableTarget(name: "workbench", dependencies: ["WorkbenchCore"], swiftSettings: simplifyCFGWorkaround),
         // Test double for `claude`. Standalone on purpose: no dependency on WorkbenchCore.
         .executableTarget(name: "fake-claude"),
         .testTarget(name: "WorkbenchCoreTests", dependencies: [
             "WorkbenchCore", "fake-claude", "workbench",
-            .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
+            .product(name: "Crypto", package: "swift-crypto"),
         ]),
     ]
 )
