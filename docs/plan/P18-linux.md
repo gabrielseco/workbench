@@ -163,8 +163,13 @@ Task 3 (the Linux platform, this branch), same runner, two parallel jobs (tests,
   newest earlier build of the same Swift version and `Package.swift`, restores the file times, builds, and the `test`
   job saves `.build` right after the build; pushes to main fill the cache that pull requests start from. Not measured:
   a change to a widely used file, a `Package.swift` change (cold again), and a cache evicted after 7 days.
-- Open: an intermittent segfault inside libdispatch's event loop on Linux (the same signature as the 64-permit crash),
-  seen in 1 of 5 full runs at 16 permits. It has to be understood before Linux is the gate.
+- The intermittent segfault on Linux (seen in about 2 of 9 full runs at 16 permits, and at 64 permits) is a libdispatch bug:
+  cancelling a Dispatch *read source* as an event for it arrives fails an assertion in
+  `_dispatch_source_refs_finalize_unregistration`, on libdispatch's manager thread. Found by hammering one mechanism at a
+  time with 48 concurrent loops for 4 minutes (`DispatchStressTests`, `WORKBENCH_STRESS=<mode>`): timers and exit watchers
+  did not crash in 2 of 2 runs each; pipe read sources and the child runner (which uses them) each crashed in 1 of 2.
+  TSan and ASan reports showed no race or use-after-free in our code, only the crash site. The fix is the platform
+  contract's `PipeReading`: macOS keeps its read source, Linux watches the pipe from a thread of its own with `poll`.
 
 ## Contract tests
 
