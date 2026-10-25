@@ -86,12 +86,19 @@ public struct ProjectInstructions: Sendable, Equatable {
         /// The entry at exactly `path` in the commit, or nil when there is none.
         func entry(_ path: String) async -> Entry? { await entries([path])[path] }
 
-        /// The entries at exactly these paths, from one `git ls-tree`; a path with no entry is absent.
+        /// The entries at exactly these paths, from one `git ls-tree`; a path with no entry is absent. Meant for paths
+        /// that do not sit under one another: with a directory and a path inside it, git lists the directory's
+        /// contents too, so a cut listing is not trusted and each path is asked for on its own instead.
         func entries(_ paths: [String]) async -> [String: Entry] {
             guard
                 let tree = try? await git.run(["ls-tree", "-z", commit, "--"] + paths, in: repo),
                 tree.succeeded
             else { return [:] }
+            if tree.outputTruncated && paths.count > 1 {
+                var each: [String: Entry] = [:]
+                for path in paths { each[path] = await entries([path])[path] }
+                return each
+            }
             // "<mode> <type> <sha>\t<path>" ; one record for each exact file path.
             var found: [String: Entry] = [:]
             for record in tree.stdout.split(separator: "\0") {

@@ -54,11 +54,15 @@ public struct VerifierSkill: Sendable, Equatable {
     /// its target text and that text would reach the model as its instructions.
     public static func load(git: GitRunner, repo: URL, commit: String, path: String) async -> Result<VerifierSkill, Problem> {
         let reader = ProjectInstructions.BlobReader(git: git, repo: repo, commit: commit)
-        // One `ls-tree` names the path and every directory above it; asking for each was a git process apiece.
+        // A skill that is a regular file in the commit has no symlink above it (git stores nothing beneath a link), so
+        // one `ls-tree` of the path settles the usual case. Only when it is not found as a regular file are the
+        // directories above it asked one by one, as before, to say which link it is.
         let parts = path.split(separator: "/").map(String.init)
-        let prefixes = (1...max(parts.count, 1)).map { parts.prefix($0).joined(separator: "/") }
-        let found = await reader.entries(prefixes + [path])
-        if let problem = await symlinkProblem(reader, path, parts: parts, found: found) { return .failure(problem) }
+        var found = await reader.entries([path])
+        if found[path]?.isRegularFile != true {
+            if let problem = await symlinkProblem(reader, path, parts: parts) { return .failure(problem) }
+            found = [path: await reader.entry(path)].compactMapValues { $0 }
+        }
         guard let entry = found[path] else { return .failure(.missing(path)) }
         guard entry.isRegularFile else { return .failure(.missing(path)) }
         guard let raw = await reader.read(entry) else {
@@ -69,12 +73,11 @@ public struct VerifierSkill: Sendable, Equatable {
 
     /// The path is a symlink, or sits under one (this repository's `.claude/skills/<name>` points into `.agents/`).
     private static func symlinkProblem(
-        _ reader: ProjectInstructions.BlobReader, _ path: String, parts: [String],
-        found: [String: ProjectInstructions.BlobReader.Entry]
+        _ reader: ProjectInstructions.BlobReader, _ path: String, parts: [String]
     ) async -> Problem? {
         for count in 1...max(parts.count, 1) {
             let link = parts.prefix(count).joined(separator: "/")
-            guard let entry = found[link], entry.isSymlink else { continue }
+            guard let entry = await reader.entry(link), entry.isSymlink else { continue }
             let target = await reader.contents(of: entry) ?? ""
             let base = resolve(link: target, from: link)
             let rest = parts.dropFirst(count).joined(separator: "/")

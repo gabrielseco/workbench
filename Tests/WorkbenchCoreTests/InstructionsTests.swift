@@ -44,6 +44,29 @@ private struct InstructionsRepo {
 }
 
 @Suite(.processGate) struct ProjectInstructionsTests {
+    @Test func aCutListingIsNotTrustedAndEachCandidateIsAskedForOnItsOwn() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.write("AGENTS.md", "agents\n")
+        try repo.write("CLAUDE.md", "claude\n")
+        let commit = try await repo.commit()
+        // A git whose listing of several paths is over the output cap, as it can be when a directory is among them.
+        let script = Scratch.url("cutgit").appendingPathExtension("sh")
+        try """
+            #!/bin/sh
+            if [ "$1" = ls-tree ]; then
+              n=0; after=0
+              for a in "$@"; do [ $after = 1 ] && n=$((n+1)); [ "$a" = -- ] && after=1; done
+              if [ $n -gt 1 ]; then head -c 5242880 /dev/zero | tr '\\0' 'x'; exit 0; fi
+            fi
+            exec \(repo.git.executable.path) "$@"
+            """.write(to: script, atomically: true, encoding: .utf8)
+        chmod(script.path, 0o755)
+        let cut = GitRunner(executable: script, environment: repo.git.environment)
+
+        let loaded = await ProjectInstructions.load(git: cut, repo: repo.root, commit: commit)
+        #expect(loaded?.file == "AGENTS.md" && loaded?.text == "agents", "a cut listing must not hide a file that is there")
+    }
+
     @Test func theCandidatesAreLookedUpWithOneGitCommandNotOnePerFile() async throws {
         let repo = try await InstructionsRepo()
         let none = try await repo.commit()

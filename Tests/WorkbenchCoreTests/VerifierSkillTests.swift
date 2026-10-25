@@ -81,7 +81,22 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
             return
         }
         #expect(link == ".claude/skills/verify" && real == ".agents/skills/verify/SKILL.md")
-        #expect(counting.calls.filter { $0.contains("ls-tree") }.count == 1, "\(counting.calls)")
+        // Not found as a regular file, so the directories above it are asked one by one to name the link.
+        #expect(counting.calls.filter { $0.contains("ls-tree") }.count <= 1 + 3, "\(counting.calls)")
+    }
+
+    @Test func aSkillInsideALargeDirectoryIsNotMissedForItsSiblings() async throws {
+        let repo = try await SkillRepo()
+        for index in 0..<40 { try repo.write(".agents/skills/other-\(index)/SKILL.md", "other \(index)\n") }
+        try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
+        let commit = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        let loaded = await VerifierSkill.load(
+            git: counting.runner, repo: repo.root, commit: commit, path: ".agents/skills/verify/SKILL.md")
+        #expect(try loaded.get().text == "drive the app")
+        // Only the skill's own entry is asked for, so what git prints does not grow with the directory beside it.
+        #expect(counting.calls.filter { $0.contains("ls-tree") }.allSatisfy { $0.hasSuffix("SKILL.md") }, "\(counting.calls)")
     }
 
     @Test(arguments: [".claude/skills/verify/SKILL.md", ".agents/skills/verify/SKILL.md"])
