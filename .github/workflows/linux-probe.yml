@@ -6,6 +6,11 @@ on:
   push:
     branches: [probe/linux-build]
 
+# A new push supersedes the run before it on the same ref, as in ci.yml.
+concurrency:
+  group: linux-probe-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   linux:
     runs-on: ubuntu-latest
