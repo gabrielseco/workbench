@@ -44,6 +44,10 @@ struct LinuxPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapin
 
     func becomeSubreaper() -> Bool { wb_become_subreaper() == 0 }
 
+    var orphanAdopters: Set<pid_t> { Self.adopters.adopters(on: self) }
+
+    private static let adopters = AdopterCache(ledger: .standard) { AdopterProbe.measure(on: LinuxPlatform()).adopter }
+
     func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
         ThreadPipeReader(fd: fd, queue: queue, onReadable: onReadable)
     }

@@ -59,6 +59,8 @@ struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapi
 
     func becomeSubreaper() -> Bool { false }
 
+    var orphanAdopters: Set<pid_t> { [1] }
+
     func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
         DispatchPipeReader(fd: fd, queue: queue, onReadable: onReadable)
     }

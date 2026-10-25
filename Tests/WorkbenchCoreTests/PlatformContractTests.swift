@@ -129,6 +129,19 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         if watch != nil { #expect(await wait { heard.value }, "the platform's event arrives") }
     }
 
+    @Test func aProcessWhoseParentDiedIsAdoptedByOneOfTheAdoptersThePlatformNames() async throws {
+        let dir = try Scratch.directory("contract")
+        let pidFile = Scratch.url("contract-orphan")
+        let (shell, _) = try spawn("sleep 300 & echo $! > '\(pidFile.path)'", in: dir)
+        _ = await wait { waitpidNoHang(shell) }
+        let text = try #require(try? String(contentsOf: pidFile, encoding: .utf8))
+        let orphan = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { kill(orphan, SIGKILL) }
+        #expect(await wait { platform.parent(of: orphan).map { $0 != shell } ?? false }, "it is re-parented")
+        let parent = try #require(platform.parent(of: orphan))
+        #expect(platform.orphanAdopters.contains(parent), "adopted by \(parent); the adopters are \(platform.orphanAdopters)")
+    }
+
     @Test(arguments: WatchKind.allCases)
     func aPipeWatchReportsDataThenTheHangUpAndAnExtraCancelIsHarmless(kind: WatchKind) async throws {
         var fds: [Int32] = [0, 0]

@@ -100,10 +100,13 @@ protocol Subreaping {         // Darwin: false. Linux: prctl(PR_SET_CHILD_SUBREA
 `ProcessMember` keeps `pid`, `startSeconds` and `startMicros` as they are written to `runner.json`: the platform fills them (on Linux clock ticks and 0), and callers only compare or order them. (Task 2 first planned one opaque `start` token; that would have changed the file format and about 17 test files for no gain.) Pure parsing (`/proc/<pid>/stat` fields, which may hold
 spaces and parentheses in the command name) is a plain function so macOS CI can test it with fixtures.
 
-**Orphans.** Ownership no longer depends on the parent PID. An orphan is a process whose working directory is inside
-the worktree and which is not a descendant of a live Workbench process. That holds on both kernels, under PID 1 and
-under any subreaper. Workbench may also call `becomeSubreaper()` at startup on Linux so its own orphans come to it;
-the cwd rule is what recovery relies on after a restart.
+**Orphans.** An orphan is a process whose working directory is inside the worktree and whose parent is one of the
+platform's *adopters*: PID 1, and on Linux whichever ancestor adopts orphans of this process tree (`systemd --user`, a
+supervisor, a container's init; found by orphaning a throwaway `sleep` and reading its new parent; measured once, retried after 30 s if it failed, and recorded in `/tmp/wb-adopters-<uid>` with the process's start time so a thread resumed from under another subreaper still finds what the first one adopted).
+Everything running beneath an orphan is swept too. The first draft of this section said "any process in the worktree
+that is not a descendant of a live Workbench process"; that would kill a shell the user has open in the worktree under
+tmux or ssh, whose parent is live and ordinary, so it was not used. `becomeSubreaper()` is not called at startup: a
+subreaper would adopt its own orphans as zombies it has to reap, and the adopter probe makes it unnecessary.
 
 **Ready check.** A `LoopbackProbe` accepts only `127.0.0.1`, `::1` and `localhost` (mapped to both literals), parses
 them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects non-blocking and waits only through
@@ -117,7 +120,7 @@ them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects
 | 1 | **Portable libraries**: `swift-crypto` for the six `CryptoKit` imports (replaced in task 1b by our own `SHA256`, see below), system zlib for `Gzip` (`CZlib`) | Behaviour identical on macOS; the existing hash and gzip tests are the proof. `zcat` and `gzip -t` must still read what is written. |
 | 2 | **Platform contract, macOS only**: the four protocols, `Platform+Darwin.swift` (today's libproc code moved, not changed), `ProcessMember` with an opaque start token, `Spawner`, `ProcessTree` and `OrphanSweeper` call through it | Refactor, no behaviour change. Adds the contract tests (below), run on the current platform. |
 | 3 | **Linux implementation**: `Platform+Linux.swift`, `CShim`, the `stat`/`siginfo_t` accessors, `Glibc` imports, fake-claude and test fixes, a Linux build job | Builds and passes the whole suite in a `swift:6.2` container with `--init`. |
-| 4 | **Orphan ownership**: the cwd-and-not-a-descendant rule replaces `ppid == 1`; `becomeSubreaper()` called at startup | Test under a subreaper (a parent that sets `PR_SET_CHILD_SUBREAPER` and runs the CLI) and under PID 1. |
+| 4 | **Orphan ownership**: an orphan's parent is one of the platform's adopters (`orphanAdopters`), not just PID 1 | Rule tests on a described machine (an adopted process, one under a subreaper, a shell under tmux left alone, a reused pid); a real orphan's parent is one of the platform's adopters; the two Linux-disabled tests run again. |
 | 5 | **Loopback ready check**: `LoopbackProbe` replaces `Network.framework` | Tests: response split across packets, early close, timeout, cancel, IPv6 literal, a name that does not resolve. |
 | 6 | **Linux becomes the PR gate, macOS moves off it**: the suite is sharded across parallel Linux jobs (each a disjoint set of suites, together all of them), with the soak, the leftover-process checks and one non-root run; macOS keeps a smaller job on `main` and nightly (and on PRs that touch `canImport(Darwin)` files) | Target: PR wall time at or below today's macOS job, and a PR holds no macOS slot unless it touches Darwin code. Decide shard count and runner size from task 0. |
 
@@ -210,5 +213,5 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
   self-hosted runner. Task 0's timing decides it.
 - **What stays on macOS per PR:** nothing, or only PRs touching Darwin files. macOS stays the supported desktop and
   is tested on `main` and nightly either way.
-- **Subreaper at startup:** on by default on Linux, or only for long-running commands. Default on unless a test shows
-  it changes exit-code behaviour.
+- **Subreaper at startup:** decided in task 4: not called. A subreaper adopts its own orphans as zombies it must reap,
+  and the adopter probe finds the orphans without it.

@@ -375,20 +375,14 @@ private func drafting(
 }
 
 @Suite(.processGate) struct GoalDraftReplaceTests {
-    @Test(.disabled(if: onLinux, "an orphan on Linux is adopted by a subreaper, not PID 1: P18 task 4"))
-    func aDrafterAKilledHolderLeftBehindIsEndedBeforeTheNextOne() async throws {
+    @Test func aDrafterAKilledHolderLeftBehindIsEndedBeforeTheNextOne() async throws {
         let d = try await drafting()
         let id = try await d.fx.approvedThread()
         let work = d.fx.service.draftScratch(for: .replace(id: id)).appendingPathComponent("work")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         // A child whose parent is gone, working in the drafter's folder: what a killed holder leaves.
         let pidFile = d.dir.appendingPathComponent("leftover.pid")
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", "sleep 60 & echo $! > '\(pidFile.path)'"]
-        shell.currentDirectoryURL = work
-        try shell.run()
-        shell.waitUntilExit()
+        try await runOutsideTheProcessLayer("/bin/sh", ["-c", "sleep 60 & echo $! > '\(pidFile.path)'"], in: work)
         let written = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         let pid = try #require(Int32(written))
         defer { kill(pid, SIGKILL) }
