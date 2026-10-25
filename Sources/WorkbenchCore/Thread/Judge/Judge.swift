@@ -78,6 +78,12 @@ public enum Judge {
             does not settle it, put that in "concerns" and do not mark it unmet.
             - concerns: things a reviewer should look at that no criterion covers, one sentence each. [] if none.
             - You judge; you do not run anything, and you do not redo the project's checks.
+            - A criterion whose proof is run or checked by hand (a person, or a command other than the project's \
+            check, such as typecheck or lint) is outside your evidence. Do not mark it unmet and do not raise a \
+            concern because that evidence is missing; judge it only on what the diff, the check and the \
+            screenshots do show, and mark it unmet if they show a violation.
+            - Do not raise a concern that a file or implementation is absent because the diff does not show it, or \
+            about how fast the check ran. Only the diff, the check, the verifier and the screenshots are given to you.
             - Do not write file system paths of the machine this ran on.
             """
         ]

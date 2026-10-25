@@ -95,7 +95,9 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   JSON object: per criterion `{id, met, evidence}`, and `concerns`. The answer is accepted only if it names
   every criterion once and no other, with real JSON booleans and both lists present; anything else is recorded
   as a failed run. It is told to mark a
-  criterion not met only for an evidenced violation of its literal text and to put doubt in `concerns`. Each
+  criterion not met only for an evidenced violation of its literal text and to put doubt in `concerns`. It raises
+  no concern about a criterion whose proof is checked by hand, a file the diff does not show, or the check's speed
+  (a hand-checked criterion is still unmet if the evidence given shows a violation). Each
   screenshot is listed with its pixel size, so a clipped capture is named as a concern. When the verdict is for
   the latest turn, `ship` writes its `concerns` (at most 5 of 300 characters, the rest counted) into the PR
   description under the criteria table as `Judge concerns`; they never gate. It runs
