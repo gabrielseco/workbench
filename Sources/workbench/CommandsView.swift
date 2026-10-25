@@ -21,7 +21,7 @@ extension Commands {
             return
         }
 
-        // `--transcript`: what claude printed, as stored, one stream line each. Nothing of Workbench's own.
+        // `--transcript`: what the agent printed, as stored, one stream line each. Nothing of Workbench's own.
         if transcript {
             if follow { throw CLIError.usage("log --transcript prints what is stored; it does not follow (use log -f)") }
             var turn: Int?
@@ -30,7 +30,10 @@ extension Commands {
                 turn = found
             }
             do {
-                for line in try ThreadLog.read(at: url).transcript(turn: turn) { out(line) }
+                let lines = try ThreadLog.read(at: url).transcript(turn: turn)
+                for line in lines { out(line) }
+                // On stderr, so a pipe into `jq` still gets nothing but lines; a turn from before every provider kept one has none.
+                if lines.isEmpty { err("no transcript is stored for \(turn.map { "turn \($0)" } ?? "this thread")") }
             } catch let error as ThreadLogError {
                 throw CLIError.message("\(error); `gzip -t` on its .gz says more")
             }

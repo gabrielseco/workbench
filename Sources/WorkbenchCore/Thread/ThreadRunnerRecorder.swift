@@ -1,10 +1,10 @@
 import Foundation
 
-/// Writes a coding turn's output as it arrives, in one of two shapes. Claude: every line verbatim and in order in
-/// the turn's transcript file, which the bounded activity stream cannot promise, and the `result` line also in the
-/// event log as a `claude` event (cost, session and denials are derived from it). Any other provider: the decoder's
-/// normalized activity (`agent.activity` events), at most `AgentActivityRecord.maxPerTurn` of them. Never both, so
-/// a reducer counts each activity once. Also the session's confirmation the first time it is named.
+/// Writes a coding turn's output as it arrives, the same way for every provider: each line verbatim and in order
+/// in the turn's transcript file, which the bounded activity stream cannot promise, and the decoder's normalized
+/// activity as `agent.activity` events, at most `AgentActivityRecord.maxPerTurn` of them. The file is the lossless
+/// copy and a reducer reads the log only, so it counts each activity once. What only the end of a turn knows (cost,
+/// session, the refused calls) is on `turn.ended`. Also the session's confirmation the first time it is named.
 /// Called one line at a time by the adapter's driver; read after `completion`, which orders the two.
 final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private let log: EventLogWriter
@@ -22,9 +22,10 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private var written = 0
     /// Items past the cap not yet counted in a `dropped` record.
     private var overCap = 0
+    private var overTools = 0
+    private var overDenied = 0
     private var lastMark = Date()
     private let now: @Sendable () -> Date
-    private var normalized: Bool { provider != "claude" }
 
     init(
         log: EventLogWriter, transcript: TranscriptWriter, turn: Int, sessionID: String, provider: String,
@@ -45,53 +46,14 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     }
 
     func record(_ line: AgentRawLine, activity: [AgentActivity]) async throws {
-        if normalized { return try await recordNormalized(line, activity: activity) }
-        switch line {
-        case .line(let text):
-            sawOutput = true
-            try await store(text)
-            notify(.claudeLine(text))
-            // A resume of an id Claude never saw fails at once with no output; a line that names it is the proof.
-            if !confirmed, activity.contains(where: { if case .session = $0 { true } else { false } }) {
-                confirmed = true
-                try store.save(.init(sessionID: sessionID, confirmed: true, provider: provider), for: threadID)
-            }
-        case .oversized(let preview, let total):
-            sawOutput = true
-            try transcript.appendOversized(preview: preview, totalBytes: total)
-        case .late(let text):
-            try await store(text)
-        }
-    }
-
-    /// The line goes to the transcript; the turn's `result` line also to the log, and first: a runner killed between
-    /// the two writes then loses one line of history, not the result that cost and denials are derived from.
-    private func store(_ text: String) async throws {
-        if Self.isResult(text) { try await log.appendClaudeLine(text, turn: turn) }
-        try transcript.append(text)
-    }
-
-    private static func isResult(_ text: String) -> Bool {
-        guard text.contains("\"result\""),
-            case .object(let fields)? = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
-        else { return false }
-        return fields["type"]?.stringValue == "result"
-    }
-
-    /// Writes the `dropped` record for the activity past the cap not yet counted. Also called once the child has ended.
-    func flush() async throws {
-        guard normalized, overCap > 0 else { return }
-        try await log.append(
-            .agentActivity, turn: turn, data: AgentActivityRecord.droppedData(count: overCap, provider: provider))
-        overCap = 0
-        lastMark = now()
-    }
-
-    private func recordNormalized(_ line: AgentRawLine, activity: [AgentActivity]) async throws {
         var items = activity
+        // The raw line first: a runner killed between the two writes loses a normalized item, not the original.
         switch line {
-        case .line, .late: break
-        case .oversized(_, let total):
+        case .line(let text), .late(let text):
+            try transcript.append(text)
+            if case .line = line, provider == "claude" { notify(.claudeLine(text)) }
+        case .oversized(let preview, let total):
+            try transcript.appendOversized(preview: preview, totalBytes: total)
             if items.isEmpty { items = [.diagnostic("a line of \(total) bytes was over the size limit and cut")] }
         }
         if case .late = line {} else { sawOutput = true }
@@ -99,6 +61,11 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
             guard let data = AgentActivityRecord.data(for: item, provider: provider) else { continue }
             if written >= AgentActivityRecord.maxPerTurn {
                 overCap += 1
+                switch data["type"]?.stringValue {
+                case "tool": overTools += 1
+                case "permission_denied": overDenied += 1
+                default: break
+                }
                 // A turn that keeps working past the cap still shows signs of life: one count per interval.
                 if now().timeIntervalSince(lastMark) >= AgentActivityRecord.dropMarkInterval { try await flush() }
             } else {
@@ -111,5 +78,16 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
                 try store.save(.init(sessionID: sessionID, confirmed: true, provider: provider), for: threadID)
             }
         }
+    }
+
+    /// Writes the `dropped` record for the activity past the cap not yet counted. Also called once the child has ended.
+    func flush() async throws {
+        guard overCap > 0 else { return }
+        try await log.append(
+            .agentActivity, turn: turn,
+            data: AgentActivityRecord.droppedData(
+                count: overCap, provider: provider, toolCalls: overTools, denied: overDenied))
+        (overCap, overTools, overDenied) = (0, 0, 0)
+        lastMark = now()
     }
 }

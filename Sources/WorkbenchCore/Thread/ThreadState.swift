@@ -291,7 +291,7 @@ public struct ThreadState: Sendable, Equatable {
 
     /// A pure function of the events: no file, git or clock. Unknown kinds and unknown decisions are ignored.
     /// `transcript` is the open turn's lines when they are kept outside the log (progress is folded from them).
-    public static func derive(from events: [Event], id: String, transcript: [TranscriptLine] = []) -> ThreadState {
+    public static func derive(from events: [Event], id: String) -> ThreadState {
         var state = ThreadState(
             id: id, createdAt: nil, lastTurn: 0, openTurn: nil, openCheck: nil, lastCheck: nil,
             decision: nil, lastResult: nil, totalCostUSD: 0, sessionID: nil,
@@ -321,7 +321,8 @@ public struct ThreadState: Sendable, Equatable {
                 if state.openTurn == event.turn { state.openTurn = nil }
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
-                Self.attachFullInputs(event, to: &state.review.deniedTools)
+                Self.recordDenials(event, legacy: legacyTurns.contains(event.turn), into: &state.review.deniedTools)
+                Self.reconcileDenials(ended: event, legacy: legacyTurns.contains(event.turn), into: &state)
                 switch event.data["cost_usd"] {
                 case .double(let d)?: state.totalCostUSD += d
                 case .int(let i)?: state.totalCostUSD += Double(i)
@@ -396,17 +397,7 @@ public struct ThreadState: Sendable, Equatable {
         } else {
             state.review.status = .awaitingReview
         }
-        Self.foldOpenTurn(transcript, into: &state)
         return state
-    }
-
-    /// The open turn's lines, kept outside the log, count towards its progress like the log's own `claude` events.
-    private static func foldOpenTurn(_ transcript: [TranscriptLine], into state: inout ThreadState) {
-        guard let open = state.openTurn else { return }
-        for line in transcript where line.turn == open {
-            state.progress.markReported()
-            track(line, in: &state.progress)
-        }
     }
 
     /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.
@@ -493,6 +484,25 @@ public struct ThreadState: Sendable, Equatable {
 
     /// Puts the full inputs `turn.ended` recorded on the turn's entries, which came from the same result line in
     /// the same order. A different count means they are not the same list, so nothing is attached.
+    /// The refused calls of a turn read through `agent.activity`: they are on `turn.ended`, whole, since the
+    /// activity events only say a call was refused.
+    static func recordDenials(_ ended: Event, legacy: Bool, into tools: inout [Review.DeniedTool]) {
+        // An older turn's entries come from its result line; `turn.ended` only adds the whole input to them.
+        if legacy { return attachFullInputs(ended, to: &tools) }
+        guard case .array(let calls)? = ended.data["denials"] else { return }
+        tools.removeAll { $0.turn == ended.turn }
+        for call in calls {
+            guard let tool = call["tool"]?.stringValue else { continue }
+            let raw = call["input"]?.stringValue
+            let short = raw.map { safeLine($0, limit: 100) }.flatMap { $0.isEmpty ? nil : $0 }
+            let full = raw.map { safeLine($0, limit: 4096) }.flatMap { $0.isEmpty ? nil : $0 }
+            tools.append(
+                Review.DeniedTool(
+                    turn: ended.turn, tool: safeLine(tool, limit: 60), seq: ended.seq, input: short, fullInput: full,
+                    identity: String((tool + "\u{0}" + (raw ?? "")).hashValue)))
+        }
+    }
+
     static func attachFullInputs(_ ended: Event, to tools: inout [Review.DeniedTool]) {
         guard case .array(let calls)? = ended.data["denials"] else { return }
         let indices = tools.indices.filter { tools[$0].turn == ended.turn }

@@ -1,18 +1,19 @@
 #!/bin/bash
-# verify-cli scenario for `workbench compact` (temporary: it goes once the logs are moved). On a clone of this repository.
+# verify-cli scenario for `workbench compact`, which brings an older log to the current shape (temporary: it goes once the logs
+# are moved). On a clone of this repository.
 # No turn is run, so it costs nothing: the scenario writes the log of an ended thread the way an older Workbench did, every
 # stream line a `claude` event, with a grant that names a denial by `seq` and an agent attempt.
 #   bash scripts/verify-cli/compact.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/compact.sh   (the same, on a branch that contains origin/main)
 # `compact --dry-run` must change nothing. `compact <id>` must exit 0, shrink events.jsonl and leave gzipped transcript
 # files (no plain ones, `gzip -t` passes). Then `log --transcript`, `status --json`, `review --json` and `grant --json`
-# must say what they said before, bar the `seq` numbers a rewrite renumbers; the log must have no `seq` gap, the grant must
-# still point at the denial's result line and the attempt's id must be `a<seq of its start>`. A second `compact` must find
+# must say what they said before, bar the `seq` numbers a rewrite renumbers (and, in `review`, the denied call's whole input,
+# which the end record now holds); the log must have no `seq` gap, the grant must
+# still point at the denial (now the turn's end record, which holds the refused calls) and the attempt's id must be `a<seq of its start>`. A second `compact` must find
 # nothing to move and leave the log's bytes alone; a thread that has not ended must be refused (exit 6) and skipped by
 # `--all`. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 removes the transcript folder after the compaction, so "the transcript files are gzipped",
-# "log --transcript says what it said" and "log --json prints every stream line" must FAIL. The frame is in lib.sh. Run by
-# hand, not by CI.
+# and "log --transcript says what it said" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -35,7 +36,7 @@ shown() { sed 's/^/    /' "$1" | head -${2:-8}; }
 plain() { python3 -I -c "
 import json, sys
 def strip(v):
-    if isinstance(v, dict): return {k: strip(x) for k, x in v.items() if k not in ('seq', 'seqs', 'denial_seq', 'progress')}
+    if isinstance(v, dict): return {k: strip(x) for k, x in v.items() if k not in ('seq', 'seqs', 'denial_seq', 'progress', 'input_full')}
     if isinstance(v, list): return [strip(x) for x in v]
     return v
 print(json.dumps(strip(json.load(open(sys.argv[1]))), sort_keys=True))" "$1" 2>/dev/null; }
@@ -137,15 +138,21 @@ fi
 GZ="$T/transcript/turn-1.jsonl.gz"
 check "the transcript files are gzipped: no plain file, gzip -t passes" "plain file present, or .gz missing or not gzip" \
     bash -c '[ ! -e "$1/transcript/turn-1.jsonl" ] && [ -f "$2" ] && gzip -t "$2"' _ "$T" "$GZ"
-check "the log holds no stream line but the result line" "$(grep -c '"kind":"claude"' "$EVENTS") claude events left" \
-    test "$(grep -c '"kind":"claude"' "$EVENTS")" = 1
+check "the log holds no claude event" "$(grep -c '"kind":"claude"' "$EVENTS") claude events left" \
+    test "$(grep -c '"kind":"claude"' "$EVENTS")" = 0
+check "the old log is kept as events.jsonl.before-migrate" "no such file, or not the older log" \
+    bash -c 'test "$(wc -c <"$1.before-migrate" | tr -d " ")" = "$2"' _ "$EVENTS" "$BEFORE_SIZE"
+check "the turn's stream is one dropped record that counts its tool calls and refusals" "no migrated dropped record with counts" \
+    py "import sys
+d = [l['data'] for l in lines if l['kind'] == 'agent.activity']
+sys.exit(0 if len(d) == 1 and d[0].get('reason') == 'migrated' and d[0].get('denied', 0) >= 1 and d[0].get('tool_calls', -1) >= 0 else 1)" <"$EVENTS"
 check "the log has no seq gap" "seq numbers are not 1..n" \
     py "import sys; s = [l['seq'] for l in lines]; sys.exit(0 if s == list(range(1, len(s) + 1)) else 1)" <"$EVENTS"
-check "the grant still points at the denial's result line" "denial_seq does not name a claude result" \
+check "the grant still points at the denial: the turn's end record, which holds the refused call" "denial_seq does not name turn.ended with the call" \
     py "import sys
 g = [l for l in lines if l['kind'] == 'grant.added'][0]['data']['denial_seq']
 t = lines[g - 1]
-sys.exit(0 if t['kind'] == 'claude' and t['data'].get('type') == 'result' else 1)" <"$EVENTS"
+sys.exit(0 if t['kind'] == 'turn.ended' and t['data'].get('denials', [{}])[0].get('tool') == 'Bash' else 1)" <"$EVENTS"
 check "the attempt's id is a<seq of its start> on both lines" "the ids do not match their start" \
     py "import sys
 s = [l for l in lines if l['kind'] == 'agent.attempt.started'][0]
@@ -159,8 +166,8 @@ check "log --transcript says what it said, line for line" "the stream lines diff
     cmp -s "$SCRATCH/before.transcript" "$SCRATCH/after.transcript"
 wbp "$SCRATCH/after.json" log "$ID" --json
 JSON_LINES=$(py "print(sum(1 for l in lines if l['kind'] == 'claude'))" <"$SCRATCH/after.json" 2>/dev/null)
-check "log --json prints every stream line" "log --json has '$JSON_LINES' claude lines, the older log had $LINES_IN_LOG" \
-    test "$JSON_LINES" = "$LINES_IN_LOG"
+check "log --json prints no stream line as an event; they are in the transcript" "log --json has '$JSON_LINES' claude lines" \
+    test "$JSON_LINES" = 0
 wbp "$SCRATCH/after.status" status "$ID" --json
 wbp "$SCRATCH/after.review" review "$ID" --json
 wbp "$SCRATCH/after.grant" grant --json
@@ -168,6 +175,8 @@ check "status --json says the same, bar the seq numbers" "status --json differs"
     test -n "$(plain "$SCRATCH/before.status")" -a "$(plain "$SCRATCH/before.status")" = "$(plain "$SCRATCH/after.status")"
 check "review --json says the same, bar the seq numbers" "review --json differs" \
     test -n "$(plain "$SCRATCH/before.review")" -a "$(plain "$SCRATCH/before.review")" = "$(plain "$SCRATCH/after.review")"
+check "review --json now carries the denied call's whole input, which the end record holds" "input_full is not the command" \
+    py "import sys; sys.exit(0 if any(t.get('input_full') == 'chmod +x a.sh' for t in d['denied_tools']) else 1)" <"$SCRATCH/after.review"
 check "grant --json says the same, bar the seq numbers" "grant --json differs" \
     test -n "$(plain "$SCRATCH/before.grant")" -a "$(plain "$SCRATCH/before.grant")" = "$(plain "$SCRATCH/after.grant")"
 

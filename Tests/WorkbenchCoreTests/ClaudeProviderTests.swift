@@ -129,6 +129,23 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(d.consume(line: #"{"type":"stream_event"}"#).isEmpty, "partial messages are not flooded into activity")
     }
 
+    @Test func aRefusedCallBecomesADeniedActivityNamingItsTool() {
+        var d = decoder()
+        _ = d.consume(
+            line: #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","#
+                + #""input":{"command":"git push"}}]}}"#)
+        let refused =
+            #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"#
+            + #""content":"Permission for this tool use was denied. The user did not allow it."}]}}"#
+        #expect(d.consume(line: refused) == [.permissionDenied(tool: "Bash")])
+        let failed =
+            #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","#
+            + #""is_error":true,"content":"exit 1"}]}}"#
+        #expect(d.consume(line: failed).isEmpty, "a command that merely failed is not a refusal")
+        let unknownTool = refused.replacingOccurrences(of: "t1", with: "never-seen")
+        #expect(d.consume(line: unknownTool) == [.permissionDenied(tool: "tool")], "still counted when the tool is unknown")
+    }
+
     @Test func theResultLineGivesTheSummaryCostAndOutcome() {
         var d = decoder()
         _ = d.consume(line: success)

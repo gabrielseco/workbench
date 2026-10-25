@@ -86,6 +86,14 @@ extension Progress {
 }
 
 extension ThreadState {
+    /// A finished turn's own count of refused calls is the authority: Claude's last line can be recovered after the
+    /// output limit, with refusals that no activity event reported.
+    static func reconcileDenials(ended event: Event, legacy: Bool, into state: inout ThreadState) {
+        guard !legacy, event.turn == state.lastTurn, let count = event.data["permission_denials"]?.intValue else { return }
+        state.progress.deniedCalls = max(state.progress.deniedCalls, count)
+        state.progress.deniedCallsKnown = true
+    }
+
     /// Folds one normalized activity into the progress of the latest turn and the reported usage.
     static func fold(activity event: Event, legacyTurns: Set<Int>, into state: inout ThreadState) {
         // A turn with `claude` lines is read through those; counting its activity too would count everything twice.
@@ -120,9 +128,15 @@ extension ThreadState {
             let summary = event.data["summary"]?.stringValue.map { " " + safeLine($0, limit: 60) } ?? ""
             state.progress.note(event.ts, "tool_use \(name)\(summary)")
         case "dropped":
-            // Items were left out, so the counts so far are a floor and no longer known; the marker is still a sign of life.
-            (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
-            state.progress.hasGap = true
+            // A record that counts its tool calls and refusals keeps the totals known; one that does not (an older
+            // log) leaves them a floor. The marker is a sign of life either way.
+            if let tools = event.data["tool_calls"]?.intValue, let denied = event.data["denied"]?.intValue {
+                state.progress.toolCalls += max(0, tools)
+                state.progress.deniedCalls += max(0, denied)
+            } else {
+                (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
+                state.progress.hasGap = true
+            }
             state.progress.note(event.ts, "\(provider) \(event.data["count"]?.intValue ?? 0) activity item(s) not recorded")
         case "permission_denied":
             state.progress.deniedCalls += 1

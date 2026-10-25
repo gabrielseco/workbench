@@ -1,18 +1,20 @@
 import Foundation
 
-/// Moves the `claude` lines of a log written before transcript files out of `events.jsonl`, into the turn's
-/// transcript file, gzipped. Temporary: it is there for the logs that exist today and goes with the old shape.
+/// Brings a thread's log written before every provider recorded `agent.activity` to the current shape: no `claude`
+/// events. Temporary: it is there for the logs that exist today and goes with the old shape.
 ///
 /// What it does to a thread that has ended, in an order a crash cannot hurt:
-/// 1. builds each turn's transcript from the log's `claude` events, `data` cut out of the stored line, so the lines
-///    are byte for byte what the log held;
-/// 2. builds the new log: every other event, and each turn's `result` line (cost, session and denials come from
-///    it), with `seq` numbered again from 1 so it has no gaps. Two fields refer to a `seq` and are changed with it:
-///    `grant.added`'s `denial_seq` and the `a<seq>` ids of agent attempts. A moved turn's `turn.ended` gains the
-///    `transcript` counts a new turn has;
+/// 1. builds each turn's transcript from the log's `claude` events when they are still there, `data` cut out of the
+///    stored line, so the lines are byte for byte what the log held (a turn that already has its file keeps it);
+/// 2. builds the new log: every other event, with the turn's `claude` events replaced by one `agent.activity`
+///    `dropped` record (reason `migrated`) that counts the items, tool calls and refused calls its transcript holds,
+///    and `turn.ended` gaining the `transcript` counts and the `denials` (tool and input) of the turn's result line.
+///    `seq` is numbered again from 1 so it has no gaps. Two fields refer to a `seq` and are changed with it:
+///    `grant.added`'s `denial_seq` (now the turn's `turn.ended`) and the `a<seq>` ids of agent attempts;
 /// 3. checks the new log replays to the same state (the `seq` numbers apart) and every transcript line is its event;
-/// 4. puts the transcript files in place, then renames the new log over the old one. A reader shows a turn from its
-///    file when it has one, so a crash between the two steps shows nothing twice; running it again finishes.
+/// 4. puts the transcript files in place, keeps the old log as `events.jsonl.before-migrate`, then renames the new log
+///    over the old one. A reader shows a turn from its file when it has one, so a crash between the two steps shows
+///    nothing twice; running it again finishes.
 /// It holds the log's lock throughout, refuses a thread that has not ended, and a second run finds nothing to do.
 public struct TranscriptCompactor: Sendable {
     public struct Report: Sendable, Equatable {
@@ -120,8 +122,12 @@ public struct TranscriptCompactor: Sendable {
         for (index, event) in events.enumerated() where event.kind == .claude {
             claudeByTurn[event.turn, default: []].append(index)
         }
-        let moved = Set(claudeByTurn.filter { _, indices in indices.contains { !Self.isResult(events[$0]) } }.keys)
-        guard !moved.isEmpty else { return nil }
+        let older = Set(claudeByTurn.keys)
+        guard !older.isEmpty else { return nil }
+        try Self.requireNoMixedTurns(older, events: events)
+        let moved = turnsToMove(claudeByTurn, events: events, id: id)
+        let claudeTurnBySeq = Dictionary(
+            uniqueKeysWithValues: events.filter { $0.kind == .claude }.map { ($0.seq, $0.turn) })
 
         // 1. Each moved turn's transcript, from the stored lines.
         var transcripts: [Int: Data] = [:]
@@ -142,22 +148,38 @@ public struct TranscriptCompactor: Sendable {
             summaries[turn] = TranscriptSummary(lines: count, bytes: file.count)
         }
 
+        let (counts, denials) = try olderTurnFacts(
+            id: id, older: older, transcripts: transcripts, claudeByTurn: claudeByTurn, events: events, lines: lines)
+
         // 2. The new log.
         var newLines: [String] = []
         var seqs: [Int: Int] = [:]
+        var endedAt: [Int: Int] = [:]
         var attempts: [String: String] = [:]
         for (index, event) in events.enumerated() {
-            if event.kind == .claude, moved.contains(event.turn), !Self.isResult(event) { continue }
+            if event.kind == .claude {
+                // The turn's first `claude` event stands for all of them; it keeps its place inside the turn.
+                let first = claudeByTurn[event.turn]?.first == index
+                if let line = try Self.migratedLine(event, counts: first ? counts[event.turn] : nil, seq: newLines.count + 1) {
+                    newLines.append(line)
+                }
+                continue
+            }
             let seq = newLines.count + 1
             seqs[event.seq] = seq
+            if event.kind == .turnEnded { endedAt[event.turn] = seq }
             var changed = event.data
             var rebuildLine = false
             if event.kind == .turnEnded, let summary = summaries[event.turn], event.data["transcript"] == nil {
                 changed = Self.setting("transcript", summary.json, in: changed)
                 rebuildLine = true
             }
+            if event.kind == .turnEnded, event.data["denials"] == nil, let calls = denials[event.turn] {
+                changed = Self.setting("denials", calls, in: changed)
+                rebuildLine = true
+            }
             if event.kind.rawValue == "grant.added", let old = event.data["denial_seq"]?.intValue {
-                guard let new = seqs[old] else { throw Failure.verification("grant.added refers to event \(old), which is gone") }
+                let new = try Self.denialTarget(old, claudeTurnBySeq: claudeTurnBySeq, endedAt: endedAt, seqs: seqs)
                 changed = Self.setting("denial_seq", .int(new), in: changed)
                 rebuildLine = true
             }
@@ -189,12 +211,11 @@ public struct TranscriptCompactor: Sendable {
         }
         guard ThreadState.derive(from: events, id: id).comparable == ThreadState.derive(from: rebuilt.events, id: id).comparable
         else { throw Failure.verification("the thread's state would change") }
-        func shown(_ candidates: [GrantCandidate]) -> [String] { candidates.map { "\($0.tool)|\($0.input ?? "")|\($0.turns)" } }
-        guard shown(GrantCandidates.derive(events: events)) == shown(GrantCandidates.derive(events: rebuilt.events)),
+        guard Self.shown(GrantCandidates.derive(events: events)) == Self.shown(GrantCandidates.derive(events: rebuilt.events)),
             GrantLedger(events: events).refused == GrantLedger(events: rebuilt.events).refused
         else { throw Failure.verification("what `grant` lists would change") }
         for event in rebuilt.events where event.kind.rawValue == "grant.added" {
-            if let denial = event.data["denial_seq"]?.intValue, rebuilt.events[denial - 1].kind != .claude {
+            if let denial = event.data["denial_seq"]?.intValue, rebuilt.events[denial - 1].kind != .turnEnded {
                 throw Failure.verification("a grant would point at event \(denial), which is not the denial")
             }
         }
@@ -225,7 +246,7 @@ public struct TranscriptCompactor: Sendable {
             }
         }
         let report = Report(
-            thread: id, turns: moved.sorted(), lines: summaries.values.reduce(0) { $0 + $1.lines },
+            thread: id, turns: older.sorted(), lines: summaries.values.reduce(0) { $0 + $1.lines },
             transcriptBytes: transcripts.values.reduce(0) { $0 + $1.count },
             transcriptDiskBytes: files.reduce(0) { $0 + $1.data.count },
             logBytesBefore: data.count, logBytesAfter: newLog.count, applied: false)
@@ -255,6 +276,9 @@ public struct TranscriptCompactor: Sendable {
                 try fileManager.moveItem(
                     at: staging.appendingPathComponent(file.name), to: destination.appendingPathComponent(file.name))
             }
+            // The old log stays beside the new one, once: the first migration's is the original.
+            let backup = url.appendingPathExtension("before-migrate")
+            if !fileManager.fileExists(atPath: backup.path) { try fileManager.copyItem(at: url, to: backup) }
             guard sysRename(staged.path, url.path) == 0 else {
                 throw Failure.io("cannot replace \(url.lastPathComponent): \(String(cString: strerror(errno)))")
             }
@@ -267,6 +291,115 @@ public struct TranscriptCompactor: Sendable {
     }
 
     // MARK: helpers
+
+    /// What the activity of each older turn would have been, and its refused calls, from the lines kept.
+    private func olderTurnFacts(
+        id: String, older: Set<Int>, transcripts: [Int: Data], claudeByTurn: [Int: [Int]], events: [Event], lines: [String]
+    ) throws -> ([Int: StreamCounts], [Int: JSONValue]) {
+        var counts: [Int: StreamCounts] = [:]
+        var denials: [Int: JSONValue] = [:]
+        for turn in older.sorted() {
+            let stream: [String]
+            if let file = transcripts[turn] {
+                stream = TranscriptFile.parse(file, from: 0).lines.map(\.rawData)
+            } else {
+                switch TranscriptFile.load(TranscriptFile.url(in: project.threadDirectory(id), turn: turn)) {
+                case .data(let have):
+                    let parsed = TranscriptFile.parse(have, from: 0)
+                    // The result event goes from the log, so the file has to hold it, and all of it has to read.
+                    let result = (claudeByTurn[turn] ?? []).last { Self.isResult(events[$0]) }.map { events[$0].data }
+                    guard parsed.offset == have.count, result == nil || parsed.lines.contains(where: { $0.data == result }) else {
+                        throw Failure.verification("turn \(turn)'s transcript file does not hold the result line the log has")
+                    }
+                    stream = parsed.lines.map(\.rawData)
+                case .missing: stream = []
+                case .unreadable(let why):
+                    throw Failure.verification("turn \(turn) has a transcript file that cannot be read (\(why))")
+                }
+            }
+            counts[turn] = Self.counts(of: stream)
+            if let last = (claudeByTurn[turn] ?? []).last(where: { Self.isResult(events[$0]) }),
+                let raw = try? Self.rawData(of: lines[last]),
+                let result = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any],
+                let calls = ThreadRunner.deniedCalls(ClaudeDecoder.denials(result).0) {
+                denials[turn] = calls
+            }
+        }
+        return (counts, denials)
+    }
+
+    /// The record that stands for a turn's `claude` events, or nil when the turn had no items to count.
+    private static func migratedLine(_ event: Event, counts: StreamCounts?, seq: Int) throws -> String? {
+        guard let counts, counts.items > 0 else { return nil }
+        let data = AgentActivityRecord.droppedData(
+            count: counts.items, provider: "claude", toolCalls: counts.tools, denied: counts.denied, reason: "migrated")
+        let numbered = Event(v: event.v, seq: seq, ts: event.ts, turn: event.turn, kind: .agentActivity, data: data)
+        return try EventLogWriter.encodedLine(numbered, dataJSON: try EventLogWriter.json(data))
+    }
+
+    /// A turn with `claude` events and `agent.activity` was read through the `claude` events only. Counting what the
+    /// activity says as well would change its totals, and dropping it would lose it, so such a log is left as it is.
+    private static func requireNoMixedTurns(_ older: Set<Int>, events: [Event]) throws {
+        if let turn = events.first(where: { $0.kind == .agentActivity && older.contains($0.turn) })?.turn {
+            throw Failure.verification("turn \(turn) has both claude lines and agent.activity")
+        }
+    }
+
+    /// The turns whose `claude` events go into a transcript file: those that hold stream lines, and those with no file
+    /// yet, whose result line would otherwise be lost.
+    private func turnsToMove(_ claudeByTurn: [Int: [Int]], events: [Event], id: String) -> Set<Int> {
+        Set(
+            claudeByTurn.filter { turn, indices in
+                indices.contains { !Self.isResult(events[$0]) }
+                    || !TranscriptFile.exists(TranscriptFile.url(in: project.threadDirectory(id), turn: turn))
+            }.keys)
+    }
+
+    /// What `grant` lists, by tool and the first characters of the input, with the turns it was denied in. `turn.ended`
+    /// records a call cut at `maxDeniedInputCharacters` (and `grant` then does not offer it as granted), so two longer
+    /// commands that share that much are one entry afterwards.
+    private static func shown(_ candidates: [GrantCandidate]) -> [String: Set<Int>] {
+        var out: [String: Set<Int>] = [:]
+        for candidate in candidates {
+            let key = "\(candidate.tool)|\((candidate.input ?? "").prefix(ClaudeDecoder.maxDeniedInputCharacters))"
+            out[key, default: []].formUnion(candidate.turns)
+        }
+        return out
+    }
+
+    /// Where a grant's denial is now. A denial was a line of the turn's result; it is the turn's end record, which
+    /// carries the same calls.
+    private static func denialTarget(
+        _ old: Int, claudeTurnBySeq: [Int: Int], endedAt: [Int: Int], seqs: [Int: Int]
+    ) throws -> Int {
+        guard let new = claudeTurnBySeq[old].flatMap({ endedAt[$0] }) ?? seqs[old] else {
+            throw Failure.verification("grant.added refers to event \(old), which is gone")
+        }
+        return new
+    }
+
+    struct StreamCounts {
+        var items = 0
+        var tools = 0
+        var denied = 0
+    }
+
+    /// What Claude's decoder reports for these stream lines: items, tool calls, refused calls.
+    private static func counts(of stream: [String]) -> StreamCounts {
+        var decoder = ClaudeDecoder(sessionID: nil, purpose: .coding, maxRawBytes: 4096)
+        var found = StreamCounts()
+        for line in stream {
+            for item in decoder.consume(line: line) {
+                found.items += 1
+                switch item {
+                case .tool: found.tools += 1
+                case .permissionDenied: found.denied += 1
+                default: break
+                }
+            }
+        }
+        return found
+    }
 
     private static func isResult(_ event: Event) -> Bool { event.data["type"]?.stringValue == "result" }
 
@@ -291,7 +424,12 @@ extension ThreadState {
     fileprivate var comparable: ThreadState {
         var copy = self
         copy.review.notes = copy.review.notes.map { var note = $0; note.seq = 0; return note }
-        copy.review.deniedTools = copy.review.deniedTools.map { var tool = $0; tool.seq = 0; return tool }
+        // The whole input is what a migrated turn gains (its refused calls are now on `turn.ended`).
+        copy.review.deniedTools = copy.review.deniedTools.map {
+            var tool = $0
+            (tool.seq, tool.fullInput, tool.identity) = (0, nil, "")
+            return tool
+        }
         copy.progress = Progress()
         // An attempt is named a<seq of its start>, and the seq changes.
         copy.agentUse = copy.agentUse.mapValues { use in

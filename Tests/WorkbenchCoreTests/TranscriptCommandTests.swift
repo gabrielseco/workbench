@@ -48,9 +48,10 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> Ou
 
         // The ordinary views read the compressed file as they read the plain one.
         let log = try await cli(["log", id], in: fx)
-        #expect(log.lines.contains { $0.contains("session started") })
+        #expect(log.lines.contains { $0.contains("claude session") }, "the turn is read through its activity")
         let json = try await cli(["log", id, "--json"], in: fx)
-        #expect(json.lines.filter { $0.contains("\"kind\":\"claude\"") }.count == stored.count)
+        #expect(json.lines.contains { $0.contains("\"kind\":\"agent.activity\"") })
+        #expect(!json.lines.contains { $0.contains("\"kind\":\"claude\"") }, "no stream line is an event any more")
     }
 
     @Test func aDamagedGzipIsReportedNotPrintedAsNothing() async throws {
@@ -65,12 +66,11 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> Ou
         let printed = try await cli(["log", id, "--transcript"], in: fx)
         #expect(printed.code == 1 && printed.lines.isEmpty, "\(printed)")
         #expect(printed.stderr.contains("the transcript of turn 1 cannot be read: damaged"), "\(printed.stderr)")
-        // The ordinary views still work, say so, and keep the log's own result line.
+        // The ordinary views do not need the file: the turn is in the log.
         let log = try await cli(["log", id], in: fx)
-        #expect(log.code == 0 && log.lines.contains { $0.contains("transcript cannot be read") }, "\(log)")
-        #expect(log.lines.contains { $0.contains("result") })
-        let json = try await cli(["log", id, "--json"], in: fx)
-        #expect(json.lines.contains { $0.contains("\"kind\":\"transcript.unreadable\"") })
+        #expect(log.code == 0 && log.lines.contains { $0.contains("turn ended") }, "\(log)")
+        let status = try await cli(["status", id], in: fx)
+        #expect(status.code == 0, "\(status)")
     }
 
     @Test func anOlderLogsClaudeEventsArePrintedAsTheyWereStored() async throws {

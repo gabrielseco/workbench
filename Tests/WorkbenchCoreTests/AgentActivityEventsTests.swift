@@ -188,7 +188,7 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(old.progress.lastEvent == ignored.progress.lastEvent, "activity in a legacy turn is ignored whole")
     }
 
-    @Test func recorderChoosesOneShape() async throws {
+    @Test func everyProviderKeepsItsRawLinesAndLogsItsActivity() async throws {
         for provider in ["codex", "claude"] {
             let dir = try tempDir()
             let log = try EventLogWriter.open(at: dir.appendingPathComponent("events.jsonl"))
@@ -205,19 +205,15 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
             try await recorder.flush()
             let events = try EventLogReader.read(at: dir.appendingPathComponent("events.jsonl")).events.dropFirst()
             #expect(recorder.sawOutput)
-            if provider == "claude" {
-                // The lines are in the turn's transcript, verbatim, in order; neither is the turn's result line, so
-                // the log holds none, and there is no normalized copy.
-                #expect(events.isEmpty)
-                let lines = TranscriptFile.lines(
-                    at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
-                let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
-                #expect(lines.map(\.data) == [["type": "system"], marker])
-                #expect(transcript.summary?.lines == 2)
-            } else {
-                #expect(events.map(\.kind) == [.agentActivity, .agentActivity, .agentActivity])
-                #expect(events.map { $0.data["type"]?.stringValue } == ["text", "unknown", "diagnostic"])
-            }
+            // Whatever the provider, the lines are in the turn's transcript, verbatim and in order.
+            let lines = TranscriptFile.lines(
+                at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
+            let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
+            #expect(lines.map(\.data) == [["type": "system"], marker])
+            #expect(transcript.summary?.lines == 2)
+            // The same events for both: the items the decoder reported, then a note for the line that was cut.
+            #expect(events.map(\.kind) == [.agentActivity, .agentActivity, .agentActivity])
+            #expect(events.map { $0.data["type"]?.stringValue } == ["text", "unknown", "diagnostic"])
         }
     }
 }
@@ -272,7 +268,36 @@ private final class Clock: @unchecked Sendable {
         #expect(marks.count == 1 && marks[0].data["count"]?.intValue == 6)
         let state = ThreadState.derive(from: try EventLogReader.read(at: url).events, id: "t")
         #expect(state.progress.lastEvent?.hasSuffix("6 activity item(s) not recorded") == true)
-        #expect(!state.progress.toolCallsKnown, "past the cap the count is a floor, so it is not shown as known")
+        #expect(state.progress.toolCalls == AgentActivityRecord.maxPerTurn + 5 && state.progress.toolCallsKnown)
+    }
+
+    @Test func theDroppedRecordCountsTheToolCallsAndRefusalsItStandsFor() async throws {
+        let dir = try tempDir()
+        let url = dir.appendingPathComponent("events.jsonl")
+        let log = try EventLogWriter.open(at: url)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "claude"])
+        let recorder = TurnRecorder(
+            log: log, transcript: TranscriptWriter(url: dir.appendingPathComponent("t.jsonl")), turn: 1, sessionID: "s",
+            provider: "claude", threadID: "t", store: ThreadStore(project: Project(root: dir)), notify: { _ in })
+        for _ in 0..<AgentActivityRecord.maxPerTurn { try await recorder.record(.line("x"), activity: [.text("t")]) }
+        try await recorder.record(
+            .line("x"), activity: [.tool(name: "Bash", summary: "ls"), .permissionDenied(tool: "Bash"), .text("more")])
+        try await recorder.flush()
+        let events = try EventLogReader.read(at: url).events
+        let dropped = try #require(events.last { $0.data["type"] == "dropped" })
+        #expect(dropped.data["count"]?.intValue == 3)
+        #expect(dropped.data["tool_calls"]?.intValue == 1 && dropped.data["denied"]?.intValue == 1)
+        let progress = ThreadState.derive(from: events, id: "t").progress
+        #expect(progress.toolCalls == 1 && progress.toolCallsKnown && progress.deniedCalls == 1 && progress.deniedCallsKnown)
+    }
+
+    @Test func aDroppedRecordWithoutCountsStillLeavesTheTotalsUnknown() {
+        let events = [
+            ev(1, 0, .threadCreated), ev(2, 1, .turnStarted, ["provider": "codex"]),
+            ev(3, 1, .agentActivity, ["provider": "codex", "type": "dropped", "count": 4, "reason": "cap"]),
+        ]
+        let progress = ThreadState.derive(from: events, id: "t").progress
+        #expect(!progress.toolCallsKnown && !progress.deniedCallsKnown, "an older record did not say what it dropped")
     }
 
     @Test func capAndSlowConsumer() async throws {
