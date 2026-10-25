@@ -41,7 +41,10 @@ import Testing
 
         let log = await output(of: try cli(["log"], in: fx))
         #expect(log.lines.filter { $0.contains("check") && !$0.contains("claude:") }.count == 1, "\(log.lines)")
-        #expect(log.lines.contains { $0.hasSuffix("check failed (exit 1)  0s") }, "\(log.lines)")
+        // How long the check took is the runner's business (a loaded machine makes it "1s"): the line's shape is the claim.
+        #expect(
+            log.lines.contains { $0.range(of: #"check failed \(exit 1\)  \d+s$"#, options: .regularExpression) != nil },
+            "\(log.lines)")
 
         let status = await output(of: try cli(["status"], in: fx))
         #expect(status.lines.contains("check:     failed"), "\(status.lines)")
