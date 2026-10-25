@@ -54,8 +54,12 @@ public struct VerifierSkill: Sendable, Equatable {
     /// its target text and that text would reach the model as its instructions.
     public static func load(git: GitRunner, repo: URL, commit: String, path: String) async -> Result<VerifierSkill, Problem> {
         let reader = ProjectInstructions.BlobReader(git: git, repo: repo, commit: commit)
-        if let problem = await symlinkProblem(reader, path) { return .failure(problem) }
-        guard let entry = await reader.entry(path) else { return .failure(.missing(path)) }
+        // One `ls-tree` names the path and every directory above it; asking for each was a git process apiece.
+        let parts = path.split(separator: "/").map(String.init)
+        let prefixes = (1...max(parts.count, 1)).map { parts.prefix($0).joined(separator: "/") }
+        let found = await reader.entries(prefixes + [path])
+        if let problem = await symlinkProblem(reader, path, parts: parts, found: found) { return .failure(problem) }
+        guard let entry = found[path] else { return .failure(.missing(path)) }
         guard entry.isRegularFile else { return .failure(.missing(path)) }
         guard let raw = await reader.read(entry) else {
             return .failure(await oversized(git: git, repo: repo, sha: entry.sha) ? .tooLarge(path) : .unreadable(path))
@@ -64,11 +68,13 @@ public struct VerifierSkill: Sendable, Equatable {
     }
 
     /// The path is a symlink, or sits under one (this repository's `.claude/skills/<name>` points into `.agents/`).
-    private static func symlinkProblem(_ reader: ProjectInstructions.BlobReader, _ path: String) async -> Problem? {
-        let parts = path.split(separator: "/").map(String.init)
+    private static func symlinkProblem(
+        _ reader: ProjectInstructions.BlobReader, _ path: String, parts: [String],
+        found: [String: ProjectInstructions.BlobReader.Entry]
+    ) async -> Problem? {
         for count in 1...max(parts.count, 1) {
             let link = parts.prefix(count).joined(separator: "/")
-            guard let entry = await reader.entry(link), entry.isSymlink else { continue }
+            guard let entry = found[link], entry.isSymlink else { continue }
             let target = await reader.contents(of: entry) ?? ""
             let base = resolve(link: target, from: link)
             let rest = parts.dropFirst(count).joined(separator: "/")

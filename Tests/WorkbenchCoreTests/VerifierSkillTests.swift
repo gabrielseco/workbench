@@ -53,6 +53,37 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
 }
 
 @Suite(.processGate) struct VerifierSkillTests {
+    @Test func aSkillAndTheDirectoriesAboveItAreLookedUpWithOneLsTree() async throws {
+        let repo = try await SkillRepo()
+        try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
+        let commit = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+        let path = ".agents/skills/verify/SKILL.md"
+
+        let loaded = await VerifierSkill.load(git: counting.runner, repo: repo.root, commit: commit, path: path)
+        #expect(try loaded.get().text == "drive the app")
+        let calls = counting.calls
+        #expect(calls.filter { $0.contains("ls-tree") }.count == 1, "one ls-tree for four path components: \(calls)")
+        #expect(calls.count == 3, "the ls-tree, then the blob's size and the blob: \(calls)")
+    }
+
+    @Test func aLinkAboveTheSkillIsStillRefusedWithTheDirectoriesAsOneLookup() async throws {
+        let repo = try await SkillRepo()
+        try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
+        try repo.symlink(".claude/skills/verify", to: "../../.agents/skills/verify")
+        let commit = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        let result = await VerifierSkill.load(
+            git: counting.runner, repo: repo.root, commit: commit, path: ".claude/skills/verify/SKILL.md")
+        guard case .failure(.symlink(_, let link, let real)) = result else {
+            Issue.record("expected a symlink refusal, got \(result)")
+            return
+        }
+        #expect(link == ".claude/skills/verify" && real == ".agents/skills/verify/SKILL.md")
+        #expect(counting.calls.filter { $0.contains("ls-tree") }.count == 1, "\(counting.calls)")
+    }
+
     @Test(arguments: [".claude/skills/verify/SKILL.md", ".agents/skills/verify/SKILL.md"])
     func aSkillUnderEitherDirectoryIsRead(path: String) async throws {
         let repo = try await SkillRepo()
