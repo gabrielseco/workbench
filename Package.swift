@@ -23,9 +23,13 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
     ],
     targets: [
+        // zlib is on macOS and Linux alike; Apple's `Compression` framework is not.
+        .systemLibrary(name: "CZlib"),
         .target(
             name: "WorkbenchCore",
-            dependencies: [.product(name: "Crypto", package: "swift-crypto")],
+            dependencies: [
+                "CZlib",
+                .product(name: "Crypto", package: "swift-crypto")],
             swiftSettings: simplifyCFGWorkaround),
         .executableTarget(name: "workbench", dependencies: ["WorkbenchCore"], swiftSettings: simplifyCFGWorkaround),
         // Test double for `claude`. Standalone on purpose: no dependency on WorkbenchCore.

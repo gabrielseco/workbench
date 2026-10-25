@@ -171,7 +171,8 @@ if argument(after: "--output-format", in: args) == "json" {
         _ = posix_spawn(&pid, "/bin/sh", nil, &attributes, argv, environ)
         #else
         // No POSIX_SPAWN_SETSID in Swift's Glibc: util-linux setsid does the same (-w waits, as the spawn above is waited on).
-        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("setsid"), strdup("-w"), strdup("sh"), strdup("-c"), strdup(script), nil]
+        let words = ["setsid", "-w", "sh", "-c", script]
+        let argv: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) } + [nil]
         _ = posix_spawn(&pid, "/usr/bin/setsid", nil, nil, argv, environ)
         #endif
         var status: Int32 = 0
