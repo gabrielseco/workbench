@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 import Testing
 
@@ -120,7 +119,7 @@ private struct InstructionsRepo {
         #expect(loaded.file == "AGENTS.md")
         #expect(loaded.text == "# Rules\n\nBe kind.")
         #expect(loaded.bytes == loaded.text.utf8.count)
-        let expected = SHA256.hash(data: Data(loaded.text.utf8)).map { String(format: "%02x", $0) }.joined()
+        let expected = referenceSHA256(Data(loaded.text.utf8)).map { String(format: "%02x", $0) }.joined()
         #expect(loaded.sha256 == expected)
         #expect(!loaded.truncated)
         #expect(loaded.skipped.isEmpty)

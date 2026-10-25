@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 import Testing
 
@@ -110,7 +109,7 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
         #expect(found.text == "# Verify\n\nBuild the app.")
         #expect(found.bytes == found.text.utf8.count)
         #expect(!found.truncated)
-        let digest = SHA256.hash(data: Data(found.text.utf8)).map { String(format: "%02x", $0) }.joined()
+        let digest = referenceSHA256(Data(found.text.utf8)).map { String(format: "%02x", $0) }.joined()
         #expect(found.sha256 == digest)
     }
 

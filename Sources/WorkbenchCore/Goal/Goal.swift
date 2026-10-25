@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 
 public enum GoalStatus: String, Sendable, Equatable {

@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 import Testing
 
@@ -91,7 +90,7 @@ private func problems(_ text: String, knownKeys: Set<String>? = nil) -> [GoalPro
         let free = try GoalFile.parse(goalText(spend: "spend_policy: timeout_only")).goal.contentHash
         let canonical = (["workbench-goal-v1", "base=main", "spend_policy=timeout_only", "turn_timeout_min=30", "---"]
             + [GoalHash.canonicalBody(bodyOf(goalText()))]).joined(separator: "\n")
-        let expected = SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
+        let expected = referenceSHA256(Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
         #expect(free == expected, "spend_policy=timeout_only takes the place of the budget_usd line")
         #expect(free != capped)
     }
