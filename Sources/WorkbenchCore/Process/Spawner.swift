@@ -29,13 +29,21 @@ enum Spawner {
             throw SpawnError.notExecutable(executable)
         }
 
+        #if canImport(Darwin)
         var actions: posix_spawn_file_actions_t?
+        #else
+        var actions = posix_spawn_file_actions_t()
+        #endif
         guard posix_spawn_file_actions_init(&actions) == 0 else {
             throw SpawnError.launchFailed("posix_spawn_file_actions_init")
         }
         defer { posix_spawn_file_actions_destroy(&actions) }
 
+        #if canImport(Darwin)
         var attributes: posix_spawnattr_t?
+        #else
+        var attributes = posix_spawnattr_t()
+        #endif
         guard posix_spawnattr_init(&attributes) == 0 else {
             throw SpawnError.launchFailed("posix_spawnattr_init")
         }
@@ -46,9 +54,16 @@ enum Spawner {
         if rc == 0 { rc = posix_spawn_file_actions_adddup2(&actions, stdout, 1) }
         if rc == 0 { rc = posix_spawn_file_actions_adddup2(&actions, stderr, 2) }
         if rc == 0 { rc = posix_spawn_file_actions_addchdir_np(&actions, workingDirectory) }
+        #if !canImport(Darwin)
+        // No CLOEXEC_DEFAULT on Linux: close everything above stderr in the child, after the dup2s.
+        if rc == 0 { rc = posix_spawn_file_actions_addclosefrom_np(&actions, 3) }
+        #endif
         guard rc == 0 else { throw SpawnError.launchFailed("file actions: \(String(cString: strerror(rc)))") }
 
-        var flags = Int32(POSIX_SPAWN_CLOEXEC_DEFAULT) | Int32(POSIX_SPAWN_SETSIGDEF) | Int32(POSIX_SPAWN_SETSIGMASK)
+        var flags = Int32(POSIX_SPAWN_SETSIGDEF) | Int32(POSIX_SPAWN_SETSIGMASK)
+        #if canImport(Darwin)
+        flags |= Int32(POSIX_SPAWN_CLOEXEC_DEFAULT)
+        #endif
         if ownProcessGroup { flags |= Int32(POSIX_SPAWN_SETPGROUP) }
         var defaults = sigset_t()
         sigfillset(&defaults)
@@ -106,7 +121,9 @@ final class ChildExitWatcher: @unchecked Sendable {
 
     private let pid: pid_t
     private let queue: DispatchQueue
+    #if canImport(Darwin)
     private var source: DispatchSourceProcess?
+    #endif
     private var pollTimer: DispatchSourceTimer?
     private var onExit: (@Sendable () -> Void)?
     private var notified = false
@@ -119,6 +136,7 @@ final class ChildExitWatcher: @unchecked Sendable {
         self.queue = queue
         self.onExit = onExit
 
+        #if canImport(Darwin)
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
         source.setEventHandler { [weak self] in
             guard let self else { return }
@@ -128,6 +146,7 @@ final class ChildExitWatcher: @unchecked Sendable {
         }
         self.source = source
         source.resume()
+        #endif
         schedulePoll(every: Self.idleInterval)
         // The child may already have exited before the source existed.
         queue.async { [weak self] in self?.check() }
@@ -169,8 +188,10 @@ final class ChildExitWatcher: @unchecked Sendable {
     func reap() -> Termination {
         guard !reaped else { return .lost }
         reaped = true
+        #if canImport(Darwin)
         source?.cancel()
         source = nil
+        #endif
         pollTimer?.cancel()
         pollTimer = nil
         if gone { return .lost }
@@ -182,8 +203,10 @@ final class ChildExitWatcher: @unchecked Sendable {
     }
 
     func cancel() {
+        #if canImport(Darwin)
         source?.cancel()
         source = nil
+        #endif
         pollTimer?.cancel()
         pollTimer = nil
         onExit = nil
@@ -212,6 +235,7 @@ enum ProcessTree {
         return found
     }
 
+    #if canImport(Darwin)
     static func member(for pid: pid_t) -> ProcessMember? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -220,12 +244,29 @@ enum ProcessTree {
             pid: pid, startSeconds: info.pbi_start_tvsec, startMicros: info.pbi_start_tvusec)
     }
 
+    #else
+    /// `/proc/<pid>/stat` fields after the command name (which may hold spaces and parentheses): state, ppid, ...
+    private static func statFields(_ pid: pid_t) -> [Substring]? {
+        guard let text = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
+            let close = text.lastIndex(of: ")")
+        else { return nil }
+        return text[text.index(after: close)...].split(separator: " ")
+    }
+
+    static func member(for pid: pid_t) -> ProcessMember? {
+        // Field 22 (start time in clock ticks since boot) is index 19 after the command name.
+        guard let fields = statFields(pid), fields.count > 19, let start = UInt64(fields[19]) else { return nil }
+        return ProcessMember(pid: pid, startSeconds: start, startMicros: 0)
+    }
+    #endif
+
     /// True while that exact process (same pid, same start time) is still around.
     static func isAlive(_ member: ProcessMember) -> Bool {
         guard let current = Self.member(for: member.pid) else { return false }
         return current == member
     }
 
+    #if canImport(Darwin)
     private static func children(of parent: pid_t) -> [pid_t] {
         let bytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parent), nil, 0)
         guard bytes > 0 else { return [] }
@@ -235,4 +276,14 @@ enum ProcessTree {
         guard written > 0 else { return [] }
         return pids.prefix(Int(written) / MemoryLayout<pid_t>.size).filter { $0 > 0 }
     }
+    #else
+    private static func children(of parent: pid_t) -> [pid_t] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc") else { return [] }
+        return entries.compactMap { name in
+            guard let pid = pid_t(name), let fields = statFields(pid), fields.count > 1, pid_t(fields[1]) == parent
+            else { return nil }
+            return pid
+        }
+    }
+    #endif
 }
