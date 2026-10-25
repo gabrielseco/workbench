@@ -149,13 +149,17 @@ Task 3 (the Linux platform, this branch), same runner, two parallel jobs (tests,
 | `soak` | 119 to 143 s | 185 to 193 s | passes (it failed once when run after the tests in the same container: a leftover `sleep 300` from another suite) |
 
 - A whole run is about 6 to 6.5 minutes (the two jobs overlap), against 8m41s for macOS.
-- The build is the slow part on Linux: about 35 s for the dependencies (BoringSSL) and about 115 s for our own Swift,
-  and it varies by runner. A `.build` cache restored in 5 s did not shorten it measurably, because a fresh checkout
-  gives every source file a new timestamp. Done in task 1b: `swift-crypto` is gone (only SHA-256 was used, and it
-  compiled BoringSSL, about 35 s on the critical path of a cold build) for a plain-Swift `SHA256` held to the FIPS
-  vectors and, on macOS, to CryptoKit. Left for task 6: whether restoring file timestamps lets SwiftPM rebuild only
-  what changed (a throwaway workflow measures it; the cache alone saved about 30 to 55 s on average, mostly the
-  dependency that task 1b removed).
+- The build is the slow part on Linux: a cold build takes 146 to 256 s (about 35 s for the dependencies, the rest our
+  own Swift) and varies a lot by runner. Task 1b removed `swift-crypto` (only SHA-256 was used, and it compiled
+  BoringSSL on the critical path) for a plain-Swift `SHA256` held to the FIPS vectors and, on macOS, to CryptoKit.
+- Build cache, measured with a throwaway workflow (3 runs each): a restored `.build` alone helps little (warm builds of
+  137 to 150 s), because a fresh checkout gives every source file a new modification time and SwiftPM rebuilds what
+  looks newer. With each file's time set to its last commit time (`git log --name-only`, full history) the same cache
+  gives a warm build of **3 to 5 s with nothing changed and 24, 27 and 37 s after changing one source file and one
+  test file**. Done: `.github/actions/linux-build` (shared by the `test` and `soak` jobs) restores `.build` from the
+  newest earlier build of the same Swift version and `Package.swift`, restores the file times, builds, and the `test`
+  job saves `.build` right after the build; pushes to main fill the cache that pull requests start from. Not measured:
+  a change to a widely used file, a `Package.swift` change (cold again), and a cache evicted after 7 days.
 - Open: an intermittent segfault inside libdispatch's event loop on Linux (the same signature as the 64-permit crash),
   seen in 1 of 5 full runs at 16 permits. It has to be understood before Linux is the gate.
 
