@@ -110,8 +110,8 @@ private final class ProcessEngine: @unchecked Sendable {
 
     private var pid: pid_t = 0
     private var watcher: ChildExitWatcher?
-    private var stdoutSource: DispatchSourceRead?
-    private var stderrSource: DispatchSourceRead?
+    private var stdoutSource: (any PipeReader)?
+    private var stderrSource: (any PipeReader)?
     private var stdoutOpen = false
     private var stderrOpen = false
     private var timeoutTimer: DispatchSourceTimer?
@@ -197,12 +197,8 @@ private final class ProcessEngine: @unchecked Sendable {
 
     // MARK: Reading
 
-    private func makeReader(fd: Int32, isStdout: Bool) -> DispatchSourceRead {
-        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
-        source.setEventHandler { [self] in readAvailable(fd: fd, isStdout: isStdout) }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        return source
+    private func makeReader(fd: Int32, isStdout: Bool) -> any PipeReader {
+        platform.watch(fd: fd, queue: queue) { [self] in readAvailable(fd: fd, isStdout: isStdout) }
     }
 
     private func readAvailable(fd: Int32, isStdout: Bool) {

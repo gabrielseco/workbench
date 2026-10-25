@@ -66,3 +66,21 @@ protocol Subreaping {
     /// True when this process now adopts the orphans beneath it. macOS has no such thing and says false.
     func becomeSubreaper() -> Bool
 }
+
+/// A running watch on a pipe's read end, from `PipeReading.watch`.
+protocol PipeReader: AnyObject, Sendable {
+    /// Stops the callbacks and closes the descriptor, once, after the last callback has finished. Safe to call again, and
+    /// from inside `onReadable`.
+    func cancel()
+}
+
+/// Tells the engine on a queue when a pipe has data or has hung up. macOS uses a Dispatch read source. Linux cannot:
+/// libdispatch there crashes (in `_dispatch_source_refs_finalize_unregistration`, on its manager thread) when a read
+/// source is cancelled as an event for it arrives, which is what a child closing its end and us cancelling at EOF is. Under
+/// 48 concurrent loops of pipe, write, close, cancel it fell over in about one four-minute run in two, and never in timers
+/// or exit watchers alone (docs/plan/P18-linux.md).
+protocol PipeReading {
+    /// Starts watching `fd` (a non-blocking read end) and calls `onReadable` on `queue` while it has data or has hung up,
+    /// until `cancel()`. The watch owns the descriptor from here on and closes it when it ends.
+    func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader
+}
