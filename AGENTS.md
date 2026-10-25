@@ -4,7 +4,7 @@ Guidance for coding agents (Claude Code, Codex, Cursor, …) working in this rep
 imports this file, so edit this one.
 
 Workbench hands a coding task to Claude in an isolated git worktree and gives back a diff, check results
-and a decision. Swift 6, macOS 14+, a `WorkbenchCore` library and a `workbench` CLI. Start at
+and a decision. Swift 6, macOS 14+, a `WorkbenchCore` library and a `workbench` CLI. The library and the CLI also build and pass their tests on Linux (the PR gate runs there; macOS runs on `main` and nightly); the app, screen-recording checks and opening an editor are macOS only. Start at
 `docs/plan/README.md` (phases and the scope rule), `docs/spec/` (goal file, event log) and the current
 phase's plan.
 
