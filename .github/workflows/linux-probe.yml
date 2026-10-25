@@ -29,10 +29,12 @@ jobs:
           swift --version
           nproc
           git --version
-      - name: Git identity (the tests commit)
+      - name: Git identity and python3 (the tests commit, and two of them run a python server)
+        # System scope, not --global: Foundation's NSHomeDirectory() is /root here while HOME is /github/home.
         run: |
-          git config --global user.name "Workbench CI"
-          git config --global user.email "ci@example.invalid"
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
       - name: Build
         run: |
           set -o pipefail
