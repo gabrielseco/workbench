@@ -42,8 +42,6 @@ let workbenchUsage = """
                                  --seq one event in full, --transcript what the agent printed, as stored
       status [id] [--all] [--fetch]  where the thread stands; --all: one line per thread; --fetch: ask origin if the base moved
       review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
-      compact (<id> | --all) [--dry-run]  bring an older log to the current shape: no claude events (temporary: it goes once
-                                 the logs are moved); ended threads only, safe to repeat; --dry-run changes nothing
       open [id] [--editor <name-or-command>] [--print] [--goal]
                                  open the thread's worktree in an editor to read what the run changed (--goal: its
                                  goal file instead, which a draft has before any run): cursor, code,

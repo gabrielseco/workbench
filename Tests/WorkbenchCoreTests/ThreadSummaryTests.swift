@@ -22,9 +22,13 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
         try await log.append(
             .threadCreated, data: ["parent": "g-root", "root": "g-root", "round": 2])
         try await log.append(.turnStarted, turn: 1)
-        // A verbatim claude line that quotes the kinds must not change the summary.
-        _ = try await log.appendClaudeLine(
-            #"{"type":"user","text":"thread.created review.decision {\"decision\":\"accepted\"}"}"#, turn: 1)
+        // Activity that quotes the kinds must not change the summary.
+        _ = try await log.append(
+            .agentActivity, turn: 1,
+            data: [
+                "provider": "claude", "type": "text",
+                "text": "thread.created review.decision {\"decision\":\"accepted\"}",
+            ])
         try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
         try await log.append(.reviewDecision, data: ["decision": "accepted"])
 
@@ -41,8 +45,12 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
         let log = try openLog("g-b", in: project)
         try await log.append(.threadCreated)
         try await log.append(.turnStarted, turn: 1)
-        _ = try await log.appendClaudeLine(
-            #"{"type":"user","text":"\"kind\":\"review.decision\",\"data\":{\"decision\":\"discarded\"}"}"#, turn: 1)
+        _ = try await log.append(
+            .agentActivity, turn: 1,
+            data: [
+                "provider": "claude", "type": "text",
+                "text": "\"kind\":\"review.decision\",\"data\":{\"decision\":\"discarded\"}",
+            ])
         #expect(store.summary(of: "g-b").isActive)
         #expect(store.activeThreadID() == "g-b")
     }
@@ -99,8 +107,9 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
         let log = try openLog("g-f", in: project)
         try await log.append(.threadCreated)
         try await log.append(.turnStarted, turn: 1)
-        _ = try await log.appendClaudeLine(
-            #"{"type":"user","text":"thread.created and review.decision in one line"}"#, turn: 1)
+        _ = try await log.append(
+            .agentActivity, turn: 1,
+            data: ["provider": "claude", "type": "text", "text": "thread.created and review.decision in one line"])
         try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
         try await log.append(.reviewDecision, data: ["decision": "discarded"])
         let summary = store.summary(of: "g-f")

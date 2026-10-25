@@ -193,7 +193,6 @@ private func codexRun(
         let attempts = events.filter { $0.kind == .agentAttemptStarted }
         #expect(attempts.count == 1 && attempts.first?.data["role"] == "run" && attempts.first?.data["provider"] == "codex")
         #expect(events.filter { $0.kind == .agentAttemptEnded }.count == 1)
-        #expect(!events.contains { $0.kind == .claude }, "no Claude lines from a Codex turn")
         let activity = events.filter { $0.kind == .agentActivity }
         #expect(!activity.isEmpty && activity.allSatisfy { $0.data["provider"] == "codex" })
         let end = try #require(c.ended().first)

@@ -72,22 +72,6 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(ThreadState.derive(from: [ev(1, 0, .threadCreated)], id: "t").reportedUsage == nil)
     }
 
-    @Test func oneShapePerTurn() {
-        let claudeTool: JSONValue = [
-            "type": "assistant", "message": ["content": [["type": "tool_use", "name": "Bash", "input": ["command": "ls"]]]],
-        ]
-        let state = ThreadState.derive(
-            from: [
-                ev(1, 0, .threadCreated),
-                ev(2, 1, .turnStarted, ["provider": "claude"]),
-                ev(3, 1, .claude, claudeTool),
-                ev(4, 1, .agentActivity, activity("tool", ["name": "shell", "summary": "ls"])),
-                ev(5, 1, .agentActivity, activity("permission_denied", ["tool": "Bash"])),
-            ], id: "t")
-        #expect(state.progress.toolCalls == 1, "the legacy line counts; the normalized copy does not")
-        #expect(state.progress.deniedCalls == 0 && state.progress.deniedCallsKnown)
-    }
-
     @Test func hugeCountsSaturateInsteadOfTrapping() {
         let state = ThreadState.derive(
             from: [
@@ -151,9 +135,6 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
     }
 
     @Test func fixtureReplaysSameState() {
-        let claudeTool: JSONValue = [
-            "type": "assistant", "message": ["content": [["type": "tool_use", "name": "Bash", "input": ["command": "ls"]]]],
-        ]
         let normalized: [Event] = [
             ev(20, 2, .agentActivity, activity("text", ["text": "hello"])),
             ev(21, 2, .agentActivity, activity("tool", ["name": "shell", "summary": "ls"])),
@@ -163,7 +144,7 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         ]
         let legacy: [Event] = [
             ev(10, 0, .threadCreated), ev(11, 1, .turnStarted, ["provider": "claude", "session_id": "s"]),
-            ev(12, 1, .claude, claudeTool), ev(13, 1, .turnEnded, ["result": "succeeded", "cost_usd": 0.25]),
+            ev(13, 1, .turnEnded, ["result": "succeeded", "cost_usd": 0.25]),
         ]
         let turnTwo: [Event] = [
             ev(18, 2, .turnStarted, ["provider": "codex", "session_id": "c"]),
@@ -178,14 +159,6 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         with.progress = without.progress
         with.reportedUsage = nil
         #expect(with == without)
-
-        // A log with only `claude` lines, as written before this kind existed, reads as it did.
-        let ended = ev(14, 1, .turnEnded, ["result": "succeeded", "cost_usd": 0.25])
-        let old = ThreadState.derive(from: Array(legacy[0...2]) + [ended], id: "t")
-        let ignored = ThreadState.derive(
-            from: Array(legacy[0...2]) + [ev(13, 1, .agentActivity, activity("tool", ["name": "x"])), ended], id: "t")
-        #expect(old.progress.toolCalls == 1 && ignored.progress.toolCalls == 1)
-        #expect(old.progress.lastEvent == ignored.progress.lastEvent, "activity in a legacy turn is ignored whole")
     }
 
     @Test func everyProviderKeepsItsRawLinesAndLogsItsActivity() async throws {
@@ -206,10 +179,9 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
             let events = try EventLogReader.read(at: dir.appendingPathComponent("events.jsonl")).events.dropFirst()
             #expect(recorder.sawOutput)
             // Whatever the provider, the lines are in the turn's transcript, verbatim and in order.
-            let lines = TranscriptFile.lines(
-                at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
+            let lines = TranscriptFile.lines(at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1))
             let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
-            #expect(lines.map(\.data) == [["type": "system"], marker])
+            #expect(lines == [["type": "system"], marker])
             #expect(transcript.summary?.lines == 2)
             // The same events for both: the items the decoder reported, then a note for the line that was cut.
             #expect(events.map(\.kind) == [.agentActivity, .agentActivity, .agentActivity])

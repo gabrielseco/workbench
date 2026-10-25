@@ -13,9 +13,8 @@ private struct Story {
 
     mutating func turn(_ n: Int, result: String = "succeeded", cost: Double? = nil, denied: [String] = []) {
         add(.turnStarted, turn: n, ["session_id": "s1", "resume": .bool(n > 1)])
-        let denials = JSONValue.array(denied.map { ["tool_name": .string($0)] })
-        add(.claude, turn: n, ["type": "result", "permission_denials": denials])
         var ended: [String: JSONValue] = ["result": .string(result), "permission_denials": .int(denied.count)]
+        if !denied.isEmpty { ended["denials"] = .array(denied.map { ["tool": .string($0)] }) }
         if let cost { ended["cost_usd"] = .double(cost) }
         add(.turnEnded, turn: n, .object(ended))
     }
@@ -88,10 +87,10 @@ private struct Story {
         #expect(review.check == Review.Check(
                 turn: 1, result: "failed", exitCode: 2, durationMs: nil, outputRef: "checks/turn-1.log",
                 command: "scripts/check.sh"))
-        #expect(review.notes == [Review.Note(turn: 2, seq: 7, text: "fix the failing test")])
+        #expect(review.notes == [Review.Note(turn: 2, seq: 6, text: "fix the failing test")])
         #expect(review.deniedTools.map(\.tool) == ["Bash", "Bash", "Write"])
         #expect(review.deniedTools.map(\.turn) == [1, 1, 2])
-        #expect(story.events[review.deniedTools[0].seq - 1].kind == .claude)
+        #expect(story.events[review.deniedTools[0].seq - 1].kind == .turnEnded)
     }
 
     @Test func statusWhatCanBeDecided() {

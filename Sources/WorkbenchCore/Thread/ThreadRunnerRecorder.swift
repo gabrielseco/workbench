@@ -51,7 +51,6 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
         switch line {
         case .line(let text), .late(let text):
             try transcript.append(text)
-            if case .line = line, provider == "claude" { notify(.claudeLine(text)) }
         case .oversized(let preview, let total):
             try transcript.appendOversized(preview: preview, totalBytes: total)
             if items.isEmpty { items = [.diagnostic("a line of \(total) bytes was over the size limit and cut")] }
@@ -72,6 +71,7 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
                 written += 1
                 if written == AgentActivityRecord.maxPerTurn { lastMark = now() }
                 try await log.append(.agentActivity, turn: turn, data: data)
+                if let live = Self.liveText(data) { notify(.activity(live)) }
             }
             if keepsSession, !confirmed, case .session = item {
                 confirmed = true
@@ -89,5 +89,11 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
                 count: overCap, provider: provider, toolCalls: overTools, denied: overDenied))
         (overCap, overTools, overDenied) = (0, 0, 0)
         lastMark = now()
+    }
+
+    /// What `run` shows as the turn goes: what the agent said, ran or was refused; the rest is in the log.
+    private static func liveText(_ data: JSONValue) -> String? {
+        guard ["text", "tool", "permission_denied"].contains(data["type"]?.stringValue ?? "") else { return nil }
+        return LogFormatter.describeActivity(data)
     }
 }
