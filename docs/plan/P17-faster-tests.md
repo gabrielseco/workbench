@@ -146,7 +146,7 @@ staged and ignored reads. Now:
 - Result: 10 git processes (from 17), `acceptPlan` 0.43 to 0.57 s against 0.86 s through a counting wrapper, and
   `AcceptTests` 23.3 s to 12.6 s serial. `AcceptGitCallsTests` pins it: no git command runs twice, and at most 10.
 
-### 5. Shorten the waits that are by design
+### 5. Shorten the waits that are by design (started)
 
 - Make each timeout and grace a parameter the test chooses (`EditorLauncher.launch(timeout:killGrace:)`
   already is). The 20 s editor test uses the shortest timeout that outlasts `python3` starting, with the
@@ -156,6 +156,19 @@ staged and ignored reads. Now:
 - `Patience.limit` stays 60 s as the ceiling; a short timeout is the thing under test, not a measurement.
 
 Done when: no single test takes over 5 s, except the ones named at the end of this file.
+
+Fresh serial profile, 2026-10-25 (1695 tests, 907 s summed, 297 tests over 1 s hold 73%): the slowest test is
+11.4 s, and the 20 slowest add up to about 140 s. Done so far: the four Doctor tests that held doctor running with
+`sleep 5` now hold until the test releases them (`holdSetup`, `release()`), so each lasts as long as its checks:
+`DoctorBoundaryTests` 24.7 s to 8.7 s serial, about 25 s less in all. Left, with the reason each one has not been
+shortened yet:
+
+- **Timeouts that start when the child starts** (`aHangingCodexIsEndedAtTheTimeout…` 8 s, `aHungPushEndsInATimeout…`
+  8 s): the test needs the child's pid file written before the product's timeout fires, and the product's
+  timeout starts before the child does. A shorter one flakes on a loaded runner; they stay unless the child can
+  say it has started (see the table below).
+- **Fixture cost, not waiting** (`anAnswerWithoutAVerdictLineIsAFailureNeverAPass` 4 cases at 2.4 s each, the
+  `Ship*` and `ReviewLoopCommand*` suites): this is process spawns per test, which is task 6.
 
 ### 6. Fewer processes per test
 
@@ -211,4 +224,5 @@ most to gain: each git process saved is saved in every test that runs the comman
 
 | Test | Time | Why it cannot be shorter |
 |---|---|---|
-| | | |
+| `aHangingCodexIsEndedAtTheTimeoutAndNothingStaysRunning` | 9.6 s | the product's timeout (8 s) must outlast the fake codex writing its pid on a loaded runner |
+| `aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated` | 9.6 s | same: the push timeout (8 s) must outlast the hook starting |

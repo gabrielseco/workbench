@@ -28,6 +28,14 @@ private func fixture(setup: String? = nil, check: String? = nil, extra: String =
     return (try await RunnerFixture(extraConfig: lines.joined(separator: "\n")), script)
 }
 
+/// A setup that says it started, then holds until the test calls `release()`: the test decides how long doctor is
+/// running, instead of a fixed sleep. The bound only ends a setup whose test failed before it released.
+private let holdSetup = "touch \"$0.started\"\nn=0\nwhile [ ! -e \"$0.release\" ] && [ $n -lt 600 ]; do sleep 0.05; n=$((n+1)); done"
+
+extension CheckScript {
+    fileprivate func release() { FileManager.default.createFile(atPath: path("setup.sh.release"), contents: nil) }
+}
+
 /// Nothing of doctor's is left: one worktree (the checkout), no `workbench/*` branch, no worktree directory.
 private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #_sourceLocation) async throws {
     let list = try await fx.git.run(["worktree", "list", "--porcelain"], in: fx.repo).stdout
@@ -314,7 +322,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 
 @Suite(.processGate) struct DoctorOwnershipTests {
     @Test func aSecondDoctorIsRefusedAndTheFirstKeepsItsWorktree() async throws {
-        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let (fx, script) = try await fixture(setup: holdSetup, check: "true")
         let first = Doctor(project: fx.project, git: fx.git)
         let task = Task { try await first.run(base: "main", options: options()) }
         #expect(await script.waitFor("setup.sh.started"))
@@ -326,6 +334,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
             #expect(error == .alreadyRunning)
         }
         #expect(FileManager.default.fileExists(atPath: fx.project.worktreesDirectory.appendingPathComponent("doctor").path))
+        script.release()
         let report = try await task.value
         #expect(report.passed)
         try await expectClean(fx)
@@ -344,7 +353,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
 
 @Suite(.processGate) struct DoctorBoundaryTests {
     @Test func aRunCannotStartWhileDoctorRuns() async throws {
-        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let (fx, script) = try await fixture(setup: holdSetup, check: "true")
         let id = try await fx.approvedThread()
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
         #expect(await script.waitFor("setup.sh.started"))
@@ -357,17 +366,21 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         }
         #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path), "the refused run left no runner.json")
         #expect(!(try fx.kinds(id)).contains("turn.started"))
+        script.release()
         _ = try await task.value
     }
 
     @Test func aPlanOrAJudgeCannotStartWhileDoctorRuns() async throws {
-        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let (fx, script) = try await fixture(setup: holdSetup, check: "true")
         let id = try await fx.approvedThread()
+        // The thread run has the same setup, which must not hold: release it first, then hold doctor's.
+        script.release()
         _ = try await fx.runner(id).run(fx.options())
         let config = try Config.load(from: fx.project.configURL)
         let before = try fx.kinds(id)
-        // The thread run above touched it too; wait for doctor's own setup.
-        try? FileManager.default.removeItem(atPath: script.path("setup.sh.started"))
+        for name in ["setup.sh.started", "setup.sh.release"] {
+            try? FileManager.default.removeItem(atPath: script.path(name))
+        }
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
         #expect(await script.waitFor("setup.sh.started"))
 
@@ -381,11 +394,12 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
         } catch let error as ThreadStoreError { #expect(error == .doctorRunning) }
         #expect(try fx.kinds(id) == before, "neither wrote a started event")
         #expect(!FileManager.default.fileExists(atPath: fx.project.runnerURL(id).path))
+        script.release()
         _ = try await task.value
     }
 
     @Test func aThreadCannotBeStartedWhileDoctorRuns() async throws {
-        let (fx, script) = try await fixture(setup: "touch \"$0.started\"\nsleep 5", check: "true")
+        let (fx, script) = try await fixture(setup: holdSetup, check: "true")
         let task = Task { try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options()) }
         #expect(await script.waitFor("setup.sh.started"))
 
@@ -396,6 +410,7 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> (c
             #expect(error == .doctorRunning)
         }
         #expect(ThreadStore(project: fx.project).threadIDs().isEmpty, "nothing was created")
+        script.release()
         _ = try await task.value
         _ = try await fx.service.newThread(name: "work", base: "main")
     }
