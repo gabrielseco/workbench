@@ -18,6 +18,12 @@ let platform: some PlatformServices = CurrentPlatform()
 // Where macOS and Linux differ in the system calls and structs the rest of the code uses, so it has no `#if`. The free
 // functions also keep a type's own `open`/`close`/`read` from shadowing the libc one.
 
+#if canImport(Darwin)
+let streamSocketType = SOCK_STREAM
+#else
+let streamSocketType = Int32(SOCK_STREAM.rawValue)
+#endif
+
 public func sysOpen(_ path: String, _ flags: Int32, _ mode: mode_t = 0) -> Int32 { open(path, flags, mode) }
 func sysClose(_ fd: Int32) { _ = close(fd) }
 func sysRead(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int { read(fd, buffer, count) }

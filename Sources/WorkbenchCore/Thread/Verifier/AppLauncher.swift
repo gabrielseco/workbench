@@ -1,12 +1,7 @@
 import Foundation
 
-// BSD sockets are the same on macOS and Linux apart from these two, so no per-OS networking library is needed.
-#if canImport(Darwin)
-private let streamSocket = SOCK_STREAM
-private let noSigPipe: Int32 = 0  // `SO_NOSIGPIPE` is set on the socket instead
-#else
-private let streamSocket = Int32(SOCK_STREAM.rawValue)
-private let noSigPipe = Int32(MSG_NOSIGNAL)
+#if canImport(Network)
+import Network
 #endif
 
 /// Starts the project's `[run]` command for one verifier turn and stops it when the turn ends
@@ -181,87 +176,61 @@ struct AppLauncher {
         regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
+    #if canImport(Network)
     /// Any HTTP answer, whatever its status, means something is listening and serving. It is the status line that
     /// counts, read from a plain TCP connection: nothing follows a redirect (the check stays on this machine, and a 3xx
     /// is an answer already), the body is never read (a server that streams one cannot hold the check or grow our
     /// memory), and the whole attempt ends within `attempt` seconds.
     static func answers(_ url: String, attempt: TimeInterval = 1.5) async -> Bool {
-        guard let url = URL(string: url), let host = url.host, let number = url.port else { return false }
+        guard let url = URL(string: url), let host = url.host, let number = url.port,
+            let port = NWEndpoint.Port(rawValue: UInt16(clamping: number))
+        else { return false }
         let target = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?" + $0 } ?? "")
-        let request = "GET \(target) HTTP/1.0\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
-        let deadline = Date().addingTimeInterval(attempt)
-        // Every wait below is a poll bounded by the deadline, so this ends within `attempt` on a background queue.
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: port, using: .tcp)
+        let queue = DispatchQueue(label: "workbench.ready-check")
         return await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                continuation.resume(returning: statusLine(host: host, port: number, request: request, deadline: deadline))
+            let once = Once(continuation)
+            let request = Data("GET \(target) HTTP/1.0\r\nHost: \(host)\r\nConnection: close\r\n\r\n".utf8)
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    connection.send(content: request, completion: .contentProcessed { _ in })
+                    connection.receive(minimumIncompleteLength: 5, maximumLength: 16) { data, _, _, _ in
+                        once.resume(data.map { String(decoding: $0, as: UTF8.self).hasPrefix("HTTP/") } ?? false)
+                        connection.cancel()
+                    }
+                case .failed, .cancelled:
+                    once.resume(false)
+                default:
+                    break
+                }
+            }
+            connection.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + attempt) {
+                once.resume(false)
+                connection.cancel()
             }
         }
     }
 
-    /// True when the first bytes back from `host:port` are `HTTP/`. Tries each address the name resolves to.
-    private static func statusLine(host: String, port: Int, request: String, deadline: Date) -> Bool {
-        var hints = addrinfo()
-        hints.ai_socktype = streamSocket
-        var found: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, String(port), &hints, &found) == 0 else { return false }
-        defer { freeaddrinfo(found) }
-        var entry = found
-        while let info = entry {
-            if exchange(info.pointee, request: request, deadline: deadline) { return true }
-            entry = info.pointee.ai_next
-        }
-        return false
-    }
-
-    private static func exchange(_ info: addrinfo, request: String, deadline: Date) -> Bool {
-        let fd = socket(info.ai_family, info.ai_socktype, info.ai_protocol)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-        #if canImport(Darwin)
-        var on: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
-        #endif
-        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-
-        if connect(fd, info.ai_addr, info.ai_addrlen) != 0 {
-            guard errno == EINPROGRESS, ready(fd, Int16(POLLOUT), deadline) else { return false }
-            var failure: Int32 = 0
-            var length = socklen_t(MemoryLayout<Int32>.size)
-            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &failure, &length) == 0, failure == 0 else { return false }
-        }
-
-        let bytes = Array(request.utf8)
-        var sent = 0
-        while sent < bytes.count {
-            guard ready(fd, Int16(POLLOUT), deadline) else { return false }
-            let n = bytes[sent...].withUnsafeBytes { send(fd, $0.baseAddress, $0.count, noSigPipe) }
-            if n > 0 { sent += n } else if errno != EAGAIN && errno != EINTR { return false }
-        }
-
-        var head = [UInt8]()
-        var buffer = [UInt8](repeating: 0, count: 16)
-        while head.count < 5 {
-            guard ready(fd, Int16(POLLIN), deadline) else { return false }
-            let n = recv(fd, &buffer, buffer.count, 0)
-            if n > 0 { head += buffer[0..<n] } else if n == 0 || (errno != EAGAIN && errno != EINTR) { break }
-        }
-        return String(decoding: head, as: UTF8.self).hasPrefix("HTTP/")
-    }
-
-    /// Waits for `events` on `fd` until `deadline`. An error or hang-up counts as ready: the next call reports it.
-    private static func ready(_ fd: Int32, _ events: Int16, _ deadline: Date) -> Bool {
-        var descriptor = pollfd(fd: fd, events: events, revents: 0)
-        while true {
-            let remaining = Int32(max(0, deadline.timeIntervalSinceNow * 1000))
-            let n = poll(&descriptor, 1, remaining)
-            if n > 0 { return true }
-            if n == 0 || errno != EINTR { return false }
+    /// Resumes a continuation once, whichever of the answer, the failure and the deadline comes first.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+        func resume(_ value: Bool) {
+            lock.lock()
+            let taken = continuation
+            continuation = nil
+            lock.unlock()
+            taken?.resume(returning: value)
         }
     }
+    #endif
 
     /// A port nothing listens on: the kernel picks one for a socket that is closed again at once.
     static func freePort() -> Int? {
-        let fd = socket(AF_INET, streamSocket, 0)
+        let fd = socket(AF_INET, streamSocketType, 0)
         guard fd >= 0 else { return nil }
         defer { close(fd) }
         var address = sockaddr_in()
