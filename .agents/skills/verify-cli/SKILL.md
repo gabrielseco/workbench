@@ -92,7 +92,7 @@ A FAIL is a finding about the merged feature (or about the scenario): read the k
 commits `scratch/verify-cli.txt` on the thread's branch itself (writing it if the model did not) and checks
 that the branch tip now differs from the base, then leaves the worktree with a modified tracked file (`README.md`), a file staged and edited again, a staged file
 deleted from disk, an untracked file and a binary file, and runs `abandon` without `--force`. Steps: the goal
-approved with the cap; the turn succeeded; the log has real `claude` stream lines (the `turn.started` argv
+approved with the cap; the turn succeeded; the transcript has real `claude` stream lines (the `turn.started` argv
 and the `system/init` line); abandon exit 0; worktree gone; branch kept; `abandon.patch` and
 `abandon-staged.patch` exist; `abandon.saved` in `workbench log` with size, sha256, tree and head (and they
 match the file); `git apply` of each patch on a fresh checkout of that committed tip (the saved head) restores the
@@ -180,7 +180,7 @@ say a plain command does not fetch, keeps an age, carries `as_of` and prints no 
 
 No real turn: a clone with a `claude` stand-in on the fake-claude test double, streaming slowly (800 ms between lines). `run` goes to
 the background; the script waits until `transcript/turn-1.jsonl` has lines while the log has no `turn.ended`, then `log -f` must print
-the stream lines and end with `turn ended`. After the turn: the file is gzipped (`turn-1.jsonl.gz`, no plain file, `gzip -t` passes);
+the turn's activity and end with `turn ended`. After the turn: the file is gzipped (`turn-1.jsonl.gz`, no plain file, `gzip -t` passes);
 the log holds `agent.activity` events and no `claude` event; `turn.ended`'s `transcript` counts are the lines and bytes `gzip -dc` gives; the last
 line is the result and every line is a whole `{ts, data}` record; `log` prints the session once; `log --transcript` prints the stored lines
 as they are; `log --json` prints the activity events and no `claude` event; `status`, `status --json` and `review` load;
