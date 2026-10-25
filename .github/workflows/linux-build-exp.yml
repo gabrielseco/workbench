@@ -11,49 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  baseline-nocache:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    container:
-      image: swift:6.2.1
-      options: --init
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      matrix:
-        n: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          start=$(date +%s)
-          swift build --build-tests 2>&1 | tail -3
-          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
-
-  populate-b:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    container:
-      image: swift:6.2.1
-      options: --init
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          start=$(date +%s)
-          swift build --build-tests 2>&1 | tail -3
-          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Save the build
-        uses: actions/cache/save@v4
-        with:
-          path: .build
-          key: exp-${{ github.run_id }}-b
-
   populate-c:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -71,6 +28,7 @@ jobs:
         run: apt-get update -qq && apt-get install -y -qq python3 git
       - name: Restore file timestamps to each file's last commit time
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           import os, subprocess
           log = subprocess.run(["git", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
@@ -84,6 +42,7 @@ jobs:
               if path in seen and os.path.exists(path):
                   os.utime(path, (seen[path], seen[path])); n += 1
           print("timestamps restored for", n, "files")
+          assert n > 100, "the timestamp restore touched too few files"
           PY
       - name: Build
         run: |
@@ -95,33 +54,6 @@ jobs:
         with:
           path: .build
           key: exp-${{ github.run_id }}-c
-
-  warm-b:
-    needs: populate-b
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    container:
-      image: swift:6.2.1
-      options: --init
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      matrix:
-        n: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Restore the build
-        uses: actions/cache/restore@v4
-        with:
-          path: .build
-          key: exp-${{ github.run_id }}-b
-      - name: Build
-        run: |
-          start=$(date +%s)
-          swift build --build-tests 2>&1 | tail -3
-          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
 
   warm-c:
     needs: populate-c
@@ -163,6 +95,7 @@ jobs:
               if path in seen and os.path.exists(path):
                   os.utime(path, (seen[path], seen[path])); n += 1
           print("timestamps restored for", n, "files")
+          assert n > 100, "the timestamp restore touched too few files"
           PY
       - name: Build
         run: |
