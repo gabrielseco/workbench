@@ -337,18 +337,10 @@ private func pid(in path: String) throws -> pid_t {
             + "open(F, '>', $ARGV[0]); print F $p; close F;"
         // Started outside the process layer on purpose: its sweep of a child's descendants would otherwise kill the
         // leftover on a slow machine, before the test has made it.
-        let perl = Process()
-        perl.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        perl.arguments = ["-e", script, pidFile]
-        perl.currentDirectoryURL = v.worktree
-        perl.environment = ["PATH": "/usr/bin:/bin"]
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            perl.terminationHandler = { _ in done.resume() }
-            do { try perl.run() } catch { done.resume() }
-        }
+        try await runOutsideTheProcessLayer("/usr/bin/perl", ["-e", script, pidFile], in: v.worktree)
         let left = try pid(in: pidFile)
         defer { kill(left, SIGKILL) }
-        #expect(alive(left), "\(describeProcess(left, inside: v.worktree))")
+        #expect(alive(left))
         _ = try await v.verify()
         #expect(await waitUntilGone(left), "the leftover is still running")
     }

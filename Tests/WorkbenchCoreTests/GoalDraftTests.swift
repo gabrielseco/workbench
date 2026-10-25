@@ -382,18 +382,11 @@ private func drafting(
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         // A child whose parent is gone, working in the drafter's folder: what a killed holder leaves.
         let pidFile = d.dir.appendingPathComponent("leftover.pid")
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", "sleep 60 & echo $! > '\(pidFile.path)'"]
-        shell.currentDirectoryURL = work
-        try shell.run()
-        shell.waitUntilExit()
+        try await runOutsideTheProcessLayer("/bin/sh", ["-c", "sleep 60 & echo $! > '\(pidFile.path)'"], in: work)
         let written = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         let pid = try #require(Int32(written))
         defer { kill(pid, SIGKILL) }
-        #expect(
-            !OrphanSweeper.orphans(inside: work).isEmpty,
-            "the leftover works in the drafter's folder: \(describeProcess(pid, inside: work))")
+        #expect(!OrphanSweeper.orphans(inside: work).isEmpty, "the leftover works in the drafter's folder")
         _ = try await d.draft(.replace(id: id))
         var gone = false
         for _ in 0..<100 where !gone {
