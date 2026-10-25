@@ -56,7 +56,7 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
         let repo = try await SkillRepo()
         try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
         let commit = try await repo.commit()
-        let counting = try CountingGit(wrapping: repo.git)
+        let counting = try await CountingGit(wrapping: repo.git)
         let path = ".agents/skills/verify/SKILL.md"
 
         let loaded = await VerifierSkill.load(git: counting.runner, repo: repo.root, commit: commit, path: path)
@@ -71,7 +71,7 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
         try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
         try repo.symlink(".claude/skills/verify", to: "../../.agents/skills/verify")
         let commit = try await repo.commit()
-        let counting = try CountingGit(wrapping: repo.git)
+        let counting = try await CountingGit(wrapping: repo.git)
 
         let result = await VerifierSkill.load(
             git: counting.runner, repo: repo.root, commit: commit, path: ".claude/skills/verify/SKILL.md")
@@ -89,7 +89,7 @@ private func problem(_ result: Result<VerifierSkill, VerifierSkill.Problem>) -> 
         for index in 0..<40 { try repo.write(".agents/skills/other-\(index)/SKILL.md", "other \(index)\n") }
         try repo.write(".agents/skills/verify/SKILL.md", "drive the app\n")
         let commit = try await repo.commit()
-        let counting = try CountingGit(wrapping: repo.git)
+        let counting = try await CountingGit(wrapping: repo.git)
 
         let loaded = await VerifierSkill.load(
             git: counting.runner, repo: repo.root, commit: commit, path: ".agents/skills/verify/SKILL.md")
