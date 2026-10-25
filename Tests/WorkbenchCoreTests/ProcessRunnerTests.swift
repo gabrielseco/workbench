@@ -305,6 +305,18 @@ private func readJSON(_ path: String) throws -> [String: Any] {
         #expect(!result.exit.escalatedToKill)
     }
 
+    @Test func expiringARunEndsItAsItsTimeoutWouldWithoutWaitingForTheTimer() async throws {
+        let run = try ProcessRunner.start(request("hang-after=1", timeout: 600))
+        run.expire()
+        run.expire()  // idempotent
+        let result = try await collect(run)
+        #expect(result.exit.cause == .timedOut)
+        #expect(result.exit.termination == .exited(143) || result.exit.termination == .signaled(SIGTERM))
+        #expect(!result.exit.escalatedToKill)
+        // The timer was set for 600 s: ending at all, within the test's patience, is `expire()` having worked.
+        #expect(result.exit.durationMs < Int(Patience.limit * 1000))
+    }
+
     @Test func aChildThatIgnoresSigtermIsKilledAfterTheGrace() async throws {
         let ready = FakeClaude.scratch("ready")
         defer { try? FileManager.default.removeItem(atPath: ready) }

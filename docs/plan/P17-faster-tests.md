@@ -163,12 +163,36 @@ Fresh serial profile, 2026-10-25 (1695 tests, 907 s summed, 297 tests over 1 s h
 `DoctorBoundaryTests` 24.7 s to 8.7 s serial, about 25 s less in all. Left, with the reason each one has not been
 shortened yet:
 
-- **Timeouts that start when the child starts** (`aHangingCodexIsEndedAtTheTimeout…` 8 s, `aHungPushEndsInATimeout…`
-  8 s): the test needs the child's pid file written before the product's timeout fires, and the product's
+- **Timeouts that start when the child starts** (`aHungPushEndsInATimeout…` 8 s; the Codex one is done, below): the test needs the child's pid file written before the product's timeout fires, and the product's
   timeout starts before the child does. A shorter one flakes on a loaded runner; they stay unless the child can
   say it has started (see the table below).
+- **Done: end a hang as its timeout would, once the child is known to run.** `ProcessRun.expire()` (and
+  `AgentExecution.expire()`) ends the child with cause `.timedOut`, the same SIGTERM then SIGKILL path, now. A test
+  that must see a hang ended gets the running agent from `attach`, waits for the child's pid file, then expires
+  it, so nothing depends on a timer outliving a loaded runner. No product timeout or grace value changed. The
+  Codex hang test: 9.6 s to 1.7 s. The timer itself stays covered by `timeoutStopsTheChildAndSaysWhy`.
+  `GitRunner`'s hung push has no handle to expire (its runner is built inside `shipPush`), so it stays until task 5c.
+- **Waits that are the kill grace, not the timeout** (`aClaudeThatIgnoresTerm…` 7.5 s, `aCheckThatIgnoresSIGTERM…`
+  4.9 s, `stoppingEndsTheReview…` 7.1 s): a child that ignores SIGTERM costs the default 5 s grace; these want a
+  shorter `killGrace` chosen by the test, not `expire()`.
 - **Fixture cost, not waiting** (`anAnswerWithoutAVerdictLineIsAFailureNeverAPass` 4 cases at 2.4 s each, the
   `Ship*` and `ReviewLoopCommand*` suites): this is process spawns per test, which is task 6.
+
+### 5c. End a hung git or `gh` call from the test (planned, after task 6)
+
+The same idea as `ProcessRun.expire()` (task 5), for the short commands that run through `GitRunner`:
+`aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated` (9.6 s) and the hung-`gh` watch tests
+(`repeatedFailuresAndAHungGHEndTheWatchAndLeaveNoProcess`, 4.7 s) wait for a real timer because the runner is built
+inside `shipPush` and `ShortCommand` owns the timer.
+
+- A test-only way to expire the running command: either a handle the caller can reach, or an `expire` hook on
+  `GitRunner` that the test passes in (the tests already build the service with their own `GitRunner`). No timeout
+  value changes, and the timer stays covered by the tests that use it.
+- Convert the two tests: wait for the hook's pid file, expire, assert the same things (timed out, no process left,
+  the push can be repeated).
+
+Done when: neither test waits for a timer, 20 runs with all cores busy pass, and the "Tests that stay slow" table no
+longer lists the hung push. Worth about 10 to 15 s of the serial total, so it comes after task 6.
 
 ### 6. Fewer processes per test
 
@@ -200,7 +224,7 @@ Done when: a typical diff checks in 15 s or less, or the remaining cost is expla
 ## Order
 
 1 first (everything is guided by it), then 2 (independent, small), then 3 and 4 (can run in parallel; 4 touches
-product code, not tests), then 5 and 6 (independent of each other), then 7, then 8. Task 4 is the one with the
+product code, not tests), then 5 and 6 (independent of each other), then 5c, then 7, then 8. Task 4 is the one with the
 most to gain: each git process saved is saved in every test that runs the command.
 
 ## Risks
@@ -224,5 +248,4 @@ most to gain: each git process saved is saved in every test that runs the comman
 
 | Test | Time | Why it cannot be shorter |
 |---|---|---|
-| `aHangingCodexIsEndedAtTheTimeoutAndNothingStaysRunning` | 9.6 s | the product's timeout (8 s) must outlast the fake codex writing its pid on a loaded runner |
-| `aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated` | 9.6 s | same: the push timeout (8 s) must outlast the hook starting |
+| `aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated` | 9.6 s | until task 5c: the push timeout (8 s) must outlast the hook starting |
