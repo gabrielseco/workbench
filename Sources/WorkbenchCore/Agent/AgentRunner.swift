@@ -34,10 +34,20 @@ public final class AgentExecution: Sendable {
         get async { await task.value }
     }
 
+    fileprivate func expireRun() { run.expire() }
+
     /// SIGTERM now, SIGKILL and a sweep of descendants after the grace period. Idempotent.
     public func stop() {
         run.stop()
         begin()  // a held execution that is stopped must still end
+    }
+}
+
+extension AgentExecution {
+    /// Ends the agent as its timeout would, now: `ProcessRun.expire()`. For tests.
+    public func expire() {
+        expireRun()
+        begin()
     }
 }
 

@@ -43,7 +43,14 @@ import Testing
     @Test func aHangingCodexIsEndedAtTheTimeoutAndNothingStaysRunning() async throws {
         let r = try await reviewedPR()
         try r.codex.put("hang", "")
-        let result = try await r.round(timeout: 8)
+        // The timeout starts at the spawn, before the fake has written its pid, so a short one flakes on a loaded
+        // runner. The test ends the hang as the timeout would (`expire()`) once the pid is there; the timer itself
+        // is covered by the process runner's own tests.
+        let running = RunningAgent()
+        async let ended = r.round(timeout: 8, attach: { running.set($0) })
+        #expect(await pollUntil { running.agent != nil && r.codex.read("pid") != nil })
+        running.agent?.expire()
+        let result = try await ended
         #expect(result.verdict == nil && result.failure?.contains("did not finish within 8s") == true)
         let pid = try #require(Int32(r.codex.read("pid")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
         #expect(await pollUntil { kill(pid, 0) != 0 }, "codex is gone")
@@ -98,5 +105,23 @@ import Testing
         let pid = try #require(Int32(r.codex.read("pid")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
         #expect(await pollUntil { kill(pid, 0) != 0 }, "even a codex that ignores SIGTERM is gone")
         try await r.expectNoLeftovers()
+    }
+}
+
+/// The agent a round started, handed over by `attach` so the test can act on it.
+final class RunningAgent: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: AgentExecution?
+
+    var agent: AgentExecution? {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+
+    func set(_ agent: AgentExecution) {
+        lock.lock()
+        current = agent
+        lock.unlock()
     }
 }

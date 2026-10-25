@@ -163,10 +163,18 @@ Fresh serial profile, 2026-10-25 (1695 tests, 907 s summed, 297 tests over 1 s h
 `DoctorBoundaryTests` 24.7 s to 8.7 s serial, about 25 s less in all. Left, with the reason each one has not been
 shortened yet:
 
-- **Timeouts that start when the child starts** (`aHangingCodexIsEndedAtTheTimeout…` 8 s, `aHungPushEndsInATimeout…`
-  8 s): the test needs the child's pid file written before the product's timeout fires, and the product's
+- **Timeouts that start when the child starts** (`aHungPushEndsInATimeout…` 8 s; the Codex one is done, below): the test needs the child's pid file written before the product's timeout fires, and the product's
   timeout starts before the child does. A shorter one flakes on a loaded runner; they stay unless the child can
   say it has started (see the table below).
+- **Done: end a hang as its timeout would, once the child is known to run.** `ProcessRun.expire()` (and
+  `AgentExecution.expire()`) ends the child with cause `.timedOut`, the same SIGTERM then SIGKILL path, now. A test
+  that must see a hang ended gets the running agent from `attach`, waits for the child's pid file, then expires
+  it, so nothing depends on a timer outliving a loaded runner. No product timeout or grace value changed. The
+  Codex hang test: 9.6 s to 1.7 s. The timer itself stays covered by `timeoutStopsTheChildAndSaysWhy`.
+  `GitRunner`'s hung push has no handle to expire (its runner is built inside `shipPush`), so it stays.
+- **Waits that are the kill grace, not the timeout** (`aClaudeThatIgnoresTerm…` 7.5 s, `aCheckThatIgnoresSIGTERM…`
+  4.9 s, `stoppingEndsTheReview…` 7.1 s): a child that ignores SIGTERM costs the default 5 s grace; these want a
+  shorter `killGrace` chosen by the test, not `expire()`.
 - **Fixture cost, not waiting** (`anAnswerWithoutAVerdictLineIsAFailureNeverAPass` 4 cases at 2.4 s each, the
   `Ship*` and `ReviewLoopCommand*` suites): this is process spawns per test, which is task 6.
 
@@ -224,5 +232,4 @@ most to gain: each git process saved is saved in every test that runs the comman
 
 | Test | Time | Why it cannot be shorter |
 |---|---|---|
-| `aHangingCodexIsEndedAtTheTimeoutAndNothingStaysRunning` | 9.6 s | the product's timeout (8 s) must outlast the fake codex writing its pid on a loaded runner |
 | `aHungPushEndsInATimeoutLeavesNoProcessAndCanBeRepeated` | 9.6 s | same: the push timeout (8 s) must outlast the hook starting |
