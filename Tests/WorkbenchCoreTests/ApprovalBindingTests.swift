@@ -17,6 +17,25 @@ import Testing
         try fx.events(id).filter { $0.kind == .goalApproved }
     }
 
+    @Test func aNewGoalIsTimeoutOnlyUnlessTheConfigSetsADefaultBudget() async throws {
+        let plain = try await RunnerFixture()
+        let text = try String(contentsOf: plain.project.configURL, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false).filter { !$0.hasPrefix("default_budget_usd") }
+            .joined(separator: "\n")
+        try text.write(to: plain.project.configURL, atomically: true, encoding: .utf8)
+        let id = try await plain.service.newThread(name: "plain", base: "main")
+        let goal = try GoalFile.parse(String(contentsOf: plain.project.goalURL(id), encoding: .utf8)).goal
+        #expect(goal.spend == .timeoutOnly && goal.budgetUSD == nil)
+
+        let capped = try await RunnerFixture()
+        try String(contentsOf: capped.project.configURL, encoding: .utf8)
+            .replacingOccurrences(of: "default_budget_usd = 1.00", with: "default_budget_usd = 2.5")
+            .write(to: capped.project.configURL, atomically: true, encoding: .utf8)
+        let cappedID = try await capped.service.newThread(name: "capped", base: "main")
+        let cappedGoal = try GoalFile.parse(String(contentsOf: capped.project.goalURL(cappedID), encoding: .utf8)).goal
+        #expect(cappedGoal.budgetUSD == Decimal(string: "2.5"))
+    }
+
     @Test func approveRecordsResolvedAgent() async throws {
         let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
         let id = try await fx.approvedThread()

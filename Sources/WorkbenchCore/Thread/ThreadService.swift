@@ -131,12 +131,11 @@ public struct ThreadService: Sendable {
             baseBranch = await defaultBase()
         }
         let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
+        // A budget only when the file or the config asks for one: a subscription has no dollars to cap, and Codex cannot enforce any.
+        let config = config ?? (try? Config.load(from: project.configURL))
+        let budget = settings.budgetUSD ?? (config?.defaultBudgetConfigured == true ? config?.defaultBudgetUSD : nil)
         let spendLine =
-            settings.timeoutOnly
-            ? "spend_policy: timeout_only"
-            : "budget_usd: "
-                + NSDecimalNumber(decimal: settings.budgetUSD ?? config?.defaultBudgetUSD ?? Config.defaultBudgetUSD)
-                .stringValue
+            budget.map { "budget_usd: " + NSDecimalNumber(decimal: $0).stringValue } ?? "spend_policy: timeout_only"
         let title = proposedTitle ?? name.replacingOccurrences(of: "-", with: " ")
         let modelLine =
             settings.model.map { "model: \($0)" }
