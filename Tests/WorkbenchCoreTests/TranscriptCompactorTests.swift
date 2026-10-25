@@ -156,6 +156,53 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         #expect(kept == [#"{"type":"result","subtype":"success","permission_denials":[]}"#], "nothing the log held is lost")
     }
 
+    @Test func aDeniedCommandOverTheRecordedLimitStillMigratesAndIsNoLongerGrantable() async throws {
+        let project = Project(root: Scratch.url("long-denial"))
+        let id = "g-long-denial"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        let command = "echo " + String(repeating: "x", count: 5_000)
+        let result = JSONValue.object([
+            "type": "result",
+            "permission_denials": .array([["tool_name": "Bash", "tool_input": ["command": .string(command)]]]),
+        ])
+        try await log.appendClaudeLine(try EventLogWriter.json(result), turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded", "permission_denials": 1])
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+        let before = GrantCandidates.derive(events: try read(project, id).events)
+        #expect(before.count == 1, "the result line held the whole command")
+
+        guard case .compacted = try await TranscriptCompactor(project: project).compact(id: id) else {
+            Issue.record("the thread should have been migrated")
+            return
+        }
+        let after = GrantCandidates.derive(events: try read(project, id).events)
+        #expect(after.count == 1 && after.first?.assessment.level == .unsafe, "cut at 4096, so it is not offered as granted")
+        #expect(after.first?.assessment.grantable.isEmpty == true)
+    }
+
+    @Test func aResultOnlyTurnWhoseFileLacksTheResultIsLeftAlone() async throws {
+        let project = Project(root: Scratch.url("short-file"))
+        let id = "g-short-file"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        try await log.appendClaudeLine(#"{"type":"result","subtype":"success","permission_denials":[]}"#, turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+        let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
+        try writer.append(#"{"type":"system"}"#)
+        writer.close()
+        let before = try Data(contentsOf: project.eventsURL(id))
+
+        let compactor = TranscriptCompactor(project: project)
+        await #expect(throws: TranscriptCompactor.Failure.self) { try await compactor.compact(id: id) }
+        #expect(try Data(contentsOf: project.eventsURL(id)) == before, "the log is untouched")
+    }
+
     @Test func aTurnWithBothClaudeLinesAndActivityIsLeftAlone() async throws {
         let project = Project(root: Scratch.url("mixed-turn"))
         let id = "g-mixed-turn"

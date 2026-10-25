@@ -211,8 +211,7 @@ public struct TranscriptCompactor: Sendable {
         }
         guard ThreadState.derive(from: events, id: id).comparable == ThreadState.derive(from: rebuilt.events, id: id).comparable
         else { throw Failure.verification("the thread's state would change") }
-        func shown(_ candidates: [GrantCandidate]) -> [String] { candidates.map { "\($0.tool)|\($0.input ?? "")|\($0.turns)" } }
-        guard shown(GrantCandidates.derive(events: events)) == shown(GrantCandidates.derive(events: rebuilt.events)),
+        guard Self.shown(GrantCandidates.derive(events: events)) == Self.shown(GrantCandidates.derive(events: rebuilt.events)),
             GrantLedger(events: events).refused == GrantLedger(events: rebuilt.events).refused
         else { throw Failure.verification("what `grant` lists would change") }
         for event in rebuilt.events where event.kind.rawValue == "grant.added" {
@@ -305,7 +304,14 @@ public struct TranscriptCompactor: Sendable {
                 stream = TranscriptFile.parse(file, from: 0).lines.map(\.rawData)
             } else {
                 switch TranscriptFile.load(TranscriptFile.url(in: project.threadDirectory(id), turn: turn)) {
-                case .data(let have): stream = TranscriptFile.parse(have, from: 0).lines.map(\.rawData)
+                case .data(let have):
+                    let parsed = TranscriptFile.parse(have, from: 0)
+                    // The result event goes from the log, so the file has to hold it, and all of it has to read.
+                    let result = (claudeByTurn[turn] ?? []).last { Self.isResult(events[$0]) }.map { events[$0].data }
+                    guard parsed.offset == have.count, result == nil || parsed.lines.contains(where: { $0.data == result }) else {
+                        throw Failure.verification("turn \(turn)'s transcript file does not hold the result line the log has")
+                    }
+                    stream = parsed.lines.map(\.rawData)
                 case .missing: stream = []
                 case .unreadable(let why):
                     throw Failure.verification("turn \(turn) has a transcript file that cannot be read (\(why))")
@@ -347,6 +353,18 @@ public struct TranscriptCompactor: Sendable {
                 indices.contains { !Self.isResult(events[$0]) }
                     || !TranscriptFile.exists(TranscriptFile.url(in: project.threadDirectory(id), turn: turn))
             }.keys)
+    }
+
+    /// What `grant` lists, by tool and the first characters of the input, with the turns it was denied in. `turn.ended`
+    /// records a call cut at `maxDeniedInputCharacters` (and `grant` then does not offer it as granted), so two longer
+    /// commands that share that much are one entry afterwards.
+    private static func shown(_ candidates: [GrantCandidate]) -> [String: Set<Int>] {
+        var out: [String: Set<Int>] = [:]
+        for candidate in candidates {
+            let key = "\(candidate.tool)|\((candidate.input ?? "").prefix(ClaudeDecoder.maxDeniedInputCharacters))"
+            out[key, default: []].formUnion(candidate.turns)
+        }
+        return out
     }
 
     /// Where a grant's denial is now. A denial was a line of the turn's result; it is the turn's end record, which
