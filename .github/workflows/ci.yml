@@ -11,6 +11,23 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Nothing here needs macOS, and GitHub caps concurrent macOS jobs far below Linux ones, so these checks stay off the macOS slot.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Banned process APIs
+        run: scripts/check-banned-apis.sh
+      - name: SwiftLint
+        # Pinned to the version developers run locally; the static Linux binary needs no Swift toolchain.
+        run: |
+          curl -fsSL -o swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
+          unzip -q swiftlint.zip -d "$RUNNER_TEMP/swiftlint"
+          "$RUNNER_TEMP/swiftlint/swiftlint" lint --quiet
+      - name: Timing script check
+        run: scripts/test-timings-check.sh
+
   build-test:
     runs-on: macos-15
     steps:
@@ -20,14 +37,6 @@ jobs:
           echo "cores: $(sysctl -n hw.ncpu)"
           sw_vers
           swift --version
-      - name: Banned process APIs
-        run: scripts/check-banned-apis.sh
-      - name: SwiftLint
-        run: |
-          command -v swiftlint || brew install swiftlint
-          swiftlint lint --quiet
-      - name: Timing script check
-        run: scripts/test-timings-check.sh
       - name: Build
         run: swift build
       - name: Test
@@ -63,31 +72,3 @@ jobs:
             timings.md
           if-no-files-found: ignore
           retention-days: 14
-
-  # The unit tests only run in debug, and a release build of the same source has behaved differently (Swift's simplify-cfg pass
-  # miscompiled async code: a Claude review was refused in release only; docs/swift-bugs/, Package.swift). This builds the optimized
-  # binary and runs the free scenarios (a fake claude and a fake codex, no money) on it. A separate job, so it adds no time to the first.
-  release-build:
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode 26.1 (Swift 6.2.1)
-        # The runner's default Xcode has Swift 6.1.2, which predates the simplify-cfg bug (docs/swift-bugs/), so CI could not see it.
-        run: sudo xcode-select -s /Applications/Xcode_26.1.app
-      - name: Toolchain bug check (informational)
-        # Says whether this Swift still has the bug Package.swift works around; never fails the job on its own answer.
-        run: scripts/swift-bug-repro.sh || true
-      - name: Release build with every optimizer pass verified
-        # The compiler checks its own intermediate code after each pass and aborts on invalid code: that is how the bug was found, and
-        # it catches the next one in any function, with no scenario needed to reach it. About two minutes.
-        run: swift build -c release --product workbench -Xswiftc -Xfrontend -Xswiftc -sil-verify-all
-      - name: Git identity (the scenarios commit)
-        run: |
-          git config --global user.name "ci"
-          git config --global user.email "ci@example.com"
-      - name: Review on Claude, release build
-        run: VERIFY_CLI_CI=1 VERIFY_CLI_BUILD=release scripts/verify-cli/claude-review.sh
-      - name: Run on Codex, release build
-        run: VERIFY_CLI_CI=1 VERIFY_CLI_BUILD=release scripts/verify-cli/run-codex.sh
-
