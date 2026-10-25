@@ -30,7 +30,8 @@ private func fixture(setup: String? = nil, check: String? = nil, extra: String =
 
 /// A setup that says it started, then holds until the test calls `release()`: the test decides how long doctor is
 /// running, instead of a fixed sleep. The bound only ends a setup whose test failed before it released.
-private let holdSetup = "touch \"$0.started\"\nn=0\nwhile [ ! -e \"$0.release\" ] && [ $n -lt 600 ]; do sleep 0.05; n=$((n+1)); done"
+private let holdSetup =
+    "touch \"$0.started\"\nn=0\nwhile [ ! -e \"$0.release\" ] && [ $n -lt 600 ]; do sleep 0.05; n=$((n+1)); done"
 
 extension CheckScript {
     fileprivate func release() { FileManager.default.createFile(atPath: path("setup.sh.release"), contents: nil) }
