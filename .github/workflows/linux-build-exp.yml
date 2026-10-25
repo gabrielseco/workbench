@@ -104,6 +104,10 @@ jobs:
                   os.utime(path, (seen[path], seen[path])); n += 1
           print("timestamps restored for", n, "files")
           PY
+      - name: A realistic change, as a PR makes one (one source file and one test file)
+        run: |
+          echo "// experiment $(date +%s)" >> Sources/WorkbenchCore/Thread/Plan/Plan.swift
+          echo "// experiment $(date +%s)" >> Tests/WorkbenchCoreTests/PlanTests.swift
       - name: Build
         run: |
           start=$(date +%s)
