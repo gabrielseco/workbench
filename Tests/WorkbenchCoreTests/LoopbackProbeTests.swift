@@ -7,7 +7,7 @@ import Testing
 /// that behaves exactly that way.
 private final class Server: @unchecked Sendable {
     let port: Int
-    private let fd: Int32
+    private let running = Switch()
     private let handler: @Sendable (Int32) -> Void
 
     init?(ipv6: Bool = false, handler: @escaping @Sendable (Int32) -> Void) {
@@ -32,14 +32,19 @@ private final class Server: @unchecked Sendable {
             close(listener)
             return nil
         }
-        fd = listener
         // sin_port and sin6_port both sit at byte 2.
         port = Int(UInt16(bigEndian: withUnsafeBytes(of: &address) { $0.load(fromByteOffset: 2, as: UInt16.self) }))
-        DispatchQueue.global().async { [self] in
-            while true {
-                let client = accept(fd, nil, nil)
-                if client < 0 { return }
-                DispatchQueue.global().async { [handler] in
+        // The loop holds the descriptor and the flag, not the server, so dropping the server ends it and closes the listener.
+        let flag = running
+        _ = fcntl(listener, F_SETFL, fcntl(listener, F_GETFL) | O_NONBLOCK)
+        DispatchQueue.global().async { [handler] in
+            defer { close(listener) }
+            var watch = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
+            while flag.isOn {
+                guard poll(&watch, 1, 100) > 0 else { continue }
+                let client = accept(listener, nil, nil)
+                if client < 0 { continue }
+                DispatchQueue.global().async {
                     handler(client)
                     close(client)
                 }
@@ -47,7 +52,7 @@ private final class Server: @unchecked Sendable {
         }
     }
 
-    deinit { close(fd) }
+    deinit { running.turnOff() }
 
     static func say(_ text: String, to client: Int32) {
         _ = text.withCString { send(client, $0, strlen($0), sendFlags) }
@@ -157,6 +162,13 @@ private final class Server: @unchecked Sendable {
         #expect(await LoopbackProbe.answers(url("127.0.0.1", server.port)))
         #expect(hits.count == 1)
     }
+}
+
+private final class Switch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var on = true
+    var isOn: Bool { lock.lock(); defer { lock.unlock() }; return on }
+    func turnOff() { lock.lock(); on = false; lock.unlock() }
 }
 
 private final class Hits: @unchecked Sendable {
