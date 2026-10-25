@@ -122,9 +122,10 @@ public struct TranscriptCompactor: Sendable {
         for (index, event) in events.enumerated() where event.kind == .claude {
             claudeByTurn[event.turn, default: []].append(index)
         }
-        let moved = Set(claudeByTurn.filter { _, indices in indices.contains { !Self.isResult(events[$0]) } }.keys)
         let older = Set(claudeByTurn.keys)
         guard !older.isEmpty else { return nil }
+        try Self.requireNoMixedTurns(older, events: events)
+        let moved = turnsToMove(claudeByTurn, events: events, id: id)
         let claudeTurnBySeq = Dictionary(
             uniqueKeysWithValues: events.filter { $0.kind == .claude }.map { ($0.seq, $0.turn) })
 
@@ -328,6 +329,24 @@ public struct TranscriptCompactor: Sendable {
             count: counts.items, provider: "claude", toolCalls: counts.tools, denied: counts.denied, reason: "migrated")
         let numbered = Event(v: event.v, seq: seq, ts: event.ts, turn: event.turn, kind: .agentActivity, data: data)
         return try EventLogWriter.encodedLine(numbered, dataJSON: try EventLogWriter.json(data))
+    }
+
+    /// A turn with `claude` events and `agent.activity` was read through the `claude` events only. Counting what the
+    /// activity says as well would change its totals, and dropping it would lose it, so such a log is left as it is.
+    private static func requireNoMixedTurns(_ older: Set<Int>, events: [Event]) throws {
+        if let turn = events.first(where: { $0.kind == .agentActivity && older.contains($0.turn) })?.turn {
+            throw Failure.verification("turn \(turn) has both claude lines and agent.activity")
+        }
+    }
+
+    /// The turns whose `claude` events go into a transcript file: those that hold stream lines, and those with no file
+    /// yet, whose result line would otherwise be lost.
+    private func turnsToMove(_ claudeByTurn: [Int: [Int]], events: [Event], id: String) -> Set<Int> {
+        Set(
+            claudeByTurn.filter { turn, indices in
+                indices.contains { !Self.isResult(events[$0]) }
+                    || !TranscriptFile.exists(TranscriptFile.url(in: project.threadDirectory(id), turn: turn))
+            }.keys)
     }
 
     /// Where a grant's denial is now. A denial was a line of the turn's result; it is the turn's end record, which

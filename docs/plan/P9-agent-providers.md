@@ -279,7 +279,8 @@ recover from the last durable start. No secondary authoritative workflow state.
 
 Update `docs/spec/{event-log,goal-file,cli-json,exit-codes}.md` with the implementation slices that change
 behaviour. Before retaining event version 1, prove additive compatibility with old fixtures/readers;
-otherwise specify a version migration. Do not relabel old Claude sessions or rewrite historical logs.
+otherwise specify a version migration. Do not relabel old Claude sessions. Historical logs are rewritten only by `workbench compact`, which keeps the old log
+beside the new one and checks the new one replays to the same state.
 
 ## Dependencies and implementation order
 

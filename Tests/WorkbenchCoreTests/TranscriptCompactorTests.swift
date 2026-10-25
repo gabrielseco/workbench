@@ -138,6 +138,42 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         #expect(progress.toolCalls == 1 && progress.deniedCalls == 1 && progress.deniedCallsKnown)
     }
 
+    @Test func aResultOnlyTurnWithNoFileKeepsItsResultLineInANewFile() async throws {
+        let project = Project(root: Scratch.url("result-only"))
+        let id = "g-result-only"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        try await log.appendClaudeLine(#"{"type":"result","subtype":"success","permission_denials":[]}"#, turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+
+        _ = try await TranscriptCompactor(project: project).compact(id: id)
+        let after = try read(project, id)
+        #expect(after.events.filter { $0.kind == .claude }.isEmpty)
+        let kept = try ThreadLog.read(at: project.eventsURL(id)).transcript(turn: 1)
+        #expect(kept == [#"{"type":"result","subtype":"success","permission_denials":[]}"#], "nothing the log held is lost")
+    }
+
+    @Test func aTurnWithBothClaudeLinesAndActivityIsLeftAlone() async throws {
+        let project = Project(root: Scratch.url("mixed-turn"))
+        let id = "g-mixed-turn"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        try await log.appendClaudeLine(#"{"type":"system"}"#, turn: 1)
+        try await log.append(.agentActivity, turn: 1, data: ["provider": "claude", "type": "tool", "name": "Bash"])
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+        let before = try Data(contentsOf: project.eventsURL(id))
+
+        let compactor = TranscriptCompactor(project: project)
+        await #expect(throws: TranscriptCompactor.Failure.self) { try await compactor.compact(id: id) }
+        #expect(try Data(contentsOf: project.eventsURL(id)) == before)
+    }
+
     @Test func aSecondRunFindsNothingAndLeavesTheBytesAlone() async throws {
         let thread = try await legacyThread()
         let (project, id) = (thread.project, thread.id)
