@@ -1,10 +1,11 @@
 import Foundation
 
-/// Writes a coding turn's output as it arrives, in one of two shapes. Claude: every line verbatim and in order in
-/// the turn's transcript file, which the bounded activity stream cannot promise, and the `result` line also in the
-/// event log as a `claude` event (cost, session and denials are derived from it). Any other provider: the decoder's
-/// normalized activity (`agent.activity` events), at most `AgentActivityRecord.maxPerTurn` of them. Never both, so
-/// a reducer counts each activity once. Also the session's confirmation the first time it is named.
+/// Writes a coding turn's output as it arrives. Every provider: each line verbatim and in order in the turn's
+/// transcript file, which the bounded activity stream cannot promise. Claude: the `result` line also in the event
+/// log as a `claude` event (cost, session and denials are derived from it). Any other provider: the decoder's
+/// normalized activity (`agent.activity` events) as well, at most `AgentActivityRecord.maxPerTurn` of them; the
+/// file is the lossless copy and a reducer reads the log only, so it counts each activity once. Also the session's
+/// confirmation the first time it is named.
 /// Called one line at a time by the adapter's driver; read after `completion`, which orders the two.
 final class TurnRecorder: AgentRecorder, @unchecked Sendable {
     private let log: EventLogWriter
@@ -89,9 +90,11 @@ final class TurnRecorder: AgentRecorder, @unchecked Sendable {
 
     private func recordNormalized(_ line: AgentRawLine, activity: [AgentActivity]) async throws {
         var items = activity
+        // The raw line first: a runner killed between the two writes loses a normalized item, not the original.
         switch line {
-        case .line, .late: break
-        case .oversized(_, let total):
+        case .line(let text), .late(let text): try transcript.append(text)
+        case .oversized(let preview, let total):
+            try transcript.appendOversized(preview: preview, totalBytes: total)
             if items.isEmpty { items = [.diagnostic("a line of \(total) bytes was over the size limit and cut")] }
         }
         if case .late = line {} else { sawOutput = true }

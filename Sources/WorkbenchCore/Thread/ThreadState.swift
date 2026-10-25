@@ -402,12 +402,15 @@ public struct ThreadState: Sendable, Equatable {
 
     /// The open turn's lines, kept outside the log, count towards its progress like the log's own `claude` events.
     private static func foldOpenTurn(_ transcript: [TranscriptLine], into state: inout ThreadState) {
-        guard let open = state.openTurn else { return }
+        guard let open = state.openTurn, state.readsStreamLines else { return }
         for line in transcript where line.turn == open {
             state.progress.markReported()
             track(line, in: &state.progress)
         }
     }
+
+    /// Whether the latest turn is read through its stream lines (Claude's) and not through `agent.activity`.
+    var readsStreamLines: Bool { sessionProvider == nil || sessionProvider == "claude" }
 
     /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.
     static func track(_ line: TranscriptLine, in progress: inout Progress) {

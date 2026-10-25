@@ -37,11 +37,12 @@ public struct ThreadStore: Sendable {
         state(from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
     }
 
-    /// The state for events already replayed. While a turn is open its progress also reads the turn's
-    /// transcript file, since the lines of a turn are not in the log.
+    /// The state for events already replayed. While a Claude turn is open its progress also reads the turn's
+    /// transcript file, since the lines of a turn are not in the log. Another provider's progress is its
+    /// `agent.activity` events; its file holds the same turn again, raw.
     public func state(from events: [Event], id: String) -> ThreadState {
         let state = ThreadState.derive(from: events, id: id)
-        guard let open = state.openTurn else { return state }
+        guard let open = state.openTurn, state.readsStreamLines else { return state }
         let lines = TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(id), turn: open), turn: open)
         return lines.isEmpty ? state : ThreadState.derive(from: events, id: id, transcript: lines)
     }

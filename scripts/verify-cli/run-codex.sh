@@ -6,8 +6,8 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/run-codex.sh   (the same, on a branch that contains origin/main)
 # With `[agents.run] provider = "codex"`: a goal with budget_usd is refused by `goal approve` (naming spend_policy: timeout_only) before
 # the fake is started; after the goal is changed to `spend_policy: timeout_only` and approved again, `run` succeeds, the turn is on
-# record as codex with no session and an unknown cost, the fake's prompt starts with the standing rules, `grant` is refused, a
-# `send-back` starts a fresh process whose prompt holds the previous turn, the diff and the note, and `accept` commits what the
+# record as codex with no session and an unknown cost, the fake's prompt starts with the standing rules, `grant` is refused, `log --transcript` prints the
+# three lines the fake wrote (the file is gzipped), a `send-back` starts a fresh process whose prompt holds the previous turn, the diff and the note, and `accept` commits what the
 # fake left uncommitted. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1
 # leaves `[agents.run]` on Claude (/usr/bin/false), so the steps that expect Codex must FAIL. The frame and the other switches are
 # in lib.sh. Run by hand, not by CI.
@@ -117,6 +117,11 @@ check "status: one turn, an unknown cost (null), not approved-for-claude" "statu
 wbp "$SCRATCH/logv.out" log -v
 check "the log has the turn on codex and normalized activity, no claude lines" "log is not as expected" \
     bash -c 'grep -qi "codex" "$1" && ! grep -q "claude" "$1"' _ "$SCRATCH/logv.out"
+wbp "$SCRATCH/transcript1.out" log --transcript --turn 1
+check "log --transcript prints the three lines the fake wrote, as it wrote them" "log --transcript gave $(wc -l <"$SCRATCH/transcript1.out" | tr -d ' ') line(s)" \
+    bash -c 'test "$(wc -l <"$1" | tr -d " ")" = 3 && sed -n 1p "$1" | grep -q "\"thread_id\":\"thread-1\"" && sed -n 3p "$1" | grep -q "\"type\":\"turn.completed\""' _ "$SCRATCH/transcript1.out"
+check "the transcript file is gzipped beside the log, as for Claude" "no turn-1.jsonl.gz" \
+    test -f "$P/.workbench/threads/$ID/transcript/turn-1.jsonl.gz"
 check "the turn's events: provider codex, no session_id, null denials" "events are not as expected" \
     bash -c 'f="$1/.workbench/threads/$2/events.jsonl"; grep "\"kind\":\"turn.started\"" "$f" | grep -q "\"provider\":\"codex\"" && ! grep "\"kind\":\"turn.started\"" "$f" | grep -q session_id && grep "\"kind\":\"turn.ended\"" "$f" | grep -q "\"permission_denials\":null" && ! grep "\"kind\":\"turn.ended\"" "$f" | grep -q cost_usd' _ "$P" "$ID"
 
