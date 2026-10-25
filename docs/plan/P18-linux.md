@@ -7,9 +7,26 @@ gate) and [`../later/portability.md`](../later/portability.md) (other stacks, no
 
 ## Why
 
-Workbench runs on macOS 14+ only. Linux would let CI run on cheaper runners, let the soak and leftover-process checks
-run on a second kernel, and let Workbench run on a server. The probe shows the code needs few changes; what is
-missing is a way to keep two platforms correct without `#if` spread through the code.
+**The goal is CI velocity with more PRs open at once.** GitHub caps concurrent macOS jobs far below Linux ones
+(#219 moved lint to Linux for that reason), so every PR that holds a macOS slot for the whole suite queues the next.
+Linux is the way to run many PRs in parallel. A Linux port that is correct but slower than macOS fails that goal, so
+speed is an acceptance criterion here, not a nice-to-have. Secondary gains: the soak and leftover checks run on a
+second kernel, and Workbench can run on a server.
+
+The probe shows the code needs few changes; what is missing is a way to keep two platforms correct without `#if`
+spread through the code, and a Linux job that is not the slowest check.
+
+## Speed
+
+Measured on the #221 probe (2026-10-25, `ubuntu-latest` in a `swift:6.2.1` container, `--init`): macOS `build-test`
+7 m 55 s for the whole job; Linux build about 1 m, and the Linux `swift test` still running after 13 m. So the first
+Linux run is slower than macOS, and the reason is not yet known. Suspects: fewer cores than the 11-core Macs P17
+measured (the `ProcessGate` is sized by cores and the suite is spawn-heavy); the missing kqueue exit event, so each
+test that waits for a child pays the poll interval; a few outlier tests. Task 0 measures before anything else is
+built.
+
+What Linux allows that macOS does not is **sharding**: Linux slots are plentiful, so one PR can use several jobs.
+Each job builds (about 1 m, cached) and runs a disjoint set of suites; PR wall time is the slowest shard.
 
 ## What the probe changed (and what that tells us)
 
@@ -88,14 +105,15 @@ them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects
 
 | # | PR | Notes |
 |---|---|---|
+| 0 | **Measure the probe**: per-suite and per-test Linux time against macOS from `scripts/ci-report.sh 221`, cores on both, and the poll interval's share | No code. Output is a table in this file and a target: the Linux PR gate finishes no later than the macOS job did. |
 | 1 | **Portable libraries**: `swift-crypto` for the six `CryptoKit` imports, system zlib for `Gzip` (`CZlib`), `Package.resolved` committed | Behaviour identical on macOS; the existing hash and gzip tests are the proof. `zcat` and `gzip -t` must still read what is written. |
 | 2 | **Platform contract, macOS only**: the four protocols, `Platform+Darwin.swift` (today's libproc code moved, not changed), `ProcessMember` with an opaque start token, `Spawner`, `ProcessTree` and `OrphanSweeper` call through it | Refactor, no behaviour change. Adds the contract tests (below), run on the current platform. |
 | 3 | **Linux implementation**: `Platform+Linux.swift`, `CShim`, the `stat`/`siginfo_t` accessors, `Glibc` imports, fake-claude and test fixes, a Linux build job | Builds and passes the whole suite in a `swift:6.2` container with `--init`. |
 | 4 | **Orphan ownership**: the cwd-and-not-a-descendant rule replaces `ppid == 1`; `becomeSubreaper()` called at startup | Test under a subreaper (a parent that sets `PR_SET_CHILD_SUBREAPER` and runs the CLI) and under PID 1. |
 | 5 | **Loopback ready check**: `LoopbackProbe` replaces `Network.framework` | Tests: response split across packets, early close, timeout, cancel, IPv6 literal, a name that does not resolve. |
-| 6 | **Linux as a permanent gate**: the job runs on every PR, runs the soak and the leftover-process checks, and runs once as a non-root user | Decide the runner and cost; lint already moved to Linux in #219. Keep wall time under the macOS job (P17). |
+| 6 | **Linux becomes the PR gate, macOS moves off it**: the suite is sharded across parallel Linux jobs (each a disjoint set of suites, together all of them), with the soak, the leftover-process checks and one non-root run; macOS keeps a smaller job on `main` and nightly (and on PRs that touch `canImport(Darwin)` files) | Target: PR wall time at or below today's macOS job, and a PR holds no macOS slot unless it touches Darwin code. Decide shard count and runner size from task 0. |
 
-Tasks 1 and 2 are independent of each other and of Linux. 3 needs 1 and 2. 4 and 5 can follow 3 in either order;
+Task 0 can start now and decides how task 6 is shaped. Tasks 1 and 2 are independent of each other and of Linux. 3 needs 1 and 2. 4 and 5 can follow 3 in either order;
 6 comes last but may start as soon as 3 lands, with the soak added when 4 is in.
 
 ## Contract tests
@@ -113,7 +131,10 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
 
 ## Acceptance
 
-- [ ] `swift build` and the full suite pass on macOS and on Linux, in CI, on every PR.
+- [ ] The Linux PR gate is no slower than the macOS job it replaces, and three PRs open at once do not queue behind
+      each other on a macOS slot.
+- [ ] `swift build` and the full suite pass on Linux on every PR and on macOS on `main` and nightly (and on PRs
+      that touch Darwin files).
 - [ ] The Linux job also runs the lifecycle tests: a hang, a child that ignores SIGTERM, an escaped grandchild, a
       crash and its recovery, and a descriptor leak check; the soak passes on Linux.
 - [ ] The Linux suite passes as a non-root user (the permission test is not skipped).
@@ -133,8 +154,9 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
 
 ## Decisions to make
 
-- **Runner:** GitHub-hosted `ubuntu-latest` in a `swift` container versus a self-hosted one. The probe's timing against
-  the macOS job decides it.
-- **Whether Linux replaces or joins macOS** for the soak. Joins is the default; macOS stays the supported desktop.
+- **Runner and shard count:** hosted `ubuntu-latest` in a `swift` container (how many shards) versus a larger or
+  self-hosted runner. Task 0's timing decides it.
+- **What stays on macOS per PR:** nothing, or only PRs touching Darwin files. macOS stays the supported desktop and
+  is tested on `main` and nightly either way.
 - **Subreaper at startup:** on by default on Linux, or only for long-running commands. Default on unless a test shows
   it changes exit-code behaviour.
