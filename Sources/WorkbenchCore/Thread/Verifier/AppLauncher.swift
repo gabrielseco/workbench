@@ -1,5 +1,8 @@
 import Foundation
+
+#if canImport(Network)
 import Network
+#endif
 
 /// Starts the project's `[run]` command for one verifier turn and stops it when the turn ends
 /// (docs/plan/P16-run.md). It is the check's machinery (one `ProcessRunner` child, its streams merged, its whole
@@ -173,6 +176,7 @@ struct AppLauncher {
         regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
+    #if canImport(Network)
     /// Any HTTP answer, whatever its status, means something is listening and serving. It is the status line that
     /// counts, read from a plain TCP connection: nothing follows a redirect (the check stays on this machine, and a 3xx
     /// is an answer already), the body is never read (a server that streams one cannot hold the check or grow our
@@ -222,10 +226,11 @@ struct AppLauncher {
             taken?.resume(returning: value)
         }
     }
+    #endif
 
     /// A port nothing listens on: the kernel picks one for a socket that is closed again at once.
     static func freePort() -> Int? {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        let fd = socket(AF_INET, streamSocketType, 0)
         guard fd >= 0 else { return nil }
         defer { close(fd) }
         var address = sockaddr_in()

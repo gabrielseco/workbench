@@ -62,6 +62,18 @@ func json(_ object: [String: Any]) -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
+func descriptorPath(_ fd: Int32) -> String? {
+    #if canImport(Darwin)
+    var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+    guard fcntl(fd, F_GETPATH, &buffer) != -1 else { return nil }
+    return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    #else
+    var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+    guard readlink("/proc/self/fd/\(fd)", &buffer, buffer.count - 1) > 0 else { return nil }
+    return String(cString: buffer)
+    #endif
+}
+
 func write(_ text: String) {
     FileHandle.standardOutput.write(Data(text.utf8))
 }
@@ -84,10 +96,7 @@ let prompt = args.firstIndex(of: "--").flatMap { $0 + 1 < args.count ? args[$0 +
 if let path = d.string("dump") {
     var fds: [[String: Any]] = []
     for fd in 0..<256 where fcntl(Int32(fd), F_GETFD) != -1 {
-        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        let known = fcntl(Int32(fd), F_GETPATH, &buffer) != -1
-        let path = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
-        fds.append(["fd": fd, "path": known ? String(decoding: path, as: UTF8.self) : ""])
+        fds.append(["fd": fd, "path": descriptorPath(Int32(fd)) ?? ""])
     }
     // stdin is read to completion: /dev/null (or a closed pipe) returns at once, an open terminal or pipe
     // would block here, which is exactly what the test wants to notice.
@@ -121,7 +130,11 @@ if d.has("ignore-term") {
 }
 
 if let pidFile = d.string("grandchild") {
+    #if canImport(Darwin)
     var attributes: posix_spawnattr_t?
+    #else
+    var attributes = posix_spawnattr_t()
+    #endif
     posix_spawnattr_init(&attributes)
     posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
     posix_spawnattr_setpgroup(&attributes, 0)  // its own group, like real tool children (spike S6)
@@ -150,11 +163,18 @@ if argument(after: "--output-format", in: args) == "json" {
         var pid: pid_t = 0
         // A session of its own, so the process-group sweep at the end of the run cannot reach it (as an app opened
         // through LaunchServices is out of reach).
+        #if canImport(Darwin)
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
         posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
         let argv: [UnsafeMutablePointer<CChar>?] = [strdup("sh"), strdup("-c"), strdup(script), nil]
         _ = posix_spawn(&pid, "/bin/sh", nil, &attributes, argv, environ)
+        #else
+        // No POSIX_SPAWN_SETSID in Swift's Glibc: util-linux setsid does the same (-w waits, as the spawn above is waited on).
+        let words = ["setsid", "-w", "sh", "-c", script]
+        let argv: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) } + [nil]
+        _ = posix_spawn(&pid, "/usr/bin/setsid", nil, nil, argv, environ)
+        #endif
         var status: Int32 = 0
         waitpid(pid, &status, 0)
     }

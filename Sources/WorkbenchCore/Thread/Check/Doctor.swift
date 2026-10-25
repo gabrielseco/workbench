@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 
 public enum DoctorError: Error, Equatable, CustomStringConvertible {
@@ -186,7 +188,13 @@ public final class Doctor: @unchecked Sendable {
         public var checkTimeout: TimeInterval = 30 * 60
         public var killGrace: TimeInterval = 5
         /// Whether the process running doctor may record the screen. Replaced in tests.
-        public var screenRecordingGranted: @Sendable () -> Bool = { CGPreflightScreenCaptureAccess() }
+        public var screenRecordingGranted: @Sendable () -> Bool = {
+            #if canImport(CoreGraphics)
+            CGPreflightScreenCaptureAccess()
+            #else
+            true  // no screen-recording permission outside macOS
+            #endif
+        }
         /// `doctor --editor`, which wins over the configs as it does for `open`.
         public var editor: String?
         public init() {}

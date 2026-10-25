@@ -30,7 +30,9 @@ import Testing
         if case .lastFetch(let date)? = again?.knownFrom {
             #expect(Date().timeIntervalSince(date) < 60, "FETCH_HEAD was just rewritten")
         } else {
-            Issue.record("expected a last-fetch time: \(String(describing: again))")
+            let head = (try? String(contentsOf: repo.root.appendingPathComponent(".git/FETCH_HEAD"), encoding: .utf8)) ?? "?"
+            let version = (try? await repo.git.run(["--version"], in: repo.root).stdout) ?? "?"
+            Issue.record("expected a last-fetch time: \(String(describing: again)); FETCH_HEAD: \(head); \(version)")
         }
     }
 

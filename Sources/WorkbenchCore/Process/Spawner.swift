@@ -35,7 +35,7 @@ enum Spawner {
         }
         defer { posix_spawn_file_actions_destroy(&actions) }
 
-        var attributes: posix_spawnattr_t?
+        var attributes = emptySpawnAttributes
         guard posix_spawnattr_init(&attributes) == 0 else {
             throw SpawnError.launchFailed("posix_spawnattr_init")
         }
@@ -145,7 +145,7 @@ final class ChildExitWatcher: @unchecked Sendable {
         guard !notified, !reaped else { return }
         var info = siginfo_t()
         let rc = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT)
-        if rc == 0, info.si_pid == pid {
+        if rc == 0, info.childPID == pid {
             fire(gone: false)
         } else if rc == -1, errno == ECHILD {
             fire(gone: true)

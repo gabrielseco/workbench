@@ -11,20 +11,30 @@ enum WorkbenchBinary {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         var candidates = [".build/debug/workbench", ".build/release/workbench"].map { root.appendingPathComponent($0) }
+        // Next to the test bundle, whatever the configuration and architecture. (On Linux `Bundle.allBundles` crashes
+        // under concurrent tests, and the `.build/debug` link above already finds it.)
+        #if canImport(Darwin)
         for bundle in Bundle.allBundles where bundle.bundleURL.pathExtension == "xctest" {
             candidates.insert(bundle.bundleURL.deletingLastPathComponent().appendingPathComponent("workbench"), at: 0)
         }
+        #endif
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) } ?? candidates[0]
     }()
 }
 
 /// Open descriptors in this process, from the kernel's own list.
 func openDescriptorCount() -> Int {
+    #if canImport(Darwin)
     let bytes = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, nil, 0)
     guard bytes > 0 else { return -1 }
     var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(bytes) / MemoryLayout<proc_fdinfo>.size + 16)
     let written = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, &fds, Int32(fds.count * MemoryLayout<proc_fdinfo>.size))
     return written > 0 ? Int(written) / MemoryLayout<proc_fdinfo>.size : -1
+    #else
+    // Listing the directory opens one descriptor of its own.
+    guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd") else { return -1 }
+    return entries.count - 1
+    #endif
 }
 
 /// Whether a process's whole command line is exactly `commandLine` (`pgrep -f` with an anchored pattern, run

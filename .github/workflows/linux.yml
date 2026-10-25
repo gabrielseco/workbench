@@ -1,0 +1,97 @@
+name: Linux
+
+# Builds the package and runs the whole suite on Linux (P18). Not the PR gate yet: that is task 6, once this is
+# green and its time is known.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      # An init as PID 1 reaps orphans, as launchd does on macOS; without one they stay zombies and `kill(pid, 0)` still succeeds.
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hardware and toolchain
+        run: |
+          swift --version
+          echo "cores: $(nproc)"
+          git --version
+      - name: Tools the tests use, and a user that is not root
+        # The tests commit (a system git identity) and two run a python server. Some tests need a directory they cannot
+        # write to, which root always can, so everything runs as an ordinary user.
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Build
+        run: runuser -u tester -- env "PATH=$PATH" swift build --build-tests 2>&1 | tee build.log
+      - name: Test
+        # 16 permits: on a 4-core Linux runner the default (one per core) left the CPU 91% idle (docs/plan/P18-linux.md).
+        run: |
+          set -o pipefail
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 swift test --skip-build 2>&1 | tee test.log
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-logs
+          path: |
+            build.log
+            test.log
+
+  # Its own job, in its own container: it counts the processes left on the machine ("no `sleep 300`"), so no other
+  # suite may run beside it, and it runs at the same time as `test`, so it costs no wall time.
+  soak:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      # An init as PID 1 reaps orphans, as launchd does on macOS; without one they stay zombies and `kill(pid, 0)` still succeeds.
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hardware and toolchain
+        run: |
+          swift --version
+          echo "cores: $(nproc)"
+          git --version
+      - name: Tools the tests use, and a user that is not root
+        # The tests commit (a system git identity) and two run a python server. Some tests need a directory they cannot
+        # write to, which root always can, so everything runs as an ordinary user.
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Build
+        run: runuser -u tester -- env "PATH=$PATH" swift build --build-tests 2>&1 | tee build.log
+      - name: Soak (100 fake runs, failure matrix, no leaks)
+        run: |
+          set -o pipefail
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_SOAK=1 swift test --skip-build --filter SoakTests 2>&1 | tee soak.log
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-soak-logs
+          path: |
+            build.log
+            soak.log

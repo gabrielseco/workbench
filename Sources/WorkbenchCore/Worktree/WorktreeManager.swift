@@ -393,7 +393,10 @@ public struct WorktreeManager: Sendable {
     private func lastFetch(of base: String, from originURL: String) async -> BaseGap.KnownFrom {
         let path = try? await git.run(["rev-parse", "--git-path", "FETCH_HEAD"], in: repoRoot)
         guard let path, path.succeeded else { return .unknown }
-        let file = URL(fileURLWithPath: path.stdout.trimmingCharacters(in: .whitespacesAndNewlines), relativeTo: repoRoot)
+        // Git prints the path relative to the repository. Joined by hand: a relative `URL(relativeTo:)` that is then
+        // standardized loses its base on Linux, and the file would be looked for in the current directory.
+        let printed = path.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let file = (printed.hasPrefix("/") ? URL(fileURLWithPath: printed) : repoRoot.appendingPathComponent(printed))
             .standardizedFileURL
         // git writes the remote without a trailing `.git` or slash.
         func bare(_ url: String) -> String {

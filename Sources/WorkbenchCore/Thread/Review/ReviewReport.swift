@@ -374,7 +374,13 @@ public struct ReviewLoader: Sendable {
         } catch let error as GoalParseError {
             problem = error.description
         } catch {
-            problem = "cannot read the goal file: \(error.localizedDescription)"
+            // Foundation words a missing file differently on Linux, and this text is in the CLI's JSON.
+            let missing = (error as? CocoaError)?.code == .fileReadNoSuchFile
+            let name = project.goalURL(id).lastPathComponent
+            let reason = missing
+                ? "The file \u{201C}\(name)\u{201D} couldn\u{2019}t be opened because there is no such file."
+                : error.localizedDescription
+            problem = "cannot read the goal file: \(reason)"
         }
         // The diff and the branch lookups read different things, so they run together.
         async let shownDiff = diff(id: id, goalBase: goalBase, events: events, includeIgnored: includeIgnored)

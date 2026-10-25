@@ -92,7 +92,8 @@ private final class CopyCounter: @unchecked Sendable {
         let parent = try scratch()
         let git = try isolatedGit()
         let root = try await creator().create(NewProjectRequest(name: "mocks-kit", parent: parent))
-        #expect(root == parent.appendingPathComponent("mocks-kit").resolvingSymlinksInPath())
+        // Compared as paths: Foundation on Linux puts a trailing slash on a resolved directory URL.
+        #expect(root.path == parent.appendingPathComponent("mocks-kit").resolvingSymlinksInPath().path)
         #expect(try await git.run(["rev-parse", "--abbrev-ref", "HEAD"], in: root).stdout == "main\n")
         #expect(try await git.run(["rev-list", "--count", "HEAD"], in: root).stdout == "1\n")
         #expect(try await git.run(["ls-tree", "-r", "HEAD"], in: root).stdout.isEmpty)

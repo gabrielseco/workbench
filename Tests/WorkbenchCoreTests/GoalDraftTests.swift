@@ -375,7 +375,8 @@ private func drafting(
 }
 
 @Suite(.processGate) struct GoalDraftReplaceTests {
-    @Test func aDrafterAKilledHolderLeftBehindIsEndedBeforeTheNextOne() async throws {
+    @Test(.disabled(if: onLinux, "an orphan on Linux is adopted by a subreaper, not PID 1: P18 task 4"))
+    func aDrafterAKilledHolderLeftBehindIsEndedBeforeTheNextOne() async throws {
         let d = try await drafting()
         let id = try await d.fx.approvedThread()
         let work = d.fx.service.draftScratch(for: .replace(id: id)).appendingPathComponent("work")

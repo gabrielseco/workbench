@@ -56,7 +56,7 @@ public actor EventLogWriter {
         // lock is then on a file nobody reads any more, so a writer that finds the path is another file starts again.
         var opened: (fd: Int32, handle: FileHandle)?
         for _ in 0..<5 {
-            let fd = Darwin.open(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+            let fd = sysOpen(url.path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
             guard fd >= 0 else {
                 throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))")
             }
@@ -329,7 +329,7 @@ public actor EventLogWriter {
 
     private static func keepTail(_ tail: Data, beside url: URL) throws {
         let sidecar = url.appendingPathExtension("truncated")
-        let fd = Darwin.open(sidecar.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+        let fd = sysOpen(sidecar.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
         guard fd >= 0 else {
             throw EventLogError.io("cannot open \(sidecar.path): \(String(cString: strerror(errno)))")
         }

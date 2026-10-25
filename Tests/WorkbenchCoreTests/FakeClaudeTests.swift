@@ -11,11 +11,14 @@ enum FakeClaude {
         var candidates = [".build/debug/fake-claude", ".build/release/fake-claude"].map {
             root.appendingPathComponent($0)
         }
-        // Next to the test bundle, whatever the configuration and architecture.
+        // Next to the test bundle, whatever the configuration and architecture. (On Linux `Bundle.allBundles` crashes
+        // under concurrent tests, and the `.build/debug` link above already finds it.)
+        #if canImport(Darwin)
         for bundle in Bundle.allBundles where bundle.bundleURL.pathExtension == "xctest" {
             candidates.insert(
                 bundle.bundleURL.deletingLastPathComponent().appendingPathComponent("fake-claude"), at: 0)
         }
+        #endif
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) } ?? candidates[0]
     }()
 
