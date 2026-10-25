@@ -69,7 +69,14 @@ enum Spawner {
         }
 
         var pid: pid_t = 0
-        let status = posix_spawn(&pid, executable, &actions, &attributes, argv, envp)
+        var status = posix_spawn(&pid, executable, &actions, &attributes, argv, envp)
+        // A script written a moment ago can still be open for writing in another thread's fork (Linux ETXTBSY); it clears in milliseconds.
+        var retries = 0
+        while status == ETXTBSY, retries < 20 {
+            retries += 1
+            usleep(10_000)
+            status = posix_spawn(&pid, executable, &actions, &attributes, argv, envp)
+        }
         guard status == 0 else {
             throw SpawnError.launchFailed("\(executable): \(String(cString: strerror(status)))")
         }
