@@ -73,7 +73,7 @@ private struct InstructionsRepo {
         let onlyClaude = try await repo.commit()
         try repo.write("AGENTS.md", "agents\n")
         let both = try await repo.commit()
-        let counting = try CountingGit(wrapping: repo.git)
+        let counting = try await CountingGit(wrapping: repo.git)
 
         #expect(await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: none) == nil)
         #expect(counting.calls.count == 1, "neither file: one ls-tree, not one per name: \(counting.calls)")
@@ -92,7 +92,7 @@ private struct InstructionsRepo {
         try repo.symlink("AGENTS.md", to: "README.md")
         try repo.write("CLAUDE.md", "claude\n")
         let commit = try await repo.commit()
-        let counting = try CountingGit(wrapping: repo.git)
+        let counting = try await CountingGit(wrapping: repo.git)
 
         let loaded = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: commit)
         #expect(loaded?.file == "CLAUDE.md" && loaded?.text == "claude")
