@@ -69,12 +69,13 @@ private func one(_ mode: String) async {
         try? await Task.sleep(nanoseconds: UInt64.random(in: 0...10_000_000))
         close(fds[1])
         source.cancel()
-    case "pipe":
+    case "pipe", "thread-reader":
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { return }
         _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
         let reader = fds[0]
-        let watch = platform.watch(fd: reader, queue: DispatchQueue(label: "stress.pipe")) {
+        let kind: WatchKind = mode == "pipe" ? .platform : .thread
+        let watch = kind.watch(fd: reader, queue: DispatchQueue(label: "stress.pipe")) {
             var byte: UInt8 = 0
             _ = read(reader, &byte, 1)
         }

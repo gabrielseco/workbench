@@ -7,15 +7,18 @@ import Foundation
 /// Why it exists: libdispatch on Linux crashes when a read source is cancelled as an event for it arrives (see
 /// `PipeReading`). Nothing here touches libdispatch's event loop, only a queue and a semaphore.
 ///
-/// `cancel()` wakes the thread through a second pipe, so it never waits out a timeout, and the thread closes the descriptor
-/// itself when it ends: nothing is polling it by then.
+/// `cancel()` wakes the thread through a second pipe, so it never waits out a timeout. The wake pipe's write end belongs to
+/// `cancel()` (or to the thread, if it ends on its own first) and is closed under the lock, so nothing can write to it after
+/// it is closed or reused: an earlier version set the flag first and wrote afterwards, and under load the thread left and
+/// closed the pipe in between (a SIGPIPE, or a byte into someone else's descriptor). The thread closes the watched
+/// descriptor and the read end when it ends: nothing is polling them by then.
 final class ThreadPipeReader: PipeReader, @unchecked Sendable {
     private let fd: Int32
     private let queue: DispatchQueue
     private let onReadable: @Sendable () -> Void
     private let wakeRead: Int32
-    private let wakeWrite: Int32
     private let lock = NSLock()
+    private var wakeWrite: Int32
     private var cancelled = false
 
     init(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) {
@@ -33,13 +36,16 @@ final class ThreadPipeReader: PipeReader, @unchecked Sendable {
     }
 
     func cancel() {
-        let first = lock.withLock { () -> Bool in
-            defer { cancelled = true }
-            return !cancelled
+        lock.withLock {
+            guard !cancelled else { return }
+            cancelled = true
+            if wakeWrite >= 0 {
+                var byte: UInt8 = 1
+                _ = write(wakeWrite, &byte, 1)
+                close(wakeWrite)
+                wakeWrite = -1
+            }
         }
-        guard first, wakeWrite >= 0 else { return }
-        var byte: UInt8 = 1
-        _ = write(wakeWrite, &byte, 1)
     }
 
     private var isCancelled: Bool { lock.withLock { cancelled } }
@@ -48,7 +54,14 @@ final class ThreadPipeReader: PipeReader, @unchecked Sendable {
         defer {
             close(fd)
             if wakeRead >= 0 { close(wakeRead) }
-            if wakeWrite >= 0 { close(wakeWrite) }
+            // Ending on its own: a later cancel() must find nothing to write to.
+            lock.withLock {
+                cancelled = true
+                if wakeWrite >= 0 {
+                    close(wakeWrite)
+                    wakeWrite = -1
+                }
+            }
         }
         while !isCancelled {
             var watched = [
