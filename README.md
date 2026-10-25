@@ -1,6 +1,6 @@
 # Workbench
 
-A small macOS app for handing a coding task to Claude and getting back work you can trust.
+A small macOS app (the library and CLI also build and pass their tests on Linux) for handing a coding task to Claude and getting back work you can trust.
 
 ```
 Write a Goal → you approve it → Claude works in an isolated worktree

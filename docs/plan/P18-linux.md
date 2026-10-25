@@ -1,6 +1,6 @@
 # P18: Linux
 
-Status: plan, nothing built. Written 2026-10-25. Starts from the throwaway probe in PR #221 (`probe/linux-build`),
+Status: built (2026-10-25, tasks 1 to 6 merged; task 6 without shards, see its row). Written 2026-10-25. Starts from the throwaway probe in PR #221 (`probe/linux-build`),
 which ports the package to Linux in one 40-file diff and is not for merge. This phase ships the same result as
 small PRs and keeps Linux green afterwards. Complements [P17](P17-faster-tests.md) (the Linux job must not slow the
 gate) and [`../later/portability.md`](../later/portability.md) (other stacks, not other operating systems).
@@ -123,7 +123,7 @@ calling task is noticed within 50 ms because every wait is a `poll` slice.
 | 3 | **Linux implementation**: `Platform+Linux.swift`, `CShim`, the `stat`/`siginfo_t` accessors, `Glibc` imports, fake-claude and test fixes, a Linux build job | Builds and passes the whole suite in a `swift:6.2` container with `--init`. |
 | 4 | **Orphan ownership**: an orphan's parent is one of the platform's adopters (`orphanAdopters`), not just PID 1 | Rule tests on a described machine (an adopted process, one under a subreaper, a shell under tmux left alone, a reused pid); a real orphan's parent is one of the platform's adopters; the two Linux-disabled tests run again. |
 | 5 | **Loopback ready check**: `LoopbackProbe` replaces `Network.framework` | Tests: response split across packets, early close, timeout, cancel, IPv6 literal, a name that does not resolve. |
-| 6 | **Linux becomes the PR gate, macOS moves off it**: the suite is sharded across parallel Linux jobs (each a disjoint set of suites, together all of them), with the soak, the leftover-process checks and one non-root run; macOS keeps a smaller job on `main` and nightly (and on PRs that touch `canImport(Darwin)` files) | Target: PR wall time at or below today's macOS job, and a PR holds no macOS slot unless it touches Darwin code. Decide shard count and runner size from task 0. |
+| 6 | **Linux becomes the PR gate, macOS moves off it** (#244): PRs run lint and the Linux workflow only; the macOS suite runs on pushes to `main`, nightly at 03:00 UTC and by hand | Built **without shards**: after the build cache (#240) and the 5 ms exit poll (#243) the Linux `test` and `soak` jobs take about 2m20s each, against 8 to 9 min for the macOS job, so splitting the suite buys nothing. Also dropped: macOS on PRs that touch Darwin files (a Darwin-only break is caught on `main` within minutes). |
 
 Task 0 can start now and decides how task 6 is shaped. Tasks 1 and 2 are independent of each other and of Linux. 3 needs 1 and 2. 4 and 5 can follow 3 in either order;
 6 comes last but may start as soon as 3 lands, with the soak added when 4 is in.
@@ -187,18 +187,23 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
 
 ## Acceptance
 
-- [ ] The Linux PR gate is no slower than the macOS job it replaces, and three PRs open at once do not queue behind
-      each other on a macOS slot.
-- [ ] `swift build` and the full suite pass on Linux on every PR and on macOS on `main` and nightly (and on PRs
-      that touch Darwin files).
-- [ ] The Linux job also runs the lifecycle tests: a hang, a child that ignores SIGTERM, an escaped grandchild, a
-      crash and its recovery, and a descriptor leak check; the soak passes on Linux.
-- [ ] The Linux suite passes as a non-root user (the permission test is not skipped).
-- [ ] No `#if` outside `Platform*.swift`, `CShim` and the import lines; `scripts/check-banned-apis.sh` still passes
-      and also covers the Linux files.
-- [ ] A process orphaned under a subreaper is found and ended by the sweeper.
-- [ ] The ready check returns within its deadline with the resolver unreachable.
-- [ ] Docs that name macOS 14+ (README, AGENTS.md) say what is supported on Linux.
+All met on 2026-10-25, with the notes.
+
+- [x] The Linux PR gate is no slower than the macOS job it replaces (`test` and `soak` about 2m20s each, against 8 to 9
+      min), and a PR holds no macOS slot. Three PRs open at once were not tried.
+- [x] `swift build` and the full suite pass on Linux on every PR and on macOS on `main` and nightly. Not on PRs that
+      touch Darwin files: #244 dropped that trigger.
+- [x] The Linux job also runs the lifecycle tests (hang, SIGTERM ignored, escaped grandchild, crash and recovery,
+      descriptor leak check); the `soak` job passes on Linux.
+- [x] The Linux suite runs as a non-root user (`runuser -u tester`).
+- [x] No `#if` outside `Platform*.swift`, `CShim` and the import lines, with five exceptions that are each a small
+      difference and not a process or system call: `Judge.jsonBool` (how `NSNumber` reports a Bool), `Editor.isMacOS`
+      (`open` is macOS only), `Doctor` (screen-recording permission), `DiffProvider`'s import and `fake-claude`'s
+      spawn attributes. `scripts/check-banned-apis.sh` passes on every file under `Sources/`.
+- [x] A process orphaned under a subreaper is found and ended by the sweeper: tested on a described machine and with
+      the platform's measured adopter; no real subreaper process runs in CI.
+- [x] The ready check returns within its deadline with the resolver unreachable (no name is resolved at all).
+- [x] Docs that name macOS 14+ (README, AGENTS.md) say what is supported on Linux.
 
 ## Out of scope
 
