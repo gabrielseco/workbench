@@ -4,7 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 /// A machine described by a table, so the rule for what counts as an orphan is tested without starting anything.
-private final class Machine: ProcessInspecting, Subreaping, @unchecked Sendable {
+final class Machine: ProcessInspecting, Subreaping, @unchecked Sendable {
     struct Entry {
         var parent: pid_t
         var cwd: String
@@ -12,7 +12,7 @@ private final class Machine: ProcessInspecting, Subreaping, @unchecked Sendable 
     }
 
     var table: [pid_t: Entry]
-    let adopters: Set<pid_t>
+    var adopters: Set<pid_t>
     /// A pid whose start changes between two reads: it left and the number was reused.
     var recycled: Set<pid_t> = []
     private var reads: [pid_t: Int] = [:]

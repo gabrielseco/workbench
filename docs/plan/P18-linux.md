@@ -102,7 +102,7 @@ spaces and parentheses in the command name) is a plain function so macOS CI can 
 
 **Orphans.** An orphan is a process whose working directory is inside the worktree and whose parent is one of the
 platform's *adopters*: PID 1, and on Linux whichever ancestor adopts orphans of this process tree (`systemd --user`, a
-supervisor, a container's init; found once per process by orphaning a throwaway `sleep` and reading its new parent).
+supervisor, a container's init; found by orphaning a throwaway `sleep` and reading its new parent; measured once, retried after 30 s if it failed, and recorded in `/tmp/wb-adopters-<uid>` with the process's start time so a thread resumed from under another subreaper still finds what the first one adopted).
 Everything running beneath an orphan is swept too. The first draft of this section said "any process in the worktree
 that is not a descendant of a live Workbench process"; that would kill a shell the user has open in the worktree under
 tmux or ssh, whose parent is live and ordinary, so it was not used. `becomeSubreaper()` is not called at startup: a
@@ -208,5 +208,5 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
   self-hosted runner. Task 0's timing decides it.
 - **What stays on macOS per PR:** nothing, or only PRs touching Darwin files. macOS stays the supported desktop and
   is tested on `main` and nightly either way.
-- **Subreaper at startup:** on by default on Linux, or only for long-running commands. Default on unless a test shows
-  it changes exit-code behaviour.
+- **Subreaper at startup:** decided in task 4: not called. A subreaper adopts its own orphans as zombies it must reap,
+  and the adopter probe finds the orphans without it.
