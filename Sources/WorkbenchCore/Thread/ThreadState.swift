@@ -301,8 +301,6 @@ public struct ThreadState: Sendable, Equatable {
             progress: Progress())
         var noteIsLatest = false
         var verifierProof: [ProofFile] = []
-        // A turn is read through one shape: verbatim `claude` lines when it has any, else `agent.activity`.
-        let legacyTurns = Set(events.filter { $0.kind == .claude }.map(\.turn))
         for event in events {
             Self.applyAgent(event, to: &state.agentUse)
             switch event.kind {
@@ -321,8 +319,8 @@ public struct ThreadState: Sendable, Equatable {
                 if state.openTurn == event.turn { state.openTurn = nil }
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
-                Self.recordDenials(event, legacy: legacyTurns.contains(event.turn), into: &state.review.deniedTools)
-                Self.reconcileDenials(ended: event, legacy: legacyTurns.contains(event.turn), into: &state)
+                Self.recordDenials(event, into: &state.review.deniedTools)
+                Self.reconcileDenials(ended: event, into: &state)
                 switch event.data["cost_usd"] {
                 case .double(let d)?: state.totalCostUSD += d
                 case .int(let i)?: state.totalCostUSD += Double(i)
@@ -355,28 +353,8 @@ public struct ThreadState: Sendable, Equatable {
                         Review.Note(turn: state.lastTurn + 1, seq: event.seq, text: text))
                     noteIsLatest = state.openTurn == nil
                 }
-            case .claude:
-                if event.turn == state.lastTurn {
-                    state.progress.markReported()
-                    if let line = TranscriptLine(event: event) { Self.track(line, in: &state.progress) }
-                }
-                guard event.data["type"]?.stringValue == "result",
-                    case .array(let denials)? = event.data["permission_denials"]
-                else { break }
-                if event.turn == state.lastTurn { state.progress.deniedCalls = max(state.progress.deniedCalls, denials.count) }
-                // The turn's final result line is the one whose length `turn.ended.permission_denials`
-                // records, so an earlier result line of the same turn (a replay) is replaced, not added.
-                state.review.deniedTools.removeAll { $0.turn == event.turn }
-                for denial in denials {
-                    guard let tool = denial["tool_name"]?.stringValue else { continue }
-                    let identity = tool + "\u{0}" + (Self.denialRawInput(denial["tool_input"]) ?? "")
-                    state.review.deniedTools.append(
-                        Review.DeniedTool(
-                            turn: event.turn, tool: Self.safeLine(tool, limit: 60), seq: event.seq,
-                            input: Self.denialInput(denial["tool_input"]), identity: String(identity.hashValue)))
-                }
             case .agentActivity:
-                Self.fold(activity: event, legacyTurns: legacyTurns, into: &state)
+                Self.fold(activity: event, into: &state)
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
                     state.decision = decision
@@ -398,38 +376,6 @@ public struct ThreadState: Sendable, Equatable {
             state.review.status = .awaitingReview
         }
         return state
-    }
-
-    /// Folds one stream line into the turn's progress: what the model called, what was refused, the newest line.
-    static func track(_ line: TranscriptLine, in progress: inout Progress) {
-        let data = line.data
-        // Every line is a sign of life, whatever it carries; the cases below only say it better.
-        progress.note(line.ts, "claude \(safeLine(data["type"]?.stringValue ?? "?", limit: 30))")
-        switch data["type"]?.stringValue {
-        case "assistant":
-            guard case .array(let blocks)? = data["message"]?["content"] else { return }
-            for block in blocks where block["type"]?.stringValue == "tool_use" {
-                progress.toolCalls += 1
-                let name = safeLine(block["name"]?.stringValue ?? "tool", limit: 40)
-                let target = denialInput(block["input"]).map { " " + safeLine($0, limit: 60) } ?? ""
-                progress.note(line.ts, "tool_use \(name)\(target)")
-            }
-        case "user":
-            guard case .array(let blocks)? = data["message"]?["content"] else { return }
-            for block in blocks where block["type"]?.stringValue == "tool_result" {
-                // The refusal is the one fixed sentence the permission layer gives the model; a command that
-                // merely failed is not counted.
-                let text = block["content"]?.stringValue ?? ""
-                if block["is_error"] == .bool(true), text.hasPrefix("Permission for this tool use was denied") {
-                    progress.deniedCalls += 1
-                    progress.note(line.ts, "tool denied")
-                } else {
-                    progress.note(line.ts, "tool_result")
-                }
-            }
-        default:
-            break
-        }
     }
 
     /// Text from the log that will be printed in a terminal: one line, no control characters or escape
@@ -473,22 +419,9 @@ public struct ThreadState: Sendable, Equatable {
         return out.count > limit ? String(out.prefix(limit - 1)) + "…" : out
     }
 
-    /// The input as written, for telling denials apart. Never printed.
-    static func denialRawInput(_ input: JSONValue?) -> String? {
-        guard let input else { return nil }
-        for key in ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"] {
-            if let value = input[key]?.stringValue { return value }
-        }
-        return nil
-    }
-
-    /// Puts the full inputs `turn.ended` recorded on the turn's entries, which came from the same result line in
-    /// the same order. A different count means they are not the same list, so nothing is attached.
     /// The refused calls of a turn read through `agent.activity`: they are on `turn.ended`, whole, since the
     /// activity events only say a call was refused.
-    static func recordDenials(_ ended: Event, legacy: Bool, into tools: inout [Review.DeniedTool]) {
-        // An older turn's entries come from its result line; `turn.ended` only adds the whole input to them.
-        if legacy { return attachFullInputs(ended, to: &tools) }
+    static func recordDenials(_ ended: Event, into tools: inout [Review.DeniedTool]) {
         guard case .array(let calls)? = ended.data["denials"] else { return }
         tools.removeAll { $0.turn == ended.turn }
         for call in calls {
@@ -500,17 +433,6 @@ public struct ThreadState: Sendable, Equatable {
                 Review.DeniedTool(
                     turn: ended.turn, tool: safeLine(tool, limit: 60), seq: ended.seq, input: short, fullInput: full,
                     identity: String((tool + "\u{0}" + (raw ?? "")).hashValue)))
-        }
-    }
-
-    static func attachFullInputs(_ ended: Event, to tools: inout [Review.DeniedTool]) {
-        guard case .array(let calls)? = ended.data["denials"] else { return }
-        let indices = tools.indices.filter { tools[$0].turn == ended.turn }
-        guard indices.count == calls.count else { return }
-        for (index, call) in zip(indices, calls) {
-            guard let text = call["input"]?.stringValue else { continue }
-            let line = safeLine(text, limit: 4096)
-            if !line.isEmpty { tools[index].fullInput = line }
         }
     }
 

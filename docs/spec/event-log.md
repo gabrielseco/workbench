@@ -6,7 +6,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 ## Envelope
 
 ```json
-{"v":1,"seq":42,"ts":"2026-10-12T20:11:03.120Z","turn":2,"kind":"claude","data":{ ... }}
+{"v":1,"seq":42,"ts":"2026-10-12T20:11:03.120Z","turn":2,"kind":"agent.activity","data":{ ... }}
 ```
 
 | Field | Meaning |
@@ -25,7 +25,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.saved` | goal changed | `status`, `hash` |
 | `goal.approved` | approve | `hash`, `budget_usd`, `provider`, `model`, `reasoning_effort` |
 | `turn.started` | process spawned | `session_id` (Claude only), `resume`, `pid`, `argv` (redacted), `prompt_ref`, `provider`, `continuation` (Codex follow-up only) |
-| `claude` | **Older logs only**: a turn written before every provider recorded `agent.activity` has its `result` line here (cost, session and `permission_denials` are derived from it), and a log older than transcript files every stream line. A turn written now has none | the raw line, unmodified |
+| `claude` | **No longer written or read.** A log from before every provider recorded `agent.activity` holds it (every stream line, or a turn's `result` line); a reader ignores it as an unknown kind. `workbench compact` of the release before this change rewrote such logs | the raw line, unmodified |
 | `agent.activity` | one normalized item of a coding turn, whatever the provider (P9). The raw lines are in the turn's [transcript file](#transcript-files) | `provider`, `type` (`text`, `tool`, `permission_denied`, `usage`, `session`, `diagnostic`, `unknown`, `dropped`) and that type's fields |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?`, `transcript?` (`{lines, bytes}` of the turn's transcript file; absent when the turn wrote none) |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
@@ -73,7 +73,7 @@ every command that shows a thread replays it. Every coding turn, whatever the pr
 {"ts":"2026-10-24T10:00:00.120Z","data":{ ...the line as claude wrote it... }}
 ```
 
-- `data` is the line as the agent wrote it (for Claude, what a `claude` event's `data` was): the line itself, `{"invalid_json": "<raw line>"}`, or the
+- `data` is the line as the agent wrote it: the line itself, `{"invalid_json": "<raw line>"}`, or the
   truncation marker for a line over the size limit. Nothing is dropped.
 - A line is appended whole; a last line without its newline (a runner that died mid-write) is not a line. Recovery
   cuts it off before writing the synthetic `turn.ended`, whose `transcript` counts the lines that are left.
@@ -83,33 +83,20 @@ every command that shows a thread replays it. Every coding turn, whatever the pr
   compression fails, stays plain; both forms read the same, and `turn.ended`'s counts are those of the plain bytes.
 - `workbench log --transcript [--turn <n>]` prints the stored stream lines, one per line and nothing else, from either form.
   A transcript file that exists and cannot be read (a damaged `.gz`, one over the limit) is an error, not an empty
-  transcript: `log --transcript` exits 1 naming the turn. `log`, `log --json`, `status` and `review` do not read the
-  file of a turn written now: they show its `agent.activity` events (a turn with no file prints `no transcript is
-  stored for turn <n>` on stderr and nothing on stdout). For a turn of an older log, which has a `claude` event, `log`
-  also shows the file's lines just before its `turn.ended` (as `claude` events with `seq` null in `--json`), says
-  `transcript cannot be read: <why>` in their place when it is damaged, and shows the `result` line once, from the file.
-- A thread from before every provider recorded `agent.activity` has `claude` events in the log (every stream line, or only
-  the `result` line once it had a transcript file). Both read the same way for now.
-  `workbench compact (<id> | --all) [--dry-run]` brings such a thread to the current shape (temporary: it goes with the
-  old shape once the logs are moved). It works on an ended thread only, holds the log's lock, and builds the new log
-  beside the old one: the stream lines still in the log go to the turn's transcript file; a turn's `claude` events are
-  replaced by one `agent.activity` `dropped` record (`reason` `migrated`) with the `count` of items, `tool_calls` and
-  `denied` its transcript holds (the counts Claude's decoder gives for those lines), so the turn's totals stay known;
-  `turn.ended` gains `transcript` and `denials` (the refused calls of the result line, as a new turn records them);
-  `seq` is numbered again from 1 (so there are no gaps), and the two fields that name a `seq` change with it:
-  `grant.added`'s `denial_seq` (now the turn's `turn.ended`) and the `a<seq>` ids of agent attempts. The old log is
-  kept beside the new one as `events.jsonl.before-migrate`. Before anything is replaced it checks that the new log
-  replays to the same state (the `seq` numbers apart, and the whole input of a refused call, which the end record adds),
-  that what `grant` lists is the same, and that every transcript line decodes to its event; the transcript files go in
-  place first and the log is renamed over the old one last, so an interrupted run shows no line twice (a turn with a
-  file is shown from it) and running it again finishes.
+  transcript: `log --transcript` exits 1 naming the turn. A turn with no file prints `no transcript is stored for
+  turn <n>` on stderr and nothing on stdout. `log`, `log --json`, `status` and `review` do not read the files: a turn
+  is in the log as its `agent.activity` events.
+- A thread from before every provider recorded `agent.activity` has `claude` events in the log. They are not read any
+  more: `workbench compact` (the release before this change) moved such a thread's denied calls onto
+  `turn.ended.denials` and its counts into a `dropped` record, and kept the old log beside the new one as
+  `events.jsonl.before-migrate`.
 
 ## Invariants (tested)
 
 1. Every `turn.started` is followed by exactly one `turn.ended`, even on crash recovery (the runner writes a
    synthetic `turn.ended` with `result: "interrupted"` for orphans on startup).
 2. `seq` is strictly increasing with no gaps, so truncation is detectable.
-3. The agent's lines are stored verbatim, in the turn's transcript file (every provider); the log holds the normalized `agent.activity` and, on `turn.ended`, what only the end knows. A turn of an older log also has its `result` line in the log. We never drop information we may want later; derived state is computed.
+3. The agent's lines are stored verbatim, in the turn's transcript file (every provider); the log holds the normalized `agent.activity` and, on `turn.ended`, what only the end knows. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).
@@ -125,7 +112,7 @@ every command that shows a thread replays it. Every coding turn, whatever the pr
 | `goal.saved` | `status`, `hash` (null for a new draft) |
 | `goal.approved` | `hash`, `budget_usd` (null for a `timeout_only` goal), `spend_policy` (`hard_cap` or `timeout_only`; an approval without it was a hard cap), and the coding settings the approval is for: `provider`, `model` and `reasoning_effort` (null: the provider's own default), resolved from the goal's `model`, `[agents.run]` and the root `model` at the time; an approval without `reasoning_effort` bound none. `run` refuses when the config now resolves to another pair ("approved for claude, opus … now claude, haiku") and `goal approve` binds the new pair with another `goal.approved` with the same `hash`, leaving the goal file alone; the latest one counts. `run` also refuses when the goal's spend policy is not the one recorded. Judge, review and drafting settings are not part of it. An approval without the two keys (written before P9) binds nothing and is accepted until the next `goal approve` |
 | `turn.started` | `session_id` (absent for Codex: a Codex turn is one fresh process and has no session to resume), `resume` (false for Codex), `pid` (null when the process could not start), `argv` (without the prompt, the system prompt shown as `<rules>`), `prompt_ref` (`prompts/turn-N.md`), and for a turn built from the goal `instructions`: `{file, sha256, bytes, truncated, skipped}` of the project's instructions as sent, or `null` when there was none or `project_instructions` is off, and `plan`: `{sha256, bytes, source}` (`generated` or `edited`) of the plan the prompt carried, or `null` when it carried none (there is none, it was made for another version of the goal, its file is missing or no longer what the log recorded, or `run --no-plan`). A follow-up turn has neither key |
-| `agent.activity` | Inside an open turn only (rejected on append, a problem on replay, like `claude`); one event per item, in order. `provider` and `type` always. `text`: `text`. `tool`: `name`, `summary`. `permission_denied`: `tool`. `usage`: any of `input_tokens`, `output_tokens`, `cached_input_tokens`, `cost_usd`; **a count the provider did not report is absent, never 0**. `session`: `value`, `purpose`. `diagnostic`: `text`. `unknown`: an event the adapter did not understand; `provider` names it, `raw` is the original line, `raw_truncated` when cut. `dropped`: `count` (items since the last record), `reason` (`cap`, or `migrated` for a record `compact` wrote for an older turn): items past the cap, and `tool_calls` and `denied`, how many of them were tool calls and refused calls, so the totals stay known; a record without those two (an older log) leaves the turn's tool and denial counts unknown (`status` shows them as unknown). A refused call is a `permission_denied` item naming the tool; its input is on `turn.ended.denials`. Every string is cut at 4096 characters and `truncated` is set when one was. At most 1000 items per turn; the rest are counted in `dropped` records, one every 30 s while the turn goes on (so a busy turn does not read as stuck) and one when the child has ended, so a slow or absent reader of the in-memory stream neither holds the child open nor grows the log. A `started` item is not stored (`turn.started` has the pid). Activity of judge, review and draft attempts is not logged; their transcripts are files |
+| `agent.activity` | Inside an open turn only (rejected on append, a problem on replay); one event per item, in order. `provider` and `type` always. `text`: `text`. `tool`: `name`, `summary`. `permission_denied`: `tool`. `usage`: any of `input_tokens`, `output_tokens`, `cached_input_tokens`, `cost_usd`; **a count the provider did not report is absent, never 0**. `session`: `value`, `purpose`. `diagnostic`: `text`. `unknown`: an event the adapter did not understand; `provider` names it, `raw` is the original line, `raw_truncated` when cut. `dropped`: `count` (items since the last record), `reason` (`cap`, or `migrated` for a record `compact` wrote for an older turn): items past the cap, and `tool_calls` and `denied`, how many of them were tool calls and refused calls, so the totals stay known; a record without those two (an older log) leaves the turn's tool and denial counts unknown (`status` shows them as unknown). A refused call is a `permission_denied` item naming the tool; its input is on `turn.ended.denials`. Every string is cut at 4096 characters and `truncated` is set when one was. At most 1000 items per turn; the rest are counted in `dropped` records, one every 30 s while the turn goes on (so a busy turn does not read as stuck) and one when the child has ended, so a slow or absent reader of the in-memory stream neither holds the child open nor grows the log. A `started` item is not stored (`turn.started` has the pid). Activity of judge, review and draft attempts is not logged; their transcripts are files |
 | `worktree.created` | `path`, `branch`, `base_commit`: the commit the worktree was cut from, also where the project's instructions are read; `copied` (repo-relative paths) when the config's `copy` put files in, absent otherwise |
 | `thread.note` | `text`: the feedback that started a follow-up turn; when the latest check did not pass also `check_turn` and `check_omitted_bytes` (its output, last 16 KiB, is in `prompts/turn-N.md`, not here); `budget_usd` when `workbench send-back --budget` set one for that turn only |
 | `orphans.swept` | `pids`: leftover processes from an earlier run, found by working directory inside the worktree and a parent that is gone |
@@ -166,9 +153,8 @@ fail; they are counted in `permission_denials`.
 
 Every coding turn is recorded the same way: `agent.activity` events in the log, the raw lines in the turn's
 transcript file, and on `turn.ended` what only the end of the turn knows (`cost_usd`, `permission_denials` and
-`denials`, the refused calls with their input). A turn of an older log has `claude` lines in the log instead; a
-reader that meets both in one turn reads the `claude` lines and ignores that turn's `agent.activity`, so no tool call
-or denial is counted twice. `ThreadState` does this per turn. `progress.tool_calls` and `denied_calls` of a
+`denials`, the refused calls with their input). The file is the lossless copy and a reader of the log counts each
+activity once. `progress.tool_calls` and `denied_calls` of a
 turn are `null` in `status --json` until the provider has reported one: a provider that streams no tool or
 denial events has not said there were none, and neither is one that dropped items without counting them. Usage from
 `agent.activity` is summed per field in `ThreadState.reportedUsage`; a field never reported stays nil.
@@ -241,10 +227,12 @@ of the event list; `ThreadStore.state(of:)` reads the log and calls it. Unknown 
   `decided(accepted|discarded|abandoned)`, which wins over the rest.
 - **`turnResult`**: the latest `turn.ended` `result`.
 - **`check`**: the latest `check.ran` (turn it followed, `result`, `exit_code`, `output_ref`).
-- **`deniedTools`**: for a turn written now, one entry per item of `turn.ended.denials` (`tool`, `turn`, the `seq` of that `turn.ended`, `input` and `fullInput` made safe to print, as below). For a turn of an older log, one entry per `permission_denials` item of a `claude` result line: `tool`, `turn`, the
-  `seq` of that line, and `input`, the `command`, `file_path`, `path`, `url`, `pattern` or `query` of its
-  `tool_input` made safe to print (one line, no control characters, at most 100 characters), and `fullInput`, the same made safe to print from the turn's `turn.ended.denials` (at most 4096 characters; absent for a log from before that field, or when its count differs from the result line's). `review` prints it wrapped under the entry when it is longer than `input`. Only a turn's last `result` line counts (an earlier one of the same turn is a replay), so a turn's entries match its
-  `turn.ended.permission_denials`. A denial is `tool_name`, `tool_use_id` and `tool_input`. Entries are grouped by tool and the full, unshortened input.
+- **`deniedTools`**: one entry per item of `turn.ended.denials`: `tool`, `turn`, the `seq` of that `turn.ended`, `input`
+  (the `command`, `file_path`, `path`, `url`, `pattern` or `query` of the call, made safe to print: one line, no control
+  characters, at most 100 characters) and `fullInput` (the same, at most 4096 characters). `review` prints it wrapped under
+  the entry when it is longer than `input`. A turn's entries match its `turn.ended.permission_denials` while that count is
+  at most 100; a call over 4096 characters is recorded cut (`input_truncated`). Entries are grouped by tool and the full,
+  unshortened input.
 - **Grants** are not a field of `ThreadState`; `GrantLedger(events:)` reads them from the same events: every `grant.added`. For the turn that starts next, `once` grants written after the
   latest `turn.started` and every `thread` grant are added to the project's allowed tools; `never` revokes the earlier grants of that pattern and allows nothing (a later grant allows it again; the
   latest word on a pattern stands). A pattern is ignored (not an error) unless it is `Tool(content)` for a tool in `[tools]
@@ -267,14 +255,14 @@ Implemented in `Sources/WorkbenchCore/EventLog/`.
   without). Use `close()` to release the lock
   deterministically; do not rely on the writer being deallocated.
 - **Turn numbers** are 1, 2, 3 with no gaps. `turn.started` while a turn is open, `turn.ended` for a turn
-  that is not the open one, and `claude` lines outside an open turn are all rejected on append and
+  that is not the open one, and `agent.activity` outside an open turn are all rejected on append and
   reported as problems on replay. (A transcript line is not an event and has no `seq`; it belongs to the turn
   whose file it is in.)
 - **Checks** follow the same rule: `check.started` while a check is open, and `check.ran` when the open
   check is not that turn's (or none is open), are rejected on append and reported as problems on replay.
 - **Rejected appends consume no `seq`.**
-- **Invalid JSON from `claude`** is stored as `{"invalid_json": "<raw line>"}` (as a transcript line's `data`, or
-  as a `claude` event in an older log), so a bad line is logged raw and the run continues.
+- **Invalid JSON from the agent** is stored as `{"invalid_json": "<raw line>"}` as a transcript line's `data`, so a bad
+  line is kept raw and the run continues.
 - **Oversized lines** (default 1 MiB) are stored as
   `{"truncated": true, "original_bytes": N, "prefix": "<first 4096 characters>"}`.
 - **Opening a damaged log.** A half-written final line (no trailing newline) is cut off and kept in

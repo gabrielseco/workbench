@@ -47,7 +47,6 @@ bash scripts/verify-cli/commits-visible.sh         # accept -m ignored, branch.a
 bash scripts/verify-cli/spend-policy.sh          # spend_policy: timeout_only and the no-cap wording; a clone, no turn, costs nothing
 bash scripts/verify-cli/base-gap.sh              # status and review do not fetch unless --fetch; a clone, no turn, costs nothing
 bash scripts/verify-cli/transcript.sh            # the claude transcript beside the log, plain while a turn runs; a clone with fake-claude, costs nothing
-bash scripts/verify-cli/compact.sh               # `compact` on a log written with every stream line in it (temporary, goes with the command); a clone, no turn, costs nothing
 VERIFY_CLI_SABOTAGE=1 bash scripts/verify-cli/abandon.sh   # breaks abandon's output on purpose: must FAIL
 VERIFY_CLI_SABOTAGE=cleanup bash scripts/verify-cli/abandon.sh   # a cleanup step fails on purpose: must FAIL, exit 1
 ```
@@ -93,7 +92,7 @@ A FAIL is a finding about the merged feature (or about the scenario): read the k
 commits `scratch/verify-cli.txt` on the thread's branch itself (writing it if the model did not) and checks
 that the branch tip now differs from the base, then leaves the worktree with a modified tracked file (`README.md`), a file staged and edited again, a staged file
 deleted from disk, an untracked file and a binary file, and runs `abandon` without `--force`. Steps: the goal
-approved with the cap; the turn succeeded; the log has real `claude` stream lines (the `turn.started` argv
+approved with the cap; the turn succeeded; the transcript has real `claude` stream lines (the `turn.started` argv
 and the `system/init` line); abandon exit 0; worktree gone; branch kept; `abandon.patch` and
 `abandon-staged.patch` exist; `abandon.saved` in `workbench log` with size, sha256, tree and head (and they
 match the file); `git apply` of each patch on a fresh checkout of that committed tip (the saved head) restores the
@@ -181,25 +180,13 @@ say a plain command does not fetch, keeps an age, carries `as_of` and prints no 
 
 No real turn: a clone with a `claude` stand-in on the fake-claude test double, streaming slowly (800 ms between lines). `run` goes to
 the background; the script waits until `transcript/turn-1.jsonl` has lines while the log has no `turn.ended`, then `log -f` must print
-the stream lines and end with `turn ended`. After the turn: the file is gzipped (`turn-1.jsonl.gz`, no plain file, `gzip -t` passes);
-the log holds one `claude` event (the `result` line); `turn.ended`'s `transcript` counts are the lines and bytes `gzip -dc` gives; the last
-line is the result and every line is a whole `{ts, data}` record; `log` prints the stream once; `log --transcript` prints the stored lines
-as they are; `log --json` prints the transcript lines as `claude` events with `"seq":null`; `status`, `status --json` and `review` load;
-then a byte of the `.gz` is flipped: `log --transcript` exits non-zero naming the turn, and `log` says `transcript cannot be read` and still
-exits 0; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the gzip, counts, file,
-whole-record, `log`, `log --transcript`, `log --json` and the two damaged-file steps must FAIL.
-
-### compact
-
-Temporary, with the command. No turn is run, so it costs nothing: a clone, and the log of an ended thread written the way an older
-Workbench did (59 stream lines as `claude` events, a result with a denial, an agent attempt, a `grant.added` that names the denial's `seq`).
-Steps: the older log loads; `compact --dry-run` says "would move" and changes neither the log nor the folder; `compact <id>` exits 0 and
-says the lines were moved; `events.jsonl` is under a quarter of its size; the transcript is `turn-1.jsonl.gz` with no plain file and
-`gzip -t` passes; the log holds only the result line, has no `seq` gap, the grant's `denial_seq` names the result line and the attempt's
-id is `a<seq of its start>`; `log --transcript` is identical to before, `log --json` prints every stream line, and `status --json`,
-`review --json` and `grant --json` equal their old output bar the `seq` numbers; a second `compact` says "nothing to move" and leaves the
-bytes alone; a second, active thread is refused with exit 6 and skipped by `compact --all`; `abandon` ends it. `VERIFY_CLI_SABOTAGE=1`
-removes the transcript folder after the compaction, so the gzip, `log --transcript` and `log --json` steps must FAIL.
+the turn's activity and end with `turn ended`. After the turn: the file is gzipped (`turn-1.jsonl.gz`, no plain file, `gzip -t` passes);
+the log holds `agent.activity` events and no `claude` event; `turn.ended`'s `transcript` counts are the lines and bytes `gzip -dc` gives; the last
+line is the result and every line is a whole `{ts, data}` record; `log` prints the session once; `log --transcript` prints the stored lines
+as they are; `log --json` prints the activity events and no `claude` event; `status`, `status --json` and `review` load;
+then a byte of the `.gz` is flipped: `log --transcript` exits non-zero naming the turn, and `log` and `status` still
+exit 0; `abandon` ends the thread. `VERIFY_CLI_SABOTAGE=1` removes the transcript folder after the turn, so the gzip, counts, file,
+whole-record, `log --transcript` and damaged-file steps must FAIL.
 
 ### open
 

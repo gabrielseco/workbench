@@ -104,16 +104,14 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
   is none or its goal does not parse.
 - `setup`, `check`: `{command, result, duration_ms}`; `result` is `passed`, `failed`, `timed_out`, `stopped`, `skipped` or `not_declared`.
 
-## seq numbers and `compact`
+## seq numbers
 
 Every `seq` these outputs carry (`notes[].seq`, `denied_tools[].seq`, the `seqs` of a `grant` entry) is the event's number in
-`events.jsonl`. `workbench compact` (temporary) takes a log's stream lines out and numbers the events that are left again
-from 1, so after it those numbers differ from before and a `seq` written down earlier (`log --seq <n>`) may name another
-event. Nothing else in the outputs changes.
+`events.jsonl`. For a denied call it is the `turn.ended` that records it.
 
 ## log
 
-JSON lines: the stored events, one per line, exactly as in `events.jsonl`. A turn written now has no stream line among them: those are in `transcript/turn-<n>.jsonl` (`log --transcript`, see the event-log spec). For a turn of an older log, which has `claude` events, its transcript lines are printed as `claude` events with `"seq":null`, `data` verbatim, just before that turn's `turn.ended`; its `result` line is printed once, from there. A log with a line that is not an event is printed as it is, without transcripts.
+JSON lines: the stored events, one per line, exactly as in `events.jsonl`. No stream line is among them: those are in `transcript/turn-<n>.jsonl` (`log --transcript`, see the event-log spec). A log with a line that is not an event is printed as it is.
 `log --transcript [--turn <n>]` prints the stored stream lines, one JSON value each, whatever `--json` says. `log -f --json` follows and ends the way `log -f` does. `log --seq <n> --json` prints that one stored line.
 
 ## grant
@@ -127,7 +125,7 @@ first happened (the numbers `grant <n>` takes; they do not change when more is g
 - `input`: the command, path or URL as the model sent it (JSON-escaped, not made safe to print).
 - `level`: `safe`, `caution` or `unsafe`, by fixed rules (`DeniedCommandClassifier`); a compound is at least `caution`.
 - `status`: `open`, `granted_once` (until the next turn starts), `granted_thread` or `never`.
-- `turns`, `seqs`: the turns that were denied it and the `claude` lines that carry the denial.
+- `turns`, `seqs`: the turns that were denied it and the `turn.ended` events that carry the denial.
 - `parts`: `{number, command, level, pattern, reasons, status}`; one for a plain command (`number` `"3"`), one per
   simple command of a compound (`"3.1"`, ...). `pattern` is what granting it would allow, null when it cannot be
   written as a fixed pattern.

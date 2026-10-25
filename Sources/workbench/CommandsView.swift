@@ -79,21 +79,14 @@ extension Commands {
             }
         }
 
-        func show(_ entry: LogEntry) {
-            switch entry {
-            case .transcript(let line):
-                if !verbose, LogFormatter.describeClaude(line.data) == nil { return }
-            case .unreadableTranscript:
-                break
-            case .event(let event):
-                // One line per check: how it ended.
-                if event.kind == .checkStarted, !verbose { return }
-                // Only the verifier's files are proof; a line without `source` is an old verify step's.
-                if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
-                // An older log's verify step: the step is gone, so its lines are not described.
-                if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
-            }
-            out(LogFormatter.describe(entry))
+        func show(_ event: Event) {
+            // One line per check: how it ended.
+            if event.kind == .checkStarted, !verbose { return }
+            // Only the verifier's files are proof; a line without `source` is an old verify step's.
+            if event.kind == .proofAdded, event.data["source"]?.stringValue != "verifier" { return }
+            // An older log's verify step: the step is gone, so its lines are not described.
+            if ["verify.started", "verify.ended"].contains(event.kind.rawValue) { return }
+            out(LogFormatter.describe(event))
         }
 
         var threadLog = try ThreadLog.read(at: url)
@@ -119,10 +112,8 @@ extension Commands {
             threadLog = try ThreadLog.read(at: url)
             contents = threadLog.contents
             (shown, position) = threadLog.entries(after: position)
-            for entry in shown {
-                show(entry)
-                // Only Workbench's own events say that a run is over.
-                guard case .event(let event) = entry else { continue }
+            for event in shown {
+                show(event)
                 if event.kind == .turnStarted { sawStart = true }
                 if event.kind == .turnEnded { turnSucceeded = event.data["result"]?.stringValue == "succeeded" }
                 let verifiers = await willVerify(event)

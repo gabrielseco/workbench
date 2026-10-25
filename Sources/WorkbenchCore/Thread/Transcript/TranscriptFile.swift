@@ -121,9 +121,9 @@ public enum TranscriptFile {
         return (lines, start - data.startIndex)
     }
 
-    /// The complete lines of the file as transcript lines.
-    public static func lines(at url: URL, turn: Int) -> [TranscriptLine] {
-        read(at: url).lines.map { TranscriptLine(turn: turn, ts: $0.ts, seq: nil, data: $0.data) }
+    /// The `data` of the complete lines of the file.
+    public static func lines(at url: URL) -> [JSONValue] {
+        read(at: url).lines.map(\.data)
     }
 
     /// How many complete lines and bytes the file holds; nil when there is no file.

@@ -112,6 +112,8 @@ check "log -f ends with the turn's end" "workbench log -f exited $RC or did not 
     bash -c 'test "$1" = 0 && grep -q "turn ended" "$2"' _ "$RC" "$SCRATCH/follow.out"
 check "log -f printed the turn's activity" "no 'claude session' line" grep -q "claude session" "$SCRATCH/follow.out"
 wait "$RUN_PID" 2>/dev/null
+check "run printed the turn's activity as it went, from the same items the log records" "no '  claude: ' line in the run's output" \
+    grep -q "^  claude: " "$SCRATCH/run.out"
 check "run: the turn finished" "workbench run exited $(cat "$SCRATCH/run.rc" 2>/dev/null)" test "$(cat "$SCRATCH/run.rc" 2>/dev/null)" = 0
 
 if [ "$SABOTAGE" = 1 ]; then

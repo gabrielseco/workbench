@@ -2,25 +2,11 @@ import Foundation
 
 /// One-line descriptions of events, for `workbench log` and the live output of `workbench run`.
 public enum LogFormatter {
-    /// A `log` line for an entry: an event as `describe(_ event:)` has it, a transcript line the same way with
-    /// its `seq` (a dash when the line is not in `events.jsonl`).
-    public static func describe(_ entry: LogEntry) -> String {
-        switch entry {
-        case .event(let event):
-            return describe(event)
-        case .transcript(let line):
-            let seq = line.seq.map { String(format: "%4d", $0) } ?? "   -"
-            return "\(seq)  \(shortTime(line.ts))  t\(line.turn)  " + (describeClaude(line.data) ?? "claude")
-        case .unreadableTranscript(let turn, let reason):
-            return "   -  --:--:--  t\(turn)  transcript cannot be read: \(reason)"
-        }
-    }
-
     public static func describe(_ event: Event) -> String {
         let head = "\(String(format: "%4d", event.seq))  \(shortTime(event.ts))  t\(event.turn)  "
         switch event.kind {
-        case .claude, .agentActivity:
-            return head + describeStream(event)
+        case .agentActivity:
+            return head + describeActivity(event.data)
         case .turnStarted:
             let resume = event.data["resume"] == true ? "resume" : "new session"
             let pid = event.data["pid"]?.intValue.map { " pid \($0)" } ?? ""
@@ -131,11 +117,6 @@ public enum LogFormatter {
         return out
     }
 
-    private static func describeStream(_ event: Event) -> String {
-        if event.kind == .agentActivity { return describeActivity(event.data) }
-        return describeClaude(event.data) ?? "claude"
-    }
-
     /// One line for a normalized `agent.activity`; the text is the provider's, so it is made safe to print.
     public static func describeActivity(_ data: JSONValue) -> String {
         func safe(_ key: String, _ limit: Int = 100) -> String {
@@ -160,46 +141,6 @@ public enum LogFormatter {
         }
     }
 
-    /// The interesting part of a raw `claude` stream line, or nil for noise (partial messages, hooks).
-    public static func describeClaude(_ data: JSONValue) -> String? {
-        if data["truncated"] == true {
-            return "(line too long: \(data["original_bytes"]?.intValue ?? 0) bytes, cut)"
-        }
-        if let raw = data["invalid_json"]?.stringValue { return "(not JSON) \(raw.prefix(80))" }
-        guard let type = data["type"]?.stringValue else { return nil }
-        switch type {
-        case "system":
-            return data["subtype"]?.stringValue == "init" ? "session started" : nil
-        case "assistant":
-            guard case .array(let blocks)? = data["message"]?["content"] else { return nil }
-            var parts: [String] = []
-            for block in blocks {
-                switch block["type"]?.stringValue {
-                case "text": if let t = block["text"]?.stringValue { parts.append("claude: \(oneLine(t))") }
-                case "tool_use":
-                    let name = block["name"]?.stringValue ?? "tool"
-                    let input = block["input"]
-                    let detail = input?["command"]?.stringValue ?? input?["file_path"]?.stringValue
-                        ?? input?["pattern"]?.stringValue ?? ""
-                    parts.append("tool: \(name) \(oneLine(detail))")
-                default: break
-                }
-            }
-            return parts.isEmpty ? nil : parts.joined(separator: " | ")
-        case "user":
-            guard case .array(let blocks)? = data["message"]?["content"] else { return nil }
-            for block in blocks where block["type"]?.stringValue == "tool_result" {
-                if block["is_error"] == true { return "tool result: error" }
-            }
-            return nil
-        case "result":
-            let subtype = data["subtype"]?.stringValue ?? "?"
-            return "result: \(subtype)"
-        default:
-            return nil
-        }
-    }
-
     private static func shortTime(_ ts: String) -> String {
         // 2026-10-12T20:11:03.120Z -> 20:11:03
         guard let t = ts.firstIndex(of: "T") else { return ts }
@@ -212,11 +153,6 @@ public enum LogFormatter {
         case .int(let i)?: "$\(i)"
         default: nil
         }
-    }
-
-    private static func oneLine(_ s: String) -> String {
-        let flat = s.replacingOccurrences(of: "\n", with: " ")
-        return flat.count > 100 ? String(flat.prefix(100)) + "..." : flat
     }
 
     /// Whether the newest turn in the log ended `succeeded`; where `log -f` starts when it joins a run midway.

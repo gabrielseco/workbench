@@ -38,8 +38,8 @@ private func raw(_ n: Int) -> String { #"{"type":"assistant","n":\#(n)}"# }
         let writer = TranscriptWriter(url: url, maxLineBytes: 100)
         try writer.append(#"{"pad":"\#(String(repeating: "y", count: 500))"}"#)
         writer.close()
-        let line = try #require(TranscriptFile.lines(at: url, turn: 1).first)
-        #expect(line.data["truncated"] == true && (line.data["original_bytes"]?.intValue ?? 0) > 500)
+        let line = try #require(TranscriptFile.lines(at: url).first)
+        #expect(line["truncated"] == true && (line["original_bytes"]?.intValue ?? 0) > 500)
         #expect((try Data(contentsOf: url)).count < 5000)
     }
 
@@ -55,7 +55,7 @@ private func raw(_ n: Int) -> String { #"{"type":"assistant","n":\#(n)}"# }
         try handle.write(contentsOf: Data(#"{"ts":"2026-10-24T00:00:00.000Z","data":{"type":"ass"#.utf8))
         try handle.close()
 
-        #expect(TranscriptFile.lines(at: url, turn: 1).count == 2)
+        #expect(TranscriptFile.lines(at: url).count == 2)
         #expect(TranscriptFile.summary(at: url) == TranscriptSummary(lines: 2, bytes: whole))
         #expect(TranscriptFile.repair(at: url) == TranscriptSummary(lines: 2, bytes: whole))
         #expect(try Data(contentsOf: url).count == whole, "the torn line is gone")

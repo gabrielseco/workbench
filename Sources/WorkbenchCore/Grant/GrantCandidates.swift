@@ -25,7 +25,7 @@ public struct GrantCandidate: Sendable, Equatable {
     /// The command, path or URL as the model sent it.
     public var input: String?
     public var turns: [Int]
-    /// The `claude` lines that carry the denial.
+    /// The `turn.ended` events that carry the denial.
     public var seqs: [Int]
     public var assessment: DeniedCommandAssessment
     public var parts: [Part]
@@ -52,15 +52,9 @@ public enum GrantCandidates {
     /// The denied calls of a thread, grouped by tool and whole input, in the order they first happened. The
     /// numbers depend only on the log, so `grant 3` means the same thing after other grants are recorded.
     public static func derive(events: [Event]) -> [GrantCandidate] {
-        // A turn's last result line is the one whose denials count (as in `ThreadState`). A turn without one is read
-        // through `turn.ended`, which carries its refused calls whole.
+        // A turn's refused calls are on its `turn.ended`, whole.
         var lastResult: [Int: (seq: Int, denials: [JSONValue])] = [:]
-        for event in events where event.kind == .claude && event.data["type"]?.stringValue == "result" {
-            if case .array(let denials)? = event.data["permission_denials"] {
-                lastResult[event.turn] = (event.seq, denials)
-            }
-        }
-        for event in events where event.kind == .turnEnded && lastResult[event.turn] == nil {
+        for event in events where event.kind == .turnEnded {
             guard case .array(let calls)? = event.data["denials"] else { continue }
             let denials = calls.compactMap { call -> JSONValue? in
                 guard let tool = call["tool"]?.stringValue else { return nil }

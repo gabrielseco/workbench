@@ -6,7 +6,7 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/run-codex.sh   (the same, on a branch that contains origin/main)
 # With `[agents.run] provider = "codex"`: a goal with budget_usd is refused by `goal approve` (naming spend_policy: timeout_only) before
 # the fake is started; after the goal is changed to `spend_policy: timeout_only` and approved again, `run` succeeds, the turn is on
-# record as codex with no session and an unknown cost, the fake's prompt starts with the standing rules, `grant` is refused, `log --transcript` prints the
+# record as codex with no session and an unknown cost, the fake's prompt starts with the standing rules, `grant` is refused, `run` prints what the fake said as it goes, `log --transcript` prints the
 # three lines the fake wrote (the file is gzipped), a `send-back` starts a fresh process whose prompt holds the previous turn, the diff and the note, and `accept` commits what the
 # fake left uncommitted. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1
 # leaves `[agents.run]` on Claude (/usr/bin/false), so the steps that expect Codex must FAIL. The frame and the other switches are
@@ -105,6 +105,8 @@ check "the changed goal is approved again" "goal approve exited $RC" test "$RC" 
 wbp "$SCRATCH/run1.out" run
 shown "$SCRATCH/run1.out" 6
 check "run on Codex succeeds: exit 0" "workbench run exited $RC" test "$RC" = 0
+check "run printed what Codex said as it went" "no '  codex: edited AGENTS.md in turn 1' line" \
+    grep -q "^  codex: edited AGENTS.md in turn 1" "$SCRATCH/run1.out"
 check "the fake ran once" "the fake ran $(runs) time(s)" test "$(runs)" = 1
 check "the turn has its own temporary directory: TMPDIR is a writable root, not /tmp" "args or TMPDIR are not as expected" \
     bash -c 'd=$(cat "$2"); [ -n "$d" ] && [ "$d" != /tmp ] && [ -f "$d/probe_1" ] && grep -q "writable_roots=\[\"$d\"\]" "$1"' _ "$FAKE/args_1" "$FAKE/tmpdir_1"

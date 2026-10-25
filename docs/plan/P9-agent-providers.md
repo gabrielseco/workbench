@@ -256,9 +256,10 @@ gets its own terminal record without creating extra numbered coding turns.
 
 Keep the single writer, sequence without gaps, current turn/stage events, worktree isolation and decisions.
 Add provider/model/continuation metadata to existing start/end records, and bounded normalized activity
-for presentation. Preserve legacy `claude` events verbatim and their replay; new raw provider records
-must name the provider and retain original payload within documented limits. Do not emit both legacy
-and normalized activity into a reducer that counts it twice. Unknown usage/denial counts stay unknown.
+for presentation. Legacy `claude` events were preserved and replayed while the logs were moved to the
+normalized shape (`workbench compact`, #223); they are no longer read (#224), so a log must be migrated first. New raw
+provider records name the provider and keep the original payload in the turn's transcript file within documented limits.
+A reducer reads the log only, so it counts each activity once. Unknown usage/denial counts stay unknown.
 
 Add provider-attempt start/end records with stable ids, responsibility, optional named review stage,
 turn/round (none for drafting), provider/model and outcome. Draft attempts are thread-level events
@@ -395,9 +396,10 @@ never checked, and `EventLogTests.readerIgnoresUnknownKindsAndFields` pins it. S
 needs (attempt start/end, normalized activity, `goal.draft.*`, provider/model metadata on existing
 records) are new kinds and new fields, which an older reader skips.
 
-- No existing field changes meaning. `claude` events of older logs stay verbatim and are still read; a Claude run now
-  records `agent.activity` like every provider, with its raw lines in the turn's transcript file.
-- A reducer that understands both shapes counts each activity once: a run is read through one or the other.
+- No existing field changes meaning. A Claude run records `agent.activity` like every provider, with its raw lines in
+  the turn's transcript file. `claude` events of older logs were moved by `workbench compact` (#223), which keeps the old
+  log beside the new one, and are no longer read (#224): migrating comes first.
+- A reducer reads the log only, so it counts each activity once.
 - An older Workbench reading a newer log cannot see the new attempts, so it will not recover an unfinished
   one. That is harmless: a log opened by an old binary has no recovery obligation for kinds it does not
   know.

@@ -3,23 +3,25 @@ import Testing
 
 @testable import WorkbenchCore
 
+/// A refused call as `turn.ended.denials` records it.
 func bashDenial(_ command: String) -> JSONValue {
-    ["tool_name": "Bash", "tool_use_id": "toolu_1", "tool_input": ["command": .string(command)]]
+    ["tool": "Bash", "input": .string(command)]
 }
 
-/// A finished turn in the thread's log whose result line lists these denials; returns the `claude` line's seq.
+/// A finished turn in the thread's log whose end record lists these denials; returns the `turn.ended` seq.
 @discardableResult
 func denyInLog(_ fx: RunnerFixture, _ id: String, _ commands: [String]) async throws -> Int {
     let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
     let turn = await log.lastTurn + 1
     _ = try await log.append(.turnStarted, turn: turn, data: ["session_id": "s", "resume": false])
-    let line = try await log.append(
-        .claude, turn: turn,
-        data: ["type": "result", "permission_denials": .array(commands.map(bashDenial))])
-    _ = try await log.append(
-        .turnEnded, turn: turn, data: ["result": "succeeded", "permission_denials": .int(commands.count)])
+    let ended = try await log.append(
+        .turnEnded, turn: turn,
+        data: [
+            "result": "succeeded", "permission_denials": .int(commands.count),
+            "denials": .array(commands.map(bashDenial)),
+        ])
     await log.close()
-    return line.seq
+    return ended.seq
 }
 
 private func grantEvents(_ fx: RunnerFixture, _ id: String) throws -> [Event] {
