@@ -45,6 +45,42 @@ private func rendered(_ state: ThreadState) -> [String] {
 }
 
 @Suite(.processGate) struct DeniedToolsTests {
+    @Test func aTurnWithoutClaudeLinesReadsItsRefusedCallsFromTurnEnded() {
+        func event(_ seq: Int, _ turn: Int, _ kind: EventKind, _ data: JSONValue = [:]) -> Event {
+            Event(seq: seq, ts: "2026-10-25T10:00:00.000Z", turn: turn, kind: kind, data: data)
+        }
+        let calls: JSONValue = .array([
+            ["tool": "Bash", "input": "git push origin main"], ["tool": "Bash", "input": "git push origin main"],
+            ["tool": "Write"],
+        ])
+        let events = [
+            event(1, 0, .threadCreated), event(2, 1, .turnStarted, ["provider": "claude"]),
+            event(3, 1, .turnEnded, ["result": "succeeded", "permission_denials": 3, "denials": calls]),
+        ]
+        let tools = ThreadState.derive(from: events, id: "t").review.deniedTools
+        #expect(tools.map(\.tool) == ["Bash", "Bash", "Write"])
+        #expect(tools[0].input == "git push origin main" && tools[0].fullInput == "git push origin main")
+        #expect(tools[0].identity == tools[1].identity && tools[0].identity != tools[2].identity)
+        #expect(tools.allSatisfy { $0.seq == 3 && $0.turn == 1 })
+        #expect(tools[2].input == nil)
+    }
+
+    @Test func grantCandidatesReadATurnEndedWithNoClaudeLines() {
+        let push: JSONValue = ["tool": "Bash", "input": "git push origin main"]
+        let calls: JSONValue = .array([push, push])
+        let events = [
+            Event(seq: 1, ts: "2026-10-25T10:00:00.000Z", turn: 0, kind: .threadCreated, data: [:]),
+            Event(seq: 2, ts: "2026-10-25T10:00:00.000Z", turn: 1, kind: .turnStarted, data: ["provider": "claude"]),
+            Event(
+                seq: 3, ts: "2026-10-25T10:00:01.000Z", turn: 1, kind: .turnEnded,
+                data: ["result": "succeeded", "denials": calls]),
+        ]
+        let candidates = GrantCandidates.derive(events: events)
+        #expect(candidates.count == 1, "equal refusals are one candidate")
+        #expect(candidates.first?.seqs == [3, 3])
+        #expect(candidates.first?.assessment.parts.first?.command.contains("git push") == true)
+    }
+
     @Test func aDenialShowsWhatItWasDeniedFor() {
         let push = denial("Bash", ["command": "git push origin main"])
         let s = state([(1, result([push, push, denial("Write", ["file_path": "/etc/hosts"])]))])

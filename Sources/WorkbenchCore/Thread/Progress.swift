@@ -120,9 +120,15 @@ extension ThreadState {
             let summary = event.data["summary"]?.stringValue.map { " " + safeLine($0, limit: 60) } ?? ""
             state.progress.note(event.ts, "tool_use \(name)\(summary)")
         case "dropped":
-            // Items were left out, so the counts so far are a floor and no longer known; the marker is still a sign of life.
-            (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
-            state.progress.hasGap = true
+            // A record that counts its tool calls and refusals keeps the totals known; one that does not (an older
+            // log) leaves them a floor. The marker is a sign of life either way.
+            if let tools = event.data["tool_calls"]?.intValue, let denied = event.data["denied"]?.intValue {
+                state.progress.toolCalls += max(0, tools)
+                state.progress.deniedCalls += max(0, denied)
+            } else {
+                (state.progress.toolCallsKnown, state.progress.deniedCallsKnown) = (false, false)
+                state.progress.hasGap = true
+            }
             state.progress.note(event.ts, "\(provider) \(event.data["count"]?.intValue ?? 0) activity item(s) not recorded")
         case "permission_denied":
             state.progress.deniedCalls += 1

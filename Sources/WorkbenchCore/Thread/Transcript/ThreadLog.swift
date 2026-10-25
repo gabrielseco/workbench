@@ -166,12 +166,11 @@ public struct ThreadLog: Sendable {
             loaded[turn] = found
             return found
         }
-        // A turn of another provider is read through its `agent.activity` events; its file is for `--transcript`.
-        let normalized = Set(
-            contents.events.filter { $0.kind == .turnStarted && ($0.data["provider"]?.stringValue ?? "claude") != "claude" }
-                .map(\.turn))
+        // Only a turn the log holds a `claude` result line for is older than `agent.activity`; the others are read
+        // through their activity events, and their file is for `--transcript`.
+        let legacy = Set(contents.events.filter { $0.kind == .claude }.map(\.turn))
         func flush(_ turn: Int) {
-            guard !normalized.contains(turn) else { return }
+            guard legacy.contains(turn) else { return }
             switch transcriptFile(turn) {
             case .missing:
                 return

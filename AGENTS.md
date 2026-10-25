@@ -124,7 +124,7 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
 - **A turn always ends, and says how.** Exactly one `turn.ended` per `turn.started`, also on stop, timeout,
   crash and restart (`recoverOrphanedTurn`). A run that cannot say how it ended is a bug.
 - **One writer per event log**, `seq` without gaps. The agent's lines (any provider) are stored verbatim in the turn's transcript file
-  (`threads/<id>/transcript/`), not in the log, which keeps a Claude turn's `result` line and a Codex turn's `agent.activity`. The log is the state; derive,
+  (`threads/<id>/transcript/`), not in the log, which keeps the turn's normalized `agent.activity` (any provider) and, on `turn.ended`, its cost and refused calls. The log is the state; derive,
   don't store a second copy.
 - **Everything is bounded:** line size, log size, output, timeout, budget.
 - **Validate before it reaches git or a path.** Thread ids, bases and the check command go through

@@ -50,12 +50,24 @@ public enum GrantCandidates {
     /// The denied calls of a thread, grouped by tool and whole input, in the order they first happened. The
     /// numbers depend only on the log, so `grant 3` means the same thing after other grants are recorded.
     public static func derive(events: [Event]) -> [GrantCandidate] {
-        // A turn's last result line is the one whose denials count (as in `ThreadState`).
+        // A turn's last result line is the one whose denials count (as in `ThreadState`). A turn without one is read
+        // through `turn.ended`, which carries its refused calls whole.
         var lastResult: [Int: (seq: Int, denials: [JSONValue])] = [:]
         for event in events where event.kind == .claude && event.data["type"]?.stringValue == "result" {
             if case .array(let denials)? = event.data["permission_denials"] {
                 lastResult[event.turn] = (event.seq, denials)
             }
+        }
+        for event in events where event.kind == .turnEnded && lastResult[event.turn] == nil {
+            guard case .array(let calls)? = event.data["denials"] else { continue }
+            let denials = calls.compactMap { call -> JSONValue? in
+                guard let tool = call["tool"]?.stringValue else { return nil }
+                var denial: [String: JSONValue] = ["tool_name": .string(tool)]
+                // `turn.ended` kept the one string the key search below would have picked, so any key finds it.
+                if let input = call["input"]?.stringValue { denial["tool_input"] = .object(["command": .string(input)]) }
+                return .object(denial)
+            }
+            lastResult[event.turn] = (event.seq, denials)
         }
         var groups: [DeniedGroup] = []
         var index: [String: Int] = [:]
