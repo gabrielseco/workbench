@@ -1,0 +1,84 @@
+name: Linux build
+description: >
+  Everything the two Linux jobs share before they run tests: the tools and the ordinary user, the .build cache, each
+  file's last-commit time so SwiftPM rebuilds only what a change touches, and the build itself (P18).
+
+inputs:
+  save-cache:
+    description: Save .build after the build, under this commit's key ("true" in one job only; the other only restores).
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Hardware and toolchain
+      shell: bash
+      run: |
+        swift --version
+        echo "cores: $(nproc)"
+        git --version
+
+    - name: Tools the tests use, and a user that is not root
+      # The tests commit (a system git identity) and two run a python server. Some tests need a directory they cannot
+      # write to, which root always can, so everything runs as an ordinary user.
+      shell: bash
+      run: |
+        git config --system user.name "Workbench CI"
+        git config --system user.email "ci@example.invalid"
+        apt-get update -qq && apt-get install -y -qq python3
+        useradd --create-home tester
+
+    - name: Restore the build
+      # The newest .build saved for this Swift version and Package.swift: this branch's, else main's. A commit never has an
+      # exact key of its own to restore, so it always falls back to the prefix.
+      uses: actions/cache/restore@v4
+      with:
+        path: .build
+        key: linux-build-swift6.2.1-${{ hashFiles('Package.swift') }}-${{ github.sha }}
+        restore-keys: |
+          linux-build-swift6.2.1-${{ hashFiles('Package.swift') }}-
+
+    - name: Restore each file's last commit time
+      # A fresh checkout gives every file a new modification time, and SwiftPM treats a newer file as changed, so it would
+      # rebuild everything and the restored .build would be worth nothing. With the time of the commit that last touched
+      # each file, only what a change touched looks new. Measured on this repository (docs/plan/P18-linux.md): a cold
+      # build takes 2.5 to 4 minutes, a warm one after a one-file change about 30 seconds.
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import os, subprocess
+        git = ["git", "-c", "safe.directory=*"]
+        log = subprocess.run(git + ["log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
+                             capture_output=True, text=True, check=True).stdout
+        seen, stamp = {}, None
+        for line in log.splitlines():
+            if line.startswith("#"): stamp = int(line[1:])
+            elif line and line not in seen: seen[line] = stamp
+        restored = 0
+        for path in subprocess.run(git + ["ls-files"], capture_output=True, text=True, check=True).stdout.splitlines():
+            if path in seen and os.path.exists(path):
+                os.utime(path, (seen[path], seen[path]))
+                restored += 1
+        print("modification times restored for", restored, "files")
+        assert restored > 100, "the checkout is too shallow, or git refused it"
+        PY
+
+    - name: Hand the workspace to the test user
+      shell: bash
+      run: chown -R tester:tester "$GITHUB_WORKSPACE"
+
+    - name: Build
+      shell: bash
+      run: |
+        start=$(date +%s)
+        set -o pipefail
+        runuser -u tester -- env "PATH=$PATH" swift build --build-tests 2>&1 | tee build.log
+        echo "Build took $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - name: Save the build
+      # Right after the build, not at the end of the job: a failing test run must not throw a good build away.
+      if: ${{ inputs.save-cache == 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .build
+        key: linux-build-swift6.2.1-${{ hashFiles('Package.swift') }}-${{ github.sha }}

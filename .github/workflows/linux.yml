@@ -1,9 +1,11 @@
 name: Linux
 
-# Builds the package and runs the whole suite on Linux (P18). Not the PR gate yet: that is task 6, once this is
-# green and its time is known.
+# Builds the package and runs the whole suite on Linux (P18). Not the PR gate yet: that is task 6.
+# Also runs on pushes to main, which is what fills the build cache that pull requests start from.
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -23,22 +25,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Hardware and toolchain
-        run: |
-          swift --version
-          echo "cores: $(nproc)"
-          git --version
-      - name: Tools the tests use, and a user that is not root
-        # The tests commit (a system git identity) and two run a python server. Some tests need a directory they cannot
-        # write to, which root always can, so everything runs as an ordinary user.
-        run: |
-          git config --system user.name "Workbench CI"
-          git config --system user.email "ci@example.invalid"
-          apt-get update -qq && apt-get install -y -qq python3
-          useradd --create-home tester
-          chown -R tester:tester "$GITHUB_WORKSPACE"
-      - name: Build
-        run: runuser -u tester -- env "PATH=$PATH" swift build --build-tests 2>&1 | tee build.log
+        with:
+          # All of history: the build restores each file's last commit time from it.
+          fetch-depth: 0
+      - uses: ./.github/actions/linux-build
+        with:
+          save-cache: "true"
       - name: Test
         # 16 permits: on a 4-core Linux runner the default (one per core) left the CPU 91% idle (docs/plan/P18-linux.md).
         run: |
@@ -60,29 +52,15 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: swift:6.2.1
-      # An init as PID 1 reaps orphans, as launchd does on macOS; without one they stay zombies and `kill(pid, 0)` still succeeds.
       options: --init
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Hardware and toolchain
-        run: |
-          swift --version
-          echo "cores: $(nproc)"
-          git --version
-      - name: Tools the tests use, and a user that is not root
-        # The tests commit (a system git identity) and two run a python server. Some tests need a directory they cannot
-        # write to, which root always can, so everything runs as an ordinary user.
-        run: |
-          git config --system user.name "Workbench CI"
-          git config --system user.email "ci@example.invalid"
-          apt-get update -qq && apt-get install -y -qq python3
-          useradd --create-home tester
-          chown -R tester:tester "$GITHUB_WORKSPACE"
-      - name: Build
-        run: runuser -u tester -- env "PATH=$PATH" swift build --build-tests 2>&1 | tee build.log
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/linux-build
       - name: Soak (100 fake runs, failure matrix, no leaks)
         run: |
           set -o pipefail
