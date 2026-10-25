@@ -22,6 +22,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case copyValueInvalid(String)
     case noFreeID(String)
     case abandonNotSaved(String)
+    case budgetNeedsCap(provider: String)
 
     public var description: String {
         switch self {
@@ -31,6 +32,9 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .abandonNotSaved(let why):
             "not abandoned: \(why). Nothing was removed. Commit what you want to keep, or `workbench discard` "
                 + "throws it away after listing it."
+        case .budgetNeedsCap(let provider):
+            "\(provider) cannot enforce a dollar limit, and this goal has a budget_usd, so it was not approved. "
+                + "Change the goal to `spend_policy: timeout_only` (and remove budget_usd), then approve it again."
         case .noFreeID(let id): "could not find a free id for '\(id)'; try another name"
         case .invalidPushTarget(let name):
             "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
@@ -196,6 +200,8 @@ public struct ThreadService: Sendable {
         let config = config ?? (try? Config.load(from: project.configURL))
         let agent = config?.resolvedRunAgent(goalModel: file.goal.model)
             ?? ResolvedAgent(provider: .claude, model: file.goal.model, allowUnpriced: false)
+        // The run would refuse this goal, so say so now rather than after the approval.
+        if agent.provider == .codex, file.goal.budgetUSD != nil { throw ThreadServiceError.budgetNeedsCap(provider: "codex") }
         let binding = ApprovedAgent(agent, spendPolicy: file.goal.spendPolicyName)
         // An unchanged goal is approved already; it is approved again only for coding settings it was not approved for.
         if file.goal.approval == .approved, store.state(of: id).approvedAgent == binding { return file }

@@ -104,12 +104,15 @@ runs, because the first had a flawed probe; see "What the probes got wrong").
 codex exec --json --color never --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules \
   -c approval_policy="never" -c sandbox_workspace_write.network_access=false \
   -c sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true \
+  -c 'sandbox_workspace_write.writable_roots=["<outputDirectory>/tmp"]' \
   -s workspace-write -C <worktree> -- <prompt>
 ```
 
 - **`$TMPDIR` and `/tmp` are excluded from the writable roots.** `workspace-write` otherwise makes them writable (task 1: a push to
   a remote under `$TMPDIR` succeeded). A control turn with the same argv minus the two `exclude_*` keys did write a file under
   `$TMPDIR`; with them it is refused. A coding turn therefore cannot change another checkout or push from a temporary one.
+- **The turn gets its own scratch directory.** `<outputDirectory>/tmp` (the thread's, so its turns share it) is the only extra
+  writable root and `TMPDIR` points at it, so tools that need a temporary directory (Vitest) work without `/tmp`.
 
 - **One-shot, no native resume.** `codex exec resume` takes no `-s` and no `-C`, so a resumed turn cannot state its sandbox on
   the command line as a first turn does. The adapter declares `resume: .none` and writes no session file (`--ephemeral`); the

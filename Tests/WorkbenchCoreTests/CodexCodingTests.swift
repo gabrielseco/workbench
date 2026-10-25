@@ -4,6 +4,7 @@ import Testing
 @testable import WorkbenchCore
 
 private let tree = "/t/worktree"
+private let scratch = "/t/prompts/tmp"
 
 private func coding(_ tweak: (inout AgentRequest) -> Void = { _ in }) -> AgentRequest {
     var r = AgentRequest(
@@ -41,12 +42,18 @@ private let completed =
         #expect(refusal?.message.contains("spend_policy: timeout_only") == true, "\(String(describing: refusal?.message))")
     }
 
+    @Test func tomlStringEscapesQuotesBackslashesAndControls() {
+        #expect(CodexProvider.tomlString("/a/b") == "\"/a/b\"")
+        #expect(CodexProvider.tomlString("/a\"b\\t\tc") == "\"/a\\\"b\\\\t\\u0009c\"")
+    }
+
     @Test func codingInvocationIsHardened() throws {
         let args = try provider.invocation(for: coding()).arguments
         let expected = [
             "exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config",
             "--ignore-rules", "-c", "approval_policy=\"never\"", "-c", "sandbox_workspace_write.network_access=false",
             "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true", "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
+            "-c", "sandbox_workspace_write.writable_roots=[\"\(scratch)\"]",
             "-s", "workspace-write", "-C", tree, "--", "# Add a greeting\n\nDo it.",
         ]
         #expect(args == expected, "\(args)")
@@ -78,7 +85,8 @@ private let completed =
 
     @Test func codingEnvironmentIsMinimal() throws {
         let environment = try provider.invocation(for: coding()).environment
-        #expect(Set(environment.keys) == ["PATH", "HOME"], "\(environment.keys.sorted())")
+        #expect(Set(environment.keys) == ["PATH", "HOME", "TMPDIR"], "\(environment.keys.sorted())")
+        #expect(environment["TMPDIR"] == scratch, "the turn gets its own temporary directory, not the user's")
         let wide = try provider.invocation(
             for: coding {
                 $0.environment = [
@@ -86,7 +94,7 @@ private let completed =
                     "GITHUB_TOKEN": "t", "SSH_AUTH_SOCK": "/s", "FAKE_CLAUDE": "x",
                 ]
             }).environment
-        #expect(Set(wide.keys) == ["PATH", "CODEX_HOME", "OPENAI_API_KEY", "LC_ALL"], "\(wide.keys.sorted())")
+        #expect(Set(wide.keys) == ["PATH", "CODEX_HOME", "OPENAI_API_KEY", "LC_ALL", "TMPDIR"], "\(wide.keys.sorted())")
     }
 
     // MARK: Decoding

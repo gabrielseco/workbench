@@ -102,17 +102,24 @@ private func codexRun(
         #expect(approved.data["model"] == "gpt-6-astra" && approved.data["reasoning_effort"] == "high")
     }
 
-    @Test func budgetGoalRefusedOnCodex() async throws {
-        let c = try await codexRun(goalEdit: { $0.replacingOccurrences(of: "spend_policy: timeout_only", with: "budget_usd: 1") })
-        for feedback in [nil, "again"] as [String?] {
-            do {
-                _ = try await c.run(feedback: feedback)
-                Issue.record("ran a budget goal on Codex")
-            } catch let error as RunnerError {
-                #expect("\(error)".contains("spend_policy: timeout_only") && "\(error)".contains("budget_usd"), "\(error)")
-            }
+    @Test func budgetGoalIsNotApprovedOnCodex() async throws {
+        let c = try await codexRun(
+            goalEdit: { $0.replacingOccurrences(of: "spend_policy: timeout_only", with: "budget_usd: 1") }, approve: false)
+        let error = await #expect(throws: ThreadServiceError.self) { try await c.fx.service.approve(id: c.id) }
+        #expect(error == .budgetNeedsCap(provider: "codex"))
+        #expect("\(error!)".contains("spend_policy: timeout_only"))
+        #expect(ThreadStore(project: c.fx.project).state(of: c.id).approvedAgent == nil, "nothing was approved")
+    }
+
+    @Test func runStillRefusesABudgetGoalWhenTheProviderChangedAfterApproval() throws {
+        let text = "---\nid: g\ntitle: t\nstatus: draft\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\n---\n\n"
+            + "## Request\n\nr\n\n## Criteria\n\n- [c1] c\n  - proof: p\n"
+        let goal = try GoalFile.parse(text).goal
+        let codex = ResolvedAgent(provider: .codex, model: nil, allowUnpriced: false)
+        let error = #expect(throws: RunnerError.self) {
+            try ThreadRunner.requireProviderCanCode(agent: codex, goal: goal, options: RunOptions())
         }
-        #expect(c.runs == 0 && !c.hasWorktree)
+        #expect("\(error!)".contains("spend_policy: timeout_only") && "\(error!)".contains("budget_usd"))
     }
 
     @Test func budgetFlagRefusedOnCodex() async throws {
@@ -414,7 +421,12 @@ private func codexRun(
     @Test func planAndVerifierStayOnClaude() async throws {
         // The plan is Claude's whatever `[agents.run]` says: with Codex for coding it still runs the fake claude, and the
         // verifier's code (which resolves `claude_path` itself) is untouched by this change.
-        let p = try await planned(extraConfig: "[agents.run]\nprovider = \"codex\"")
+        let p0 = try await planned()
+        // The thread was approved with its budget on Claude; the coding provider changes afterwards.
+        let configText = try String(contentsOf: p0.fx.project.configURL, encoding: .utf8)
+        try (configText + "\n[agents.run]\nprovider = \"codex\"\n").write(
+            to: p0.fx.project.configURL, atomically: true, encoding: .utf8)
+        let p = Planned(fx: p0.fx, id: p0.id, config: try Config.load(from: p0.fx.project.configURL), dir: p0.dir)
         #expect(p.config.resolvedRunAgent().provider == .codex)
         let result = try await p.fx.service.plan(id: p.id, config: p.config, environment: try p.answering("1. Add the greeting."))
         #expect(result.failure == nil && result.ref == "plans/plan-1.md", "\(String(describing: result.failure))")
