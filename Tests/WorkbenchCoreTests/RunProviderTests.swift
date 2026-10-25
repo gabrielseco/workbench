@@ -111,6 +111,17 @@ private func codexRun(
         #expect(ThreadStore(project: c.fx.project).state(of: c.id).approvedAgent == nil, "nothing was approved")
     }
 
+    @Test func runStillRefusesABudgetGoalWhenTheProviderChangedAfterApproval() throws {
+        let text = "---\nid: g\ntitle: t\nstatus: draft\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\n---\n\n"
+            + "## Request\n\nr\n\n## Criteria\n\n- [c1] c\n  - proof: p\n"
+        let goal = try GoalFile.parse(text).goal
+        let codex = ResolvedAgent(provider: .codex, model: nil, allowUnpriced: false)
+        let error = #expect(throws: RunnerError.self) {
+            try ThreadRunner.requireProviderCanCode(agent: codex, goal: goal, options: RunOptions())
+        }
+        #expect("\(error!)".contains("spend_policy: timeout_only") && "\(error!)".contains("budget_usd"))
+    }
+
     @Test func budgetFlagRefusedOnCodex() async throws {
         let c = try await codexRun()
         var options = c.fx.options()

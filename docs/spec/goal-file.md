@@ -211,9 +211,9 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   always was. `spend_policy: timeout_only` means **no dollar cap**: `turn_timeout_min` is the only bound on a turn.
   The two exclude each other: a goal with both is an error naming `budget_usd` and `spend_policy` (a kept budget
   that nothing enforces would be an ignored field), and any other value of `spend_policy` is an error naming the key.
-  A `budget_usd` goal runs only on an adapter that reports a hard dollar cap; on one that does not, `run` is refused
-  before anything starts, with a message that says to change the goal to `spend_policy: timeout_only` and approve it
-  again. A `timeout_only` goal runs on any adapter, Claude included: Claude is then started without
+  A `budget_usd` goal runs only on an adapter that reports a hard dollar cap; on one that does not, `goal approve` is
+  refused (nothing is approved) and so is `run` if the config changed after approval, each with a message that says to
+  change the goal to `spend_policy: timeout_only` and approve it again. A `timeout_only` goal runs on any adapter, Claude included: Claude is then started without
   `--max-budget-usd` and its cost is still recorded. `run --budget` and `send-back --budget` are refused on such a goal
   (there is no cap to override). `goal approve`, `status`, `review`, `doctor` and the PR description print
   `no dollar cap: bounded by N min per turn` where a budget would be. **A cost nobody reported is unknown, never 0:**
