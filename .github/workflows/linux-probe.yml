@@ -1,0 +1,37 @@
+name: Linux probe
+
+# Throwaway: does the package build and pass its tests on Linux, and how long does it take next to macOS?
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/linux-build]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          swift --version
+          nproc
+          git --version
+      - name: Build
+        run: |
+          set -o pipefail
+          time swift build 2>&1 | tee build.log
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          time swift test 2>&1 | tee test.log
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-probe-logs
+          path: |
+            build.log
+            test.log
