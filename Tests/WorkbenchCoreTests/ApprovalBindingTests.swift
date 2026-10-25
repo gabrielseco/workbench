@@ -34,6 +34,12 @@ import Testing
         let cappedID = try await capped.service.newThread(name: "capped", base: "main")
         let cappedGoal = try GoalFile.parse(String(contentsOf: capped.project.goalURL(cappedID), encoding: .utf8)).goal
         #expect(cappedGoal.budgetUSD == Decimal(string: "2.5"))
+
+        // A copied goal that says timeout_only keeps saying it, whatever the config's default.
+        let other = try await RunnerFixture()
+        let kept = try await other.service.newThread(name: "kept", base: "main", settings: GoalSettings(timeoutOnly: true))
+        let keptGoal = try GoalFile.parse(String(contentsOf: other.project.goalURL(kept), encoding: .utf8)).goal
+        #expect(keptGoal.spend == .timeoutOnly && keptGoal.budgetUSD == nil)
     }
 
     @Test func approveRecordsResolvedAgent() async throws {

@@ -133,7 +133,8 @@ public struct ThreadService: Sendable {
         let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
         // A budget only when the file or the config asks for one: a subscription has no dollars to cap, and Codex cannot enforce any.
         let config = config ?? (try? Config.load(from: project.configURL))
-        let budget = settings.budgetUSD ?? (config?.defaultBudgetConfigured == true ? config?.defaultBudgetUSD : nil)
+        let configured = config?.defaultBudgetConfigured == true ? config?.defaultBudgetUSD : nil
+        let budget = settings.timeoutOnly ? nil : (settings.budgetUSD ?? configured)
         let spendLine =
             budget.map { "budget_usd: " + NSDecimalNumber(decimal: $0).stringValue } ?? "spend_policy: timeout_only"
         let title = proposedTitle ?? name.replacingOccurrences(of: "-", with: " ")
