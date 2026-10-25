@@ -81,10 +81,31 @@ public struct CodexProvider: AgentProvider {
         // which would let a turn change another checkout or push from a temporary one.
         args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
         args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        // Tools such as Vitest need a temporary directory, so the turn gets one of its own, outside both the checkout and
+        // `/tmp` and shared by the thread's turns: `TMPDIR` points at it and it is the only writable root besides the worktree.
+        let scratch = request.outputDirectory.appendingPathComponent("tmp", isDirectory: true)
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        args += ["-c", "sandbox_workspace_write.writable_roots=[\(Self.tomlString(scratch.path))]"]
         args += ["-s", "workspace-write", "-C", request.workingDirectory.path, "--", request.prompt]
+        var environment = Self.environment(from: request.environment)
+        environment["TMPDIR"] = scratch.path
         return AgentInvocation(
-            executable: executable, arguments: args, environment: Self.environment(from: request.environment),
+            executable: executable, arguments: args, environment: environment,
             displayArguments: Array(args[..<(args.firstIndex(of: "--") ?? args.count)]))
+    }
+
+    /// A TOML basic string: a path with a quote or backslash must reach Codex as the same path.
+    static func tomlString(_ text: String) -> String {
+        var out = "\""
+        for ch in text.unicodeScalars {
+            switch ch {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case _ where ch.value < 0x20 || ch.value == 0x7F: out += String(format: "\\u%04X", ch.value)
+            default: out.unicodeScalars.append(ch)
+            }
+        }
+        return out + "\""
     }
 
     public func makeDecoder(for request: AgentRequest) -> any AgentDecoder {
