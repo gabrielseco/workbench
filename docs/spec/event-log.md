@@ -66,14 +66,14 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 ## Transcript files
 
 What `claude` printed in a turn is not in `events.jsonl`: a log that holds every stream line is megabytes long, and
-every command that shows a thread replays it. A Claude turn writes `threads/<id>/transcript/turn-<n>.jsonl`
-instead, one line per stream line, in order:
+every command that shows a thread replays it. Every coding turn, whatever the provider, writes
+`threads/<id>/transcript/turn-<n>.jsonl` instead, one line per line the agent printed, in order:
 
 ```json
 {"ts":"2026-10-24T10:00:00.120Z","data":{ ...the line as claude wrote it... }}
 ```
 
-- `data` is what a `claude` event's `data` was: the line itself, `{"invalid_json": "<raw line>"}`, or the
+- `data` is the line as the agent wrote it (for Claude, what a `claude` event's `data` was): the line itself, `{"invalid_json": "<raw line>"}`, or the
   truncation marker for a line over the size limit. Nothing is dropped.
 - A line is appended whole; a last line without its newline (a runner that died mid-write) is not a line. Recovery
   cuts it off before writing the synthetic `turn.ended`, whose `transcript` counts the lines that are left.
@@ -85,9 +85,11 @@ instead, one line per stream line, in order:
   A transcript file that exists and cannot be read (a damaged `.gz`, one over the limit) is an error, not an empty
   transcript: `log --transcript` exits 1 naming the turn, `log` prints `transcript cannot be read: <why>` in its place and keeps
   the log's own `result` line, and `log --json` prints `{"kind":"transcript.unreadable","seq":null,"ts":null,...}` with the reason. `workbench log` and
-  `log --json` show a turn's lines just before its `turn.ended`, as `claude` events with `seq` null in JSON; the
-  turn's `result` line is shown once, from the file.
-- `status` reads the open turn's file for its progress (tool calls, denials, the newest line). A turn that is not
+  `log --json` show a Claude turn's lines just before its `turn.ended`, as `claude` events with `seq` null in JSON; the
+  turn's `result` line is shown once, from the file. A turn of another provider shows its `agent.activity` events
+  instead and its file only through `log --transcript` (a turn with no file prints `no transcript is stored for
+  turn <n>` on stderr and nothing on stdout).
+- `status` reads an open Claude turn's file for its progress (another provider's progress is its `agent.activity` events) (tool calls, denials, the newest line). A turn that is not
   open needs no file to be understood: its result is in the log.
 - A thread from before transcript files has its lines in the log and no file; both read the same way.
   `workbench compact (<id> | --all) [--dry-run]` moves such a thread's lines into the files (temporary: it goes with
@@ -104,7 +106,7 @@ instead, one line per stream line, in order:
 1. Every `turn.started` is followed by exactly one `turn.ended`, even on crash recovery (the runner writes a
    synthetic `turn.ended` with `result: "interrupted"` for orphans on startup).
 2. `seq` is strictly increasing with no gaps, so truncation is detectable.
-3. `claude` lines are stored verbatim, in the turn's transcript file, and the turn's `result` line also in the log. We never drop information we may want later; derived state is computed.
+3. The agent's lines are stored verbatim, in the turn's transcript file (every provider), and a Claude turn's `result` line also in the log. We never drop information we may want later; derived state is computed.
 4. The log is the only writer-owned state. Session id, status and cost are computed from it, not stored twice.
 5. Every `check.started` is followed by exactly one `check.ran`, on stop, timeout and crash recovery too (a
    synthetic `check.ran` with `result: "interrupted"` for a check its runner left open).

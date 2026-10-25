@@ -166,7 +166,12 @@ public struct ThreadLog: Sendable {
             loaded[turn] = found
             return found
         }
+        // A turn of another provider is read through its `agent.activity` events; its file is for `--transcript`.
+        let normalized = Set(
+            contents.events.filter { $0.kind == .turnStarted && ($0.data["provider"]?.stringValue ?? "claude") != "claude" }
+                .map(\.turn))
         func flush(_ turn: Int) {
+            guard !normalized.contains(turn) else { return }
             switch transcriptFile(turn) {
             case .missing:
                 return

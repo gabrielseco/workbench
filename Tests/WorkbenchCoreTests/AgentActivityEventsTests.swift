@@ -188,7 +188,7 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(old.progress.lastEvent == ignored.progress.lastEvent, "activity in a legacy turn is ignored whole")
     }
 
-    @Test func recorderChoosesOneShape() async throws {
+    @Test func everyProviderKeepsItsRawLinesAndOnlyOthersAlsoLogActivity() async throws {
         for provider in ["codex", "claude"] {
             let dir = try tempDir()
             let log = try EventLogWriter.open(at: dir.appendingPathComponent("events.jsonl"))
@@ -205,15 +205,15 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
             try await recorder.flush()
             let events = try EventLogReader.read(at: dir.appendingPathComponent("events.jsonl")).events.dropFirst()
             #expect(recorder.sawOutput)
+            // Whatever the provider, the lines are in the turn's transcript, verbatim and in order.
+            let lines = TranscriptFile.lines(
+                at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
+            let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
+            #expect(lines.map(\.data) == [["type": "system"], marker])
+            #expect(transcript.summary?.lines == 2)
             if provider == "claude" {
-                // The lines are in the turn's transcript, verbatim, in order; neither is the turn's result line, so
-                // the log holds none, and there is no normalized copy.
+                // Neither is the turn's result line, so the log holds none, and there is no normalized copy.
                 #expect(events.isEmpty)
-                let lines = TranscriptFile.lines(
-                    at: TranscriptFile.url(in: store.project.threadDirectory("t"), turn: 1), turn: 1)
-                let marker: JSONValue = ["truncated": true, "original_bytes": 9_000_000, "prefix": "abc"]
-                #expect(lines.map(\.data) == [["type": "system"], marker])
-                #expect(transcript.summary?.lines == 2)
             } else {
                 #expect(events.map(\.kind) == [.agentActivity, .agentActivity, .agentActivity])
                 #expect(events.map { $0.data["type"]?.stringValue } == ["text", "unknown", "diagnostic"])

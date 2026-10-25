@@ -27,7 +27,44 @@ private func mixedThread() async throws -> URL {
     return events
 }
 
+/// A Codex turn: its `agent.activity` events in the log, and the raw lines in the transcript file.
+private func codexThread() async throws -> (project: Project, id: String) {
+    let project = Project(root: Scratch.url("codex-turn"))
+    let id = "g-codex"
+    let log = try EventLogWriter.open(at: project.eventsURL(id))
+    try await log.append(.threadCreated)
+    try await log.append(.turnStarted, turn: 1, data: ["provider": "codex"])
+    try await log.append(.agentActivity, turn: 1, data: ["provider": "codex", "type": "tool", "name": "shell", "summary": "ls"])
+    let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
+    try writer.append(#"{"type":"item.started","item":{"type":"command_execution","command":"ls"}}"#)
+    writer.close()
+    return (project, id)
+}
+
 @Suite struct ThreadLogTranscriptTests {
+    @Test func aCodexTurnShowsItsActivityNotItsRawLinesAndKeepsThemForTranscript() async throws {
+        let (project, id) = try await codexThread()
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        await log.close()
+        let read = try ThreadLog.read(at: project.eventsURL(id))
+        let kinds = read.entries.map { entry -> String in
+            if case .event(let event) = entry { return event.kind.rawValue }
+            return "line"
+        }
+        #expect(kinds == ["thread.created", "turn.started", "agent.activity", "turn.ended"], "no raw line inline")
+        #expect(try read.transcript(turn: 1) == [#"{"type":"item.started","item":{"type":"command_execution","command":"ls"}}"#])
+    }
+
+    @Test func anOpenCodexTurnIsReadFromItsActivityNotItsFile() async throws {
+        let (project, id) = try await codexThread()
+        let store = ThreadStore(project: project)
+        let events = try EventLogReader.read(at: project.eventsURL(id)).events
+        let progress = store.state(from: events, id: id).progress
+        #expect(progress.toolCalls == 1)
+        #expect(progress.lastEvent == "tool_use shell ls", "the raw line did not replace what the activity said")
+    }
+
     @Test func aTurnsLinesComeJustBeforeItsEndAndItsResultLineIsNotShownTwice() async throws {
         let url = try await mixedThread()
         let entries = try ThreadLog.read(at: url).entries
