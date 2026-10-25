@@ -78,7 +78,8 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         let spare = fcntl(fd, F_DUPFD, 100)
         #expect(spare >= 100)
         defer { close(spare) }
-        let script = "read line; echo \"stdin:[$line]\"; echo to-stderr >&2; echo leaked >&\(spare) || echo cannot-write; ls /dev/fd"
+        let script =
+            "read line; echo \"stdin:[$line]\"; echo to-stderr >&2; echo leaked >&\(spare) || echo cannot-write; ls /dev/fd"
         let (pid, output) = try spawn(script, in: dir)
         let exited = await wait { waitpidNoHang(pid) }
         #expect(exited)
