@@ -52,9 +52,7 @@ final class ThreadPipeReader: PipeReader, @unchecked Sendable {
 
     private func run() {
         defer {
-            close(fd)
-            if wakeRead >= 0 { close(wakeRead) }
-            // Ending on its own: a later cancel() must find nothing to write to.
+            // Before anything is closed: a cancel() that gets the lock after this finds no wake pipe to write to.
             lock.withLock {
                 cancelled = true
                 if wakeWrite >= 0 {
@@ -62,6 +60,8 @@ final class ThreadPipeReader: PipeReader, @unchecked Sendable {
                     wakeWrite = -1
                 }
             }
+            close(fd)
+            if wakeRead >= 0 { close(wakeRead) }
         }
         while !isCancelled {
             var watched = [
