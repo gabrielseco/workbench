@@ -28,6 +28,16 @@ import Testing
         #expect(log.trimmingCharacters(in: .whitespacesAndNewlines) == "first")
     }
 
+    @Test func theTemplateIsBuiltOnceHoweverManyFixturesAskAtTheSameTime() async throws {
+        let git = try isolatedGit()
+        let asked = try await withThrowingTaskGroup(of: URL.self) { group in
+            for _ in 0..<8 { group.addTask { try await RunnerTemplate.repository(git: git) } }
+            return try await group.reduce(into: Set<URL>()) { $0.insert($1) }
+        }
+        #expect(asked.count == 1, "\(asked)")
+        #expect(try await RunnerTemplate.repository(git: git) == asked.first)
+    }
+
     @Test func aFixtureKeepsItsOwnConfig() async throws {
         let plain = try await RunnerFixture()
         let custom = try await RunnerFixture(extraConfig: "check_command = \"true\"")
