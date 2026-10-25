@@ -352,7 +352,8 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
         #expect(try p.fx.contents(p.id).isHealthy)
     }
 
-    @Test func aCheckoutThatCannotBeRemovedIsReportedNotHidden() async throws {
+    @Test(.enabled(if: getuid() != 0, "root ignores file modes, so nothing can be locked"))
+    func aCheckoutThatCannotBeRemovedIsReportedNotHidden() async throws {
         struct Locking: ReadOnlyAgent {
             func unavailable() -> String? { nil }
             func shownArguments(for request: ReadOnlyRequest) -> [String] { ["stub"] }
