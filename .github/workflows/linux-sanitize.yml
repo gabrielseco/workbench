@@ -1,0 +1,163 @@
+name: Linux sanitizers
+
+# Throwaway (P18): find the intermittent libdispatch segfault by running the suite under ASan and TSan, several at once.
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/linux-sanitize]
+
+concurrency:
+  group: linux-sanitize-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  asan-1:
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools and an ordinary user
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Test under address
+        run: |
+          set +e
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=0 swift test --sanitize=address 2>&1 | tee test.log
+          echo "swift test exit: ${PIPESTATUS[0]}"
+          grep -c "ERROR: AddressSanitizer\|WARNING: ThreadSanitizer\|Program crashed" test.log | sed 's/^/reports: /'
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-1-log
+          path: test.log
+  asan-2:
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools and an ordinary user
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Test under address
+        run: |
+          set +e
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=0 swift test --sanitize=address 2>&1 | tee test.log
+          echo "swift test exit: ${PIPESTATUS[0]}"
+          grep -c "ERROR: AddressSanitizer\|WARNING: ThreadSanitizer\|Program crashed" test.log | sed 's/^/reports: /'
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-2-log
+          path: test.log
+  asan-3:
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools and an ordinary user
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Test under address
+        run: |
+          set +e
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=0 swift test --sanitize=address 2>&1 | tee test.log
+          echo "swift test exit: ${PIPESTATUS[0]}"
+          grep -c "ERROR: AddressSanitizer\|WARNING: ThreadSanitizer\|Program crashed" test.log | sed 's/^/reports: /'
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-3-log
+          path: test.log
+  tsan-1:
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools and an ordinary user
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Test under thread
+        run: |
+          set +e
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 TSAN_OPTIONS=halt_on_error=0:second_deadlock_stack=1 swift test --sanitize=thread 2>&1 | tee test.log
+          echo "swift test exit: ${PIPESTATUS[0]}"
+          grep -c "ERROR: AddressSanitizer\|WARNING: ThreadSanitizer\|Program crashed" test.log | sed 's/^/reports: /'
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-1-log
+          path: test.log
+  tsan-2:
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools and an ordinary user
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Test under thread
+        run: |
+          set +e
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 TSAN_OPTIONS=halt_on_error=0:second_deadlock_stack=1 swift test --sanitize=thread 2>&1 | tee test.log
+          echo "swift test exit: ${PIPESTATUS[0]}"
+          grep -c "ERROR: AddressSanitizer\|WARNING: ThreadSanitizer\|Program crashed" test.log | sed 's/^/reports: /'
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-2-log
+          path: test.log
