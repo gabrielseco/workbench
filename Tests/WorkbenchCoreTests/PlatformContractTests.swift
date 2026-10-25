@@ -148,3 +148,19 @@ private func waitpidNoHang(_ pid: pid_t) -> Bool {
     var status: Int32 = 0
     return waitpid(pid, &status, WNOHANG) == pid
 }
+
+/// Both ways of watching a pipe run through the same checks: the platform's own, and the thread reader Linux uses (which has no
+/// OS-specific code, so macOS can hold it to the same behavior).
+enum WatchKind: CaseIterable, CustomTestStringConvertible, Sendable {
+    case platform
+    case thread
+
+    var testDescription: String { self == .platform ? "platform watch" : "thread reader" }
+
+    func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
+        switch self {
+        case .platform: WorkbenchCore.platform.watch(fd: fd, queue: queue, onReadable: onReadable)
+        case .thread: ThreadPipeReader(fd: fd, queue: queue, onReadable: onReadable)
+        }
+    }
+}
