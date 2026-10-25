@@ -203,7 +203,12 @@ public enum Judge {
 
     /// A JSON `true` or `false`, and not the number 1 or 0 that Foundation would also bridge to a Bool.
     static func jsonBool(_ value: Any?) -> Bool? {
-        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        guard let number = value as? NSNumber else { return nil }
+        #if canImport(Darwin)
+        guard CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        #else
+        guard String(cString: number.objCType) == "c" else { return nil }  // corelibs: only a Bool reports "c"
+        #endif
         return number.boolValue
     }
 

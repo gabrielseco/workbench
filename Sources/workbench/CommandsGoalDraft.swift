@@ -72,7 +72,7 @@ extension Commands {
 
     /// The rough request from a file: a regular file of at most `GoalDraft.requestLimit` bytes.
     private static func readRequestFile(_ path: String) throws -> String {
-        let fd = Darwin.open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+        let fd = sysOpen(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw CLIError.usage("no request file at \(path)") }
         defer { close(fd) }
         var info = stat()

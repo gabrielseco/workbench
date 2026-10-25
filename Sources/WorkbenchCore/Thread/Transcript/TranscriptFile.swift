@@ -197,7 +197,7 @@ public final class TranscriptWriter: @unchecked Sendable {
                 try FileManager.default.createDirectory(
                     at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 // A line is appended, never rewritten; a file left by an earlier run of this turn is kept whole.
-                let fd = Darwin.open(url.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+                let fd = sysOpen(url.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
                 guard fd >= 0 else { throw EventLogError.io("cannot open \(url.path): \(String(cString: strerror(errno)))") }
                 handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             }

@@ -255,7 +255,7 @@ public struct TranscriptCompactor: Sendable {
                 try fileManager.moveItem(
                     at: staging.appendingPathComponent(file.name), to: destination.appendingPathComponent(file.name))
             }
-            guard Darwin.rename(staged.path, url.path) == 0 else {
+            guard sysRename(staged.path, url.path) == 0 else {
                 throw Failure.io("cannot replace \(url.lastPathComponent): \(String(cString: strerror(errno)))")
             }
             try? fileManager.removeItem(at: staging)

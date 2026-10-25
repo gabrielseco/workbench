@@ -166,7 +166,7 @@ final class ChildExitWatcher: @unchecked Sendable {
         guard !notified, !reaped else { return }
         var info = siginfo_t()
         let rc = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT)
-        if rc == 0, info.si_pid == pid {
+        if rc == 0, info.childPID == pid {
             fire(gone: false)
         } else if rc == -1, errno == ECHILD {
             fire(gone: true)
@@ -227,63 +227,19 @@ enum ProcessTree {
         var queue: [pid_t] = [root]
         var seen: Set<pid_t> = [root]
         while let parent = queue.popLast() {
-            for child in children(of: parent) where seen.insert(child).inserted {
-                if let member = member(for: child) { found.append(member) }
+            for child in ProcessTable.children(of: parent) where seen.insert(child).inserted {
+                if let member = ProcessTable.member(for: child) { found.append(member) }
                 queue.append(child)
             }
         }
         return found
     }
 
-    #if canImport(Darwin)
-    static func member(for pid: pid_t) -> ProcessMember? {
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
-        return ProcessMember(
-            pid: pid, startSeconds: info.pbi_start_tvsec, startMicros: info.pbi_start_tvusec)
-    }
-
-    #else
-    /// `/proc/<pid>/stat` fields after the command name (which may hold spaces and parentheses): state, ppid, ...
-    private static func statFields(_ pid: pid_t) -> [Substring]? {
-        guard let text = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
-            let close = text.lastIndex(of: ")")
-        else { return nil }
-        return text[text.index(after: close)...].split(separator: " ")
-    }
-
-    static func member(for pid: pid_t) -> ProcessMember? {
-        // Field 22 (start time in clock ticks since boot) is index 19 after the command name.
-        guard let fields = statFields(pid), fields.count > 19, let start = UInt64(fields[19]) else { return nil }
-        return ProcessMember(pid: pid, startSeconds: start, startMicros: 0)
-    }
-    #endif
+    static func member(for pid: pid_t) -> ProcessMember? { ProcessTable.member(for: pid) }
 
     /// True while that exact process (same pid, same start time) is still around.
     static func isAlive(_ member: ProcessMember) -> Bool {
         guard let current = Self.member(for: member.pid) else { return false }
         return current == member
     }
-
-    #if canImport(Darwin)
-    private static func children(of parent: pid_t) -> [pid_t] {
-        let bytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parent), nil, 0)
-        guard bytes > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(bytes) / MemoryLayout<pid_t>.size + 8)
-        let written = proc_listpids(
-            UInt32(PROC_PPID_ONLY), UInt32(parent), &pids, Int32(pids.count * MemoryLayout<pid_t>.size))
-        guard written > 0 else { return [] }
-        return pids.prefix(Int(written) / MemoryLayout<pid_t>.size).filter { $0 > 0 }
-    }
-    #else
-    private static func children(of parent: pid_t) -> [pid_t] {
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc") else { return [] }
-        return entries.compactMap { name in
-            guard let pid = pid_t(name), let fields = statFields(pid), fields.count > 1, pid_t(fields[1]) == parent
-            else { return nil }
-            return pid
-        }
-    }
-    #endif
 }
