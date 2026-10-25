@@ -40,7 +40,7 @@ serial), so per-test tuning is largely spent and sharding is the lever that scal
 
 | Area | macOS only | Linux replacement |
 |---|---|---|
-| Hashing | `CryptoKit` (6 files) | `swift-crypto`: same API, wraps CryptoKit on Apple platforms |
+| Hashing | `CryptoKit` (6 files) | first `swift-crypto` (task 1), then our own plain-Swift SHA-256 (task 1b), the only hash used |
 | gzip | `Compression` | system zlib through a `CZlib` system-library target |
 | Process facts | `libproc` (`proc_pidinfo`, `proc_listpids`, cwd) | `/proc/<pid>/stat`, `/proc/<pid>/cwd`, `/proc` listing |
 | Spawn | `POSIX_SPAWN_CLOEXEC_DEFAULT` | `posix_spawn_file_actions_addclosefrom_np(3)` |
@@ -114,7 +114,7 @@ them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects
 | # | PR | Notes |
 |---|---|---|
 | 0 | **Measure the probe**: per-suite and per-test Linux time against macOS from `scripts/ci-report.sh 221`, cores on both, and the poll interval's share | No code. Output is a table in this file and a target: the Linux PR gate finishes no later than the macOS job did. |
-| 1 | **Portable libraries**: `swift-crypto` for the six `CryptoKit` imports, system zlib for `Gzip` (`CZlib`), `Package.resolved` committed | Behaviour identical on macOS; the existing hash and gzip tests are the proof. `zcat` and `gzip -t` must still read what is written. |
+| 1 | **Portable libraries**: `swift-crypto` for the six `CryptoKit` imports (replaced in task 1b by our own `SHA256`, see below), system zlib for `Gzip` (`CZlib`) | Behaviour identical on macOS; the existing hash and gzip tests are the proof. `zcat` and `gzip -t` must still read what is written. |
 | 2 | **Platform contract, macOS only**: the four protocols, `Platform+Darwin.swift` (today's libproc code moved, not changed), `ProcessMember` with an opaque start token, `Spawner`, `ProcessTree` and `OrphanSweeper` call through it | Refactor, no behaviour change. Adds the contract tests (below), run on the current platform. |
 | 3 | **Linux implementation**: `Platform+Linux.swift`, `CShim`, the `stat`/`siginfo_t` accessors, `Glibc` imports, fake-claude and test fixes, a Linux build job | Builds and passes the whole suite in a `swift:6.2` container with `--init`. |
 | 4 | **Orphan ownership**: the cwd-and-not-a-descendant rule replaces `ppid == 1`; `becomeSubreaper()` called at startup | Test under a subreaper (a parent that sets `PR_SET_CHILD_SUBREAPER` and runs the CLI) and under PID 1. |
@@ -151,8 +151,11 @@ Task 3 (the Linux platform, this branch), same runner, two parallel jobs (tests,
 - A whole run is about 6 to 6.5 minutes (the two jobs overlap), against 8m41s for macOS.
 - The build is the slow part on Linux: about 35 s for the dependencies (BoringSSL) and about 115 s for our own Swift,
   and it varies by runner. A `.build` cache restored in 5 s did not shorten it measurably, because a fresh checkout
-  gives every source file a new timestamp. Left for task 6: restore file timestamps, and/or drop `swift-crypto` for
-  a small SHA-256 of our own (only SHA-256 is used).
+  gives every source file a new timestamp. Done in task 1b: `swift-crypto` is gone (only SHA-256 was used, and it
+  compiled BoringSSL, about 35 s on the critical path of a cold build) for a plain-Swift `SHA256` held to the FIPS
+  vectors and, on macOS, to CryptoKit. Left for task 6: whether restoring file timestamps lets SwiftPM rebuild only
+  what changed (a throwaway workflow measures it; the cache alone saved about 30 to 55 s on average, mostly the
+  dependency that task 1b removed).
 - Open: an intermittent segfault inside libdispatch's event loop on Linux (the same signature as the 64-permit crash),
   seen in 1 of 5 full runs at 16 permits. It has to be understood before Linux is the gate.
 
