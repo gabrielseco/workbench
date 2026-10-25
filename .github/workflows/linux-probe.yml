@@ -10,7 +10,10 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    container: swift:6.2
+    container: swift:6.2.1
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
