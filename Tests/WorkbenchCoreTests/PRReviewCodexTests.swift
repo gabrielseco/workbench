@@ -47,11 +47,12 @@ import Testing
         // runner. The test ends the hang as the timeout would (`expire()`) once the pid is there; the timer itself
         // is covered by the process runner's own tests.
         let running = RunningAgent()
-        async let ended = r.round(timeout: 8, attach: { running.set($0) })
+        // A timeout far past the test, so only `expire()` can end it here; a no-op `expire()` would hang, not pass.
+        async let ended = r.round(timeout: 600, attach: { running.set($0) })
         #expect(await pollUntil { running.agent != nil && r.codex.read("pid") != nil })
         running.agent?.expire()
         let result = try await ended
-        #expect(result.verdict == nil && result.failure?.contains("did not finish within 8s") == true)
+        #expect(result.verdict == nil && result.failure?.contains("did not finish within 600s") == true)
         let pid = try #require(Int32(r.codex.read("pid")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
         #expect(await pollUntil { kill(pid, 0) != 0 }, "codex is gone")
         try await r.expectNoLeftovers()
