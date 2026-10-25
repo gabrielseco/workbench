@@ -35,7 +35,9 @@ jobs:
         # 16 permits: on a 4-core Linux runner the default (one per core) left the CPU 91% idle (docs/plan/P18-linux.md).
         run: |
           set -o pipefail
-          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 swift test --skip-build 2>&1 | tee test.log
+          # A filter in .github/linux-test-filter (only while debugging a branch) narrows the run.
+          filter=$(cat .github/linux-test-filter 2>/dev/null || true)
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 swift test --skip-build ${filter:+--filter "$filter"} 2>&1 | tee test.log
       - name: Upload logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
