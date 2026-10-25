@@ -29,6 +29,10 @@ jobs:
           swift --version
           nproc
           git --version
+      - name: Git identity (the tests commit)
+        run: |
+          git config --global user.name "Workbench CI"
+          git config --global user.email "ci@example.invalid"
       - name: Build
         run: |
           set -o pipefail
