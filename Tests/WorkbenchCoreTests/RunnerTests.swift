@@ -15,6 +15,33 @@ func isolatedGit(sourceLocation: SourceLocation = #_sourceLocation) throws -> Gi
         ])
 }
 
+/// The repository every `RunnerFixture` starts from: `main` with one commit holding `a.txt`. Built once per test
+/// process and copied, since init, add and commit are three git processes a fixture would otherwise run itself.
+/// A plain repository holds no absolute path, so a copy is as good as a fresh one.
+enum RunnerTemplate {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var building: Task<URL, Error>?
+
+    static func repository(git: GitRunner) async throws -> URL {
+        let task = lock.withLock {
+            if let building { return building }
+            let task = Task { () -> URL in
+                let dir = Scratch.url("template").appendingPathComponent("repo")
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let root = dir.resolvingSymlinksInPath()
+                _ = try await git.run(["init", "-q", "-b", "main"], in: root)
+                try "one\n".write(to: root.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                _ = try await git.run(["add", "-A"], in: root)
+                _ = try await git.run(["commit", "-q", "-m", "first"], in: root)
+                return dir
+            }
+            building = task
+            return task
+        }
+        return try await task.value
+    }
+}
+
 /// A scratch repository with a `.workbench/config.toml` that points at the fake claude.
 ///
 /// Built and used under `@Suite(.processGate)`, so the test's waits start when its processes can run.
@@ -28,16 +55,12 @@ struct RunnerFixture {
         expectProcessGate("RunnerFixture", sourceLocation: sourceLocation)
         // The repo sits in a directory of its own: the fakes tests put beside it (`gh-*`, `codex-*`, `origin-*`)
         // go there too and are removed with the run, instead of piling up in the temporary directory.
-        let base = Scratch.url("run").appendingPathComponent("repo")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        repo = base.resolvingSymlinksInPath()
+        let run = Scratch.url("run")
+        try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true)
+        let base = run.appendingPathComponent("repo")
         git = try isolatedGit()
-        for args in [["init", "-q", "-b", "main"], ["add", "-A"]] where args[0] == "init" {
-            _ = try await git.run(args, in: repo)
-        }
-        try "one\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try await git.run(["add", "-A"], in: repo)
-        _ = try await git.run(["commit", "-q", "-m", "first"], in: repo)
+        try FileManager.default.copyItem(at: try await RunnerTemplate.repository(git: git), to: base)
+        repo = base.resolvingSymlinksInPath()
 
         project = Project(root: repo)
         try FileManager.default.createDirectory(at: project.workbenchDirectory, withIntermediateDirectories: true)
