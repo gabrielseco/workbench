@@ -95,6 +95,15 @@ extension ThreadService {
         return (host == "github.com" ? "" : host + "/") + parts.joined(separator: "/")
     }
 
+    private static func describe(_ error: Error) -> String {
+        switch error as? GitError {
+        case .timedOut(_, let seconds): "it did not finish in \(Int(seconds))s"
+        case .launchFailed(let reason): "it could not be started (\(reason))"
+        case .toolNotFound(let name): "\(name) was not found"
+        default: "\(error)"
+        }
+    }
+
     /// The pull request's branch, base and text, refused unless it is open and its branch is on origin.
     func pullRequestInfo(_ number: Int, gh: GitRunner, originURL: String? = nil) async throws -> PullRequestInfo {
         let fields = "headRefName,baseRefName,title,body,state,isCrossRepository"
@@ -105,13 +114,25 @@ extension ThreadService {
         }
         let repo = url.flatMap { Self.repositoryName(ofOrigin: $0) }
         let repoArgs = repo.map { ["--repo", $0] } ?? []
-        let result = try? await gh.run(["pr", "view", String(number), "--json", fields] + repoArgs, in: project.root)
+        // The error is kept: "no answer" for a launch failure or a timeout hid which of them it was.
+        var runError: Error?
+        let result: GitResult?
+        do {
+            result = try await gh.run(["pr", "view", String(number), "--json", fields] + repoArgs, in: project.root)
+        } catch {
+            runError = error
+            result = nil
+        }
         guard let result, result.succeeded,
             let object = (try? JSONSerialization.jsonObject(with: Data(result.stdout.utf8))) as? [String: Any],
             let branch = object["headRefName"] as? String, let base = object["baseRefName"] as? String
         else {
-            let why = result.map { Self.withoutCredentials($0.stderr).trimmingCharacters(in: .whitespacesAndNewlines) }
-            throw PRReviewRefusal.pullRequestUnreadable(number, why.flatMap { $0.isEmpty ? nil : $0 } ?? "no answer")
+            let stderr = result.map { Self.withoutCredentials($0.stderr).trimmingCharacters(in: .whitespacesAndNewlines) }
+            let why = stderr.flatMap { $0.isEmpty ? nil : $0 }
+                ?? runError.map { Self.describe($0) }
+                ?? result.map { $0.succeeded ? "its answer was not the expected JSON" : "it exited \($0.status) with no message" }
+                ?? "no answer"
+            throw PRReviewRefusal.pullRequestUnreadable(number, why)
         }
         guard object["state"] as? String == "OPEN" else {
             throw PRReviewRefusal.notReviewable(number, "it is not open")
