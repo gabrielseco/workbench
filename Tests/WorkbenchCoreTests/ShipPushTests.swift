@@ -216,9 +216,18 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
         let pidFile = bare.appendingPathExtension("pid")
         try hook("pre-receive", "echo $$ > '\(pidFile.path)'\nexec sleep 600", in: bare)
 
-        let started = Date()
+        // The push timeout starts at the spawn, before the hook has written its pid, so a short one flakes on a loaded
+        // runner. The test ends the push as the timeout would (`CommandExpiry`) once the hook is running.
+        let expiry = CommandExpiry()
+        let service = ThreadService(
+            project: fx.project,
+            git: GitRunner(
+                executable: fx.git.executable, environment: fx.git.environment, timeout: fx.git.timeout, expiry: expiry))
+        let push = Task { try await service.shipPush(id: id, gh: gh, timeout: 600) }
+        #expect(await pollUntil { FileManager.default.fileExists(atPath: pidFile.path) }, "the hook ran")
+        expiry.expire()
         do {
-            _ = try await fx.service.shipPush(id: id, gh: gh, timeout: 8)
+            _ = try await push.value
             Issue.record("expected a timeout")
         } catch let error as ShipError {
             guard case .gitFailed(let why) = error else {
@@ -227,7 +236,6 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             }
             #expect(why.contains("did not finish"), "\(why)")
         }
-        #expect(Date().timeIntervalSince(started) < Patience.limit)
         let written = (try? String(contentsOf: pidFile, encoding: .utf8)) ?? ""
         let pid = Int32(written.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(pid != nil, "the hook ran")

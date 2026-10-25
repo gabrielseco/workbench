@@ -58,6 +58,24 @@ struct TestRepo {
         #expect(!result.succeeded)
     }
 
+    @Test func expiringARunningCommandEndsItAsItsTimeoutWouldWithoutWaitingForTheTimer() async throws {
+        let expiry = CommandExpiry()
+        expiry.expire()  // nothing is running: harmless
+        let sleep = GitRunner(
+            executable: URL(fileURLWithPath: "/bin/sleep"), environment: [:], timeout: 600, expiry: expiry)
+        let running = Task { try await sleep.run(["300"], in: URL(fileURLWithPath: "/tmp")) }
+        // `sleep` has no signal to say it started; expiring repeatedly until it ends reaches it whenever it is up.
+        let ended = Task {
+            while !Task.isCancelled {
+                expiry.expire()
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+        defer { ended.cancel() }
+        // The timer was set for 600 s: ending with the timeout's error, inside the test's patience, is `expire()`.
+        await #expect(throws: GitError.timedOut(arguments: ["300"], seconds: 600)) { _ = try await running.value }
+    }
+
     @Test func timeoutKillsAndThrows() async throws {
         let sleep = GitRunner(
             executable: URL(fileURLWithPath: "/bin/sleep"), environment: [:], timeout: 0.3)

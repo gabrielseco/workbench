@@ -10,6 +10,38 @@ public struct GitResult: Sendable, Equatable {
     public var succeeded: Bool { status == 0 }
 }
 
+/// For tests: ends the command a runner is running as its timeout would (SIGTERM, then SIGKILL, the same
+/// `GitError.timedOut`), now. A test that must see a hung command ended waits for the command to say it started,
+/// then calls `expire()`, instead of a timer sized to outlast a loaded runner. Nothing here changes a timeout value.
+public final class CommandExpiry: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running: [UUID: @Sendable () -> Void] = [:]
+
+    public init() {}
+
+    /// Ends every command currently running through a runner that carries this. Idempotent.
+    public func expire() {
+        lock.lock()
+        let ending = Array(running.values)
+        lock.unlock()
+        for end in ending { end() }
+    }
+
+    fileprivate func register(_ end: @escaping @Sendable () -> Void) -> UUID {
+        let id = UUID()
+        lock.lock()
+        running[id] = end
+        lock.unlock()
+        return id
+    }
+
+    fileprivate func unregister(_ id: UUID) {
+        lock.lock()
+        running[id] = nil
+        lock.unlock()
+    }
+}
+
 public enum GitError: Error, Equatable, Sendable {
     case gitNotFound
     case toolNotFound(String)
@@ -33,11 +65,16 @@ public struct GitRunner: Sendable {
     public let executable: URL
     public let environment: [String: String]
     public let timeout: TimeInterval
+    /// Test seam, nil outside tests: see `CommandExpiry`. A copy of the runner with another timeout keeps it.
+    public let expiry: CommandExpiry?
 
-    public init(executable: URL, environment: [String: String], timeout: TimeInterval = 60) {
+    public init(
+        executable: URL, environment: [String: String], timeout: TimeInterval = 60, expiry: CommandExpiry? = nil
+    ) {
         self.executable = executable
         self.environment = environment
         self.timeout = timeout
+        self.expiry = expiry
     }
 
     /// Finds `git` (or another short command such as `gh`) on PATH and builds a minimal, prompt-free
@@ -102,7 +139,7 @@ public struct GitRunner: Sendable {
         close(outFD)
         close(errFD)
 
-        let outcome = await ShortCommand(pid: pid, timeout: timeout).wait()
+        let outcome = await ShortCommand(pid: pid, timeout: timeout, expiry: expiry).wait()
         if outcome.timedOut { throw GitError.timedOut(arguments: arguments, seconds: timeout) }
 
         let status: Int32
@@ -143,10 +180,13 @@ private final class ShortCommand: @unchecked Sendable {
     private var timeoutTimer: DispatchSourceTimer?
     private var killTimer: DispatchSourceTimer?
     private var timedOut = false
+    private let expiry: CommandExpiry?
+    private var expiryID: UUID?
 
-    init(pid: pid_t, timeout: TimeInterval) {
+    init(pid: pid_t, timeout: TimeInterval, expiry: CommandExpiry? = nil) {
         self.pid = pid
         self.timeout = timeout
+        self.expiry = expiry
     }
 
     func wait() async -> Outcome {
@@ -154,20 +194,26 @@ private final class ShortCommand: @unchecked Sendable {
             queue.async { [self] in
                 self.continuation = continuation
                 watcher = ChildExitWatcher(pid: pid, queue: queue) { [self] in exited() }
-                timeoutTimer = timer(after: timeout) { [self] in
-                    timedOut = true
-                    killpg(pid, SIGTERM)
-                    kill(pid, SIGTERM)
-                    killTimer = timer(after: 2) { [self] in
-                        killpg(pid, SIGKILL)
-                        kill(pid, SIGKILL)
-                    }
-                }
+                timeoutTimer = timer(after: timeout) { [self] in timeOut() }
+                expiryID = expiry?.register { [self] in self.queue.async { self.timeOut() } }
             }
         }
     }
 
+    /// What the timeout does; a test's `CommandExpiry` runs it early.
+    private func timeOut() {
+        guard !timedOut, continuation != nil else { return }
+        timedOut = true
+        killpg(pid, SIGTERM)
+        kill(pid, SIGTERM)
+        killTimer = timer(after: 2) { [self] in
+            killpg(pid, SIGKILL)
+            kill(pid, SIGKILL)
+        }
+    }
+
     private func exited() {
+        if let expiryID { expiry?.unregister(expiryID) }
         timeoutTimer?.cancel(); timeoutTimer = nil
         killTimer?.cancel(); killTimer = nil
         // Still a zombie, so the group id is ours: take anything the command left behind with it.
