@@ -121,12 +121,13 @@ private final class Server: @unchecked Sendable {
     }
 
     @Test func anIPv6LiteralIsReadWithItsBracketsOrWithout() async throws {
-        let server = try #require(
-            Server(ipv6: true) { client in
-                Server.hear(client)
-                Server.say("HTTP/1.0 200 OK\r\n\r\n", to: client)
-            }, "this machine has no IPv6 loopback")
-        #expect(await LoopbackProbe.answers(url("[::1]", server.port)))
+        // A machine without an IPv6 loopback cannot listen on it; the address parsing below still runs.
+        if let server = Server(ipv6: true, handler: { client in
+            Server.hear(client)
+            Server.say("HTTP/1.0 200 OK\r\n\r\n", to: client)
+        }) {
+            #expect(await LoopbackProbe.answers(url("[::1]", server.port)))
+        }
         #expect(LoopbackProbe.addresses(for: "[::1]", port: 1).count == 1)
         #expect(LoopbackProbe.addresses(for: "::1", port: 1).count == 1)
         #expect(LoopbackProbe.addresses(for: "localhost", port: 1).count == 2, "localhost is both families")
