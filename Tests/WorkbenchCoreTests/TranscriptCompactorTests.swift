@@ -67,12 +67,18 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         }
         #expect(report.turns == [1, 2] && report.lines == 406 && report.applied)
 
-        // The log: healthy, seq from 1 without gaps, only the result lines left of the claude events.
+        // The log: healthy, seq from 1 without gaps, no `claude` event left, the old log kept beside it.
         let after = try read(project, id)
         #expect(after.isHealthy && after.events.map(\.seq) == Array(1...after.events.count))
-        #expect(after.events.filter { $0.kind == .claude }.count == 2)
-        #expect(after.events.filter { $0.kind == .claude }.allSatisfy { $0.data["type"] == "result" })
+        #expect(after.events.filter { $0.kind == .claude }.isEmpty)
         #expect(try Data(contentsOf: url).count < sizeBefore / 5, "the weight is gone")
+        #expect(try Data(contentsOf: url.appendingPathExtension("before-migrate")).count == sizeBefore)
+        // Turn 1's stream stands for one record that counts what the decoder found in it: a tool call and a line it did not know.
+        let dropped = try #require(after.events.first { $0.kind == .agentActivity && $0.turn == 1 })
+        #expect(dropped.data["type"] == "dropped" && dropped.data["reason"] == "migrated" && dropped.data["count"] == 2)
+        #expect(dropped.data["tool_calls"] == 1 && dropped.data["denied"] == 0)
+        let progress = ThreadState.derive(from: after.events, id: id).progress
+        #expect(progress.toolCallsKnown, "the counts are known, not a floor")
         // The thread is the same thread.
         let stateAfter = ThreadState.derive(from: after.events, id: id)
         #expect(stateAfter.decision == "accepted" && stateAfter.totalCostUSD == stateBefore.totalCostUSD)
@@ -84,6 +90,8 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         let file = TranscriptFile.url(in: project.threadDirectory(id), turn: 1)
         #expect(!FileManager.default.fileExists(atPath: file.path) && FileManager.default.fileExists(atPath: file.path + ".gz"))
         #expect(turn1.data["transcript"] == TranscriptFile.summary(at: file)?.json, "turn.ended counts what the file holds")
+        // The refused calls moved from the result line to the turn's end record.
+        #expect(turn1.data["denials"] == .array([["tool": "Bash", "input": "chmod +x a.sh"]]))
     }
 
     @Test func theNumbersThatNameASeqFollowTheRenumbering() async throws {
@@ -92,17 +100,42 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         _ = try await TranscriptCompactor(project: project).compact(id: id)
         let events = try read(project, id).events
 
-        // The grant still names the denial: the event it points at is now the result line of turn 1.
+        // The grant still names the denial: the event it points at is now the end record of turn 1, which holds the calls.
         let grant = try #require(events.first { $0.kind == .grantAdded })
         let denial = try #require(grant.data["denial_seq"]?.intValue)
         let target = events[denial - 1]
-        #expect(target.kind == .claude && target.turn == 1 && target.data["type"] == "result")
+        #expect(target.kind == .turnEnded && target.turn == 1)
         #expect(GrantCandidates.derive(events: events).first?.seqs == [denial])
 
         // An attempt's id is still `a<seq of its start>` on both lines.
         let started = try #require(events.first { $0.kind == .agentAttemptStarted })
         let ended = try #require(events.first { $0.kind == .agentAttemptEnded })
         #expect(started.data["attempt"] == .string("a\(started.seq)") && ended.data["attempt"] == started.data["attempt"])
+    }
+
+    @Test func aRefusedCallInTheStreamIsCountedInTheMigratedRecord() async throws {
+        let project = Project(root: Scratch.url("refused"))
+        let id = "g-refused"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1)
+        try await log.appendClaudeLine(
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","#
+                + #""input":{"command":"git push"}}]}}"#, turn: 1)
+        try await log.appendClaudeLine(
+            #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"#
+                + #""content":"Permission for this tool use was denied."}]}}"#, turn: 1)
+        try await log.appendClaudeLine(#"{"type":"result","subtype":"success","permission_denials":[]}"#, turn: 1)
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.reviewDecision, data: ["decision": "accepted"])
+        await log.close()
+
+        _ = try await TranscriptCompactor(project: project).compact(id: id)
+        let events = try read(project, id).events
+        let record = try #require(events.first { $0.kind == .agentActivity })
+        #expect(record.data["tool_calls"] == 1 && record.data["denied"] == 1 && record.data["count"] == 2)
+        let progress = ThreadState.derive(from: events, id: id).progress
+        #expect(progress.toolCalls == 1 && progress.deniedCalls == 1 && progress.deniedCallsKnown)
     }
 
     @Test func aSecondRunFindsNothingAndLeavesTheBytesAlone() async throws {
@@ -191,7 +224,7 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
             return
         }
         let finished = try read(project, id)
-        #expect(finished.isHealthy && finished.events.filter { $0.kind == .claude }.count == 2)
+        #expect(finished.isHealthy && finished.events.filter { $0.kind == .claude }.isEmpty)
         #expect(try ThreadLog.read(at: url).transcript() == expected)
         #expect(try Data(contentsOf: url) == Data(contentsOf: control.eventsURL(id)), "the log an uninterrupted run leaves")
     }
@@ -211,7 +244,7 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         #expect(TranscriptFile.lines(at: file, turn: 1).count == 1, "the file that was there is still there")
     }
 
-    @Test func aTurnAlreadyInTheNewShapeIsLeftAlone() async throws {
+    @Test func aTurnWithItsFileAlreadyKeepsItAndOnlyLosesItsResultEvent() async throws {
         let project = Project(root: Scratch.url("mixed"))
         let id = "g-mixed"
         let log = try EventLogWriter.open(at: project.eventsURL(id))
@@ -220,7 +253,7 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         try await log.appendClaudeLine(#"{"type":"system","subtype":"init"}"#, turn: 1)
         try await log.appendClaudeLine(#"{"type":"result","permission_denials":[]}"#, turn: 1)
         try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
-        // Turn 2 as a new Workbench writes it: its lines in a file, the log holds the result line.
+        // Turn 2 as the transcript-file runner wrote it: its lines in a file, the log holds the result line.
         try await log.append(.turnStarted, turn: 2)
         let file = TranscriptFile.url(in: project.threadDirectory(id), turn: 2)
         let writer = TranscriptWriter(url: file)
@@ -236,13 +269,13 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         let packed = try Data(contentsOf: TranscriptFile.compressedURL(file))
 
         guard case .compacted(let report) = try await TranscriptCompactor(project: project).compact(id: id) else {
-            Issue.record("turn 1 should have been moved")
+            Issue.record("the thread should have been migrated")
             return
         }
-        #expect(report.turns == [1], "turn 2 is already compact")
+        #expect(report.turns == [1, 2])
         #expect(try Data(contentsOf: TranscriptFile.compressedURL(file)) == packed, "its file was not touched")
         let after = try read(project, id)
-        #expect(after.isHealthy && after.events.filter { $0.kind == .claude }.count == 2)
+        #expect(after.isHealthy && after.events.filter { $0.kind == .claude }.isEmpty)
         let kept = try #require(after.events.last { $0.kind == .turnEnded && $0.turn == 2 })
         #expect(kept.data["transcript"] == summary.json)
     }

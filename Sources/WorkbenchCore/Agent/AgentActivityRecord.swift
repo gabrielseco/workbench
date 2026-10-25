@@ -60,9 +60,11 @@ public enum AgentActivityRecord {
 
     /// The `dropped` record for the activity past `maxPerTurn`. It still counts the tool calls and refusals among the
     /// items it stands for, so a long turn's totals stay known.
-    public static func droppedData(count: Int, provider: String, toolCalls: Int = 0, denied: Int = 0) -> JSONValue {
+    public static func droppedData(
+        count: Int, provider: String, toolCalls: Int = 0, denied: Int = 0, reason: String = "cap"
+    ) -> JSONValue {
         .object([
-            "provider": .string(provider), "type": "dropped", "count": .int(count), "reason": "cap",
+            "provider": .string(provider), "type": "dropped", "count": .int(count), "reason": .string(reason),
             "tool_calls": .int(toolCalls), "denied": .int(denied),
         ])
     }
