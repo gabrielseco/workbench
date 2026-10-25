@@ -1,5 +1,7 @@
 import Foundation
 
+@testable import WorkbenchCore
+
 #if canImport(CryptoKit)
 import CryptoKit
 #endif
