@@ -29,7 +29,7 @@ enum Spawner {
             throw SpawnError.notExecutable(executable)
         }
 
-        var actions: posix_spawn_file_actions_t?
+        var actions = emptySpawnFileActions
         guard posix_spawn_file_actions_init(&actions) == 0 else {
             throw SpawnError.launchFailed("posix_spawn_file_actions_init")
         }
@@ -46,9 +46,10 @@ enum Spawner {
         if rc == 0 { rc = posix_spawn_file_actions_adddup2(&actions, stdout, 1) }
         if rc == 0 { rc = posix_spawn_file_actions_adddup2(&actions, stderr, 2) }
         if rc == 0 { rc = posix_spawn_file_actions_addchdir_np(&actions, workingDirectory) }
+        if rc == 0 { rc = platform.addDescriptorHygiene(to: &actions) }
         guard rc == 0 else { throw SpawnError.launchFailed("file actions: \(String(cString: strerror(rc)))") }
 
-        var flags = Int32(POSIX_SPAWN_CLOEXEC_DEFAULT) | Int32(POSIX_SPAWN_SETSIGDEF) | Int32(POSIX_SPAWN_SETSIGMASK)
+        var flags = platform.descriptorFlags | Int32(POSIX_SPAWN_SETSIGDEF) | Int32(POSIX_SPAWN_SETSIGMASK)
         if ownProcessGroup { flags |= Int32(POSIX_SPAWN_SETPGROUP) }
         var defaults = sigset_t()
         sigfillset(&defaults)
@@ -106,7 +107,7 @@ final class ChildExitWatcher: @unchecked Sendable {
 
     private let pid: pid_t
     private let queue: DispatchQueue
-    private var source: DispatchSourceProcess?
+    private var exitWatch: ExitWatch?
     private var pollTimer: DispatchSourceTimer?
     private var onExit: (@Sendable () -> Void)?
     private var notified = false
@@ -119,15 +120,12 @@ final class ChildExitWatcher: @unchecked Sendable {
         self.queue = queue
         self.onExit = onExit
 
-        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
-        source.setEventHandler { [weak self] in
+        exitWatch = platform.watchExit(of: pid, queue: queue) { [weak self] in
             guard let self else { return }
             // The child is exiting. It may not be waitable for a moment, so look again soon.
             schedulePoll(every: Self.afterEventInterval)
             check()
         }
-        self.source = source
-        source.resume()
         schedulePoll(every: Self.idleInterval)
         // The child may already have exited before the source existed.
         queue.async { [weak self] in self?.check() }
@@ -169,8 +167,8 @@ final class ChildExitWatcher: @unchecked Sendable {
     func reap() -> Termination {
         guard !reaped else { return .lost }
         reaped = true
-        source?.cancel()
-        source = nil
+        exitWatch?.cancel()
+        exitWatch = nil
         pollTimer?.cancel()
         pollTimer = nil
         if gone { return .lost }
@@ -182,19 +180,12 @@ final class ChildExitWatcher: @unchecked Sendable {
     }
 
     func cancel() {
-        source?.cancel()
-        source = nil
+        exitWatch?.cancel()
+        exitWatch = nil
         pollTimer?.cancel()
         pollTimer = nil
         onExit = nil
     }
-}
-
-/// One process, identified so a recycled pid is never mistaken for it.
-struct ProcessMember: Equatable, Hashable, Sendable {
-    var pid: pid_t
-    var startSeconds: UInt64
-    var startMicros: UInt64
 }
 
 enum ProcessTree {
@@ -204,7 +195,7 @@ enum ProcessTree {
         var queue: [pid_t] = [root]
         var seen: Set<pid_t> = [root]
         while let parent = queue.popLast() {
-            for child in children(of: parent) where seen.insert(child).inserted {
+            for child in platform.children(of: parent) where seen.insert(child).inserted {
                 if let member = member(for: child) { found.append(member) }
                 queue.append(child)
             }
@@ -212,27 +203,11 @@ enum ProcessTree {
         return found
     }
 
-    static func member(for pid: pid_t) -> ProcessMember? {
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
-        return ProcessMember(
-            pid: pid, startSeconds: info.pbi_start_tvsec, startMicros: info.pbi_start_tvusec)
-    }
+    static func member(for pid: pid_t) -> ProcessMember? { platform.member(for: pid) }
 
     /// True while that exact process (same pid, same start time) is still around.
     static func isAlive(_ member: ProcessMember) -> Bool {
         guard let current = Self.member(for: member.pid) else { return false }
         return current == member
-    }
-
-    private static func children(of parent: pid_t) -> [pid_t] {
-        let bytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parent), nil, 0)
-        guard bytes > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(bytes) / MemoryLayout<pid_t>.size + 8)
-        let written = proc_listpids(
-            UInt32(PROC_PPID_ONLY), UInt32(parent), &pids, Int32(pids.count * MemoryLayout<pid_t>.size))
-        guard written > 0 else { return [] }
-        return pids.prefix(Int(written) / MemoryLayout<pid_t>.size).filter { $0 > 0 }
     }
 }
