@@ -46,6 +46,12 @@ jobs:
           # A filter in .github/linux-test-filter (only while debugging a branch) narrows the run.
           filter=$(cat .github/linux-test-filter 2>/dev/null || true)
           runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 swift test --skip-build ${filter:+--filter "$filter"} 2>&1 | tee test.log
+      - name: Soak (100 fake runs, failure matrix, no leaks)
+        # Its own step, as on macOS, so descriptor counts are not disturbed by other suites running alongside.
+        run: |
+          set -o pipefail
+          runuser -u tester -- env "PATH=$PATH" WORKBENCH_SOAK=1 swift test --skip-build --filter SoakTests 2>&1 | tee soak.log
+        timeout-minutes: 15
       - name: Upload logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -54,3 +60,4 @@ jobs:
           path: |
             build.log
             test.log
+            soak.log
