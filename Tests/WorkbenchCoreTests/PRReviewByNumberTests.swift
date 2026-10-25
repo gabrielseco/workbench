@@ -14,7 +14,7 @@ private struct FakeViewGH {
     /// What `GH_REPO` was when `gh` ran.
     var seenRepo: String { (try? String(contentsOf: dir.appendingPathComponent("repo"), encoding: .utf8)) ?? "" }
 
-    init(in r: ReviewedPR, json: String? = nil, fails: Bool = false, ghRepo: String? = nil) throws {
+    init(in r: ReviewedPR, json: String? = nil, fails: Bool = false, hangs: Bool = false, ghRepo: String? = nil) throws {
         dir = r.fx.repo.deletingLastPathComponent().appendingPathComponent("gh-view-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let script = dir.appendingPathComponent("gh")
@@ -23,12 +23,12 @@ private struct FakeViewGH {
             #!/bin/sh
             echo "${GH_REPO:-unset}" > "\(dir.path)/repo"
             echo "$@" > "\(dir.path)/args"
-            \(fails ? "echo 'HTTP 404: not found' >&2; exit 1" : "cat <<'EOF'\n\(answer)\nEOF")
+            \(hangs ? "sleep 30" : fails ? "echo 'HTTP 404: not found' >&2; exit 1" : "cat <<'EOF'\n\(answer)\nEOF")
             """.write(to: script, atomically: true, encoding: .utf8)
         chmod(script.path, 0o755)
         var env = ["PATH": "/usr/bin:/bin"]
         if let ghRepo { env["GH_REPO"] = ghRepo }
-        runner = GitRunner(executable: script, environment: env, timeout: 10)
+        runner = GitRunner(executable: script, environment: env, timeout: hangs ? 1 : 10)
     }
 
     static func view(
@@ -144,6 +144,21 @@ private struct FakeViewGH {
             #expect("\(error)".contains("HTTP 404"), "\(error)")
         }
         #expect(r.codex.runs == 0)
+    }
+
+    @Test func aGHThatCannotStartOrHangsIsSaidAsThatNotAsNoAnswer() async throws {
+        let r = try await reviewedPR()
+        let missing = GitRunner(
+            executable: r.fx.repo.appendingPathComponent("no-such-gh"), environment: ["PATH": "/usr/bin:/bin"], timeout: 10)
+        let hung = try FakeViewGH(in: r, hangs: true)
+        for (runner, said) in [(missing, "could not be started"), (hung.runner, "did not finish")] {
+            do {
+                _ = try await r.fx.service.pullRequestInfo(12, gh: runner, originURL: "/var/folders/x/origin.git")
+                Issue.record("a pull request was read")
+            } catch let error as PRReviewRefusal {
+                #expect("\(error)".contains(said) && !"\(error)".contains("no answer"), "\(error)")
+            }
+        }
     }
 
     @Test func aLiveReviewInTheProjectIsNotDisturbedAndTheNextOneIsRefusedAsBusy() async throws {
