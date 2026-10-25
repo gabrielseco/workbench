@@ -1,4 +1,8 @@
 import Foundation
+#if canImport(Glibc)
+// glibc's `stdout` is a mutable global, which Swift 6 rejects unless the import is `@preconcurrency`.
+@preconcurrency import Glibc
+#endif
 import WorkbenchCore
 
 func report(_ error: Error, arguments: [String]) -> Never {
