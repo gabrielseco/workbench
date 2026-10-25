@@ -12,7 +12,7 @@ import Testing
         try "one\nhello\n".write(to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         try "x\n".write(to: worktree.appendingPathComponent("loose.txt"), atomically: true, encoding: .utf8)
 
-        let counting = try CountingGit(wrapping: fx.git)
+        let counting = try await CountingGit(wrapping: fx.git)
         let plan = try await ThreadService(project: fx.project, git: counting.runner).acceptPlan(id: id)
 
         #expect(plan.hasPendingChanges)
