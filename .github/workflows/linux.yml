@@ -23,14 +23,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Restore the build
-        # Dependencies (BoringSSL is about 30 s of the cold build) and, if SwiftPM accepts them, unchanged files of ours.
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
-          restore-keys: |
-            linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-
       - name: Hardware and toolchain
         run: |
           swift --version
@@ -65,9 +57,6 @@ jobs:
   # suite may run beside it, and it runs at the same time as `test`, so it costs no wall time.
   soak:
     timeout-minutes: 30
-    # Known red until P18 task 4: an orphan on Linux is adopted by a subreaper, not always PID 1, which the sweeper
-    # assumes, so a tool child survives `abandon`. Task 4 removes this line.
-    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: swift:6.2.1
@@ -78,13 +67,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Restore the build
-        uses: actions/cache/restore@v4
-        with:
-          path: .build
-          key: linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
-          restore-keys: |
-            linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-
       - name: Hardware and toolchain
         run: |
           swift --version
