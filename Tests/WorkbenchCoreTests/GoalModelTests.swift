@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 import Testing
 
@@ -65,7 +64,7 @@ private func problems(in text: String) -> [GoalProblem] {
             "workbench-goal-v1", "base=main", "budget_usd=5", "turn_timeout_min=30", "---",
             GoalHash.canonicalBody(body),
         ].joined(separator: "\n")
-        return SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
+        return referenceSHA256(Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     @Test func aGoalWithoutAModelKeepsTheHashItWasApprovedWith() throws {
