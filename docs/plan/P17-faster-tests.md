@@ -197,6 +197,31 @@ copy of the runner. `aHungPushEndsInATimeout…` waits for the hook's pid file, 
 converted: the hung-`gh` watch test. Its timer is at most 1 s (`callTimeout` floors at 1 s) and the rest of its 4.7 s is
 other work, so a handle would save about a second.
 
+### 5d. Cheaper test setup (step 1 built; 2 and 3 dropped)
+
+`scripts/ci-report.sh` and a counting probe (2026-10-25) showed that `review` and `ship` have no repeated git calls
+(6, 7 and 8 processes), so the time in the `Ship*` suites is the setup each test repeats, run alone and warm:
+`RunnerFixture` 0.12 s (359 uses), `acceptedThread` 0.37 s (72 uses, a fake turn plus `accept`), `addOrigin` 0.11 s
+(67 uses), a fake turn run only to change a file (about 170 uses). Three steps, one PR each:
+
+1. **Template repository** (built): `RunnerTemplate` builds `main` with one commit once per test process and a fixture
+   copies it, instead of `git init`, `add` and `commit`. A fixture: 0.12 s to 0.008 s (20 fixtures in a row, 3 runs);
+   about 40 s of the serial total, about 20 s of the CI test step. A plain repository holds no absolute path, so a
+   copy is as good as a fresh one; `RunnerTemplateTests` checks branch, history, a clean tree, independence of two
+   fixtures and that each keeps its own config. The full suite passes (1704 tests).
+2. **No turn where the test is not about one** (tried, dropped): `acceptedThread` without its fake turn failed 256
+   tests in 28 suites. The turn is not only a changed file: it creates the worktree and the branch (`ThreadRunner`
+   cuts the worktree and records `worktree.created`), the thread's `prompts/` and `transcript/` directories and the
+   session file, and the Ship, Judge, PR review and describe tests read those. Doing the same by hand in the helper
+   copies the runner's logic into the tests to save about 0.2 s in 72 setups (about 15 s serial, about 7 s of the CI
+   test step). Not worth the second copy. A single test that only needs a changed file may still skip the turn.
+3. **A snapshot of an accepted thread, copied** (not tried): a git worktree stores absolute paths and the thread's
+   events carry the worktree path and a pid, so a copy needs `git worktree repair` and events rewritten. Same
+   verdict: brittle for about the same saving.
+
+Serial seconds are not CI seconds: the CI test step (451 s) runs the suite about twice as fast as `--no-parallel`
+(907 s), so a serial saving shows up as about half of it in CI.
+
 ### 6. Fewer processes per test
 
 - Where a test checks logic, call `ThreadService` (or the command's type) in-process instead of spawning the

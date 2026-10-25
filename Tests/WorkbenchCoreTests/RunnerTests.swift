@@ -28,16 +28,12 @@ struct RunnerFixture {
         expectProcessGate("RunnerFixture", sourceLocation: sourceLocation)
         // The repo sits in a directory of its own: the fakes tests put beside it (`gh-*`, `codex-*`, `origin-*`)
         // go there too and are removed with the run, instead of piling up in the temporary directory.
-        let base = Scratch.url("run").appendingPathComponent("repo")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        repo = base.resolvingSymlinksInPath()
+        let run = Scratch.url("run")
+        try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true)
+        let base = run.appendingPathComponent("repo")
         git = try isolatedGit()
-        for args in [["init", "-q", "-b", "main"], ["add", "-A"]] where args[0] == "init" {
-            _ = try await git.run(args, in: repo)
-        }
-        try "one\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try await git.run(["add", "-A"], in: repo)
-        _ = try await git.run(["commit", "-q", "-m", "first"], in: repo)
+        try FileManager.default.copyItem(at: try await RunnerTemplate.repository(git: git), to: base)
+        repo = base.resolvingSymlinksInPath()
 
         project = Project(root: repo)
         try FileManager.default.createDirectory(at: project.workbenchDirectory, withIntermediateDirectories: true)
