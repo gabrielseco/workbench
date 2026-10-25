@@ -38,7 +38,7 @@ jobs:
         run: |
           set -o pipefail
           time swift build --build-tests 2>&1 | tee build.log
-      - name: Measure (default gate, then 4x the permits)
+      - name: Measure (32 permits, then 64)
         run: |
           cat > measure.py <<'PY'
           import json, os, subprocess, sys, time
@@ -47,7 +47,7 @@ jobs:
               forks = next(int(l.split()[1]) for l in open("/proc/stat") if l.startswith("processes "))
               return list(map(int, fields)), forks
           results = []
-          for name, env in [("default", {}), ("permits-16", {"WORKBENCH_TEST_PERMITS": "16"})]:
+          for name, env in [("permits-32", {"WORKBENCH_TEST_PERMITS": "32"}), ("permits-64", {"WORKBENCH_TEST_PERMITS": "64"})]:
               before, f0 = cpu()
               t0 = time.time()
               with open(f"test-{name}.log", "w") as log:
@@ -70,13 +70,13 @@ jobs:
       - name: Summary
         if: ${{ !cancelled() }}
         run: |
-          for r in default permits-16; do
+          for r in permits-32 permits-64; do
             echo "== $r"
             grep -E "Test run with" test-$r.log | tail -1
             echo "failed tests:"
             grep -E "^✘ Test .* (failed|recorded)" test-$r.log | sed -E 's/ recorded an issue.*//; s/ failed after.*//' | sort -u | head -40
           done
-          python3 scripts/test-timings.py test-default.log --markdown timings-default.md --json timings-default.json || true
+          python3 scripts/test-timings.py test-permits-32.log --markdown timings-default.md --json timings-default.json || true
           head -45 timings-default.md || true
       - name: Upload logs
         if: ${{ !cancelled() }}
@@ -85,7 +85,7 @@ jobs:
           name: linux-measure-logs
           path: |
             build.log
-            test-default.log
-            test-permits-16.log
+            test-permits-32.log
+            test-permits-64.log
             measure.txt
             timings-default.md
