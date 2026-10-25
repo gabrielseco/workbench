@@ -32,6 +32,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P15](P15-agent-ergonomics.md) | Agent ergonomics | `doctor` after approve, per-command help, a criterion backed by the named tests the check ran; typed proofs written down for later | S |
 | [P16](P16-run.md) | Run | built: `[run]` declares how a project's app is started (a command and a ready check); Workbench starts it for the verifier, hands it the port and PID, and ends it with the turn, so the verifier no longer launches the app through its own helper; launch only, not `verify_command` back; piloted on Triage and expense-tracker | S |
 | [P17](P17-faster-tests.md) | Faster tests | task 1 built (profile); the repo's own `swift test` from 178 s to about 60 s without weakening a test: measure per-test cost serially, clean fixtures, size the gate, fewer and parallel git calls in the commands the tests drive, shorter by-design waits, fewer CLI spawns | M |
+| [P18](P18-linux.md) | Linux | planned: the #221 probe shipped as six small PRs (portable crypto and zlib, a platform contract on macOS, the Linux implementation, orphan ownership without `ppid == 1`, a loopback ready check, Linux as a permanent CI gate with the soak and a non-root run) | M |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
 **P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,
