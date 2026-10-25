@@ -38,6 +38,19 @@ import Testing
         #expect(try await RunnerTemplate.repository(git: git) == asked.first)
     }
 
+    @Test func noGitMaintenanceRunsInATemplateCopyOrLeavesALockBehind() async throws {
+        let fx = try await RunnerFixture()
+        for (key, expected) in [("maintenance.auto", "false"), ("gc.auto", "0")] {
+            let value = try await fx.git.run(["config", "--get", key], in: fx.repo).stdout
+            #expect(value.trimmingCharacters(in: .whitespacesAndNewlines) == expected, "\(key)")
+        }
+        // The race this prevents: a lock file present while the template is copied.
+        let template = try await RunnerTemplate.repository(git: fx.git)
+        let names = try FileManager.default.contentsOfDirectory(atPath: template.appendingPathComponent(".git").path)
+        #expect(names.contains("HEAD"), "this is the template's .git: \(names)")
+        #expect(!names.contains { $0.hasSuffix(".lock") || $0 == "gc.pid" }, "\(names)")
+    }
+
     @Test func aFixtureKeepsItsOwnConfig() async throws {
         let plain = try await RunnerFixture()
         let custom = try await RunnerFixture(extraConfig: "check_command = \"true\"")
