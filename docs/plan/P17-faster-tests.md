@@ -96,7 +96,7 @@ Targets are confirmed against task 1's baseline; a target missed is reported, no
 - Phase timings of a fixture, a turn, a CLI spawn and `accept` were measured with a throwaway test (not kept);
   the result is finding 2.
 
-Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (open: run the `Test profile` workflow once it is on `main`, then fill in the goals table).
+Done when: finding 2 has a cause (it does: sequential git spawns) and the CI baseline is recorded (done as the CI job's step times in "Where it stands": test 451 s, soak 79 s, build 39 s; a per-test CI profile was not needed, since a parallel log cannot rank tests anyway).
 
 ### 2. Clean up temp directories (built)
 
@@ -309,7 +309,13 @@ most to gain: each git process saved is saved in every test that runs the comman
 - Changing the product's own timeouts or grace periods; only tests choose shorter ones.
 - Anything about the cost of a Workbench run (P8).
 
-## Tests that stay slow (fill in during task 5)
+## Tests that stay slow
+
+Tests over 5 s in the 2026-10-25 serial profile that were measured and left: the multi-round review-loop and
+stage tests (`twoRoundsOfFindingsMakeAChain…` 7.9 s, `aStageMatchingAChangedFileRuns` 7.8 s over 4 cases,
+`pullRequestReviewMatchingAChangedFile…` 5.7 s over 3 cases, `findingsLeftAtTheCap…` 5.8 s, `aFixRoundStartsAFollowUp…`
+5.3 s). They are loops of real work (a review, a turn, a push, a check per round), not waits, so they stay; task 9
+lists them as named end-to-end tests. The timeout and grace tests (7.5, 7.2, 4.9 s) are the kill-grace result above.
 
 | Test | Time | Why it cannot be shorter |
 |---|---|---|
