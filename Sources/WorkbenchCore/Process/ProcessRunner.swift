@@ -287,8 +287,9 @@ private final class ProcessEngine: @unchecked Sendable {
         terminating = true
         cause = why
         refreshTracked()
-        killpg(pid, SIGTERM)
-        kill(pid, SIGTERM)
+        // One SIGTERM: the child leads its group, so the group call reaches it, and a second one would land after a
+        // handler that resets itself to the default action on the first (the `workbench` CLI's) and kill it mid-cleanup.
+        if killpg(pid, SIGTERM) != 0 { kill(pid, SIGTERM) }
         escalationTimer = makeTimer(after: request.killGrace) { [self] in escalate() }
     }
 
