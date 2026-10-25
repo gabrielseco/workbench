@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// The verifier's instructions: the project's skill file, read from the base commit so the coding run cannot

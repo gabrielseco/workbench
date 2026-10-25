@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// Everything the plan turn is told, assembled by Workbench. The only other thing it can read is the repository
