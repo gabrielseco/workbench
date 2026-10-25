@@ -9,28 +9,12 @@ enum OrphanSweeper {
         // Not `resolvingSymlinksInPath()`: Foundation rewrites /private/var back to /var, but the kernel
         // reports a process's working directory with the real /private prefix.
         let prefix = realPath(directory)
-        let count = proc_listallpids(nil, 0)
-        guard count > 0 else { return [] }
-        var pids = [pid_t](repeating: 0, count: Int(count) + 32)
-        let written = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
-        guard written > 0 else { return [] }
-
         var roots: [ProcessMember] = []
-        for pid in pids.prefix(Int(written)) where pid > 1 && pid != getpid() {
-            var bsd = proc_bsdinfo()
-            let bsdSize = Int32(MemoryLayout<proc_bsdinfo>.size)
-            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsd, bsdSize) == bsdSize, bsd.pbi_ppid == 1
+        for pid in platform.allPIDs() where pid > 1 && pid != getpid() {
+            guard platform.parent(of: pid) == 1, let cwd = platform.workingDirectory(of: pid),
+                cwd == prefix || cwd.hasPrefix(prefix + "/"), let member = platform.member(for: pid)
             else { continue }
-
-            var vnode = proc_vnodepathinfo()
-            let vnodeSize = Int32(MemoryLayout<proc_vnodepathinfo>.size)
-            guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &vnode, vnodeSize) == vnodeSize else { continue }
-            let cwd = withUnsafeBytes(of: &vnode.pvi_cdir.vip_path) { raw -> String in
-                String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
-            }
-            guard cwd == prefix || cwd.hasPrefix(prefix + "/") else { continue }
-            roots.append(
-                ProcessMember(pid: pid, startSeconds: bsd.pbi_start_tvsec, startMicros: bsd.pbi_start_tvusec))
+            roots.append(member)
         }
 
         // Whatever runs under an orphan is orphaned too, wherever it has since changed directory to.

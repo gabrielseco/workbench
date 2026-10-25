@@ -97,7 +97,7 @@ protocol Subreaping {         // Darwin: false. Linux: prctl(PR_SET_CHILD_SUBREA
 }
 ```
 
-`ProcessMember` holds `pid` and one `start: UInt64` token. Pure parsing (`/proc/<pid>/stat` fields, which may hold
+`ProcessMember` keeps `pid`, `startSeconds` and `startMicros` as they are written to `runner.json`: the platform fills them (on Linux clock ticks and 0), and callers only compare or order them. (Task 2 first planned one opaque `start` token; that would have changed the file format and about 17 test files for no gain.) Pure parsing (`/proc/<pid>/stat` fields, which may hold
 spaces and parentheses in the command name) is a plain function so macOS CI can test it with fixtures.
 
 **Orphans.** Ownership no longer depends on the parent PID. An orphan is a process whose working directory is inside
