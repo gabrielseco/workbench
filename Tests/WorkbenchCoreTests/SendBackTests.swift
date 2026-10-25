@@ -120,7 +120,7 @@ private func startedArgv(_ id: String, turn: Int, _ fx: RunnerFixture) throws ->
         _ = try await fx.runner(id).run(fx.options(feedback: "and again"))
         let argv3 = try startedArgv(id, turn: 3, fx)
         let i3 = try #require(argv3.firstIndex(of: "--max-budget-usd"))
-        #expect(argv3[i3 + 1] == "5", "the goal's budget is back: \(argv3[i3 + 1])")
+        #expect(argv3[i3 + 1] == "1", "the goal's budget is back: \(argv3[i3 + 1])")
 
         #expect(try String(contentsOf: fx.project.goalURL(id), encoding: .utf8) == goalBefore)
         let goal = try GoalFile.parse(goalBefore).goal

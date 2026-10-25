@@ -48,7 +48,7 @@ private let noCap = "no dollar cap: bounded by 30 min per turn"
         let fx = try await RunnerFixture()
         _ = try await fx.approvedThread()
         let status = try await cli(["status"], in: fx)
-        #expect(status.text.contains("budget $5/turn") && !status.text.contains("no dollar cap"), "\(status.text)")
+        #expect(status.text.contains("budget $1/turn") && !status.text.contains("no dollar cap"), "\(status.text)")
     }
 
     @Test func jsonCarriesSpendPolicy() async throws {
