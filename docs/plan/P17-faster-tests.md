@@ -116,7 +116,7 @@ Done when: a full run leaves no `wb-*` directory (done).
 
 Done when: the question "is the gate too small?" is answered (it is not).
 
-### 4. Fewer and parallel git calls in the commands the tests drive (built)
+### 4. Fewer and parallel git calls in the commands the tests drive (acceptPlan built)
 
 Replaces "share the fixture": a fixture costs 0.05 s, so a template saves little (finding 2).
 
@@ -130,7 +130,9 @@ Replaces "share the fixture": a fixture costs 0.05 s, so a template saves little
 
 Done when: `acceptPlan` spawns 10 or fewer git processes (from 17) and the CLI `accept` takes 0.4 s or less.
 
-Built for `acceptPlan` (2026-10-25). It spawned 17: `symbolic-ref`, `status`, `log` for the commits, then
+Built for `acceptPlan` only (2026-10-25); not done: the process count of `review`, `ship` and `status`, the CLI `accept` time
+(only `acceptPlan` was timed, 0.4 s for the CLI is unconfirmed), and spawn-count tests for `ReviewLoader.load` and
+`DiffProvider.summary` on their own. It spawned 17: `symbolic-ref`, `status`, `log` for the commits, then
 `ReviewLoader.load` (`rev-parse` of the branch twice, `rev-list --count`, `log`, and the plain diff: two `diff`
 and `ls-files --others`), then a second, full `DiffProvider.summary` that repeated the same three and added the
 staged and ignored reads. Now:
