@@ -10,7 +10,10 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    container: swift:6.2.1
+    container:
+      image: swift:6.2.1
+      # An init as PID 1 reaps orphans, as launchd does on macOS; without one they stay zombies and `kill(pid, 0)` still succeeds.
+      options: --init
     defaults:
       run:
         shell: bash
