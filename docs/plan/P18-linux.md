@@ -28,6 +28,14 @@ built.
 What Linux allows that macOS does not is **sharding**: Linux slots are plentiful, so one PR can use several jobs.
 Each job builds (about 1 m, cached) and runs a disjoint set of suites; PR wall time is the slowest shard.
 
+The soak (79 s on the macOS runner, its own step) cannot become a separate job on macOS, because that holds a second
+macOS slot per PR; on Linux it is a parallel job of its own, so it leaves the critical path. That is one reason the
+gate moves to Linux and not just a second macOS job.
+
+CI baseline on `main` (2026-10-25, after P17 tasks 4 and 5): build 39 s, test 451 s, soak 79 s, 9m42s in all. P17 found
+the remaining suite cost is the work the tests do (a serial run is 907 s; the CI test step runs about 2x faster than
+serial), so per-test tuning is largely spent and sharding is the lever that scales.
+
 ## What the probe changed (and what that tells us)
 
 | Area | macOS only | Linux replacement |
