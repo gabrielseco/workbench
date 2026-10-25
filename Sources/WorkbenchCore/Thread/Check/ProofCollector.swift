@@ -1,4 +1,4 @@
-import CryptoKit
+import Crypto
 import Foundation
 
 /// One file the verifier left in the proof directory, as `proof.added` recorded it.
