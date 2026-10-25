@@ -168,7 +168,6 @@ private let good = """
         #expect(prompt.contains("It left: income.png."))
         #expect(prompt.contains("```diff\n+new\n```"))
         #expect(prompt.contains("Other labels."))
-        #expect(prompt.contains("evidenced violation"), "the rule that keeps it from failing on a hunch")
         #expect(prompt.contains("The project's check did not run."))
     }
 

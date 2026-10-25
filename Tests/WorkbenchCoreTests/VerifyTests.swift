@@ -112,14 +112,6 @@ import Testing
         return try GoalFile.parse(text).goal
     }
 
-    @Test func claudeIsToldWhichCriteriaTheVerifierCovers() throws {
-        let prompt = PromptBuilder.firstPrompt(
-            goal: try goal("screenshot: home"), checkCommand: nil, verifies: true)
-        #expect(prompt.contains("## Verification"))
-        #expect(prompt.contains("`screenshot: <name>`"))
-        #expect(prompt.contains("do not need to take"))
-    }
-
     @Test func nothingIsAddedWithoutAVerifierOrAScreenshotCriterion() throws {
         let shot = try goal("screenshot: home")
         #expect(!PromptBuilder.firstPrompt(goal: shot, checkCommand: nil, verifies: false).contains("Verification"))

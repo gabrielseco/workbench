@@ -68,8 +68,6 @@ private func changeGoal(_ p: Planned) async throws {
         let section = try #require(text.range(of: "## Plan"))
         #expect(outOfScope.lowerBound < section.lowerBound)
         #expect(text.contains("Do the thing."))
-        #expect(text.contains("the criteria and the out-of-scope list win wherever they disagree"))
-        #expect(text.contains("say so in your summary"))
         #expect(!text.contains("a person then edited it") && !text.contains("It was written at commit"))
     }
 

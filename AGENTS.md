@@ -52,7 +52,11 @@ list the tasks.
    `Tests/…/Foo*Tests.swift` that names it (`grep -l Foo Tests/WorkbenchCoreTests/*.swift` when the name does
    not match), and a changed test file is its own suite. Docs-only changes need neither. Do not run
    `scripts/check.sh` or the soak locally: CI runs them. Add tests for what you add, including the failure
-   cases the phase plan lists.
+   cases the phase plan lists. Tests check behaviour, not wording: do not assert that a prompt or instruction
+   text contains a phrase, since that breaks on harmless rewording and says nothing about what the model does.
+   Test what the code does with the text (what goes in and in what order, fencing of untrusted input, paths
+   scrubbed, sections included or left out, size limits). A change that only rewords a prompt ships without a
+   unit test; say so in the PR, and use a `scripts/verify-cli/` scenario if the behaviour matters.
 3. A change to what a `workbench` command does (its output, flags, exit codes, or what it writes) ships a
    verify-cli scenario in the same PR: add `scripts/verify-cli/<feature>.sh`, or update the one that covers the
    command (the `verify-cli` skill says how). Run it by hand from the branch (`VERIFY_CLI_FROM_BRANCH=1`), once
