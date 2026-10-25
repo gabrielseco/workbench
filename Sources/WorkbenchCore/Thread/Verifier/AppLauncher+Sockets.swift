@@ -35,23 +35,30 @@ extension AppLauncher {
         case "::1": names = [(AF_INET6, bare)]
         default: return []
         }
-        return names.compactMap { family, text in
-            var storage = sockaddr_storage()
+        return names.compactMap { family, text -> sockaddr_storage? in
             if family == AF_INET {
                 var address = sockaddr_in()
                 address.sin_family = sa_family_t(AF_INET)
                 address.sin_port = port.bigEndian
                 guard inet_pton(AF_INET, text, &address.sin_addr) == 1 else { return nil }
-                withUnsafeMutableBytes(of: &storage) { $0.copyMemory(from: UnsafeRawBufferPointer(start: &address, count: MemoryLayout<sockaddr_in>.size)) }
+                return Self.storage(of: &address)
             } else {
                 var address = sockaddr_in6()
                 address.sin6_family = sa_family_t(AF_INET6)
                 address.sin6_port = port.bigEndian
                 guard inet_pton(AF_INET6, text, &address.sin6_addr) == 1 else { return nil }
-                withUnsafeMutableBytes(of: &storage) { $0.copyMemory(from: UnsafeRawBufferPointer(start: &address, count: MemoryLayout<sockaddr_in6>.size)) }
+                return Self.storage(of: &address)
             }
-            return storage
         }
+    }
+
+    /// An address struct copied into the one type that holds either family.
+    private static func storage<T>(of address: inout T) -> sockaddr_storage {
+        var storage = sockaddr_storage()
+        withUnsafeBytes(of: &address) { source in
+            withUnsafeMutableBytes(of: &storage) { $0.copyMemory(from: source) }
+        }
+        return storage
     }
 
     private static func exchange(address: sockaddr_storage, request: String, deadline: Date) -> Bool {
@@ -61,7 +68,8 @@ extension AppLauncher {
         defer { close(fd) }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
 
-        let length = socklen_t(address.ss_family == sa_family_t(AF_INET) ? MemoryLayout<sockaddr_in>.size : MemoryLayout<sockaddr_in6>.size)
+        let isIPv4 = address.ss_family == sa_family_t(AF_INET)
+        let length = socklen_t(isIPv4 ? MemoryLayout<sockaddr_in>.size : MemoryLayout<sockaddr_in6>.size)
         let connected = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, length) }
         }
