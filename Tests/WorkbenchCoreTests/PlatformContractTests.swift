@@ -240,6 +240,18 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         return poll(&probe, 1, 0) > 0 && probe.revents & Int16(POLLERR | POLLHUP) != 0
     }
 
+    @Test func aPlatformWithoutAnExitEventPollsOftenEnoughToNotSlowEveryRun() async throws {
+        let dir = try Scratch.directory("contract")
+        let (pid, _) = try spawn("sleep 300", in: dir)
+        let watch = platform.watchExit(of: pid, queue: DispatchQueue(label: "contract.exit.interval")) {}
+        watch?.cancel()
+        end(pid)
+        if watch == nil {
+            #expect(platform.exitPollInterval <= 0.01, "polling is all it has, and each exit waits up to one interval")
+        }
+        #expect(platform.exitPollInterval > 0, "a zero interval would spin")
+    }
+
     @Test func onlyAPlatformThatHasSubreapersSaysItBecameOne() {
         #if canImport(Darwin)
         #expect(!platform.becomeSubreaper(), "macOS has no subreapers")

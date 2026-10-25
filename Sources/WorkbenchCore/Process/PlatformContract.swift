@@ -58,6 +58,10 @@ struct ExitWatch {
 protocol ExitNotifying {
     /// Calls `handler` on `queue` when `pid` exits. Nil when the platform has no such event; polling alone then.
     func watchExit(of pid: pid_t, queue: DispatchQueue, handler: @escaping @Sendable () -> Void) -> ExitWatch?
+
+    /// How often `ChildExitWatcher` looks when no event has come. A platform with no event finds every exit by this poll
+    /// alone, so it is short there (measured: the Linux soak took 189 s at 50 ms and 49 s at 5 ms).
+    var exitPollInterval: TimeInterval { get }
 }
 
 /// Adoption of orphans: on Linux a process whose parent died goes to the nearest ancestor that asked to be a

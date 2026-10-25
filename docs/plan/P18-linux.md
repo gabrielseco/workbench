@@ -205,7 +205,7 @@ Fixture tests for the `/proc/<pid>/stat` parser run on both operating systems.
 - Windows.
 - Linux versions of anything with no CLI behaviour (`open` in an editor, desktop notifications): they degrade with a
   clear message instead of being ported.
-- A pidfd-based exit watcher (`pidfd_open` plus a read source) is an optimisation behind `ExitNotifying`, later.
+- A pidfd-based exit watcher (`pidfd_open` plus a read source) is an optimisation behind `ExitNotifying`, later. Until then Linux polls every 5 ms (macOS 50 ms, with kqueue): the Linux soak took 189 s at 50 ms and 49 s at 5 ms (40 s at 1 ms) on one runner.
 - Packaging and distribution of a Linux binary.
 
 ## Decisions to make
