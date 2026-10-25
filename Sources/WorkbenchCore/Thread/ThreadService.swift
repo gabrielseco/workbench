@@ -308,11 +308,20 @@ public struct ThreadService: Sendable {
         guard manager.exists(id) else { throw ThreadServiceError.worktreeMissing(manager.path(for: id).path) }
         let worktree = manager.path(for: id)
 
+        // Everything below only reads, so it runs together; the answers are checked in the order the questions
+        // are asked, which keeps the refusal a person sees the same.
+        let branch = WorktreeManager.branch(for: id)
+        let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue
+        async let headRun = git.run(["symbolic-ref", "--short", "-q", "HEAD"], in: worktree)
+        async let pendingRun = Self.pendingResult(in: worktree, git: git)
+        async let commitsRun = base == nil ? nil : manager.commits(threadID: id, since: base ?? "")
+        async let loaded = ReviewLoader(project: project, git: git).diffForAccept(id: id, events: events)
+
         // The commit goes on workbench/<id> and nowhere else: a model that switched branches in its
         // worktree must not get its work committed to another one.
-        let head = try await git.run(["symbolic-ref", "--short", "-q", "HEAD"], in: worktree)
-        let branch = WorktreeManager.branch(for: id)
+        let head = try await headRun
         guard head.succeeded, head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == branch else {
+            _ = (await pendingRun, await commitsRun, await loaded)
             throw ThreadServiceError.acceptIncomplete(
                 "the worktree is not on \(branch) (it is on "
                     + (head.succeeded ? head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : "a detached HEAD")
@@ -320,30 +329,32 @@ public struct ThreadService: Sendable {
         }
 
         let pending: [String]
-        do { pending = try await Self.pendingChanges(in: worktree, git: git) } catch {
+        switch await pendingRun {
+        case .success(let lines): pending = lines
+        case .failure(let error):
+            _ = (await commitsRun, await loaded)
             throw ThreadServiceError.acceptIncomplete("cannot read the worktree's changes: \(error)")
         }
         var commits: [String] = []
-        if let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue {
-            guard let found = await manager.commits(threadID: id, since: base) else {
+        if base != nil {
+            guard let found = await commitsRun else {
+                _ = await loaded
                 throw ThreadServiceError.acceptIncomplete("git could not list the commits on \(branch)")
             }
             commits = found
         }
+        let (shown, full) = await loaded
         if pending.isEmpty && commits.isEmpty { throw ThreadServiceError.nothingToAccept }
 
-        let report = await ReviewLoader(project: project, git: git).load(id: id, events: events)
         // Same-size edits keep paths and counts, so what was shown is also pinned by file identity.
         var snapshot = ""
-        if case .summary(let shown) = report.diff {
-            let full = try? await DiffProvider(git: git).summary(
-                worktree: worktree, base: shown.base, limit: Int.max, includeIgnored: true, includeStaged: true)
-            let stamps = (full?.workingFingerprint ?? [:]).sorted { $0.key < $1.key }
-            snapshot = (full?.indexFingerprint ?? "") + "\n"
+        if let full {
+            let stamps = (full.workingFingerprint ?? [:]).sorted { $0.key < $1.key }
+            snapshot = (full.indexFingerprint ?? "") + "\n"
                 + stamps.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")
         }
         return AcceptPlan(
-            id: id, worktree: worktree, branch: branch, diff: report.diff, hasPendingChanges: !pending.isEmpty,
+            id: id, worktree: worktree, branch: branch, diff: shown, hasPendingChanges: !pending.isEmpty,
             commits: commits, check: state.review.check,
             // Recovery will record these as interrupted, which is not a pass.
             openWork: state.openTurn != nil || state.openCheck != nil, snapshot: snapshot,
@@ -429,14 +440,6 @@ public struct ThreadService: Sendable {
     }
 
     /// Uncommitted work as porcelain lines, untracked files always included (ignored ones never).
-    static func pendingChanges(in worktree: URL, git: GitRunner) async throws -> [String] {
-        let result = try await git.run(["status", "--porcelain", "--untracked-files=all"], in: worktree)
-        guard result.succeeded else {
-            throw WorktreeError.gitFailed(command: "status", status: result.status, stderr: result.stderr)
-        }
-        return result.stdout.split(separator: "\n").map(String.init)
-    }
-
     /// `chore: <goal title>`, then the request and the thread id. The type is a guess; edit it with `-m`.
     static func defaultCommitMessage(id: String, goalURL: URL) -> String {
         guard let text = try? String(contentsOf: goalURL, encoding: .utf8),

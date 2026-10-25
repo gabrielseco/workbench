@@ -376,27 +376,40 @@ public struct ReviewLoader: Sendable {
         } catch {
             problem = "cannot read the goal file: \(error.localizedDescription)"
         }
-        let commits = await branchCommits(id, base: base)
+        // The diff and the branch lookups read different things, so they run together.
+        async let shownDiff = diff(id: id, goalBase: goalBase, events: events, includeIgnored: includeIgnored)
+        let tip = await branchTip(id)
+        let commits = await branchCommits(id, base: base, tip: tip)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
-            diff: await diff(
-                id: id, goalBase: goalBase, events: events, includeIgnored: includeIgnored),
-            threadDirectory: project.threadDirectory(id), branchTip: await branchTip(id),
+            diff: await shownDiff,
+            threadDirectory: project.threadDirectory(id), branchTip: tip,
             commits: commits?.commits ?? [],
             commitCount: commits?.count ?? 0)
     }
 
+    /// What `accept` shows and what it pins, from one read of git: the diff `review` shows, and the full summary (staged
+    /// and ignored files, no file limit) whose fingerprints say whether the worktree changed since.
+    func diffForAccept(id: String, events: [Event]) async -> (shown: ReviewReport.Diff, full: DiffSummary?) {
+        let goalBase = (try? GoalFile.parse(try String(contentsOf: project.goalURL(id), encoding: .utf8)))?.goal.base
+        let all = await diff(id: id, goalBase: goalBase, events: events, limit: Int.max, includeIgnored: true)
+        guard case .summary(let full) = all else { return (all, nil) }
+        return (.summary(full.plain()), full)
+    }
+
     /// How many commits `workbench/<id>` holds past its base; nil when unknown.
     public func branchCommitCount(id: String) async -> Int? {
-        await branchCommits(id, base: Self.recordedBase(in: readEvents(id)))?.count
+        await branchCommits(id, base: Self.recordedBase(in: readEvents(id)), tip: await branchTip(id))?.count
     }
 
     /// The commits on `workbench/<id>` since the commit its worktree was cut from; nil when unknown.
-    private func branchCommits(_ id: String, base: String?) async -> (count: Int, commits: [BranchCommit])? {
+    private func branchCommits(
+        _ id: String, base: String?, tip: String?
+    ) async -> (count: Int, commits: [BranchCommit])? {
         guard SafeNames.isThreadID(id), let base,
             base.range(of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil,
-            await branchTip(id) != nil
+            tip != nil
         else { return nil }
         return await BranchCommit.oldest(
             in: "\(base)..refs/heads/\(WorktreeManager.branch(for: id))", at: project.root, git: git)
