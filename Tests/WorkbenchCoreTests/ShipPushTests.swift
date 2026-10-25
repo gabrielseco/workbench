@@ -223,6 +223,7 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             project: fx.project,
             git: GitRunner(
                 executable: fx.git.executable, environment: fx.git.environment, timeout: fx.git.timeout, expiry: expiry))
+        let started = Date()
         let push = Task { try await service.shipPush(id: id, gh: gh, timeout: 600) }
         #expect(await pollUntil { FileManager.default.fileExists(atPath: pidFile.path) }, "the hook ran")
         expiry.expire()
@@ -236,6 +237,8 @@ private func pushRefusal(_ body: () async throws -> ShipPushResult) async -> Shi
             }
             #expect(why.contains("did not finish"), "\(why)")
         }
+        // The timer was set for 600 s: ending inside the test's patience is `expire()` having reached the push.
+        #expect(Date().timeIntervalSince(started) < Patience.limit)
         let written = (try? String(contentsOf: pidFile, encoding: .utf8)) ?? ""
         let pid = Int32(written.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(pid != nil, "the hook ran")

@@ -182,11 +182,15 @@ private final class ShortCommand: @unchecked Sendable {
     private var timedOut = false
     private let expiry: CommandExpiry?
     private var expiryID: UUID?
+    private var finished = false
 
     init(pid: pid_t, timeout: TimeInterval, expiry: CommandExpiry? = nil) {
         self.pid = pid
         self.timeout = timeout
         self.expiry = expiry
+        // Registered as soon as the child exists, not when `wait()` gets to run: a test that sees the child do
+        // something must not find nothing to expire.
+        expiryID = expiry?.register { [self] in self.queue.async { self.timeOut() } }
     }
 
     func wait() async -> Outcome {
@@ -195,14 +199,13 @@ private final class ShortCommand: @unchecked Sendable {
                 self.continuation = continuation
                 watcher = ChildExitWatcher(pid: pid, queue: queue) { [self] in exited() }
                 timeoutTimer = timer(after: timeout) { [self] in timeOut() }
-                expiryID = expiry?.register { [self] in self.queue.async { self.timeOut() } }
             }
         }
     }
 
     /// What the timeout does; a test's `CommandExpiry` runs it early.
     private func timeOut() {
-        guard !timedOut, continuation != nil else { return }
+        guard !timedOut, !finished else { return }
         timedOut = true
         killpg(pid, SIGTERM)
         kill(pid, SIGTERM)
@@ -213,6 +216,7 @@ private final class ShortCommand: @unchecked Sendable {
     }
 
     private func exited() {
+        finished = true
         if let expiryID { expiry?.unregister(expiryID) }
         timeoutTimer?.cancel(); timeoutTimer = nil
         killTimer?.cancel(); killTimer = nil
