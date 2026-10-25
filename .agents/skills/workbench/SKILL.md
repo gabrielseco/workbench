@@ -51,6 +51,10 @@ with `accept`, `discard` or `abandon`.
    in doubt and why, ask the person to check them by hand, and put their answer in the PR under Testing as "checked by hand, not by the
    verifier". The judge's "not met" on those criteria is then a note, not a block.
 6. **Accept.** `wb accept -m "<conventional commit>"` commits the work on `workbench/<id>` and ends the thread. Nothing is pushed.
+   Who commits depends on the run provider: a Claude turn commits its own work (its message is the commit's), a Codex turn leaves
+   changes uncommitted. `accept -m` therefore sets the message only for Codex work; on a commit the run made it prints
+   `-m ignored: the work was already committed` and leaves it. To reword that commit run `git commit --amend -m "<message>"` in
+   `wb open --print`'s worktree before `ship` (a single commit; nothing is pushed yet).
 7. **Ship.** `wb ship --yes` pushes the branch and opens the PR (a read-only turn writes the description). If it fails after the push,
    fix the cause; if you open the PR by hand, say so, because `ship` then recorded nothing and `clean` will not know the PR.
    `--watch` only follows CI (read-only) and takes minutes: run `wb ship --yes --watch` in the background and do not wait for it
