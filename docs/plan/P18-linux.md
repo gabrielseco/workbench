@@ -124,6 +124,38 @@ them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects
 Task 0 can start now and decides how task 6 is shaped. Tasks 1 and 2 are independent of each other and of Linux. 3 needs 1 and 2. 4 and 5 can follow 3 in either order;
 6 comes last but may start as soon as 3 lands, with the soak added when 4 is in.
 
+## Measured (2026-10-25)
+
+Task 0, on the probe merged with `main` (4-core GitHub runner, 1712 tests, 16 permits unless noted):
+
+| Gate permits | Wall | CPU busy | Result |
+|---:|---:|---:|---|
+| 4 (the default: one per core) | 540 s | 8.9% | 10 failing tests |
+| 16 | 341 s | 16.3% | the same 10 |
+| 32 | 368 s | 18.6% | the same 10, no faster than 16 |
+| 64 | crashed after 64 s | | libdispatch segfault in `_dispatch_event_loop_drain` |
+
+- Linux spends its time waiting, not computing: a process costs about 2 ms of system time (10 ms on macOS), the CPU is
+  more than 80% idle at 16 permits, and the default of one permit per core leaves it 91% idle. 16 permits is the setting.
+- The 10 failures were: the container running as root (5, fixed by an ordinary user), `BaseGapTests` (3, a relative
+  `FETCH_HEAD` path that a standardized `URL` loses its base on Linux, fixed in product code), and two orphan tests
+  (an orphan is adopted by a subreaper, not always PID 1: task 4; they are disabled on Linux until then).
+
+Task 3 (the Linux platform, this branch), same runner, two parallel jobs (tests, soak) in separate containers:
+
+| | Build | Run | Result |
+|---|---:|---:|---|
+| `test` | 104 to 235 s | 121 to 174 s | 1720 tests pass |
+| `soak` | 119 to 143 s | 185 to 193 s | passes (it failed once when run after the tests in the same container: a leftover `sleep 300` from another suite) |
+
+- A whole run is about 6 to 6.5 minutes (the two jobs overlap), against 8m41s for macOS.
+- The build is the slow part on Linux: about 35 s for the dependencies (BoringSSL) and about 115 s for our own Swift,
+  and it varies by runner. A `.build` cache restored in 5 s did not shorten it measurably, because a fresh checkout
+  gives every source file a new timestamp. Left for task 6: restore file timestamps, and/or drop `swift-crypto` for
+  a small SHA-256 of our own (only SHA-256 is used).
+- Open: an intermittent segfault inside libdispatch's event loop on Linux (the same signature as the 64-permit crash),
+  seen in 1 of 5 full runs at 16 permits. It has to be understood before Linux is the gate.
+
 ## Contract tests
 
 One generic suite, `contract(_ platform: some ProcessInspecting & SpawnPlatform)`, run on the current platform in CI.
