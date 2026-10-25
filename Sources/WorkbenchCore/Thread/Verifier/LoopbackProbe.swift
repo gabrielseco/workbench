@@ -21,7 +21,8 @@ enum LoopbackProbe {
         let stop = Stop()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                DispatchQueue.global().async {
+                // A thread of its own: the shared pool can be full of blocked work, and this check has a deadline.
+                Thread.detachNewThread {
                     let found = addresses(for: host, port: UInt16(number)).contains {
                         exchange(address: $0, request: request, deadline: deadline, stop: stop)
                     }
