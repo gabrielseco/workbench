@@ -94,8 +94,12 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         let spare = fcntl(fd, F_DUPFD, 100)
         #expect(spare >= 100)
         defer { close(spare) }
-        let script =
-            "read line; echo \"stdin:[$line]\"; echo to-stderr >&2; echo leaked >&\(spare) || echo cannot-write; ls /dev/fd"
+        // `test -e /dev/fd/N`, not a redirect: dash (Linux's /bin/sh) accepts only a one-digit descriptor after `>&`.
+        let script = """
+            read line; echo "stdin:[$line]"; echo to-stderr >&2
+            if [ -e /dev/fd/\(spare) ]; then echo leaked; else echo cannot-write; fi
+            ls /dev/fd
+            """
         let (pid, output) = try spawn(script, in: dir)
         let exited = await wait { waitpidNoHang(pid) }
         #expect(exited)
