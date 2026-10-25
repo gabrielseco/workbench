@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 
 public struct FileChange: Sendable, Equatable {
@@ -182,8 +186,8 @@ public struct DiffProvider: Sendable {
         guard lstat(url.path, &metadata) == 0 else { return "missing:\(errno)" }
         // ctime catches same-size edits even when an editor preserves mtime; lstat never follows a link.
         return "\(metadata.st_dev):\(metadata.st_ino):\(metadata.st_mode):\(metadata.st_size):"
-            + "\(metadata.st_mtimespec.tv_sec):\(metadata.st_mtimespec.tv_nsec):"
-            + "\(metadata.st_ctimespec.tv_sec):\(metadata.st_ctimespec.tv_nsec)"
+            + "\(metadata.modifiedTime.tv_sec):\(metadata.modifiedTime.tv_nsec):"
+            + "\(metadata.changedTime.tv_sec):\(metadata.changedTime.tv_nsec)"
     }
 
     private func untrackedChange(_ path: String, in worktree: URL) throws -> FileChange {
@@ -197,9 +201,9 @@ public struct DiffProvider: Sendable {
             metadata.st_mode & S_IFMT == S_IFREG
         else { return unknown }
         // A replaced path must not make inspection follow a symlink or block opening a FIFO.
-        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let fd = sysOpen(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { return unknown }
-        defer { Darwin.close(fd) }
+        defer { sysClose(fd) }
         guard fstat(fd, &metadata) == 0,
             metadata.st_mode & S_IFMT == S_IFREG
         else { return unknown }
@@ -209,7 +213,7 @@ public struct DiffProvider: Sendable {
         var last: UInt8 = 0x0A
         var buffer = [UInt8](repeating: 0, count: 1 << 16)
         while true {
-            let count = Darwin.read(fd, &buffer, min(buffer.count, Self.untrackedCountLimit + 1 - bytes))
+            let count = sysRead(fd, &buffer, min(buffer.count, Self.untrackedCountLimit + 1 - bytes))
             if count < 0 {
                 if errno == EINTR { continue }
                 return uncounted

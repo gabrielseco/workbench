@@ -219,7 +219,7 @@ private struct OutputSink {
         } catch {
             throw CheckError.outputFile(error.localizedDescription)
         }
-        let fd = Darwin.open(url.path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
+        let fd = sysOpen(url.path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
         guard fd >= 0 else { throw CheckError.outputFile(String(cString: strerror(errno))) }
         handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         self.limit = limit

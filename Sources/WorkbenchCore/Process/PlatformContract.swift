@@ -26,12 +26,17 @@ protocol ProcessInspecting {
     func children(of pid: pid_t) -> [pid_t]
 }
 
+// The spawn types are optional pointers on macOS and plain structs on glibc; this is the one place that says so.
 #if canImport(Darwin)
 typealias SpawnFileActions = posix_spawn_file_actions_t?
+typealias SpawnAttributes = posix_spawnattr_t?
 var emptySpawnFileActions: SpawnFileActions { nil }
+var emptySpawnAttributes: SpawnAttributes { nil }
 #else
 typealias SpawnFileActions = posix_spawn_file_actions_t
+typealias SpawnAttributes = posix_spawnattr_t
 var emptySpawnFileActions: SpawnFileActions { posix_spawn_file_actions_t() }
+var emptySpawnAttributes: SpawnAttributes { posix_spawnattr_t() }
 #endif
 
 /// How a child is started so that it holds exactly stdin, stdout and stderr and nothing else.

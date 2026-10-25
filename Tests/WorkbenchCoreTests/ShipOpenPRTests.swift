@@ -46,7 +46,7 @@ struct FakeGH {
               prev=""
               for a in "$@"; do
                 if [ "$prev" = "--body-file" ]; then
-                  cp "$a" "$d/body"; stat -f %Lp "$a" > "$d/mode"; echo "$a" > "$d/bodypath"
+                  cp "$a" "$d/body"; (stat -c %a "$a" 2>/dev/null || stat -f %Lp "$a") > "$d/mode"; echo "$a" > "$d/bodypath"
                 fi
                 prev="$a"
               done

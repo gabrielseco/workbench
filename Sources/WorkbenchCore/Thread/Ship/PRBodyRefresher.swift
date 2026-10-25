@@ -125,7 +125,7 @@ public enum PRBodyRefresher {
         var result = [Part()]
         var fence: (char: Character, length: Int)?
         // `\r\n` is one Character in Swift, so a Character split on `\n` would never split a CRLF body.
-        for line in text.components(separatedBy: "\n") {
+        for line in text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map({ String($0) }) {
             let plain = stripCR(line)
             let wasFenced = fence != nil
             fence = PRBodyBuilder.nextFence(after: fence, line: plain)

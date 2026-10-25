@@ -27,9 +27,11 @@ let package = Package(
         .systemLibrary(name: "CZlib"),
         .target(
             name: "WorkbenchCore",
-            dependencies: ["CZlib", .product(name: "Crypto", package: "swift-crypto")],
+            dependencies: ["CZlib", "CShim", .product(name: "Crypto", package: "swift-crypto")],
             swiftSettings: simplifyCFGWorkaround),
-        .executableTarget(name: "workbench", dependencies: ["WorkbenchCore"], swiftSettings: simplifyCFGWorkaround),
+        // The few C calls Swift cannot make itself: a variadic `prctl`, and `stdout` (Swift 6 rejects reading the C global on glibc).
+        .target(name: "CShim"),
+        .executableTarget(name: "workbench", dependencies: ["WorkbenchCore", "CShim"], swiftSettings: simplifyCFGWorkaround),
         // Test double for `claude`. Standalone on purpose: no dependency on WorkbenchCore.
         .executableTarget(name: "fake-claude"),
         .testTarget(

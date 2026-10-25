@@ -1,4 +1,5 @@
 import Foundation
+import CShim
 import WorkbenchCore
 
 func report(_ error: Error, arguments: [String]) -> Never {
@@ -16,7 +17,7 @@ func report(_ error: Error, arguments: [String]) -> Never {
 }
 
 // Progress must show up as it happens even when output is piped or redirected (`workbench run | tee`).
-setvbuf(stdout, nil, _IOLBF, 0)
+wb_line_buffer_stdout()
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 // `--json` is global: it is taken out here so every command sees the same arguments, and only the read
