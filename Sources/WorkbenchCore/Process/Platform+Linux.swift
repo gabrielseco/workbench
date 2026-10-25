@@ -5,7 +5,7 @@ import Glibc
 
 /// Linux: `/proc` for the process table, no exit event (the poll alone), and everything above descriptor 2 closed in
 /// the child by a file action, since there is no `CLOEXEC_DEFAULT`.
-struct LinuxPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreaping {
+struct LinuxPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreaping, PipeReading {
     private func fields(_ pid: pid_t) -> [Substring]? {
         guard let text = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8) else { return nil }
         return ProcStat.fields(text)
@@ -43,5 +43,9 @@ struct LinuxPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapin
     func watchExit(of pid: pid_t, queue: DispatchQueue, handler: @escaping @Sendable () -> Void) -> ExitWatch? { nil }
 
     func becomeSubreaper() -> Bool { wb_become_subreaper() == 0 }
+
+    func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
+        ThreadPipeReader(fd: fd, queue: queue, onReadable: onReadable)
+    }
 }
 #endif

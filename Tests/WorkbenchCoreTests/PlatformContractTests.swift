@@ -129,6 +129,104 @@ private func wait(_ timeout: TimeInterval = Patience.limit, until condition: () 
         if watch != nil { #expect(await wait { heard.value }, "the platform's event arrives") }
     }
 
+    @Test(arguments: WatchKind.allCases)
+    func aPipeWatchReportsDataThenTheHangUpAndAnExtraCancelIsHarmless(kind: WatchKind) async throws {
+        var fds: [Int32] = [0, 0]
+        #expect(pipe(&fds) == 0)
+        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+        let seen = WatchSeen()
+        let reader = fds[0]
+        let watch = kind.watch(fd: reader, queue: DispatchQueue(label: "contract.pipe")) {
+            var buffer = [UInt8](repeating: 0, count: 64)
+            while true {
+                let n = read(reader, &buffer, buffer.count)
+                if n > 0 {
+                    seen.add(Array(buffer[0..<n]))
+                } else {
+                    if n == 0 { seen.markHangUp() }
+                    break
+                }
+            }
+        }
+        _ = write(fds[1], "hello", 5)
+        #expect(await eventually { seen.text == "hello" }, "the data is reported")
+        _ = write(fds[1], " world", 6)
+        #expect(await eventually { seen.text == "hello world" }, "and more of it, as it comes")
+        close(fds[1])
+        #expect(await eventually { seen.hungUp }, "the hang-up is reported (a read returns 0)")
+        watch.cancel()
+        watch.cancel()
+    }
+
+    @Test(arguments: WatchKind.allCases)
+    func cancellingAPipeWatchClosesItsDescriptorAndStopsTheCallbacks(kind: WatchKind) async throws {
+        var fds: [Int32] = [0, 0]
+        #expect(pipe(&fds) == 0)
+        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+        defer { close(fds[1]) }
+        let seen = WatchSeen()
+        let watch = kind.watch(fd: fds[0], queue: DispatchQueue(label: "contract.pipe.cancel")) { seen.count() }
+        watch.cancel()
+        // With the read end closed, the write end reports an error condition (nothing is written to it: that would raise SIGPIPE).
+        let writer = fds[1]
+        #expect(await eventually { Self.hasError(writer) }, "the read end was closed")
+        let calls = seen.calls
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(seen.calls == calls, "no callback after the cancel")
+    }
+
+    @Test(arguments: WatchKind.allCases)
+    func aPipeWatchMayBeCancelledFromInsideItsOwnCallback(kind: WatchKind) async throws {
+        var fds: [Int32] = [0, 0]
+        #expect(pipe(&fds) == 0)
+        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+        defer { close(fds[1]) }
+        let seen = WatchSeen()
+        let holder = WatchHolder()
+        let reader = fds[0]
+        holder.watch = kind.watch(fd: reader, queue: DispatchQueue(label: "contract.pipe.inside")) {
+            var byte: UInt8 = 0
+            if read(reader, &byte, 1) > 0 {
+                seen.count()
+                holder.watch?.cancel()
+            }
+        }
+        _ = write(fds[1], "x", 1)
+        #expect(await eventually { seen.calls == 1 })
+        let writer = fds[1]
+        #expect(await eventually { Self.hasError(writer) }, "closed after it cancelled itself")
+    }
+
+    @Test(arguments: WatchKind.allCases)
+    func manyPipeWatchesStartedWrittenToHungUpAndCancelledAtOnceDoNotBringTheProcessDown(kind: WatchKind) async {
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<24 {
+                group.addTask {
+                    for _ in 0..<100 {
+                        var fds: [Int32] = [0, 0]
+                        guard pipe(&fds) == 0 else { return }
+                        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+                        let reader = fds[0]
+                        let watch = kind.watch(fd: reader, queue: DispatchQueue(label: "contract.pipe.many")) {
+                            var byte: UInt8 = 0
+                            _ = read(reader, &byte, 1)
+                        }
+                        _ = write(fds[1], "x", 1)
+                        try? await Task.sleep(nanoseconds: UInt64.random(in: 0...2_000_000))
+                        close(fds[1])
+                        watch.cancel()
+                    }
+                }
+            }
+        }
+    }
+
+    private static func hasError(_ fd: Int32) -> Bool {
+        // A write end whose last read end is gone reports an error (Linux: POLLERR, macOS: POLLHUP or POLLERR).
+        var probe = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        return poll(&probe, 1, 0) > 0 && probe.revents & Int16(POLLERR | POLLHUP) != 0
+    }
+
     @Test func onlyAPlatformThatHasSubreapersSaysItBecameOne() {
         #if canImport(Darwin)
         #expect(!platform.becomeSubreaper(), "macOS has no subreapers")
@@ -147,4 +245,47 @@ private final class Heard: @unchecked Sendable {
 private func waitpidNoHang(_ pid: pid_t) -> Bool {
     var status: Int32 = 0
     return waitpid(pid, &status, WNOHANG) == pid
+}
+
+/// Both ways of watching a pipe run through the same checks: the platform's own, and the thread reader Linux uses (which has no
+/// OS-specific code, so macOS can hold it to the same behavior).
+enum WatchKind: CaseIterable, CustomTestStringConvertible, Sendable {
+    case platform
+    case thread
+
+    var testDescription: String { self == .platform ? "platform watch" : "thread reader" }
+
+    func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
+        switch self {
+        case .platform: WorkbenchCore.platform.watch(fd: fd, queue: queue, onReadable: onReadable)
+        case .thread: ThreadPipeReader(fd: fd, queue: queue, onReadable: onReadable)
+        }
+    }
+}
+
+private final class WatchHolder: @unchecked Sendable {
+    var watch: (any PipeReader)?
+}
+
+/// What a pipe watch's callback saw, safe to read from the test.
+private final class WatchSeen: @unchecked Sendable {
+    private let lock = NSLock()
+    private var bytes: [UInt8] = []
+    private var eof = false
+    private var n = 0
+    func add(_ more: [UInt8]) { lock.withLock { bytes += more } }
+    func markHangUp() { lock.withLock { eof = true } }
+    func count() { lock.withLock { n += 1 } }
+    var text: String { lock.withLock { String(decoding: bytes, as: UTF8.self) } }
+    var hungUp: Bool { lock.withLock { eof } }
+    var calls: Int { lock.withLock { n } }
+}
+
+/// Polls `condition` for up to five seconds.
+private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
+    for _ in 0..<500 {
+        if condition() { return true }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+    return condition()
 }

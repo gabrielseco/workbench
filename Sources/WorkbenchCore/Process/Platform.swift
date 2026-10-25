@@ -10,7 +10,7 @@ typealias CurrentPlatform = DarwinPlatform
 typealias CurrentPlatform = LinuxPlatform
 #endif
 
-typealias PlatformServices = ProcessInspecting & SpawnPlatform & ExitNotifying & Subreaping & Sendable
+typealias PlatformServices = ProcessInspecting & SpawnPlatform & ExitNotifying & Subreaping & PipeReading & Sendable
 
 /// What the code calls. Not a global of the concrete type, so a test can run the contract on any conforming value.
 let platform: some PlatformServices = CurrentPlatform()

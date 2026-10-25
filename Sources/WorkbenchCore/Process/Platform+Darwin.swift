@@ -3,7 +3,7 @@ import Darwin
 import Foundation
 
 /// macOS: libproc for the process table, kqueue for the exit event, `CLOEXEC_DEFAULT` for descriptor hygiene.
-struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreaping {
+struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreaping, PipeReading {
     func member(for pid: pid_t) -> ProcessMember? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -58,5 +58,23 @@ struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapi
     }
 
     func becomeSubreaper() -> Bool { false }
+
+    func watch(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) -> any PipeReader {
+        DispatchPipeReader(fd: fd, queue: queue, onReadable: onReadable)
+    }
+}
+
+/// A Dispatch read source: the closing of the descriptor is its cancel handler's job, after libdispatch has unregistered it.
+private final class DispatchPipeReader: PipeReader, @unchecked Sendable {
+    private let source: DispatchSourceRead
+
+    init(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) {
+        source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        source.setEventHandler(handler: onReadable)
+        source.setCancelHandler { close(fd) }
+        source.resume()
+    }
+
+    func cancel() { source.cancel() }
 }
 #endif
