@@ -25,26 +25,23 @@ public actor EventLogWriter {
 
     private let handle: FileHandle
     private let url: URL
-    private let maxClaudeLineBytes: Int
     private let now: @Sendable () -> Date
     private var state: LogState
     private var closed = false
 
     private init(
-        handle: FileHandle, url: URL, state: LogState, repairedTailBytes: Int, maxClaudeLineBytes: Int,
+        handle: FileHandle, url: URL, state: LogState, repairedTailBytes: Int,
         now: @escaping @Sendable () -> Date
     ) {
         self.handle = handle
         self.url = url
         self.state = state
         self.repairedTailBytes = repairedTailBytes
-        self.maxClaudeLineBytes = maxClaudeLineBytes
         self.now = now
     }
 
     public static func open(
         at url: URL,
-        maxClaudeLineBytes: Int = defaultMaxClaudeLineBytes,
         lockTimeout: TimeInterval = defaultLockTimeout,
         now: @escaping @Sendable () -> Date = { Date() }
     ) throws -> EventLogWriter {
@@ -94,7 +91,7 @@ public actor EventLogWriter {
         for event in contents.events { state.apply(event) }
         return EventLogWriter(
             handle: handle, url: url, state: state, repairedTailBytes: repaired,
-            maxClaudeLineBytes: maxClaudeLineBytes, now: now)
+            now: now)
     }
 
     /// Releases the lock and closes the file. Appends after this throw. Prefer this to letting the writer
@@ -121,19 +118,6 @@ public actor EventLogWriter {
         if let problem = state.check(event) { throw EventLogError.invalid(problem) }
         try write(event, dataJSON: try Self.json(data))
         return event
-    }
-
-    /// Appends one raw line from `claude`, stored verbatim when it is valid JSON. Invalid JSON is wrapped as
-    /// `{"invalid_json": "<line>"}` and oversized lines as a truncation marker, so the run continues and
-    /// the log stays bounded.
-    @discardableResult
-    public func appendClaudeLine(_ raw: String, turn: Int) throws -> Int {
-        let seq = state.nextSeq
-        let dataJSON = try Self.claudeDataJSON(raw, maxBytes: maxClaudeLineBytes)
-        let event = Event(seq: seq, ts: timestamp(), turn: turn, kind: .claude, data: .null)
-        if let problem = state.check(event) { throw EventLogError.invalid(problem) }
-        try write(event, dataJSON: dataJSON)
-        return seq
     }
 
     /// Closes an orphaned turn (left behind by a runner that died) with a synthetic `interrupted` end.

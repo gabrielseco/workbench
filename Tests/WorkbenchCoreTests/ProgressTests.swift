@@ -8,23 +8,18 @@ import Testing
         Event(seq: seq, ts: ts, turn: turn, kind: kind, data: data)
     }
 
-    private func toolUse(_ name: String, _ input: JSONValue) -> JSONValue {
-        ["type": "assistant", "message": ["content": [["type": "tool_use", "name": .string(name), "input": input]]]]
-    }
-
-    private func toolResult(_ text: String, error: Bool) -> JSONValue {
-        ["type": "user", "message": ["content": [["type": "tool_result", "content": .string(text), "is_error": .bool(error)]]]]
+    private func tool(_ name: String, _ summary: String) -> JSONValue {
+        ["provider": "claude", "type": "tool", "name": .string(name), "summary": .string(summary)]
     }
 
     private var running: [Event] {
         [
             event(1, "2026-10-14T10:00:00.000Z", .turnStarted, ["session_id": "s"]),
-            event(2, "2026-10-14T10:00:05.000Z", .claude, toolUse("Edit", ["file_path": "examples.json"])),
-            event(3, "2026-10-14T10:00:06.000Z", .claude, toolResult("ok", error: false)),
-            event(4, "2026-10-14T10:00:10.000Z", .claude, toolUse("Bash", ["command": "git push"])),
+            event(2, "2026-10-14T10:00:05.000Z", .agentActivity, tool("Edit", "examples.json")),
+            event(4, "2026-10-14T10:00:10.000Z", .agentActivity, tool("Bash", "git push")),
             event(
-                5, "2026-10-14T10:00:11.000Z", .claude,
-                toolResult("Permission for this tool use was denied. It requires approval", error: true)),
+                5, "2026-10-14T10:00:11.000Z", .agentActivity,
+                ["provider": "claude", "type": "permission_denied", "tool": "Bash"]),
         ]
     }
 
@@ -41,17 +36,11 @@ import Testing
         var events = running
         events.append(
             event(
-                6, "2026-10-14T10:03:00.000Z", .claude,
-                ["type": "assistant", "message": ["content": [["type": "text", "text": "thinking it over"]]]]))
+                6, "2026-10-14T10:03:00.000Z", .agentActivity,
+                ["provider": "claude", "type": "text", "text": "thinking it over"]))
         let progress = ThreadState.derive(from: events, id: "t").progress
         #expect(progress.lastEventAt == "2026-10-14T10:03:00.000Z")
         #expect(progress.toolCalls == 2)
-    }
-
-    @Test func aFailedCommandIsNotARefusal() {
-        var events = running
-        events.append(event(6, "2026-10-14T10:00:12.000Z", .claude, toolResult("exit 1: no such file", error: true)))
-        #expect(ThreadState.derive(from: events, id: "t").progress.deniedCalls == 1)
     }
 
     @Test func elapsedAndQuietComeFromTheStampsAndTheClockPassedIn() throws {

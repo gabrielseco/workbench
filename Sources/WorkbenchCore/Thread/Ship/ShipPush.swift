@@ -41,7 +41,8 @@ extension ThreadService {
         let ahead = try await recordBranchAhead(id: id, plan: plan)
         if plan.remote == .upToDate { return ShipPushResult(plan: plan, outcome: .alreadyOnOrigin, ahead: ahead) }
 
-        let pusher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
+        let pusher = GitRunner(
+            executable: git.executable, environment: git.environment, timeout: timeout, expiry: git.expiry)
         let result: GitResult
         do {
             result = try await pusher.run(

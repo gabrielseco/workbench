@@ -6,7 +6,7 @@ import Testing
 private struct Turn {
     var directory: URL
     var plain: URL
-    var original: [TranscriptLine]
+    var original: [JSONValue]
 }
 
 private func finishedTurn(lines: Int = 40) throws -> Turn {
@@ -16,7 +16,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
     let writer = TranscriptWriter(url: plain)
     for n in 0..<lines { try writer.append(#"{"type":"assistant","n":\#(n)}"#) }
     writer.close()
-    return Turn(directory: directory, plain: plain, original: TranscriptFile.lines(at: plain, turn: 1))
+    return Turn(directory: directory, plain: plain, original: TranscriptFile.lines(at: plain))
 }
 
 @Suite struct TranscriptCompressTests {
@@ -30,7 +30,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
         #expect(FileManager.default.fileExists(atPath: TranscriptFile.compressedURL(plain).path))
         #expect(!FileManager.default.fileExists(atPath: TranscriptFile.compressedURL(plain).path + ".partial"))
         #expect(TranscriptFile.exists(plain))
-        #expect(TranscriptFile.lines(at: plain, turn: 1) == original)
+        #expect(TranscriptFile.lines(at: plain) == original)
         #expect(TranscriptFile.summary(at: plain) == before, "the counts turn.ended recorded still hold")
         // From an offset too: a reader that followed the plain file goes on in the compressed one.
         let first = TranscriptFile.read(at: plain)
@@ -46,7 +46,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
 
         let rest = TranscriptFile.read(at: plain, from: head + 1)
         #expect(rest.lines.count == original.count - 1)
-        #expect(rest.lines.map(\.data) == original.dropFirst().map(\.data))
+        #expect(rest.lines.map(\.data) == Array(original.dropFirst()))
     }
 
     @Test func aFailureLeavesThePlainFileWhole() throws {
@@ -57,7 +57,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
             at: TranscriptFile.compressedURL(plain).appendingPathExtension("partial"), withIntermediateDirectories: true)
         #expect(!TranscriptFile.compress(plain))
         #expect(FileManager.default.fileExists(atPath: plain.path))
-        #expect(TranscriptFile.lines(at: plain, turn: 1) == original)
+        #expect(TranscriptFile.lines(at: plain) == original)
     }
 
     @Test func aFileOverTheLimitStaysPlain() throws {
@@ -66,7 +66,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
         #expect(!TranscriptFile.compress(plain, limit: 10))
         #expect(FileManager.default.fileExists(atPath: plain.path))
         #expect(!FileManager.default.fileExists(atPath: TranscriptFile.compressedURL(plain).path))
-        #expect(TranscriptFile.lines(at: plain, turn: 1) == original)
+        #expect(TranscriptFile.lines(at: plain) == original)
     }
 
     @Test func compressingTwiceOrNothingIsHarmless() throws {
@@ -74,7 +74,7 @@ private func finishedTurn(lines: Int = 40) throws -> Turn {
         let (plain, original) = (turn.plain, turn.original)
         #expect(TranscriptFile.compress(plain))
         #expect(TranscriptFile.compress(plain), "already compressed")
-        #expect(TranscriptFile.lines(at: plain, turn: 1) == original)
+        #expect(TranscriptFile.lines(at: plain) == original)
         #expect(!TranscriptFile.compress(Scratch.url("none").appendingPathComponent("turn-9.jsonl")))
     }
 

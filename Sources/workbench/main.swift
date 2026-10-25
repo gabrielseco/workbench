@@ -83,8 +83,6 @@ do {
         try await Commands.grant(Array(arguments.dropFirst()))
     case "open":
         try await Commands.open(Array(arguments.dropFirst()))
-    case "compact":
-        exit(try await Commands.compact(Array(arguments.dropFirst())))
     case "judge":
         exit(try await Commands.judge(Array(arguments.dropFirst())))
     case "verifier":

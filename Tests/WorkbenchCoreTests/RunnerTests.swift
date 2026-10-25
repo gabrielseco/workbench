@@ -28,16 +28,12 @@ struct RunnerFixture {
         expectProcessGate("RunnerFixture", sourceLocation: sourceLocation)
         // The repo sits in a directory of its own: the fakes tests put beside it (`gh-*`, `codex-*`, `origin-*`)
         // go there too and are removed with the run, instead of piling up in the temporary directory.
-        let base = Scratch.url("run").appendingPathComponent("repo")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        repo = base.resolvingSymlinksInPath()
+        let run = Scratch.url("run")
+        try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true)
+        let base = run.appendingPathComponent("repo")
         git = try isolatedGit()
-        for args in [["init", "-q", "-b", "main"], ["add", "-A"]] where args[0] == "init" {
-            _ = try await git.run(args, in: repo)
-        }
-        try "one\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try await git.run(["add", "-A"], in: repo)
-        _ = try await git.run(["commit", "-q", "-m", "first"], in: repo)
+        try FileManager.default.copyItem(at: try await RunnerTemplate.repository(git: git), to: base)
+        repo = base.resolvingSymlinksInPath()
 
         project = Project(root: repo)
         try FileManager.default.createDirectory(at: project.workbenchDirectory, withIntermediateDirectories: true)
@@ -93,8 +89,8 @@ struct RunnerFixture {
     func events(_ id: String) throws -> [Event] { try EventLogReader.read(at: project.eventsURL(id)).events }
 
     /// A turn's transcript lines, from the file beside the log.
-    func transcript(_ id: String, turn: Int = 1) -> [TranscriptLine] {
-        TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(id), turn: turn), turn: turn)
+    func transcript(_ id: String, turn: Int = 1) -> [JSONValue] {
+        TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(id), turn: turn))
     }
 
     func contents(_ id: String) throws -> EventLogContents { try EventLogReader.read(at: project.eventsURL(id)) }
@@ -326,7 +322,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(report.permissionDenials == 1)
         let log = try fx.events(id)
         let denialText = "Permission for this tool use was denied"
-        #expect(fx.transcript(id).contains { "\($0.data)".contains(denialText) })
+        #expect(fx.transcript(id).contains { "\($0)".contains(denialText) })
         #expect(ended(log)[0].data["permission_denials"]?.intValue == 1)
     }
 
@@ -336,8 +332,8 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         let report = try await fx.runner(id).run(fx.options("flood=3000000"))
 
         #expect(report.result == .succeeded)
-        let marker = try #require(fx.transcript(id).first { $0.data["truncated"] == true })
-        #expect((marker.data["original_bytes"]?.intValue ?? 0) > 3_000_000)
+        let marker = try #require(fx.transcript(id).first { $0["truncated"] == true })
+        #expect((marker["original_bytes"]?.intValue ?? 0) > 3_000_000)
         let log = try FileManager.default.attributesOfItem(atPath: fx.project.eventsURL(id).path)[.size] as? Int
         #expect((log ?? .max) < 100_000, "the log did not grow by the size of the line")
         let file = TranscriptFile.summary(at: TranscriptFile.url(in: fx.project.threadDirectory(id), turn: 1))
@@ -349,7 +345,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         let id = try await fx.approvedThread()
         let report = try await fx.runner(id).run(fx.options("invalid-line"))
         #expect(report.result == .succeeded)
-        #expect(fx.transcript(id).contains { $0.data["invalid_json"]?.stringValue == "this is not json {" })
+        #expect(fx.transcript(id).contains { $0["invalid_json"]?.stringValue == "this is not json {" })
     }
 
     // MARK: recovery and sessions
@@ -360,7 +356,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         do {
             let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
             try await log.append(.turnStarted, turn: 1, data: ["session_id": "x", "resume": false])
-            try await log.appendClaudeLine(#"{"type":"system","subtype":"init"}"#, turn: 1)
+            try await log.append(.agentActivity, turn: 1, data: ["provider": "claude", "type": "text", "text": "init"])
             await log.close()  // the runner "dies" here
         }
         #expect(try fx.contents(id).openTurn == 1)
@@ -580,16 +576,8 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(ended.contains("2 denied"))
 
         let tool = LogFormatter.describe(
-            event(
-                .claude,
-                [
-                    "type": "assistant",
-                    "message": ["content": [["type": "tool_use", "name": "Bash", "input": ["command": "git status"]]]],
-                ]))
+            event(.agentActivity, ["provider": "claude", "type": "tool", "name": "Bash", "summary": "git status"]))
         #expect(tool.contains("tool: Bash git status"))
-
-        #expect(LogFormatter.describe(event(.claude, ["truncated": true, "original_bytes": 5000])).contains("5000 bytes"))
-        #expect(LogFormatter.describe(event(.claude, ["type": "stream_event"])).hasSuffix("claude"))
     }
 }
 

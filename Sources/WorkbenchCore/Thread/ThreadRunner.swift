@@ -31,7 +31,7 @@ public enum RunNotice: Sendable {
     case recoveredOrphanedCheck(Int)
     case sweptOrphans([Int32])
     case turnStarted(turn: Int, pid: Int32?, resume: Bool)
-    case claudeLine(String)
+    case activity(String)
     case turnEnded(TurnReport)
     case checkStarted(turn: Int, command: String)
     case checkRan(CheckReport)

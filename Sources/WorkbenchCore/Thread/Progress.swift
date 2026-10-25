@@ -88,16 +88,14 @@ extension Progress {
 extension ThreadState {
     /// A finished turn's own count of refused calls is the authority: Claude's last line can be recovered after the
     /// output limit, with refusals that no activity event reported.
-    static func reconcileDenials(ended event: Event, legacy: Bool, into state: inout ThreadState) {
-        guard !legacy, event.turn == state.lastTurn, let count = event.data["permission_denials"]?.intValue else { return }
+    static func reconcileDenials(ended event: Event, into state: inout ThreadState) {
+        guard event.turn == state.lastTurn, let count = event.data["permission_denials"]?.intValue else { return }
         state.progress.deniedCalls = max(state.progress.deniedCalls, count)
         state.progress.deniedCallsKnown = true
     }
 
     /// Folds one normalized activity into the progress of the latest turn and the reported usage.
-    static func fold(activity event: Event, legacyTurns: Set<Int>, into state: inout ThreadState) {
-        // A turn with `claude` lines is read through those; counting its activity too would count everything twice.
-        guard !legacyTurns.contains(event.turn) else { return }
+    static func fold(activity event: Event, into state: inout ThreadState) {
         let latest = event.turn == state.lastTurn
         let type = event.data["type"]?.stringValue ?? "?"
         if type == "usage" {

@@ -349,11 +349,8 @@ enum Commands {
                 out("swept \(pids.count) leftover process(es) from an earlier run")
             case .turnStarted(let turn, let pid, let resume):
                 out("turn \(turn) started\(pid.map { " (pid \($0))" } ?? ""), \(resume ? "resuming session" : "new session")")
-            case .claudeLine(let line):
-                if let data = try? JSONDecoder().decode(JSONValue.self, from: Data(line.utf8)),
-                    let text = LogFormatter.describeClaude(data) {
-                    out("  \(text)")
-                }
+            case .activity(let text):
+                out("  \(text)")
             case .turnEnded(let report):
                 out("turn \(report.turn) ended: \(report.result.rawValue)"
                     + (report.costUSD.map { String(format: "  $%.4f", $0) } ?? "")

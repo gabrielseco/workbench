@@ -54,8 +54,16 @@ public struct VerifierSkill: Sendable, Equatable {
     /// its target text and that text would reach the model as its instructions.
     public static func load(git: GitRunner, repo: URL, commit: String, path: String) async -> Result<VerifierSkill, Problem> {
         let reader = ProjectInstructions.BlobReader(git: git, repo: repo, commit: commit)
-        if let problem = await symlinkProblem(reader, path) { return .failure(problem) }
-        guard let entry = await reader.entry(path) else { return .failure(.missing(path)) }
+        // A skill that is a regular file in the commit has no symlink above it (git stores nothing beneath a link), so
+        // one `ls-tree` of the path settles the usual case. Only when it is not found as a regular file are the
+        // directories above it asked one by one, as before, to say which link it is.
+        let parts = path.split(separator: "/").map(String.init)
+        var found = await reader.entries([path])
+        if found[path]?.isRegularFile != true {
+            if let problem = await symlinkProblem(reader, path, parts: parts) { return .failure(problem) }
+            found = [path: await reader.entry(path)].compactMapValues { $0 }
+        }
+        guard let entry = found[path] else { return .failure(.missing(path)) }
         guard entry.isRegularFile else { return .failure(.missing(path)) }
         guard let raw = await reader.read(entry) else {
             return .failure(await oversized(git: git, repo: repo, sha: entry.sha) ? .tooLarge(path) : .unreadable(path))
@@ -64,8 +72,9 @@ public struct VerifierSkill: Sendable, Equatable {
     }
 
     /// The path is a symlink, or sits under one (this repository's `.claude/skills/<name>` points into `.agents/`).
-    private static func symlinkProblem(_ reader: ProjectInstructions.BlobReader, _ path: String) async -> Problem? {
-        let parts = path.split(separator: "/").map(String.init)
+    private static func symlinkProblem(
+        _ reader: ProjectInstructions.BlobReader, _ path: String, parts: [String]
+    ) async -> Problem? {
         for count in 1...max(parts.count, 1) {
             let link = parts.prefix(count).joined(separator: "/")
             guard let entry = await reader.entry(link), entry.isSymlink else { continue }

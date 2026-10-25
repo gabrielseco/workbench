@@ -3,10 +3,9 @@
 # (nothing runs), so it costs nothing.
 #   bash scripts/verify-cli/activity-events.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/activity-events.sh   (the same, on a branch that contains origin/main)
-# No second provider can be enabled yet, so the scenario writes what its recorder would: a thread's log gets a Claude turn
-# (verbatim `claude` lines) and an open turn of provider `codex` with `agent.activity` events (text, two tool calls, an
-# event nobody understood), as the log writer lays them out. Then `log` must print the Claude turn as before and the codex
-# turn through the new lines, `log --json` must carry the stored events unchanged, and `status --json` must count the codex
+# No agent is started, so the scenario writes what the recorder would: a thread's log gets a Claude turn (a tool call as
+# `agent.activity`) and an open turn of provider `codex` with `agent.activity` events (text, two tool calls, an event nobody
+# understood), as the log writer lays them out. Then `log` must print both turns through their lines, `log --json` must carry the stored events unchanged, and `status --json` must count the codex
 # turn's two tool calls and say its denied calls are null (a provider that reported none has not said there were none).
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start.
 # VERIFY_CLI_SABOTAGE=1 leaves the `agent.activity` events out of the codex turn, so the steps that expect its lines, its
@@ -74,8 +73,7 @@ def add(turn, kind, data):
         f.write(json.dumps({"v": 1, "seq": seq, "ts": "2026-10-24T10:00:%02d.000Z" % (seq % 60), "turn": turn,
                             "kind": kind, "data": data}) + "\n")
 add(1, "turn.started", {"provider": "claude", "session_id": "s1", "resume": False, "pid": 1})
-add(1, "claude", {"type": "assistant", "message": {"content": [
-    {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}]}})
+add(1, "agent.activity", {"provider": "claude", "type": "tool", "name": "Bash", "summary": "ls"})
 add(1, "turn.ended", {"result": "succeeded", "exit_code": 0})
 add(2, "turn.started", {"provider": "codex", "session_id": "c1", "resume": False, "pid": 2})
 if not sabotage:
@@ -88,7 +86,7 @@ PY
 
 wbp "$SCRATCH/log.out" log "$ID"
 shown "$SCRATCH/log.out" 14
-check "the Claude turn reads as before" "no 'tool: Bash ls' line" grep -q "tool: Bash ls" "$SCRATCH/log.out"
+check "the Claude turn is a line" "no 'tool: Bash ls' line" grep -q "tool: Bash ls" "$SCRATCH/log.out"
 check "the codex turn's text is a line" "no 'codex: hello from codex' line" grep -q "codex: hello from codex" "$SCRATCH/log.out"
 check "its tool calls are lines" "no 'tool: shell git status' line" grep -q "tool: shell git status" "$SCRATCH/log.out"
 check "an event nobody understood names its provider" "no 'codex event not understood' line" \

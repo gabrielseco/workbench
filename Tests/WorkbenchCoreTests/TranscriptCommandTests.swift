@@ -73,20 +73,6 @@ private func cli(_ arguments: [String], in fx: RunnerFixture) async throws -> Ou
         #expect(status.code == 0, "\(status)")
     }
 
-    @Test func anOlderLogsClaudeEventsArePrintedAsTheyWereStored() async throws {
-        let fx = try await RunnerFixture()
-        let id = try await fx.approvedThread()
-        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
-        try await log.append(.turnStarted, turn: 1)
-        try await log.appendClaudeLine(#"{"type":"system","subtype":"init","b":2,"a":1}"#, turn: 1)
-        try await log.appendClaudeLine("not json {", turn: 1)
-        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
-        await log.close()
-
-        let printed = try await cli(["log", id, "--transcript"], in: fx)
-        #expect(printed.lines == [#"{"type":"system","subtype":"init","b":2,"a":1}"#, #"{"invalid_json":"not json {"}"#])
-    }
-
     @Test func theFlagsAreCheckedBeforeAnythingIsPrinted() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

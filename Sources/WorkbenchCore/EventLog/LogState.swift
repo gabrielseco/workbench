@@ -10,8 +10,6 @@ public enum LogProblem: Error, Equatable, Sendable {
     case turnNotConsecutive(expected: Int, found: Int, line: Int)
     /// `turn.ended` for a turn that is not the open one (invariant 1).
     case turnEndedWithoutStart(turn: Int, line: Int)
-    /// A `claude` line outside an open turn.
-    case claudeOutsideTurn(turn: Int, line: Int)
     /// An `agent.activity` outside an open turn.
     case activityOutsideTurn(turn: Int, line: Int)
     /// `check.started` while another check has not ended.
@@ -61,10 +59,6 @@ struct LogState: Sendable {
         case .turnEnded:
             if openTurn != event.turn {
                 return .turnEndedWithoutStart(turn: event.turn, line: line)
-            }
-        case .claude:
-            if openTurn != event.turn {
-                return .claudeOutsideTurn(turn: event.turn, line: line)
             }
         case .agentActivity:
             if openTurn != event.turn {

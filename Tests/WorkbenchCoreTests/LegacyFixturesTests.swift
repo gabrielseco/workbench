@@ -28,9 +28,10 @@ private let scenarios = [
     Scenario(
         name: "bare", model: nil, judgeModel: nil, lastTurn: 1, cost: 0.12, decision: nil, judged: false,
         prVerdict: nil, denials: 0),
+    // Its result line lists one refused call; `claude` events are no longer read, so an unmigrated log shows none.
     Scenario(
         name: "models", model: "opus", judgeModel: "haiku", lastTurn: 1, cost: 0.12, decision: nil, judged: true,
-        prVerdict: nil, denials: 1),
+        prVerdict: nil, denials: 0),
     Scenario(
         name: "codex-review", model: nil, judgeModel: nil, lastTurn: 1, cost: 0.12, decision: nil, judged: true,
         prVerdict: "clean", denials: 0),

@@ -14,6 +14,15 @@ private func denial(_ tool: String, _ input: JSONValue? = nil, id: String? = nil
     return .object(fields)
 }
 
+/// One refused call as the runner stores it: the tool and the one string `tool_input` carries for it.
+private func recordedCall(_ item: JSONValue) -> JSONValue? {
+    guard let tool = item["tool_name"]?.stringValue else { return nil }
+    var call: [String: JSONValue] = ["tool": .string(tool)]
+    let keys = ["command", "file_path", "path", "notebook_path", "url", "pattern", "query"]
+    if let input = keys.lazy.compactMap({ item["tool_input"]?[$0]?.stringValue }).first { call["input"] = .string(input) }
+    return .object(call)
+}
+
 private func state(
     _ lines: [(turn: Int, JSONValue)], end: String = "succeeded", recorded full: [Int: JSONValue] = [:]
 ) -> ThreadState {
@@ -24,14 +33,15 @@ private func state(
     add(.threadCreated, 0, [:])
     for turn in Set(lines.map(\.turn)).sorted() {
         add(.turnStarted, turn, ["session_id": "s", "resume": .bool(turn > 1)])
-        for line in lines where line.turn == turn { add(.claude, turn, line.1) }
-        // What the runner records: the length of the turn's last result array.
+        // What the runner records on `turn.ended` from the turn's last result: the count and the calls.
         var recorded = 0
+        var calls: [JSONValue] = []
         if let last = lines.last(where: { $0.turn == turn }), case .array(let items)? = last.1["permission_denials"] {
             recorded = items.count
+            calls = items.compactMap(recordedCall)
         }
         var ended: [String: JSONValue] = ["result": .string(end), "permission_denials": .int(recorded)]
-        if let calls = full[turn] { ended["denials"] = calls }
+        if let override = full[turn] { ended["denials"] = override } else if !calls.isEmpty { ended["denials"] = .array(calls) }
         add(.turnEnded, turn, .object(ended))
     }
     return ThreadState.derive(from: events, id: "t")
@@ -135,33 +145,16 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(body.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ") == "Bash(\(command))")
     }
 
-    @Test func aShortCommandIsNotRepeatedAndAnOldLogStillRenders() {
+    @Test func aShortCommandIsNotRepeated() {
         let call = result([denial("Bash", ["command": "git push origin main"])])
         let short = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "git push origin main"]]])
         #expect(!rendered(short).contains { $0.hasPrefix("      ") })
-        let old = state([(1, call)])
-        #expect(old.review.deniedTools[0].fullInput == nil)
-        #expect(rendered(old).contains { $0.hasPrefix("  Bash(git push origin main) ×1") })
-    }
-
-    @Test func aGroupTakesTheFullCommandFromAnyTurnThatRecordedIt() {
-        let long = String(repeating: "word ", count: 40) + "end"
-        let call = result([denial("Bash", ["command": .string(long)])])
-        let s = state([(1, call), (2, call)], recorded: [2: [["tool": "Bash", "input": .string(long)]]])
-        #expect(s.review.deniedTools.map(\.fullInput) == [nil, long])
-        #expect(rendered(s).contains { $0.hasPrefix("      ") })
     }
 
     @Test func theFullInputIsMadeSafeToPrint() {
         let call = result([denial("Bash", ["command": "echo hi"])])
         let s = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "\u{1B}[31mecho\u{07}\nhi\tthere"]]])
         #expect(s.review.deniedTools[0].fullInput == "echo hi there")
-    }
-
-    @Test func fullInputsFromAnotherListAreNotAttached() {
-        let call = result([denial("Bash", ["command": "ls"]), denial("Bash", ["command": "pwd"])])
-        let s = state([(1, call)], recorded: [1: [["tool": "Bash", "input": "something else entirely"]]])
-        #expect(s.review.deniedTools.allSatisfy { $0.fullInput == nil })
     }
 
     @Test func oddShapesStillShowTheToolAndNeverBreakTheLine() {
@@ -198,7 +191,7 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(rendered(s).contains { $0.contains("denied tools may explain this") })
     }
 
-    @Test func aReplayedResultLineIsCountedOnceAndEntriesMatchEachTurnsRecordedCount() {
+    @Test func eachTurnsEntriesAreItsRecordedCallsOnce() {
         let withID = result([denial("Bash", ["command": "rm -rf /"], id: "toolu_1")])
         let noID = result([denial("Bash", ["command": "git push"])])
         let two = result([denial("Bash", ["command": "ls"]), denial("Bash", ["command": "ls"])])
@@ -241,9 +234,9 @@ private func rendered(_ state: ThreadState) -> [String] {
         _ = try await fx.runner(id).run(fx.options())
         let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
         _ = try await log.append(.turnStarted, turn: 2, data: ["session_id": "s", "resume": true])
+        let calls: JSONValue = .array([["tool": "Bash", "input": "git push origin main"]])
         let seq = try await log.append(
-            .claude, turn: 2, data: result([denial("Bash", ["command": "git push origin main"], id: "toolu_9")])).seq
-        _ = try await log.append(.turnEnded, turn: 2, data: ["result": "succeeded"])
+            .turnEnded, turn: 2, data: ["result": "succeeded", "permission_denials": 1, "denials": calls]).seq
         await log.close()
 
         let review = try await cli(["review", id], in: fx)
@@ -251,7 +244,7 @@ private func rendered(_ state: ThreadState) -> [String] {
 
         let raw = try await cli(["log", id, "--seq", String(seq)], in: fx)
         #expect(raw.exit?.termination == .exited(0), "\(raw.text)")
-        #expect(raw.text.contains("toolu_9") && raw.text.contains("git push origin main"), "\(raw.text)")
+        #expect(raw.text.contains("git push origin main"), "\(raw.text)")
         #expect(raw.text.contains("\"seq\" : \(seq)"), "\(raw.text)")
 
         let missing = try await cli(["log", id, "--seq", "9999"], in: fx)

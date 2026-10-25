@@ -57,11 +57,6 @@ enum Help {
         "review": Extra(
             changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
             example: "workbench review --json"),
-        "compact": Extra(
-            changes:
-                "events.jsonl of each ended thread it names (renumbers seq, replaces claude events by a counted record, "
-                + "adds denials to turn.ended); adds its transcript files; keeps the old log as events.jsonl.before-migrate",
-            example: "workbench compact --all --dry-run   then   workbench compact --all"),
         "open": Extra(
             changes: "nothing in the thread or its worktree; starts the editor (or, with --print, nothing)",
             example: "workbench open --editor cursor   or   cd \"$(workbench open --print)\""),

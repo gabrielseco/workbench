@@ -21,13 +21,13 @@ private func lines(of url: URL) throws -> [String] {
         let log = try EventLogWriter.open(at: url)
         try await log.append(.threadCreated, data: ["repo": "/r", "branch": "workbench/t1"])
         try await log.append(.turnStarted, turn: 1, data: ["session_id": "abc", "resume": false])
-        try await log.appendClaudeLine(#"{"type":"system","subtype":"init"}"#, turn: 1)
+        try await log.append(.agentActivity, turn: 1, data: ["provider": "claude", "type": "text", "text": "hi"])
         try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded", "exit_code": 0])
 
         let contents = try EventLogReader.read(at: url)
         #expect(contents.isHealthy)
         #expect(contents.events.map(\.seq) == [1, 2, 3, 4])
-        #expect(contents.events.map(\.kind) == [.threadCreated, .turnStarted, .claude, .turnEnded])
+        #expect(contents.events.map(\.kind) == [.threadCreated, .turnStarted, .agentActivity, .turnEnded])
         #expect(contents.events[0].v == 1)
         #expect(contents.events[0].data["branch"] == "workbench/t1")
         #expect(contents.events[3].data["exit_code"]?.intValue == 0)
@@ -39,50 +39,6 @@ private func lines(of url: URL) throws -> [String] {
         let log = try EventLogWriter.open(at: url, now: { Date(timeIntervalSince1970: 1_700_000_000.125) })
         let event = try await log.append(.threadCreated)
         #expect(event.ts == "2023-11-14T22:13:20.125Z")
-    }
-
-    // MARK: invariant 3, verbatim
-
-    @Test func validClaudeLineIsStoredByteForByte() async throws {
-        let url = try tempLog()
-        let log = try EventLogWriter.open(at: url)
-        try await log.append(.turnStarted, turn: 1)
-        let raw = #"{"type":"assistant",  "z":1,"a":[1,2.50,"x/y"], "n":null}"#
-        try await log.appendClaudeLine(raw, turn: 1)
-
-        let stored = try lines(of: url)[1]
-        #expect(stored.hasSuffix(#""data":\#(raw)}"#))
-        let event = try EventLogReader.read(at: url).events[1]
-        #expect(event.data["type"] == "assistant")
-    }
-
-    @Test func invalidJsonLineIsWrappedAndRunContinues() async throws {
-        let url = try tempLog()
-        let log = try EventLogWriter.open(at: url)
-        try await log.append(.turnStarted, turn: 1)
-        try await log.appendClaudeLine("not json {", turn: 1)
-        try await log.appendClaudeLine("{\"ok\":true}\n{\"two\":2}", turn: 1)
-        try await log.appendClaudeLine(#"{"type":"result"}"#, turn: 1)
-
-        let contents = try EventLogReader.read(at: url)
-        #expect(contents.isHealthy)
-        #expect(contents.events[1].data["invalid_json"] == "not json {")
-        #expect(contents.events[2].data["invalid_json"] == "{\"ok\":true}\n{\"two\":2}")
-        #expect(contents.events[3].data["type"] == "result")
-    }
-
-    @Test func oversizedLineBecomesTruncationMarker() async throws {
-        let url = try tempLog()
-        let log = try EventLogWriter.open(at: url, maxClaudeLineBytes: 100)
-        try await log.append(.turnStarted, turn: 1)
-        let big = #"{"blob":""# + String(repeating: "x", count: 5000) + #""}"#
-        try await log.appendClaudeLine(big, turn: 1)
-
-        let data = try EventLogReader.read(at: url).events[1].data
-        #expect(data["truncated"] == true)
-        #expect(data["original_bytes"]?.intValue == big.utf8.count)
-        #expect(data["prefix"]?.stringValue?.hasPrefix(#"{"blob":"xxx"#) == true)
-        #expect(try String(contentsOf: url, encoding: .utf8).utf8.count < 6000)
     }
 
     // MARK: invariant 1, turns
@@ -107,9 +63,6 @@ private func lines(of url: URL) throws -> [String] {
         await #expect(throws: EventLogError.invalid(.turnEndedWithoutStart(turn: 1, line: 0))) {
             try await log.append(.turnEnded, turn: 1)
         }
-        await #expect(throws: EventLogError.invalid(.claudeOutsideTurn(turn: 1, line: 0))) {
-            try await log.appendClaudeLine("{}", turn: 1)
-        }
         await #expect(throws: EventLogError.invalid(.turnNotConsecutive(expected: 1, found: 2, line: 0))) {
             try await log.append(.turnStarted, turn: 2)
         }
@@ -119,9 +72,6 @@ private func lines(of url: URL) throws -> [String] {
             try await log.append(.turnStarted, turn: 2)
         }
         try await log.append(.turnEnded, turn: 1)
-        await #expect(throws: EventLogError.invalid(.claudeOutsideTurn(turn: 1, line: 0))) {
-            try await log.appendClaudeLine("{}", turn: 1)
-        }
         // Rejected appends must not have consumed a seq.
         #expect(await log.nextSeq == 3)
     }
@@ -131,7 +81,7 @@ private func lines(of url: URL) throws -> [String] {
         do {
             let log = try EventLogWriter.open(at: url)
             try await log.append(.turnStarted, turn: 1)
-            try await log.appendClaudeLine(#"{"type":"system"}"#, turn: 1)
+            try await log.append(.agentActivity, turn: 1, data: ["provider": "claude", "type": "text", "text": "hi"])
             // runner "dies" here: no turn.ended
             await log.close()
         }
@@ -253,18 +203,14 @@ private func lines(of url: URL) throws -> [String] {
         let raw = try String(contentsOf: fixture, encoding: .utf8).split(separator: "\n").map(String.init)
         try #require(!raw.isEmpty)
 
-        let url = try tempLog()
-        let log = try EventLogWriter.open(at: url)
-        try await log.append(.turnStarted, turn: 1)
-        for line in raw { try await log.appendClaudeLine(line, turn: 1) }
-        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        // Real stream lines go through the transcript writer exactly as they came.
+        let url = TranscriptFile.url(in: try tempLog().deletingLastPathComponent(), turn: 1)
+        let writer = TranscriptWriter(url: url)
+        for line in raw { try writer.append(line) }
+        writer.close()
 
-        let stored = try lines(of: url)
-        #expect(stored.count == raw.count + 2)
-        for (line, written) in zip(raw, stored.dropFirst()) {
-            #expect(written.hasSuffix(#""data":\#(line)}"#))
-        }
-        #expect(try EventLogReader.read(at: url).isHealthy)
+        let stored = TranscriptFile.read(at: url).lines
+        #expect(stored.map(\.rawData) == raw)
     }
 
     @Test func closeReleasesTheLockAndStopsAppends() async throws {

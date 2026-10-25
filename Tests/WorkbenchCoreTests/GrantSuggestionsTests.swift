@@ -14,8 +14,9 @@ private func thread(
         events.append(Event(seq: events.count + 1, ts: "2026-10-18T10:00:00.000Z", turn: turn, kind: kind, data: data))
     }
     add(.turnStarted, 1, ["session_id": "s", "resume": false])
-    add(.claude, 1, ["type": "result", "permission_denials": .array(commands.map(bashDenial))])
-    add(.turnEnded, 1, ["result": "succeeded", "permission_denials": .int(commands.count)])
+    add(
+        .turnEnded, 1,
+        ["result": "succeeded", "permission_denials": .int(commands.count), "denials": .array(commands.map(bashDenial))])
     for (scope, pattern) in decisions {
         add(.grantAdded, 0, ["scope": .string(scope), "pattern": .string(pattern)])
     }

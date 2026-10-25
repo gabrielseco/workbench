@@ -82,6 +82,10 @@ public final class ProcessRun: @unchecked Sendable {
     /// SIGTERM now, SIGKILL (and a sweep of descendants) after `killGrace`. Idempotent.
     public func stop() { engine.requestStop(.stopped) }
 
+    /// Ends the child exactly as its timeout would (cause `.timedOut`, same SIGTERM then SIGKILL), now. For tests that
+    /// need a hang ended once the child is known to be running, instead of a timer sized to outlast a loaded runner.
+    public func expire() { engine.requestStop(.timedOut) }
+
     /// Descendants seen so far that may still be running. For tests and diagnostics.
     public func trackedDescendants() -> [Int32] { engine.trackedPIDs() }
 }
