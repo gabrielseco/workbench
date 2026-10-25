@@ -65,6 +65,19 @@ private func rendered(_ state: ThreadState) -> [String] {
         #expect(tools[2].input == nil)
     }
 
+    @Test func theEndOfATurnRaisesTheDeniedCountPastWhatActivityReported() {
+        func event(_ seq: Int, _ turn: Int, _ kind: EventKind, _ data: JSONValue = [:]) -> Event {
+            Event(seq: seq, ts: "2026-10-25T10:00:00.000Z", turn: turn, kind: kind, data: data)
+        }
+        let events = [
+            event(1, 0, .threadCreated), event(2, 1, .turnStarted, ["provider": "claude"]),
+            event(3, 1, .agentActivity, ["provider": "claude", "type": "permission_denied", "tool": "Bash"]),
+            event(4, 1, .turnEnded, ["result": "succeeded", "permission_denials": 3]),
+        ]
+        let progress = ThreadState.derive(from: events, id: "t").progress
+        #expect(progress.deniedCalls == 3 && progress.deniedCallsKnown, "two refusals came after the output limit")
+    }
+
     @Test func aDenialTurnEndedCutIsNotRatedOrGrantedAsItsPrefix() {
         let long = "git status" + String(repeating: " ", count: 4_100) + "; git push origin main"
         let cut: JSONValue = ["tool": "Bash", "input": .string(String(long.prefix(4096))), "input_truncated": true]

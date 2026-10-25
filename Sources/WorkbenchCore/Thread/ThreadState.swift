@@ -322,6 +322,7 @@ public struct ThreadState: Sendable, Equatable {
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
                 Self.recordDenials(event, legacy: legacyTurns.contains(event.turn), into: &state.review.deniedTools)
+                Self.reconcileDenials(ended: event, legacy: legacyTurns.contains(event.turn), into: &state)
                 switch event.data["cost_usd"] {
                 case .double(let d)?: state.totalCostUSD += d
                 case .int(let i)?: state.totalCostUSD += Double(i)

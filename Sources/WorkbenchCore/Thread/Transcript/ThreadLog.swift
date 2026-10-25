@@ -166,11 +166,13 @@ public struct ThreadLog: Sendable {
             loaded[turn] = found
             return found
         }
-        // Only a turn the log holds a `claude` result line for is older than `agent.activity`; the others are read
-        // through their activity events, and their file is for `--transcript`.
+        // A turn is read through its `agent.activity` events, and its file is for `--transcript`. Older turns have no
+        // such events: one the log holds a `claude` line for, and one that ended without any (an older runner killed
+        // before its result line) whose file is then the only record, shown at its end.
         let legacy = Set(contents.events.filter { $0.kind == .claude }.map(\.turn))
-        func flush(_ turn: Int) {
-            guard legacy.contains(turn) else { return }
+        let withActivity = Set(contents.events.filter { $0.kind == .agentActivity }.map(\.turn))
+        func flush(_ turn: Int, ended: Bool) {
+            guard legacy.contains(turn) || (ended && !withActivity.contains(turn)) else { return }
             switch transcriptFile(turn) {
             case .missing:
                 return
@@ -193,11 +195,11 @@ public struct ThreadLog: Sendable {
             // A turn with a transcript file shows its lines from there, whatever `claude` events the log still holds
             // for it: its `result` line always, and all of them in a log `compact` was interrupted in.
             if event.kind == .claude, hasTranscript(event.turn) { continue }
-            if event.kind == .turnEnded { flush(event.turn) }
+            if event.kind == .turnEnded { flush(event.turn, ended: true) }
             emit(.event(event, index: index))
         }
         position.events = contents.events.count
-        if let open = contents.openTurn { flush(open) }
+        if let open = contents.openTurn { flush(open, ended: false) }
         return position
     }
 

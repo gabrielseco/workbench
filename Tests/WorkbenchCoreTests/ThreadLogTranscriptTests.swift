@@ -42,6 +42,24 @@ private func codexThread() async throws -> (project: Project, id: String) {
 }
 
 @Suite struct ThreadLogTranscriptTests {
+    @Test func anOlderTurnKilledBeforeItsResultStillShowsItsFileAtItsEnd() async throws {
+        let project = Project(root: Scratch.url("killed"))
+        let id = "g-killed"
+        let log = try EventLogWriter.open(at: project.eventsURL(id))
+        try await log.append(.threadCreated)
+        try await log.append(.turnStarted, turn: 1, data: ["provider": "claude"])
+        let writer = TranscriptWriter(url: TranscriptFile.url(in: project.threadDirectory(id), turn: 1))
+        try writer.append(#"{"type":"system","subtype":"init"}"#)
+        writer.close()
+        try await log.append(.turnEnded, turn: 1, data: ["result": "interrupted"])
+        await log.close()
+        let kinds = try ThreadLog.read(at: project.eventsURL(id)).entries.map { entry -> String in
+            if case .event(let event) = entry { return event.kind.rawValue }
+            return "line"
+        }
+        #expect(kinds == ["thread.created", "turn.started", "line", "turn.ended"])
+    }
+
     @Test func aCodexTurnShowsItsActivityNotItsRawLinesAndKeepsThemForTranscript() async throws {
         let (project, id) = try await codexThread()
         let log = try EventLogWriter.open(at: project.eventsURL(id))
