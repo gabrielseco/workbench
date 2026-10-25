@@ -241,4 +241,27 @@ private struct DiffRepo {
         let statuses = DiffProvider.parseNameStatus("M\0a b.txt\0A\0pic.png\0R100\0old.txt\0new.txt\0D\0x\0")
         #expect(statuses == ["a b.txt": .modified, "pic.png": .added, "new.txt": .renamed, "x": .deleted])
     }
+
+    @Test func theListReviewShowsIsWhatAFullSummaryHoldsWithoutStagedOrIgnoredFiles() async throws {
+        let repo = try await DiffRepo()
+        let base = try await repo.base()
+        try repo.write(".gitignore", "*.log\n")
+        try repo.write("keep.txt", "one\ntwo\nthree\nfour\n")
+        try repo.write("staged.txt", "s\n")
+        try repo.write("loose.txt", "l\n")
+        try repo.write("noise.log", "ignored\n")
+        try await repo.run("add", "staged.txt", "keep.txt")
+        try await repo.run("mv", "old-name.txt", "new-name.txt")
+
+        let direct = try await repo.provider.summary(worktree: repo.root, base: base)
+        let full = try await repo.provider.summary(
+            worktree: repo.root, base: base, limit: Int.max, includeIgnored: true, includeStaged: true)
+
+        #expect(full.files.contains { $0.path == "noise.log" && $0.isIgnored })
+        #expect(full.files.contains { $0.isStaged })
+        #expect(full.plain() == direct)
+        // The cut applies to what is shown, not to what was read.
+        let cut = full.plain(limit: 2)
+        #expect(cut.files == Array(direct.files.prefix(2)) && cut.truncated && cut.totalFiles == direct.totalFiles)
+    }
 }

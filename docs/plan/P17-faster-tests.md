@@ -116,7 +116,7 @@ Done when: a full run leaves no `wb-*` directory (done).
 
 Done when: the question "is the gate too small?" is answered (it is not).
 
-### 4. Fewer and parallel git calls in the commands the tests drive
+### 4. Fewer and parallel git calls in the commands the tests drive (built)
 
 Replaces "share the fixture": a fixture costs 0.05 s, so a template saves little (finding 2).
 
@@ -129,6 +129,20 @@ Replaces "share the fixture": a fixture costs 0.05 s, so a template saves little
   plus one test per changed function that counts spawns (a fake `GitRunner` records its calls).
 
 Done when: `acceptPlan` spawns 10 or fewer git processes (from 17) and the CLI `accept` takes 0.4 s or less.
+
+Built for `acceptPlan` (2026-10-25). It spawned 17: `symbolic-ref`, `status`, `log` for the commits, then
+`ReviewLoader.load` (`rev-parse` of the branch twice, `rev-list --count`, `log`, and the plain diff: two `diff`
+and `ls-files --others`), then a second, full `DiffProvider.summary` that repeated the same three and added the
+staged and ignored reads. Now:
+
+- `acceptPlan` uses only the diff of the review report, so it no longer loads the report's branch lookups (4).
+- `DiffProvider.summary` is read once with staged and ignored files, and the list `review` shows is
+  `DiffSummary.plain()` of it (3 fewer; `FileChange.isIgnored` marks what is only there for discard).
+- The independent reads run together (`async let`): `symbolic-ref`, `status`, `log` and the diff in one round, and
+  the up to seven reads inside `summary` in another. The answers are still checked in the old order, so the
+  refusal a person sees is the same. `GIT_OPTIONAL_LOCKS=0` keeps them off the index lock.
+- Result: 10 git processes (from 17), `acceptPlan` 0.43 to 0.57 s against 0.86 s through a counting wrapper, and
+  `AcceptTests` 23.3 s to 12.6 s serial. `AcceptGitCallsTests` pins it: no git command runs twice, and at most 10.
 
 ### 5. Shorten the waits that are by design
 

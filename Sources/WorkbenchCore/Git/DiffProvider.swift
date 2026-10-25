@@ -16,11 +16,21 @@ public struct FileChange: Sendable, Equatable {
     public var isBinary: Bool
     public var isUntracked: Bool
     public var isStaged = false
+    /// Listed only because discard removes ignored files too; `review` does not show it.
+    public var isIgnored = false
 }
 
 /// What a worktree holds compared to its base: the same set of files `git status` reports there, with
 /// line counts. Patches are fetched per file with `patch(for:)` so a huge diff costs nothing until asked.
 public struct DiffSummary: Sendable, Equatable {
+    /// The list a summary without staged or ignored files would have given, cut at `limit`: what `review` shows,
+    /// taken from a summary that was read with both so git is not asked twice.
+    public func plain(limit: Int = DiffProvider.fileLimit) -> DiffSummary {
+        let shown = files.filter { !$0.isStaged && !$0.isIgnored }
+        return DiffSummary(
+            base: base, files: Array(shown.prefix(limit)), truncated: shown.count > limit, totalFiles: shown.count)
+    }
+
     public var base: String
     public var files: [FileChange]
     /// `true` when there were more changed files than `DiffProvider.fileLimit`; `files` is cut.
@@ -73,22 +83,35 @@ public struct DiffProvider: Sendable {
     ) async throws -> DiffSummary {
         try requireDirectory(worktree)
 
-        let tracked = try await run(
+        // Independent reads: with `GIT_OPTIONAL_LOCKS=0` none of them takes the index lock, so they run together.
+        async let trackedRun = run(
             ["diff", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
-        let named = try await run(
+        async let namedRun = run(
             ["diff", "--name-status", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
-        let statuses = Self.parseNameStatus(named.stdout)
-        var files = Self.parseNumstat(tracked.stdout).map { change -> FileChange in
+        async let stagedRun = includeStaged
+            ? run(["diff", "--cached", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
+            : nil
+        async let stagedNamesRun = includeStaged
+            ? run(["diff", "--cached", "--name-status", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
+            : nil
+        async let snapshotRun = includeStaged
+            ? run(["diff", "--cached", "--raw", "--no-abbrev", "-z", "--no-ext-diff", base, "--"], in: worktree)
+            : nil
+        async let untrackedRun = run(["ls-files", "--others", "--exclude-standard", "-z"], in: worktree)
+        // Discard removes ignored files too, so its confirmation must list them.
+        async let ignoredRun = includeIgnored
+            ? run(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], in: worktree)
+            : nil
+
+        let statuses = Self.parseNameStatus(try await namedRun.stdout)
+        var files = Self.parseNumstat(try await trackedRun.stdout).map { change -> FileChange in
             var change = change
             if change.oldPath == nil, let status = statuses[change.path] { change.status = status }
             return change
         }
         var indexFingerprint: String?
-        if includeStaged {
-            let staged = try await run(
-                ["diff", "--cached", "--numstat", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
-            let stagedNames = try await run(
-                ["diff", "--cached", "--name-status", "-z", "-M", "--no-ext-diff", "--no-color", base, "--"], in: worktree)
+        if includeStaged, let staged = try await stagedRun, let stagedNames = try await stagedNamesRun,
+            let snapshot = try await snapshotRun {
             let stagedStatuses = Self.parseNameStatus(stagedNames.stdout)
             files += Self.parseNumstat(staged.stdout).map { change -> FileChange in
                 var change = change
@@ -96,22 +119,17 @@ public struct DiffProvider: Sendable {
                 if change.oldPath == nil, let status = stagedStatuses[change.path] { change.status = status }
                 return change
             }
-            let snapshot = try await run(
-                ["diff", "--cached", "--raw", "--no-abbrev", "-z", "--no-ext-diff", base, "--"], in: worktree)
             indexFingerprint = snapshot.stdout
         }
 
-        let untracked = try await run(
-            ["ls-files", "--others", "--exclude-standard", "-z"], in: worktree)
-        for path in untracked.stdout.split(separator: "\0").map(String.init) {
+        for path in try await untrackedRun.stdout.split(separator: "\0").map(String.init) {
             files.append(try untrackedChange(path, in: worktree))
         }
-        // Discard removes ignored files too, so its confirmation must list them.
-        if includeIgnored {
-            let ignored = try await run(
-                ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], in: worktree)
+        if let ignored = try await ignoredRun {
             for path in ignored.stdout.split(separator: "\0").map(String.init) {
-                files.append(try untrackedChange(path, in: worktree))
+                var change = try untrackedChange(path, in: worktree)
+                change.isIgnored = true
+                files.append(change)
             }
         }
 
