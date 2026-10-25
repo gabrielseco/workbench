@@ -1,0 +1,197 @@
+name: Linux dispatch stress
+
+# Throwaway: which Dispatch mechanism crashes libdispatch on Linux under heavy concurrency?
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/linux-stress]
+
+concurrency:
+  group: linux-stress-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runner-1:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress runner
+        run: |
+          set +e
+          WORKBENCH_STRESS=runner WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-runner-1
+          path: stress.log
+  runner-2:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress runner
+        run: |
+          set +e
+          WORKBENCH_STRESS=runner WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-runner-2
+          path: stress.log
+  timers-1:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress timers
+        run: |
+          set +e
+          WORKBENCH_STRESS=timers WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-timers-1
+          path: stress.log
+  timers-2:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress timers
+        run: |
+          set +e
+          WORKBENCH_STRESS=timers WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-timers-2
+          path: stress.log
+  reads-1:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress reads
+        run: |
+          set +e
+          WORKBENCH_STRESS=reads WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-reads-1
+          path: stress.log
+  reads-2:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress reads
+        run: |
+          set +e
+          WORKBENCH_STRESS=reads WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-reads-2
+          path: stress.log
+  exitwatch-1:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress exitwatch
+        run: |
+          set +e
+          WORKBENCH_STRESS=exitwatch WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-exitwatch-1
+          path: stress.log
+  exitwatch-2:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stress exitwatch
+        run: |
+          set +e
+          WORKBENCH_STRESS=exitwatch WORKBENCH_STRESS_SECONDS=240 swift test --filter DispatchStressTests 2>&1 | tee stress.log
+          echo "exit: ${PIPESTATUS[0]}"
+          grep -E "STRESS_DONE|Program crashed|_dispatch_event_loop_drain" stress.log | head -5
+      - name: Upload log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-exitwatch-2
+          path: stress.log
