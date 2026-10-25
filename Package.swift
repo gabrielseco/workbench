@@ -31,7 +31,8 @@ let package = Package(
                 "CZlib",
                 .product(name: "Crypto", package: "swift-crypto")],
             swiftSettings: simplifyCFGWorkaround),
-        .executableTarget(name: "workbench", dependencies: ["WorkbenchCore"], swiftSettings: simplifyCFGWorkaround),
+        .target(name: "CShim"),
+        .executableTarget(name: "workbench", dependencies: ["WorkbenchCore", "CShim"], swiftSettings: simplifyCFGWorkaround),
         // Test double for `claude`. Standalone on purpose: no dependency on WorkbenchCore.
         .executableTarget(name: "fake-claude"),
         .testTarget(name: "WorkbenchCoreTests", dependencies: [
