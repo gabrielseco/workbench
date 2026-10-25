@@ -20,8 +20,18 @@ let platform: some PlatformServices = CurrentPlatform()
 
 #if canImport(Darwin)
 let streamSocketType = SOCK_STREAM
+let sendFlags: Int32 = 0
+
+/// macOS has no `MSG_NOSIGNAL`; the socket itself is told not to raise SIGPIPE.
+func suppressSigpipe(_ fd: Int32) {
+    var on: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+}
 #else
 let streamSocketType = Int32(SOCK_STREAM.rawValue)
+let sendFlags = Int32(MSG_NOSIGNAL)
+
+func suppressSigpipe(_ fd: Int32) {}
 #endif
 
 public func sysOpen(_ path: String, _ flags: Int32, _ mode: mode_t = 0) -> Int32 { open(path, flags, mode) }

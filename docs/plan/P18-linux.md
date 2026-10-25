@@ -110,7 +110,8 @@ subreaper would adopt its own orphans as zombies it has to reap, and the adopter
 
 **Ready check.** A `LoopbackProbe` accepts only `127.0.0.1`, `::1` and `localhost` (mapped to both literals), parses
 them with `inet_pton` after stripping the brackets of an IPv6 URL host, connects non-blocking and waits only through
-`poll` against one deadline. No `getaddrinfo`.
+`poll` against one deadline. No `getaddrinfo`. The same code runs on macOS (`NWConnection` is gone) and Linux; a cancel of the
+calling task is noticed within 50 ms because every wait is a `poll` slice.
 
 ## Tasks (one PR each)
 
