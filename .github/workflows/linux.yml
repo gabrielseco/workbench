@@ -23,6 +23,14 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Restore the build
+        # Dependencies (BoringSSL is about 30 s of the cold build) and, if SwiftPM accepts them, unchanged files of ours.
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-
       - name: Hardware and toolchain
         run: |
           swift --version
@@ -70,6 +78,13 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: .build
+          key: linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            linux-build-swift6.2.1-${{ hashFiles('Package.swift', 'Package.resolved') }}-
       - name: Hardware and toolchain
         run: |
           swift --version
