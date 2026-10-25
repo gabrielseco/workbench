@@ -1,4 +1,4 @@
-import CryptoKit
+import Crypto
 import Foundation
 
 /// The project's own instructions file (`AGENTS.md`, else `CLAUDE.md`), read from the commit a thread was
