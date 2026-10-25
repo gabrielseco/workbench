@@ -21,9 +21,9 @@ enum Gzip {
     static func compress(_ data: Data) throws -> Data {
         var stream = z_stream()
         let size = Int32(MemoryLayout<z_stream>.size)
-        guard deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY, ZLIB_VERSION, size) == Z_OK else {
-            throw Failure.corrupt("cannot start deflating")
-        }
+        let started = deflateInit2_(
+            &stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY, ZLIB_VERSION, size)
+        guard started == Z_OK else { throw Failure.corrupt("cannot start deflating") }
         defer { deflateEnd(&stream) }
         var deflated = Data(count: Int(deflateBound(&stream, UInt(data.count))))
         let status: Int32 = deflated.withUnsafeMutableBytes { output in
