@@ -44,6 +44,39 @@ private struct InstructionsRepo {
 }
 
 @Suite(.processGate) struct ProjectInstructionsTests {
+    @Test func theCandidatesAreLookedUpWithOneGitCommandNotOnePerFile() async throws {
+        let repo = try await InstructionsRepo()
+        let none = try await repo.commit()
+        try repo.write("CLAUDE.md", "claude\n")
+        let onlyClaude = try await repo.commit()
+        try repo.write("AGENTS.md", "agents\n")
+        let both = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        #expect(await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: none) == nil)
+        #expect(counting.calls.count == 1, "neither file: one ls-tree, not one per name: \(counting.calls)")
+
+        let claude = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: onlyClaude)
+        #expect(claude?.file == "CLAUDE.md" && claude?.text == "claude")
+        #expect(counting.calls.count == 1 + 3, "one ls-tree, then the size and the blob: \(counting.calls)")
+
+        let agents = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: both)
+        #expect(agents?.file == "AGENTS.md" && agents?.text == "agents", "AGENTS.md still wins over CLAUDE.md")
+        #expect(counting.calls.count == 1 + 3 + 3, "\(counting.calls)")
+    }
+
+    @Test func aCandidateThatIsNotARegularFileFallsBackToTheNext() async throws {
+        let repo = try await InstructionsRepo()
+        try repo.symlink("AGENTS.md", to: "README.md")
+        try repo.write("CLAUDE.md", "claude\n")
+        let commit = try await repo.commit()
+        let counting = try CountingGit(wrapping: repo.git)
+
+        let loaded = await ProjectInstructions.load(git: counting.runner, repo: repo.root, commit: commit)
+        #expect(loaded?.file == "CLAUDE.md" && loaded?.text == "claude")
+        #expect(counting.calls.count == 3, "one ls-tree sees the symlink, then CLAUDE.md's size and blob: \(counting.calls)")
+    }
+
     @Test func replacedImportPathsDoNotConsumeTheSizeLimit() async throws {
         let repo = try await InstructionsRepo()
         let prefix = String(repeating: "./", count: 150)

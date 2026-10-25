@@ -33,8 +33,12 @@ public struct ProjectInstructions: Sendable, Equatable {
     /// Reads the instructions at `commit`, or nil when the commit has neither file as a regular file.
     public static func load(git: GitRunner, repo: URL, commit: String) async -> ProjectInstructions? {
         let reader = BlobReader(git: git, repo: repo, commit: commit)
+        // One `ls-tree` answers for every candidate; asking one by one spawned a git process per missing file.
+        let found = await reader.entries(candidates)
         for name in candidates {
-            guard let top = await reader.read(name) else { continue }
+            guard let entry = found[name], entry.isRegularFile, let top = await reader.contents(of: entry) else {
+                continue
+            }
             var state = Expansion(reader: reader)
             state.visited.insert(name)
             let lines = await state.expand(top, directory: "", depth: 0)
@@ -80,18 +84,24 @@ public struct ProjectInstructions: Sendable, Equatable {
         }
 
         /// The entry at exactly `path` in the commit, or nil when there is none.
-        func entry(_ path: String) async -> Entry? {
+        func entry(_ path: String) async -> Entry? { await entries([path])[path] }
+
+        /// The entries at exactly these paths, from one `git ls-tree`; a path with no entry is absent.
+        func entries(_ paths: [String]) async -> [String: Entry] {
             guard
-                let tree = try? await git.run(["ls-tree", "-z", commit, "--", path], in: repo),
+                let tree = try? await git.run(["ls-tree", "-z", commit, "--"] + paths, in: repo),
                 tree.succeeded
-            else { return nil }
-            // "<mode> <type> <sha>\t<path>" ; one record for an exact file path.
-            guard let record = tree.stdout.split(separator: "\0").first,
-                let tab = record.firstIndex(of: "\t")
-            else { return nil }
-            let fields = record[..<tab].split(separator: " ")
-            guard fields.count == 3, String(record[record.index(after: tab)...]) == path else { return nil }
-            return Entry(mode: String(fields[0]), type: String(fields[1]), sha: String(fields[2]))
+            else { return [:] }
+            // "<mode> <type> <sha>\t<path>" ; one record for each exact file path.
+            var found: [String: Entry] = [:]
+            for record in tree.stdout.split(separator: "\0") {
+                guard let tab = record.firstIndex(of: "\t") else { continue }
+                let fields = record[..<tab].split(separator: " ")
+                let path = String(record[record.index(after: tab)...])
+                guard fields.count == 3, paths.contains(path) else { continue }
+                found[path] = Entry(mode: String(fields[0]), type: String(fields[1]), sha: String(fields[2]))
+            }
+            return found
         }
 
         /// The blob's text, or nil when it is over the ceiling or cannot be read. Cut at the read limit.
