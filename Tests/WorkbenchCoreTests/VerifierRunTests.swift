@@ -348,7 +348,7 @@ private func pid(in path: String) throws -> pid_t {
         }
         let left = try pid(in: pidFile)
         defer { kill(left, SIGKILL) }
-        #expect(alive(left))
+        #expect(alive(left), "\(describeProcess(left, inside: v.worktree))")
         _ = try await v.verify()
         #expect(await waitUntilGone(left), "the leftover is still running")
     }

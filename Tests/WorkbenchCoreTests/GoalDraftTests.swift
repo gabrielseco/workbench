@@ -391,7 +391,9 @@ private func drafting(
         let written = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         let pid = try #require(Int32(written))
         defer { kill(pid, SIGKILL) }
-        #expect(!OrphanSweeper.orphans(inside: work).isEmpty, "the leftover works in the drafter's folder")
+        #expect(
+            !OrphanSweeper.orphans(inside: work).isEmpty,
+            "the leftover works in the drafter's folder: \(describeProcess(pid, inside: work))")
         _ = try await d.draft(.replace(id: id))
         var gone = false
         for _ in 0..<100 where !gone {

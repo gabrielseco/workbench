@@ -99,3 +99,14 @@ private final class Machine: ProcessInspecting, Subreaping, @unchecked Sendable 
         #expect(platform.orphanAdopters.contains(1))
     }
 }
+
+/// What the machine says about a process, for a failure message: whether it exists, who its parent is, where it works, and
+/// who adopts orphans here. Linux also shows its state (a zombie or a stopped process looks alive to `kill(pid, 0)`).
+func describeProcess(_ pid: pid_t, inside directory: URL) -> String {
+    let state = (try? String(contentsOfFile: "/proc/\(pid)/status", encoding: .utf8))?
+        .split(separator: "\n").filter { $0.hasPrefix("State:") || $0.hasPrefix("PPid:") || $0.hasPrefix("Name:") }
+        .joined(separator: ", ") ?? "no /proc entry"
+    return "pid \(pid): exists=\(kill(pid, 0) == 0) parent=\(String(describing: platform.parent(of: pid))) "
+        + "cwd=\(String(describing: platform.workingDirectory(of: pid))) wanted under \(OrphanSweeper.realPath(directory)) "
+        + "adopters=\(platform.orphanAdopters.sorted()) \(state)"
+}
