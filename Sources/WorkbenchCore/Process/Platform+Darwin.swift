@@ -50,6 +50,8 @@ struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapi
 
     func addDescriptorHygiene(to actions: inout SpawnFileActions) -> Int32 { 0 }
 
+    var exitPollInterval: TimeInterval { 0.05 }
+
     func watchExit(of pid: pid_t, queue: DispatchQueue, handler: @escaping @Sendable () -> Void) -> ExitWatch? {
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
         source.setEventHandler(handler: handler)

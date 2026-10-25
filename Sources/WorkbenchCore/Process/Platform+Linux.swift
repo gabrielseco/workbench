@@ -40,6 +40,8 @@ struct LinuxPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapin
         posix_spawn_file_actions_addclosefrom_np(&actions, 3)
     }
 
+    var exitPollInterval: TimeInterval { 0.005 }
+
     func watchExit(of pid: pid_t, queue: DispatchQueue, handler: @escaping @Sendable () -> Void) -> ExitWatch? { nil }
 
     func becomeSubreaper() -> Bool { wb_become_subreaper() == 0 }

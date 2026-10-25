@@ -96,13 +96,13 @@ public enum Termination: Equatable, Sendable {
 /// A kqueue process source gives prompt notice, but it is not enough on its own, and an earlier version
 /// that trusted it hung under load. The event can arrive while the child is still exiting and not yet
 /// waitable, and a child can be reaped by someone else before we ever look. So there is always a poll
-/// behind it: 1 ms right after an event, 50 ms otherwise. A poll that finds no such child reports the
+/// behind it: 1 ms right after an event, otherwise the platform's interval (50 ms on macOS, 5 ms on Linux, which has no event). A poll that finds no such child reports the
 /// exit as `.lost` instead of waiting forever.
 ///
 /// Exit is *peeked* first (`waitid` with `WNOWAIT`), so the child stays a zombie and its pid stays reserved
 /// while the owner sweeps its process group; only then does the owner call `reap()`.
 final class ChildExitWatcher: @unchecked Sendable {
-    static let idleInterval: TimeInterval = 0.05
+    static var idleInterval: TimeInterval { platform.exitPollInterval }
     static let afterEventInterval: TimeInterval = 0.001
 
     private let pid: pid_t
