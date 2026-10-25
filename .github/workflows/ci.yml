@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# A new push supersedes the run before it on the same ref; main runs are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build-test:
     runs-on: macos-15
