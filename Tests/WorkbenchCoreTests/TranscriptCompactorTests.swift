@@ -306,7 +306,7 @@ private func legacyThread(_ name: String = "legacy", extraLines: Int = 0) async 
         // The log is replaced by another file, as `compact` does, and only then is the old one let go.
         let replacement = directory.appendingPathComponent("events.jsonl.new")
         try Data(contentsOf: url).write(to: replacement)
-        #expect(Darwin.rename(replacement.path, url.path) == 0)
+        #expect(sysRename(replacement.path, url.path) == 0)
         await first.close()
 
         let second = try await waiting.value

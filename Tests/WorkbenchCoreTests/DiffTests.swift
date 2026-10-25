@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import Testing
 
@@ -139,15 +138,15 @@ private struct DiffRepo {
         try #require(mkfifo(pipe.path, 0o600) == 0)
         try FileManager.default.createSymbolicLink(
             at: repo.root.appendingPathComponent("ignored-link"), withDestinationURL: pipe)
-        let fd = Darwin.open(pipe.path, O_RDWR | O_NONBLOCK | O_CLOEXEC)
+        let fd = sysOpen(pipe.path, O_RDWR | O_NONBLOCK | O_CLOEXEC)
         try #require(fd >= 0)
         let marker: [UInt8] = [0x78, 0x0A]
-        #expect(marker.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) } == marker.count)
+        #expect(marker.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) } == marker.count)
         let finished = DispatchSemaphore(value: 0)
         // Let a reader of the old implementation reach EOF instead of hanging the test indefinitely.
         DispatchQueue.global().async {
             _ = finished.wait(timeout: .now() + 30)
-            Darwin.close(fd)
+            sysClose(fd)
         }
         defer { finished.signal() }
 
