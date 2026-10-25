@@ -31,21 +31,22 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           import os, subprocess
-          run = subprocess.run(["git", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
+          run = subprocess.run(["git", "-c", "safe.directory=*", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
                                capture_output=True, text=True)
           log = run.stdout
           print("cwd", os.getcwd(), "git log rc", run.returncode, "bytes", len(log), "stderr", run.stderr[:300])
-          print("shallow:", subprocess.run(["git", "rev-parse", "--is-shallow-repository"], capture_output=True, text=True).stdout.strip())
-          print("commits:", subprocess.run(["git", "rev-list", "--count", "HEAD"], capture_output=True, text=True).stdout.strip())
+          print("shallow:", subprocess.run(["git", "-c", "safe.directory=*", "rev-parse", "--is-shallow-repository"], capture_output=True, text=True).stdout.strip())
+          print("commits:", subprocess.run(["git", "-c", "safe.directory=*", "rev-list", "--count", "HEAD"], capture_output=True, text=True).stdout.strip())
           seen, ts = {}, None
           for line in log.splitlines():
               if line.startswith("#"): ts = int(line[1:])
               elif line and line not in seen: seen[line] = ts
           n = 0
-          for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.splitlines():
+          for path in subprocess.run(["git", "-c", "safe.directory=*", "ls-files"], capture_output=True, text=True).stdout.splitlines():
               if path in seen and os.path.exists(path):
                   os.utime(path, (seen[path], seen[path])); n += 1
           print("timestamps restored for", n, "files")
+          assert n > 100, "the timestamp restore touched too few files"
           PY
       - name: Build
         run: |
@@ -87,18 +88,18 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, subprocess
-          run = subprocess.run(["git", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
+          run = subprocess.run(["git", "-c", "safe.directory=*", "log", "--name-only", "--pretty=format:#%ct", "--no-renames"],
                                capture_output=True, text=True)
           log = run.stdout
           print("cwd", os.getcwd(), "git log rc", run.returncode, "bytes", len(log), "stderr", run.stderr[:300])
-          print("shallow:", subprocess.run(["git", "rev-parse", "--is-shallow-repository"], capture_output=True, text=True).stdout.strip())
-          print("commits:", subprocess.run(["git", "rev-list", "--count", "HEAD"], capture_output=True, text=True).stdout.strip())
+          print("shallow:", subprocess.run(["git", "-c", "safe.directory=*", "rev-parse", "--is-shallow-repository"], capture_output=True, text=True).stdout.strip())
+          print("commits:", subprocess.run(["git", "-c", "safe.directory=*", "rev-list", "--count", "HEAD"], capture_output=True, text=True).stdout.strip())
           seen, ts = {}, None
           for line in log.splitlines():
               if line.startswith("#"): ts = int(line[1:])
               elif line and line not in seen: seen[line] = ts
           n = 0
-          for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.splitlines():
+          for path in subprocess.run(["git", "-c", "safe.directory=*", "ls-files"], capture_output=True, text=True).stdout.splitlines():
               if path in seen and os.path.exists(path):
                   os.utime(path, (seen[path], seen[path])); n += 1
           print("timestamps restored for", n, "files")
