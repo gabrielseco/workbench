@@ -517,7 +517,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
 
         let text = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
         #expect(text.contains("base: main"))
-        #expect(text.contains("budget_usd: 5"))
+        #expect(text.contains("budget_usd: 1"))
         let parsed = try GoalFile.parse(text)
         #expect(parsed.goal.approval == .draft)
         #expect(try fx.kinds(id) == ["thread.created", "goal.saved"])

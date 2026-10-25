@@ -73,8 +73,10 @@ public struct Config: Sendable, Equatable {
     public var copy: [String] = []
     /// What the project's verifier drives. `desktop` needs Screen Recording, which `doctor` checks.
     public var appType: AppType = .web
-    /// Used when drafting a new goal. Goals carry their own `budget_usd`.
+    /// The dollar cap for a judge, a review and a review loop, and for a new goal's `budget_usd` when `default_budget_usd` is set.
     public var defaultBudgetUSD: Decimal
+    /// True when the config sets `default_budget_usd`: only then does a new goal get a `budget_usd`, else `spend_policy: timeout_only`.
+    public var defaultBudgetConfigured = false
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
     public var envPass: [String]
     public var tools: ToolSet
@@ -332,6 +334,7 @@ public struct Config: Sendable, Equatable {
             planModel: planModel, verifier: verifier, run: run)
         config.editor = editor
         config.agents = agents
+        config.defaultBudgetConfigured = document.tables[""]?.entries["default_budget_usd"] != nil
         return config
     }
 
@@ -407,7 +410,7 @@ public struct Config: Sendable, Equatable {
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # copy = [".env.*", "example/.env"] # git-ignored files copied from this checkout into each new worktree
         # app_type = "web"                 # "desktop" if the verifier captures the screen: doctor checks Screen Recording
-        # default_budget_usd = 5.00        # used when drafting a goal
+        # default_budget_usd = 5.00        # opt in: new goals get this budget_usd (API billing); else timeout_only
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command

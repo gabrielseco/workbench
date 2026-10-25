@@ -152,7 +152,7 @@ private func leaveOnlyABranch(_ fx: RunnerFixture, _ service: ThreadService) asy
         #expect(copy.ignoredKeys == [])
         let id = try await service.newThread(name: "copy", body: copy.body, settings: copy.settings)
         let goal = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
-        #expect(goal.budgetUSD == Config.defaultBudgetUSD)
+        #expect(goal.budgetUSD == 1, "the config's default_budget_usd, which the fixture sets")
         #expect(goal.turnTimeoutMin == 30)
         #expect(goal.model == nil)
     }

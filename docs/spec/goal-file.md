@@ -190,8 +190,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **`goal new <name> --from <goal-file>` starts from another goal.** It copies the file's request, criteria and
   out of scope, and its `title`, `budget_usd` or `spend_policy`, `turn_timeout_min` and `model`, into the draft. Those are
   checked by the same rules as in any goal (below; an empty `title` is one); a bad one is a usage error (exit 2) naming the
-  key, and nothing is created. One the file does not give keeps the default (the title from `<name>`, `default_budget_usd`,
-  30 minutes, no `model`). The rest of the front matter (`id`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
+  key, and nothing is created. One the file does not give keeps the default (the title from `<name>`, `spend_policy: timeout_only` unless the config sets
+  `default_budget_usd`, in which case that `budget_usd`, 30 minutes, no `model`). The rest of the front matter (`id`, `base`, `status`, `push_to`, `approved_at`, `approved_hash`) belongs to the file's own
   thread and is ignored; `goal new` prints one line naming what it ignored (`ignored from the file: base, status`),
   nothing when there is none. The file's front matter must still be well formed (unknown or repeated keys are goal
   errors) but no key is required in it, and its body must parse as a goal's. The draft is always a draft.
@@ -276,7 +276,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording for the verifier
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 # copy = [".env.*", "example/.env"]     # optional; git-ignored files copied from your checkout into each new worktree
-default_budget_usd = 5.00               # used when drafting a goal
+# default_budget_usd = 5.00            # optional; new goals get this budget_usd, else spend_policy: timeout_only
 # claude_path = "claude"                # name on PATH, or an absolute path
 # model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
 # judge_model = "sonnet"                # --model for the judge (it only reads); `judge --model` wins; unset = model
