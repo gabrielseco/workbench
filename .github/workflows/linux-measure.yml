@@ -1,0 +1,91 @@
+name: Linux measure
+
+# Throwaway (P18 task 0): the Linux port on today's main, run twice, to see what the Linux suite time is made of.
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/linux-measure]
+
+concurrency:
+  group: linux-measure-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    container:
+      image: swift:6.2.1
+      options: --init
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hardware and toolchain
+        run: |
+          swift --version
+          echo "cores: $(nproc)"
+          grep -m1 "model name" /proc/cpuinfo || true
+          grep -E "MemTotal" /proc/meminfo
+          git --version
+      - name: Git identity and python3
+        run: |
+          git config --system user.name "Workbench CI"
+          git config --system user.email "ci@example.invalid"
+          apt-get update -qq && apt-get install -y -qq python3
+      - name: Build
+        run: |
+          set -o pipefail
+          time swift build --build-tests 2>&1 | tee build.log
+      - name: Measure (default gate, then 4x the permits)
+        run: |
+          cat > measure.py <<'PY'
+          import json, os, subprocess, sys, time
+          def cpu():
+              fields = open("/proc/stat").readline().split()[1:]
+              forks = next(int(l.split()[1]) for l in open("/proc/stat") if l.startswith("processes "))
+              return list(map(int, fields)), forks
+          results = []
+          for name, env in [("default", {}), ("permits-16", {"WORKBENCH_TEST_PERMITS": "16"})]:
+              before, f0 = cpu()
+              t0 = time.time()
+              with open(f"test-{name}.log", "w") as log:
+                  subprocess.run(["swift", "test", "--skip-build"], stdout=log, stderr=subprocess.STDOUT,
+                                 env={**os.environ, **env})
+              wall = time.time() - t0
+              after, f1 = cpu()
+              d = [b - a for a, b in zip(before, after)]
+              user, nice, system, idle, iowait, irq, softirq = d[:7]
+              total = sum(d[:7])
+              hz = os.sysconf("SC_CLK_TCK")
+              results.append({
+                  "run": name, "wall_s": round(wall, 1), "forks": f1 - f0,
+                  "user_s": round((user + nice) / hz, 1), "system_s": round((system + irq + softirq) / hz, 1),
+                  "idle_s": round((idle + iowait) / hz, 1), "busy_pct": round(100 * (total - idle - iowait) / total, 1)})
+          print(json.dumps(results, indent=2))
+          json.dump(results, open("measure.json", "w"))
+          PY
+          python3 measure.py | tee measure.txt
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: |
+          for r in default permits-16; do
+            echo "== $r"
+            grep -E "Test run with" test-$r.log | tail -1
+            echo "failed tests:"
+            grep -E "^✘ Test .* (failed|recorded)" test-$r.log | sed -E 's/ recorded an issue.*//; s/ failed after.*//' | sort -u | head -40
+          done
+          python3 scripts/test-timings.py test-default.log --markdown timings-default.md --json timings-default.json || true
+          head -45 timings-default.md || true
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-measure-logs
+          path: |
+            build.log
+            test-default.log
+            test-permits-16.log
+            measure.txt
+            timings-default.md
