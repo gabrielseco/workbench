@@ -42,6 +42,7 @@ n=\$(cat "$FAKE/n" 2>/dev/null || echo 0); n=\$((n+1)); echo \$n > "$FAKE/n"
 for a in "\$@"; do p="\$a"; done
 printf '%s' "\$p" > "$FAKE/prompt_\$n"
 echo "\$@" > "$FAKE/args_\$n"
+printf '%s' "\$TMPDIR" > "$FAKE/tmpdir_\$n"
 echo '{"type":"thread.started","thread_id":"thread-'\$n'"}'
 echo "codex turn \$n" >> AGENTS.md
 echo '{"type":"item.completed","item":{"id":"i","type":"agent_message","text":"edited AGENTS.md in turn '\$n'"}}'
@@ -104,6 +105,8 @@ wbp "$SCRATCH/run1.out" run
 shown "$SCRATCH/run1.out" 6
 check "run on Codex succeeds: exit 0" "workbench run exited $RC" test "$RC" = 0
 check "the fake ran once" "the fake ran $(runs) time(s)" test "$(runs)" = 1
+check "the turn has its own temporary directory: TMPDIR is a writable root, not /tmp" "args or TMPDIR are not as expected" \
+    bash -c 'd=$(cat "$2"); [ -n "$d" ] && [ "$d" != /tmp ] && grep -q "writable_roots=\[\"$d\"\]" "$1"' _ "$FAKE/args_1" "$FAKE/tmpdir_1"
 check "the fake's prompt starts with the standing rules and holds the goal" "prompt_1 is not as expected" \
     bash -c 'head -c 60 "$1" | grep -q "isolated git worktree" && grep -q "AGENTS.md gains a line" "$1" && grep -q "cannot commit" "$1"' _ "$FAKE/prompt_1"
 wbp "$SCRATCH/log.json" log

@@ -81,9 +81,16 @@ public struct CodexProvider: AgentProvider {
         // which would let a turn change another checkout or push from a temporary one.
         args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
         args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        // Tools such as Vitest need a temporary directory, so the turn gets one of its own, empty and outside both the
+        // checkout and `/tmp`: `TMPDIR` points at it and it is the only writable root besides the worktree.
+        let scratch = request.outputDirectory.appendingPathComponent("tmp", isDirectory: true)
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        args += ["-c", "sandbox_workspace_write.writable_roots=[\"\(scratch.path)\"]"]
         args += ["-s", "workspace-write", "-C", request.workingDirectory.path, "--", request.prompt]
+        var environment = Self.environment(from: request.environment)
+        environment["TMPDIR"] = scratch.path
         return AgentInvocation(
-            executable: executable, arguments: args, environment: Self.environment(from: request.environment),
+            executable: executable, arguments: args, environment: environment,
             displayArguments: Array(args[..<(args.firstIndex(of: "--") ?? args.count)]))
     }
 
