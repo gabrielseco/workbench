@@ -274,9 +274,21 @@ struct ClaudeDecoder: AgentDecoder {
         (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
     }
 
+    // Hand-written keys: the synthesized `init(stringValue:)` of a one-case enum makes Swift 6.2.1's ConditionForwarding pass emit invalid
+    // SIL (a release build with `-sil-verify-all` aborts), and the key type has no other way to avoid it.
     private struct CostField: Decodable {
+        struct Key: CodingKey {
+            let stringValue: String
+            let intValue: Int? = nil
+            init?(stringValue: String) { self.stringValue = stringValue }
+            init?(intValue: Int) { nil }
+        }
         var totalCostUSD: Double?
-        enum CodingKeys: String, CodingKey { case totalCostUSD = "total_cost_usd" }
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: Key.self)
+            guard let key = Key(stringValue: "total_cost_usd") else { return }
+            totalCostUSD = try container.decodeIfPresent(Double.self, forKey: key)
+        }
     }
 
     /// The cost exactly as the line wrote it. `JSONSerialization` on Linux can be one digit off in the last place,
