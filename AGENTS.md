@@ -66,10 +66,13 @@ list the tasks.
    tests, scripts) needs none; say that in the PR. Do not put it in a later PR: a scenario that was not run on
    the change has not checked it.
 4. Commit messages and the PR title follow Conventional Commits (below).
-5. After opening a PR, or after pushing a fix to an open one, have Codex review it with
+5. A PR that touches `Package.swift`, concurrency code, or `Codable` and enum-heavy code gets the `release-build` label
+   (`gh pr edit <pr> --add-label release-build`): the optimized build is otherwise only checked nightly, and the compiler has
+   crashed on ordinary source before (#250). Wait for that run to pass.
+6. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
-6. Don't merge. Leave the PR open with CI green; the user reviews and merges.
-7. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
+7. Don't merge. Leave the PR open with CI green; the user reviews and merges.
+8. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
    same PR.
 
 ### Commits and PR titles

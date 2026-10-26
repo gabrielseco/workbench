@@ -1,17 +1,26 @@
 name: Release build
 
 # The optimized build of the same source, nightly: it is slow, holds a macOS slot, and the optimizer bug it guards against shows up
-# in the source on main, not in one PR. Run it by hand (workflow_dispatch) from a branch that touches Package.swift or concurrency code.
+# in the source on main, not in every PR. A PR gets it by carrying the `release-build` label (each push re-runs it); put the label on
+# one that touches Package.swift, concurrency code, or Codable and enum-heavy code. Or run it by hand (workflow_dispatch).
 on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: release-build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   # The unit tests only run in debug, and a release build of the same source has behaved differently (Swift's simplify-cfg pass
   # miscompiled async code: a Claude review was refused in release only; docs/swift-bugs/, Package.swift). This builds the optimized
   # binary and runs the free scenarios (a fake claude and a fake codex, no money) on it.
   release-build:
+    # A PR event without the label (any other label, any push to an unlabelled PR) skips the job; schedule and dispatch always run.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-build')
     runs-on: macos-15
     timeout-minutes: 30
     steps:
