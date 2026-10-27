@@ -171,8 +171,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 - **`workbench goal draft <name> (--request "<text>" | --request-file <path>) [--base <branch>]` has the goal agent write
   the draft** (P9 PR 14). It needs `[agents.goal]` naming a provider (`goal new` stays the only way without one: the
   command is refused, exit 6, and says so). The agent is read-only, asked once, bounded at 300 s and, on Claude, at $0.50;
-  Codex has no dollar cap and is refused before it starts unless `[agents.goal] allow_unpriced = true`, the message naming
-  that key. It is given the rough request (quoted, at most 16 KiB), the project's instructions file at the base and up to
+  Codex has no dollar cap, so a draft on it is bounded by the 300 s alone; `[agents.goal] allow_unpriced = false` refuses
+  it before it starts instead, the message naming that key. It is given the rough request (quoted, at most 16 KiB), the project's instructions file at the base and up to
   400 tracked paths, and the goal-file shape. It may return only `title`, `request`, `criteria` (`text` and `proof`) and
   `out_of_scope`; an answer that sets anything else (`id`, `base`, `model`, `budget_usd`, `spend_policy`,
   `turn_timeout_min`, `push_to`, `status`, `approved…`) is refused, not trimmed. Workbench numbers the criteria `c1`…, and
@@ -424,7 +424,8 @@ Notes:
   pull request's checkout and puts its rubric in the brief in place of the built-in report instructions (a
   skill's `## Rubric` section when it has one, else the whole skill under a header saying to ignore steps that
   build, run or post; a prompt file whole); when that file is missing or empty the round fails.
-  A stage table may also set `provider`, `model` and `allow_unpriced`, which override `[agents.review]` for that stage;
+  A stage table may also set `provider`, `model` and `allow_unpriced` (`false` forbids a timeout-only stage on Codex), which
+  override `[agents.review]` for that stage;
   `reviewer = "codex"` is read as `provider = "codex"`, and a stage with both keys is refused.
   `workbench review-stage <name>` runs one round of a listed stage (`pr-review` is `workbench pr-review`).
   `proof` attaches the top-level `*.png` files of the thread's latest proof (the verifier's) to the Codex run (`-i`, at
@@ -500,8 +501,8 @@ no effort key. The model and effort are part of what `goal approve` binds, so ch
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
-`allow_unpriced` is for evaluations that may run without a dollar cap; `[agents.run]` refuses it, because spending
-is approved in the goal. A model is resolved per role: for the judge `judge --model`, then `[agents.judge]`'s
+`allow_unpriced` is for evaluations on a provider without a dollar cap: unset or `true` they run timeout-only,
+`false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role: for the judge `judge --model`, then `[agents.judge]`'s
 `model`, then `judge_model` and `model` (only while `[agents.judge]` sets no provider or model, and only for Claude),
 then the provider's default; for review the stage's `model`, then `[agents.review]`'s, then the default; for coding
 the goal's `model`, `[agents.run]`'s, then `model`; drafting never inherits `model`. `workbench doctor` prints
@@ -513,12 +514,14 @@ parser, answer cap, retry on capacity and `max_rounds` count apply. Claude is no
 image input and there is no text substitute), so such a stage fails the round. A Codex judge runs read-only with the
 hardened call (`--ignore-rules`, `approval_policy="never"`), is asked for the same JSON as text, has its screenshots attached
 with `-i`, and writes its last message to `judge/turn-<n>.answer.txt` in the thread's folder; the same validator accepts it
-only if it names every criterion once. Codex has no dollar cap, so a Codex judge or review is refused before
-anything starts unless its table says `allow_unpriced = true` (`[agents.judge]`, `[agents.review]` or the stage's table,
-which inherits `[agents.review]`'s); the message names the key and the refusal is recorded as a failed judge or round.
+only if it names every criterion once. Codex has no dollar cap, so choosing it for a judge or review is choosing a
+timeout-only run (300 s for the judge, 20 minutes for a review round, cost unknown), which `judge` and `doctor` say.
+`allow_unpriced = false` in its table (`[agents.judge]`, `[agents.review]` or the stage's table, which inherits
+`[agents.review]`'s) forbids it: it is refused before anything starts, the message names the key, and the refusal is
+recorded as a failed judge or round. `allow_unpriced = true` is the default said out loud.
 Exception: a review whose provider no `provider` key chose (the default Codex, or P6's `reviewer = "codex"`) keeps
-running timeout-only without the opt-in. A Claude judge or review keeps its dollar cap and `allow_unpriced` changes
-nothing for it. `judge --budget` with a Codex judge is a usage error. A review's `cost_usd` is recorded when its provider
+running timeout-only even with `allow_unpriced = false`. A Claude judge or review keeps its dollar cap and
+`allow_unpriced` changes nothing for it. `judge --budget` with a Codex judge is a usage error. A review's `cost_usd` is recorded when its provider
 reports one (Claude); unknown is absent, never 0, and `review` prints a Codex judge's cost as `cost unknown`. The
 executables (`[providers.<id>]`, `claude_path`) take effect for every role; `run` and goal drafting are unchanged.
 

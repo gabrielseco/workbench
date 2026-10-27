@@ -87,17 +87,23 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
 - `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
 - `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, reasoning_effort, note, issues}`. `provider`, `model` and `reasoning_effort`
   are null for goal drafting with no `[agents.goal]` (it stays manual; `note` says so); a null `model` is the provider's default.
-  A Codex goal agent without `allow_unpriced = true` in `[agents.goal]` is an `unpriced_not_allowed` problem with `role: "goal"`,
-  like the judge and review (`workbench goal draft` is refused for the same reason). Nothing in `--json` changed shape.
+  A Codex goal agent with `allow_unpriced = false` in `[agents.goal]` is an `unpriced_not_allowed` problem with `role: "goal"`,
+  like the judge and review (`workbench goal draft` is refused for the same reason); without the key, or with `true`, it is a
+  `timeout_only` note. Nothing in `--json` changed shape.
   `issues` is `{kind, severity, message}` each, found before anything is spawned from the adapter's own capabilities:
   `policy_without_controls` (the provider has no verified controls for what the responsibility needs: coding confinement for
   `run`, read-only evidence for the others), `missing_executable` (not on the environment's `PATH`, or the path in
   `[providers.<id>] executable` is not executable), `budget_without_cap` (the active thread's goal has `budget_usd` and the
   `run` provider cannot enforce a dollar limit; the message names the fix, `spend_policy: timeout_only`), `unpriced_not_allowed` (a
-  judge or review on a provider with no dollar cap, chosen with `provider`, and no `allow_unpriced = true` in its table: it is
-  refused before it starts; a review on the default Codex is not reported), `unconfined_reads` (a read-only judge or review, or a coding turn on Codex, on a provider that can read
+  goal draft, judge or review on a provider with no dollar cap, chosen with `provider`, and `allow_unpriced = false` in its
+  table: it is refused before it starts, and the message names the key; a review on the default Codex is not reported),
+  `timeout_only` (a note: the goal draft, judge, review or a review stage on another provider runs on a provider with no
+  dollar cap, so its timeout alone bounds it and its cost is unknown; the message says `<provider> has no dollar cap: the
+  <job> on it is bounded by its <N> s timeout alone and its cost is unknown`, prefixed `review stage <name>: ` for a stage;
+  given for an unset `allow_unpriced`, for `true` and for the default Codex review), `unconfined_reads` (a read-only judge or review, or a coding turn on Codex, on a provider that can read
   outside the checkout, as Codex can: a stated limit) and `setting_unused` (a key that changes nothing: `allow_unpriced` on a provider that enforces a dollar limit, or an
-  executable no responsibility uses; on Codex `allow_unpriced` is described as what it does, a timeout-only run with unknown cost). `severity` is `problem` (the responsibility would
+  executable no responsibility uses; on Codex `allow_unpriced = true` is described as the default it repeats and `false` as
+  keeping the responsibility refused). `severity` is `problem` (the responsibility would
   be refused or fail) or `note`. A problem is a warning: it does not make `passed` false.
 - `problems`: every `problem` issue, `{role, kind, message}`.
 - `thread`, `approved_for`: the project's active thread and what its goal was approved for (as in `status`), both null when there

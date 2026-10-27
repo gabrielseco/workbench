@@ -39,8 +39,8 @@ Drafting uses the same provider abstraction and enforced read-only policy, its o
 output/spending limits and isolated context/session. It does not open a numbered coding turn, create
 a coding worktree or automatically approve a goal. Record draft attempts and their terminal outcomes
 in the thread's log, without enabling Run. Preserve manual drafting when no agent is configured.
-Use the current judge defaults ($0.50 where enforceable, 300 s) for drafting, with an explicit
-`agents.goal.allow_unpriced` opt-in when only the deadline can be enforced.
+Use the current judge defaults ($0.50 where enforceable, 300 s) for drafting; on a provider where only the
+deadline can be enforced it runs on the 300 s alone unless `agents.goal.allow_unpriced = false` forbids it.
 A failed or cancelled proposal leaves the existing goal untouched; applying a replacement is explicit,
 returns any approved goal to draft and requires approval again. Provider/model provenance is retained
 with the proposal, separate from coding settings and approval. No automatic goal-drafting retries.
@@ -132,11 +132,14 @@ Validate the resolved stage request before spawning or spending money; `doctor` 
   and truncation. Never claim the provider remembers omitted context.
 - Unknown cost is not zero. Existing `budget_usd` is a hard limit: refuse `run` on an adapter that cannot
   enforce it unless the user explicitly approves an execution policy without a dollar cap. Evaluations and goal drafting
-  likewise require an explicit config opt-in to timeout-only spending when hard caps are unavailable.
+  are not goals and have no approval: choosing a provider without a hard cap for one (`provider = "codex"` in its
+  table) is the explicit choice, and it runs timeout-only, bounded by its fixed deadline. `allow_unpriced = false`
+  in that table forbids it, and the refusal names the key; `allow_unpriced = true` is the default said out loud.
+  `doctor` and the command itself say the run has no dollar cap and what bounds it.
   Neither timeout nor token reporting is described as an equivalent dollar cap.
   Compatibility exception: legacy Codex review keeps its existing timeout-only policy when no new
-  agent selection is configured; display that limitation. New evaluation selections require the explicit
-  opt-in when unpriced. This exception never removes the hard cap from legacy coding or judging.
+  agent selection is configured, even with `allow_unpriced = false`; display that limitation. This exception never
+  removes the hard cap from legacy coding or judging.
 
 Provider CLI flags and capability claims must be verified against supported installed versions in task 1.
 This plan does not prescribe unverified Codex coding or Gemini invocation flags.
@@ -173,20 +176,18 @@ executable = "codex"
 [agents.goal]
 provider = "codex"
 model = "<installed Sol model id>"  # illustrative: use the actual provider model id
-allow_unpriced = true
 
 [agents.run]
 provider = "claude"
 model = "opus"
 
 [agents.judge]
-provider = "codex"
+provider = "codex"      # no dollar cap: timeout-only, cost unknown
 # model = "<installed provider model>"
-allow_unpriced = true   # explicit timeout-only evaluation; cost remains unknown
 
 [agents.review]
 provider = "codex"
-allow_unpriced = true
+# allow_unpriced = false  # forbids a timeout-only review on codex instead
 
 # Optional per-P6-stage override; other stages inherit agents.review.
 [review.stage.design]
@@ -207,7 +208,7 @@ Resolution rules:
   P7's proposed change to default judging on Codex does not take effect implicitly.
 - Drafting: `agents.goal.provider` / `agents.goal.model`, then that provider's model default. With no
   goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model
-  or root `model`; `agents.goal.allow_unpriced` explicitly permits timeout-only spending when needed.
+  or root `model`; on a provider without a hard cap it runs timeout-only unless `agents.goal.allow_unpriced = false`.
 - Model precedence for coding: approved goal `model`, `agents.run.model`, legacy root `model`, provider
   default. Legacy root model applies only to legacy Claude selection; never send an alias such as
   `opus` to a different provider. An incompatible goal model must be changed and reapproved.
@@ -386,8 +387,8 @@ A goal says how its spend is bounded, and approval covers it.
 - **Copying.** `goal new --from` copies `spend_policy` with the other approval-bearing keys.
 - **Older Workbench.** Front matter is strict, so an older binary reading such a goal reports an unknown
   key and refuses it. That fails closed.
-- **Evaluations and drafting** are not goals and have no approval. They keep `agents.<job>.allow_unpriced`
-  in config, as above.
+- **Evaluations and drafting** are not goals and have no approval. Choosing a provider without a hard cap for one
+  is the consent; `agents.<job>.allow_unpriced = false` in config forbids it, as above.
 
 ### Events stay version 1
 
