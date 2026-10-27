@@ -43,7 +43,7 @@ extension ThreadService {
         }
         let scratch = prTurnScratch(id)
         let root = OrphanSweeper.realPath(project.root)
-        if agent.provider != .claude, OrphanSweeper.realPath(scratch.url.deletingLastPathComponent()).hasPrefix(root + "/") {
+        if agent.provider != .claude, Self.isInside(OrphanSweeper.realPath(scratch.url.deletingLastPathComponent()), root: root) {
             return PRTurnOutcome(failure: "the temporary folder is inside the repository, so the turn would see it", argv: [])
         }
         let request = ReadOnlyRequest(
@@ -63,6 +63,9 @@ extension ThreadService {
         guard let text = answer.text else { return PRTurnOutcome(failure: answer.failure ?? "no answer", argv: shown) }
         return PRTurnOutcome(text: text, argv: shown)
     }
+
+    /// True for the repository root itself and for anything under it (a `TMPDIR` that names the root is inside it too).
+    static func isInside(_ path: String, root: String) -> Bool { path == root || path.hasPrefix(root + "/") }
 
     /// Where a PR description or refresh turn on Codex runs: in the system's temporary folder, outside the repository,
     /// and named for the thread, so the next command finds one a killed Workbench left.

@@ -94,6 +94,16 @@ private func codexPlanned(allowUnpriced: Bool? = nil) async throws -> CodexPlann
     return CodexPlanned(p: p, codex: codex, config: onCodex(p.config, .plan, codex: codex, allowUnpriced: allowUnpriced))
 }
 
+@Suite struct ScratchLocationTests {
+    @Test func theRepositoryRootAndAnythingUnderItIsInside() {
+        #expect(ThreadService.isInside("/repo", root: "/repo"), "a temporary folder that is the root")
+        #expect(ThreadService.isInside("/repo/tmp", root: "/repo"))
+        #expect(!ThreadService.isInside("/repository", root: "/repo"), "a sibling with the same prefix")
+        #expect(!ThreadService.isInside("/", root: "/repo"))
+        #expect(!ThreadService.isInside("/var/folders/x", root: "/repo"))
+    }
+}
+
 @Suite(.processGate) struct PlanOnCodexTests {
     @Test func aGoodAnswerIsThePlanAndTheTurnIsHardenedAndUnpriced() async throws {
         let c = try await codexPlanned()
