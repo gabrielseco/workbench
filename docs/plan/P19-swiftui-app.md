@@ -70,8 +70,10 @@ CI that is still running; a quiet turn (the Run screen says `quiet for 4m`, whic
 PR waiting for `Clean` (housekeeping, grey badge, no notification). With one active thread the count is 0 or 1; the menu bar
 keeps the numeral of the design because it costs nothing and survives the day the scope rule lifts.
 
-`needsYou` carries the `seq` it began at. That is the identity the notification de-duplicates on (task 5): the same state
-seen again after a relaunch is not a new reason to interrupt anyone.
+`needsYou` carries the identity the notification de-duplicates on (task 5): the `seq` it began at for a state the log
+records, and for the two CI-driven rows the pull request's head sha, since a GitHub check change writes no event. A relaunch
+is not a new reason to interrupt anyone, and neither is the same commit's CI failing again after a rerun: one notification per
+reason per commit, on purpose. A new commit is a new identity.
 
 ## What the app is made of
 
@@ -79,17 +81,23 @@ seen again after a relaunch is not a new reason to interrupt anyone.
   is declared under `#if os(macOS)` in `Package.swift`. It links `WorkbenchCore`, which keeps the release-build flag
   workaround in `Package.swift` (SwiftPM refuses unsafe flags from a dependent package, so the app cannot live in its own).
 - **One `@Observable` store** per window: opens the project, holds `[Event]` and the derived `ThreadState`, `ReviewReport`,
-  `ThreadSpine` and `Attention`, and tails the log with `ThreadLog.entries(after:)` and its `Position`. It polls the log's size
-  (`EventLogReader.bytes`) at 250 ms while a runner is live and 2 s otherwise, and re-derives on change; the poll is the
-  design, FSEvents only if the poll shows up in a profile. A run started in a terminal therefore appears in the app, and the
+  `ThreadSpine` and `Attention`, and tails the log incrementally. It polls the log's size at 250 ms while a runner is live and
+  2 s otherwise and re-derives on change; the poll is the design, FSEvents only if it shows up in a profile. **The tail is a
+  core prerequisite (task 0):** `ThreadLog.read` loads the whole file and `entries(after:)` only slices that snapshot, and
+  `EventLogReadCount.bytes` is test instrumentation, so none of them is a bounded follower. Core gets an `EventLogTail` that
+  `stat`s the file, reads only the bytes after its last offset, yields whole lines (a final line without its newline waits),
+  and detects a log that shrank or was replaced (re-read from the start, as `workbench compact` can do). The log is bounded
+  per turn (1000 activity items), so the store keeps the events it derived from and not the raw bytes. A run started in a terminal therefore appears in the app, and the
   other way round.
 - **No process code in the app.** The app calls `ThreadRunner.run(RunOptions)` (it already takes a notice callback), `ThreadService`
   and `ReviewLoader`. Anything that today shells out inside the CLI target (`gh`, `git`, the ship sequence) is lifted into
   core first. The app target has no `Process`, `Subprocess`, `posix_spawn` or shell strings; `scripts/check-banned-apis.sh` is
   extended to `Sources/WorkbenchApp/` in task 0, and that edit is the only change to the script.
 - **Runs live in the app's process.** Closing the window does not end a run: the app stays resident for the menu bar (the Run
-  mockup says so). Quitting (⌘Q) with a live run asks, then calls `requestStop` and waits up to 6 s for the recorded
-  `stopped`; a crash or force quit leaves the turn for `recoverOrphanedTurn()` on the next open, which the app shows as
+  mockup says so). **Stop is `ThreadRunner.stop()` on the runner the app owns**, which records `stopped` itself. `requestStop(id:)` sends SIGTERM
+  to the pid in `runner.json`, so it is used only for a run another process holds, and is never sent when that pid is the
+  app's own (the CLI's SIGTERM handler lives in the CLI target; the app has none and installs none for its own runs).
+  Quitting (⌘Q) with a live run asks, then calls `stop()` and waits up to 6 s for the recorded `stopped`; a crash or force quit leaves the turn for `recoverOrphanedTurn()` on the next open, which the app shows as
   `interrupted` and offers to run again. A run started elsewhere shows as running (`runnerPID`) and stops through the same call.
 - **Ids and paths** come through `SafeNames` and `Project`; the repo picker validates a git repo before it is remembered. The one
   project is remembered in app preferences (not in `.workbench/`). "Open in editor" and "Open worktree" use `EditorLauncher`.
@@ -101,14 +109,14 @@ a real turn costs money, so the demo goals are small, with a stated budget. Ever
 
 ### Task 0: Core first, then the shell and spine
 
-**Core PR** (Linux-tested, no UI): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; fixtures of logs for each state of
+**Core PR** (Linux-tested, no UI): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; `EventLogTail`; fixtures of logs for each state of
 the two tables above (`Tests/Fixtures/`, built with the same recorder the legacy fixtures use).
 **App PR:** the target and its CI (below), window with toolbar (project pill, `base:`, state pill, spend meter), the spine, the
 footer bar, repo picker, remembered repo, and the empty and error states (no project, not a git repo, no thread, log corrupt,
 `.workbench/` missing).
 
 - **Reads:** `Project`, `ThreadStore.activeThreadID/newestThreadID/state(of:)`, `ThreadState` (`lastTurn`, `openTurn`, `decision`,
-  `totalCostUSD`/`knownCostUSD`, `lineage`, `agentUse`), `EventLogReader`, `ThreadLog`; events `thread.created`, `goal.*`,
+  `totalCostUSD`/`knownCostUSD`, `lineage`, `agentUse`), `EventLogReader`, `EventLogTail` (new); events `thread.created`, `goal.*`,
   `turn.*`, `review.decision`, `pr.opened`, `branch.removed`, `worktree.removed`.
 - **Doctor chip** runs `Doctor.run(base:)` at open and on click; core stores no doctor result, so slice 0 first measures what
   it costs, and the chip does not run on its own if that is more than a couple of seconds.
@@ -155,7 +163,7 @@ the start of the slice.
   (`text`, `tool` with `name`/`summary`, `permission_denied` with `tool`, `usage`, `diagnostic`, `unknown`, `dropped`),
   `agent.attempt.*`, `check.started/ran` (`tests_passed`, `tests_failed`), `setup.ran`, `verifier.*`, `run.*`, `orphans.swept`,
   `turn.ended`; the turn's transcript file for the "Raw log" disclosure.
-- **Does:** `ThreadRunner.run` (from task 1 or `Run again`), `ThreadService.requestStop`, `send-back` is task 3.
+- **Does:** `ThreadRunner.run` (from task 1 or `Run again`), `ThreadRunner.stop()` for a run the app owns, `ThreadService.requestStop` for one a terminal holds; `send-back` is task 3.
 - **What the mockup shows that the log does not carry, and what the app does instead:**
   - `+61 −8` on an edit line: shown only if the activity's `summary` has it; the app never parses the text for numbers.
   - The full command of a denied call: during the turn the log has the tool name only (`permission_denied.tool`); the command
@@ -295,6 +303,8 @@ These are the [README](README.md)'s principles applied to a UI, and each is a te
 - **A turn always ends, and says how.** Quit mid-run (⌘Q) records `stopped`; kill the app mid-run and relaunch: exactly one
   `turn.ended` per `turn.started` with `interrupted`, `seq` without gaps, and the UI offers Run again. Tested against `fake-claude`
   (hang, crash, ignore SIGTERM, leave children) driven through the store, not through the views.
+- **Stop never signals the app itself.** A test starts an owned run, stops it through the store, and asserts the app's pid was
+  not sent a signal and the turn ended `stopped`.
 - **Stop returns a usable window in under 6 seconds**, including a child that ignores SIGTERM and one that left descendants.
 - **One writer per log.** The app appends only through `ThreadService` and `ThreadRunner`. A run held by a terminal makes the
   app's Run `busy` with the pid, not a second writer; a stale `runner.json` after a crash is recovered, not trusted.
@@ -302,8 +312,8 @@ These are the [README](README.md)'s principles applied to a UI, and each is a te
   tables and for an unknown future event kind (ignored, as the log spec says). The app holds no thread state outside the log
   and the repo path.
 - **No blocking waits, no process code in the app.** The grep gate extends to `Sources/WorkbenchApp/` (`Process`, `Subprocess`,
-  `posix_spawn`, `waitUntilExit`, `readDataToEndOfFile`, `/bin/sh`). Main-thread work is bounded: the poll reads size first, not
-  the file; no event-log read on the main actor.
+  `posix_spawn`, `waitUntilExit`, `readDataToEndOfFile`, `/bin/sh`). Main-thread work is bounded: the poll `stat`s first and `EventLogTail` reads only appended bytes (a test asserts the bytes read over a growing log are the
+  bytes appended, via `EventLogReadCount`); no event-log read on the main actor.
 - **Everything is bounded.** The activity list is capped to the turn's stored items (1000) with `dropped` shown; transcripts and
   the raw log are paged, never loaded whole; findings and diffs shown are the sizes core already truncates, and say when cut;
   `Event log` opens the file, not an in-memory copy.
@@ -313,7 +323,7 @@ These are the [README](README.md)'s principles applied to a UI, and each is a te
   not report shows `unknown`, never `0`; CI that cannot be read is not green; a failed review round is not clean; a skipped stage
   is not a pass. A screenshot whose files are missing or stale is never shown as evidence.
 - **The notification rule holds under replay.** Replaying a fixture log into the store produces exactly one notification per
-  entry into `needsYou`, none for the state the app opened on, and none after pause.
+  identity of `needsYou` (including a CI failure on the same head sha twice), none for the state the app opened on, and none after pause.
 - **No UI hitch while a turn streams 5 000 events** (main thread never blocked over 50 ms), measured with the store fed by a
   fake that emits that stream, as P3 required.
 - **CI.** The Linux PR gate keeps passing (the app target is macOS-only, core types are tested there); a path-filtered macOS job
