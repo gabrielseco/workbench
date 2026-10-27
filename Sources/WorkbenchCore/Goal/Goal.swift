@@ -30,7 +30,7 @@ public struct Goal: Sendable, Equatable {
     /// How the thread's spend is bounded: `budget_usd` as a hard cap, or `spend_policy: timeout_only`.
     public var spend: AgentSpend
     public var turnTimeoutMin: Int
-    /// `--model` for every turn of this thread; nil falls back to the config's `model`, then the CLI default.
+    /// `--model` for every turn of this thread; nil falls back to `[agents.run] model`, then the provider's default.
     public var model: String?
     /// An existing branch the thread's work is pushed to by `ship`, instead of a new `workbench/<id>` branch.
     public var pushTo: String?

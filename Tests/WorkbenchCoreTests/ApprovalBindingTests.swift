@@ -5,11 +5,14 @@ import Testing
 
 /// Approval binds the coding provider and model the config picks, and a session belongs to the provider that made it.
 @Suite(.processGate) struct ApprovalBindingTests {
+    private static let runModel = "[agents.run]\nmodel = \"opus\""
+
+    /// Rewrites `[agents.run] model`, the only `model` these fixtures set; nil removes the table.
     private func setModel(_ model: String?, in fx: RunnerFixture) throws {
         var text = try String(contentsOf: fx.project.configURL, encoding: .utf8)
         text = text.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.hasPrefix("model = ") }.joined(separator: "\n")
-        if let model { text = "model = \"\(model)\"\n" + text }
+            .filter { !$0.hasPrefix("model = ") && $0 != "[agents.run]" }.joined(separator: "\n")
+        if let model { text += "\n[agents.run]\nmodel = \"\(model)\"\n" }
         try text.write(to: fx.project.configURL, atomically: true, encoding: .utf8)
     }
 
@@ -43,7 +46,7 @@ import Testing
     }
 
     @Test func approveRecordsResolvedAgent() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: Self.runModel)
         let id = try await fx.approvedThread()
         let event = try #require(approvals(fx, id).last)
         #expect(event.data["provider"] == "claude" && event.data["model"] == "opus")
@@ -52,7 +55,7 @@ import Testing
     }
 
     @Test func runRefusesChangedAgent() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: Self.runModel)
         let id = try await fx.approvedThread()
         try setModel("haiku", in: fx)
         let error = await #expect(throws: RunnerError.self) { _ = try await fx.runner(id).run(fx.options()) }
@@ -62,7 +65,7 @@ import Testing
     }
 
     @Test func reapproveAfterConfigChange() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: Self.runModel)
         let id = try await fx.approvedThread()
         let goalBefore = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
         try setModel(nil, in: fx)
@@ -149,7 +152,7 @@ import Testing
     }
 
     @Test func legacyApprovalStillRuns() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: Self.runModel)
         let id = try await fx.approvedThread()
         // An approval written before the settings were recorded: rewrite the log line without them.
         let url = fx.project.eventsURL(id)

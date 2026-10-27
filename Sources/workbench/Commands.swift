@@ -432,9 +432,7 @@ enum Commands {
     static func config() async throws {
         let ctx = try await Context.load()
         let config = try Config.load(from: ctx.project.configURL)
-        let turn = TurnRequest(
-            sessionID: UUID(), resume: false, budgetUSD: config.defaultBudgetUSD, prompt: "<prompt>")
-        let invocation = try config.invocation(for: turn)
+        let invocation = try config.previewInvocation()
         let env = ProcessInfo.processInfo.environment
         let resolved = ExecutableResolver.resolve(config.claudePath, searchPath: env["PATH"])
         out("config:   \(ctx.project.configURL.path)")

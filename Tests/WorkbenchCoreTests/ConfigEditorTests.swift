@@ -33,7 +33,7 @@ private let tools = "\n[tools]\navailable = [\"Read\"]\n"
     @Test func theGlobalKeyIsAllowedAndValidated() throws {
         #expect(GlobalConfig.allowedKeys.contains("editor"))
         #expect(try GlobalConfig.parse("editor = \"zed\"\n").editor == "zed")
-        #expect(try GlobalConfig.parse("editor = \"subl -n\"\nmodel = \"haiku\"\n").editor == "subl -n")
+        #expect(try GlobalConfig.parse("editor = \"subl -n\"\n[agents.run]\nmodel = \"haiku\"\n").editor == "subl -n")
         #expect {
             try GlobalConfig.parse("editor = \"code; evil\"\n")
         } throws: { error in
@@ -46,7 +46,7 @@ private let tools = "\n[tools]\navailable = [\"Read\"]\n"
         #expect {
             try GlobalConfig.parse("check_command = \"x\"\n")
         } throws: { error in
-            "\(error)".contains("allowed: claude_path, editor, model, projects_dir")
+            "\(error)".contains("allowed: claude_path, editor, projects_dir")
         }
     }
 }

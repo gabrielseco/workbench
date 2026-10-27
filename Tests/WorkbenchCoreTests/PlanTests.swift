@@ -157,7 +157,7 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
         #expect(state.plan?.ok == true && state.plan?.ref == "plans/plan-1.md" && state.plan?.failure == nil)
     }
 
-    @Test func theModelIsTheFlagThenPlanModelThenModel() async throws {
+    @Test func theModelIsTheFlagThenThePlanTableThenTheDefault() async throws {
         func model(_ extra: String, flag: String? = nil) async throws -> String? {
             let p = try await planned(extraConfig: extra)
             let dump = p.dir.appendingPathComponent("dump.json").path
@@ -168,10 +168,25 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
             let list = try #require(argv as? [String])
             return list.firstIndex(of: "--model").map { list[$0 + 1] }
         }
-        #expect(try await model("model = \"sonnet\"\nplan_model = \"opus\"\n", flag: "haiku") == "haiku")
-        #expect(try await model("model = \"sonnet\"\nplan_model = \"opus\"\n") == "opus")
-        #expect(try await model("model = \"sonnet\"\n") == "sonnet")
+        let tables = "[agents.run]\nmodel = \"sonnet\"\n[agents.plan]\nmodel = \"opus\"\n"
+        #expect(try await model(tables, flag: "haiku") == "haiku")
+        #expect(try await model(tables) == "opus")
+        #expect(try await model("[agents.run]\nmodel = \"sonnet\"\n") == nil, "the coding model is not inherited")
         #expect(try await model("") == nil)
+    }
+
+    @Test func theEffortComesFromThePlanTable() throws {
+        let config = try Config.parse("[agents.plan]\nreasoning_effort = \"high\"\n[tools]\navailable = [\"Read\"]\n")
+        let agent = ClaudeReadOnlyAgent(config: config, environment: [:])
+        let effort = config.resolvedPlanAgent().reasoningEffort
+        let request = ReadOnlyRequest(
+            prompt: "p", workingDirectory: URL(fileURLWithPath: "/tmp"), model: nil, budget: 1, timeout: 1,
+            reasoningEffort: effort)
+        let args = agent.arguments(for: request)
+        #expect(args.firstIndex(of: "--effort").map { args[$0 + 1] } == "high")
+        var none = request
+        none.reasoningEffort = nil
+        #expect(!agent.arguments(for: none).contains("--effort"))
     }
 
     @Test func aDraftOrChangedGoalIsRefusedAndSpendsNothing() async throws {

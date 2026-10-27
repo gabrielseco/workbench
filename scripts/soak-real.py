@@ -71,8 +71,9 @@ def main():
     sh(WB, "init", cwd=repo, env=env)
     cfg = os.path.join(repo, ".workbench", "config.toml")
     text = open(cfg).read()
-    text = text.replace('# model = "haiku"', 'model = "haiku"').replace('# check_command = "scripts/check.sh"', 'check_command = "scripts/check.sh"')
+    text = text.replace('# check_command = "scripts/check.sh"', 'check_command = "scripts/check.sh"')
     text = text.replace("# default_budget_usd = 5.00", "default_budget_usd = 1.00")
+    text += '\n[agents.run]\nmodel = "haiku"\n'
     open(cfg, "w").write(text)
 
     results, total_cost, total_secs = {}, 0.0, 0.0

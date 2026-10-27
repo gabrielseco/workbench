@@ -7,6 +7,8 @@ public struct ReadOnlyRequest: Sendable, Equatable {
     public var model: String?
     public var budget: Decimal
     public var timeout: TimeInterval
+    /// `--effort`; nil leaves the agent's own setting.
+    public var reasoningEffort: String?
 }
 
 /// What came back. `text` is set when the agent answered; `failure` says why it did not (never both).
@@ -55,6 +57,7 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
         // Always: `safe_mode = false` lets a project's hooks and plugins into a run, and this turn is read-only.
         args += ["--safe-mode", "--disable-slash-commands"]
         if let model = request.model { args += ["--model", model] }
+        if let effort = request.reasoningEffort { args += ["--effort", effort] }
         args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools
         args += ["--", request.prompt]
         return args

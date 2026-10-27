@@ -24,7 +24,13 @@ enum AgentSpendPolicy {
                 retry: .afterFix))
     }
 
-    static func jobName(_ role: AgentRole) -> String { role == .goal ? "goal draft" : role.rawValue }
+    static func jobName(_ role: AgentRole) -> String {
+        switch role {
+        case .goal: "goal draft"
+        case .ship: "PR description"
+        default: role.rawValue
+        }
+    }
 }
 
 extension AgentRole {
@@ -35,6 +41,8 @@ extension AgentRole {
         case .goal: GoalDraft.timeout
         case .judge: Judge.timeout
         case .review: PRReview.timeout
+        case .ship: PRDescriber.timeout
+        case .plan: Plan.timeout
         case .run: nil
         }
     }

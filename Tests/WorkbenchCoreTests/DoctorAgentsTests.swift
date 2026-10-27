@@ -14,7 +14,7 @@ import Testing
 
     @Test func defaultsAreShownPerResponsibility() async throws {
         let found = try await report("").agents
-        #expect(found.map(\.role) == [.goal, .run, .judge, .review])
+        #expect(found.map(\.role) == [.goal, .run, .judge, .review, .ship, .plan])
         #expect(found[0].resolved == nil && found[0].note == "goal drafting stays manual")
         #expect(found[1].resolved?.provider == .claude && found[2].resolved?.provider == .claude)
         #expect(found[3].resolved?.provider == .codex)
@@ -54,7 +54,9 @@ import Testing
     }
 
     @Test func theCommandPrintsOneLineEach() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"\n[agents.judge]\nmodel = \"haiku\"")
+        let fx = try await RunnerFixture(
+            extraConfig: "[agents.run]\nmodel = \"opus\"\n[agents.judge]\nmodel = \"haiku\"\n"
+                + "[agents.ship]\nmodel = \"haiku\"\nreasoning_effort = \"low\"\n[agents.plan]\nmodel = \"sonnet\"")
         let ran = try await workbenchCLI(
             ["doctor"], in: fx.repo, environment: ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName()])
         #expect(ran.code == 0, "\(ran.stderr)")
@@ -63,5 +65,16 @@ import Testing
         #expect(lines.contains { $0.hasPrefix("agent run:") && $0.contains("claude, model opus") })
         #expect(lines.contains { $0.hasPrefix("agent judge:") && $0.contains("claude, model haiku") })
         #expect(lines.contains { $0.hasPrefix("agent review:") && $0.contains("codex, model the provider's default") })
+        #expect(lines.contains { $0.hasPrefix("agent ship:") && $0.contains("claude, model haiku, effort low") })
+        #expect(lines.contains { $0.hasPrefix("agent plan:") && $0.contains("claude, model sonnet") })
+    }
+
+    @Test func shipAndPlanAreListedWithoutTheirTables() async throws {
+        let found = try await report("").agents
+        for role in [AgentRole.ship, .plan] {
+            let agent = try #require(found.first { $0.role == role })
+            #expect(agent.resolved == ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
+            #expect(agent.problems.isEmpty)
+        }
     }
 }

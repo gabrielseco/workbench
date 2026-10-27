@@ -68,10 +68,11 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         #expect(verifier.tools == ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(swift scripts/ax.swift:*)"])
     }
 
-    @Test func theModelFallsBackToTheCodingModel() throws {
+    @Test func theModelIsItsOwnElseTheCLIDefaultNeverTheCodingModel() throws {
         let skill = "[verifier]\nskill = \"s.md\""
-        #expect(try parse(skill, root: "model = \"opus\"").verifierModel == "opus")
-        #expect(try parse(skill + "\nmodel = \"sonnet\"", root: "model = \"opus\"").verifierModel == "sonnet")
+        let run = "[agents.run]\nmodel = \"opus\"\n"
+        #expect(try parse(run + skill).verifierModel == nil)
+        #expect(try parse(run + skill + "\nmodel = \"sonnet\"").verifierModel == "sonnet")
         #expect(try parse(skill).verifierModel == nil)
     }
 

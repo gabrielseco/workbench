@@ -135,9 +135,10 @@ extension ThreadService {
                 log, turn: turn, hash: hash, base: nil, failure: baseProblem ?? "the base commit is unknown", argv: nil)
         }
 
+        let planAgent = config.resolvedPlanAgent(modelFlag: model)
         let request = ReadOnlyRequest(
-            prompt: "", workingDirectory: planDirectory(id), model: model ?? config.planModel ?? config.model,
-            budget: budget, timeout: timeout)
+            prompt: "", workingDirectory: planDirectory(id), model: planAgent.model, budget: budget, timeout: timeout,
+            reasoningEffort: planAgent.reasoningEffort)
         var loaded: ProjectInstructions?
         if config.projectInstructions {
             loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: commit)

@@ -295,9 +295,9 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
     }
 
     @Test func modelIsPassedWhenSetAndOmittedWhenNot() throws {
-        let with = try Config.parse("model = \"haiku\"\n[tools]\navailable = [\"Read\"]")
+        let with = try Config.parse("[tools]\navailable = [\"Read\"]")
         let args = try with.invocation(
-            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x", model: "haiku")).arguments
         let i = try #require(args.firstIndex(of: "--model"))
         #expect(args[i + 1] == "haiku")
         #expect(i < args.firstIndex(of: "--")!)
@@ -308,22 +308,27 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
             .contains("--model")))
     }
 
-    @Test func roleModelsAreValidatedLikeModelAndDoNotReachTheCodingTurn() throws {
-        let config = try Config.parse(
-            "model = \"opus\"\njudge_model = \"sonnet\"\ndescribe_model = \"haiku\"\n[tools]\navailable = [\"Read\"]")
-        #expect(config.judgeModel == "sonnet" && config.describeModel == "haiku")
-        let args = try config.invocation(
-            for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
-        #expect(args[try #require(args.firstIndex(of: "--model")) + 1] == "opus")
-        #expect(codes("judge_model = \"-x\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
-        #expect(codes("describe_model = \"a b\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
-        #expect(try Config.parse("plan_model = \"opus\"\n[tools]\navailable = [\"Read\"]").planModel == "opus")
-        #expect(codes("plan_model = \"-x\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
+    @Test(arguments: [
+        ("model", "[agents.run]"), ("judge_model", "[agents.judge]"), ("describe_model", "[agents.ship]"),
+        ("plan_model", "[agents.plan]"),
+    ])
+    func aRemovedRootModelKeyIsRefusedAndNamesItsTable(key: String, table: String) throws {
+        let error = try #require(throws: ConfigError.self) {
+            try Config.parse("\(key) = \"opus\"\n[tools]\navailable = [\"Read\"]\n")
+        }
+        #expect(error.problems.count == 1)
+        let problem = try #require(error.problems.first)
+        #expect(problem.line == 1 && problem.code == .unknownKey)
+        #expect(problem.message.contains("'\(key)'") && problem.message.contains(table))
+    }
+
+    @Test func theRemovedKeysAreRefusedEvenNextToTheirTables() {
+        #expect(codes("model = \"opus\"\n[agents.run]\nmodel = \"opus\"\n[tools]\navailable = [\"Read\"]") == [.unknownKey])
     }
 
     @Test(arguments: ["-x", "a b", "a;b", ""])
     func modelMustBeANameNotAFlag(model: String) {
-        #expect(codes("model = \"\(model)\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
+        #expect(codes("[agents.run]\nmodel = \"\(model)\"\n[tools]\navailable = [\"Read\"]") == [.invalidValue])
     }
 
     @Test func laterTurnsResumeAndNeverReuseSessionID() throws {

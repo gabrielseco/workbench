@@ -60,9 +60,6 @@ public struct Config: Sendable, Equatable {
     /// Put the repository's `AGENTS.md` (else `CLAUDE.md`) in the first prompt of a thread. Safe mode keeps
     /// `claude` itself from reading it, so Workbench does.
     public var projectInstructions: Bool
-    /// `--model` for every turn. Unset means the CLI's own default; note `--restricted` ignores the user's
-    /// settings files, so that default is not the one chosen in an interactive session.
-    public var model: String?
     /// The project's own check (tests, lint). Added to the allowed tools as `Bash(<command>:*)`.
     public var checkCommand: String?
     /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
@@ -81,12 +78,6 @@ public struct Config: Sendable, Equatable {
     public var envPass: [String]
     public var tools: ToolSet
     public var review: ReviewConfig = ReviewConfig()
-    /// `--model` for the judge, which only reads; unset falls back to `model`. A `--model` on the command wins.
-    public var judgeModel: String?
-    /// `--model` for the turn that writes or refreshes the pull request description; unset falls back to `model`.
-    public var describeModel: String?
-    /// `--model` for the plan turn, which only reads; unset falls back to `model`. A `--model` on the command wins.
-    public var planModel: String?
     /// `[verifier]`, or nil when the project declares none.
     public var verifier: VerifierConfig?
 
@@ -94,14 +85,15 @@ public struct Config: Sendable, Equatable {
     public var run: RunConfig?
 
     /// `[providers.<id>]` and `[agents.<role>]`: which provider and model each responsibility asks for. Read through
-    /// `resolvedRunAgent`, `resolvedJudgeAgent`, `resolvedReviewAgent` and `resolvedGoalAgent`.
+    /// `resolvedRunAgent`, `resolvedJudgeAgent`, `resolvedReviewAgent`, `resolvedGoalAgent`, `resolvedShipAgent`
+    /// and `resolvedPlanAgent`.
     public var agents = AgentsConfig()
 
     /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
     public var editor: String?
 
-    /// `--model` for the verifier: its own, else the coding `model`.
-    public var verifierModel: String? { verifier?.model ?? model }
+    /// `--model` for the verifier: its own, else nil for the CLI's default.
+    public var verifierModel: String? { verifier?.model }
 
     /// The `pr-review` stage's checklist and round cap, from `[review.stage.pr-review]` or the older `[pr_review]`.
     public var prReview: PRReviewConfig {
@@ -142,8 +134,7 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type",
-            "default_budget_usd", "env_pass", "model", "judge_model", "describe_model", "plan_model", "safe_mode",
-            "project_instructions", "copy", "editor",
+            "default_budget_usd", "env_pass", "safe_mode", "project_instructions", "copy", "editor",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -159,8 +150,8 @@ public struct Config: Sendable, Equatable {
             }
             let known = name == "" ? rootKeys : toolKeys
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !known.contains(key) {
-                if name == "", Self.removedVerifyKeys.contains(key) {
-                    fail(.unknownKey, entry.line, "'\(key)' was removed: replace it with a [verifier] table")
+                if name == "", let removed = Self.removedKeyMessage(key) {
+                    fail(.unknownKey, entry.line, removed)
                     continue
                 }
                 let location = name == "" ? "" : " in [\(name)]"
@@ -223,19 +214,6 @@ public struct Config: Sendable, Equatable {
                     "'project_instructions' must be true or false, found \(entry.value.typeName)")
             }
         }
-
-        func modelKey(_ key: String) -> String? {
-            guard let (value, line) = string("", key) else { return nil }
-            if !SafeNames.isModelName(value) {
-                fail(.invalidValue, line, "'\(key)' must be a model name or alias like \"haiku\"")
-                return nil
-            }
-            return value
-        }
-        let model = modelKey("model")
-        let judgeModel = modelKey("judge_model")
-        let describeModel = modelKey("describe_model")
-        let planModel = modelKey("plan_model")
 
         func command(_ key: String) -> String? {
             guard let (value, line) = string("", key) else { return nil }
@@ -327,11 +305,10 @@ public struct Config: Sendable, Equatable {
         guard problems.isEmpty else { throw ConfigError(problems: sorted(problems)) }
         var config = Config(
             claudePath: claudePath, safeMode: safeMode, projectInstructions: projectInstructions,
-            model: model, checkCommand: checkCommand, setupCommand: setupCommand, copy: copy,
+            checkCommand: checkCommand, setupCommand: setupCommand, copy: copy,
             appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
-            review: review, judgeModel: judgeModel, describeModel: describeModel,
-            planModel: planModel, verifier: verifier, run: run)
+            review: review, verifier: verifier, run: run)
         config.editor = editor
         config.agents = agents
         config.defaultBudgetConfigured = document.tables[""]?.entries["default_budget_usd"] != nil
@@ -347,6 +324,20 @@ public struct Config: Sendable, Equatable {
 
     /// Keys an older config used for the verify step, which `[verifier]` replaced.
     private static let removedVerifyKeys: Set<String> = ["verify_command", "verify_timeout_min"]
+
+    /// Root model keys the `[agents.<role>]` tables replaced, with where each now lives.
+    static let removedModelKeys: [String: String] = [
+        "model": "'model' in [agents.run]",
+        "judge_model": "'model' in [agents.judge]",
+        "describe_model": "'model' in [agents.ship]",
+        "plan_model": "'model' in [agents.plan]",
+    ]
+
+    /// What to say about a root key an older config used, nil for a key that never existed.
+    static func removedKeyMessage(_ key: String) -> String? {
+        if removedVerifyKeys.contains(key) { return "'\(key)' was removed: replace it with a [verifier] table" }
+        return removedModelKeys[key].map { "'\(key)' was removed: it is now \($0)" }
+    }
 
     private static func sorted(_ problems: [ConfigProblem]) -> [ConfigProblem] {
         problems.enumerated().sorted {
@@ -378,15 +369,20 @@ public struct Config: Sendable, Equatable {
         func quoted(_ s: String) -> String {
             "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         }
-        // Only the root keys, which come first: a later table's own `# model = ` example stays a comment.
+        // The `[agents.run]` example becomes a real table holding the model; every other `# model = ` stays a comment.
         var claudePathDone = false
+        var inRunTable = false
         var modelDone = false
         let lines = exampleTOML.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
             if let claudePath, !claudePathDone, line.hasPrefix("# claude_path = ") {
                 claudePathDone = true
                 return "claude_path = \(quoted(claudePath))"
             }
-            if let model, !modelDone, line.hasPrefix("# model = ") {
+            if model != nil, !modelDone, line.hasPrefix("# [agents.run]") {
+                inRunTable = true
+                return String(line.dropFirst(2))
+            }
+            if let model, inRunTable, !modelDone, line.hasPrefix("# model = ") {
                 modelDone = true
                 return "model = \(quoted(model))"
             }
@@ -402,10 +398,6 @@ public struct Config: Sendable, Equatable {
         # claude_path = "claude"           # name on PATH, or an absolute path
         # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
         # project_instructions = true     # put AGENTS.md (else CLAUDE.md) in the first prompt (default)
-        # model = "opus"                   # --model for every turn; a goal's `model` wins; unset = the CLI default
-        # judge_model = "sonnet"           # --model for the judge (it only reads); unset = model
-        # describe_model = "haiku"         # --model for the PR description turn; unset = model
-        # plan_model = "opus"              # --model for `workbench plan` (it only reads); unset = model
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # copy = [".env.*", "example/.env"] # git-ignored files copied from this checkout into each new worktree
@@ -423,9 +415,16 @@ public struct Config: Sendable, Equatable {
         # [providers.codex]                # which executable runs a provider (claude: same as claude_path)
         # executable = "/opt/homebrew/bin/codex"
 
-        # [agents.judge]                   # provider and model per responsibility; unset keeps the defaults:
-        # provider = "claude"              # run and judge on claude, review on codex, goal drafting off
-        # model = "sonnet"                 # replaces judge_model and model for the judge once it is set
+        # [agents.run]                     # provider, model and reasoning_effort per responsibility: every model is set here
+        # model = "opus"                   # the coding turns; a goal's own `model` wins; unset = the provider's default
+        # reasoning_effort = "high"        # low, medium, high, xhigh or max; unset = the provider's own
+        # [agents.judge]                   # unset keeps the defaults: run, judge, ship and plan on claude,
+        # provider = "claude"              # review on codex, goal drafting off
+        # model = "sonnet"                 # `workbench judge --model` wins
+        # [agents.ship]                    # the PR description and its refresh (claude only for now)
+        # model = "haiku"
+        # [agents.plan]                    # `workbench plan` (claude only for now); `plan --model` wins
+        # model = "opus"
         # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
         # allow_unpriced = true            # the default: codex (no dollar cap) runs on its timeout; false refuses it
         #                                  # (never for [agents.run], whose spending the goal approves)

@@ -15,6 +15,8 @@ import Testing
         let config = try Config.parse(block.joined(separator: "\n") + "\n[tools]\navailable = [\"Read\"]\n")
         #expect(config.executable(for: .codex) == "/opt/homebrew/bin/codex")
         #expect(config.agents.judge.model == "sonnet" && config.agents.review.allowUnpriced == true)
+        #expect(config.agents.run.model == "opus" && config.agents.ship.model == "haiku")
+        #expect(config.agents.plan.model == "opus")
         #expect(Config.exampleTOML.contains("[agents.judge]") && Config.exampleTOML.contains("review.stage.<name>"))
     }
 }

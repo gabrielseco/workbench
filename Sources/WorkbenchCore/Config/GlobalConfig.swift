@@ -4,11 +4,14 @@ import Foundation
 /// `workbench open`. It supplies a few keys and nothing else; a project's own `.workbench/config.toml` is still the
 /// only thing a run reads, so a global file can never change what an existing project does.
 public struct GlobalConfig: Sendable, Equatable {
-    public static let allowedKeys: [String] = ["claude_path", "editor", "model", "projects_dir"]
+    public static let allowedKeys: [String] = ["claude_path", "editor", "projects_dir"]
+    /// The one table it may have, and its one key: the coding model a new project starts with.
+    static let runTable = "agents.run"
 
     /// Where `workbench new <name>` puts the project when no location is given. Absolute, `~` expanded.
     public var projectsDirectory: URL?
     public var claudePath: String?
+    /// `[agents.run] model`, written into a new project's `[agents.run]`.
     public var model: String?
     /// What `workbench open` starts when neither `--editor` nor the project names one.
     public var editor: String?
@@ -51,11 +54,26 @@ public struct GlobalConfig: Sendable, Equatable {
         }
 
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) {
+            if name == runTable {
+                for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where key != "model" {
+                    fail(
+                        .unknownKey, entry.line,
+                        "'\(key)' is not allowed in [\(runTable)] of the global config (allowed: model); "
+                            + "set it in the project's .workbench/config.toml")
+                }
+                continue
+            }
             if name != "" {
-                fail(.unknownTable, table.line, "table [\(name)] is not allowed in the global config")
+                fail(
+                    .unknownTable, table.line,
+                    "table [\(name)] is not allowed in the global config (allowed: [\(runTable)])")
                 continue
             }
             for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !allowedKeys.contains(key) {
+                if Config.removedModelKeys[key] != nil, let removed = Config.removedKeyMessage(key) {
+                    fail(.unknownKey, entry.line, removed)
+                    continue
+                }
                 fail(
                     .unknownKey, entry.line,
                     "'\(key)' is not allowed in the global config (allowed: \(allowedKeys.joined(separator: ", "))); "
@@ -63,8 +81,8 @@ public struct GlobalConfig: Sendable, Equatable {
             }
         }
 
-        func string(_ key: String) -> (String, Int)? {
-            guard let entry = document.tables[""]?.entries[key] else { return nil }
+        func string(_ key: String, table: String = "") -> (String, Int)? {
+            guard let entry = document.tables[table]?.entries[key] else { return nil }
             guard case .string(let s) = entry.value else {
                 fail(.wrongType, entry.line, "'\(key)' must be a string, found \(entry.value.typeName)")
                 return nil
@@ -80,11 +98,11 @@ public struct GlobalConfig: Sendable, Equatable {
                 result.claudePath = value
             }
         }
-        if let (value, line) = string("model") {
+        if let (value, line) = string("model", table: runTable) {
             if SafeNames.isModelName(value) {
                 result.model = value
             } else {
-                fail(.invalidValue, line, "'model' must be a model name or alias like \"haiku\"")
+                fail(.invalidValue, line, "'model' in [\(runTable)] must be a model name or alias like \"haiku\"")
             }
         }
         if let (value, line) = string("editor") { result.editor = Config.editorValue(value, line: line, fail: fail) }

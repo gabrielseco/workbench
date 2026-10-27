@@ -51,7 +51,7 @@ extension Commands {
 
     static func printDoctor(_ report: DoctorReport) {
         out("claude:   \(report.claude ?? "NOT FOUND (\(report.claudePath))")")
-        out("model:    \(report.model ?? "the claude CLI default (no `model` in the config)")")
+        out("model:    \(report.model ?? "the provider's default (no `model` in [agents.run])")")
         for agent in report.agents {
             let label = "agent \(agent.role.rawValue):".padding(toLength: 14, withPad: " ", startingAt: 0)
             guard let resolved = agent.resolved else { out("\(label)none (\(agent.note ?? ""))"); continue }

@@ -9,7 +9,7 @@ public struct TurnRequest: Sendable, Equatable {
     public var budgetUSD: Decimal?
     public var prompt: String
     public var appendSystemPrompt: String?
-    /// The goal's model, which wins over the config's.
+    /// The resolved run model (`Config.resolvedRunAgent`); nil is the CLI's own default.
     public var model: String?
     /// `--effort` for the turn; nil leaves Claude's own setting.
     public var reasoningEffort: String?
@@ -53,6 +53,16 @@ public struct ClaudeInvocation: Sendable, Equatable {
 }
 
 extension Config {
+    /// What `workbench config` prints: a coding turn as `run` would start it for a goal that sets no model, so the model and
+    /// effort are the ones `[agents.run]` chooses.
+    public func previewInvocation() throws -> ClaudeInvocation {
+        let agent = resolvedRunAgent()
+        return try invocation(
+            for: TurnRequest(
+                sessionID: UUID(), resume: false, budgetUSD: defaultBudgetUSD, prompt: "<prompt>", model: agent.model,
+                reasoningEffort: agent.reasoningEffort))
+    }
+
     /// The argv for one turn (docs/plan/P1-runner.md, "Turn lifecycle"; flags verified in the P1 spikes).
     ///
     /// - `--restricted` is always passed. It is what confines the file tools to the worktree; without it
@@ -73,7 +83,7 @@ extension Config {
         let session = turn.sessionID.uuidString.lowercased()
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
         if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
-        if let model = turn.model ?? model { args += ["--model", model] }
+        if let model = turn.model { args += ["--model", model] }
         if let effort = turn.reasoningEffort { args += ["--effort", effort] }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools

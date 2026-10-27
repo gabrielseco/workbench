@@ -70,6 +70,8 @@ extension Doctor {
             DoctorAgent(role: .run, resolved: config.resolvedRunAgent(goalModel: goal?.model), note: nil),
             DoctorAgent(role: .judge, resolved: config.resolvedJudgeAgent(), note: nil),
             DoctorAgent(role: .review, resolved: config.resolvedReviewAgent(), note: nil),
+            DoctorAgent(role: .ship, resolved: config.resolvedShipAgent, note: nil),
+            DoctorAgent(role: .plan, resolved: config.resolvedPlanAgent(), note: nil),
         ]
         for index in found.indices {
             guard let resolved = found[index].resolved else { continue }
@@ -107,8 +109,9 @@ extension Doctor {
         }
         let used = Set(found.compactMap { $0.resolved?.provider })
         let unusedProviders = config.agents.executables.keys.filter { !used.contains($0) }.sorted { "\($0)" < "\($1)" }
+        let reviewIndex = found.firstIndex { $0.role == .review } ?? found.count - 1
         for provider in unusedProviders {
-            found[found.count - 1].issues.append(
+            found[reviewIndex].issues.append(
                 DoctorAgentIssue(
                     role: .review, kind: "setting_unused", severity: .note,
                     message: "[providers.\(provider)] executable is not used: no responsibility resolves to \(provider)"

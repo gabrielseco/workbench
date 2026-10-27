@@ -387,7 +387,7 @@ private func changeGoal(_ p: Planned) async throws {
     }
 
     @Test func theModelIsReadFromTheLoggedCommand() async throws {
-        let p = try await planned(extraConfig: "plan_model = \"opus\"\n")
+        let p = try await planned(extraConfig: "[agents.plan]\nmodel = \"opus\"\n")
         try await makePlan(p)
         let state = ThreadState.derive(from: p.events, id: p.id)
         #expect(state.currentPlan?.model == "opus")

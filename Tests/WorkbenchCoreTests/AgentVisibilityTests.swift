@@ -119,7 +119,7 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
     }
 
     @Test func statusJSONHasAgents() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: "[agents.run]\nmodel = \"opus\"")
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
         let status = try await cliJSON(["status"], in: fx)
@@ -147,7 +147,7 @@ private func cliJSON(_ arguments: [String], in fx: RunnerFixture) async throws -
     }
 
     @Test func textShowsAgents() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: "[agents.run]\nmodel = \"opus\"")
         let id = try await fx.approvedThread()
         _ = try await fx.runner(id).run(fx.options())
         let environment = ["PATH": "/usr/bin:/bin", "HOME": fx.repo.path, "USER": NSUserName(), "FAKE_CLAUDE": ""]

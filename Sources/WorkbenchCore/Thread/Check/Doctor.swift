@@ -67,7 +67,7 @@ public struct DoctorStep: Sendable, Equatable {
 /// `[verifier]` as doctor found it: the config, and the skill as it is at the base commit.
 public struct DoctorVerifier: Sendable, Equatable {
     public var config: VerifierConfig
-    /// `--model` the verifier gets: its own, else the coding model, else nil for the CLI's default.
+    /// `--model` the verifier gets: its own, else nil for the CLI's default.
     public var model: String?
     public var skill: VerifierSkill?
     /// Why the skill cannot be used, when it cannot. A warning: doctor still runs the declared steps.
@@ -106,7 +106,7 @@ public struct DoctorReport: Sendable, Equatable {
     /// Where `claude_path` resolved, or nil.
     public var claude: String?
     public var claudePath: String
-    /// The `model` in the config, or nil for the CLI's own default.
+    /// The `model` in `[agents.run]`, or nil for the provider's own default.
     public var model: String?
     /// `Bash` is among the available tools, so a run can call the check at all.
     public var bashAvailable: Bool
@@ -246,7 +246,7 @@ public final class Doctor: @unchecked Sendable {
         let claude = ExecutableResolver.resolve(config.claudePath, searchPath: options.environment["PATH"])
         let bash = config.tools.available.contains("Bash")
         var report = DoctorReport(
-            base: base, claude: claude?.path, claudePath: config.claudePath, model: config.model,
+            base: base, claude: claude?.path, claudePath: config.claudePath, model: config.agents.run.model,
             bashAvailable: bash, checkPattern: config.checkCommand.map { "Bash(\($0):*)" },
             checkDenied: config.checkCommand.map {
                 config.tools.denied.contains("Bash") || config.tools.denied.contains("Bash(\($0):*)")

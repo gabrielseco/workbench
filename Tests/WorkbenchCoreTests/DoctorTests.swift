@@ -116,7 +116,7 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
     }
 
     @Test func itReportsClaudeModelAndWhatARunMayCall() async throws {
-        let (fx, script) = try await fixture(check: "true", extra: "model = \"opus\"")
+        let (fx, script) = try await fixture(check: "true", extra: "[agents.run]\nmodel = \"opus\"")
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
         #expect(report.claude == FakeClaude.executable.path)
         #expect(report.model == "opus")
@@ -125,7 +125,7 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
 
         var config = try String(contentsOf: fx.project.configURL, encoding: .utf8)
         config = config.replacingOccurrences(of: FakeClaude.executable.path, with: "no-such-claude-here")
-        config = config.replacingOccurrences(of: "model = \"opus\"\n", with: "")
+        config = config.replacingOccurrences(of: "[agents.run]\nmodel = \"opus\"\n", with: "")
         config = config.replacingOccurrences(of: "available = [\"Read\", \"Edit\", \"Bash\"]", with: "available = [\"Read\"]")
         try config.write(to: fx.project.configURL, atomically: true, encoding: .utf8)
         let other = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())

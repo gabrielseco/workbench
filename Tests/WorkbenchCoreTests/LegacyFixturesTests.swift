@@ -3,10 +3,11 @@ import Testing
 
 @testable import WorkbenchCore
 
-/// `Tests/Fixtures/legacy/<name>/`: a config with no `[agents]` and the log and `session.json` a thread had before P9
-/// (claude lines only, no attempt records, no provider in `turn.started`, an approval without provider or model).
-/// `status.expected.json`, `review.expected.json` and `doctor.expected.txt` were produced by the `workbench` built from
-/// `origin/main` before this change (011ce70),, and are not regenerated from this code.
+/// `Tests/Fixtures/legacy/<name>/`: a config and the log and `session.json` a thread had before P9 (claude lines only, no
+/// attempt records, no provider in `turn.started`, an approval without provider or model). The configs have no `[agents]`
+/// table, except `models`, whose root `model` and `judge_model` were rewritten to `[agents.run]` and `[agents.judge]` when
+/// those keys were removed. `status.expected.json`, `review.expected.json` and `doctor.expected.txt` were produced by the
+/// `workbench` built from `origin/main` before this change (011ce70), and are not regenerated from this code.
 private let fixtures = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/legacy")
 
@@ -89,15 +90,17 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
         for scenario in scenarios {
             let config = try Config.load(
                 from: fixtures.appendingPathComponent(scenario.name).appendingPathComponent("config.toml"))
-            #expect(config.agents == AgentsConfig(), "\(scenario.name): no [agents] table")
+            var tables = AgentsConfig()
+            tables.run.model = scenario.model
+            tables.judge.model = scenario.judgeModel
+            #expect(config.agents == tables, "\(scenario.name): only the models the config names")
             #expect(
                 config.resolvedRunAgent()
                     == ResolvedAgent(provider: .claude, model: scenario.model, allowUnpriced: false), "\(scenario.name)"
             )
             #expect(
                 config.resolvedJudgeAgent()
-                    == ResolvedAgent(
-                        provider: .claude, model: scenario.judgeModel ?? scenario.model, allowUnpriced: false),
+                    == ResolvedAgent(provider: .claude, model: scenario.judgeModel, allowUnpriced: false),
                 "\(scenario.name)")
             #expect(
                 config.resolvedReviewAgent() == ResolvedAgent(provider: .codex, model: nil, allowUnpriced: false),
@@ -177,11 +180,19 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
         for scenario in scenarios {
             let fixture = try await project(scenario.name)
             let now = try await run(["doctor"], in: fixture)
-            // What this change adds to the text: problems and notes per agent, and the approved line.
+            // What later changes add to the text: problems and notes per agent, the approved line, the ship and plan
+            // agents.
             let kept = now.split(separator: "\n", omittingEmptySubsequences: false).filter {
                 !$0.hasPrefix("  problem:") && !$0.hasPrefix("  note:") && !$0.hasPrefix("approved:")
+                    && !$0.hasPrefix("agent ship:") && !$0.hasPrefix("agent plan:")
             }
+            // With the root `model` removed, the hint names [agents.run], and the verifier no longer inherits the
+            // coding model.
             let was = try text(scenario.name, "doctor.expected.txt")
+                .replacingOccurrences(
+                    of: "the claude CLI default (no `model` in the config)",
+                    with: "the provider's default (no `model` in [agents.run])")
+                .replacingOccurrences(of: "\n  model:  opus\n", with: "\n  model:  the claude CLI default\n")
             #expect(kept.joined(separator: "\n") == was.trimmingCharacters(in: .newlines), "\(scenario.name):\n\(now)")
         }
     }

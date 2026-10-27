@@ -1,8 +1,9 @@
 # P14: A plan turn before the first run
 
-Status: tasks 1 to 5 built (task 5: `scripts/verify-cli/plan.sh`, recorded 2026-10-18: PASS in 22 steps for $0.0023 plan + $0.0025 turn on haiku; with `VERIFY_CLI_SABOTAGE=1` exactly the two plan-in-prompt steps FAIL, exit 1; `workbench plan`, `plan_model`, `plan.started`/`plan.ended`, the plan in the run's first prompt, `plan show`, `plan edit`). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
+Status: tasks 1 to 5 built (task 5: `scripts/verify-cli/plan.sh`, recorded 2026-10-18: PASS in 22 steps for $0.0023 plan + $0.0025 turn on haiku; with `VERIFY_CLI_SABOTAGE=1` exactly the two plan-in-prompt steps FAIL, exit 1; `workbench plan`, `plan_model` (since replaced by `[agents.plan] model`), `plan.started`/`plan.ended`, the plan in the run's first prompt, `plan show`, `plan edit`). Written 2026-10-18. Independent of [P9](P9-agent-providers.md), but shaped so P9 can
 give it a provider. Builds on the judge (a separate read-only `claude -p` run with its own budget and events) and
-on the per-role model keys (`judge_model`, `describe_model`, #126).
+on the per-role model keys (`judge_model`, `describe_model`, #126; all of them, `plan_model` and the root `model`
+were later removed for `[agents.<role>]` tables: see "Config and command").
 
 ## Why
 
@@ -38,7 +39,7 @@ skips one that exists.
 |---|---|---|---|
 | Reads | the base commit, the goal | the diff, check and proof | the worktree |
 | Tools | `Read`, `Grep`, `Glob` | none, or `Read` on screenshots | the project's `[tools]` |
-| Model | `plan_model`, else `model` | `judge_model`, else `model` | the goal's `model`, else `model` |
+| Model | `plan --model`, else `[agents.plan]` | `judge --model`, else `[agents.judge]` | the goal's `model`, else `[agents.run]` |
 | Writes | nothing but its answer | nothing but its answer | the worktree |
 | Numbered turn | no | no | yes |
 
@@ -91,14 +92,19 @@ typealias ReadOnlyAgent = (ReadOnlyRequest) async -> ReadOnlyAnswer
 
 The first implementation is Claude (argv, the `--output-format json` envelope, the spawn and sweep taken from
 `ThreadService+Judge`). P9 can put Codex behind the same function (answer file, capacity retry as `pr-review`
-does) and add `agents.plan` next to `agents.goal`, with no change to what is below it. The judge and the describe
+does) and let `[agents.plan]` (which exists, Claude only) choose it, with no change to what is below it. The judge and the describe
 turn are **not** moved onto it in this phase.
 
 ## Config and command
 
 ```toml
-# plan_model = "opus"       # --model for the plan turn; `plan --model` wins; unset = model
+# [agents.plan]             # the plan turn; claude only for now
+# model = "opus"            # --model; `plan --model` wins; unset = the provider's default
+# reasoning_effort = "high" # --effort; unset = Claude's own setting
 ```
+
+This was the root key `plan_model` (falling back to the root `model`) until every model moved into an
+`[agents.<role>]` table; a config that still has it is refused with a message naming `[agents.plan]`.
 
 `workbench plan [id] [--model M] [--budget USD] [--again]`, once per approved goal unless `--again`.
 `workbench plan show [id]` prints the latest plan, whether it was generated or edited, and what it cost.
@@ -119,7 +125,7 @@ it had a plan. Spec in `docs/spec/event-log.md`, `--json` keys added never renam
 
 | Task | Result | Gate |
 |---|---|---|
-| 1. Config, events, state | `plan_model`; `plan.started`/`plan.ended`; `ThreadState` derives "planned"; spec updated | config, event and state tests, including a log with a `plan.started` and no end |
+| 1. Config, events, state | `plan_model` (now `[agents.plan] model`); `plan.started`/`plan.ended`; `ThreadState` derives "planned"; spec updated | config, event and state tests, including a log with a `plan.started` and no end |
 | 2. The turn | `ReadOnlyAgent` (Claude), the base-commit checkout, `workbench plan`, sweep, holder marker, recovery | fake-claude tests for every failure below |
 | 3. Into the run | `PromptBuilder.firstPrompt` takes a plan; stale-hash rule; `run --no-plan`; `turn.started.plan` | prompt snapshot tests; a changed goal means no injection |
 | 4. Show and edit | `plan show`, `plan edit` (`--from`), `plan.edited`, `status`, `review`, cost line | CLI and `--json` fixtures; an edit becomes the plan the next run uses |

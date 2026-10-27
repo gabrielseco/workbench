@@ -3,7 +3,7 @@
 # started (the clone's claude_path names nothing), so it costs nothing.
 #   bash scripts/verify-cli/approval-binding.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/approval-binding.sh   (the same, on a branch that contains origin/main)
-# A goal is approved with `model = "opus"` in the config, then the config is changed to "haiku". `run` must refuse before
+# A goal is approved with `[agents.run] model = "opus"` in the config, then the config is changed to "haiku". `run` must refuse before
 # starting anything and say what the goal was approved for; `goal approve` must bind the new model without touching the goal
 # file, and `log` must show both approvals. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start.
 # VERIFY_CLI_SABOTAGE=1 leaves the config unchanged, so `run` is not refused for its settings (it gets as far as the missing
@@ -29,10 +29,10 @@ wbp() { # <out> args...: a workbench command in the clone, stdout and stderr tog
     RC=$?
 }
 shown() { sed 's/^/    /' "$1" | head -${2:-12}; }
-setconfig() { # <model>: the clone's config with this model and no claude to start
+setconfig() { # <model>: the clone's config with this [agents.run] model and no claude to start
     local cfg="$P/.workbench/config.toml"
-    grep -v -e '^model = ' -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
-    { echo "model = \"$1\""; echo 'claude_path = "/nonexistent/claude"'; cat "$SCRATCH/config.rest"; } >"$cfg"
+    grep -v -e '^model = ' -e '^\[agents\.run\]$' -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
+    { echo 'claude_path = "/nonexistent/claude"'; cat "$SCRATCH/config.rest"; printf '\n[agents.run]\nmodel = "%s"\n' "$1"; } >"$cfg"
 }
 
 wbp "$SCRATCH/init.out" init

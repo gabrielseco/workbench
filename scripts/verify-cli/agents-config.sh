@@ -3,14 +3,19 @@
 # No turn is run, so it costs nothing.
 #   bash scripts/verify-cli/agents-config.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/agents-config.sh   (the same, on a branch that contains origin/main)
-# Doctor must print one `agent <role>:` line each for goal, run, judge and review: with no tables the defaults (goal
-# manual, run and judge on claude, review on codex); with `[agents.judge] model = "haiku"` the judge line must say haiku.
-# A provider no adapter exists for (`[agents.run] provider = "gemini"`), a stage that sets both `reviewer` and
+# Doctor must print one `agent <role>:` line each for goal, run, judge, review, ship and plan: with no tables the defaults
+# (goal manual, run, judge, ship and plan on claude, review on codex); with `[agents.judge] model = "haiku"` the judge line
+# must say haiku. A provider no adapter exists for (`[agents.run] provider = "gemini"`), a stage that sets both `reviewer` and
 # `provider`, and an unknown provider table must each be refused by doctor with a message that names the problem.
 # A coding turn takes `[agents.run]` `model` and `reasoning_effort`: doctor must accept them on codex and name both on the run line.
+# `[agents.ship]` and `[agents.plan]` take a model and an effort, which their doctor lines must name; `provider = "codex"` in
+# either is refused, naming the table. The removed root keys `model`, `judge_model`, `describe_model` and `plan_model` are each
+# refused with a message naming the key and the `[agents.<role>]` table that replaced it.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 leaves the haiku model out and writes valid values in the three refused configs, so the judge
-# line step, the three "refused" steps and the coding effort step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# VERIFY_CLI_SABOTAGE=1 leaves the haiku model and the ship model out, writes valid values in the three refused configs and
+# the two codex ones, and puts each removed key in its table instead of the root, so the judge line step, the three
+# "refused" steps, the coding effort step, the ship line step, the two codex steps and the removed-key steps must FAIL. The
+# frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -55,6 +60,9 @@ check "no tables: goal drafting stays manual" "no 'agent goal: none' line" grep 
 check "no tables: run and judge on claude" "no claude lines for run and judge" bash -c \
     'grep -q "^agent run: *claude, model the provider.s default" "$1" && grep -q "^agent judge: *claude, model" "$1"' _ "$SCRATCH/d1.out"
 check "no tables: review on codex" "no 'agent review: codex' line" grep -q "^agent review: *codex," "$SCRATCH/d1.out"
+check "no tables: ship and plan on claude" "no claude lines for ship and plan" bash -c \
+    'grep -q "^agent ship: *claude, model the provider.s default" "$1" && grep -q "^agent plan: *claude, model the provider.s default" "$1"' \
+    _ "$SCRATCH/d1.out"
 
 # --- 2. a configured model -------------------------------------------------------------------------------
 
@@ -115,4 +123,49 @@ shown "$SCRATCH/d6.out" 6
 check "run on codex with a model and an effort: doctor accepts it" "workbench doctor exited $RC" test "$RC" = 0
 check "the run line names the model and the effort" "no 'agent run: codex, model gpt-6-astra, effort high' line" \
     grep -q "^agent run: *codex, model gpt-6-astra, effort high" "$SCRATCH/d6.out"
+
+# --- 5. the ship and plan turns --------------------------------------------------------------------------
+
+SHIPMODEL='model = "haiku"'
+[ "$SABOTAGE" = 1 ] && SHIPMODEL=""
+config "[agents.ship]
+$SHIPMODEL
+reasoning_effort = \"low\"
+
+[agents.plan]
+model = \"sonnet\""
+wbp "$SCRATCH/d7.out" doctor --base "$BASE"
+shown "$SCRATCH/d7.out" 8
+check "ship and plan tables: doctor accepts them" "workbench doctor exited $RC" test "$RC" = 0
+check "the ship line names the model and the effort" "no 'agent ship: claude, model haiku, effort low' line" \
+    grep -q "^agent ship: *claude, model haiku, effort low" "$SCRATCH/d7.out"
+check "the plan line names the model" "no 'agent plan: claude, model sonnet' line" \
+    grep -q "^agent plan: *claude, model sonnet" "$SCRATCH/d7.out"
+
+TURNPROVIDER=codex
+[ "$SABOTAGE" = 1 ] && TURNPROVIDER=claude
+for table in ship plan; do
+    config "[agents.$table]
+provider = \"$TURNPROVIDER\""
+    wbp "$SCRATCH/d8-$table.out" doctor --base "$BASE"
+    shown "$SCRATCH/d8-$table.out" 4
+    check "codex in [agents.$table]: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
+    check "codex in [agents.$table]: the message names the table and claude" "no '[agents.$table] cannot use \"codex\"' message" \
+        bash -c 'grep -qF "[agents.$1] cannot use \"codex\"" "$2" && grep -qF "only \"claude\"" "$2"' _ "$table" "$SCRATCH/d8-$table.out"
+done
+
+# --- 6. the removed root model keys ----------------------------------------------------------------------
+
+for pair in model:run judge_model:judge describe_model:ship plan_model:plan; do
+    key=${pair%%:*} table=${pair##*:}
+    # The key at the root, before any table; sabotaged, the same model in its replacement table, which loads.
+    if [ "$SABOTAGE" = 1 ]; then line="[agents.$table]
+model = \"haiku\""; else line="$key = \"haiku\""; fi
+    printf '%s\n\n[tools]\navailable = ["Read"]\nallowed = ["Read"]\n' "$line" >"$P/.workbench/config.toml"
+    wbp "$SCRATCH/d9-$key.out" doctor --base "$BASE"
+    shown "$SCRATCH/d9-$key.out" 3
+    check "root '$key': doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
+    check "root '$key': the message names [agents.$table]" "no \"'$key' was removed ... [agents.$table]\" message" \
+        bash -c 'grep -qF "'"'"'$1'"'"' was removed" "$3" && grep -qF "[agents.$2]" "$3"' _ "$key" "$table" "$SCRATCH/d9-$key.out"
+done
 finish

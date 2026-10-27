@@ -226,7 +226,7 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   **An older Workbench fails closed.** Front matter is strict, so a binary from before this key reports
   `unknown key 'spend_policy'` and refuses the goal instead of running it with a cap it cannot see.
   **Optional:** `model`, a model name or alias (`opus`, `claude-opus-5-5`; no leading `-`, no spaces). It
-  wins over the config's `model`, which wins over the CLI default, and applies to every turn of the thread,
+  wins over the config's `[agents.run] model`, which wins over the provider's default, and applies to every turn of the thread,
   send-backs included. The turn's `argv` in `turn.started` shows what ran.
   **Optional:** `push_to`, an existing branch of `origin` the thread continues, such as a pull request's
   branch. `workbench goal new <name> --update <branch>` writes it together with `base: origin/<branch>`, and
@@ -278,10 +278,6 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # copy = [".env.*", "example/.env"]     # optional; git-ignored files copied from your checkout into each new worktree
 # default_budget_usd = 5.00            # optional; new goals get this budget_usd, else spend_policy: timeout_only
 # claude_path = "claude"                # name on PATH, or an absolute path
-# model = "opus"                        # --model for every turn; a goal's `model` wins; unset = the CLI default
-# judge_model = "sonnet"                # --model for the judge (it only reads); `judge --model` wins; unset = model
-# describe_model = "haiku"              # --model for the PR description turn; unset = model
-# plan_model = "opus"                   # --model for `workbench plan` (it only reads); `plan --model` wins; unset = model
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
@@ -296,8 +292,14 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 #                                       # inputs, applies_to, max_rounds
 # [providers.codex]                     # P9: the executable of a provider (claude: the same as claude_path)
 # executable = "/opt/homebrew/bin/codex"
-# [agents.judge]                        # P9: provider, model and allow_unpriced for goal, run, judge and review
+# [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
+# model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
+# [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run, ship, plan)
 # model = "haiku"                       # also [review.stage.<name>] provider, model and allow_unpriced
+# [agents.ship]                         # the PR description and its refresh; claude only for now
+# model = "haiku"
+# [agents.plan]                         # `workbench plan`; claude only for now; `plan --model` wins
+# model = "opus"
 # [run]                                 # P16: how the verifier's app is started; Workbench runs it and stops it
 # command = "npm run dev:mock"          # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
 # ready_url = "http://localhost:{port}/"  # or ready_line = "on mock data"; exactly one. Any HTTP answer is up
@@ -305,7 +307,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
 # skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
 # tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
-# model = "sonnet"                      # --model for the verifier; unset = model
+# model = "sonnet"                      # --model for the verifier; unset = the CLI default
 # enabled = false                       # the verifier is on by default; this turns it off
 # budget_usd = 1.00                     # default 1.00
 # timeout_min = 10                      # default 10 (1 to 240)
@@ -390,7 +392,7 @@ Notes:
 - **`workbench verifier [id] [--again]` runs the skill as a separate turn.** Like the judge it is advisory and costs
   money: one `claude -p --output-format json` run in the thread's worktree, in `--safe-mode --restricted
   --disable-slash-commands --add-dir <the turn's proof folder>` (the file tools are confined to the worktree, and the
-  proof folder is outside it: the run can `Read` the screenshots it takes), with `--model` from `[verifier] model` (else the coding `model`), the tools of `[verifier]
+  proof folder is outside it: the run can `Read` the screenshots it takes), with `--model` from `[verifier] model` (else the CLI default; it never inherits the coding model), the tools of `[verifier]
   tools` as `--tools` and `--allowedTools` and nothing else (the project's `[tools] denied` still applies), its own
   session, `--max-budget-usd` from `budget_usd` and the `timeout_min` deadline. Its prompt holds the skill text read from
   the base commit, the goal's request and criteria, and `WORKBENCH_PROOF_DIR` (the latest turn's `proof/turn-N`, not
@@ -452,8 +454,8 @@ Notes:
   a throwaway worktree (reserved id `doctor`, removed on every path, a crash leftover is replaced by the next
   run) at the base (default: the repo's default branch, as for `goal new`), runs `setup_command` then `check_command` through the
   same runners, environment and limits a thread uses, and prints each step's result, duration, output tail
-  and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `model` (or
-  the CLI default), and whether `Bash` is in `[tools].available` and the check is not denied. It runs nothing the config does not
+  and, for a failed setup, the `env_pass` hint. It also says where `claude_path` resolves, the `[agents.run] model` (or
+  the provider's default), and whether `Bash` is in `[tools].available` and the check is not denied. It runs nothing the config does not
   declare, writes no event into a thread and no file into the project, and refuses while a thread's run is live
   (a turn or check; a draft, an approved goal or a finished turn does not stop it) or another doctor holds the project (a lock on `.workbench/`, which also makes `goal new` wait for it). A worktree it cannot remove is an error
   (exit 1) that names the command to remove it by hand.
@@ -491,8 +493,13 @@ Notes:
 
 **Providers and agents (P9 PR 7).** `[providers.claude]` and `[providers.codex]` take `executable`, a command name or
 path run without a shell; `[providers.claude]` and `claude_path` name the same executable, so both is refused. An
-`[agents.<role>]` table, for `goal`, `run`, `judge` or `review`, takes `provider` (`"claude"` or `"codex"`), `model`,
-`reasoning_effort` and `allow_unpriced`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
+`[agents.<role>]` table, for `goal`, `run`, `judge`, `review`, `ship` (the PR description and its refresh) or `plan`
+(`workbench plan`), takes `provider` (`"claude"` or `"codex"`), `model`, `reasoning_effort` and `allow_unpriced`. Every
+model is chosen in one of these tables: the root keys `model`, `judge_model`, `describe_model` and `plan_model` were
+removed, and a config (or the global `~/.workbench/config.toml`) that still has one is refused when it loads, with a
+message that names the key and its replacement (`model` in `[agents.run]`, `[agents.judge]`, `[agents.ship]` and
+`[agents.plan]` respectively). `ship` and `plan` run on Claude only for now: `provider = "codex"` in their table is
+refused at load, saying that turn does not support it yet, and so is `allow_unpriced`, as for `[agents.run]`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
 `--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
 Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
 `goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes both on either provider. A coding turn gets the goal's `model`, else `[agents.run]`'s, and
@@ -502,11 +509,13 @@ goal drafting stays manual. The pair a role may use is limited to what an adapte
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
 `allow_unpriced` is for evaluations on a provider without a dollar cap: unset or `true` they run timeout-only,
-`false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role: for the judge `judge --model`, then `[agents.judge]`'s
-`model`, then `judge_model` and `model` (only while `[agents.judge]` sets no provider or model, and only for Claude),
-then the provider's default; for review the stage's `model`, then `[agents.review]`'s, then the default; for coding
-the goal's `model`, `[agents.run]`'s, then `model`; drafting never inherits `model`. `workbench doctor` prints
-`agent goal:`, `agent run:`, `agent judge:` and `agent review:` lines with the provider and model each resolves to.
+`false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role, and no role inherits another's: for coding the goal's
+`model`, then `[agents.run]`'s; for the judge `judge --model`, then `[agents.judge]`'s; for review the stage's `model`, then
+`[agents.review]`'s; for the PR description and its refresh `[agents.ship]`'s; for the plan turn `plan --model`, then
+`[agents.plan]`'s; for drafting `[agents.goal]`'s; for the verifier `[verifier] model`; each then the provider's default.
+`reasoning_effort` of `[agents.ship]` and `[agents.plan]` reaches those turns as `--effort`. `workbench doctor` prints
+`agent goal:`, `agent run:`, `agent judge:`, `agent review:`, `agent ship:` and `agent plan:` lines with the provider,
+model and effort each resolves to.
 **Judge and review on either provider (P9 PR 13).** A Claude review runs through the read-only adapter (`--restricted`, only
 the `Read` tool, in the round's folder that holds the brief, the saved diff and the checkout, its own session, a $2 cap);
 its answer text is written to the same `round-<n>.findings.md` a Codex answer goes to, and the same `VERDICT: CLEAN|FIX`
