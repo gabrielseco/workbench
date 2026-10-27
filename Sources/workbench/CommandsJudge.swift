@@ -62,7 +62,7 @@ extension Commands {
         if !capped && budgetText != nil {
             throw CLIError.usage(
                 "--budget has no effect on \(agent.provider): it cannot enforce a dollar limit, so the judge is bounded by "
-                    + "its timeout only (allow_unpriced in [agents.judge])")
+                    + "its \(Int(Judge.timeout)) s timeout only (allow_unpriced = false in [agents.judge] refuses it instead)")
         }
         out(
             capped

@@ -48,7 +48,7 @@ private struct Drafting {
 
 /// A fixture drafting on Codex (answering from a file) unless `provider` is Claude.
 private func drafting(
-    provider: AgentProviderID = .codex, allowUnpriced: Bool = true, answer: String? = proposalJSON, model: String? = nil
+    provider: AgentProviderID = .codex, allowUnpriced: Bool? = true, answer: String? = proposalJSON, model: String? = nil
 ) async throws -> Drafting {
     let fx = try await RunnerFixture()
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("draft-\(UUID().uuidString)")
@@ -81,11 +81,17 @@ private func drafting(
         }
     }
 
-    @Test func codexNeedsAllowUnpriced() async throws {
+    @Test func codexDraftsTimeoutOnlyWithoutTheKey() async throws {
+        let d = try await drafting(allowUnpriced: nil)
+        let result = try await d.draft()
+        #expect(result.failure == nil && d.codex?.runs == 1, "\(String(describing: result.failure))")
+    }
+
+    @Test func codexForbiddenByAllowUnpricedFalse() async throws {
         let refused = try await drafting(allowUnpriced: false)
         do {
             _ = try await refused.draft()
-            Issue.record("a Codex draft without allow_unpriced started")
+            Issue.record("a Codex draft with allow_unpriced = false started")
         } catch let refusal as GoalDraftRefusal {
             let text = "\(refusal)"
             #expect(text.contains("allow_unpriced") && text.contains("[agents.goal]"), "\(text)")

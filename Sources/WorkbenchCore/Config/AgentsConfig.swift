@@ -44,13 +44,26 @@ public struct ResolvedAgent: Sendable, Equatable {
     /// Nil is the provider's own default.
     public var model: String?
     public var reasoningEffort: String?
+    /// The config said `allow_unpriced = true`.
     public var allowUnpriced: Bool
+    /// The config said `allow_unpriced = false`: the one way an evaluation on a provider with no dollar cap is refused.
+    public var forbidsUnpriced: Bool
 
-    public init(provider: AgentProviderID, model: String?, reasoningEffort: String? = nil, allowUnpriced: Bool) {
+    public init(
+        provider: AgentProviderID, model: String?, reasoningEffort: String? = nil, allowUnpriced: Bool,
+        forbidsUnpriced: Bool = false
+    ) {
         self.provider = provider
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.allowUnpriced = allowUnpriced
+        self.forbidsUnpriced = forbidsUnpriced
+    }
+
+    init(provider: AgentProviderID, model: String?, reasoningEffort: String?, unpriced: Bool?) {
+        self.init(
+            provider: provider, model: model, reasoningEffort: reasoningEffort, allowUnpriced: unpriced == true,
+            forbidsUnpriced: unpriced == false)
     }
 }
 
@@ -248,8 +261,7 @@ extension Config {
     public var resolvedGoalAgent: ResolvedAgent? {
         guard let goal = agents.goal, let provider = goal.provider else { return nil }
         return ResolvedAgent(
-            provider: provider, model: goal.model, reasoningEffort: goal.reasoningEffort,
-            allowUnpriced: goal.allowUnpriced ?? false)
+            provider: provider, model: goal.model, reasoningEffort: goal.reasoningEffort, unpriced: goal.allowUnpriced)
     }
 
     /// Coding: the goal's `model`, `[agents.run]`, the root `model`, then the provider's default. The root `model`
@@ -268,7 +280,7 @@ extension Config {
         let legacy = agents.judge.isSet ? nil : legacyModel(judgeModel ?? model, for: provider)
         return ResolvedAgent(
             provider: provider, model: modelFlag ?? agents.judge.model ?? legacy,
-            reasoningEffort: agents.judge.reasoningEffort, allowUnpriced: agents.judge.allowUnpriced ?? false)
+            reasoningEffort: agents.judge.reasoningEffort, unpriced: agents.judge.allowUnpriced)
     }
 
     /// A review stage: its own table, then `[agents.review]`, then the provider's default. `allow_unpriced` is
@@ -281,11 +293,11 @@ extension Config {
         return ResolvedAgent(
             provider: provider, model: stage?.model ?? (provider == base ? agents.review.model : nil),
             reasoningEffort: stage?.reasoningEffort ?? (provider == base ? agents.review.reasoningEffort : nil),
-            allowUnpriced: stage?.allowUnpriced ?? agents.review.allowUnpriced ?? false)
+            unpriced: stage?.allowUnpriced ?? agents.review.allowUnpriced)
     }
 
     /// True when the review provider is the one the thread always used (Codex) and no new `provider` key chose it: the
-    /// P9 compatibility exception, which keeps its timeout-only policy without `allow_unpriced`. `reviewer = "codex"`
+    /// P9 compatibility exception, which keeps its timeout-only policy even with `allow_unpriced = false`. `reviewer = "codex"`
     /// (P6) is not a new selection.
     public func reviewUsesLegacySelection(stage name: String = ReviewConfig.prReviewStage) -> Bool {
         if agents.review.provider != nil { return false }

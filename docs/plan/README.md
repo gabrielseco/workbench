@@ -102,7 +102,9 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
   general workflow engine. Same-provider evaluations use independent sessions; vendor diversity is optional.
 - **D8 — Capability boundary:** native controls must enforce the requested permissions. Unsupported
   combinations fail explicitly; no silent provider fallback or weaker policy. Unknown cost is not zero,
-  and removing a hard dollar cap requires explicit spending approval.
+  and removing a hard dollar cap from coding requires explicit spending approval in the goal. For a judge, review
+  or goal draft, choosing a provider without a cap is that choice: it runs on its timeout, said so, unless
+  `allow_unpriced = false` forbids it.
 - **D9 — Compatibility:** retain Claude run/judge and Codex review defaults. Preserve historical logs
   and state transitions; add normalized activity and attempt recovery before the app depends on them.
 

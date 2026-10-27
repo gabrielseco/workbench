@@ -427,7 +427,8 @@ public struct Config: Sendable, Equatable {
         # provider = "claude"              # run and judge on claude, review on codex, goal drafting off
         # model = "sonnet"                 # replaces judge_model and model for the judge once it is set
         # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
-        # allow_unpriced = true            # needed to judge or review on codex (no dollar cap); never for [agents.run]
+        # allow_unpriced = true            # the default: codex (no dollar cap) runs on its timeout; false refuses it
+        #                                  # (never for [agents.run], whose spending the goal approves)
 
         # [run]                            # how the verifier's app is started: Workbench runs it and stops it
         # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set

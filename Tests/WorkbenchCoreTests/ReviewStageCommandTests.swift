@@ -92,6 +92,24 @@ private func stageEvents(_ r: ReviewedPR, _ kind: EventKind, stage: String = "de
         #expect(r.codex.runs == 1 && r.started.count == 1 && r.finished.count == 1)
         try await r.expectNoLeftovers()
     }
+
+    @Test func aStageChosenOnCodexRunsTimeoutOnlyWithoutTheKey() async throws {
+        let r = try await reviewedPR(
+            extraConfig: stagesConfig("provider = \"codex\"", before: "[agents.review]\nprovider = \"claude\""))
+        #expect(r.config.resolvedReviewAgent(stage: "design").provider == .codex)
+        let result = try await runStage("design", r)
+        #expect(result.verdict == .clean && r.codex.runs == 1, "\(result)")
+    }
+
+    @Test func aStageWithAllowUnpricedFalseIsRefusedBeforeItStarts() async throws {
+        let r = try await reviewedPR(
+            extraConfig: stagesConfig(
+                "provider = \"codex\"\nallow_unpriced = false", before: "[agents.review]\nprovider = \"claude\""))
+        let result = try await runStage("design", r)
+        let why = try #require(result.failure, "\(result)")
+        #expect(result.verdict == nil && r.codex.runs == 0, "refused before spawn")
+        #expect(why.contains("allow_unpriced") && why.contains("[review.stage.design]"), "\(why)")
+    }
 }
 
 // MARK: round caps

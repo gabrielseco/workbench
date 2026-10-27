@@ -10,12 +10,12 @@
 # (`workbench pr-review`, the thread's own branch, no pull request needed). The review must be started, not refused for a dollar
 # limit; its argv on record must name claude and a `--max-budget-usd` cap; a CLEAN verdict must be recorded and exit 0.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 chooses Codex for the
-# review (not installed, no opt-in), so the steps that expect a Claude review must FAIL. The frame and the other switches are in
+# review (not installed, forbidden by allow_unpriced = false), so the steps that expect a Claude review must FAIL. The frame and the other switches are in
 # lib.sh. Run by hand and in CI (release), never with a real agent.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
-[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the review is configured for codex (absent, no allow_unpriced)"
+[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the review is configured for codex (absent, allow_unpriced = false)"
 
 echo "==> building fake-claude ($BUILD)"
 with_timeout "$T_BUILD" swift build ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} --product fake-claude || die "swift build of fake-claude failed"
@@ -43,7 +43,8 @@ wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 grep -v -e '^model = ' -e '^claude_path = ' -e '^env_pass = ' "$cfg" >"$SCRATCH/config.rest"
 REVIEW='provider = "claude"'
-[ "$SABOTAGE" = 1 ] && REVIEW='provider = "codex"'
+[ "$SABOTAGE" = 1 ] && REVIEW='provider = "codex"
+allow_unpriced = false'
 { printf 'claude_path = "%s"\nenv_pass = ["FAKE_CLAUDE"]\n' "$FAKE_CLAUDE_BIN"; cat "$SCRATCH/config.rest"
   printf '\n[providers.codex]\nexecutable = "/nonexistent/codex"\n\n[agents.review]\n%s\n' "$REVIEW"; } >"$cfg"
 

@@ -140,9 +140,17 @@ import Testing
         #expect(tired.codex.runs == 3)
     }
 
-    @Test func codexReviewNeedsAllowUnpriced() async throws {
+    @Test func codexReviewRunsTimeoutOnlyWithoutTheKey() async throws {
         var r = try await reviewedPR()
         r.config.agents.review = AgentSelection(provider: .codex)
+        #expect(!r.config.reviewUsesLegacySelection(), "chosen with provider, not the legacy review")
+        let result = try await r.round()
+        #expect(result.verdict == .clean && r.codex.runs == 1, "\(String(describing: result.failure))")
+    }
+
+    @Test func codexReviewForbiddenByAllowUnpricedFalse() async throws {
+        var r = try await reviewedPR()
+        r.config.agents.review = AgentSelection(provider: .codex, allowUnpriced: false)
         let result = try await r.round()
         #expect(result.verdict == nil && r.codex.runs == 0, "refused before spawn")
         let why = try #require(result.failure)
@@ -166,13 +174,17 @@ import Testing
         #expect(agent.provider == .codex && agent.allowUnpriced, "the stage inherits the opt-in")
         let table = r.config.allowUnpricedTable(.review, stage: "design")
         #expect(table == "[agents.review] or [review.stage.design]")
+        func spend() -> Result<AgentSpend, AgentFailure> {
+            AgentSpendPolicy.spend(
+                role: .review, agent: r.config.resolvedReviewAgent(stage: "design"),
+                capabilities: CodexProvider().capabilities, cap: 2, legacy: false, table: table)
+        }
         r.config.agents.review = AgentSelection(provider: .claude)
         #expect(!r.config.resolvedReviewAgent(stage: "design").allowUnpriced)
-        let refusal = AgentSpendPolicy.spend(
-            role: .review, agent: r.config.resolvedReviewAgent(stage: "design"), capabilities: CodexProvider().capabilities,
-            cap: 2, legacy: false, table: table)
-        guard case .failure(let failure) = refusal else {
-            Issue.record("a Codex stage without the opt-in must be refused")
+        #expect((try? spend().get()) == .timeoutOnly, "no key anywhere: choosing codex is the consent")
+        r.config.agents.review = AgentSelection(provider: .claude, allowUnpriced: false)
+        guard case .failure(let failure) = spend() else {
+            Issue.record("a Codex stage that inherits allow_unpriced = false must be refused")
             return
         }
         #expect(failure.message.contains("allow_unpriced") && failure.message.contains("[review.stage.design]"))

@@ -78,7 +78,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 1 | `failed` | the agent ran and there is no valid proposal: it failed, timed out, or answered something that is not a goal. Nothing was written |
 | 2 | `usage` | wrong command line: no request or two, `--base` with `--replace`, an unreadable or oversized `--request-file` |
 | 3 | `stopped` | stopped by Ctrl-C; nothing was written |
-| 6 | `refused` | nothing was started: no `[agents.goal]`, Codex without `allow_unpriced`, no executable, an empty or oversized request, another thread is active, `doctor` is running, or with `--replace` the thread has ended or has a live run |
+| 6 | `refused` | nothing was started: no `[agents.goal]`, Codex with `allow_unpriced = false`, no executable, an empty or oversized request, another thread is active, `doctor` is running, or with `--replace` the thread has ended or has a live run |
 | 7 | `not-found` | `--replace` names no thread |
 
 ### `goal approve`
@@ -163,7 +163,7 @@ criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sh
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | a verdict was recorded and printed |
-| 1 | `failed` | no verdict this time: no `claude` or `codex`, a timeout, a budget stop, a Codex judge without `allow_unpriced = true` in `[agents.judge]` (refused before it starts, recorded), or an answer that was not usable (recorded, with the reason) |
+| 1 | `failed` | no verdict this time: no `claude` or `codex`, a timeout, a budget stop, a Codex judge with `allow_unpriced = false` in `[agents.judge]` (refused before it starts, recorded), or an answer that was not usable (recorded, with the reason) |
 | 2 | `usage` | wrong command line, or a `--model` or `--budget` that is not valid; `--budget` with a judge on Codex, which has no dollar cap to set |
 | 6 | `refused` | no turn has run, the turn was judged already (`--again` asks once more), a run is live, or another command holds the thread (a second judge, a send-back) |
 | 7 | `not-found` | the thread named does not exist |
@@ -202,7 +202,7 @@ criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sh
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the review ended `VERDICT: CLEAN` (recorded, findings printed) |
-| 1 | `failed` | no verdict this round: no `codex` (or `claude`, when the review runs on it), a Codex review chosen with `provider = "codex"` and no `allow_unpriced = true` (refused before it starts, recorded, counts as a round), the stage reads `proof` and the review runs on Claude, the branch moved while the review was starting, Codex was at capacity three times, crashed, timed out, was stopped, or its answer did not end in exactly one `VERDICT:` line (recorded, with the reason; it counts as a round). Also: origin could not be read |
+| 1 | `failed` | no verdict this round: no `codex` (or `claude`, when the review runs on it), a Codex review chosen with `provider = "codex"` and `allow_unpriced = false` (refused before it starts, recorded, counts as a round), the stage reads `proof` and the review runs on Claude, the branch moved while the review was starting, Codex was at capacity three times, crashed, timed out, was stopped, or its answer did not end in exactly one `VERDICT:` line (recorded, with the reason; it counts as a round). Also: origin could not be read |
 | 2 | `usage` | wrong command line, or a `[pr_review]`, `[review]` or `[review.stage.<name>]` config that is not valid |
 | 6 | `refused` | nothing was spawned or recorded: the thread has no recorded pull request, `max_rounds` reviews of this pull request already ran (`--again` does not lift that), the branch was reviewed as it is (`--again` asks once more), origin no longer has the branch, a run is live, or another command holds the thread (a judge, another review) |
 | 7 | `not-found` | the thread named does not exist |

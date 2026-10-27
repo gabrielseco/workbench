@@ -6,8 +6,8 @@ public struct DoctorAgentIssue: Sendable, Equatable {
     public enum Severity: String, Sendable { case problem, note }
 
     public var role: AgentRole
-    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `model_unsupported`, `unpriced_not_allowed`, `unconfined_reads` or
-    /// `setting_unused`.
+    /// `policy_without_controls`, `missing_executable`, `budget_without_cap`, `model_unsupported`, `unpriced_not_allowed`,
+    /// `timeout_only`, `unconfined_reads` or `setting_unused`.
     public var kind: String
     public var severity: Severity
     public var message: String
@@ -77,8 +77,9 @@ extension Doctor {
                 role: found[index].role, resolved: resolved, config: config, searchPath: searchPath, goal: goal,
                 caps: capabilities?(resolved.provider) ?? Self.capabilities(of: resolved.provider, config: config))
         }
-        // Each listed stage resolves on its own: one that moves to a provider without a dollar cap needs its own opt-in.
+        // Each listed stage resolves on its own: one can be forbidden, or move to a provider without a dollar cap.
         if let at = found.firstIndex(where: { $0.role == .review }) {
+            let reviewSaysTimeoutOnly = found[at].issues.contains { $0.kind == "timeout_only" }
             for name in config.review.stages where name != ReviewConfig.prReviewStage && config.review.stage(name) != nil {
                 let agent = config.resolvedReviewAgent(stage: name)
                 guard let caps = capabilities?(agent.provider) ?? Self.capabilities(of: agent.provider, config: config),
@@ -88,11 +89,19 @@ extension Doctor {
                     role: .review, agent: agent, capabilities: caps, cap: 0,
                     legacy: config.reviewUsesLegacySelection(stage: name),
                     table: config.allowUnpricedTable(.review, stage: name))
-                if case .failure(let refusal) = spend {
+                switch spend {
+                case .failure(let refusal):
                     found[at].issues.append(
                         DoctorAgentIssue(
                             role: .review, kind: "unpriced_not_allowed", severity: .problem,
                             message: "review stage \(name) is refused on \(agent.provider): \(refusal.message)"))
+                // The review's own line already says it for a stage on the same provider, unless the review is forbidden.
+                case .success(.timeoutOnly) where !(reviewSaysTimeoutOnly && agent.provider == found[at].resolved?.provider):
+                    found[at].issues.append(
+                        DoctorAgentIssue(
+                            role: .review, kind: "timeout_only", severity: .note,
+                            message: "review stage \(name): " + timeoutOnlyMessage(.review, agent.provider)))
+                default: break
                 }
             }
         }
@@ -151,27 +160,39 @@ extension Doctor {
                     : "a read-only \(role.rawValue) on \(provider) can read files outside the checkout; "
                         + "repository writes and posting are still refused")
         }
-        // A judge or review on a provider with no dollar cap needs the opt-in, the same rule the commands apply.
+        // A judge, review or draft on a provider with no dollar cap runs on its timeout unless the config forbids it,
+        // the same rule the commands apply.
         if role != .run, caps.policies.contains(.readOnlyEvidence) {
             let legacy = role == .review && config.reviewUsesLegacySelection()
             let spend = AgentSpendPolicy.spend(
                 role: role, agent: resolved, capabilities: caps, cap: 0, legacy: legacy, table: config.allowUnpricedTable(role))
-            if case .failure(let refusal) = spend {
-                let job = role == .goal ? "goal draft" : role.rawValue
-                add("unpriced_not_allowed", .problem, "\(job) is refused on \(provider): \(refusal.message)")
+            switch spend {
+            case .failure(let refusal):
+                add(
+                    "unpriced_not_allowed", .problem,
+                    "\(AgentSpendPolicy.jobName(role)) is refused on \(provider): \(refusal.message)")
+            case .success(.timeoutOnly): add("timeout_only", .note, timeoutOnlyMessage(role, provider))
+            case .success: break
             }
         }
         let selection = config.agents.selection(role)
-        if selection.allowUnpriced != nil {
+        if let allow = selection.allowUnpriced {
             add(
                 "setting_unused", .note,
                 caps.hardDollarCap
                     ? "[agents.\(role.rawValue)] allow_unpriced has no effect: \(provider) enforces a dollar limit"
-                    : "[agents.\(role.rawValue)] allow_unpriced = \(selection.allowUnpriced == true) "
-                        + (selection.allowUnpriced == true
-                            ? "lets the \(role.rawValue) run on \(provider) with only a timeout; its cost is unknown"
-                            : "keeps the \(role.rawValue) on \(provider) refused: it has no dollar cap"))
+                    : allow
+                        ? "[agents.\(role.rawValue)] allow_unpriced = true is the default: choosing \(provider) already "
+                            + "lets the \(role.rawValue) run on it with only a timeout"
+                        : "[agents.\(role.rawValue)] allow_unpriced = false keeps the \(role.rawValue) on \(provider) "
+                            + "refused: it has no dollar cap")
         }
         return out
+    }
+
+    private static func timeoutOnlyMessage(_ role: AgentRole, _ provider: AgentProviderID) -> String {
+        let job = AgentSpendPolicy.jobName(role)
+        let bound = role.evaluationTimeout.map { "its \(Int($0)) s timeout" } ?? "its timeout"
+        return "\(provider) has no dollar cap: the \(job) on it is bounded by \(bound) alone and its cost is unknown"
     }
 }

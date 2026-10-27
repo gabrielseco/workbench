@@ -26,7 +26,8 @@ let workbenchUsage = """
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
       goal draft <name> --request "<text>" | --request-file <path>  [--base <branch>] [--replace]
                                  have the goal agent ([agents.goal]) draft the goal from a rough request, read-only and
-                                 bounded (300 s; $0.50 on Claude; Codex needs allow_unpriced = true); creates a draft
+                                 bounded (300 s; $0.50 on Claude; Codex has no dollar cap, allow_unpriced = false
+                                 refuses it); creates a draft
                                  thread, approves nothing, runs nothing; a failed draft leaves nothing behind
                                  --replace: <name> is an existing thread (default: the active one); its title, request,
                                  criteria and out of scope are redrafted and an approved goal returns to draft

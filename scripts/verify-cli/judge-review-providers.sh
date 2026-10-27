@@ -1,21 +1,24 @@
 #!/bin/bash
-# verify-cli scenario for judge and review on either provider and the `allow_unpriced` opt-in (P9 PR 13), on a clone of this
-# repository. The clone's claude is /usr/bin/false and its codex does not exist, so no real agent is started and it costs nothing.
+# verify-cli scenario for judge and review on either provider and `allow_unpriced` (P9 PR 13; choosing Codex is the consent), on a
+# clone of this repository. The clone's claude is /usr/bin/false and its codex does not exist, so no real agent is started and it
+# costs nothing.
 #   bash scripts/verify-cli/judge-review-providers.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/judge-review-providers.sh   (the same, on a branch that contains origin/main)
-# With `[agents.judge] provider = "codex"` and `[agents.review] provider = "claude"`: doctor must name both, report the Codex judge
-# without `allow_unpriced` as a problem that names the key, and `judge` must be refused before it starts (recorded, exit 1) with the
-# same message; `judge --budget` on it is a usage error
+# With `[agents.judge] provider = "codex"`, `allow_unpriced = false` and `[agents.review] provider = "claude"`: doctor must name
+# both, report the forbidden Codex judge as a problem that names the key, and `judge` must be refused before it starts (recorded,
+# exit 1) with the same message; `judge --budget` on it is a usage error
 # (exit 2). `[agents.review]` on Codex takes a `model` and a `reasoning_effort` (doctor names both); an effort that is no level is
 # refused when the config loads. SABOTAGE also writes that bad effort in the config that must be accepted.
-# With `allow_unpriced = true` the problem goes, and `judge` gets as far as looking for `codex` (not installed: that is the failure).
+# Without the key the problem goes, doctor notes that the judge has no dollar cap and is bounded by its 300 s timeout, and `judge`
+# gets as far as looking for `codex` (not installed: that is the failure).
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 writes `allow_unpriced =
-# true` already in the first config and leaves the review on codex, so the steps that expect the refusal and the Claude review
-# must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# true` in the first config and leaves the review on codex, and writes `allow_unpriced = false` in the last one, so the steps that
+# expect the refusal, the Claude review and the unrefused judge must FAIL. The frame and the other switches are in lib.sh. Run by
+# hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
-[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the opt-in is already given and the review stays on codex"
+[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the judge is allowed first, forbidden last, and the review stays on codex"
 
 P="$SCRATCH/project"
 g clone -q "$ROOT" "$P" || die "git clone failed"
@@ -44,7 +47,7 @@ check "init writes a config in the clone" "workbench init exited $RC" test "$RC"
 cp "$cfg" "$SCRATCH/config.base"
 
 REVIEW='provider = "claude"'
-OPTIN=""
+OPTIN='allow_unpriced = false'
 [ "$SABOTAGE" = 1 ] && { REVIEW='provider = "codex"'; OPTIN='allow_unpriced = true'; }
 setagents "$OPTIN" "$REVIEW"
 
@@ -76,13 +79,13 @@ ID=$(sed -n 's/^created //p' "$SCRATCH/new.out")
 wbp "$SCRATCH/approve.out" goal approve "$ID"
 wbp "$SCRATCH/run.out" run "$ID"   # ends at once: the claude is /usr/bin/false; it leaves a turn to judge
 
-# --- 1. a Codex judge without the opt-in -------------------------------------------------------------------
+# --- 1. a Codex judge forbidden with allow_unpriced = false --------------------------------------------------
 
 wbp "$SCRATCH/doctor1.out" doctor
 shown "$SCRATCH/doctor1.out" 22
 check "doctor names the Codex judge and the Claude review" "no 'agent judge: codex' or 'agent review: claude' line" \
     bash -c 'grep -q "^agent judge: *codex" "$1" && grep -q "^agent review: *claude" "$1"' _ "$SCRATCH/doctor1.out"
-check "doctor reports the Codex judge without allow_unpriced as a problem" "no problem naming allow_unpriced in [agents.judge]" \
+check "doctor reports the Codex judge with allow_unpriced = false as a problem" "no problem naming allow_unpriced in [agents.judge]" \
     bash -c 'grep -q "problem: .*allow_unpriced.*\[agents.judge\]" "$1"' _ "$SCRATCH/doctor1.out"
 wbp "$SCRATCH/doctor1.json" doctor --json
 check "doctor --json: an unpriced_not_allowed problem for the judge" "no such problem in problems" \
@@ -120,14 +123,23 @@ wbp "$SCRATCH/doctor2b.out" doctor
 check "an effort Workbench has no level for is refused when the config loads" "workbench doctor exited $RC" test "$RC" != 0
 check "the message names reasoning_effort" "no 'reasoning_effort' message" grep -q "reasoning_effort" "$SCRATCH/doctor2b.out"
 
-# --- 3. with the opt-in the judge goes as far as looking for codex ------------------------------------------
+# --- 3. without the key the judge is timeout-only and goes as far as looking for codex ---------------------
 
-setagents "allow_unpriced = true" 'provider = "claude"'
+setagents "" 'provider = "claude"'
+[ "$SABOTAGE" = 1 ] && setagents "allow_unpriced = false" 'provider = "claude"'
 wbp "$SCRATCH/doctor3.out" doctor
-check "with allow_unpriced the doctor problem is gone" "an unpriced_not_allowed problem is still reported" \
-    bash -c '! grep -q "allow_unpriced" "$1" || grep -q "lets the judge run on codex with only a timeout" "$1"' _ "$SCRATCH/doctor3.out"
+shown "$SCRATCH/doctor3.out" 22
+check "without allow_unpriced the doctor problem is gone" "a problem naming allow_unpriced is still reported" \
+    bash -c '! grep -q "problem: .*allow_unpriced" "$1"' _ "$SCRATCH/doctor3.out"
+check "doctor says the judge has no dollar cap and is bounded by its timeout" "no 'note: codex has no dollar cap ... 300 s timeout' line" \
+    bash -c 'grep -q "note: codex has no dollar cap: the judge on it is bounded by its 300 s timeout" "$1"' _ "$SCRATCH/doctor3.out"
+wbp "$SCRATCH/doctor3.json" doctor --json
+check "doctor --json: a timeout_only note for the judge and no unpriced_not_allowed" "the judge's issues are not as expected" \
+    py "j=[a for a in d['agents'] if a['role']=='judge'][0]; assert any(i['kind']=='timeout_only' and i['severity']=='note' for i in j['issues']), j; assert not any(p['kind']=='unpriced_not_allowed' for p in d['problems']), d['problems']" <"$SCRATCH/doctor3.json"
 wbp "$SCRATCH/judge3.out" judge "$ID" --again
 shown "$SCRATCH/judge3.out" 3
+check "judge says it has no dollar cap and what bounds it" "no 'no dollar cap: bounded by 5 min' line" \
+    grep -q "no dollar cap: bounded by 5 min" "$SCRATCH/judge3.out"
 check "judge is not refused for the spend: it fails on the missing codex" "the message is not about the missing codex" \
     bash -c 'grep -q "was not found" "$1" && ! grep -q "cannot enforce a dollar limit" "$1"' _ "$SCRATCH/judge3.out"
 finish
