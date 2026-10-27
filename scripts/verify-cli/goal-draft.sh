@@ -3,18 +3,19 @@
 # script the scenario writes, so no real agent is started and it costs nothing.
 #   bash scripts/verify-cli/goal-draft.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/goal-draft.sh   (the same, on a branch that contains origin/main)
-# With no [agents.goal] the command is refused (exit 6) and says to use `goal new`. With a Codex goal agent and no
-# `allow_unpriced` it is refused before the fake is started, naming the key, and doctor reports the same problem. With the
-# opt-in, an answer that is not a goal fails (exit 1) and leaves no thread; a valid one creates a draft thread (never approved,
+# With no [agents.goal] the command is refused (exit 6) and says to use `goal new`. With a Codex goal agent and
+# `allow_unpriced = false` it is refused before the fake is started, naming the key, and doctor reports the same problem. With no
+# `allow_unpriced` (choosing Codex is the consent) doctor notes the draft has no dollar cap and is bounded by its 300 s timeout, an
+# answer that is not a goal fails (exit 1) and leaves no thread; a valid one creates a draft thread (never approved,
 # its front matter Workbench's own, the log with a goal.draft pair and no coding turn); `--replace` over an approved goal returns
 # it to draft and the approval has to be given again.
-# Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 gives the opt-in in the
-# first config and makes the fake always answer with a valid goal, so the steps that expect the refusal and the failed draft
-# must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 writes
+# `allow_unpriced = true` in the first config and makes the fake always answer with a valid goal, so the steps that expect the
+# refusal and the failed draft must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
-[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the opt-in is already given and the fake always answers with a valid goal"
+[ "$SABOTAGE" = 1 ] && echo "    VERIFY_CLI_SABOTAGE=1: the draft is not forbidden and the fake always answers with a valid goal"
 
 P="$SCRATCH/project"
 g clone -q "$ROOT" "$P" || die "git clone failed"
@@ -70,14 +71,14 @@ check "no [agents.goal]: goal draft is refused, exit 6" "workbench goal draft ex
 check "the refusal says to write the goal by hand" "no mention of goal new" grep -q "goal new" "$SCRATCH/none.out"
 check "nothing was created" "threads exist: $(threads)" test "$(threads)" = 0
 
-# --- 2. a Codex goal agent without the opt-in ---------------------------------------------------------------
+# --- 2. a Codex goal agent forbidden with allow_unpriced = false --------------------------------------------
 
-OPTIN=""
+OPTIN='allow_unpriced = false'
 [ "$SABOTAGE" = 1 ] && OPTIN='allow_unpriced = true'
 setgoal "$OPTIN"
 wbp "$SCRATCH/unpriced.out" goal draft retry --request "retry uploads"
 shown "$SCRATCH/unpriced.out" 3
-check "Codex without allow_unpriced: refused before it starts, exit 6" "workbench goal draft exited $RC" test "$RC" = 6
+check "Codex with allow_unpriced = false: refused before it starts, exit 6" "workbench goal draft exited $RC" test "$RC" = 6
 check "the refusal names allow_unpriced and [agents.goal]" "no such message" \
     bash -c 'grep -q "allow_unpriced" "$1" && grep -q "\[agents.goal\]" "$1"' _ "$SCRATCH/unpriced.out"
 check "the fake was not started" "the fake ran $(runs) time(s)" test "$(runs)" = 0
@@ -86,9 +87,12 @@ wbp "$SCRATCH/doctor.json" doctor --json
 check "doctor --json: an unpriced_not_allowed problem for the goal agent, on codex" "no such problem" \
     py "assert any(p['role']=='goal' and p['kind']=='unpriced_not_allowed' for p in d['problems']), d['problems']; assert d['agents'][0]['provider']=='codex', d['agents'][0]" <"$SCRATCH/doctor.json"
 
-# --- 3. with the opt-in: an answer that is not a goal -------------------------------------------------------
+# --- 3. without the key, timeout-only: an answer that is not a goal ----------------------------------------
 
-setgoal "allow_unpriced = true"
+setgoal ""
+wbp "$SCRATCH/doctor3.json" doctor --json
+check "doctor --json: a timeout_only note for the goal agent and no unpriced_not_allowed" "the goal agent's issues are not as expected" \
+    py "g=d['agents'][0]; assert any(i['kind']=='timeout_only' and '300 s' in i['message'] for i in g['issues']), g; assert not any(p['kind']=='unpriced_not_allowed' for p in d['problems']), d['problems']" <"$SCRATCH/doctor3.json"
 [ "$SABOTAGE" = 1 ] || echo "I would rather not." >"$FAKE/answer"
 wbp "$SCRATCH/bad.out" goal draft retry --request "retry uploads"
 shown "$SCRATCH/bad.out" 3
