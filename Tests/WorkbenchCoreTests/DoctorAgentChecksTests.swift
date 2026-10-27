@@ -201,6 +201,16 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(found[0].message.contains("design") && found[0].message.contains("[review.stage.design]"))
     }
 
+    @Test func aStageThatAllowsWhatTheForbiddenReviewDoesNotStillSaysItHasNoCap() throws {
+        let text =
+            present + "[agents.review]\nprovider = \"codex\"\nallow_unpriced = false\n[review]\n"
+            + "stages = [\"pr-review\", \"design\"]\n[review.stage.design]\nprompt = \"d.md\"\nallow_unpriced = true\n"
+        let found = issues(Doctor.agents(try config(text), searchPath: "/bin"), .review)
+        #expect(found.filter { $0.kind == "unpriced_not_allowed" }.count == 1, "\(found)")
+        let note = try #require(found.first { $0.kind == "timeout_only" }, "\(found)")
+        #expect(note.message.contains("design") && note.message.contains("no dollar cap"))
+    }
+
     @Test func legacyCodexReviewIsNotProblem() throws {
         let plain = try config(present)
         #expect(issues(Doctor.agents(plain, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })

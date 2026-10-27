@@ -79,6 +79,7 @@ extension Doctor {
         }
         // Each listed stage resolves on its own: one can be forbidden, or move to a provider without a dollar cap.
         if let at = found.firstIndex(where: { $0.role == .review }) {
+            let reviewSaysTimeoutOnly = found[at].issues.contains { $0.kind == "timeout_only" }
             for name in config.review.stages where name != ReviewConfig.prReviewStage && config.review.stage(name) != nil {
                 let agent = config.resolvedReviewAgent(stage: name)
                 guard let caps = capabilities?(agent.provider) ?? Self.capabilities(of: agent.provider, config: config),
@@ -94,8 +95,8 @@ extension Doctor {
                         DoctorAgentIssue(
                             role: .review, kind: "unpriced_not_allowed", severity: .problem,
                             message: "review stage \(name) is refused on \(agent.provider): \(refusal.message)"))
-                // The review's own line already says it for a stage on the same provider.
-                case .success(.timeoutOnly) where agent.provider != found[at].resolved?.provider:
+                // The review's own line already says it for a stage on the same provider, unless the review is forbidden.
+                case .success(.timeoutOnly) where !(reviewSaysTimeoutOnly && agent.provider == found[at].resolved?.provider):
                     found[at].issues.append(
                         DoctorAgentIssue(
                             role: .review, kind: "timeout_only", severity: .note,
