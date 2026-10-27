@@ -9,13 +9,14 @@
 # `provider`, and an unknown provider table must each be refused by doctor with a message that names the problem.
 # A coding turn takes `[agents.run]` `model` and `reasoning_effort`: doctor must accept them on codex and name both on the run line.
 # `[agents.ship]` and `[agents.plan]` take a model and an effort, which their doctor lines must name; `provider = "codex"` in
-# either is accepted, its doctor line naming codex, the model and the effort, with a "no dollar cap" note, and with
+# either is accepted, its doctor line naming codex, the model and the effort, with a "no dollar cap" note and a note that
+# it can read files outside its folder (an accepted limit), and with
 # `allow_unpriced = false` doctor reports the turn as refused. The removed root keys `model`, `judge_model`, `describe_model`
 # and `plan_model` are each refused with a message naming the key and the `[agents.<role>]` table that replaced it.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 leaves the haiku model and the ship model out, writes valid values in the three refused configs,
 # puts claude instead of codex in the ship and plan tables, and puts each removed key in its table instead of the root, so
-# the judge line step, the three "refused" steps, the coding effort step, the ship line step, the codex line, note and
+# the judge line step, the three "refused" steps, the coding effort step, the ship line step, the codex line, the two notes and
 # allow_unpriced steps for ship and plan, and the removed-key steps must FAIL. The frame and the other switches are in
 # lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -159,6 +160,9 @@ reasoning_effort = \"high\""
         grep -q "^agent $table: *codex, model gpt-6-astra, effort high" "$SCRATCH/d8-$table.out"
     check "codex in [agents.$table]: doctor notes it has no dollar cap" "no 'codex has no dollar cap' note for $table" \
         bash -c 'grep -A8 "^agent $1:" "$2" | grep -q "note: codex has no dollar cap"' _ "$table" "$SCRATCH/d8-$table.out"
+    check "codex in [agents.$table]: doctor notes it can read outside its folder" \
+        "no 'can read files outside' note for $table" \
+        bash -c 'grep -A8 "^agent $1:" "$2" | grep -q "note: .*can read files outside"' _ "$table" "$SCRATCH/d8-$table.out"
 
     config "[agents.$table]
 provider = \"$TURNPROVIDER\"

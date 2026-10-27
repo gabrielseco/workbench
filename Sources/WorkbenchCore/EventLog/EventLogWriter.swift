@@ -237,7 +237,7 @@ public actor EventLogWriter {
     public func recoverOrphanedPlan() throws -> Event? {
         guard let started = state.planStart else { return nil }
         var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
-        for key in ["goal_hash", "base_commit"] { if let value = started.data[key] { data[key] = value } }
+        for key in ["goal_hash", "base_commit", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
         return try append(.planEnded, turn: started.turn, data: .object(data))
     }
 

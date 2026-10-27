@@ -52,6 +52,13 @@ extension ThreadService {
             turn: "PR description turn")
         let shown = chosen.shownArguments(for: request)
         if let why = chosen.unavailable() { return PRTurnOutcome(failure: why, argv: shown) }
+        if let pid = runnerPID(id: id), pid != getpid() {
+            return PRTurnOutcome(failure: "another command is using this thread (pid \(pid))", argv: shown)
+        }
+        // This process is the thread's live holder while the turn runs: `stop` reaches it, a run, a judge or a plan is
+        // refused.
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
         let answer = await chosen.run(request, attach: attach)
         guard let text = answer.text else { return PRTurnOutcome(failure: answer.failure ?? "no answer", argv: shown) }
         return PRTurnOutcome(text: text, argv: shown)

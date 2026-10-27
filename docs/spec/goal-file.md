@@ -296,7 +296,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
 # [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run)
 # model = "haiku"                       # also [review.stage.<name>] provider, model and allow_unpriced
-# [agents.ship]                         # the PR description and its refresh; no tools, the prompt is all it reads
+# [agents.ship]                         # the PR description and its refresh, from the prompt (codex can still read files)
 # model = "haiku"
 # [agents.plan]                         # `workbench plan`; `plan --model` wins
 # model = "opus"
@@ -501,7 +501,11 @@ message that names the key and its replacement (`model` in `[agents.run]`, `[age
 `[agents.plan]` respectively). `ship` and `plan` run on either provider. On Codex the
 plan turn reads its checkout of the base read-only, and the description and refresh turns run in an empty folder outside the
 repository, the prompt their only input; with no dollar cap the turn is bounded by its timeout, and `allow_unpriced = false`
-refuses it, as for the judge. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
+refuses it, as for the judge. A Codex turn cannot be made tool-free: its read-only sandbox refuses writes, not reads, so a
+Codex description, refresh or plan turn can read files outside its folder (anything the user can read), and the
+description answer goes into the pull request without being scrubbed. This is an accepted limit, not a confinement:
+`workbench doctor` notes it (`unconfined_reads`) for `[agents.ship]` and `[agents.plan]` on Codex, and `ship` prints the
+whole title and body a Codex turn wrote before it pushes, also with `--yes`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
 `--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
 Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
 `goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes both on either provider. A coding turn gets the goal's `model`, else `[agents.run]`'s, and

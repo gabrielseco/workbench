@@ -35,6 +35,13 @@ private func pid(_ codex: FakeCodex, _ name: String) -> pid_t? {
     codex.read(name).flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
 }
 
+private final class HolderBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Int32?
+    func set(_ new: Int32?) { lock.lock(); value = new; lock.unlock() }
+    func get() -> Int32? { lock.lock(); defer { lock.unlock() }; return value }
+}
+
 /// Stops the turn once it is running.
 private let stopSoon: @Sendable (ProcessRun) -> Void = { run in
     Task {
@@ -163,6 +170,63 @@ private func codexPlanned(allowUnpriced: Bool? = nil) async throws -> CodexPlann
         defer { kill(codex, SIGKILL) }
         #expect(await gone(codex), "the process is ended with the plan")
         try c.expectClosed()
+    }
+
+    @Test func theLoggedDirectoryIsTheOneItRanIn() async throws {
+        let c = try await codexPlanned()
+        try c.codex.put("answer", aPlan)
+        _ = try await c.plan()
+        let ran = try #require(c.codex.read("cwds")?.split(separator: "\n").first.map(String.init))
+        for kind in [EventKind.planStarted, .planEnded] {
+            let event = try #require(c.p.events.last { $0.kind == kind })
+            guard case .array(let argv)? = event.data["argv"] else {
+                Issue.record("no argv in \(kind)")
+                continue
+            }
+            let args = argv.compactMap(\.stringValue)
+            let at = try #require(args.firstIndex(of: "-C"), "\(args)")
+            // The checkout is gone by now, so its parent (the plan folder) is what resolves the system's symlinks.
+            let logged = URL(fileURLWithPath: args[at + 1])
+            let resolved = OrphanSweeper.realPath(logged.deletingLastPathComponent()) + "/" + logged.lastPathComponent
+            #expect(resolved == ran, "\(kind): \(args)")
+        }
+    }
+
+    @Test func anAnswerFolderAKilledPlanLeftIsClearedByTheNextCommandAndOneInUseIsNot() async throws {
+        let c = try await codexPlanned()
+        let scratch = c.p.fx.service.planScratch(c.p.id)
+        try scratch.prepare()
+        try "half an answer".write(to: scratch.answer, atomically: true, encoding: .utf8)
+        // Killed after `plan.started`: the next command closes the plan and clears what it left.
+        do {
+            let log = try EventLogWriter.open(at: c.p.fx.project.eventsURL(c.p.id))
+            try await log.append(.planStarted, turn: 0, data: ["argv": [], "goal_hash": "h", "base_commit": "b"])
+            await log.close()
+        }
+        try await c.p.fx.service.withLog(c.p.id) { _ in }
+        #expect(FileManager.default.fileExists(atPath: scratch.answer.path), "this process still owns it")
+        #expect(c.p.events.last?.kind == .planEnded, "the plan is closed either way")
+
+        let dead: [String: Any] = ["pid": 999_999, "started_seconds": 1, "started_micros": 1]
+        try JSONSerialization.data(withJSONObject: dead).write(to: scratch.url.appendingPathComponent("owner.json"))
+        try await c.p.fx.service.withLog(c.p.id) { _ in }
+        #expect(!FileManager.default.fileExists(atPath: scratch.url.path), "its Workbench is gone, so is plan/answer/")
+    }
+
+    @Test func aRecoveredEndKeepsTheStartsProviderAndModel() async throws {
+        let c = try await codexPlanned()
+        do {
+            let log = try EventLogWriter.open(at: c.p.fx.project.eventsURL(c.p.id))
+            try await log.append(
+                .planStarted, turn: 0,
+                data: ["argv": [], "goal_hash": "h", "base_commit": "b", "provider": "codex", "model": "gpt-6-astra"])
+            await log.close()  // killed here
+        }
+        try await c.p.fx.service.withLog(c.p.id) { _ in }
+        let ended = try #require(c.p.events.last)
+        #expect(ended.kind == .planEnded && ended.data["synthetic"] == true)
+        #expect(ended.data["provider"] == "codex" && ended.data["model"] == "gpt-6-astra" && ended.data["goal_hash"] == "h")
+        #expect(try c.p.fx.contents(c.p.id).isHealthy)
     }
 
     @Test func aChildCodexLeftBehindIsEnded() async throws {
@@ -305,6 +369,20 @@ private func codexDescribed(allowUnpriced: Bool? = nil) async throws -> CodexDes
         defer { kill(child, SIGKILL) }
         #expect(await gone(child), "what it left in the scratch folder is ended")
         #expect(!FileManager.default.fileExists(atPath: d.scratch.path))
+    }
+
+    @Test(arguments: [nil, "crash"] as [String?])
+    func theTurnHoldsTheThreadAndLetsGoAfterwardsAlsoOnAFailure(failure: String?) async throws {
+        let d = try await codexDescribed()
+        try d.codex.put("answer", goodDescription)
+        if let failure { try d.codex.put(failure, "") }
+        let service = d.fx.service
+        let id = d.plan.id
+        let seen = HolderBox()
+        _ = try await d.describe(attach: { _ in seen.set(service.runnerPID(id: id)) })
+        #expect(seen.get() == getpid(), "stop reaches this process while the turn runs")
+        #expect(!FileManager.default.fileExists(atPath: d.fx.project.runnerURL(id).path))
+        #expect(service.runnerPID(id: id) == nil)
     }
 
     @Test func aFolderAKilledWorkbenchLeftIsClearedByTheNextCommandAndOneInUseIsNot() async throws {

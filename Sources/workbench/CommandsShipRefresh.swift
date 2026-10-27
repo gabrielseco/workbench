@@ -26,6 +26,14 @@ extension Commands {
         }
         out("proposed update to the pull request text:")
         for line in proposal.render() { out("  " + line) }
+        // A Codex turn can read files outside its folder, so the whole text it would publish is shown, not only the change.
+        if config.resolvedShipAgent.provider != .claude {
+            out("the pull request text after the update:")
+            out("title:   \(proposal.updated.title)")
+            out("")
+            out(proposal.updated.body.trimmingCharacters(in: .newlines))
+            out("")
+        }
         return proposal
     }
 

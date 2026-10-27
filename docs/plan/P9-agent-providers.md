@@ -214,7 +214,12 @@ Resolution rules:
   `reasoning_effort` and `allow_unpriced`, on Claude or Codex. Both run through `ReadOnlyAgent`
   (`ClaudeReadOnlyAgent`, `CodexReadOnlyAgent` on the judge's hardened read-only invocation); on Codex
   the description turns run in an empty folder outside the repository, are bounded by their timeout
-  (`allow_unpriced = false` refuses them, as for the judge) and record no cost.
+  (`allow_unpriced = false` refuses them, as for the judge) and record no cost. Accepted limit: a Codex
+  turn cannot be made tool-free. Its read-only sandbox blocks writes, not reads, so a description or plan
+  turn can read files outside its folder (shown by reading `/etc/hosts` from an empty working folder), and
+  the description answer is posted to the pull request unscrubbed. Codex stays allowed for both roles;
+  `doctor` notes the unconfined reads, and `ship` prints the whole title and body a Codex turn wrote
+  before the push, also under `--yes`.
 - Drafting: `agents.goal.provider` / `agents.goal.model`, then that provider's model default. With no
   goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model;
   on a provider without a hard cap it runs timeout-only unless `agents.goal.allow_unpriced = false`.

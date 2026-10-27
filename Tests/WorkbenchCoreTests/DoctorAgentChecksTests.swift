@@ -116,6 +116,17 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(found.flatMap(\.problems).isEmpty, "a stated limit is not a problem")
     }
 
+    @Test(arguments: [AgentRole.ship, .plan])
+    func unconfinedReadsStatedForACodexDescriptionOrPlan(role: AgentRole) throws {
+        let cfg = try config(present + "\n[agents.\(role.rawValue)]\nprovider = \"codex\"\n")
+        let found = Doctor.agents(cfg, searchPath: "/bin")
+        let note = issues(found, role).filter { $0.kind == "unconfined_reads" }
+        #expect(note.count == 1 && note[0].severity == .note && note[0].message.contains("outside"), "\(note)")
+        #expect(found.flatMap(\.problems).isEmpty, "a stated limit is not a problem")
+        let onClaude = Doctor.agents(try config(present), searchPath: "/bin")
+        #expect(issues(onClaude, role).allSatisfy { $0.kind != "unconfined_reads" }, "claude confines reads")
+    }
+
     /// A key under [providers.*] or [agents.*] is read by a resolver or refused when the config loads; a key this
     /// table does not know fails here, so a new one cannot be added without saying which.
     @Test func everyKeyHonouredOrReported() throws {

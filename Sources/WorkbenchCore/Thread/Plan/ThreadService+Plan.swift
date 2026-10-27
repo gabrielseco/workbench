@@ -75,6 +75,8 @@ extension ThreadService {
         try await Plan.recoverOrphan(log: log, folder: planDirectory(id), repoRoot: project.root, git: git)
         // A Codex description turn has no open event to recover; its folder names the Workbench that made it.
         prTurnScratch(id).clearIfAbandoned()
+        // A killed Codex plan's answer folder is not part of the checkout `recoverOrphan` clears.
+        planScratch(id).clearIfAbandoned()
         try await closeOrphanedVerifier(id: id, log: log)
     }
 
@@ -139,8 +141,11 @@ extension ThreadService {
                 failure: baseProblem ?? "the base commit is unknown", argv: nil)
         }
 
+        let folder = planDirectory(id)
+        let checkout = folder.appendingPathComponent("checkout")
+        // The checkout it runs in, so the logged command (Codex's `-C`) names the directory that runs.
         let request = ReadOnlyRequest(
-            prompt: "", workingDirectory: planDirectory(id), model: planAgent.model, budget: budget, timeout: timeout,
+            prompt: "", workingDirectory: checkout, model: planAgent.model, budget: budget, timeout: timeout,
             reasoningEffort: planAgent.reasoningEffort, scratch: planScratch(id))
         var loaded: ProjectInstructions?
         if config.projectInstructions {
@@ -182,8 +187,6 @@ extension ThreadService {
                         "goal_hash": .string(hash),
                     ])))
 
-        let folder = planDirectory(id)
-        let checkout = folder.appendingPathComponent("checkout")
         // Anything left in the folder was left by a plan that is already closed (above); ended again to be sure.
         OrphanSweeper.sweep(inside: folder)
         await manager.removeDetached(at: checkout)
@@ -192,7 +195,6 @@ extension ThreadService {
         var answer: ReadOnlyAnswer
         do {
             try await manager.addDetached(at: checkout, commit: commit)
-            asked.workingDirectory = checkout
             answer = await agent.run(asked, attach: attach)
         } catch {
             answer = ReadOnlyAnswer(
