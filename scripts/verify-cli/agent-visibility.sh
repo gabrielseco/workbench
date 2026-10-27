@@ -74,7 +74,7 @@ check "status shows no agent before a turn" "an 'agent run:' line before any tur
     bash -c '! grep -q "^agent run:" "$1"' _ "$SCRATCH/status0.out"
 wbp "$SCRATCH/status0.json" status "$ID" --json
 check "status --json: approved_for, and no agent has run" "approved_for is not {claude, opus, recorded} or an agent is set" \
-    py "a=d['approved_for']; assert a=={'provider':'claude','model':'opus','recorded':True}, a; assert d['agents']=={'run':None,'judge':None,'review':None}, d['agents']" <"$SCRATCH/status0.json"
+    py "a=d['approved_for']; assert a=={'provider':'claude','model':'opus','recorded':True,'spend_policy':'hard_cap'}, a; assert d['agents']=={'run':None,'judge':None,'review':None}, d['agents']" <"$SCRATCH/status0.json"
 
 wbp "$SCRATCH/doctor.out" doctor
 shown "$SCRATCH/doctor.out" 22
