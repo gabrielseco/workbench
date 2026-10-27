@@ -27,6 +27,14 @@ import Testing
         #expect(config.verifierModel == nil)
     }
 
+    @Test func theConfigPreviewCarriesTheRunModelAndEffort() throws {
+        let set = try parse("[agents.run]\nmodel = \"opus\"\nreasoning_effort = \"high\"\n")
+        let command = try set.previewInvocation().displayCommand
+        #expect(command.contains("--model opus") && command.contains("--effort high"), "\(command)")
+        let unset = try parse("").previewInvocation().displayCommand
+        #expect(!unset.contains("--model") && !unset.contains("--effort"), "\(unset)")
+    }
+
     @Test func eachRoleTakesOnlyItsOwnTableModel() throws {
         let config = try parse("[agents.run]\nmodel = \"opus\"")
         #expect(config.resolvedRunAgent().model == "opus")

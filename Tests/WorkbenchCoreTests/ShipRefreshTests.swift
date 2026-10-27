@@ -78,6 +78,22 @@ private let fourCountries = """
         #expect(event.kind == .prRefreshed && event.data["stage"]?.stringValue == "proposed" && event.data["ok"] == true)
     }
 
+    @Test func theShipModelReachesTheRefreshTurnAndWithoutItNoModelIsPassed() async throws {
+        let r = try await refresh()
+        let plan = try await r.plan()
+        let reply = try r.file("answer.txt", fourCountries)
+        for model in ["haiku", nil] as [String?] {
+            var config = try Config.load(from: r.fx.project.configURL)
+            config.agents.ship.model = model
+            let dump = r.dir.appendingPathComponent("dump-\(model ?? "unset").json").path
+            _ = try await r.fx.service.proposePRRefresh(
+                plan: plan, config: config, environment: r.environment("answer=\(reply)", "dump=\(dump)"))
+            let argv = try String(contentsOfFile: dump, encoding: .utf8)
+            #expect(argv.contains("\"--model\"") == (model != nil), "\(argv)")
+            if let model { #expect(argv.contains("\"\(model)\""), "\(argv)") }
+        }
+    }
+
     @Test func aTurnThatFailsLeavesThePullRequestAloneAndSaysWhy() async throws {
         let r = try await refresh()
         let plan = try await r.plan()

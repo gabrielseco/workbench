@@ -62,6 +62,21 @@ private let good = """
         #expect(try d.fx.contents(d.plan.id).isHealthy)
     }
 
+    @Test func theShipModelReachesTheDescriptionTurnAndWithoutItNoModelIsPassed() async throws {
+        let d = try await described()
+        let answer = try d.file("answer.txt", good)
+        for model in ["haiku", nil] as [String?] {
+            var config = d.config
+            config.agents.ship.model = model
+            let dump = d.dir.appendingPathComponent("dump-\(model ?? "unset").json").path
+            _ = try await d.fx.service.describePR(
+                plan: d.plan, config: config, environment: d.environment("answer=\(answer)", "dump=\(dump)"))
+            let argv = try String(contentsOfFile: dump, encoding: .utf8)
+            #expect(argv.contains("\"--model\"") == (model != nil), "\(argv)")
+            if let model { #expect(argv.contains("\"\(model)\""), "\(argv)") }
+        }
+    }
+
     @Test(arguments: [
         ("not json at all", "", "not a JSON object"),
         (#"{"title":"","summary":"s"}"#, "", "not usable"),
