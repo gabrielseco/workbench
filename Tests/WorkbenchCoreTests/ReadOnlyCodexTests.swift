@@ -42,6 +42,19 @@ private final class HolderBox: @unchecked Sendable {
     func get() -> Int32? { lock.lock(); defer { lock.unlock() }; return value }
 }
 
+/// Ends the turn as its timeout would (`expire`), but only once the fake has started and reached its hang, so a loaded
+/// runner cannot end it before it wrote its pid or set its `trap '' TERM`. `env_1` is the last file it writes before that.
+private func expireOnceHanging(_ codex: FakeCodex) -> @Sendable (ProcessRun) -> Void {
+    let started = codex.dir.appendingPathComponent("env_1").path
+    return { run in
+        Task {
+            _ = await pollUntil { FileManager.default.fileExists(atPath: started) }
+            try? await Task.sleep(nanoseconds: 300_000_000)  // past the two lines between `env` and the trap
+            run.expire()
+        }
+    }
+}
+
 /// Stops the turn once it is running.
 private let stopSoon: @Sendable (ProcessRun) -> Void = { run in
     Task {
@@ -164,8 +177,8 @@ private func codexPlanned(allowUnpriced: Bool? = nil) async throws -> CodexPlann
         let c = try await codexPlanned()
         try c.codex.put("hang", "")
         try c.codex.put("ignore_term", "")
-        let result = try await c.plan(timeout: 2)
-        #expect(result.failure != nil)
+        let result = try await c.plan(attach: expireOnceHanging(c.codex))
+        #expect(result.failure?.contains("did not answer") == true, "\(result.failure ?? "")")
         let codex = try #require(pid(c.codex, "pid"))
         defer { kill(codex, SIGKILL) }
         #expect(await gone(codex), "the process is ended with the plan")
@@ -353,7 +366,7 @@ private func codexDescribed(allowUnpriced: Bool? = nil) async throws -> CodexDes
         let d = try await codexDescribed()
         try d.codex.put("hang", "")
         try d.codex.put("ignore_term", "")
-        try d.expectFellBack(try await d.describe(timeout: 1), because: "did not answer")
+        try d.expectFellBack(try await d.describe(attach: expireOnceHanging(d.codex)), because: "did not answer")
         let codex = try #require(pid(d.codex, "pid"))
         defer { kill(codex, SIGKILL) }
         #expect(await gone(codex))
