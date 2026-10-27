@@ -89,6 +89,11 @@ private func scratchFile(_ fx: RunnerFixture, _ name: String, _ text: String = "
     return url
 }
 
+private struct Failed: Error, CustomStringConvertible {
+    var description: String
+    init(_ description: String) { self.description = description }
+}
+
 @Suite(.processGate) struct PRTurnStopTests {
     /// Starts `ship` with an agent that hangs, checks the thread is held, stops it as `workbench stop` does, and checks
     /// what the turn recorded and that the hold is gone.
@@ -134,6 +139,16 @@ private func scratchFile(_ fx: RunnerFixture, _ name: String, _ text: String = "
         #expect(fx.service.requestStop(id: id) == .signalled(pid: ship.pid))
         let (lines, exit) = await output(of: ship)
         #expect(exit?.cause == .natural, "ship ended by itself after the stop: \(lines)")
+        // A stop means "do not ship": the stopped exit code, and nothing pushed, opened or removed.
+        guard case .exited(let code)? = exit?.termination else { throw Failed("ship did not exit: \(String(describing: exit))") }
+        #expect(code == 3, "ship exits 3 (stopped) after a stop: \(lines)")
+        #expect(
+            try fx.events(id).allSatisfy { $0.kind != .prOpened && $0.kind != .worktreeRemoved },
+            "no pull request was opened and the worktree was kept")
+        if !refresh {
+            let heads = try await shipOut(["ls-remote", "--heads", "origin"], fx.repo, fx)
+            #expect(!heads.contains("workbench/\(id)"), "nothing was pushed: \(heads)")
+        }
 
         let kind: EventKind = refresh ? .prRefreshed : .prDescribed
         let recorded = try #require(try fx.events(id).last { $0.kind == kind })

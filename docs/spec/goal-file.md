@@ -76,7 +76,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   goal (request, criteria, out of scope), the project's instructions as they were at the base commit, and a
   throwaway detached checkout of the base commit as its working directory (`--restricted` makes that the only place
   it can read; it is removed on every ending). Its tools are `Read`, `Grep` and `Glob`: no `Bash`, `Edit` or `Write`,
-  and no `--permission-mode`. It answers in Markdown (approach, files, order, risks). The text is trimmed, stripped
+  and no `--permission-mode`. (With `[agents.plan] provider = "codex"` it is a read-only `codex exec` instead: its
+  sandbox blocks writes, not reads, so it can read files outside the checkout; `doctor` says so.) It answers in Markdown (approach, files, order, risks). The text is trimmed, stripped
   of machine paths and credentials, cut at 16 KB with a marker, and kept as `plans/plan-N.md` in the thread's folder.
   It needs an approved goal (a draft or a changed one is refused before anything is spent), runs once per approved
   goal unless `--again`, has its own budget (default $1.00) and timeout (10 minutes), and opens no numbered turn.

@@ -97,8 +97,9 @@ let workbenchUsage = """
                                  --review-loop then has Codex review the pull request and, for each finding round,
                                  starts a follow-up thread on the same branch, runs it and its check, asks before
                                  pushing it (--yes skips that) and reviews again, up to max_rounds; never merges
-                                 exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
-                                 13 a check failed, 14 no result in time
+                                 exit 3 stopped while describing (nothing pushed), 10 not accepted,
+                                 11 already shipped (URL printed), 12 push rejected, 13 a check failed,
+                                 14 no result in time
       clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
                                  merged (or closed, with --closed); a dry run unless --yes
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
