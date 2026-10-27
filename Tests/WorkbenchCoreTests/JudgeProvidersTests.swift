@@ -22,7 +22,7 @@ private struct CodexJudged {
 }
 
 private func codexJudged(
-    allowUnpriced: Bool = true, answer: String? = oneCriterion, extraConfig: String = "", screenshots: Bool = false
+    allowUnpriced: Bool? = true, answer: String? = oneCriterion, extraConfig: String = "", screenshots: Bool = false
 ) async throws -> CodexJudged {
     let fx = try await RunnerFixture(extraConfig: extraConfig)
     let (id, _) = try await acceptedThread(fx)
@@ -117,7 +117,15 @@ private func codexJudged(
                 "\(String(describing: result.failure))")
     }
 
-    @Test func codexJudgeNeedsAllowUnpriced() async throws {
+    @Test func codexJudgeRunsTimeoutOnlyWithoutTheKey() async throws {
+        let j = try await codexJudged(allowUnpriced: nil)
+        let result = try await j.judge()
+        #expect(result.failure == nil && result.verdict?.criteria.map(\.met) == [true], "\(String(describing: result.failure))")
+        #expect(j.codex.runs == 1)
+        #expect(j.events.last { $0.kind == .agentAttemptEnded }?.data["outcome"] != "refused")
+    }
+
+    @Test func codexJudgeForbiddenByAllowUnpricedFalse() async throws {
         let j = try await codexJudged(allowUnpriced: false)
         let result = try await j.judge()
         #expect(result.verdict == nil && j.codex.runs == 0, "refused before spawn")

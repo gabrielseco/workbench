@@ -1,27 +1,42 @@
 import Foundation
 
 /// How an evaluation (judge, review) is bounded, decided before anything is spawned. A provider with a hard dollar
-/// cap gets one; one without runs on its timeout alone, but only when the config says so (`allow_unpriced`) or the
-/// thread is on the legacy Codex review, which has always run that way (docs/plan/P9-agent-providers.md,
-/// "Capabilities and permission policy"). A refusal names the key that would allow it.
+/// cap gets one; one without runs on its timeout alone, since choosing that provider is the consent, unless the config
+/// forbids it with `allow_unpriced = false`. The legacy Codex review has always run timeout-only and still does
+/// (docs/plan/P9-agent-providers.md, "Capabilities and permission policy"). A refusal names the key that forbade it.
 enum AgentSpendPolicy {
     /// - Parameters:
     ///   - cap: the dollar cap used when the provider can enforce one.
     ///   - legacy: the compatibility exception; never true for the judge.
-    ///   - table: where `allow_unpriced` would be set, as the config writes it.
+    ///   - table: where `allow_unpriced` is set, as the config writes it.
     static func spend(
         role: AgentRole, agent: ResolvedAgent, capabilities: AgentCapabilities, cap: Decimal, legacy: Bool, table: String
     ) -> Result<AgentSpend, AgentFailure> {
         if capabilities.hardDollarCap { return .success(.hardCap(cap)) }
-        if agent.allowUnpriced || legacy { return .success(.timeoutOnly) }
-        let job = role == .goal ? "goal draft" : role.rawValue
+        if !agent.forbidsUnpriced || legacy { return .success(.timeoutOnly) }
+        let job = jobName(role)
         return .failure(
             AgentFailure(
                 .unsupportedCapability,
-                "\(agent.provider) cannot enforce a dollar limit, so the \(job) on it has no cap and its cost is "
-                    + "unknown. Set allow_unpriced = true in \(table) to accept a timeout-only \(job), "
-                    + "or choose another provider.",
+                "\(agent.provider) cannot enforce a dollar limit, and allow_unpriced = false in \(table) forbids a "
+                    + "timeout-only \(job). Remove that line to run the \(job) on \(agent.provider) bounded by its "
+                    + "timeout, or choose another provider.",
                 retry: .afterFix))
+    }
+
+    static func jobName(_ role: AgentRole) -> String { role == .goal ? "goal draft" : role.rawValue }
+}
+
+extension AgentRole {
+    /// How long one evaluation may take; what bounds it on a provider with no dollar cap. Nil for coding, whose
+    /// turn timeout is in the goal.
+    var evaluationTimeout: TimeInterval? {
+        switch self {
+        case .goal: GoalDraft.timeout
+        case .judge: Judge.timeout
+        case .review: PRReview.timeout
+        case .run: nil
+        }
     }
 }
 

@@ -27,12 +27,15 @@ import Testing
     }
 
     @Test func goalAgentUnpricedNotAllowed() async throws {
-        let refused = try await report("[agents.goal]\nprovider = \"codex\"")
+        let refused = try await report("[agents.goal]\nprovider = \"codex\"\nallow_unpriced = false")
         let problem = try #require(refused.agentProblems.first { $0.role == .goal && $0.kind == "unpriced_not_allowed" })
         #expect(problem.message.contains("allow_unpriced") && problem.message.contains("[agents.goal]"), "\(problem.message)")
         #expect(refused.agents[0].resolved?.provider == .codex, "the goal agent's provider is shown")
-        let allowed = try await report("[agents.goal]\nprovider = \"codex\"\nallow_unpriced = true")
-        #expect(!allowed.agentProblems.contains { $0.role == .goal && $0.kind == "unpriced_not_allowed" })
+        for allowing in ["", "\nallow_unpriced = true"] {
+            let allowed = try await report("[agents.goal]\nprovider = \"codex\"" + allowing)
+            #expect(!allowed.agentProblems.contains { $0.role == .goal && $0.kind == "unpriced_not_allowed" })
+            #expect(allowed.agents[0].issues.contains { $0.kind == "timeout_only" })
+        }
         let claude = try await report("[agents.goal]\nprovider = \"claude\"\nmodel = \"sonnet\"")
         #expect(!claude.agentProblems.contains { $0.kind == "unpriced_not_allowed" })
         #expect(claude.agents[0].resolved?.model == "sonnet")

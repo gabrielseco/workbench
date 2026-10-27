@@ -149,44 +149,56 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         let judge = issues(found, .judge).filter { $0.kind == "setting_unused" }
         #expect(judge.count == 1 && judge[0].message.contains("enforces a dollar limit"))
         let review = issues(found, .review).filter { $0.kind == "setting_unused" }
-        #expect(review.count == 1 && review[0].message.contains("lets the review run on codex with only a timeout"), "\(review)")
-        #expect(!review[0].message.contains("nothing acts"))
+        #expect(review.count == 1 && review[0].message.contains("is the default"), "\(review)")
+        #expect(issues(found, .review).contains { $0.kind == "timeout_only" }, "true still says what bounds it")
         let unused = try config(
             "claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"/bin/sh\"\n[agents.review]\nprovider = \"codex\""
         )
         #expect(issues(Doctor.agents(unused, searchPath: "/bin"), .review).allSatisfy { $0.kind != "setting_unused" })
     }
 
-    @Test func unpricedNotAllowedIsProblem() throws {
-        let judge = try config(present + "[agents.judge]\nprovider = \"codex\"")
-        let found = Doctor.agents(judge, searchPath: "/bin")
-        let problems = issues(found, .judge).filter { $0.kind == "unpriced_not_allowed" }
+    /// Codex chosen for goal drafting, the judge and the review: unset and `true` run timeout-only and say what bounds
+    /// them; `false` is the problem that names the key.
+    @Test(arguments: [AgentRole.goal, .judge, .review])
+    func codexEvaluationWithAndWithoutTheKey(role: AgentRole) throws {
+        let table = "[agents.\(role.rawValue)]\nprovider = \"codex\"\n"
+        let timeout = Int(try #require(role.evaluationTimeout))
+        for line in ["", "allow_unpriced = true\n"] {
+            let found = issues(Doctor.agents(try config(present + table + line), searchPath: "/bin"), role)
+            #expect(found.allSatisfy { $0.kind != "unpriced_not_allowed" }, "\(role) \(line): \(found)")
+            let note = try #require(found.first { $0.kind == "timeout_only" }, "\(role) \(line): \(found)")
+            #expect(note.severity == .note && note.message.contains("no dollar cap") && note.message.contains("\(timeout) s"))
+        }
+        let forbidden = Doctor.agents(try config(present + table + "allow_unpriced = false\n"), searchPath: "/bin")
+        let problems = issues(forbidden, role).filter { $0.kind == "unpriced_not_allowed" }
         #expect(problems.count == 1 && problems[0].severity == .problem, "\(problems)")
-        #expect(problems[0].message.contains("allow_unpriced") && problems[0].message.contains("[agents.judge]"))
-        #expect(Doctor.agents(judge, searchPath: "/bin").flatMap(\.problems).count == 1)
-        let review = try config(present + "[agents.review]\nprovider = \"codex\"")
-        #expect(issues(Doctor.agents(review, searchPath: "/bin"), .review).contains { $0.kind == "unpriced_not_allowed" })
+        #expect(problems[0].message.contains("allow_unpriced") && problems[0].message.contains("[agents.\(role.rawValue)]"))
+        #expect(issues(forbidden, role).allSatisfy { $0.kind != "timeout_only" })
+        #expect(forbidden.flatMap(\.problems).count == 1)
+    }
+
+    @Test func aProviderWithACapIsNeitherRefusedNorTimeoutOnly() throws {
+        let claude = try config(present + "[agents.review]\nprovider = \"claude\"\nallow_unpriced = false")
+        let found = issues(Doctor.agents(claude, searchPath: "/bin"), .review)
+        #expect(found.allSatisfy { $0.kind != "unpriced_not_allowed" && $0.kind != "timeout_only" }, "\(found)")
         let stage = try config(
             present + "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n"
                 + "prompt = \"d.md\"\nprovider = \"claude\"")
         #expect(issues(Doctor.agents(stage, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
-        // Allowed, or on a provider with a cap: no problem.
-        let allowed = try config(present + "[agents.judge]\nprovider = \"codex\"\nallow_unpriced = true")
-        #expect(issues(Doctor.agents(allowed, searchPath: "/bin"), .judge).allSatisfy { $0.kind != "unpriced_not_allowed" })
-        let claude = try config(present + "[agents.review]\nprovider = \"claude\"")
-        #expect(issues(Doctor.agents(claude, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
     }
 
-    @Test func aListedStageOnCodexNeedsItsOwnOptIn() throws {
+    @Test func aListedStageOnCodexIsTimeoutOnlyUnlessForbidden() throws {
         let text =
             present + "[agents.review]\nprovider = \"claude\"\n[review]\nstages = [\"pr-review\", \"design\"]\n"
             + "[review.stage.design]\nprompt = \"d.md\"\nprovider = \"codex\"\n"
-        let all = issues(Doctor.agents(try config(text), searchPath: "/bin"), .review)
-        let found = all.filter { $0.kind == "unpriced_not_allowed" }
+        let unset = issues(Doctor.agents(try config(text), searchPath: "/bin"), .review)
+        #expect(unset.allSatisfy { $0.kind != "unpriced_not_allowed" }, "\(unset)")
+        let note = try #require(unset.first { $0.kind == "timeout_only" }, "\(unset)")
+        #expect(note.message.contains("design") && note.message.contains("no dollar cap"))
+        let forbidden = issues(Doctor.agents(try config(text + "allow_unpriced = false\n"), searchPath: "/bin"), .review)
+        let found = forbidden.filter { $0.kind == "unpriced_not_allowed" }
         #expect(found.count == 1 && found[0].severity == .problem, "\(found)")
         #expect(found[0].message.contains("design") && found[0].message.contains("[review.stage.design]"))
-        let allowed = try config(text + "allow_unpriced = true\n")
-        #expect(issues(Doctor.agents(allowed, searchPath: "/bin"), .review).allSatisfy { $0.kind != "unpriced_not_allowed" })
     }
 
     @Test func legacyCodexReviewIsNotProblem() throws {
@@ -290,5 +302,22 @@ private func doctorGoal(model: String?) -> DoctorGoal {
             problems.contains { $0["kind"] as? String == "missing_executable" && $0["role"] as? String == "review" })
         let text = try await doctor("[providers.codex]\nexecutable = \"/nowhere/codex\"", json: false)
         #expect(text.0.stdout.contains("problem: codex is not installed"), "\(text.0.stdout)")
+    }
+
+    @Test func anUnsetAllowUnpricedIsANoteAndFalseIsAProblem() async throws {
+        let judge = "[providers.codex]\nexecutable = \"/bin/sh\"\n[agents.judge]\nprovider = \"codex\"\n"
+        func judgeIssues(_ doc: [String: Any]?) -> [[String: Any]] {
+            let agents = doc?["agents"] as? [[String: Any]] ?? []
+            return agents.first { $0["role"] as? String == "judge" }?["issues"] as? [[String: Any]] ?? []
+        }
+        let (_, unset) = try await doctor(judge, json: true)
+        #expect(judgeIssues(unset).contains { $0["kind"] as? String == "timeout_only" && $0["severity"] as? String == "note" })
+        let problems = unset?["problems"] as? [[String: Any]] ?? []
+        #expect(!problems.contains { $0["kind"] as? String == "unpriced_not_allowed" }, "\(problems)")
+        let text = try await doctor(judge, json: false)
+        #expect(text.0.stdout.contains("note: codex has no dollar cap"), "\(text.0.stdout)")
+        let (_, forbidden) = try await doctor(judge + "allow_unpriced = false\n", json: true)
+        let refused = forbidden?["problems"] as? [[String: Any]] ?? []
+        #expect(refused.contains { $0["kind"] as? String == "unpriced_not_allowed" && $0["role"] as? String == "judge" })
     }
 }
