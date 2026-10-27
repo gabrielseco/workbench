@@ -9,13 +9,15 @@
 # `provider`, and an unknown provider table must each be refused by doctor with a message that names the problem.
 # A coding turn takes `[agents.run]` `model` and `reasoning_effort`: doctor must accept them on codex and name both on the run line.
 # `[agents.ship]` and `[agents.plan]` take a model and an effort, which their doctor lines must name; `provider = "codex"` in
-# either is refused, naming the table. The removed root keys `model`, `judge_model`, `describe_model` and `plan_model` are each
-# refused with a message naming the key and the `[agents.<role>]` table that replaced it.
+# either is accepted, its doctor line naming codex, the model and the effort, with a "no dollar cap" note, and with
+# `allow_unpriced = false` doctor reports the turn as refused. The removed root keys `model`, `judge_model`, `describe_model`
+# and `plan_model` are each refused with a message naming the key and the `[agents.<role>]` table that replaced it.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 leaves the haiku model and the ship model out, writes valid values in the three refused configs and
-# the two codex ones, and puts each removed key in its table instead of the root, so the judge line step, the three
-# "refused" steps, the coding effort step, the ship line step, the two codex steps and the removed-key steps must FAIL. The
-# frame and the other switches are in lib.sh. Run by hand, not by CI.
+# VERIFY_CLI_SABOTAGE=1 leaves the haiku model and the ship model out, writes valid values in the three refused configs,
+# puts claude instead of codex in the ship and plan tables, and puts each removed key in its table instead of the root, so
+# the judge line step, the three "refused" steps, the coding effort step, the ship line step, the codex line, note and
+# allow_unpriced steps for ship and plan, and the removed-key steps must FAIL. The frame and the other switches are in
+# lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -146,12 +148,26 @@ TURNPROVIDER=codex
 [ "$SABOTAGE" = 1 ] && TURNPROVIDER=claude
 for table in ship plan; do
     config "[agents.$table]
-provider = \"$TURNPROVIDER\""
+provider = \"$TURNPROVIDER\"
+model = \"gpt-6-astra\"
+reasoning_effort = \"high\""
     wbp "$SCRATCH/d8-$table.out" doctor --base "$BASE"
-    shown "$SCRATCH/d8-$table.out" 4
-    check "codex in [agents.$table]: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
-    check "codex in [agents.$table]: the message names the table and claude" "no '[agents.$table] cannot use \"codex\"' message" \
-        bash -c 'grep -qF "[agents.$1] cannot use \"codex\"" "$2" && grep -qF "only \"claude\"" "$2"' _ "$table" "$SCRATCH/d8-$table.out"
+    shown "$SCRATCH/d8-$table.out" 8
+    check "codex in [agents.$table]: doctor accepts it" "workbench doctor exited $RC" test "$RC" = 0
+    check "the $table line names codex, the model and the effort" \
+        "no 'agent $table: codex, model gpt-6-astra, effort high' line" \
+        grep -q "^agent $table: *codex, model gpt-6-astra, effort high" "$SCRATCH/d8-$table.out"
+    check "codex in [agents.$table]: doctor notes it has no dollar cap" "no 'codex has no dollar cap' note for $table" \
+        bash -c 'grep -A8 "^agent $1:" "$2" | grep -q "note: codex has no dollar cap"' _ "$table" "$SCRATCH/d8-$table.out"
+
+    config "[agents.$table]
+provider = \"$TURNPROVIDER\"
+allow_unpriced = false"
+    wbp "$SCRATCH/d8u-$table.out" doctor --base "$BASE"
+    shown "$SCRATCH/d8u-$table.out" 8
+    check "allow_unpriced = false in [agents.$table]: doctor says the turn is refused" \
+        "no 'is refused on codex' problem naming [agents.$table]" \
+        bash -c 'grep "problem:" "$2" | grep "is refused on codex" | grep -qF "[agents.$1]"' _ "$table" "$SCRATCH/d8u-$table.out"
 done
 
 # --- 6. the removed root model keys ----------------------------------------------------------------------

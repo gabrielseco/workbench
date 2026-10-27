@@ -294,11 +294,11 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # executable = "/opt/homebrew/bin/codex"
 # [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
 # model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
-# [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run, ship, plan)
+# [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run)
 # model = "haiku"                       # also [review.stage.<name>] provider, model and allow_unpriced
-# [agents.ship]                         # the PR description and its refresh; claude only for now
+# [agents.ship]                         # the PR description and its refresh; no tools, the prompt is all it reads
 # model = "haiku"
-# [agents.plan]                         # `workbench plan`; claude only for now; `plan --model` wins
+# [agents.plan]                         # `workbench plan`; `plan --model` wins
 # model = "opus"
 # [run]                                 # P16: how the verifier's app is started; Workbench runs it and stops it
 # command = "npm run dev:mock"          # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
@@ -498,8 +498,10 @@ path run without a shell; `[providers.claude]` and `claude_path` name the same e
 model is chosen in one of these tables: the root keys `model`, `judge_model`, `describe_model` and `plan_model` were
 removed, and a config (or the global `~/.workbench/config.toml`) that still has one is refused when it loads, with a
 message that names the key and its replacement (`model` in `[agents.run]`, `[agents.judge]`, `[agents.ship]` and
-`[agents.plan]` respectively). `ship` and `plan` run on Claude only for now: `provider = "codex"` in their table is
-refused at load, saying that turn does not support it yet, and so is `allow_unpriced`, as for `[agents.run]`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
+`[agents.plan]` respectively). `ship` and `plan` run on either provider. On Codex the
+plan turn reads its checkout of the base read-only, and the description and refresh turns run in an empty folder outside the
+repository, the prompt their only input; with no dollar cap the turn is bounded by its timeout, and `allow_unpriced = false`
+refuses it, as for the judge. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
 `--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
 Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
 `goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes both on either provider. A coding turn gets the goal's `model`, else `[agents.run]`'s, and

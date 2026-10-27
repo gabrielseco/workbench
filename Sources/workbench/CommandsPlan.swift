@@ -2,7 +2,7 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `plan [id] [--again] [--model <name>] [--budget <usd>]`: a read-only Claude run that reads the repository at
+    /// `plan [id] [--again] [--model <name>] [--budget <usd>]`: a read-only run on `[agents.plan]`'s provider that reads the repository at
     /// the thread's base commit against the approved goal and writes the approach. It prints and records the plan
     /// and changes nothing else; the next `run` does not read it yet. It costs money, so it runs once per approved
     /// goal unless `--again`.

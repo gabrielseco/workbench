@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     /// `ship [id] [--yes] [--no-describe] [--refresh-description]`: push the accepted thread's branch and open its pull request. The
-    /// title and description are written by a read-only Claude turn from the goal, the diff and the check;
+    /// title and description are written by a read-only turn on `[agents.ship]`'s provider from the goal, the diff and the check;
     /// `--no-describe` (or a failed turn) uses the goal-based body. Asks first, because it publishes, and
     /// shows what it will publish; running it again after any failure resumes where it stopped.
     static func ship(_ args: [String]) async throws -> Int32 {
