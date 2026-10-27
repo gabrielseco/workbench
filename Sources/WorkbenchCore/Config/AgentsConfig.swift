@@ -1,15 +1,31 @@
 import Foundation
 
-/// The four things an agent does for a thread (docs/plan/P9-agent-providers.md). Each picks its own provider and model.
+/// The things an agent does for a thread (docs/plan/P9-agent-providers.md). Each picks its own provider and model.
 public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     case goal
     case run
     case judge
     case review
+    /// The turns `ship` runs: the PR description and its refresh.
+    case ship
+    /// `workbench plan`.
+    case plan
 
     /// The providers an adapter exists for, in the order messages list them. A config that names another pair is
     /// refused when it loads, not ignored.
-    public var supportedProviders: [AgentProviderID] { [.claude, .codex] }
+    public var supportedProviders: [AgentProviderID] { isClaudeOnly ? [.claude] : [.claude, .codex] }
+
+    /// Turns that have only a Claude command line so far.
+    var isClaudeOnly: Bool { self == .ship || self == .plan }
+
+    /// The turn as a message names it.
+    var turnName: String {
+        switch self {
+        case .ship: "PR description turns"
+        case .plan: "plan turn"
+        default: rawValue
+        }
+    }
 
     /// What the thread did before `[agents]` existed, used when the config names nothing.
     public var defaultProvider: AgentProviderID { self == .review ? .codex : .claude }
@@ -33,12 +49,9 @@ public struct AgentSelection: Sendable, Equatable {
         self.allowUnpriced = allowUnpriced
     }
 
-    /// The table chose a provider or a model, which is what makes it replace the legacy `model` keys.
-    public var isSet: Bool { provider != nil || model != nil }
 }
 
-/// A role's provider, model and spending policy after every rule has been applied. Nothing reads it yet: the run,
-/// judge and review paths still take their own settings (PR 8 and 9 move them over).
+/// A role's provider, model and spending policy after every rule has been applied.
 public struct ResolvedAgent: Sendable, Equatable {
     public var provider: AgentProviderID
     /// Nil is the provider's own default.
@@ -74,6 +87,8 @@ public struct AgentsConfig: Sendable, Equatable {
     public var run = AgentSelection()
     public var judge = AgentSelection()
     public var review = AgentSelection()
+    public var ship = AgentSelection()
+    public var plan = AgentSelection()
 
     public init() {}
 
@@ -83,6 +98,8 @@ public struct AgentsConfig: Sendable, Equatable {
         case .run: run
         case .judge: judge
         case .review: review
+        case .ship: ship
+        case .plan: plan
         }
     }
 
@@ -169,6 +186,11 @@ extension AgentsConfig {
                 .invalidValue, entry.line,
                 "'allow_unpriced' is not allowed in [agents.run]: spending without a dollar cap is approved in the goal")
         }
+        if role.isClaudeOnly, let entry = table.entries["allow_unpriced"] {
+            fail(
+                .invalidValue, entry.line,
+                "'allow_unpriced' is not allowed in [\(tableName)]: only Claude, which has a dollar cap, runs that turn")
+        }
         if role == .goal, selection.provider == nil, table.entries["provider"] == nil {
             fail(.missingKey, table.line, "missing key 'provider' in [agents.goal]: drafting has no default provider")
         }
@@ -177,6 +199,8 @@ extension AgentsConfig {
         case .run: config.run = selection
         case .judge: config.judge = selection
         case .review: config.review = selection
+        case .ship: config.ship = selection
+        case .plan: config.plan = selection
         }
     }
 }
@@ -239,6 +263,12 @@ extension AgentSelection {
             return nil
         }
         guard role.supportedProviders.contains(id) else {
+            if role.isClaudeOnly {
+                fail(
+                    .invalidValue, line,
+                    "[\(table)] cannot use \"\(id)\": it is not supported for the \(role.turnName) yet, only \"claude\" is")
+                return nil
+            }
             fail(
                 .invalidValue, line,
                 "[\(table)] cannot use \"\(id)\" yet: \(role.rawValue) runs on \(AgentsConfig.list(role.supportedProviders)) "
@@ -264,23 +294,35 @@ extension Config {
             provider: provider, model: goal.model, reasoningEffort: goal.reasoningEffort, unpriced: goal.allowUnpriced)
     }
 
-    /// Coding: the goal's `model`, `[agents.run]`, the root `model`, then the provider's default. The root `model`
-    /// is a Claude alias, so it is only used for Claude.
+    /// Coding: the goal's `model`, `[agents.run]`, then the provider's default.
     public func resolvedRunAgent(goalModel: String? = nil) -> ResolvedAgent {
         let provider = agents.run.provider ?? AgentRole.run.defaultProvider
-        let model = goalModel ?? agents.run.model ?? legacyModel(model, for: provider)
         return ResolvedAgent(
-            provider: provider, model: model, reasoningEffort: agents.run.reasoningEffort, allowUnpriced: false)
+            provider: provider, model: goalModel ?? agents.run.model, reasoningEffort: agents.run.reasoningEffort,
+            allowUnpriced: false)
     }
 
-    /// The judge: `--model`, `[agents.judge]`, then the legacy `judge_model` and `model`, which apply only while
-    /// `[agents.judge]` chooses nothing and only to Claude.
+    /// The judge: `--model`, `[agents.judge]`, then the provider's default.
     public func resolvedJudgeAgent(modelFlag: String? = nil) -> ResolvedAgent {
         let provider = agents.judge.provider ?? AgentRole.judge.defaultProvider
-        let legacy = agents.judge.isSet ? nil : legacyModel(judgeModel ?? model, for: provider)
         return ResolvedAgent(
-            provider: provider, model: modelFlag ?? agents.judge.model ?? legacy,
+            provider: provider, model: modelFlag ?? agents.judge.model,
             reasoningEffort: agents.judge.reasoningEffort, unpriced: agents.judge.allowUnpriced)
+    }
+
+    /// The PR description and its refresh: `[agents.ship]`, then Claude's default. Claude only, checked at load.
+    public var resolvedShipAgent: ResolvedAgent { claudeOnlyAgent(agents.ship) }
+
+    /// `workbench plan`: `--model`, `[agents.plan]`, then Claude's default. Claude only, checked at load.
+    public func resolvedPlanAgent(modelFlag: String? = nil) -> ResolvedAgent {
+        var agent = claudeOnlyAgent(agents.plan)
+        agent.model = modelFlag ?? agent.model
+        return agent
+    }
+
+    private func claudeOnlyAgent(_ selection: AgentSelection) -> ResolvedAgent {
+        ResolvedAgent(
+            provider: .claude, model: selection.model, reasoningEffort: selection.reasoningEffort, allowUnpriced: false)
     }
 
     /// A review stage: its own table, then `[agents.review]`, then the provider's default. `allow_unpriced` is
@@ -311,9 +353,5 @@ extension Config {
             name != ReviewConfig.prReviewStage
         else { return "[agents.\(role.rawValue)]" }
         return "[agents.review] or [review.stage.\(name)]"
-    }
-
-    private func legacyModel(_ model: String?, for provider: AgentProviderID) -> String? {
-        provider == .claude ? model : nil
     }
 }

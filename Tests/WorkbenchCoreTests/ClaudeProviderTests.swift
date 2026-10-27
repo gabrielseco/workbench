@@ -248,7 +248,8 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
     }
 
     @Test func theModelIsWhatTheRequestSaysNotTheConfigs() throws {
-        #expect(try !argv("model = \"opus\"\njudge_model = \"sonnet\"\n[tools]\navailable = [\"Read\"]\n").contains("--model"))
+        let tables = "[agents.run]\nmodel = \"opus\"\n[agents.judge]\nmodel = \"sonnet\"\n[tools]\navailable = [\"Read\"]\n"
+        #expect(try !argv(tables).contains("--model"))
     }
 
     @Test func theLogShowsNeitherThePromptNorACredential() throws {

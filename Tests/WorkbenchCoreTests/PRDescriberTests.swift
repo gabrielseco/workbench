@@ -116,14 +116,18 @@ private func fenced(_ inner: String) -> String {
         #expect(!PRDescriber.displayArguments(args).contains("the prompt"))
     }
 
-    @Test func theDescribeModelBeatsTheConfigModel() throws {
-        func model(_ toml: String) throws -> String? {
-            let args = PRDescriber.arguments(config: try Config.parse(toml + "[tools]\navailable = [\"Read\"]\n"), prompt: "p")
-            return args.firstIndex(of: "--model").map { args[$0 + 1] }
+    @Test func theModelAndEffortComeFromTheShipTableOnly() throws {
+        func args(_ toml: String) throws -> [String] {
+            PRDescriber.arguments(config: try Config.parse(toml + "[tools]\navailable = [\"Read\"]\n"), prompt: "p")
         }
-        #expect(try model("model = \"opus\"\ndescribe_model = \"haiku\"\n") == "haiku")
-        #expect(try model("model = \"opus\"\n") == "opus")
-        #expect(try model("") == nil)
+        func value(_ flag: String, _ args: [String]) -> String? { args.firstIndex(of: flag).map { args[$0 + 1] } }
+        let set = try args("[agents.run]\nmodel = \"opus\"\n[agents.ship]\nmodel = \"haiku\"\nreasoning_effort = \"low\"\n")
+        #expect(value("--model", set) == "haiku" && value("--effort", set) == "low")
+        #expect(set.firstIndex(of: "--model")! < set.firstIndex(of: "--")!)
+        // Without [agents.ship] the CLI's default: the coding model is not inherited.
+        let unset = try args("[agents.run]\nmodel = \"opus\"\n")
+        #expect(!unset.contains("--model") && !unset.contains("--effort"))
+        #expect(try !args("").contains("--model"))
     }
 
     @Test func thePromptCarriesEverythingAndNoLocalPaths() {

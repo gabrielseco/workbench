@@ -105,7 +105,9 @@ public enum PRDescriber {
             "--max-budget-usd", NSDecimalNumber(decimal: budgetUSD).stringValue,
         ]
         if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
-        if let model = config.describeModel ?? config.model { args += ["--model", model] }
+        let agent = config.resolvedShipAgent
+        if let model = agent.model { args += ["--model", model] }
+        if let effort = agent.reasoningEffort { args += ["--effort", effort] }
         args += ["--tools", "", "--", prompt]
         return args
     }

@@ -31,6 +31,7 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         let path = ".claude/skills/verify/SKILL.md"
         let fx = try await RunnerFixture(
             extraConfig: """
+                [agents.run]
                 model = "opus"
                 [verifier]
                 skill = "\(path)"
@@ -43,7 +44,7 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(verifier.problem == nil)
         #expect(verifier.skill?.path == path)
         #expect(verifier.skill?.text == "# Verify\n\nDrive the app.")
-        #expect(verifier.model == "opus", "the coding model is the fallback")
+        #expect(verifier.model == nil, "the coding model is not the fallback: the CLI default is")
         #expect(verifier.config.tools == ["Read", "Bash(scripts/snap.sh:*)"])
         #expect(report.passed)
     }

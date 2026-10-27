@@ -64,8 +64,8 @@ helper the skill may call.
     (this repo links the first to the second). `skill` names the file; both work. It must be a regular file at the base
     commit: git stores a symlink as its target path, so reading it would hand the model a path as its instructions. A
     symlink is refused with the real path to use.
-11. **The model is the project's choice.** `[verifier] model` is passed as `--model`; unset it falls back to the coding
-    `model`. Recommended: `sonnet`. The run is a long loop of short tool calls and screenshot reading, which Haiku
+11. **The model is the project's choice.** `[verifier] model` is passed as `--model`; unset it is the CLI's default (it
+    once fell back to the root `model`, which was removed when every model moved into an `[agents.<role>]` table). Recommended: `sonnet`. The run is a long loop of short tool calls and screenshot reading, which Haiku
     is the likeliest to get wrong (a wasted run still costs money) and Opus adds little to, since the skill is written
     down. PR 5 measures it.
 12. **Claude only.** The verifier runs tools (build, launch, press, capture), which the read-only Codex sandbox the
@@ -78,7 +78,7 @@ helper the skill may call.
 [verifier]
 enabled = true                              # the default; false turns the verifier off
 skill = ".claude/skills/verify/SKILL.md"    # the default; instructions, read from the base commit; an explicit path, `.claude/` or `.agents/`
-model = "sonnet"                            # --model for the verifier; unset = the coding model
+model = "sonnet"                            # --model for the verifier; unset = the CLI default
 tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Bash(swift scripts/ax.swift:*)"]
 budget_usd = 1.00
 timeout_min = 10

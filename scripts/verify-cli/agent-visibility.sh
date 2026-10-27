@@ -3,7 +3,7 @@
 # repository. The clone's claude_path is /usr/bin/false and its codex does not exist, so no real agent is started and it costs nothing.
 #   bash scripts/verify-cli/agent-visibility.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/agent-visibility.sh   (the same, on a branch that contains origin/main)
-# A goal is approved with `model = "opus"` and `[agents.judge] model = "haiku"`. Before any turn, `status` must say what it was
+# A goal is approved with `[agents.run] model = "opus"` and `[agents.judge] model = "haiku"`. Before any turn, `status` must say what it was
 # approved for and show no agent that ran; `doctor` (text and --json) must name each responsibility's provider and model, report the
 # missing codex as a problem and its unconfined reads as a note, and still pass. Then `run` is started (it ends at once, the
 # "claude" being /usr/bin/false) and `status` and `review`, text and --json, must show the run's provider and model from the log. Exit 0 only when every
@@ -33,9 +33,9 @@ shown() { sed 's/^/    /' "$1" | head -${2:-12}; }
 wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 cfg="$P/.workbench/config.toml"
-grep -v -e '^model = ' -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
-{ echo 'model = "opus"'; echo 'claude_path = "/usr/bin/false"'; cat "$SCRATCH/config.rest"
-  printf '\n[agents.judge]\nmodel = "haiku"\n\n[providers.codex]\nexecutable = "/nonexistent/codex"\n'; } >"$cfg"
+grep -v -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
+{ echo 'claude_path = "/usr/bin/false"'; cat "$SCRATCH/config.rest"
+  printf '\n[agents.run]\nmodel = "opus"\n\n[agents.judge]\nmodel = "haiku"\n\n[providers.codex]\nexecutable = "/nonexistent/codex"\n'; } >"$cfg"
 
 cat >"$SCRATCH/goal.md" <<'GOAL'
 ---

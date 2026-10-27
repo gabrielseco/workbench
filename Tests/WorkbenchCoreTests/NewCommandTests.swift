@@ -48,14 +48,14 @@ private struct NewHome {
 
 @Suite(.processGate) struct NewCommandTests {
     @Test func usesProjectsDirFromTheGlobalConfig() async throws {
-        let h = try NewHome(globalConfig: "projects_dir = \"~/code\"\nmodel = \"haiku\"\n")
+        let h = try NewHome(globalConfig: "projects_dir = \"~/code\"\n[agents.run]\nmodel = \"haiku\"\n")
         let result = try await h.run(["new", "mocks-kit"])
         #expect(result.code == 0, "\(result.text)")
         let root = h.home.appendingPathComponent("code/mocks-kit")
         #expect(h.exists(".git", under: root) && h.exists(".workbench/config.toml", under: root))
         #expect(result.text.contains("workbench goal new"))
         let config = try Config.load(from: root.appendingPathComponent(".workbench/config.toml"))
-        #expect(config.model == "haiku")
+        #expect(config.agents.run.model == "haiku")
     }
 
     @Test func inBeatsProjectsDirAndAPathBeatsBoth() async throws {
@@ -79,17 +79,17 @@ private struct NewHome {
     }
 
     @Test func theProjectConfigIsTheOnlyOneARunReadsSoItWinsOverLaterGlobalChanges() async throws {
-        let h = try NewHome(globalConfig: "projects_dir = \"~/p\"\nmodel = \"haiku\"\n")
+        let h = try NewHome(globalConfig: "projects_dir = \"~/p\"\n[agents.run]\nmodel = \"haiku\"\n")
         #expect(try await h.run(["new", "kit"]).code == 0)
         let configURL = h.home.appendingPathComponent("p/kit/.workbench/config.toml")
-        #expect(try Config.load(from: configURL).model == "haiku")
+        #expect(try Config.load(from: configURL).agents.run.model == "haiku")
 
         let edited = try String(contentsOf: configURL, encoding: .utf8)
             .replacingOccurrences(of: "model = \"haiku\"", with: "model = \"opus\"")
         try edited.write(to: configURL, atomically: true, encoding: .utf8)
-        try "projects_dir = \"~/p\"\nmodel = \"sonnet\"\n".write(
+        try "projects_dir = \"~/p\"\n[agents.run]\nmodel = \"sonnet\"\n".write(
             to: h.home.appendingPathComponent(".workbench/config.toml"), atomically: true, encoding: .utf8)
-        #expect(try Config.load(from: configURL).model == "opus")
+        #expect(try Config.load(from: configURL).agents.run.model == "opus")
     }
 
     @Test func noLocationIsRefusedAndNothingIsCreatedInTheCurrentDirectory() async throws {

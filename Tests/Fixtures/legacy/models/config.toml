@@ -1,6 +1,10 @@
 claude_path = "/nonexistent/legacy-claude"
+
+[agents.run]
 model = "opus"
-judge_model = "haiku"
+
+[agents.judge]
+model = "haiku"
 
 [tools]
 available = ["Read", "Edit", "Bash"]

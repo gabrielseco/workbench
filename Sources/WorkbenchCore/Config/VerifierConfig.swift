@@ -13,7 +13,7 @@ public struct VerifierConfig: Sendable, Equatable {
     public var skill: String
     /// Claude Code permission patterns the verifier may use, and only these. Never the skill's own `allowed-tools`.
     public var tools: [String]
-    /// `--model` for the verifier; unset falls back to the coding `model`.
+    /// `--model` for the verifier; unset is the CLI's default.
     public var model: String?
     public var budgetUSD: Decimal
     public var timeoutMin: Int

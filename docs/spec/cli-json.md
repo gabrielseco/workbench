@@ -85,7 +85,11 @@ of the text mode are not in it.
 doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy, agents, problems, setup, check, review_warnings, cleanup_problem
 
 - `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
-- `agents`: one entry per responsibility, goal drafting first: `{role, provider, model, reasoning_effort, note, issues}`. `provider`, `model` and `reasoning_effort`
+- `model` (doctor): the `model` in `[agents.run]`, null when it sets none (the provider's default); a goal's own `model` is not
+  in it (the `run` entry of `agents` has it).
+- `agents`: one entry per responsibility, in the order `goal`, `run`, `judge`, `review`, `ship` (the PR description and its
+  refresh), `plan` (`workbench plan`): `{role, provider, model, reasoning_effort, note, issues}`. `ship` and `plan` are always
+  listed, on `claude`, with `[agents.ship]`'s and `[agents.plan]`'s model and effort (null without the table). `provider`, `model` and `reasoning_effort`
   are null for goal drafting with no `[agents.goal]` (it stays manual; `note` says so); a null `model` is the provider's default.
   A Codex goal agent with `allow_unpriced = false` in `[agents.goal]` is an `unpriced_not_allowed` problem with `role: "goal"`,
   like the judge and review (`workbench goal draft` is refused for the same reason); without the key, or with `true`, it is a

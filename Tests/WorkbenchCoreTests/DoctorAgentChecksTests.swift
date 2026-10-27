@@ -49,7 +49,9 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         let cfg = try config("claude_path = \"/nowhere/claude\"\n[providers.codex]\nexecutable = \"/bin/sh\"")
         let found = Doctor.agents(cfg, searchPath: "/bin")
         let missing = found.flatMap(\.issues).filter { $0.kind == "missing_executable" }
-        #expect(Set(missing.map(\.role)) == [.run, .judge], "claude is run and judge; codex is present: \(missing)")
+        #expect(
+            Set(missing.map(\.role)) == [.run, .judge, .ship, .plan],
+            "claude is run, judge, ship and plan; codex is present: \(missing)")
         #expect(missing.allSatisfy { $0.severity == .problem && $0.message.contains("/nowhere/claude") })
         // A bare name is looked up on the environment's PATH, without a shell.
         let bare = try config("claude_path = \"/bin/sh\"\n[providers.codex]\nexecutable = \"nothing-here\"")
@@ -97,7 +99,7 @@ private func doctorGoal(model: String?) -> DoctorGoal {
     }
 
     @Test func theGoalsModelWinsOverTheConfigs() throws {
-        let cfg = try config("model = \"haiku\"\n" + present)
+        let cfg = try config(present + "\n[agents.run]\nmodel = \"haiku\"\n")
         func runModel(_ goal: DoctorGoal?) -> String? {
             Doctor.agents(cfg, searchPath: "/bin", goal: goal).first { $0.role == .run }?.resolved?.model
         }
@@ -224,6 +226,8 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         case .run: cfg.resolvedRunAgent()
         case .judge: cfg.resolvedJudgeAgent()
         case .review: cfg.resolvedReviewAgent()
+        case .ship: cfg.resolvedShipAgent
+        case .plan: cfg.resolvedPlanAgent()
         }
     }
 }
@@ -255,16 +259,22 @@ private func doctorGoal(model: String?) -> DoctorGoal {
     }
 
     @Test func jsonShape() async throws {
-        let (ran, object) = try await doctor("model = \"opus\"", json: true)
+        let (ran, object) = try await doctor(
+            "[agents.run]\nmodel = \"opus\"\n[agents.ship]\nmodel = \"haiku\"\nreasoning_effort = \"low\"", json: true)
         #expect(ran.code == 0, "\(ran.stdout) \(ran.stderr)")
         #expect(ran.stdout.split(separator: "\n").count == 1 && ran.stderr.isEmpty, "one object, nothing else")
         let doc = try #require(object)
         #expect(Set(doc.keys) == (try documentedKeys("doctor")))
         #expect(doc["v"] as? Int == 1 && doc["passed"] as? Bool == true)
         let agents = try #require(doc["agents"] as? [[String: Any]])
-        #expect(agents.compactMap { $0["role"] as? String } == ["goal", "run", "judge", "review"])
+        #expect(agents.compactMap { $0["role"] as? String } == ["goal", "run", "judge", "review", "ship", "plan"])
         #expect(agents[0]["provider"] is NSNull && agents[0]["note"] as? String == "goal drafting stays manual")
         #expect(agents[1]["provider"] as? String == "claude" && agents[1]["model"] as? String == "opus")
+        #expect(doc["model"] as? String == "opus", "the top-level model is [agents.run]'s")
+        #expect(agents[4]["provider"] as? String == "claude" && agents[4]["model"] as? String == "haiku")
+        #expect(agents[4]["reasoning_effort"] as? String == "low" && (agents[4]["issues"] as? [Any])?.isEmpty == true)
+        #expect(agents[5]["provider"] as? String == "claude" && agents[5]["model"] is NSNull)
+        #expect(agents[5]["reasoning_effort"] is NSNull)
         #expect(agents[3]["provider"] as? String == "codex" && agents[3]["model"] is NSNull)
         let review = try #require(agents[3]["issues"] as? [[String: Any]])
         #expect(review.contains { $0["kind"] as? String == "unconfined_reads" && $0["severity"] as? String == "note" })
@@ -273,7 +283,7 @@ private func doctorGoal(model: String?) -> DoctorGoal {
     }
 
     @Test func approvedForOfTheActiveThread() async throws {
-        let fx = try await RunnerFixture(extraConfig: "model = \"opus\"")
+        let fx = try await RunnerFixture(extraConfig: "[agents.run]\nmodel = \"opus\"")
         let id = try await fx.approvedThread()
         let ran = try await workbenchCLI(
             ["doctor", "--json"], in: fx.repo,

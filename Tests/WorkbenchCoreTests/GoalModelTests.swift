@@ -112,8 +112,9 @@ private func problems(in text: String) -> [GoalProblem] {
     }
 
     @Test func theGoalsModelWinsOverTheConfigsThenTheConfigsThenTheCliDefault() async throws {
-        #expect(model(in: try await argv(config: "model = \"sonnet\"", goalModel: "opus")) == "opus")
-        #expect(model(in: try await argv(config: "model = \"sonnet\"", goalModel: nil)) == "sonnet")
+        let run = "[agents.run]\nmodel = \"sonnet\""
+        #expect(model(in: try await argv(config: run, goalModel: "opus")) == "opus")
+        #expect(model(in: try await argv(config: run, goalModel: nil)) == "sonnet")
         #expect(model(in: try await argv(config: "", goalModel: "opus")) == "opus")
         #expect(model(in: try await argv(config: "", goalModel: nil)) == nil)
     }

@@ -206,15 +206,20 @@ Resolution rules:
 
 - No new config preserves current defaults: Claude coding, Claude judge, Codex automated review.
   P7's proposed change to default judging on Codex does not take effect implicitly.
+- Every model is chosen in an `[agents.<role>]` table (or `[verifier] model`). The root keys this plan
+  first kept as a legacy fallback (`model`, `judge_model`, `describe_model`, `plan_model`) were removed
+  afterwards with no fallback: a config with one fails to load and the message names its replacement
+  (`model` in `[agents.run]`, `[agents.judge]`, `[agents.ship]`, `[agents.plan]`). `[agents.ship]` (the PR
+  description and its refresh) and `[agents.plan]` (`workbench plan`) take `provider`, `model` and
+  `reasoning_effort`, and run on Claude only for now: `provider = "codex"` there is refused at load.
 - Drafting: `agents.goal.provider` / `agents.goal.model`, then that provider's model default. With no
-  goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model
-  or root `model`; on a provider without a hard cap it runs timeout-only unless `agents.goal.allow_unpriced = false`.
-- Model precedence for coding: approved goal `model`, `agents.run.model`, legacy root `model`, provider
-  default. Legacy root model applies only to legacy Claude selection; never send an alias such as
-  `opus` to a different provider. An incompatible goal model must be changed and reapproved.
-- Judge: explicit `judge --model`, `agents.judge.model`, legacy Claude root model only when no new judge
-  selection is configured, provider default. Review: named-stage model, `agents.review.model`, provider
-  default. Named review stages also inherit `allow_unpriced` from `agents.review` unless explicitly
+  goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model;
+  on a provider without a hard cap it runs timeout-only unless `agents.goal.allow_unpriced = false`.
+- Model precedence for coding: approved goal `model`, `agents.run.model`, provider default. An
+  incompatible goal model must be changed and reapproved.
+- Judge: explicit `judge --model`, `agents.judge.model`, provider default. Review: named-stage model,
+  `agents.review.model`, provider default. Ship: `agents.ship.model`, provider default. Plan:
+  `plan --model`, `agents.plan.model`, provider default. Verifier: `[verifier] model`, the CLI default. Named review stages also inherit `allow_unpriced` from `agents.review` unless explicitly
   overridden; this flag is invalid for coding, whose spending policy requires goal approval.
   Provider selection follows the corresponding table, with named review overrides first.
 - Legacy `claude_path`, tools, safe mode and `env_pass` keep their existing Claude meanings, never become

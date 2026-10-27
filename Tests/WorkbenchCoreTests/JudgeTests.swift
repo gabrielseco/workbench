@@ -523,16 +523,16 @@ private final class LockedBox<T>: @unchecked Sendable {
         #expect(argv.contains("haiku"), "what was recorded is what was asked of claude")
     }
 
-    @Test func noJudgeModelRecordsNullAndALegacyModelStillApplies() async throws {
+    @Test func noJudgeModelRecordsNullAndTheRunModelIsNotInherited() async throws {
         var j = try await judged()
-        j.config.judgeModel = "sonnet"
+        j.config.agents.judge = AgentSelection(model: "sonnet")
         _ = try await j.fx.service.judge(
             id: j.id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", oneCriterion))"))
         let started = try #require(try j.fx.events(j.id).last { $0.kind == .judgeStarted })
-        #expect(started.data["model"] == "sonnet", "judge_model keeps its meaning while [agents.judge] chooses nothing")
+        #expect(started.data["model"] == "sonnet")
         var plain = try await judged()
-        plain.config.judgeModel = nil
-        plain.config.model = nil
+        plain.config.agents.judge = AgentSelection()
+        plain.config.agents.run = AgentSelection(model: "opus")
         _ = try await plain.fx.service.judge(
             id: plain.id, config: plain.config,
             environment: plain.environment("answer=\(try plain.file("a.json", oneCriterion))"))

@@ -9,7 +9,7 @@ public struct TurnRequest: Sendable, Equatable {
     public var budgetUSD: Decimal?
     public var prompt: String
     public var appendSystemPrompt: String?
-    /// The goal's model, which wins over the config's.
+    /// The resolved run model (`Config.resolvedRunAgent`); nil is the CLI's own default.
     public var model: String?
     /// `--effort` for the turn; nil leaves Claude's own setting.
     public var reasoningEffort: String?
@@ -73,7 +73,7 @@ extension Config {
         let session = turn.sessionID.uuidString.lowercased()
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
         if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
-        if let model = turn.model ?? model { args += ["--model", model] }
+        if let model = turn.model { args += ["--model", model] }
         if let effort = turn.reasoningEffort { args += ["--effort", effort] }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools

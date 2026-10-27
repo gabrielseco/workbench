@@ -78,6 +78,6 @@ three projects have settled on the same shape.
 
 ## Context
 
-- The default model is not set by `init`: `model` is commented out in `Config.exampleTOML`, so `claude` uses
-  its own default. `haiku` in the template is an example only. Setting `model = "opus"` in a project's
-  config pins every turn.
+- The default model is not set by `init`: `[agents.run] model` is commented out in `Config.exampleTOML`, so
+  `claude` uses its own default. The models in the template are examples only. Setting `model = "opus"` in a
+  project's `[agents.run]` pins every coding turn.

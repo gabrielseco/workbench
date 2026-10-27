@@ -57,6 +57,8 @@ BASE_SHA=$(g rev-parse "$BASE")
 wb "$T_WB" init >/dev/null
 cat >"$P/.workbench/config.toml" <<TOML
 default_budget_usd = $BUDGET_USD
+
+[agents.run]
 model = "$MODEL"
 
 [tools]

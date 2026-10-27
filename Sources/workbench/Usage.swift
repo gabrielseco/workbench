@@ -8,7 +8,7 @@ let workbenchUsage = """
       new <name|path> [--in <dir>] [--seed <path>]... [--nested]
                                  create a project: git repo on main with one empty commit, --seed copies into
                                  vendor/, .workbench/config.toml. Location: a path, else --in, else projects_dir
-                                 in ~/.workbench/config.toml (also claude_path, model); refuses a
+                                 in ~/.workbench/config.toml (also claude_path, [agents.run] model); refuses a
                                  non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run

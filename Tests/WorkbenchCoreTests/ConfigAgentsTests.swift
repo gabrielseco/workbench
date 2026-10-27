@@ -15,16 +15,56 @@ import Testing
         } catch let error as ConfigError { return error.problems.map(\.message) } catch { return ["\(error)"] }
     }
 
-    @Test func legacyDefaults() throws {
-        let config = try parse("model = \"opus\"\njudge_model = \"sonnet\"")
+    @Test func defaults() throws {
+        let config = try parse("")
         #expect(config.agents == AgentsConfig())
-        #expect(config.resolvedRunAgent() == ResolvedAgent(provider: .claude, model: "opus", allowUnpriced: false))
-        #expect(config.resolvedJudgeAgent() == ResolvedAgent(provider: .claude, model: "sonnet", allowUnpriced: false))
+        #expect(config.resolvedRunAgent() == ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
+        #expect(config.resolvedJudgeAgent() == ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
         #expect(config.resolvedReviewAgent() == ResolvedAgent(provider: .codex, model: nil, allowUnpriced: false))
+        #expect(config.resolvedShipAgent == ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
+        #expect(config.resolvedPlanAgent() == ResolvedAgent(provider: .claude, model: nil, allowUnpriced: false))
         #expect(config.resolvedGoalAgent == nil)
-        let bare = try parse("")
-        #expect(bare.resolvedJudgeAgent().model == nil && bare.resolvedRunAgent().model == nil)
-        #expect(try parse("model = \"opus\"").resolvedJudgeAgent().model == "opus", "the judge still falls back to model")
+        #expect(config.verifierModel == nil)
+    }
+
+    @Test func eachRoleTakesOnlyItsOwnTableModel() throws {
+        let config = try parse("[agents.run]\nmodel = \"opus\"")
+        #expect(config.resolvedRunAgent().model == "opus")
+        // No role inherits the coding model any more.
+        #expect(config.resolvedJudgeAgent().model == nil && config.resolvedShipAgent.model == nil)
+        #expect(config.resolvedPlanAgent().model == nil && config.resolvedGoalAgent == nil)
+        let verifier = try parse("[agents.run]\nmodel = \"opus\"\n[verifier]\nskill = \"s.md\"")
+        #expect(verifier.verifierModel == nil, "the verifier falls back to the CLI default, not to [agents.run]")
+        #expect(try parse("[verifier]\nskill = \"s.md\"\nmodel = \"sonnet\"").verifierModel == "sonnet")
+    }
+
+    @Test func shipAndPlanTables() throws {
+        let config = try parse(
+            "[agents.ship]\nprovider = \"claude\"\nmodel = \"haiku\"\nreasoning_effort = \"low\"\n"
+                + "[agents.plan]\nmodel = \"opus\"\nreasoning_effort = \"max\"")
+        #expect(config.agents.ship == AgentSelection(provider: .claude, model: "haiku", reasoningEffort: "low"))
+        #expect(
+            config.resolvedShipAgent
+                == ResolvedAgent(provider: .claude, model: "haiku", reasoningEffort: "low", allowUnpriced: false))
+        #expect(
+            config.resolvedPlanAgent()
+                == ResolvedAgent(provider: .claude, model: "opus", reasoningEffort: "max", allowUnpriced: false))
+        #expect(config.resolvedPlanAgent(modelFlag: "haiku").model == "haiku", "`plan --model` wins")
+        #expect(problems("[agents.ship]\nmodel = \"-x\"").contains { $0.contains("must be a model name") })
+        #expect(problems("[agents.plan]\nreasoning_effort = \"ultra\"").contains { $0.contains("'reasoning_effort'") })
+        #expect(problems("[agents.plan]\nbogus = 1").contains("unknown key 'bogus' in [agents.plan]"))
+    }
+
+    @Test(arguments: ["ship", "plan"])
+    func shipAndPlanRefuseCodexAndAllowUnpriced(table: String) throws {
+        let role = try #require(AgentRole(rawValue: table))
+        #expect(try parse("[agents.\(table)]\nprovider = \"claude\"").agents.selection(role).provider == .claude)
+        let codex = problems("[agents.\(table)]\nprovider = \"codex\"")
+        #expect(codex.count == 1)
+        #expect(codex.contains { $0.contains("[agents.\(table)]") && $0.contains("\"codex\"") && $0.contains("only \"claude\"") })
+        let unpriced = problems("[agents.\(table)]\nallow_unpriced = true")
+        #expect(unpriced.count == 1 && unpriced.contains { $0.contains("'allow_unpriced'") && $0.contains("[agents.\(table)]") })
+        #expect(problems("[agents.\(table)]\nallow_unpriced = false").count == 1)
     }
 
     @Test func providers() throws {
@@ -65,7 +105,7 @@ import Testing
             problems("[agents.judge]\nreasoning_effort = \"ultra\"")
                 .contains { $0.contains("'reasoning_effort'") && $0.contains("\"xhigh\"") })
         #expect(problems("[agents.judge]\nreasoning_effort = 3").contains { $0.contains("'reasoning_effort' must be a string") })
-        #expect(problems("[agents.plan]\nmodel = \"x\"").contains { $0.contains("unknown table [agents.plan]") })
+        #expect(problems("[agents.draft]\nmodel = \"x\"").contains { $0.contains("unknown table [agents.draft]") })
         #expect(problems("[agents.judge]\nbogus = 1").contains("unknown key 'bogus' in [agents.judge]"))
         #expect(problems("[agents.judge]\nprovider = \"gemini\"").contains { $0.contains("must be \"claude\" or \"codex\"") })
         #expect(problems("[agents.judge]\nmodel = \"-x\"").contains { $0.contains("must be a model name") })
@@ -114,18 +154,17 @@ import Testing
     }
 
     @Test func resolution() throws {
-        var config = try parse("model = \"opus\"\njudge_model = \"sonnet\"")
-        // The judge: a flag, then [agents.judge], then the legacy keys only while [agents.judge] chooses nothing.
+        var config = try parse("[agents.judge]\nmodel = \"sonnet\"")
+        // The judge: a flag, then [agents.judge], then the provider's default.
         #expect(config.resolvedJudgeAgent(modelFlag: "haiku").model == "haiku")
-        config.agents.judge = AgentSelection(model: "fast")
-        #expect(config.resolvedJudgeAgent().model == "fast")
+        #expect(config.resolvedJudgeAgent().model == "sonnet")
         config.agents.judge = AgentSelection(provider: .claude)
-        #expect(config.resolvedJudgeAgent().model == nil, "choosing a provider replaces the legacy models")
+        #expect(config.resolvedJudgeAgent().model == nil)
         config.agents.judge = AgentSelection(allowUnpriced: true)
-        #expect(config.resolvedJudgeAgent().model == "sonnet" && config.resolvedJudgeAgent().allowUnpriced)
-        // A legacy alias never goes to another provider.
+        #expect(config.resolvedJudgeAgent().model == nil && config.resolvedJudgeAgent().allowUnpriced)
         config.agents.judge = AgentSelection(provider: .codex)
         #expect(config.resolvedJudgeAgent().model == nil)
+        // Run: the goal's model, then [agents.run], then the provider's default.
         config.agents.run = AgentSelection(provider: .codex)
         #expect(config.resolvedRunAgent().model == nil && config.resolvedRunAgent(goalModel: "g").model == "g")
         config.agents.run = AgentSelection(model: "run-model")
@@ -183,8 +222,6 @@ import Testing
         let config = try parse("[agents.run]\nprovider = \"codex\"")
         #expect(config.resolvedRunAgent().provider == .codex)
         #expect(config.resolvedRunAgent().model == nil)
-        // The legacy root `model` is a Claude alias and never reaches Codex.
-        #expect(try parse("model = \"opus\"\n[agents.run]\nprovider = \"codex\"").resolvedRunAgent().model == nil)
     }
 
     @Test func runModelAndEffortOnEitherProviderAreRead() throws {

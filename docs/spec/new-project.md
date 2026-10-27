@@ -13,7 +13,7 @@ workbench new <name|path> [--in <dir>] [--seed <path>]... [--nested]
 2. With `--seed`, each path copied (never linked) to `vendor/<basename>/` and committed as a second commit.
    `.git` and `.workbench` inside a seed are not copied. A seed is bounded: 10,000 files, 100 MB.
 3. `.workbench/` in `.git/info/exclude`, and `.workbench/config.toml` from the same template as `init`, with
-   `claude_path` and `model` filled in when the global config sets them.
+   `claude_path` filled in, and an `[agents.run]` table with its `model`, when the global config sets them.
 
 Claude cannot read outside a thread's worktree (the S3 spikes), which is why seeds are copied in.
 
@@ -51,13 +51,16 @@ the two share it; the global file is only ever read by `new`, `open` (its `edito
 ```toml
 projects_dir = "~/code"   # absolute, or starting with ~/
 claude_path  = "claude"   # written into new projects' config
-model        = "opus"     # written into new projects' config
 editor       = "cursor"   # `workbench open` when neither --editor nor the project names one
+
+[agents.run]
+model = "opus"            # written into new projects' config as their [agents.run] model
 ```
 
-Only these four keys. Anything else (including `check_command`, `setup_command`, `[tools]`) is an
-`invalid-config` error naming the file and the key, because those depend on the stack and belong to the
-project. A run reads the project's own config, so editing the global file never changes an existing project;
+Only these three keys and `[agents.run]` with only `model`. Anything else (including `check_command`, `setup_command`,
+`[tools]`, another table or another key in `[agents.run]`) is an `invalid-config` error naming the file and the key,
+because those depend on the stack and belong to the project. A root `model`, which this file used to take, is refused
+with a message that says it is now `model` in `[agents.run]`. A run reads the project's own config, so editing the global file never changes an existing project;
 `editor` is a personal setting that only `open` uses (see `goal-file.md`, "Tool permissions").
 
 ## No remote

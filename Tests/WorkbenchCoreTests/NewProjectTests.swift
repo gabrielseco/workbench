@@ -38,11 +38,26 @@ private final class CopyCounter: @unchecked Sendable {
             """
             projects_dir = "~/code"
             claude_path = "/opt/bin/claude"
+
+            [agents.run]
             model = "haiku"
             """, home: "/Users/x")
         #expect(config.projectsDirectory?.path == "/Users/x/code")
         #expect(config.claudePath == "/opt/bin/claude")
         #expect(config.model == "haiku")
+    }
+
+    @Test func aRootModelIsRefusedAndNamesItsTable() throws {
+        let error = try #require(throws: ConfigError.self) { try GlobalConfig.parse("model = \"haiku\"\n") }
+        #expect(error.problems.count == 1)
+        let problem = try #require(error.problems.first)
+        #expect(problem.line == 1 && problem.code == .unknownKey)
+        #expect(problem.message.contains("'model'") && problem.message.contains("[agents.run]"))
+    }
+
+    @Test func theRunTableTakesOnlyTheModelAndNoOtherTableIsAllowed() {
+        #expect(throws: ConfigError.self) { try GlobalConfig.parse("[agents.run]\nprovider = \"codex\"\n") }
+        #expect(throws: ConfigError.self) { try GlobalConfig.parse("[agents.judge]\nmodel = \"haiku\"\n") }
     }
 
     @Test func aRelativeProjectsDirIsRefused() throws {
@@ -64,7 +79,7 @@ private final class CopyCounter: @unchecked Sendable {
     }
 
     @Test func aBadModelIsAnInvalidValue() throws {
-        #expect(throws: ConfigError.self) { try GlobalConfig.parse("model = \"--evil\"") }
+        #expect(throws: ConfigError.self) { try GlobalConfig.parse("[agents.run]\nmodel = \"--evil\"") }
     }
 
     @Test func defaultLocationIsADotDirectoryInHome() {
@@ -78,8 +93,13 @@ private final class CopyCounter: @unchecked Sendable {
         let text = Config.exampleTOML(claudePath: "/opt/claude \"x\"", model: "opus")
         let config = try Config.parse(text)
         #expect(config.claudePath == "/opt/claude \"x\"")
-        #expect(config.model == "opus")
-        #expect(try Config.parse(Config.exampleTOML(claudePath: nil, model: nil)).model == nil)
+        #expect(config.agents.run.model == "opus" && config.resolvedRunAgent().model == "opus")
+        #expect(text.contains("\n[agents.run]"))
+        // Only the run's model is set: every other table's example stays a comment.
+        #expect(config.agents.judge == AgentSelection() && config.agents.ship == AgentSelection())
+        #expect(config.agents.plan == AgentSelection())
+        let plain = try Config.parse(Config.exampleTOML(claudePath: nil, model: nil))
+        #expect(plain.agents.run.model == nil && !Config.exampleTOML(claudePath: nil, model: nil).contains("\n[agents."))
     }
 }
 
@@ -99,7 +119,7 @@ private final class CopyCounter: @unchecked Sendable {
         #expect(try await git.run(["ls-tree", "-r", "HEAD"], in: root).stdout.isEmpty)
         #expect(try await git.run(["status", "--porcelain"], in: root).stdout.isEmpty)
         let config = try Config.load(from: Project(root: root).configURL)
-        #expect(config.model == nil)
+        #expect(config.agents.run.model == nil)
     }
 
     @Test func defaultsFromTheGlobalConfigLandInTheProjectConfig() async throws {
@@ -109,7 +129,7 @@ private final class CopyCounter: @unchecked Sendable {
                 name: "p", parent: parent, defaults: GlobalConfig(claudePath: "/opt/claude", model: "haiku")))
         let config = try Config.load(from: Project(root: root).configURL)
         #expect(config.claudePath == "/opt/claude")
-        #expect(config.model == "haiku")
+        #expect(config.agents.run.model == "haiku")
     }
 
     @Test func badNamesAreRefusedBeforeAnythingIsCreated() async throws {
