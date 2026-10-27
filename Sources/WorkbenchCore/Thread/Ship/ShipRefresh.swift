@@ -51,29 +51,32 @@ public struct PRRefreshResult: Sendable, Equatable {
 extension ThreadService {
     /// Asks a read-only turn whether the pull request's text still matches the thread's work. Like
     /// `describePR` it never throws for a failed turn: the reason comes back as `fallback`, because shipping
-    /// must not depend on it. Writes `pr.refreshed` with `stage: proposed` and how it went.
+    /// must not depend on it. Writes `pr.refreshed` with `stage: proposed` and how it went. The turn runs as the
+    /// description turn does (`runPRTurn`); `attach` is called with its process, so the caller can stop it.
     public func proposePRRefresh(
         plan: ShipPlan, config: Config, environment: [String: String] = ProcessInfo.processInfo.environment,
-        timeout: TimeInterval = PRDescriber.timeout
+        timeout: TimeInterval = PRDescriber.timeout, attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async throws -> PRRefreshResult {
         guard let pr = plan.pullRequest else {
-            return try await recordProposal(plan, fail: "this thread has no pull request to update")
+            return try await recordProposal(plan, fail: "this thread has no pull request to update", config: config)
         }
         guard let current = pr.text else {
-            return try await recordProposal(plan, fail: "GitHub did not return the pull request's text")
+            return try await recordProposal(plan, fail: "GitHub did not return the pull request's text", config: config)
         }
         let events = (try? EventLogReader.read(at: project.eventsURL(plan.id)))?.events ?? []
         let goal: Goal
         do {
             goal = try GoalFile.parse(String(contentsOf: project.goalURL(plan.id), encoding: .utf8)).goal
-        } catch { return try await recordProposal(plan, fail: "the goal could not be read") }
+        } catch { return try await recordProposal(plan, fail: "the goal could not be read", config: config) }
         let state = ThreadState.derive(from: events, id: plan.id)
 
         // What the thread added, from the commit it was cut at; the branch's own name can move.
         let cutAt = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue ?? plan.base
         let diff = try? await git.run(["diff", "--no-ext-diff", "--no-color", "\(cutAt)...\(plan.head)"], in: plan.worktree)
         let log = try? await git.run(["log", "--format=%s", "\(cutAt)..\(plan.head)"], in: plan.worktree)
-        guard let diff, diff.succeeded else { return try await recordProposal(plan, fail: "the diff could not be read") }
+        guard let diff, diff.succeeded else {
+            return try await recordProposal(plan, fail: "the diff could not be read", config: config)
+        }
         let cut = diff.stdout.utf8.count > PRDescriber.diffLimit
         let diffText = cut ? String(decoding: diff.stdout.utf8.prefix(PRDescriber.diffLimit), as: UTF8.self) : diff.stdout
 
@@ -81,37 +84,32 @@ extension ThreadService {
             goal: goal, notes: state.review.notes.map(\.text), turnResult: state.review.turnResult,
             commits: (log?.stdout ?? "").split(separator: "\n").map(String.init), diff: diffText, diffTruncated: cut,
             check: state.review.check, current: current)
-        let arguments = PRDescriber.arguments(config: config, prompt: PRRefresher.prompt(for: input))
-        let shown = PRDescriber.displayArguments(arguments)
-
-        guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
-            let why = PRDescribeError.claudeNotFound(config.claudePath).description
-            return try await recordProposal(plan, fail: why, argv: shown)
-        }
-        let runner = GitRunner(executable: claude, environment: config.childEnvironment(from: environment), timeout: timeout)
-        let result: GitResult
-        do { result = try await runner.run(arguments, in: plan.worktree) } catch GitError.timedOut(_, let seconds) {
-            return try await recordProposal(plan, fail: "claude did not answer within \(Int(seconds))s", argv: shown)
-        } catch { return try await recordProposal(plan, fail: "claude could not be started", argv: shown) }
-        guard result.succeeded else {
-            return try await recordProposal(plan, fail: "claude exited with status \(result.status)", argv: shown)
+        let turn = await runPRTurn(
+            id: plan.id, worktree: plan.worktree, prompt: PRRefresher.prompt(for: input), config: config,
+            environment: environment, timeout: timeout, attach: attach)
+        let shown = turn.argv
+        guard let text = turn.text else {
+            return try await recordProposal(plan, fail: turn.failure ?? "no answer", argv: shown, config: config)
         }
 
         let proposal: PRRefreshProposal
         do {
-            let refresh = try PRRefresher.parse(output: result.stdout, current: current)
+            let refresh = try PRRefresher.parse(answer: text, current: current)
             proposal = try Self.proposal(number: pr.number, current: current, refresh: refresh, environment: environment)
-        } catch { return try await recordProposal(plan, fail: "\(error)", argv: shown) }
+        } catch { return try await recordProposal(plan, fail: "\(error)", argv: shown, config: config) }
 
         try await withLog(plan.id) { log in
             try await log.append(
                 .prRefreshed,
-                data: [
-                    "stage": "proposed", "ok": true, "number": .int(proposal.number),
-                    "title_changed": .bool(proposal.titleChanged),
-                    "sections": .array(proposal.changes.map { .string($0.heading) }),
-                    "argv": .array(shown.map { .string($0) }),
-                ])
+                data: .object(
+                    Self.agentFields(
+                        config.resolvedShipAgent,
+                        [
+                            "stage": "proposed", "ok": true, "number": .int(proposal.number),
+                            "title_changed": .bool(proposal.titleChanged),
+                            "sections": .array(proposal.changes.map { .string($0.heading) }),
+                            "argv": .array(shown.map { .string($0) }),
+                        ])))
         }
         return PRRefreshResult(proposal: proposal, fallback: nil)
     }
@@ -178,15 +176,20 @@ extension ThreadService {
         }
     }
 
-    private func recordProposal(_ plan: ShipPlan, fail reason: String, argv: [String] = []) async throws -> PRRefreshResult {
+    private func recordProposal(
+        _ plan: ShipPlan, fail reason: String, argv: [String] = [], config: Config
+    ) async throws -> PRRefreshResult {
         let reason = Self.withoutCredentials(PRBodyBuilder.scrub(reason))
         try await withLog(plan.id) { log in
             try await log.append(
                 .prRefreshed,
-                data: [
-                    "stage": "proposed", "ok": false, "reason": .string(reason),
-                    "argv": .array(argv.map { .string($0) }),
-                ])
+                data: .object(
+                    Self.agentFields(
+                        config.resolvedShipAgent,
+                        [
+                            "stage": "proposed", "ok": false, "reason": .string(reason),
+                            "argv": .array(argv.map { .string($0) }),
+                        ])))
         }
         return PRRefreshResult(proposal: nil, fallback: reason)
     }

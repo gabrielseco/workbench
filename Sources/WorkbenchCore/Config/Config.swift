@@ -421,10 +421,10 @@ public struct Config: Sendable, Equatable {
         # [agents.judge]                   # unset keeps the defaults: run, judge, ship and plan on claude,
         # provider = "claude"              # review on codex, goal drafting off
         # model = "sonnet"                 # `workbench judge --model` wins
-        # [agents.ship]                    # the PR description and its refresh (claude only for now)
+        # [agents.ship]                    # the PR description and its refresh: no tools, the prompt is all it reads
         # model = "haiku"
-        # [agents.plan]                    # `workbench plan` (claude only for now); `plan --model` wins
-        # model = "opus"
+        # [agents.plan]                    # `workbench plan`: reads a checkout of the base; `plan --model` wins
+        # model = "opus"                   # ship and plan also take provider = "codex" and allow_unpriced, as judge does
         # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
         # allow_unpriced = true            # the default: codex (no dollar cap) runs on its timeout; false refuses it
         #                                  # (never for [agents.run], whose spending the goal approves)

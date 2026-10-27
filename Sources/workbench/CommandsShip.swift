@@ -75,7 +75,13 @@ extension Commands {
         if !noDescribe && !plan.updatesExistingBranch {
             if let config = try? Config.load(from: ctx.project.configURL) {
                 out("describing the change...")
-                let described = try await ctx.service.describePR(plan: plan, config: config)
+                // Ctrl-C ends the description turn; ship goes on with the goal-based description.
+                let holder = RunHolder()
+                let signals = installStopHandlers(what: "the description turn") { holder.stop() }
+                let described = try await ctx.service.describePR(
+                    plan: plan, config: config, attach: { holder.attach($0) })
+                signals.forEach { $0.cancel() }
+                restoreDefaultSignals()
                 description = described.description
                 if let why = described.fallback {
                     out("could not describe the change (\(why)); using the goal-based description")

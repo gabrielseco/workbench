@@ -10,7 +10,12 @@ extension Commands {
             return nil
         }
         out("checking whether the pull request text still matches the work...")
-        let result = try await ctx.service.proposePRRefresh(plan: plan, config: config)
+        // Ctrl-C ends the refresh turn; the pull request text is then left as it is.
+        let holder = RunHolder()
+        let signals = installStopHandlers(what: "the refresh turn") { holder.stop() }
+        let result = try await ctx.service.proposePRRefresh(plan: plan, config: config, attach: { holder.attach($0) })
+        signals.forEach { $0.cancel() }
+        restoreDefaultSignals()
         if let why = result.fallback {
             out("could not check the pull request text (\(why)); it is left as is")
             return nil

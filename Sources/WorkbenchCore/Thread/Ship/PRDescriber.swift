@@ -99,15 +99,23 @@ public enum PRDescriber {
 
     /// The argv for the describing turn: no tools, its own session, its own budget. The prompt follows `--`.
     public static func arguments(config: Config, prompt: String, sessionID: UUID = UUID()) -> [String] {
+        let agent = config.resolvedShipAgent
+        return arguments(
+            safeMode: config.safeMode, model: agent.model, effort: agent.reasoningEffort, budget: budgetUSD, prompt: prompt,
+            sessionID: sessionID)
+    }
+
+    static func arguments(
+        safeMode: Bool, model: String?, effort: String?, budget: Decimal, prompt: String, sessionID: UUID = UUID()
+    ) -> [String] {
         var args = [
             "-p", "--output-format", "json", "--permission-prompts", "none", "--restricted",
             "--session-id", sessionID.uuidString.lowercased(),
-            "--max-budget-usd", NSDecimalNumber(decimal: budgetUSD).stringValue,
+            "--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue,
         ]
-        if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
-        let agent = config.resolvedShipAgent
-        if let model = agent.model { args += ["--model", model] }
-        if let effort = agent.reasoningEffort { args += ["--effort", effort] }
+        if safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
+        if let model { args += ["--model", model] }
+        if let effort { args += ["--effort", effort] }
         args += ["--tools", "", "--", prompt]
         return args
     }
@@ -123,9 +131,19 @@ public enum PRDescriber {
     /// Reads `claude -p --output-format json`: an object whose `result` holds the model's text, which is
     /// itself the JSON object asked for.
     public static func parse(output: String) throws -> PRDescription {
+        try parse(answer: claudeResult(output))
+    }
+
+    /// The `result` text of `claude -p --output-format json`.
+    static func claudeResult(_ output: String) throws -> String {
         guard let outer = object(from: output) else { throw PRDescribeError.invalidOutput("not JSON") }
         if outer["is_error"] as? Bool == true { throw PRDescribeError.claudeFailed("claude reported an error") }
         guard let text = outer["result"] as? String else { throw PRDescribeError.invalidOutput("no result") }
+        return text
+    }
+
+    /// Reads the model's own text, from any provider: the JSON object asked for.
+    public static func parse(answer text: String) throws -> PRDescription {
         guard let json = object(from: text) else { throw PRDescribeError.invalidOutput("the answer is not a JSON object") }
 
         guard let rawTitle = json["title"] as? String else { throw PRDescribeError.invalidOutput("no title") }

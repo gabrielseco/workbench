@@ -73,6 +73,8 @@ extension ThreadService {
     /// Closes a plan left open by a process that died, and ends what it left behind (see `Plan.recoverOrphan`).
     func closeOrphanedPlan(id: String, log: EventLogWriter) async throws {
         try await Plan.recoverOrphan(log: log, folder: planDirectory(id), repoRoot: project.root, git: git)
+        // A Codex description turn has no open event to recover; its folder names the Workbench that made it.
+        prTurnScratch(id).clearIfAbandoned()
         try await closeOrphanedVerifier(id: id, log: log)
     }
 
@@ -84,7 +86,7 @@ extension ThreadService {
     /// same thread at once: the second is refused as `busy`.
     ///
     /// - Parameters:
-    ///   - agent: who answers; Claude unless a test or another provider says otherwise.
+    ///   - agent: who answers; the provider `[agents.plan]` names unless a test says otherwise.
     ///   - attach: called with the running process, so the caller can stop it (Ctrl-C).
     public func plan(
         id: String, config: Config, again: Bool = false, budget: Decimal = Plan.budgetUSD, model: String? = nil,
@@ -93,19 +95,19 @@ extension ThreadService {
     ) async throws -> PlanResult {
         if let model, !SafeNames.isModelName(model) { throw PlanRefusal.invalidModel(model) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
-        let chosen = agent ?? ClaudeReadOnlyAgent(config: config, environment: environment)
         do {
             return try await withLog(id) { log in
                 try await self.planLocked(
-                    id: id, log: log, config: config, again: again, budget: budget, model: model, agent: chosen,
-                    timeout: timeout, attach: attach)
+                    id: id, log: log, config: config, again: again, budget: budget, model: model, agent: agent,
+                    environment: environment, timeout: timeout, attach: attach)
             }
         } catch EventLogError.alreadyOpen { throw PlanRefusal.busy }
     }
 
     private func planLocked(
         id: String, log: EventLogWriter, config: Config, again: Bool, budget: Decimal, model: String?,
-        agent: ReadOnlyAgent, timeout: TimeInterval, attach: @Sendable (ProcessRun) -> Void
+        agent given: ReadOnlyAgent?, environment: [String: String], timeout: TimeInterval,
+        attach: @Sendable (ProcessRun) -> Void
     ) async throws -> PlanResult {
         // `withLog` has already closed a plan whose process died, before any refusal below.
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
@@ -122,6 +124,7 @@ extension ThreadService {
         }
         if planned && !again { throw PlanRefusal.alreadyPlanned }
         let turn = ThreadState.derive(from: events, id: id).lastTurn
+        let planAgent = config.resolvedPlanAgent(modelFlag: model)
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         let recorded = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
@@ -132,13 +135,13 @@ extension ThreadService {
         }
         guard let commit = resolved else {
             return try await recordPlan(
-                log, turn: turn, hash: hash, base: nil, failure: baseProblem ?? "the base commit is unknown", argv: nil)
+                log, agent: planAgent, turn: turn, hash: hash, base: nil,
+                failure: baseProblem ?? "the base commit is unknown", argv: nil)
         }
 
-        let planAgent = config.resolvedPlanAgent(modelFlag: model)
         let request = ReadOnlyRequest(
             prompt: "", workingDirectory: planDirectory(id), model: planAgent.model, budget: budget, timeout: timeout,
-            reasoningEffort: planAgent.reasoningEffort)
+            reasoningEffort: planAgent.reasoningEffort, scratch: planScratch(id))
         var loaded: ProjectInstructions?
         if config.projectInstructions {
             loaded = await ProjectInstructions.load(git: git, repo: project.root, commit: commit)
@@ -146,9 +149,21 @@ extension ThreadService {
         let prompt = Plan.prompt(for: PlanInput(goal: goal, baseCommit: commit, instructions: loaded))
         var asked = request
         asked.prompt = prompt
+        let agent: ReadOnlyAgent
+        if let given {
+            agent = given
+        } else {
+            switch Self.readOnlyAgent(role: .plan, agent: planAgent, config: config, cap: budget, environment: environment) {
+            case .success(let chosen): agent = chosen
+            case .failure(let refusal):
+                return try await recordPlan(
+                    log, agent: planAgent, turn: turn, hash: hash, base: commit, failure: refusal.message, argv: nil)
+            }
+        }
         let shown = agent.shownArguments(for: asked)
         if let why = agent.unavailable() {
-            return try await recordPlan(log, turn: turn, hash: hash, base: commit, failure: why, argv: shown)
+            return try await recordPlan(
+                log, agent: planAgent, turn: turn, hash: hash, base: commit, failure: why, argv: shown)
         }
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
@@ -159,15 +174,20 @@ extension ThreadService {
         try ThreadStore(project: project).requireNoDoctor()
         try await log.append(
             .planStarted, turn: turn,
-            data: [
-                "argv": .array(shown.map { .string($0) }), "base_commit": .string(commit), "goal_hash": .string(hash),
-            ])
+            data: .object(
+                Self.agentFields(
+                    planAgent,
+                    [
+                        "argv": .array(shown.map { .string($0) }), "base_commit": .string(commit),
+                        "goal_hash": .string(hash),
+                    ])))
 
         let folder = planDirectory(id)
         let checkout = folder.appendingPathComponent("checkout")
         // Anything left in the folder was left by a plan that is already closed (above); ended again to be sure.
         OrphanSweeper.sweep(inside: folder)
         await manager.removeDetached(at: checkout)
+        planScratch(id).clear()
         let began = Date()
         var answer: ReadOnlyAnswer
         do {
@@ -179,6 +199,7 @@ extension ThreadService {
                 text: nil, costUSD: nil, failure: "the base commit could not be checked out: \(error)")
         }
         OrphanSweeper.sweep(inside: folder)
+        planScratch(id).clear()
         var warning: String?
         if !(await manager.removeDetached(at: checkout)) {
             warning = "the checkout of the base commit could not be removed; the next plan clears it"
@@ -187,13 +208,13 @@ extension ThreadService {
 
         guard let raw = answer.text else {
             return try await recordPlan(
-                log, turn: turn, hash: hash, base: commit, cost: answer.costUSD, failure: answer.failure ?? "no answer",
-                argv: shown, durationMs: elapsed, warning: warning)
+                log, agent: planAgent, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
+                failure: answer.failure ?? "no answer", argv: shown, durationMs: elapsed, warning: warning)
         }
         guard let stored = Plan.stored(from: raw) else {
             return try await recordPlan(
-                log, turn: turn, hash: hash, base: commit, cost: answer.costUSD, failure: "the plan was empty",
-                argv: shown, durationMs: elapsed, warning: warning)
+                log, agent: planAgent, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
+                failure: "the plan was empty", argv: shown, durationMs: elapsed, warning: warning)
         }
         let ref = "plans/plan-\(Self.nextPlanNumber(events)).md"
         let url = project.threadDirectory(id).appendingPathComponent(ref)
@@ -203,18 +224,18 @@ extension ThreadService {
             try stored.text.write(to: url, atomically: true, encoding: .utf8)
         } catch {
             return try await recordPlan(
-                log, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
+                log, agent: planAgent, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
                 failure: "the plan could not be written: \(error.localizedDescription)", argv: shown, durationMs: elapsed,
                 warning: warning)
         }
         return try await recordPlan(
-            log, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
+            log, agent: planAgent, turn: turn, hash: hash, base: commit, cost: answer.costUSD,
             stored: SavedPlan(text: stored.text, truncated: stored.truncated, ref: ref), argv: shown, durationMs: elapsed,
             warning: warning)
     }
 
     private func recordPlan(
-        _ log: EventLogWriter, turn: Int, hash: String, base: String?, cost: Double? = nil,
+        _ log: EventLogWriter, agent: ResolvedAgent, turn: Int, hash: String, base: String?, cost: Double? = nil,
         stored: SavedPlan? = nil, failure: String? = nil, argv: [String]?,
         durationMs: Int? = nil, warning: String? = nil
     ) async throws -> PlanResult {
@@ -232,7 +253,7 @@ extension ThreadService {
         let reason = failure.map { Self.withoutCredentials(PRBodyBuilder.scrub($0)) }
         if let reason { data["reason"] = .string(reason) }
         if let warning { data["warning"] = .string(warning) }
-        try await log.append(.planEnded, turn: turn, data: .object(data))
+        try await log.append(.planEnded, turn: turn, data: .object(Self.agentFields(agent, data)))
         return PlanResult(
             text: stored?.text, ref: stored?.ref, costUSD: cost, truncated: stored?.truncated ?? false, failure: reason,
             warning: warning)
