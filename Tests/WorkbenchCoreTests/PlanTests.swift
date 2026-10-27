@@ -326,6 +326,7 @@ let aPlan = "## Approach\n\nAdd a greeting to a.txt.\n\n## Files\n\n- a.txt: add
         let ends = p.events.filter { $0.kind == .planEnded }
         #expect(ends.count == 2 && ends[0].data["reason"] == "interrupted" && ends[0].data["synthetic"] == true)
         #expect(ends[0].data["goal_hash"] == "h" && ends[1].data["ok"] == true)
+        #expect(ends[0].data["provider"] == nil && ends[0].data["model"] == nil, "a start without them recovers as before")
         #expect(try p.fx.contents(p.id).isHealthy)
     }
 

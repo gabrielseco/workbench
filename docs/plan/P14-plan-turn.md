@@ -91,14 +91,14 @@ typealias ReadOnlyAgent = (ReadOnlyRequest) async -> ReadOnlyAnswer
 ```
 
 The first implementation is Claude (argv, the `--output-format json` envelope, the spawn and sweep taken from
-`ThreadService+Judge`). P9 can put Codex behind the same function (answer file, capacity retry as `pr-review`
-does) and let `[agents.plan]` (which exists, Claude only) choose it, with no change to what is below it. The judge and the describe
-turn are **not** moved onto it in this phase.
+`ThreadService+Judge`). Codex is the second, `CodexReadOnlyAgent` (the judge's read-only invocation, its answer
+file beside the checkout), and `[agents.plan]` chooses between them. The PR description and refresh turns
+were later moved onto the same seam with no tools, chosen by `[agents.ship]`; the judge is not on it.
 
 ## Config and command
 
 ```toml
-# [agents.plan]             # the plan turn; claude only for now
+# [agents.plan]             # the plan turn; provider = "claude" (default) or "codex"; allow_unpriced as for the judge
 # model = "opus"            # --model; `plan --model` wins; unset = the provider's default
 # reasoning_effort = "high" # --effort; unset = Claude's own setting
 ```

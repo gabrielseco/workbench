@@ -64,15 +64,36 @@ import Testing
     }
 
     @Test(arguments: ["ship", "plan"])
-    func shipAndPlanRefuseCodexAndAllowUnpriced(table: String) throws {
+    func shipAndPlanTakeCodexAndAllowUnpriced(table: String) throws {
         let role = try #require(AgentRole(rawValue: table))
+        func resolved(_ config: Config) -> ResolvedAgent {
+            role == .ship ? config.resolvedShipAgent : config.resolvedPlanAgent()
+        }
         #expect(try parse("[agents.\(table)]\nprovider = \"claude\"").agents.selection(role).provider == .claude)
-        let codex = problems("[agents.\(table)]\nprovider = \"codex\"")
-        #expect(codex.count == 1)
-        #expect(codex.contains { $0.contains("[agents.\(table)]") && $0.contains("\"codex\"") && $0.contains("only \"claude\"") })
-        let unpriced = problems("[agents.\(table)]\nallow_unpriced = true")
-        #expect(unpriced.count == 1 && unpriced.contains { $0.contains("'allow_unpriced'") && $0.contains("[agents.\(table)]") })
-        #expect(problems("[agents.\(table)]\nallow_unpriced = false").count == 1)
+        let codex = try parse("[agents.\(table)]\nprovider = \"codex\"\nmodel = \"gpt-6\"\nreasoning_effort = \"high\"")
+        #expect(
+            resolved(codex)
+                == ResolvedAgent(provider: .codex, model: "gpt-6", reasoningEffort: "high", allowUnpriced: false))
+        let allowed = try parse("[agents.\(table)]\nprovider = \"codex\"\nallow_unpriced = true")
+        #expect(resolved(allowed).allowUnpriced && !resolved(allowed).forbidsUnpriced)
+        let forbidden = try parse("[agents.\(table)]\nprovider = \"codex\"\nallow_unpriced = false")
+        #expect(resolved(forbidden).forbidsUnpriced, "accepted at load, refused when the turn would run")
+        #expect(problems("[agents.\(table)]\nallow_unpriced = 1").contains { $0.contains("must be true or false") })
+        #expect(problems("[agents.\(table)]\nprovider = \"gemini\"").count == 1)
+    }
+
+    @Test(arguments: [AgentRole.ship, .plan])
+    func codexWithAllowUnpricedFalseIsRefusedLikeTheJudge(role: AgentRole) throws {
+        let config = try parse("[agents.\(role.rawValue)]\nprovider = \"codex\"\nallow_unpriced = false")
+        let agent = role == .ship ? config.resolvedShipAgent : config.resolvedPlanAgent()
+        let refused = ThreadService.readOnlyAgent(role: role, agent: agent, config: config, cap: 1, environment: [:])
+        guard case .failure(let why) = refused else { Issue.record("expected a refusal"); return }
+        #expect(why.message.contains("allow_unpriced = false") && why.message.contains("[agents.\(role.rawValue)]"))
+        let chosen = try parse("[agents.\(role.rawValue)]\nprovider = \"codex\"")
+        let ok = ThreadService.readOnlyAgent(
+            role: role, agent: role == .ship ? chosen.resolvedShipAgent : chosen.resolvedPlanAgent(), config: chosen,
+            cap: 1, environment: [:])
+        #expect((try? ok.get()) is CodexReadOnlyAgent, "choosing Codex is the consent")
     }
 
     @Test func providers() throws {

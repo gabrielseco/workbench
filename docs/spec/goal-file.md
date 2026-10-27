@@ -76,7 +76,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   goal (request, criteria, out of scope), the project's instructions as they were at the base commit, and a
   throwaway detached checkout of the base commit as its working directory (`--restricted` makes that the only place
   it can read; it is removed on every ending). Its tools are `Read`, `Grep` and `Glob`: no `Bash`, `Edit` or `Write`,
-  and no `--permission-mode`. It answers in Markdown (approach, files, order, risks). The text is trimmed, stripped
+  and no `--permission-mode`. (With `[agents.plan] provider = "codex"` it is a read-only `codex exec` instead: its
+  sandbox blocks writes, not reads, so it can read files outside the checkout; `doctor` says so.) It answers in Markdown (approach, files, order, risks). The text is trimmed, stripped
   of machine paths and credentials, cut at 16 KB with a marker, and kept as `plans/plan-N.md` in the thread's folder.
   It needs an approved goal (a draft or a changed one is refused before anything is spent), runs once per approved
   goal unless `--again`, has its own budget (default $1.00) and timeout (10 minutes), and opens no numbered turn.
@@ -294,11 +295,11 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # executable = "/opt/homebrew/bin/codex"
 # [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
 # model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
-# [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run, ship, plan)
+# [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run)
 # model = "haiku"                       # also [review.stage.<name>] provider, model and allow_unpriced
-# [agents.ship]                         # the PR description and its refresh; claude only for now
+# [agents.ship]                         # the PR description and its refresh, from the prompt (codex can still read files)
 # model = "haiku"
-# [agents.plan]                         # `workbench plan`; claude only for now; `plan --model` wins
+# [agents.plan]                         # `workbench plan`; `plan --model` wins
 # model = "opus"
 # [run]                                 # P16: how the verifier's app is started; Workbench runs it and stops it
 # command = "npm run dev:mock"          # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
@@ -498,8 +499,14 @@ path run without a shell; `[providers.claude]` and `claude_path` name the same e
 model is chosen in one of these tables: the root keys `model`, `judge_model`, `describe_model` and `plan_model` were
 removed, and a config (or the global `~/.workbench/config.toml`) that still has one is refused when it loads, with a
 message that names the key and its replacement (`model` in `[agents.run]`, `[agents.judge]`, `[agents.ship]` and
-`[agents.plan]` respectively). `ship` and `plan` run on Claude only for now: `provider = "codex"` in their table is
-refused at load, saying that turn does not support it yet, and so is `allow_unpriced`, as for `[agents.run]`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
+`[agents.plan]` respectively). `ship` and `plan` run on either provider. On Codex the
+plan turn reads its checkout of the base read-only, and the description and refresh turns run in an empty folder outside the
+repository, the prompt their only input; with no dollar cap the turn is bounded by its timeout, and `allow_unpriced = false`
+refuses it, as for the judge. A Codex turn cannot be made tool-free: its read-only sandbox refuses writes, not reads, so a
+Codex description, refresh or plan turn can read files outside its folder (anything the user can read), and the
+description answer goes into the pull request without being scrubbed. This is an accepted limit, not a confinement:
+`workbench doctor` notes it (`unconfined_reads`) for `[agents.ship]` and `[agents.plan]` on Codex, and `ship` prints the
+whole title and body a Codex turn wrote before it pushes, also with `--yes`. `reasoning_effort` is `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`: Claude gets
 `--effort`, Codex `-c model_reasoning_effort`; without it the provider's own setting applies (for Codex, `~/.codex/config.toml`).
 Only the name's shape is checked when the config loads; a model or level the provider does not have is its own error at run time.
 `goal`, `judge` and `review` (and a review stage's table) take both; `[agents.run]` takes both on either provider. A coding turn gets the goal's `model`, else `[agents.run]`'s, and

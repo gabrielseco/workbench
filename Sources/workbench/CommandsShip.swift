@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     /// `ship [id] [--yes] [--no-describe] [--refresh-description]`: push the accepted thread's branch and open its pull request. The
-    /// title and description are written by a read-only Claude turn from the goal, the diff and the check;
+    /// title and description are written by a read-only turn on `[agents.ship]`'s provider from the goal, the diff and the check;
     /// `--no-describe` (or a failed turn) uses the goal-based body. Asks first, because it publishes, and
     /// shows what it will publish; running it again after any failure resumes where it stopped.
     static func ship(_ args: [String]) async throws -> Int32 {
@@ -73,19 +73,17 @@ extension Commands {
 
         var description: PRDescription?
         if !noDescribe && !plan.updatesExistingBranch {
-            if let config = try? Config.load(from: ctx.project.configURL) {
-                out("describing the change...")
-                let described = try await ctx.service.describePR(plan: plan, config: config)
-                description = described.description
-                if let why = described.fallback {
-                    out("could not describe the change (\(why)); using the goal-based description")
-                }
-            } else {
-                out("no readable .workbench/config.toml; using the goal-based description")
-            }
+            let step = try await describeForShip(plan: plan, ctx: ctx)
+            // A stop is "do not ship", not "ship a plainer description": nothing is pushed or opened.
+            if step.stopped { return fail(.stopped, "stopped while describing the change; nothing was pushed") }
+            description = step.description
         }
         var refresh: PRRefreshProposal?
-        if plan.updatesExistingBranch && !noDescribe { refresh = try await proposeRefresh(plan: plan, ctx: ctx) }
+        if plan.updatesExistingBranch && !noDescribe {
+            let step = try await proposeRefresh(plan: plan, ctx: ctx)
+            if step.stopped { return fail(.stopped, "stopped while checking the pull request text; nothing was pushed") }
+            refresh = step.proposal
+        }
         if !plan.updatesExistingBranch {
             do {
                 let preview = try await ctx.service.prBody(

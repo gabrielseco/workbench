@@ -63,9 +63,10 @@ let workbenchUsage = """
                                  the states the goal names, leaves the screenshots in the proof folder and reports per
                                  criterion; advisory, never a pass; once per turn unless --again
       plan [id] [--again] [--model <name>] [--budget <usd>]
-                                 a read-only Claude run reads the repository at the base commit against the
-                                 approved goal and writes the approach; saved under plans/ in the thread, once
-                                 per approved goal unless --again; the next run puts it in the first prompt
+                                 a read-only agent run ([agents.plan]: claude or codex) reads the repository
+                                 at the base commit against the approved goal and writes the approach; saved
+                                 under plans/ in the thread, once per approved goal unless --again; the next
+                                 run puts it in the first prompt
       plan show [id]             the latest plan, who wrote it, what it cost and whether it fits the goal
       plan edit [id] [--apply | --from <file>]
                                  copy the plan to plans/draft.md to edit; --apply (or --from) makes the edit the plan
@@ -84,8 +85,9 @@ let workbenchUsage = """
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
            [--watch|-w [--timeout <min>] [--interval <s>]] [--review-loop]
                                  push the accepted branch and open its pull request; asks first, after
-                                 showing the title and body (written by a read-only Claude turn from the
-                                 goal, diff and check; --no-describe uses the goal's text);
+                                 showing the title and body (written by a read-only turn with no tools, on
+                                 [agents.ship]'s provider, from the goal, diff and check; --no-describe uses
+                                 the goal's text);
                                  for a thread from goal new --update it proposes edits to the PR's own
                                  title and sections and applies them only on a second yes, or with
                                  --refresh-description; --no-describe skips the proposal;
@@ -96,7 +98,8 @@ let workbenchUsage = """
                                  starts a follow-up thread on the same branch, runs it and its check, asks before
                                  pushing it (--yes skips that) and reviews again, up to max_rounds; never merges
                                  exit 10 not accepted, 11 already shipped (URL printed), 12 push rejected,
-                                 13 a check failed, 14 no result in time
+                                 13 a check failed, 14 no result in time,
+                                 3 stopped while describing (nothing pushed)
       clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
                                  merged (or closed, with --closed); a dry run unless --yes
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log

@@ -210,8 +210,17 @@ Resolution rules:
   first kept as a legacy fallback (`model`, `judge_model`, `describe_model`, `plan_model`) were removed
   afterwards with no fallback: a config with one fails to load and the message names its replacement
   (`model` in `[agents.run]`, `[agents.judge]`, `[agents.ship]`, `[agents.plan]`). `[agents.ship]` (the PR
-  description and its refresh) and `[agents.plan]` (`workbench plan`) take `provider`, `model` and
-  `reasoning_effort`, and run on Claude only for now: `provider = "codex"` there is refused at load.
+  description and its refresh) and `[agents.plan]` (`workbench plan`) take `provider`, `model`,
+  `reasoning_effort` and `allow_unpriced`, on Claude or Codex. Both run through `ReadOnlyAgent`
+  (`ClaudeReadOnlyAgent`, `CodexReadOnlyAgent` on the judge's hardened read-only invocation); on Codex
+  the description turns run in an empty folder outside the repository, are bounded by their timeout
+  (`allow_unpriced = false` refuses them, as for the judge) and record no cost. Accepted limit: a Codex
+  turn cannot be made tool-free. Its read-only sandbox blocks writes, not reads, so a description or plan
+  turn can read files outside its folder (shown by reading `/etc/hosts` from an empty working folder), and
+  what it reads can end up in the pull request text. The finished body is scrubbed of absolute paths, as every
+  body is, but nothing can scrub the contents of a file it read. Codex stays allowed for both roles;
+  `doctor` notes the unconfined reads, and `ship` prints the whole title and body a Codex turn wrote
+  before the push, also under `--yes`.
 - Drafting: `agents.goal.provider` / `agents.goal.model`, then that provider's model default. With no
   goal-agent config, keep manual/template authoring. Drafting never inherits the goal's coding model;
   on a provider without a hard cap it runs timeout-only unless `agents.goal.allow_unpriced = false`.

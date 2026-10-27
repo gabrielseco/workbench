@@ -241,6 +241,7 @@ with nothing to commit, `accept` still accepts (exit 0) and prints, after its re
 | 0 |  | the PR is open (and with `--watch`: every check passed or was skipped) |
 | 1 | `failed` | git, `gh` or the network failed; with `--watch`: the answer at the prompt was no (no PR was made, so 0 would claim passing checks), or three failed polls in a row |
 | 2 | `usage` | wrong command line |
+| 3 | `stopped` | Ctrl-C or `workbench stop` ended the description or refresh turn: nothing was pushed or opened |
 | 6 | `refused` | a live runner, the worktree is missing or on another branch, uncommitted work, no `origin`, `gh` missing or not logged in, the goal's base (the branch the pull request would target) is not on `origin` (push it first or change the goal's base; checked before anything is pushed, and nothing is recorded), or no terminal to ask on (pass `--yes`) |
 | 7 | `not-found` | no such thread |
 | 10 | `not-accepted` | the thread is not accepted: still active, discarded, abandoned, unknown, or none waiting |

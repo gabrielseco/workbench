@@ -13,19 +13,7 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
 
     /// The providers an adapter exists for, in the order messages list them. A config that names another pair is
     /// refused when it loads, not ignored.
-    public var supportedProviders: [AgentProviderID] { isClaudeOnly ? [.claude] : [.claude, .codex] }
-
-    /// Turns that have only a Claude command line so far.
-    var isClaudeOnly: Bool { self == .ship || self == .plan }
-
-    /// The turn as a message names it.
-    var turnName: String {
-        switch self {
-        case .ship: "PR description turns"
-        case .plan: "plan turn"
-        default: rawValue
-        }
-    }
+    public var supportedProviders: [AgentProviderID] { [.claude, .codex] }
 
     /// What the thread did before `[agents]` existed, used when the config names nothing.
     public var defaultProvider: AgentProviderID { self == .review ? .codex : .claude }
@@ -186,11 +174,6 @@ extension AgentsConfig {
                 .invalidValue, entry.line,
                 "'allow_unpriced' is not allowed in [agents.run]: spending without a dollar cap is approved in the goal")
         }
-        if role.isClaudeOnly, let entry = table.entries["allow_unpriced"] {
-            fail(
-                .invalidValue, entry.line,
-                "'allow_unpriced' is not allowed in [\(tableName)]: only Claude, which has a dollar cap, runs that turn")
-        }
         if role == .goal, selection.provider == nil, table.entries["provider"] == nil {
             fail(.missingKey, table.line, "missing key 'provider' in [agents.goal]: drafting has no default provider")
         }
@@ -263,12 +246,6 @@ extension AgentSelection {
             return nil
         }
         guard role.supportedProviders.contains(id) else {
-            if role.isClaudeOnly {
-                fail(
-                    .invalidValue, line,
-                    "[\(table)] cannot use \"\(id)\": it is not supported for the \(role.turnName) yet, only \"claude\" is")
-                return nil
-            }
             fail(
                 .invalidValue, line,
                 "[\(table)] cannot use \"\(id)\" yet: \(role.rawValue) runs on \(AgentsConfig.list(role.supportedProviders)) "
@@ -310,19 +287,18 @@ extension Config {
             reasoningEffort: agents.judge.reasoningEffort, unpriced: agents.judge.allowUnpriced)
     }
 
-    /// The PR description and its refresh: `[agents.ship]`, then Claude's default. Claude only, checked at load.
-    public var resolvedShipAgent: ResolvedAgent { claudeOnlyAgent(agents.ship) }
-
-    /// `workbench plan`: `--model`, `[agents.plan]`, then Claude's default. Claude only, checked at load.
-    public func resolvedPlanAgent(modelFlag: String? = nil) -> ResolvedAgent {
-        var agent = claudeOnlyAgent(agents.plan)
-        agent.model = modelFlag ?? agent.model
-        return agent
+    /// The PR description and its refresh: `[agents.ship]`, then the provider's default.
+    public var resolvedShipAgent: ResolvedAgent {
+        ResolvedAgent(
+            provider: agents.ship.provider ?? AgentRole.ship.defaultProvider, model: agents.ship.model,
+            reasoningEffort: agents.ship.reasoningEffort, unpriced: agents.ship.allowUnpriced)
     }
 
-    private func claudeOnlyAgent(_ selection: AgentSelection) -> ResolvedAgent {
+    /// `workbench plan`: `--model`, `[agents.plan]`, then the provider's default.
+    public func resolvedPlanAgent(modelFlag: String? = nil) -> ResolvedAgent {
         ResolvedAgent(
-            provider: .claude, model: selection.model, reasoningEffort: selection.reasoningEffort, allowUnpriced: false)
+            provider: agents.plan.provider ?? AgentRole.plan.defaultProvider, model: modelFlag ?? agents.plan.model,
+            reasoningEffort: agents.plan.reasoningEffort, unpriced: agents.plan.allowUnpriced)
     }
 
     /// A review stage: its own table, then `[agents.review]`, then the provider's default. `allow_unpriced` is

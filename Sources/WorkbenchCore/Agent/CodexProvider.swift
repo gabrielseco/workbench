@@ -49,8 +49,10 @@ public struct CodexProvider: AgentProvider {
         let chosen =
             (request.model.map { ["-m", $0] } ?? [])
             + (request.reasoningEffort.map { ["-c", "model_reasoning_effort=\"\($0)\""] } ?? [])
+        var start = ["exec", "-s", "read-only", "-C", request.workingDirectory.path, "--color", "never", "--ephemeral"]
+        if request.outsideRepository { start.append("--skip-git-repo-check") }
         let args =
-            ["exec", "-s", "read-only", "-C", request.workingDirectory.path, "--color", "never", "--ephemeral"] + chosen
+            start + chosen
             + ["-o", answer.path, "--ignore-rules", "-c", "approval_policy=\"never\""]
             + request.images.flatMap { ["-i", $0.path] } + ["--", request.prompt]
         return AgentInvocation(

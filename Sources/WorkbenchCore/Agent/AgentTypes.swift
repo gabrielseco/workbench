@@ -69,7 +69,7 @@ public struct AgentCapabilities: Sendable, Equatable {
 /// An opaque conversation handle. Qualified by provider and purpose so it cannot be handed to another
 /// provider or reused by a different job (a judge never resumes the coder).
 public struct AgentSessionHandle: Hashable, Sendable, Codable {
-    public enum Purpose: String, Sendable, Codable { case coding, goal, judge, review }
+    public enum Purpose: String, Sendable, Codable { case coding, goal, judge, review, plan, ship }
 
     public var provider: AgentProviderID
     public var purpose: Purpose
@@ -152,6 +152,8 @@ public struct AgentRequest: Sendable, Equatable {
     /// Where an adapter that has the provider write its answer to a file (Codex `-o`) puts it: inside
     /// `outputDirectory`, so outside the checkout the agent works in.
     public var answerFile: URL?
+    /// The working directory is an empty scratch folder outside any repository, which Codex otherwise refuses to start in.
+    public var outsideRepository = false
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],

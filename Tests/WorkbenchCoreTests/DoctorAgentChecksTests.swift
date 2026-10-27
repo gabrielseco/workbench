@@ -116,6 +116,17 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(found.flatMap(\.problems).isEmpty, "a stated limit is not a problem")
     }
 
+    @Test(arguments: [AgentRole.ship, .plan])
+    func unconfinedReadsStatedForACodexDescriptionOrPlan(role: AgentRole) throws {
+        let cfg = try config(present + "\n[agents.\(role.rawValue)]\nprovider = \"codex\"\n")
+        let found = Doctor.agents(cfg, searchPath: "/bin")
+        let note = issues(found, role).filter { $0.kind == "unconfined_reads" }
+        #expect(note.count == 1 && note[0].severity == .note && note[0].message.contains("outside"), "\(note)")
+        #expect(found.flatMap(\.problems).isEmpty, "a stated limit is not a problem")
+        let onClaude = Doctor.agents(try config(present), searchPath: "/bin")
+        #expect(issues(onClaude, role).allSatisfy { $0.kind != "unconfined_reads" }, "claude confines reads")
+    }
+
     /// A key under [providers.*] or [agents.*] is read by a resolver or refused when the config loads; a key this
     /// table does not know fails here, so a new one cannot be added without saying which.
     @Test func everyKeyHonouredOrReported() throws {
@@ -159,9 +170,9 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(issues(Doctor.agents(unused, searchPath: "/bin"), .review).allSatisfy { $0.kind != "setting_unused" })
     }
 
-    /// Codex chosen for goal drafting, the judge and the review: unset and `true` run timeout-only and say what bounds
-    /// them; `false` is the problem that names the key.
-    @Test(arguments: [AgentRole.goal, .judge, .review])
+    /// Codex chosen for goal drafting, the judge, the review, the PR description or the plan: unset and `true` run
+    /// timeout-only and say what bounds them; `false` is the problem that names the key.
+    @Test(arguments: [AgentRole.goal, .judge, .review, .ship, .plan])
     func codexEvaluationWithAndWithoutTheKey(role: AgentRole) throws {
         let table = "[agents.\(role.rawValue)]\nprovider = \"codex\"\n"
         let timeout = Int(try #require(role.evaluationTimeout))
@@ -339,5 +350,35 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         let (_, forbidden) = try await doctor(judge + "allow_unpriced = false\n", json: true)
         let refused = forbidden?["problems"] as? [[String: Any]] ?? []
         #expect(refused.contains { $0["kind"] as? String == "unpriced_not_allowed" && $0["role"] as? String == "judge" })
+    }
+
+    @Test func shipAndPlanOnCodexShowTheirAgentAndTheMissingCap() async throws {
+        let tables =
+            "[providers.codex]\nexecutable = \"/bin/sh\"\n[agents.ship]\nprovider = \"codex\"\nmodel = \"gpt-6\"\n"
+            + "reasoning_effort = \"low\"\n[agents.plan]\nprovider = \"codex\"\nreasoning_effort = \"high\"\n"
+        let (ran, object) = try await doctor(tables, json: true)
+        #expect(ran.code == 0, "\(ran.stderr)")
+        let agents = try #require(object?["agents"] as? [[String: Any]])
+        let ship = try #require(agents.first { $0["role"] as? String == "ship" })
+        let plan = try #require(agents.first { $0["role"] as? String == "plan" })
+        #expect(ship["provider"] as? String == "codex" && ship["model"] as? String == "gpt-6")
+        #expect(ship["reasoning_effort"] as? String == "low")
+        #expect(plan["provider"] as? String == "codex" && plan["model"] is NSNull)
+        #expect(plan["reasoning_effort"] as? String == "high")
+        for agent in [ship, plan] {
+            let found = agent["issues"] as? [[String: Any]] ?? []
+            #expect(found.contains { $0["kind"] as? String == "timeout_only" && $0["severity"] as? String == "note" })
+        }
+        #expect((object?["problems"] as? [[String: Any]] ?? []).isEmpty)
+
+        let text = try await doctor(tables, json: false).0.stdout
+        let lines = text.split(separator: "\n").map(String.init)
+        #expect(lines.contains { $0.hasPrefix("agent ship:") && $0.contains("codex, model gpt-6, effort low") }, "\(text)")
+        #expect(lines.contains { $0.hasPrefix("agent plan:") && $0.contains("codex") && $0.contains("effort high") }, "\(text)")
+        #expect(text.contains("the PR description on it is bounded by") && text.contains("the plan on it is bounded by"))
+
+        let (_, forbidden) = try await doctor(tables + "allow_unpriced = false\n", json: true)
+        let refused = forbidden?["problems"] as? [[String: Any]] ?? []
+        #expect(refused.contains { $0["kind"] as? String == "unpriced_not_allowed" && $0["role"] as? String == "plan" })
     }
 }

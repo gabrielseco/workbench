@@ -75,7 +75,7 @@ enum Help {
             example: "workbench verifier --again"),
         "plan": Extra(
             changes:
-                "plan: runs a read-only Claude and saves the plan under plans/ in the thread folder; "
+                "plan: runs a read-only agent ([agents.plan]) and saves the plan under plans/ in the thread folder; "
                 + "plan show: nothing; plan edit: copies or applies plans/draft.md",
             example: "workbench plan && workbench plan show"),
         "pr-review": Extra(

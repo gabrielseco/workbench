@@ -2,7 +2,7 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `plan [id] [--again] [--model <name>] [--budget <usd>]`: a read-only Claude run that reads the repository at
+    /// `plan [id] [--again] [--model <name>] [--budget <usd>]`: a read-only run on `[agents.plan]`'s provider that reads the repository at
     /// the thread's base commit against the approved goal and writes the approach. It prints and records the plan
     /// and changes nothing else; the next `run` does not read it yet. It costs money, so it runs once per approved
     /// goal unless `--again`.
@@ -26,7 +26,17 @@ extension Commands {
         let ctx = try await Context.load()
         let id = try ctx.threadIDForViewing(named)
         let config = try Config.load(from: ctx.project.configURL)
-        out("planning \(id) (read-only; up to $\(NSDecimalNumber(decimal: budget).stringValue))...")
+        let agent = config.resolvedPlanAgent(modelFlag: model)
+        let capped = config.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true
+        if !capped && budgetText != nil {
+            throw CLIError.usage(
+                "--budget has no effect on \(agent.provider): it cannot enforce a dollar limit, so the plan is bounded by "
+                    + "its \(Int(Plan.timeout)) s timeout only (allow_unpriced = false in [agents.plan] refuses it instead)")
+        }
+        out(
+            capped
+                ? "planning \(id) (read-only; up to $\(NSDecimalNumber(decimal: budget).stringValue))..."
+                : "planning \(id) on \(agent.provider) (read-only; no dollar cap: bounded by \(Int(Plan.timeout / 60)) min)...")
         // Ctrl-C stops the plan's `claude` instead of leaving it running on its own budget.
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the plan") { holder.stop() }

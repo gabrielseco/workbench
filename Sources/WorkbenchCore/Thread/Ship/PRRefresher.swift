@@ -68,9 +68,11 @@ public enum PRRefresher {
     /// Reads `claude -p --output-format json` like `PRDescriber.parse`. A section the answer returns
     /// unchanged is dropped, so an answer that changes nothing comes back empty.
     public static func parse(output: String, current: PRText) throws -> PRRefresh {
-        guard let outer = PRDescriber.object(from: output) else { throw PRDescribeError.invalidOutput("not JSON") }
-        if outer["is_error"] as? Bool == true { throw PRDescribeError.claudeFailed("claude reported an error") }
-        guard let text = outer["result"] as? String else { throw PRDescribeError.invalidOutput("no result") }
+        try parse(answer: PRDescriber.claudeResult(output), current: current)
+    }
+
+    /// Reads the model's own text, from any provider.
+    public static func parse(answer text: String, current: PRText) throws -> PRRefresh {
         guard let json = PRDescriber.object(from: text) else {
             throw PRDescribeError.invalidOutput("the answer is not a JSON object")
         }
