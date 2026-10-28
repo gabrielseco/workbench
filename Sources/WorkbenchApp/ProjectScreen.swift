@@ -23,7 +23,7 @@ enum ProjectScreen: Equatable {
                 "Run `workbench init` in \(path), then choose it again."
             )
         case .noThread:
-            ("No thread yet", "Start one in a terminal for now: workbench goal new <name>.")
+            ("No thread yet", "Start one with New goal, or in a terminal: workbench goal new <name>.")
         case .logCorrupt(let thread, let problems):
             (
                 "The log of \(thread) cannot be read",

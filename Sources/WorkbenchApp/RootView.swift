@@ -124,7 +124,7 @@ struct Centre: View {
 
     var body: some View {
         if case .thread(let snapshot) = store.screen {
-            ThreadPane(snapshot: snapshot)
+            ThreadPane(snapshot: snapshot, goal: store.goal, store: store)
         } else if let message = store.screen.message {
             EmptyState(title: message.title, next: message.next, store: store)
         }
@@ -133,13 +133,17 @@ struct Centre: View {
 
 struct ThreadPane: View {
     var snapshot: ThreadSnapshot
+    var goal: GoalModel?
+    var store: ProjectStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
-            Text(".workbench/threads/\(snapshot.id)/goal.md")
-                .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-            Text(snapshot.stateText).font(.title3).foregroundStyle(.secondary).padding(.top, 4)
+            if goal == nil {
+                Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
+                Text(".workbench/threads/\(snapshot.id)/goal.md")
+                    .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                Text(snapshot.stateText).font(.title3).foregroundStyle(.secondary).padding(.top, 4)
+            }
             if !snapshot.problems.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     Label("The log has damaged lines; this shows what could be read.", systemImage: "xmark.octagon.fill")
@@ -152,6 +156,7 @@ struct ThreadPane: View {
             if case .needsYou(let reason) = snapshot.attention {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
+            if let goal { GoalView(snapshot: snapshot, goal: goal, store: store) }
             Spacer()
         }
         .padding(28).frame(maxWidth: .infinity, alignment: .leading)
@@ -162,14 +167,21 @@ struct EmptyState: View {
     var title: String
     var next: String
     var store: ProjectStore
+    @State private var naming = false
 
     var body: some View {
         VStack(spacing: 10) {
             Text(title).font(.title2.weight(.semibold))
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
-            Button("Choose project…") { Picker.chooseProject(store) }.padding(.top, 6)
+            HStack {
+                Button("Choose project…") { Picker.chooseProject(store) }
+                if store.screen == .noThread { Button("New goal…") { naming = true } }
+            }
+            .padding(.top, 6)
+            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(40)
+        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 }
 

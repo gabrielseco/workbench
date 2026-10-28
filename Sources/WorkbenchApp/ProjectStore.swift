@@ -18,6 +18,11 @@ enum DoctorChip: Equatable {
     private(set) var screen: ProjectScreen
     private(set) var project: Project?
     private(set) var doctor: DoctorChip = .notRun
+    /// The goal of the thread on screen, read with the config; nil without a thread.
+    private(set) var goal: GoalModel?
+    /// What the last Approve, Run or New goal said when it did not go through.
+    private(set) var actionError: String?
+    private(set) var starting = false
 
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private var currentThread: String?
@@ -30,6 +35,8 @@ enum DoctorChip: Equatable {
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
     @ObservationIgnored private let loader: @Sendable (Project) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
+    @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
+    @ObservationIgnored private let actions: GoalActions
 
     /// `screen` is for previews and tests that show a fixed state without a project on disk.
     init(
@@ -38,8 +45,14 @@ enum DoctorChip: Equatable {
         loader: @escaping @Sendable (Project) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0) },
         doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
             await ProjectStore.runCoreDoctor($0, base: $1)
-        }
+        },
+        goalLoader: @escaping @Sendable (Project, String) async -> GoalModel = {
+            await GoalModel.load(project: $0, thread: $1, verifierSkill: GoalModel.coreVerifierSkill(project: $0))
+        },
+        actions: GoalActions = .core
     ) {
+        self.goalLoader = goalLoader
+        self.actions = actions
         self.preferences = preferences
         self.screen = screen
         self.project = project
@@ -80,7 +93,7 @@ enum DoctorChip: Equatable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (project, currentThread, lastWatch, doctor) = (nil, nil, nil, .notRun)
+            (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
@@ -108,7 +121,66 @@ enum DoctorChip: Equatable {
         let (mine, loader) = (generation, self.loader)
         let result = await Task.detached { loader(project) }.value
         guard mine == generation else { return }
-        (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
+        var model: GoalModel?
+        if let thread = result.thread, case .thread = result.screen {
+            let goalLoader = self.goalLoader
+            model = await Task.detached { await goalLoader(project, thread) }.value
+            guard mine == generation else { return }
+        }
+        (screen, currentThread, lastWatch, goal) = (result.screen, result.thread, result.watch, model)
+    }
+
+    // MARK: Goal actions
+
+    /// Approves the goal, and only when that worked starts the run: a failed approve starts nothing. The run is core's, started
+    /// here and left to the log to report.
+    func approveAndRun() async {
+        guard let project, let thread = currentThread, !starting else { return }
+        let mine = generation
+        starting = true
+        actionError = nil
+        defer { starting = false }
+        do {
+            try await actions.approve(project, thread)
+        } catch {
+            if mine == generation { actionError = "\(error)" }
+            await reload()
+            return
+        }
+        await reload()
+        // The window may have moved to another project while approval ran: the approval stands in the log, the run is not started.
+        guard mine == generation else { return }
+        let run = actions.run
+        Task { [weak self] in
+            do { try await run(project, thread) } catch { self?.runFailed(error, generation: mine) }
+        }
+    }
+
+    /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only
+    /// place the person hears of it. An answer for another project is dropped.
+    private func runFailed(_ error: Error, generation mine: Int) {
+        guard mine == generation else { return }
+        actionError = "The run did not start: \(error)"
+    }
+
+    func openGoalFile() async {
+        guard let project, let thread = currentThread else { return }
+        actionError = nil
+        do { try await actions.openGoal(project, thread) } catch { actionError = "\(error)" }
+    }
+
+    /// Creates a thread from the template; core refuses while another thread is active, and says so.
+    func newGoal(name: String) async {
+        guard let project, !starting else { return }
+        actionError = nil
+        do {
+            try await actions.newThread(project, name)
+        } catch {
+            actionError = "\(error)"
+            return
+        }
+        (currentThread, lastWatch) = (nil, nil)
+        await reload()
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.

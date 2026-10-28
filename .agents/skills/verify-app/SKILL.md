@@ -27,6 +27,8 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | scenario | what the window shows |
 |---|---|
 | `draft` | a goal being written, not approved: Goal is current, nothing else started |
+| `goal-warning` | a draft with three criteria, two of which cannot be checked (a command not in `[tools] allowed`, a `screenshot:` with no verifier): `Heads up` rows, `1 OF 3 CHECKABLE`, Approve disabled |
+| `goal-approved` | an approved goal, nothing run yet: `Approved` pill, a `Run` button |
 | `running` | a turn is open: Run is working (blue), attention is `working` |
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00` |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet |

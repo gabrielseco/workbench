@@ -10,6 +10,7 @@ enum ProjectLoader {
         var logSize: Int?
         var logModified: Date?
         var goalModified: Date?
+        var configModified: Date?
     }
 
     static func watch(project: Project, thread: String?) -> Watch {
@@ -18,6 +19,7 @@ enum ProjectLoader {
             return (values?.fileSize, values?.contentModificationDate)
         }
         var watch = Watch(threadsDirectory: attributes(project.threadsDirectory).modified)
+        watch.configModified = attributes(project.configURL).modified
         if let thread {
             let log = attributes(project.eventsURL(thread))
             (watch.logSize, watch.logModified) = (log.size, log.modified)

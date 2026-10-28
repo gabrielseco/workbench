@@ -163,6 +163,10 @@ SWIFT
   else
     mkdir -p "$dir/project/.workbench/threads"
   fi
+  # A scenario that shows how proofs are judged ships the project's config too.
+  if [[ -f "$ROOT/Fixtures/app/$scenario/config.toml" ]]; then
+    cp "$ROOT/Fixtures/app/$scenario/config.toml" "$dir/project/.workbench/config.toml"
+  fi
 
   # The build: bundle-app.sh, to a path and a bundle id of its own.
   WORKBENCH_APP="$dir/Workbench.app" WORKBENCH_BUNDLE_ID="$id" "$ROOT/scripts/bundle-app.sh" >&2 || fail "the build failed"
