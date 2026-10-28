@@ -101,7 +101,9 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         await #expect(throws: ShipError.ghFailed("boom")) { try await fx.service.prChecks(id: id, gh: gh.runner) }
         try FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_fail"))
         try gh.put("checks_last", "this is not json")
-        await #expect(throws: ShipError.self) { try await fx.service.prChecks(id: id, gh: gh.runner) }
+        await #expect(throws: ShipError.ghFailed("`gh pr checks` did not answer with a JSON list")) {
+            try await fx.service.prChecks(id: id, gh: gh.runner)
+        }
         try FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_last"))
         try gh.put("checks_hang", "")
         do {
