@@ -4,6 +4,26 @@ import WorkbenchCore
 
 @testable import WorkbenchApp
 
+/// Preferences that count every read and write, so "untouched" means none at all, not just an unchanged value.
+private final class SpyPreferences: Preferences, @unchecked Sendable {
+    private(set) var reads = 0
+    private(set) var writes = 0
+    private var stored: String?
+
+    init(_ stored: String? = nil) { self.stored = stored }
+
+    var projectPath: String? {
+        get {
+            reads += 1
+            return stored
+        }
+        set {
+            writes += 1
+            stored = newValue
+        }
+    }
+}
+
 @MainActor @Suite struct LaunchOptionsTests {
     @Test func theProjectComesFromTheEnvironmentOrNotAtAll() {
         #expect(LaunchOptions.from(environment: [:]).project == nil)
@@ -46,5 +66,29 @@ import WorkbenchCore
         let store = options.makeStore(preferences: real)
         await options.start(store)
         #expect(store.screen == .notAGitRepository(path: elsewhere.root.path) && real.projectPath == nil)
+    }
+
+    @Test func aNamedProjectNeverReadsOrWritesTheRealPreferences() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        let spy = SpyPreferences("/somewhere/remembered")
+        let options = LaunchOptions(project: fixture.root)
+        let store = options.makeStore(preferences: spy)
+        await options.start(store)
+        try fixture.turn("t1", 1)
+        await store.refresh()
+        await store.runDoctor()
+        #expect(store.project == fixture.project)
+        #expect(spy.reads == 0 && spy.writes == 0, "reads \(spy.reads), writes \(spy.writes)")
+    }
+
+    @Test func withNoProjectNamedTheRealPreferencesAreUsed() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        let spy = SpyPreferences(fixture.project.root.path)
+        let options = LaunchOptions(project: nil)
+        let store = options.makeStore(preferences: spy)
+        await options.start(store)
+        #expect(spy.reads >= 1 && spy.writes >= 1, "the spy would have shown a restore and a save")
     }
 }

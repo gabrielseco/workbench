@@ -49,5 +49,60 @@ echo "$TMPDIR/workbench-verify/build.gone" > "$TMPDIR/workbench-verify/pids/4242
 expect 1 "is not running the build" stop 424242
 [ -f "$TMPDIR/workbench-verify/pids/424242" ] || fail "a refused stop removed the pid file of a process it never checked"
 
+# --- a live process behind a recorded pid: only the recorded build is ever touched ---------------------------------------------------
+# `sleep` run under the name of the path a build would run from stands in for the app: `ps` shows that name, which is all the check reads.
+# (`exec -a`, not a copy of the binary: macOS kills a copy of a signed system binary at once.)
+STATE="$TMPDIR/workbench-verify"
+PIDS="$STATE/pids"
+mkdir -p "$PIDS"
+SLEEP="$(command -v sleep)"
+LIVE=""
+trap 'for p in $LIVE; do kill "$p" 2>/dev/null; done; rm -rf "$TMPDIR"' EXIT
+# fake_app <folder>: runs the stand-in as <folder>/Workbench.app/Contents/MacOS/WorkbenchApp and sets FAKE_PID to its pid
+fake_app() {
+  local bin="$1/Workbench.app/Contents/MacOS/WorkbenchApp"
+  mkdir -p "$1"
+  (exec -a "$bin" "$SLEEP" 300) &
+  FAKE_PID=$!
+  disown "$FAKE_PID" 2>/dev/null || true  # no "Terminated" job noise when a stand-in is ended
+  LIVE="$LIVE $FAKE_PID"
+  sleep 0.2
+}
+alive() { kill -0 "$1" 2>/dev/null; }
+
+# 1. an installed Workbench behind a recorded pid: refused by every command, and not killed
+fake_app "$TMPDIR/Applications"
+installed=$FAKE_PID
+echo "$STATE/build.recorded" > "$PIDS/$installed"
+for command in "stop $installed" "list $installed" "press $installed Doctor" "shot $installed name"; do
+  # shellcheck disable=SC2086
+  expect 1 "is not running the build" $command
+done
+alive "$installed" || fail "an installed Workbench behind a recorded pid was killed"
+
+# 2. a build whose folder only starts like the recorded one: also not it
+fake_app "$STATE/build.lookalike"
+lookalike=$FAKE_PID
+echo "$STATE/build.look" > "$PIDS/$lookalike"
+expect 1 "is not running the build" stop "$lookalike"
+alive "$lookalike" || fail "a process in a lookalike folder was killed"
+
+# 3. the recorded build itself: press refuses what opens a panel before any helper runs, list passes the pid check, stop ends it
+fake_app "$STATE/build.real"
+real=$FAKE_PID
+echo "$STATE/build.real" > "$PIDS/$real"
+expect 1 "opens a panel or another app" press "$real" "Event log"
+expect 1 "opens a panel or another app" press "$real" "Choose project, now x"
+expect 1 "opens a panel or another app" press "$real" "Open the event log"
+expect 1 "press needs a label" press "$real" ""
+expect 1 "test stub" list "$real"   # past the pid check, as far as the helper, which the stub refuses
+alive "$real" || fail "a refused press ended the build"
+expect 0 "stopped $real" stop "$real"
+sleep 0.3
+alive "$real" && fail "stop did not end the recorded build"
+[ -e "$STATE/build.real" ] && fail "stop left the build folder"
+[ -e "$PIDS/$real" ] && fail "stop left the pid file"
+alive "$installed" || fail "stopping one build ended another process"
+
 [ "$status" = 0 ] && echo "verify-app guard: ok"
 exit $status
