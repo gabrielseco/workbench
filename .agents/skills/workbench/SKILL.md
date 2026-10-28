@@ -37,7 +37,7 @@ with `accept`, `discard` or `abandon`.
 3. **Prerequisites land first.** If the run needs something it cannot create itself (a synced API contract from another repo, a
    migration), land that on the default branch as its own PR before creating the thread. A run's file tools stop at its worktree, so it
    cannot read sibling repos or write under `.claude/`.
-4. **Run.** `wb run` takes minutes; start it in the background and follow with `wb status` and `wb log` (`-f` follows). Denied tool calls are
+4. **Run.** `wb run` takes minutes; start it in the background and follow with `wb status` and `wb log` (`-f` follows). Start it directly with the background option, never behind `nohup`, a trailing `&` in another shell or a wait loop in a subagent: the harness then tells you when `wb run` itself exits (a launcher shell ending says nothing about the run), and its exit code says how it ended (0 done, 3 stopped, 4 timed out, 5 over budget, 1 failed). For a run another process holds, read `wb status` (`running`, the last event and its age). Denied tool calls are
    normal (compound `a && b`, `node -e`, an env prefix); the model works around them. `wb grant` lists them and decides each.
    `wb stop` ends a turn cleanly.
 5. **Review.** `wb review`: the criteria, the diff, the check and the denied calls. Read the diff for what you did not ask for: unrelated
