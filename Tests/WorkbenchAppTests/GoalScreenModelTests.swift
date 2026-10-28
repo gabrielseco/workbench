@@ -163,7 +163,8 @@ private final class SkillProbe: @unchecked Sendable {
     ) async throws -> (ProjectStore, AppFixture) {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1")
-        let actions = GoalActions(approve: approve, run: run, newThread: { _, _ in }, openGoal: { _, _ in })
+        let actions = GoalActions(
+            approve: approve, makeRun: { project, thread in RunHandle(run: { try await run(project, thread) }, stop: {}) })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         return (store, fixture)
@@ -189,8 +190,7 @@ private final class SkillProbe: @unchecked Sendable {
     @Test func aGoalCanBeStartedFromAProjectWithNoThread() async throws {
         let made = Order()
         let fixture = try await AppFixture()
-        let actions = GoalActions(
-            approve: { _, _ in }, run: { _, _ in }, newThread: { _, name in made.add(name) }, openGoal: { _, _ in })
+        let actions = GoalActions(newThread: { _, name in made.add(name) })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root) && store.screen == .noThread)
         await store.newGoal(name: "first")

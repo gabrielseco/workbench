@@ -23,6 +23,16 @@ enum DoctorChip: Equatable {
     /// What the last Approve, Run or New goal said when it did not go through.
     private(set) var actionError: String?
     private(set) var starting = false
+    /// A turn the user is stopping: set from Stop until the log says it ended.
+    private(set) var stopping = false
+    /// The run this app started and has not seen end. At most one: a second start is refused.
+    @ObservationIgnored private var ownedRun: OwnedRun?
+
+    private struct OwnedRun {
+        var handle: RunHandle
+        var project: Project
+        var thread: String
+    }
 
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private var currentThread: String?
@@ -128,6 +138,8 @@ enum DoctorChip: Equatable {
             guard mine == generation else { return }
         }
         (screen, currentThread, lastWatch, goal) = (result.screen, result.thread, result.watch, model)
+        applyOwnership()
+        if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
     }
 
     // MARK: Goal actions
@@ -136,6 +148,10 @@ enum DoctorChip: Equatable {
     /// here and left to the log to report.
     func approveAndRun() async {
         guard let project, let thread = currentThread, !starting else { return }
+        if ownedRun != nil {
+            actionError = "A run is already going."
+            return
+        }
         let mine = generation
         starting = true
         actionError = nil
@@ -150,10 +166,69 @@ enum DoctorChip: Equatable {
         await reload()
         // The window may have moved to another project while approval ran: the approval stands in the log, the run is not started.
         guard mine == generation else { return }
-        let run = actions.run
-        Task { [weak self] in
-            do { try await run(project, thread) } catch { self?.runFailed(error, generation: mine) }
+        startRun(project, thread, generation: mine)
+    }
+
+    /// Starts the turn and keeps hold of it, so Stop reaches it. Refused while a run of this app is still going.
+    private func startRun(_ project: Project, _ thread: String, generation mine: Int) {
+        guard ownedRun == nil else {
+            actionError = "A run is already going."
+            return
         }
+        let handle: RunHandle
+        do { handle = try actions.makeRun(project, thread) } catch {
+            actionError = "The run did not start: \(error)"
+            return
+        }
+        ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
+        applyOwnership()
+        Task { [weak self] in
+            do { try await handle.run() } catch { self?.runFailed(error, generation: mine) }
+            await self?.runEnded()
+        }
+    }
+
+    /// The runner the app holds writes the log a moment after it starts: an open turn with no live runner is not a dead one.
+    private func applyOwnership() {
+        guard runningHere, case .thread(var shown) = screen, shown.run?.phase == .orphaned else { return }
+        shown.run?.phase = .working
+        screen = .thread(shown)
+    }
+
+    private func runEnded() async {
+        ownedRun = nil
+        stopping = false
+        await reload()
+    }
+
+    /// The next turn after one that did not finish. A turn that succeeded goes to Review and `send-back`, which is not this.
+    func runAgain() async {
+        guard let project, let thread = currentThread, !starting else { return }
+        actionError = nil
+        startRun(project, thread, generation: generation)
+    }
+
+    /// Whether this window's thread is the one the app is running.
+    var runningHere: Bool { ownedRun.map { $0.project == project && $0.thread == currentThread } ?? false }
+
+    /// Asks the turn to end: through the runner this app holds, else the process a terminal's `workbench run` holds. The turn
+    /// still ends with a recorded `stopped`; this only asks.
+    func stopTurn() async {
+        guard let project, let thread = currentThread, !stopping else { return }
+        stopping = true
+        actionError = nil
+        if let owned = ownedRun, owned.project == project, owned.thread == thread {
+            await owned.handle.stop()
+        } else if await !actions.requestStop(project, thread) {
+            stopping = false
+            actionError = "Nothing is running this thread."
+        }
+    }
+
+    func openWorktree() async {
+        guard let project, let thread = currentThread else { return }
+        actionError = nil
+        do { try await actions.openWorktree(project, thread) } catch { actionError = "\(error)" }
     }
 
     /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only

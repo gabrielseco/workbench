@@ -42,6 +42,7 @@ struct ThreadSnapshot: Equatable {
     var base: String?
     var approval: ApprovalState?
     var budgetUSD: Decimal?
+    var turnTimeoutMin: Int?
     var state: ThreadState
     var spine: ThreadSpine
     var attention: Attention
@@ -51,6 +52,8 @@ struct ThreadSnapshot: Equatable {
     /// What is damaged in a log that still shows something (a line that is not an event, a break in the sequence), in words
     /// a person can act on. The thread shows what could be read, never as if the log were whole.
     var problems: [String] = []
+    /// The latest turn as the Run screen shows it; nil before the first turn.
+    var run: RunModel?
 
     /// The cost as the toolbar says it: `unknown` when a turn reported none, never `$0.00`.
     var spendText: String {

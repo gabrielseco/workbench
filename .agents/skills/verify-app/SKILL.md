@@ -29,8 +29,8 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `draft` | a goal being written, not approved: Goal is current, nothing else started |
 | `goal-warning` | a draft with three criteria, two of which cannot be checked (a command not in `[tools] allowed`, a `screenshot:` with no verifier): `Heads up` rows, `1 OF 3 CHECKABLE`, Approve disabled |
 | `goal-approved` | an approved goal, nothing run yet: `Approved` pill, a `Run` button |
-| `running` | a turn is open: Run is working (blue), attention is `working` |
-| `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00` |
+| `running` | a turn is open in the log with activity rows, and no live runner (a fixture cannot have one): Run is current, attention is `working`, the Run screen says the runner is gone and offers Run again. Never press Run again here: it starts a real turn |
+| `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Run screen shows the ended turn with a filled-in denied row and `3 passing` |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet |
 | `cleaned` | merged and cleaned, a turn that reported no cost (`unknown`, never `$0.00`) |
 | `corrupt` | a log nothing can be read from: the corrupt-log screen |

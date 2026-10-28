@@ -1,4 +1,9 @@
 {"data":{},"kind":"thread.created","seq":1,"ts":"2026-10-28T10:00:01.000Z","turn":0,"v":1}
 {"data":{"hash":"h1"},"kind":"goal.approved","seq":2,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
 {"data":{"session_id":"s1"},"kind":"turn.started","seq":3,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
-{"data":{"cost_usd":1.88,"result":"succeeded"},"kind":"turn.ended","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"name":"Edit","provider":"claude","summary":"Sources\/Invoices\/List.swift","type":"tool"},"kind":"agent.activity","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"name":"Write","provider":"claude","summary":"Tests\/InvoiceListTests.swift","type":"tool"},"kind":"agent.activity","seq":5,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"provider":"claude","tool":"Bash","type":"permission_denied"},"kind":"agent.activity","seq":6,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"cost_usd":1.88,"denials":[{"input":"git push origin main","tool":"Bash"}],"permission_denials":1,"result":"succeeded"},"kind":"turn.ended","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{},"kind":"check.started","seq":8,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"result":"passed","tests_failed":[],"tests_passed":["a","b","c"]},"kind":"check.ran","seq":9,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
