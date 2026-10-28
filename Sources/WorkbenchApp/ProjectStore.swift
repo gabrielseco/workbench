@@ -58,6 +58,8 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored let preferences: Preferences
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
+    /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
+    var refusedPaths: [String: String] = [:]
     @ObservationIgnored private var currentThread: String?
     @ObservationIgnored private var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?

@@ -18,6 +18,7 @@ extension ProjectStore {
     }
 
     func forget(_ path: String) {
+        refusedPaths[path] = nil
         recentPaths.removeAll { $0 == path }
         preferences.recentProjects = recentPaths
     }
@@ -32,7 +33,7 @@ extension ProjectStore {
             let name = shared ? "\(names[index]) (\(url.deletingLastPathComponent().lastPathComponent))" : names[index]
             return RecentProject(
                 path: path, name: name, isCurrent: path == project?.root.path,
-                isRunning: runningProjectPath == path, unavailable: Self.unavailableReason(path))
+                isRunning: runningProjectPath == path, unavailable: Self.unavailableReason(path) ?? refusedPaths[path])
         }
     }
 
@@ -55,6 +56,7 @@ extension ProjectStore {
         // Git decides whether it is a repository: a `.git` that points nowhere passes the check above and must not close the
         // project that is open, which `open` does when it fails.
         do { _ = try await Project.locate(from: URL(fileURLWithPath: path), git: try GitRunner.discover()) } catch {
+            refusedPaths[path] = "It is not a usable git repository."
             actionError = "\(URL(fileURLWithPath: path).lastPathComponent): it is not a usable git repository."
             return
         }

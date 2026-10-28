@@ -82,6 +82,10 @@ import Testing
         store.remember(broken.path)
         #expect(store.recentProjects().first { $0.path == broken.path }?.unavailable == nil, "the cheap check passes it")
         await store.switchTo(broken.path)
+        #expect(store.recentProjects().first { $0.path == broken.path }?.unavailable == "It is not a usable git repository.")
+        store.forget(broken.path)
+        #expect(!store.recentPaths.contains(broken.path))
+        store.remember(broken.path)
         #expect(store.project == a.project && store.actionError?.hasSuffix("not a usable git repository.") == true)
         guard case .thread = store.screen else {
             Issue.record("the open project was closed")
