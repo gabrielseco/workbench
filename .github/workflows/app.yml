@@ -9,6 +9,11 @@ on:
       - "Sources/WorkbenchApp/**"
       - "Tests/WorkbenchAppTests/**"
       - "Package.swift"
+      - "Resources/**"
+      - "scripts/bundle-app.sh"
+      - "scripts/render-icon.sh"
+      - "scripts/window-info.swift"
+      - "scripts/app-icon.swift"
       - ".github/workflows/app.yml"
   workflow_dispatch:
 
@@ -28,6 +33,10 @@ jobs:
           swift --version
       - name: Build the app
         run: swift build --product WorkbenchApp
+      - name: Build the app bundle
+        # The release build in a bundle, then the checks that need no screen: the plist lints, the icon has every size, the
+        # signature holds. `--check` (launch it, find its window) needs a desktop session, so a person runs that one.
+        run: scripts/bundle-app.sh
       - name: Test the app
         # The window renders go to a folder that is uploaded below, so a reviewer sees what each state looks like.
         env:

@@ -13,10 +13,16 @@ prototyped on its own first, and only then do we decide how the two talk to each
 **Scope, on purpose:** one project, one thread at a time. Do that well first; concurrency, many projects,
 screenshot proof and Triage integration are in [`docs/later/`](docs/later/README.md).
 
-**Status:** the Swift package and CLI are built; the SwiftUI app is planned. Current coding and judging
-use Claude, automated review uses Codex. [P9: Agent providers](docs/plan/P9-agent-providers.md) plans
-independent provider/model selection for goal drafting and each execution responsibility and is required before SwiftUI development.
+**Status:** the Swift package and CLI are built, and so is the shell of the SwiftUI app
+([P19](docs/plan/P19-swiftui-app.md): it opens a project and follows its newest thread; the goal, run, review and ship screens
+come next). Provider selection ([P9](docs/plan/P9-agent-providers.md)) is built and its gate accepted.
 Start at [`docs/plan/README.md`](docs/plan/README.md).
+
+**Building the app (macOS):** `scripts/bundle-app.sh` builds `.build/bundle/Workbench.app`: a release build in a bundle with the
+Dock icon (`Resources/AppIconSource.png`; `scripts/render-icon.sh` renders `Resources/AppIcon.png` from it) and an ad hoc
+signature. `scripts/bundle-app.sh --check` also launches a copy of it, finds its window and renders the Dock icon.
+`scripts/bundle-app.sh --install` builds into `~/Applications/Workbench.app` and opens it; right-click its Dock icon, Options,
+Keep in Dock, to keep it there. A Workbench that is already running from there is not ended: quit it (⌘Q) and open it again.
 
 ## Checking a change
 
@@ -68,6 +74,8 @@ workbench/
   docs/plan/     P1 runner, P2 review, P3 app (this is where we are)
   docs/spec/     goal file and event log formats
   docs/later/    deferred: concurrency, proof, Triage
-  Package.swift  WorkbenchCore library + `workbench` CLI   (P1, P2)
-  App/           SwiftUI app                               (P3)
+  Package.swift  WorkbenchCore library + `workbench` CLI, and on macOS the app
+  Sources/WorkbenchApp/  the SwiftUI app (macOS only)
+  Resources/     the Dock icon (SVG and PNG)
+  scripts/       checks, `bundle-app.sh` (builds Workbench.app), verify-cli scenarios
 ```

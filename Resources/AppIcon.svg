@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Workbench's dock icon. The artwork is Resources/AppIconSource.png (1254 px, a squircle on a dark vignette). It is cropped to the
+       squircle (x 164 to 1085, y 138 to 1066 in the source, about 925 px), scaled to the 824 px body of the Apple icon grid, centred on a
+       1024 canvas and masked, so the corners are transparent and the vignette and its glow are gone. scripts/render-icon.sh renders it. -->
+  <defs>
+    <clipPath id="body">
+      <rect x="103" y="103" width="818" height="818" rx="215"/>
+    </clipPath>
+    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <g filter="url(#iconShadow)">
+    <rect x="103" y="103" width="818" height="818" rx="215" fill="#1B1D22"/>
+  </g>
+  <g clip-path="url(#body)">
+    <image xlink:href="AppIconSource.png" href="AppIconSource.png" x="0" y="0" width="1254" height="1254"
+           transform="translate(512 512) scale(0.891) translate(-624.5 -602)"/>
+  </g>
+</svg>

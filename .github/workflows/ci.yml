@@ -30,6 +30,9 @@ jobs:
           "$RUNNER_TEMP/swiftlint/swiftlint" lint --quiet
       - name: Timing script check
         run: scripts/test-timings-check.sh
+      - name: App bundle script refuses off macOS
+        # bundle-app.sh builds a macOS app: on Linux it must say no clearly and change nothing (the app job runs it for real).
+        run: scripts/test-bundle-app-guard.sh
 
   # macOS is no longer the PR gate (the Linux workflow is, P18): it holds one of the scarce macOS slots, so it runs on main, nightly and by hand.
   build-test:
