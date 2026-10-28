@@ -65,6 +65,8 @@ struct GoalView: View {
                         Text(row.text)
                     }
                     Text(row.proof).font(.callout).foregroundStyle(.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Theme.grey.opacity(0.12), in: Capsule())
                     if let warning = row.warning {
                         Label("Heads up: \(warning)", systemImage: "exclamationmark.triangle.fill")
                             .font(.callout).foregroundStyle(Theme.amber)

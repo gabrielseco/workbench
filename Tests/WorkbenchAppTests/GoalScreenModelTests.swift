@@ -197,6 +197,20 @@ private final class SkillProbe: @unchecked Sendable {
         #expect(made.items == ["first"] && store.actionError == nil)
     }
 
+    @Test func leavingTheProjectWhileApprovingStartsNoRun() async throws {
+        let ran = Flag()
+        let release = Gate()
+        let (store, _) = try await actionsStore(approve: { _, _ in await release.wait() }, run: { _, _ in ran.set() })
+        let other = try await AppFixture()
+        let approving = Task { await store.approveAndRun() }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await store.open(other.root))
+        release.open()
+        await approving.value
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!ran.value)
+    }
+
     @Test func approveRunsBeforeTheRun() async throws {
         let order = Order()
         let (store, _) = try await actionsStore(
@@ -219,4 +233,19 @@ private final class Order: @unchecked Sendable {
     private var list: [String] = []
     func add(_ item: String) { lock.withLock { list.append(item) } }
     var items: [String] { lock.withLock { list } }
+}
+
+private actor Gate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    nonisolated func open() { Task { await release() } }
+    private func release() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
 }

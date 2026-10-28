@@ -136,18 +136,21 @@ enum DoctorChip: Equatable {
     /// here and left to the log to report.
     func approveAndRun() async {
         guard let project, let thread = currentThread, !starting else { return }
+        let mine = generation
         starting = true
         actionError = nil
         defer { starting = false }
         do {
             try await actions.approve(project, thread)
         } catch {
-            actionError = "\(error)"
+            if mine == generation { actionError = "\(error)" }
             await reload()
             return
         }
         await reload()
-        let (run, mine) = (actions.run, generation)
+        // The window may have moved to another project while approval ran: the approval stands in the log, the run is not started.
+        guard mine == generation else { return }
+        let run = actions.run
         Task { [weak self] in
             do { try await run(project, thread) } catch { self?.runFailed(error, generation: mine) }
         }
