@@ -23,11 +23,12 @@ bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on thi
 scripts/verify-cli/from-branch.sh <feature>  # the same on a branch from a temp clone, normal then sabotaged, with the PR snippet
 scripts/bundle-app.sh [--check|--install] # macOS: builds .build/bundle/Workbench.app (release, icon, signed); --check launches a copy; --install puts it in ~/Applications
 scripts/render-icon.sh                   # re-renders Resources/AppIcon.png from the SVG (Chrome headless); the PNG is committed
+scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's app on a fixture project (Fixtures/app/) and drive it (verify-app skill)
 ```
 
 ## Skills
 
-Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `workbench`). Agents that don't read that directory
+Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `verify-app`, `workbench`). Agents that don't read that directory
 natively can open the `SKILL.md` and follow it. Claude Code reads them through the symlinks in
 `.claude/skills/`; when adding a skill, add its symlink there too:
 `ln -s ../../.agents/skills/<name> .claude/skills/<name>`.
