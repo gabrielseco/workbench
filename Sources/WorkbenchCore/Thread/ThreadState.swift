@@ -207,6 +207,8 @@ public struct ThreadState: Sendable, Equatable {
     /// The `seq` and time of the latest `turn.ended`, nil before one; where "needs you" for a review begins.
     public var lastTurnEndedSeq: Int?
     public var lastTurnEndedAt: String?
+    /// What the latest turn alone cost; nil when it reported none (never 0).
+    public var lastTurnCostUSD: Double?
     /// When the latest `goal.approved` was written.
     public var approvedAt: String?
     /// The `commit` the `accepted` decision recorded.
@@ -358,9 +360,10 @@ public struct ThreadState: Sendable, Equatable {
                 (state.lastTurnEndedSeq, state.lastTurnEndedAt) = (event.seq, event.ts)
                 Self.recordDenials(event, into: &state.review.deniedTools)
                 Self.reconcileDenials(ended: event, into: &state)
+                state.lastTurnCostUSD = nil
                 switch event.data["cost_usd"] {
-                case .double(let d)?: state.totalCostUSD += d
-                case .int(let i)?: state.totalCostUSD += Double(i)
+                case .double(let d)?: (state.totalCostUSD, state.lastTurnCostUSD) = (state.totalCostUSD + d, d)
+                case .int(let i)?: (state.totalCostUSD, state.lastTurnCostUSD) = (state.totalCostUSD + Double(i), Double(i))
                 default: state.costUnknown = true
                 }
             case .checkStarted:

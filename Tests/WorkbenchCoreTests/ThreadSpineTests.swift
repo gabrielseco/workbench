@@ -203,4 +203,11 @@ private func marks(_ spine: ThreadSpine) -> [ThreadSpine.Mark] { spine.entries.m
         story.add(.judgeStarted, turn: 1)
         #expect(ThreadSpine.derive(state: story.state, goal: .approved).mark(.review) == .pending)
     }
+
+    @Test func runShowsTheLatestTurnsCostNotTheTotal() {
+        var story = SpineStory.ended()
+        story.startTurn(2)
+        story.endTurn(2, cost: 0.25)
+        #expect(ThreadSpine.derive(state: story.state, goal: .approved).sublabel(.run) == "Turn 2 · $0.25 (send-back)")
+    }
 }

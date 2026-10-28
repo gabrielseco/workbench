@@ -121,7 +121,7 @@ public struct ThreadSpine: Sendable, Equatable {
         if let result = state.lastResult, result != "succeeded" {
             label += " · \(result)"
         } else {
-            label += state.knownCostUSD.map { String(format: " · $%.2f", $0) } ?? " · cost unknown"
+            label += state.lastTurnCostUSD.map { String(format: " · $%.2f", $0) } ?? " · cost unknown"
         }
         if state.lastTurn > 1 { label += " (send-back)" }
         return Entry(step: .run, mark: .done, sublabel: label)
