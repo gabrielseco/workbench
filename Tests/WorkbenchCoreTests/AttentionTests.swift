@@ -5,10 +5,12 @@ import Testing
 @Suite struct AttentionTests {
     private func attention(
         _ story: SpineStory, approval: ApprovalState? = .approved, checks: PRChecksSummary? = nil,
-        hand: [String] = [], outcome: PullRequestOutcome = .open
+        hand: [String] = [], outcome: PullRequestOutcome = .open, currentHead: String? = nil
     ) -> Attention {
-        let spine = ThreadSpine.derive(state: story.state, approval: approval, outcome: outcome, checks: checks)
-        return Attention.derive(spine: spine, state: story.state, checks: checks, handChecks: hand, outcome: outcome)
+        let spine = ThreadSpine.derive(
+            state: story.state, approval: approval, outcome: outcome, checks: checks, currentHead: currentHead)
+        return Attention.derive(
+            spine: spine, state: story.state, checks: checks, handChecks: hand, outcome: outcome, currentHead: currentHead)
     }
 
     private func reasonOf(_ attention: Attention) -> AttentionReason? {
@@ -146,5 +148,22 @@ import Testing
         #expect(ready.commit == "newer456", "the PR opened at abc123 and moved on")
         let red = PRChecksSummary(checks: [PRCheck(name: "linux", bucket: "fail")])
         #expect(try #require(reasonOf(attention(story, checks: red))).commit == "newer456")
+    }
+
+    @Test func aCleanReviewOfAnOlderCommitIsNotReadyToMerge() throws {
+        var story = shipped()
+        story.prRound(1, verdict: "clean", head: "old111")
+        #expect(attention(story, checks: green, currentHead: "new222") == .none)
+        let ready = try #require(reasonOf(attention(story, checks: green, currentHead: "old111")))
+        #expect(ready.text == "Ready to merge" && ready.commit == "old111")
+        let red = PRChecksSummary(checks: [PRCheck(name: "linux", bucket: "fail")])
+        #expect(try #require(reasonOf(attention(story, checks: red, currentHead: "new222"))).commit == "new222")
+    }
+
+    @Test func aCleanedThreadWithAnOpenFindingIsQuiet() {
+        var story = shipped()
+        story.prRound(1, verdict: "fix")
+        story.add(.branchRemoved, ["reason": "merged"])
+        #expect(attention(story) == .none)
     }
 }

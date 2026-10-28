@@ -219,4 +219,51 @@ import Testing
         story.judge(open: false)
         #expect(ThreadSpine.derive(state: story.state)[.review].mark == .needsYou)
     }
+
+    @Test func theRunLabelShowsTheLatestTurnsCostNotTheThreadsTotal() {
+        var story = SpineStory()
+        story.approve()
+        story.turn(1, cost: 1.5)
+        story.turn(2, cost: 2.0)
+        #expect(ThreadSpine.derive(state: story.state)[.run].sublabel == "Turn 2 · $2.00")
+        story.turn(3, cost: nil)
+        #expect(ThreadSpine.derive(state: story.state)[.run].sublabel == "Turn 3 · cost unknown")
+        story.turn(4, cost: 0.5)
+        #expect(ThreadSpine.derive(state: story.state)[.run].sublabel == "Turn 4 · $0.50", "an older unknown cost hides nothing")
+    }
+
+    @Test func aReviewOfAnOlderCommitIsStale() {
+        var story = SpineStory()
+        story.approve()
+        story.turn(1)
+        story.decide("accepted")
+        story.ship()
+        story.prRound(1, verdict: "clean", head: "old111")
+        let green = PRChecksSummary(checks: [PRCheck(name: "linux", bucket: "pass")])
+        let stale = ThreadSpine.derive(state: story.state, checks: green, currentHead: "new222")[.prReview]
+        #expect(stale.mark == .current && stale.sublabel == "New commit since round 1")
+        let same = ThreadSpine.derive(state: story.state, checks: green, currentHead: "old111")[.prReview]
+        #expect(same.mark == .done)
+    }
+
+    @Test func aCleanedThreadAsksNothingAboutItsPullRequest() {
+        var story = SpineStory()
+        story.approve()
+        story.turn(1)
+        story.decide("accepted")
+        story.ship()
+        story.prRound(1, verdict: "fix")
+        story.add(.branchRemoved, ["reason": "merged"])
+        let cleaned = ThreadSpine.derive(state: story.state)
+        #expect(!cleaned.entries.contains { $0.mark == .needsYou || $0.mark == .current })
+        #expect(cleaned[.ship].sublabel == "PR #7 shipped")
+        var merged = SpineStory()
+        merged.approve()
+        merged.turn(1)
+        merged.decide("accepted")
+        merged.ship()
+        merged.prRound(1, verdict: "fix")
+        let spine = ThreadSpine.derive(state: merged.state, outcome: .merged)
+        #expect(spine[.prReview].mark == .done && spine[.clean].mark == .current)
+    }
 }

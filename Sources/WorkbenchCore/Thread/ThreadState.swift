@@ -212,6 +212,8 @@ public struct ThreadState: Sendable, Equatable {
     public var cleaned = false
     /// The `seq` of the latest `turn.ended`, nil when none has ended.
     public var lastTurnEndedSeq: Int?
+    /// What the latest ended turn cost; nil when it reported none (never 0).
+    public var lastTurnCostUSD: Double?
 
     /// The turns' cost, nil when any turn did not report one (`--json` says null, text says `unknown`).
     public var knownCostUSD: Double? { costUnknown ? nil : totalCostUSD }
@@ -346,6 +348,7 @@ public struct ThreadState: Sendable, Equatable {
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
                 state.lastTurnEndedSeq = event.seq
+                state.lastTurnCostUSD = reportedCost(event)
                 Self.recordDenials(event, into: &state.review.deniedTools)
                 Self.reconcileDenials(ended: event, into: &state)
                 switch event.data["cost_usd"] {

@@ -46,9 +46,10 @@ public struct ThreadSpine: Sendable, Equatable {
     ///     latest `goal.approved`.
     ///   - outcome: the pull request's fate when the caller knows it.
     ///   - checks: the pull request's CI when the caller fetched it; nil is "not checked", never "green".
+    ///   - currentHead: the pull request's head commit now, when the caller knows it. A review of another commit is stale.
     public static func derive(
         state: ThreadState, approval: ApprovalState? = nil, outcome: PullRequestOutcome = .open,
-        checks: PRChecksSummary? = nil
+        checks: PRChecksSummary? = nil, currentHead: String? = nil
     ) -> ThreadSpine {
         let approved = approval.map { $0 == .approved } ?? (state.approvedGoalHash != nil)
         let review = state.review
@@ -96,13 +97,17 @@ public struct ThreadSpine: Sendable, Equatable {
 
         let ship: Entry
         if let pr {
-            let word = outcome == .open ? "open" : (outcome == .merged ? "merged" : "closed")
+            let word = outcome == .open ? (state.cleaned ? "shipped" : "open") : (outcome == .merged ? "merged" : "closed")
             ship = Entry(step: .ship, mark: .done, sublabel: "PR #\(pr.number) \(word)")
         } else {
             ship = Entry(step: .ship, mark: accepted ? .current : .pending, sublabel: accepted ? "Not shipped" : "")
         }
 
-        let prReview = prReviewEntry(state: state, pr: pr, checks: checks)
+        var prReview = prReviewEntry(state: state, pr: pr, checks: checks, currentHead: currentHead)
+        // Once the pull request ended or its branch was cleaned nothing is asked of anyone about it.
+        if pr != nil && (state.cleaned || outcome != .open) && prReview.mark != .failed {
+            prReview.mark = .done
+        }
 
         let clean: Entry
         if state.cleaned {
@@ -116,7 +121,9 @@ public struct ThreadSpine: Sendable, Equatable {
         return ThreadSpine(entries: [goal, run, reviewEntry, accept, ship, prReview, clean])
     }
 
-    private static func prReviewEntry(state: ThreadState, pr: PullRequestRecord?, checks: PRChecksSummary?) -> Entry {
+    private static func prReviewEntry(
+        state: ThreadState, pr: PullRequestRecord?, checks: PRChecksSummary?, currentHead: String?
+    ) -> Entry {
         guard let pr else { return Entry(step: .prReview, mark: .pending, sublabel: "") }
         // A round that reviewed another pull request does not count for this one.
         let round = state.review.prReview.flatMap { $0.pr == nil || $0.pr == pr.number ? $0 : nil }
@@ -125,6 +132,9 @@ public struct ThreadSpine: Sendable, Equatable {
         }
         guard let round else { return Entry(step: .prReview, mark: .current, sublabel: "No review yet") }
         if round.isOpen { return Entry(step: .prReview, mark: .current, sublabel: "Round \(round.round) · running") }
+        if let currentHead, let reviewed = round.headSHA, reviewed != currentHead {
+            return Entry(step: .prReview, mark: .current, sublabel: "New commit since round \(round.round)")
+        }
         switch round.verdict {
         case "fix": return Entry(step: .prReview, mark: .needsYou, sublabel: "Findings open")
         case "clean":
@@ -142,6 +152,6 @@ public struct ThreadSpine: Sendable, Equatable {
     }
 
     private static func cost(_ state: ThreadState) -> String {
-        state.knownCostUSD.map { String(format: "$%.2f", $0) } ?? "cost unknown"
+        state.lastTurnCostUSD.map { String(format: "$%.2f", $0) } ?? "cost unknown"
     }
 }
