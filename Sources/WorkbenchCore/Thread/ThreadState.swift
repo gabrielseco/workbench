@@ -50,6 +50,10 @@ public struct Review: Sendable, Equatable {
         public var findingsPath: String?
         /// What the reviewer's provider reported it cost (Claude); nil when it reports none (Codex), never 0.
         public var costUSD: Double?
+        /// The `seq` of the event this round is read from, so a reader can say since when it has needed anyone.
+        public var seq: Int = 0
+        /// True for a round that only started: it is running, or it was cut off and the next command closes it.
+        public var isOpen: Bool = false
     }
 
     public struct Note: Sendable, Equatable {
@@ -153,6 +157,16 @@ public struct ThreadLineage: Sendable, Equatable {
     public var round: Int
 }
 
+/// The pull request a thread opened, as `pr.opened` recorded it.
+public struct PullRequestRecord: Sendable, Equatable {
+    public var number: Int
+    public var url: String
+    /// The commit the pull request was opened at; nil when the event carries none.
+    public var headSHA: String?
+    /// The `seq` of the `pr.opened` event.
+    public var seq: Int
+}
+
 /// What the log says about a thread, derived each time it is asked for. Nothing here is stored twice.
 public struct ThreadState: Sendable, Equatable {
     public var id: String
@@ -190,6 +204,12 @@ public struct ThreadState: Sendable, Equatable {
     /// Usage the `agent.activity` events of non-Claude turns reported, summed per field. A field no provider ever
     /// reported is nil, never 0; nil when none did. Claude's cost is in `totalCostUSD`.
     public var reportedUsage: AgentUsage?
+    /// The pull request `workbench ship` opened, nil before one; the latest `pr.opened` counts.
+    public var pullRequest: PullRequestRecord?
+    /// True once `clean` deleted the shipped branch (`branch.removed`).
+    public var cleaned = false
+    /// The `seq` of the latest `turn.ended`, nil when none has ended.
+    public var lastTurnEndedSeq: Int?
 
     /// The turns' cost, nil when any turn did not report one (`--json` says null, text says `unknown`).
     public var knownCostUSD: Double? { costUnknown ? nil : totalCostUSD }
@@ -213,7 +233,8 @@ public struct ThreadState: Sendable, Equatable {
             return Review.PRReview(
                 round: event.data["round"]?.intValue ?? 0, pr: event.data["pr"]?.intValue,
                 headSHA: event.data["head_sha"]?.stringValue, verdict: nil,
-                failure: "started and never recorded a result (still running, or it was interrupted)", findingsPath: nil)
+                failure: "started and never recorded a result (still running, or it was interrupted)", findingsPath: nil,
+                seq: event.seq, isOpen: true)
         }
         let verdict = event.data["verdict"]?.stringValue
         let ok = event.data["ok"] == true && (verdict == "clean" || verdict == "fix")
@@ -221,7 +242,7 @@ public struct ThreadState: Sendable, Equatable {
             round: event.data["round"]?.intValue ?? 0, pr: event.data["pr"]?.intValue,
             headSHA: event.data["head_sha"]?.stringValue, verdict: ok ? verdict : nil,
             failure: ok ? nil : safeLine(event.data["reason"]?.stringValue ?? "no reason recorded", limit: 300),
-            findingsPath: event.data["findings_path"]?.stringValue, costUSD: reportedCost(event))
+            findingsPath: event.data["findings_path"]?.stringValue, costUSD: reportedCost(event), seq: event.seq)
     }
 
     /// The `cost_usd` an event recorded; nil when the provider reported none.
@@ -319,6 +340,7 @@ public struct ThreadState: Sendable, Equatable {
                 if state.openTurn == event.turn { state.openTurn = nil }
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
+                state.lastTurnEndedSeq = event.seq
                 Self.recordDenials(event, into: &state.review.deniedTools)
                 Self.reconcileDenials(ended: event, into: &state)
                 switch event.data["cost_usd"] {
@@ -355,6 +377,13 @@ public struct ThreadState: Sendable, Equatable {
                 }
             case .agentActivity:
                 Self.fold(activity: event, into: &state)
+            case .prOpened:
+                if let number = event.data["number"]?.intValue, let url = event.data["url"]?.stringValue {
+                    state.pullRequest = PullRequestRecord(
+                        number: number, url: url, headSHA: event.data["head_sha"]?.stringValue, seq: event.seq)
+                }
+            case .branchRemoved:
+                state.cleaned = true
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
                     state.decision = decision

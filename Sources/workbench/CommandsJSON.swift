@@ -8,7 +8,7 @@ extension Commands {
 
     static func statusKeys() -> [String] {
         ["v", "thread", "ended", "goal", "turns", "open_turn", "running", "last_result", "check", "cost_usd",
-         "notes", "base_gap", "worktree", "progress"]
+         "notes", "base_gap", "worktree", "progress", "spine", "attention"]
     }
 
     static func reviewKeys() -> [String] {
@@ -118,10 +118,12 @@ extension Commands {
         let state = ctx.store.state(from: events, id: id)
         var goalValue: JSONValue = .null
         var base: String?
+        var approvalState: ApprovalState?
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {
             do {
                 let goal = try GoalFile.parse(text).goal
                 base = goal.base
+                approvalState = goal.approval
                 let approval: String
                 switch goal.approval {
                 case .approved: approval = "approved"
@@ -145,6 +147,7 @@ extension Commands {
         let worktreeValue = worktreeJSON(id: id, ctx: ctx, events: events)
         let progressValue = progressJSON(state: state, id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
+        let spine = ThreadSpine.derive(state: state, approval: approvalState)
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: id, ctx: ctx),
@@ -161,7 +164,27 @@ extension Commands {
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
+            "spine": spineJSON(spine), "attention": attentionJSON(Attention.derive(spine: spine, state: state)),
         ]
+    }
+
+    static func spineJSON(_ spine: ThreadSpine) -> JSONValue {
+        .array(
+            spine.entries.map {
+                ["step": .string($0.step.rawValue), "mark": .string($0.mark.rawValue), "sublabel": .string($0.sublabel)]
+            })
+    }
+
+    static func attentionJSON(_ attention: Attention) -> JSONValue {
+        switch attention {
+        case .none: ["state": "none", "reason": .null, "since": .null, "commit": .null]
+        case .working: ["state": "working", "reason": .null, "since": .null, "commit": .null]
+        case .needsYou(let r):
+            [
+                "state": "needs_you", "reason": .string(r.text), "since": .int(r.since),
+                "commit": r.commit.map { .string($0) } ?? .null,
+            ]
+        }
     }
 
     /// The latest kept plan, null when there is none. `stale` is true when it was made for another version of the

@@ -13,7 +13,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress, spine, attention
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -38,6 +38,14 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
   tool_calls, denied_calls}`, derived from the log on each call (`tool_calls` and `denied_calls` are `null` for a turn of a provider that has not reported any: unknown, not 0). `quiet` is true when the newest event is
   60 s old or more. `cost_usd` is null when a turn reported none (the total is unknown, never 0) and does not include the open turn: `claude` reports cost only in the result line.
+- `spine`: the thread as seven steps in a fixed order (`goal`, `run`, `review`, `accept`, `ship`, `pr review`, `clean`), each
+  `{step, mark, sublabel}`. `mark` is `done`, `current`, `needs_you`, `pending` or `failed`; `sublabel` is a short line, empty when there is nothing to say.
+  Derived from the log and the goal file on each call (`ThreadSpine.derive`). `status` does not ask GitHub, so a pull request's CI and fate
+  are not known to it: `ship` reads `PR #n open` and `pr review` says `CI not checked` after a clean round.
+- `attention`: `{state, reason, since, commit}`. `state` is `none`, `working` (a turn or check is open, or a pull request review round is running)
+  or `needs_you` (the thread cannot go on until a person decides: a turn ended with no decision, or the pull request's latest review round found
+  something or failed). `reason` and `since` (the `seq` it began at) are null unless `needs_you`; `commit` is the head commit for a reason GitHub
+  can change without an event, null otherwise. A draft goal, a running turn and a merged pull request waiting for `clean` are never `needs_you`.
 
 `workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
 cost_usd, parent, root, round}` (the last three null unless it is a review follow-up) (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,

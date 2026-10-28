@@ -157,9 +157,11 @@ extension Commands {
         out("thread:    \(id)\(state.isActive ? "" : "  (ended: \(state.decision ?? "?"))")")
         for line in lineageLines(state, ctx: ctx) { out(line) }
 
+        var approvalState: ApprovalState?
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {
             do {
                 let goal = try GoalFile.parse(text).goal
+                approvalState = goal.approval
                 out("title:     \(goal.title)")
                 let approval: String
                 switch goal.approval {
@@ -210,6 +212,20 @@ extension Commands {
             out("worktree:  \(worktree.path)")
         } else if events.contains(where: { $0.kind == .worktreeRemoved }) {
             out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
+        }
+        let spine = ThreadSpine.derive(state: state, approval: approvalState)
+        for entry in spine.entries {
+            let label = entry.sublabel.isEmpty ? "" : "  \(entry.sublabel)"
+            out("  \(entry.step.title.padding(toLength: 10, withPad: " ", startingAt: 0)) \(entry.mark.rawValue)\(label)")
+        }
+        out("attention: " + attentionText(Attention.derive(spine: spine, state: state)))
+    }
+
+    static func attentionText(_ attention: Attention) -> String {
+        switch attention {
+        case .none: "none"
+        case .working: "working"
+        case .needsYou(let reason): "needs you: \(reason.text)"
         }
     }
 
