@@ -75,7 +75,9 @@ struct ThreadSnapshot: Equatable {
         if state.pullRequest != nil {
             return "Clean this thread once its pull request is merged, then start the next goal."
         }
-        if state.decision == "accepted" { return "Ship this thread first (`workbench ship`), or abandon it, then start the next goal." }
+        if state.decision == "accepted" {
+            return "Ship this thread first (`workbench ship`), or abandon it, then start the next goal."
+        }
         return nil
     }
 
