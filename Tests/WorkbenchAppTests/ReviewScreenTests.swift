@@ -49,7 +49,7 @@ private final class Recorder: @unchecked Sendable {
     @Test func theHeadlineHasTheTurnAndTheFilesAndLines() async throws {
         let fixture = try await ended()
         let model = ReviewModel.derive(try report(fixture))
-        #expect(model.headline == "Turn 1 succeeded · 1 file · +3 −1")
+        #expect(model.headline == "Turn 1 succeeded" && model.totals == "1 file · +3 −1")
         #expect(model.files.map(\.text) == ["M  a.swift  +3 −1"] && model.canDecide)
     }
 
@@ -171,6 +171,50 @@ private final class Recorder: @unchecked Sendable {
         #expect(store.pendingDiscard != nil)
         await store.confirmDiscard()
         #expect(recorder.log == ["discard"] && store.pendingDiscard == nil)
+    }
+
+    @Test func discardForwardsTheExactPlanItWasShown() async throws {
+        let seen = Recorder()
+        let fixture = try await ended()
+        keptFixtures.append(fixture)
+        let reported = try report(fixture)
+        let shown = DiscardPlan(
+            id: "t1", worktree: nil, branch: "workbench/t1", diff: .unavailable(reason: "x"), commits: ["a b"])
+        let actions = GoalActions(
+            loadReview: { _, _ in reported }, discardPlan: { _, _ in shown },
+            discard: { _, _, plan in seen.add("discard \(plan == shown)") })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        await store.prepareDiscard()
+        await store.confirmDiscard()
+        #expect(seen.log == ["discard true"])
+    }
+
+    @Test func deniedCallsAreGroupedByWhatWasDeniedWithACount() async throws {
+        let fixture = try await ended()
+        let denial: JSONValue = [["tool": "Bash", "input": "git push"], ["tool": "Bash", "input": "git push"]]
+        let refused: JSONValue = ["provider": "claude", "type": "permission_denied", "tool": "Bash"]
+        try fixture.append("t1", .agentActivity, turn: 1, data: refused)
+        try fixture.append("t1", .agentActivity, turn: 1, data: refused)
+        try fixture.append(
+            "t1", .turnEnded, turn: 1, data: ["result": "succeeded", "permission_denials": 2, "denials": denial])
+        let model = ReviewModel.derive(try report(fixture))
+        #expect(model.denied.count == 1 && model.denied[0].count == 2 && model.denied[0].text == "Bash(git push)")
+    }
+
+    @Test func aFailedCriterionIsFlaggedFailedNotForYou() async throws {
+        let fixture = try await ended(proofs: ["`swift test` passes"])
+        try fixture.append("t1", .checkRan, turn: 1, data: ["result": "failed", "exit_code": 1, "command": "swift test"])
+        let model = ReviewModel.derive(try report(fixture))
+        #expect(model.criteria[0].failed && !model.criteria[0].forYou && model.assessed == "1 of 1 assessed")
+    }
+
+    @Test func refreshReadsTheReviewAgain() async throws {
+        let recorder = Recorder()
+        let store = try await store(recorder)
+        #expect(store.review != nil)
+        await store.refreshReview()
+        #expect(store.review?.canDecide == true)
     }
 
     @Test func cancellingADecisionDoesNothing() async throws {

@@ -157,7 +157,7 @@ struct ThreadPane: View {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
             if let review = store.review {
-                ReviewView(review: review, store: store)
+                ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else if let run = snapshot.run {
                 RunView(snapshot: snapshot, run: run, store: store)
             } else if let goal {

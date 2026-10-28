@@ -4,6 +4,7 @@ import WorkbenchCore
 /// The turn's work, as core reports it, and the three decisions. Nothing on this screen marks a criterion as met.
 struct ReviewView: View {
     var review: ReviewModel
+    var finishedAt: Date?
     var store: ProjectStore
 
     @State private var sendingBack = false
@@ -12,7 +13,9 @@ struct ReviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Review · \(review.headline)").font(.title2.weight(.semibold))
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text("Review · \(headline(now: context.date))").font(.title2.weight(.semibold))
+                }
                 criteria
                 files
                 if !review.commits.isEmpty { section("Commits") { ForEach(review.commits, id: \.self) { mono($0) } } }
@@ -24,6 +27,9 @@ struct ReviewView: View {
                 actions
             }
             .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await store.refreshReview() }
         }
         .sheet(isPresented: $sendingBack) { SendBackSheet(store: store, shown: $sendingBack) }
         .sheet(item: Binding(get: { diffPath.map(DiffTarget.init) }, set: { diffPath = $0?.path })) { target in
@@ -37,27 +43,40 @@ struct ReviewView: View {
         }
     }
 
+    private func headline(now: Date) -> String {
+        var parts = [review.headline]
+        if let finishedAt { parts[0] += " finished \(Progress.duration(max(0, now.timeIntervalSince(finishedAt)))) ago" }
+        if !review.totals.isEmpty { parts.append(review.totals) }
+        return parts.joined(separator: " · ")
+    }
+
     private var criteria: some View {
         section("Criteria") {
             if let problem = review.goalProblem {
                 Label("The goal file is not valid, so the criteria are unknown: \(problem)", systemImage: "xmark.octagon.fill")
                     .foregroundStyle(Theme.red).font(.callout)
             } else {
-                Text(review.criteriaSummary).font(.callout).foregroundStyle(.secondary)
+                Text("\(review.assessed) · \(review.criteriaSummary)").font(.callout).foregroundStyle(.secondary)
                 ForEach(review.criteria) { criterion in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(criterion.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
                             Text(criterion.text)
                             Spacer()
-                            Text(criterion.label).font(.callout).foregroundStyle(criterion.forYou ? Theme.amber : Theme.green)
+                            Text(criterion.label).font(.callout).foregroundStyle(color(criterion))
                         }
                         Text(criterion.proof).font(.callout).foregroundStyle(.secondary)
                         if let note = criterion.note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                        ForEach(criterion.evidence, id: \.self) { Text($0).font(.system(.caption, design: .monospaced)) }
                     }
                 }
             }
         }
+    }
+
+    private func color(_ criterion: ReviewModel.Criterion) -> Color {
+        if criterion.failed { return Theme.red }
+        return criterion.forYou ? Theme.amber : Theme.green
     }
 
     private var files: some View {
@@ -93,6 +112,8 @@ struct ReviewView: View {
             HStack {
                 Button("Discard…") { Task { await store.prepareDiscard() } }
                 Button("Open worktree") { Task { await store.openWorktree() } }
+                Button("Refresh") { Task { await store.refreshReview() } }
+                    .help("Read the worktree again after editing it")
                 Spacer()
                 Button("Send back…") { sendingBack = true }
                 Button("Accept work") { Task { await store.prepareAccept() } }

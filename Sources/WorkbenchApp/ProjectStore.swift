@@ -245,6 +245,15 @@ enum DoctorChip: Equatable {
         await reload()
     }
 
+    /// Reads the review again: the worktree and the branch are not in the log, so an edit there is seen on activation or here.
+    func refreshReview() async {
+        guard let project, let thread = currentThread, review != nil else { return }
+        let (mine, load) = (generation, actions.loadReview)
+        let report = await Task.detached { await load(project, thread) }.value
+        guard mine == generation, review != nil else { return }
+        review = report.map(ReviewModel.derive)
+    }
+
     func cancelAccept() { pendingAccept = nil }
 
     func prepareDiscard() async {

@@ -23,6 +23,8 @@ struct RunModel: Equatable {
     var turn: Int
     var phase: Phase
     var startedAt: Date?
+    /// When the turn ended, nil while it is open.
+    var endedAt: Date?
     var lastEventAt: Date?
     var latest: String?
     var rows: [Row]
@@ -104,7 +106,7 @@ struct RunModel: Equatable {
             fraction = min(1, known / NSDecimalNumber(decimal: budgetUSD).doubleValue)
         }
         return RunModel(
-            turn: turn, phase: phase, startedAt: progress.turnStartedAt.flatMap(date),
+            turn: turn, phase: phase, startedAt: progress.turnStartedAt.flatMap(date), endedAt: ended.flatMap { date($0.ts) },
             lastEventAt: progress.lastEventAt.flatMap(date), latest: rows.last?.text ?? progress.lastEvent, rows: rows,
             toolCalls: progress.toolCallsKnown ? progress.toolCalls : nil,
             deniedCalls: progress.deniedCallsKnown ? progress.deniedCalls : nil,

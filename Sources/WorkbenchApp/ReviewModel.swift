@@ -12,6 +12,9 @@ struct ReviewModel: Equatable {
         var label: String
         var note: String?
         var forYou: Bool
+        var failed: Bool
+        /// The recorded screenshot files, or `name (missing)`; empty for a proof that is not a screenshot.
+        var evidence: [String]
     }
 
     struct File: Equatable, Identifiable {
@@ -26,10 +29,14 @@ struct ReviewModel: Equatable {
         var count: Int
     }
 
+    /// `Turn 2 succeeded`; the files and lines follow in `totals`, and the view says when it finished.
     var headline: String
+    var totals: String
     var result: String?
     var criteria: [Criterion]
     var criteriaSummary: String
+    /// `1 of 4 assessed`: the criteria Workbench could say something about, not a verdict on any of them.
+    var assessed: String
     var goalProblem: String?
     var files: [File]
     var filesNote: String?
@@ -49,7 +56,8 @@ struct ReviewModel: Equatable {
         let criteria = statuses.map { status in
             Criterion(
                 id: status.id, text: texts[status.id] ?? "", proof: status.proof, label: status.label, note: status.note,
-                forYou: status.state != .passed && status.state != .failed)
+                forYou: status.state != .passed && status.state != .failed, failed: status.state == .failed,
+                evidence: status.screenshots.map { $0.path.map { path in path } ?? "\($0.name) (missing)" })
         }
         var files: [File] = []
         var filesNote: String?
@@ -60,21 +68,22 @@ struct ReviewModel: Equatable {
             files = summary.files.map { File(path: $0.path, text: describe($0)) }
             if summary.truncated { filesNote = "Too many files: \(files.count) of \(summary.totalFiles) shown." }
             let noun = summary.totalFiles == 1 ? "file" : "files"
-            totals = " · \(summary.totalFiles) \(noun) · +\(summary.additions) −\(summary.deletions)"
+            totals = "\(summary.totalFiles) \(noun) · +\(summary.additions) −\(summary.deletions)"
         case .unavailable(let reason):
             diffProblem = "Diff unavailable: \(reason)"
         }
         let result = state.review.turnResult
         var headline = "Turn \(state.lastTurn)"
         if let result { headline += " \(result.replacingOccurrences(of: "_", with: " "))" }
-        headline += totals
         let groups = Dictionary(grouping: state.review.deniedTools, by: { $0.tool + "\u{0}" + $0.identity })
         let denied = groups.values.sorted { $0[0].seq < $1[0].seq }.map {
             Denied(id: "\($0[0].seq)", text: $0[0].label, count: $0.count)
         }
         return ReviewModel(
-            headline: headline, result: result, criteria: criteria,
-            criteriaSummary: CriteriaStatus.summary(statuses, check: state.review.check), goalProblem: report.goalProblem,
+            headline: headline, totals: totals, result: result, criteria: criteria,
+            criteriaSummary: CriteriaStatus.summary(statuses, check: state.review.check),
+            assessed: "\(criteria.count - criteria.filter(\.forYou).count) of \(criteria.count) assessed",
+            goalProblem: report.goalProblem,
             files: files, filesNote: filesNote, diffProblem: diffProblem,
             commits: report.commits.map { "\($0.sha.prefix(12)) \($0.subject)" }
                 + (report.commitCount > report.commits.count ? ["… and \(report.commitCount - report.commits.count) more"] : []),
