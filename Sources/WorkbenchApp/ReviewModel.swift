@@ -68,7 +68,9 @@ struct ReviewModel: Equatable {
             files = summary.files.map { File(path: $0.path, text: describe($0)) }
             if summary.truncated { filesNote = "Too many files: \(files.count) of \(summary.totalFiles) shown." }
             let noun = summary.totalFiles == 1 ? "file" : "files"
-            totals = "\(summary.totalFiles) \(noun) · +\(summary.additions) −\(summary.deletions)"
+            totals = summary.truncated
+                ? "\(summary.totalFiles) \(noun) · +\(summary.additions) −\(summary.deletions) in the \(files.count) listed"
+                : "\(summary.totalFiles) \(noun) · +\(summary.additions) −\(summary.deletions)"
         case .unavailable(let reason):
             diffProblem = "Diff unavailable: \(reason)"
         }

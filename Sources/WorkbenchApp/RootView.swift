@@ -156,6 +156,7 @@ struct ThreadPane: View {
             if case .needsYou(let reason) = snapshot.attention, store.review == nil {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
+            if let notice = store.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Theme.green) }
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else if let run = snapshot.run {

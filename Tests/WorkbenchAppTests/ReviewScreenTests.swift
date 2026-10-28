@@ -217,6 +217,40 @@ private final class Recorder: @unchecked Sendable {
         #expect(store.review?.canDecide == true)
     }
 
+    @Test func aPlanThatArrivesAfterLeavingTheProjectIsNotShown() async throws {
+        let fixture = try await ended()
+        keptFixtures.append(fixture)
+        let reported = try report(fixture)
+        let release = Release()
+        let actions = GoalActions(
+            loadReview: { _, _ in reported }, acceptPlan: { _, _ in await release.wait(); return Self.plan })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        let preparing = Task { await store.prepareAccept() }
+        try await Task.sleep(for: .milliseconds(100))
+        let other = try await AppFixture()
+        keptFixtures.append(other)
+        #expect(await store.open(other.root))
+        await release.open()
+        await preparing.value
+        #expect(store.pendingAccept == nil)
+    }
+
+    @Test func aTruncatedDiffSaysTheLineCountsCoverTheListedFiles() async throws {
+        let fixture = try await ended()
+        let diff = ReviewReport.Diff.summary(
+            DiffSummary(base: "abc", files: [file("a", add: 5, del: 1)], truncated: true, totalFiles: 300))
+        let model = ReviewModel.derive(try report(fixture, diff: diff))
+        #expect(model.totals == "300 files · +5 −1 in the 1 listed")
+    }
+
+    @Test func acceptingSaysWhichCommitWasMade() async throws {
+        let store = try await store(Recorder())
+        await store.prepareAccept()
+        await store.confirmAccept(message: nil)
+        #expect(store.notice == "Accepted: c on b")
+    }
+
     @Test func cancellingADecisionDoesNothing() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
@@ -251,5 +285,19 @@ private final class Recorder: @unchecked Sendable {
     @Test func viewDiffReadsOneFilesPatchFromCore() async throws {
         let store = try await store(Recorder())
         #expect(await store.patchText("a.swift") == "patch of a.swift")
+    }
+}
+
+private actor Release {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
     }
 }

@@ -31,6 +31,8 @@ enum DoctorChip: Equatable {
     private(set) var pendingAccept: AcceptPlan?
     private(set) var pendingDiscard: DiscardPlan?
     private(set) var deciding = false
+    /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
+    private(set) var notice: String?
     /// The run this app started and has not seen end. At most one: a second start is refused.
     @ObservationIgnored private var ownedRun: OwnedRun?
 
@@ -116,6 +118,7 @@ enum DoctorChip: Equatable {
         }
         preferences.projectPath = located.root.path
         generation += 1
+        (pendingAccept, pendingDiscard, notice) = (nil, nil, nil)
         project = located
         doctor = .notRun
         (currentThread, lastWatch) = (nil, nil)
@@ -232,7 +235,12 @@ enum DoctorChip: Equatable {
     func prepareAccept() async {
         guard let project, let thread = currentThread, !deciding else { return }
         actionError = nil
-        do { pendingAccept = try await actions.acceptPlan(project, thread) } catch { actionError = "\(error)" }
+        notice = nil
+        let mine = generation
+        do {
+            let plan = try await actions.acceptPlan(project, thread)
+            if mine == generation { pendingAccept = plan }
+        } catch { if mine == generation { actionError = "\(error)" } }
     }
 
     /// Accepts what was shown: core refuses it when the work changed since, and nothing is committed then.
@@ -241,7 +249,10 @@ enum DoctorChip: Equatable {
         deciding = true
         defer { deciding = false }
         pendingAccept = nil
-        do { _ = try await actions.accept(project, thread, plan, message) } catch { actionError = "\(error)" }
+        do {
+            let result = try await actions.accept(project, thread, plan, message)
+            notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)"
+        } catch { actionError = "\(error)" }
         await reload()
     }
 
@@ -259,7 +270,12 @@ enum DoctorChip: Equatable {
     func prepareDiscard() async {
         guard let project, let thread = currentThread, !deciding else { return }
         actionError = nil
-        do { pendingDiscard = try await actions.discardPlan(project, thread) } catch { actionError = "\(error)" }
+        notice = nil
+        let mine = generation
+        do {
+            let plan = try await actions.discardPlan(project, thread)
+            if mine == generation { pendingDiscard = plan }
+        } catch { if mine == generation { actionError = "\(error)" } }
     }
 
     func confirmDiscard() async {
