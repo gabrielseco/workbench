@@ -151,6 +151,13 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                 #expect(approved["provider"] as? String == "claude" && approved["recorded"] as? Bool == false)
                 current["agents"] = nil
                 current["approved_for"] = nil
+                // The spine and attention are derived from the old log on every call; `status` has them, `review` does not.
+                if command == "status" {
+                    let spine = try #require(current.removeValue(forKey: "spine") as? [[String: Any]])
+                    #expect(spine.count == 7 && current.removeValue(forKey: "attention") != nil, "\(scenario.name)")
+                } else {
+                    #expect(current["spine"] == nil && current["attention"] == nil, "\(scenario.name)")
+                }
                 // PR 12 adds `spend_policy` (a goal with a cap reads `hard_cap`); status has it inside `goal`.
                 #expect(approved["spend_policy"] as? String == "hard_cap")
                 current["spend_policy"] = nil
