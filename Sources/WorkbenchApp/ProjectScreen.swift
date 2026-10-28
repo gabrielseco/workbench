@@ -68,15 +68,16 @@ struct ThreadSnapshot: Equatable {
         }
     }
 
-    /// Why `New goal…` is not offered yet; nil when it is. Work that was accepted keeps the window until it is cleaned or
-    /// abandoned, so its shipping context is not left behind (docs/plan/P19-swiftui-app.md, open decision 1).
-    var newGoalHint: String? {
+    /// What starting the next goal leaves behind, when something of this thread is still to ship or merge. The window follows the
+    /// newest thread and has no list yet ([later/thread-list.md](../later/thread-list.md)), so the way back is the terminal.
+    var newGoalNote: String? {
         guard state.decision != nil, !state.cleaned else { return nil }
+        let branch = WorktreeManager.branch(for: id)
         if state.pullRequest != nil {
-            return "Clean this thread once its pull request is merged, then start the next goal."
+            return "Its pull request stays open. After it is merged, `workbench clean` removes \(branch)."
         }
         if state.decision == "accepted" {
-            return "Ship this thread first (`workbench ship`), or abandon it, then start the next goal."
+            return "\(branch) stays on its commit. Ship it later with `workbench ship \(id)` from a terminal."
         }
         return nil
     }

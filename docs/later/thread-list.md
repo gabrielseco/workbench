@@ -3,8 +3,7 @@
 A list of a project's threads in the app, to switch between them (open an old one, compare, pick one back up).
 
 **Why it waits.** The project has one active thread and no queue (see the [plan README](../plan/README.md)), so the app shows the
-newest thread and `New goal…` appears once nothing of it is left to ship (discarded, abandoned or cleaned); for accepted or shipped work it is
-disabled with the reason, because there is no way back to it. A list is only useful with more than one thread open at a time, which is
+newest thread and `New goal…` appears once it is decided; for accepted or shipped work it is offered with a note naming the terminal command that still reaches the old thread, because there is no way back to it in the window. A list is only useful with more than one thread open at a time, which is
 [concurrency](README.md) (its table row): the single-thread guard, the shared process and CPU budget, resume races. Until then a
 finished thread is read from the window's banner and its log.
 

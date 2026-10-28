@@ -18,6 +18,6 @@ Order of likely return, each decided on its own once the previous is used daily:
 | [Project setup](project-setup.md) | `workbench doctor`, a guided `init`, checks for small and large projects | The user declares the commands; Workbench only verifies them. No stack guessing. |
 | [Proof](proof.md) | Typed evidence per criterion, screenshots, optional verifier | Advisory only, never a mandatory gate. |
 | [Triage integration](triage-integration.md) | Start a thread from a PR, status badge | Only once Workbench is used daily. |
-| [Thread list](thread-list.md) | Switch between a project's threads in the app | Needs concurrency: with one active thread the window already follows it, and `New goal…` appears once nothing is left to ship. |
+| [Thread list](thread-list.md) | Switch between a project's threads in the app | Needs concurrency: with one active thread the window already follows it, and `New goal…` appears once it is decided. |
 | [Thread until merged](thread-until-merged.md) | A shipped thread stays open, watching its PR, until it is merged | Needs concurrency: it would hold the only active thread. Today `ship --watch` ends and `clean` removes merged threads. |
 | Profiles | Several named tool sets | One fixed set until the first real need. |
