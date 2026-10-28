@@ -26,8 +26,8 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         #expect(gh.calls.filter { $0.hasPrefix("pr checks") } == ["pr checks 12 --json name,bucket"])
         #expect(gh.read("repo")?.trimmingCharacters(in: .whitespacesAndNewlines) == "unset")
         let root = fx.project.root.resolvingSymlinksInPath().path
-        let cwd = gh.read("cwd")?.trimmingCharacters(in: .whitespacesAndNewlines).map { URL(fileURLWithPath: $0) }
-        #expect(cwd?.resolvingSymlinksInPath().path == root)
+        let text = (gh.read("cwd") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(URL(fileURLWithPath: text).resolvingSymlinksInPath().path == root)
     }
 
     @Test func aGHRepoInTheCallersEnvironmentIsDroppedSoItAsksAboutThisRepository() async throws {
