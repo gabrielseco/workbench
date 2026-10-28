@@ -1,8 +1,10 @@
 import AppKit
+import Foundation
 import SwiftUI
 
 @main struct WorkbenchApp: App {
-    @State private var store = ProjectStore(preferences: UserDefaultsPreferences())
+    private static let options = LaunchOptions.from(environment: ProcessInfo.processInfo.environment)
+    @State private var store = options.makeStore(preferences: UserDefaultsPreferences())
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
@@ -10,7 +12,7 @@ import SwiftUI
         Window("Workbench", id: "main") {
             RootView(store: store)
                 .task {
-                    await store.restore()
+                    await Self.options.start(store)
                     store.startPolling()
                 }
         }

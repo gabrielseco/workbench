@@ -25,6 +25,12 @@ struct RootView: View {
 struct ToolbarBar: View {
     var store: ProjectStore
 
+    /// What the project pill is called to assistive technology, and so to scripts/verify-app.sh: it opens a file panel, and its
+    /// refusal list matches this label's start, which the folder's name alone would not.
+    static func projectButtonLabel(_ project: Project?) -> String {
+        "Choose project" + (project.map { ", now \($0.root.lastPathComponent)" } ?? "")
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Button {
@@ -35,6 +41,7 @@ struct ToolbarBar: View {
                     Image(systemName: "chevron.down").font(.caption2)
                 }
             }
+            .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
             if case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()

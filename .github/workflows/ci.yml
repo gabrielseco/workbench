@@ -33,6 +33,10 @@ jobs:
       - name: App bundle script refuses off macOS
         # bundle-app.sh builds a macOS app: on Linux it must say no clearly and change nothing (the app job runs it for real).
         run: scripts/test-bundle-app-guard.sh
+      - name: App verify script refuses what it must
+        # verify-app.sh drives a macOS app: its refusals (a pid it did not start, a scenario name that reaches outside Fixtures/app/)
+        # need no macOS tool, and this test cannot start anything even if a guard is broken.
+        run: scripts/test-verify-app-guard.sh
 
   # macOS is no longer the PR gate (the Linux workflow is, P18): it holds one of the scarce macOS slots, so it runs on main, nightly and by hand.
   build-test:

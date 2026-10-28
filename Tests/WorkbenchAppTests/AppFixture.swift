@@ -22,11 +22,11 @@ import WorkbenchCore
 
     deinit { try? FileManager.default.removeItem(at: root) }
 
-    func goalText(id: String, approved: Bool) throws -> String {
+    func goalText(id: String, approved: Bool, title: String? = nil) throws -> String {
         let draft = """
             ---
             id: \(id)
-            title: Thread \(id)
+            title: \(title ?? "Thread \(id)")
             base: main
             budget_usd: 5
             turn_timeout_min: 30
@@ -54,10 +54,10 @@ import WorkbenchCore
 
     /// Creates the thread with `thread.created` and its goal, and returns it for more events.
     @discardableResult
-    func addThread(_ id: String, approved: Bool = false) async throws -> String {
+    func addThread(_ id: String, approved: Bool = false, title: String? = nil) async throws -> String {
         let directory = project.threadDirectory(id)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try goalText(id: id, approved: approved).write(to: project.goalURL(id), atomically: true, encoding: .utf8)
+        try goalText(id: id, approved: approved, title: title).write(to: project.goalURL(id), atomically: true, encoding: .utf8)
         created += 1
         try append(id, .threadCreated, ts: "2026-10-28T10:00:\(String(format: "%02d", created)).000Z")
         if approved { try append(id, .goalApproved, data: ["hash": "h1"]) }
@@ -69,7 +69,10 @@ import WorkbenchCore
         counters[id] = seq
         let event = Event(
             seq: seq, ts: ts ?? "2026-10-28T11:00:00.000Z", turn: turn, kind: kind, data: data)
-        var line = try JSONEncoder().encode(event)
+        // Sorted keys: the same fixture must be the same bytes on every run and machine, or committed fixtures would never match.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        var line = try encoder.encode(event)
         line.append(UInt8(ascii: "\n"))
         let url = project.eventsURL(id)
         if let handle = try? FileHandle(forWritingTo: url) {
