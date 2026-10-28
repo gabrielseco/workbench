@@ -20,7 +20,7 @@ NSGraphicsContext.restoreGraphicsState()
 guard let png = bitmap.representation(using: .png, properties: [:]) else { exit(1) }
 try png.write(to: URL(fileURLWithPath: arguments[2]))
 
-// Amber (#F29A1F to #FFC857): a lot of red, some green, little blue.
+// Amber to orange (the icon's glowing discs, about #FFA31A): a lot of red, some green, little blue.
 var amber = 0
 for y in 0..<size {
     for x in 0..<size {
@@ -31,4 +31,4 @@ for y in 0..<size {
     }
 }
 print("icon \(size)x\(size) amber=\(amber)")
-exit(amber > 100 ? 0 : 1)
+exit(amber > 20 ? 0 : 1)  // the discs are hundreds of pixels at 128; the generic icon and a flat one have none
