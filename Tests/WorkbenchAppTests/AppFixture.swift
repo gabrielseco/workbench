@@ -97,6 +97,12 @@ import WorkbenchCore
         try append(id, .turnEnded, turn: n, data: .object(ended))
     }
 
+    func activity(_ id: String, _ data: [String: JSONValue], turn: Int = 1) throws {
+        var data = data
+        data["provider"] = "claude"
+        try append(id, .agentActivity, turn: turn, data: .object(data))
+    }
+
     func decide(_ id: String, _ decision: String) throws {
         try append(id, .reviewDecision, data: ["decision": .string(decision)])
     }

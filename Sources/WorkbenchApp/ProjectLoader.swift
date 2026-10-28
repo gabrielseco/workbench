@@ -77,16 +77,21 @@ enum ProjectLoader {
         var base: String?
         var approval: ApprovalState?
         var budget: Decimal?
+        var timeout: Int?
         let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8)
         if let text, let goal = try? GoalFile.parse(text).goal {
-            (title, base, approval, budget) = (goal.title, goal.base, goal.approval, goal.budgetUSD)
+            (title, base, approval, budget, timeout) = (goal.title, goal.base, goal.approval, goal.budgetUSD, goal.turnTimeoutMin)
         }
         let spine = ThreadSpine.derive(state: state, approval: approval)
+        let run = RunModel.derive(
+            events: contents.events, state: state, runnerAlive: store.runnerPID(id: id) != nil, budgetUSD: budget,
+            turnTimeoutMin: timeout)
         return .thread(
             ThreadSnapshot(
-                id: id, title: title, base: base, approval: approval, budgetUSD: budget, state: state, spine: spine,
-                attention: Attention.derive(spine: spine, state: state), lastSeq: contents.events.last?.seq ?? 0,
-                logURL: log, problems: contents.problems.prefix(3).map(describe)))
+                id: id, title: title, base: base, approval: approval, budgetUSD: budget, turnTimeoutMin: timeout,
+                state: state, spine: spine, attention: Attention.derive(spine: spine, state: state),
+                lastSeq: contents.events.last?.seq ?? 0, logURL: log, problems: contents.problems.prefix(3).map(describe),
+                run: run))
     }
 
     /// A damaged line in words a person can act on.

@@ -45,9 +45,23 @@ enum AppScenario: String, CaseIterable {
         case .running:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
+            try fixture.activity(id, ["type": "text", "text": "Reading the invoice list and its tests"])
+            try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
+            try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
+            try fixture.activity(id, ["type": "permission_denied", "tool": "Bash"])
         case .needsYou:
             try await fixture.addThread(id, approved: true, title: Self.title)
-            try fixture.turn(id, 1, cost: 1.88)
+            try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
+            try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
+            try fixture.activity(id, ["type": "tool", "name": "Write", "summary": "Tests/InvoiceListTests.swift"])
+            try fixture.activity(id, ["type": "permission_denied", "tool": "Bash"])
+            let denial: JSONValue = [["tool": "Bash", "input": "git push origin main"]]
+            try fixture.append(
+                id, .turnEnded, turn: 1,
+                data: ["result": "succeeded", "cost_usd": 1.88, "permission_denials": 1, "denials": denial])
+            try fixture.append(id, .checkStarted, turn: 1)
+            try fixture.append(
+                id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
         case .prOpen:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.turn(id, 1, cost: 1.88)
