@@ -132,6 +132,7 @@ struct ThreadPane: View {
             Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
             Text(".workbench/threads/\(snapshot.id)/goal.md")
                 .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            Text(snapshot.stateText).font(.title3).foregroundStyle(.secondary).padding(.top, 4)
             if case .needsYou(let reason) = snapshot.attention {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }

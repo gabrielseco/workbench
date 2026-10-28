@@ -33,14 +33,30 @@ enum ProjectLoader {
         return newestFirst.first { !store.state(of: $0.id).cleaned }?.id ?? newestFirst.first?.id
     }
 
-    static func load(project: Project) -> (screen: ProjectScreen, thread: String?) {
+    /// What one full read of the project found, and what `stat` said just before the log was read.
+    struct Loaded: Sendable {
+        var screen: ProjectScreen
+        var thread: String?
+        var watch: Watch
+    }
+
+    /// The `stat` snapshot is taken before the log is read: a write that lands during the read makes the log differ from
+    /// the snapshot, so the next poll reads again. Taken after, it would describe the new file with the old screen and the
+    /// write would be missed for good.
+    /// `afterRead` runs right after the log was read: a test writes to the log there, as a runner would in that instant.
+    static func load(project: Project, afterRead: @Sendable () -> Void = {}) -> Loaded {
+        let folders = watch(project: project, thread: nil)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: project.workbenchDirectory.path, isDirectory: &isDirectory),
             isDirectory.boolValue
-        else { return (.workbenchMissing(path: project.root.path), nil) }
+        else { return Loaded(screen: .workbenchMissing(path: project.root.path), thread: nil, watch: folders) }
         let store = ThreadStore(project: project)
-        guard let id = currentThread(store: store) else { return (.noThread, nil) }
-        return (snapshot(project: project, store: store, id: id), id)
+        guard let id = currentThread(store: store) else { return Loaded(screen: .noThread, thread: nil, watch: folders) }
+        var seen = watch(project: project, thread: id)
+        seen.threadsDirectory = folders.threadsDirectory
+        let screen = snapshot(project: project, store: store, id: id)
+        afterRead()
+        return Loaded(screen: screen, thread: id, watch: seen)
     }
 
     static func snapshot(project: Project, store: ThreadStore, id: String) -> ProjectScreen {

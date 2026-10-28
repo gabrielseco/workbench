@@ -11,13 +11,6 @@ enum DoctorChip: Equatable {
     case problem(String)
 }
 
-/// What one full read of the project found, and what `stat` said just after it.
-private struct Loaded: Sendable {
-    var screen: ProjectScreen
-    var thread: String?
-    var watch: ProjectLoader.Watch
-}
-
 /// The one store of a window: the project, the screen derived from its newest thread's log, and the Doctor chip. It holds
 /// no thread state outside the log and the chosen repo path, and it reads the log off the main actor, only when `stat`
 /// says it changed.
@@ -31,16 +24,28 @@ private struct Loaded: Sendable {
     @ObservationIgnored private var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private let intervals: (working: Duration, idle: Duration)
+    /// Bumped each time another project is opened: an answer for an earlier one (a reload or a doctor run that was still
+    /// in flight) is dropped, never shown under the new project.
+    @ObservationIgnored private var generation = 0
+    /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
+    @ObservationIgnored private let loader: @Sendable (Project) -> ProjectLoader.Loaded
+    @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
 
     /// `screen` is for previews and tests that show a fixed state without a project on disk.
     init(
         preferences: Preferences, screen: ProjectScreen = .noProject, project: Project? = nil,
-        intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2))
+        intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2)),
+        loader: @escaping @Sendable (Project) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0) },
+        doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
+            await ProjectStore.runCoreDoctor($0, base: $1)
+        }
     ) {
         self.preferences = preferences
         self.screen = screen
         self.project = project
         self.intervals = intervals
+        self.loader = loader
+        self.doctorRunner = doctorRunner
     }
 
     // MARK: Choosing the project
@@ -67,6 +72,7 @@ private struct Loaded: Sendable {
             return false
         }
         preferences.projectPath = located.root.path
+        generation += 1
         project = located
         doctor = .notRun
         (currentThread, lastWatch) = (nil, nil)
@@ -79,19 +85,16 @@ private struct Loaded: Sendable {
     /// Looks once: reads nothing when nothing moved since the last look.
     func refresh() async {
         guard let project else { return }
-        let thread = currentThread
+        let (thread, mine) = (currentThread, generation)
         let now = await Task.detached { ProjectLoader.watch(project: project, thread: thread) }.value
-        if now != lastWatch { await reload() }
+        if mine == generation && now != lastWatch { await reload() }
     }
 
     private func reload() async {
         guard let project else { return }
-        let result = await Task.detached { () -> Loaded in
-            let loaded = ProjectLoader.load(project: project)
-            return Loaded(
-                screen: loaded.screen, thread: loaded.thread,
-                watch: ProjectLoader.watch(project: project, thread: loaded.thread))
-        }.value
+        let (mine, loader) = (generation, self.loader)
+        let result = await Task.detached { loader(project) }.value
+        guard mine == generation else { return }
         (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
     }
 
@@ -121,31 +124,37 @@ private struct Loaded: Sendable {
     // MARK: Doctor
 
     /// Runs doctor on the thread's base (else the project's default one) and reports what it found. Off the main actor:
-    /// the work is core's, awaited here.
+    /// the work is core's, awaited here. An answer for a project that is no longer the open one is dropped.
     func runDoctor() async {
         guard let project, doctor != .running else { return }
         doctor = .running
+        let (mine, runner) = (generation, doctorRunner)
+        var base: String?
+        if case .thread(let snapshot) = screen { base = snapshot.base }
+        let chip = await runner(project, base)
+        guard mine == generation else { return }
+        doctor = chip
+    }
+
+    /// Core's doctor, timed, with its verdict as the chip says it.
+    nonisolated static func runCoreDoctor(_ project: Project, base known: String?) async -> DoctorChip {
         let clock = ContinuousClock()
         let started = clock.now
         do {
             let git = try GitRunner.discover()
-            var base = "main"
-            if case .thread(let snapshot) = screen, let known = snapshot.base {
-                base = known
-            } else {
-                base = await ThreadService(project: project, git: git).defaultBase()
-            }
+            let base: String
+            if let known { base = known } else { base = await ThreadService(project: project, git: git).defaultBase() }
             let report = try await Doctor(project: project, git: git).run(base: base)
             let elapsed = started.duration(to: clock.now)
             let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
             switch report.verdict {
-            case .passed: doctor = .healthy(seconds: seconds)
-            case .stepsFailed: doctor = .problem("The declared setup or check failed")
-            case .stopped: doctor = .problem("Doctor was stopped")
-            case .cleanupFailed(let problem): doctor = .problem(problem)
+            case .passed: return .healthy(seconds: seconds)
+            case .stepsFailed: return .problem("The declared setup or check failed")
+            case .stopped: return .problem("Doctor was stopped")
+            case .cleanupFailed(let problem): return .problem(problem)
             }
         } catch {
-            doctor = .problem("\(error)")
+            return .problem("\(error)")
         }
     }
 }
