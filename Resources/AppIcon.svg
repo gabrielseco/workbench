@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Workbench's dock icon: the thread spine. A track of steps, the finished ones green, the one that needs you amber, the
+       next one still to come hollow. Squircle on the Apple icon grid (an 824 px shape centred on a 1024 canvas). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#2F5BE8"/>
+      <stop offset="1" stop-color="#14224F"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.20"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="done" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5BE39A"/>
+      <stop offset="1" stop-color="#1FB36B"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC857"/>
+      <stop offset="1" stop-color="#F29A1F"/>
+    </linearGradient>
+    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#06123A" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="body">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#iconShadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  </g>
+  <g clip-path="url(#body)">
+    <rect x="100" y="100" width="824" height="420" fill="url(#sheen)"/>
+  </g>
+
+  <!-- the track -->
+  <rect x="496" y="262" width="32" height="500" rx="16" fill="#FFFFFF" fill-opacity="0.30"/>
+  <rect x="496" y="262" width="32" height="330" rx="16" fill="url(#done)"/>
+
+  <!-- the steps: two done, one that needs you, one to come -->
+  <g filter="url(#nodeShadow)">
+    <circle cx="512" cy="262" r="64" fill="url(#done)"/>
+    <circle cx="512" cy="427" r="64" fill="url(#done)"/>
+    <circle cx="512" cy="592" r="76" fill="url(#amber)"/>
+  </g>
+  <circle cx="512" cy="762" r="60" fill="#14224F" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="22"/>
+
+  <!-- a check in each done step, a bar in the one that needs you -->
+  <path d="M484 262 l20 21 l38 -44" fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M484 427 l20 21 l38 -44" fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="500" y="556" width="24" height="46" rx="12" fill="#FFFFFF"/>
+  <circle cx="512" cy="630" r="13" fill="#FFFFFF"/>
+</svg>
