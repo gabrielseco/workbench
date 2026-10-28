@@ -23,7 +23,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order; task 1 (config, `ReviewStage`, doctor) and task 2 (`review-stage <name>`, `proof`, `applies_to`) built | M |
 | [P7](P7-judge-on-codex.md) | Judge on Codex (superseded) | unbuilt fixed-provider proposal replaced by P9; current judge remains on Claude | — |
 | [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
-| [P9](P9-agent-providers.md) | Agent providers | planned: independently select providers/models for optional goal drafting, run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
+| [P9](P9-agent-providers.md) | Agent providers | built, gate accepted 2026-10-28 (soak on Codex, a mixed-provider scenario and the real pilot runs still open): independently select providers/models for optional goal drafting, run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
 | [P10](P10-skill-verifier.md) | Skill verifier | planned: a verifier turn runs the project's own skill (read from the base commit, tools set by the project) to drive the app to the states a goal names and take the screenshots, instead of recipe files, with its own model and every screenshot reaching the judge and the design stage; it replaces `verify_command` and each project's `verify.sh`, and runs after a passing check by default; built, and `verify_command` is removed; six PRs (config, the turn, proof and review, the Triage side, the pilot and comparison, removing `verify_command`); Claude only, independent of P9 | L |
 | [P11](P11-verified-pipeline.md) | Verified pipeline | planned: one loop (check, verify, judge, design, then `ship`, then `pr-review`) where a proof belongs to a commit, a failed step goes back to the model and any fix returns to check and verify; piloted on a small Triage feature | M |
 | [P12](P12-pipeline-rough-edges.md) | Pipeline rough edges | planned: what a second sequential run of the P11 loop found in Workbench: `abandon` saves a worktree's changes then removes it, refusals that say what to do, a judge or stage result that knows its commit, a true `ship` preview; independent of P11's tasks | S |
@@ -36,7 +36,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P19](P19-swiftui-app.md) | SwiftUI app | planned: the window and menu bar from the mockups in [`../mac-app/`](../mac-app/), one slice per screen (goal, run, review, ship, menu bar) over a core-derived thread spine and an amber "needs you" rule; refines P3; starts after P9's gate | L |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
-**P3 starts only after P9's acceptance gate passes.** P9 replaces P7 rather than adding a second,
+**P3 starts only after P9's acceptance gate passes (it has).** P9 replaces P7 rather than adding a second,
 conflicting provider-selection design. P8 remains independent check-performance work.
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).

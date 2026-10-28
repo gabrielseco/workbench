@@ -1,8 +1,9 @@
 # P9: Agent providers
 
-Status: plan, nothing built. Written 2026-10-17. Required before [P3](P3-app.md) starts.
-Supersedes [P7](P7-judge-on-codex.md)'s proposed fixed provider split. This document describes future
-behaviour; the specifications under `docs/spec/` still describe the shipped CLI.
+Status: built; the acceptance gate was accepted by the user on 2026-10-28 (see the note under the checklist). Written 2026-10-17.
+Required before [P3](P3-app.md) and [P19](P19-swiftui-app.md) start.
+Supersedes [P7](P7-judge-on-codex.md)'s proposed fixed provider split. The specifications under `docs/spec/`
+describe the shipped CLI.
 
 **Outcome:** `run`, `judge` and automated review each work through interchangeable providers, selected
 independently in config, while Workbench keeps its existing sequential workflow and reliability guarantees.
@@ -354,23 +355,28 @@ locally as part of each PR: follow `AGENTS.md`'s changed-file checks; CI owns th
 
 ## Acceptance criteria (gate for P3)
 
-- [ ] Run, judge and automated review each execute with at least two compatible providers.
-- [ ] Optional goal drafting works through two providers independently of coding provider/model, validates
+- [x] Run, judge and automated review each execute with at least two compatible providers.
+- [x] Optional goal drafting works through two providers independently of coding provider/model, validates
       proposed goals, preserves manual authoring and cannot bypass explicit approval.
-- [ ] Config alone selects provider and model independently, including named review overrides and the
+- [x] Config alone selects provider and model independently, including named review overrides and the
       same provider for several responsibilities; changing providers never edits orchestration code.
-- [ ] A mixed-provider workflow completes approval, coding, judging, automated review and the existing
+- [x] A mixed-provider workflow completes approval, coding, judging, automated review and the existing
       accept/ship/follow-up decisions without changing their order or human authority.
-- [ ] Shared stage validators produce the same outcomes for equivalent answers from every provider;
+- [x] Shared stage validators produce the same outcomes for equivalent answers from every provider;
       failed evaluations expose actionable feedback, never a fabricated verdict.
-- [ ] Read-only judge/review and coding confinement pass negative tests for both providers.
-- [ ] Cancellation, deadlines, failures and retries pass the reliability matrix; every started subprocess
+- [x] Read-only judge/review and coding confinement pass negative tests for both providers.
+- [x] Cancellation, deadlines, failures and retries pass the reliability matrix; every started subprocess
       attempt and enclosing stage has one durable terminal record or is recovered as interrupted.
-- [ ] Interruption recovery is idempotent and preserves the single writer, sequential state machine,
+- [x] Interruption recovery is idempotent and preserves the single writer, sequential state machine,
       approval, review caps, worktree isolation and retry rules.
-- [ ] Current Claude coding/judge and Codex review config, event replay and CLI results remain compatible.
-- [ ] Existing reliability tests and extended CI soak pass; real pilot results and friction are recorded.
-- [ ] Specs and P3's normalized activity/config expectations match the shipped implementation.
+- [x] Current Claude coding/judge and Codex review config, event replay and CLI results remain compatible.
+- [x] Existing reliability tests and extended CI soak pass; real pilot results and friction are recorded.
+- [x] Specs and P3's normalized activity/config expectations match the shipped implementation.
+
+Gate accepted by the user on 2026-10-28. Checked against the repo that day, the tests and verify-cli scenarios cover the first nine
+criteria. Three things the plan's task 5 asks for were not found and are accepted as open: the soak (`SoakTests`) and `scripts/soak-real.py`
+do not exercise the Codex adapter, there is no verify-cli scenario for one mixed-provider loop from approval to ship, and the 10 real
+end-to-end tasks are not recorded here or in `FRICTION.md`. Add them when they are run.
 
 ## Decisions from task 1
 
