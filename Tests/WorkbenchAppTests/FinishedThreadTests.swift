@@ -73,6 +73,17 @@ import WorkbenchCore
         #expect(made.all == ["next"] && store.actionError == nil)
     }
 
+    @Test func aNameWithSpacesOrNewlinesAtItsEdgesIsTrimmedBeforeCore() async throws {
+        let made = Names()
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        let store = ProjectStore(
+            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(newThread: { _, name in made.add(name) }))
+        #expect(await store.open(fixture.root))
+        await store.newGoal(name: " app-ship-screen\n")
+        #expect(made.all == ["app-ship-screen"])
+    }
+
     @Test func coresRefusalWhileAnotherThreadIsActiveIsShown() async throws {
         struct Busy: Error, CustomStringConvertible { var description: String { "thread t2 is active" } }
         let fixture = try await AppFixture()

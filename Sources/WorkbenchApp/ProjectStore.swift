@@ -357,9 +357,11 @@ enum DoctorChip: Equatable {
     }
 
     /// Creates a thread from the template; core refuses while another thread is active, and says so.
-    func newGoal(name: String) async {
+    func newGoal(name raw: String) async {
         guard let project, !starting else { return }
         actionError = nil
+        // A pasted name often carries a space or a newline at its edges; core takes the name as typed and refuses it.
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             try await actions.newThread(project, name)
         } catch {
