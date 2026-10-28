@@ -6,7 +6,8 @@ import SwiftUI
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup("Workbench") {
+        // One window: a second would restore the same project into the same store.
+        Window("Workbench", id: "main") {
             RootView(store: store)
                 .task {
                     await store.restore()

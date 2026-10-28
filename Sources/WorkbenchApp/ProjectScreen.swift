@@ -48,6 +48,9 @@ struct ThreadSnapshot: Equatable {
     /// The `seq` of the last event, what the footer's `Event log` chip counts.
     var lastSeq: Int
     var logURL: URL
+    /// What is damaged in a log that still shows something (a line that is not an event, a break in the sequence), in words
+    /// a person can act on. The thread shows what could be read, never as if the log were whole.
+    var problems: [String] = []
 
     /// The cost as the toolbar says it: `unknown` when a turn reported none, never `$0.00`.
     var spendText: String {

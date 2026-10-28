@@ -133,6 +133,15 @@ struct ThreadPane: View {
             Text(".workbench/threads/\(snapshot.id)/goal.md")
                 .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
             Text(snapshot.stateText).font(.title3).foregroundStyle(.secondary).padding(.top, 4)
+            if !snapshot.problems.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("The log has damaged lines; this shows what could be read.", systemImage: "xmark.octagon.fill")
+                        .foregroundStyle(Theme.red)
+                    ForEach(snapshot.problems, id: \.self) { Text($0).font(.callout).foregroundStyle(.secondary) }
+                    Text("Open the event log to see it; Workbench never rewrites it.").font(.callout).foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+            }
             if case .needsYou(let reason) = snapshot.attention {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
@@ -162,11 +171,11 @@ struct FooterBar: View {
 
     var body: some View {
         HStack {
-            if case .thread(let snapshot) = store.screen {
+            if let url = store.logURL {
                 Button {
-                    NSWorkspace.shared.open(snapshot.logURL)
+                    NSWorkspace.shared.open(url)
                 } label: {
-                    Text("Event log \(snapshot.lastSeq)").foregroundStyle(Theme.blue)
+                    Text(label).foregroundStyle(Theme.blue)
                 }
                 .buttonStyle(.plain)
                 .help("Opens the raw log file")
@@ -176,6 +185,11 @@ struct FooterBar: View {
             Spacer()
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var label: String {
+        if case .thread(let snapshot) = store.screen { return "Event log \(snapshot.lastSeq)" }
+        return "Open the event log"
     }
 }
 

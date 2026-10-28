@@ -84,7 +84,7 @@ enum ProjectLoader {
             ThreadSnapshot(
                 id: id, title: title, base: base, approval: approval, budgetUSD: budget, state: state, spine: spine,
                 attention: Attention.derive(spine: spine, state: state), lastSeq: contents.events.last?.seq ?? 0,
-                logURL: log))
+                logURL: log, problems: contents.problems.prefix(3).map(describe)))
     }
 
     /// A damaged line in words a person can act on.

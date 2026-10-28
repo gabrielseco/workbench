@@ -48,6 +48,15 @@ enum DoctorChip: Equatable {
         self.doctorRunner = doctorRunner
     }
 
+    /// The raw log of what the window shows, for the footer's button: a thread's, or the damaged one's.
+    var logURL: URL? {
+        switch screen {
+        case .thread(let snapshot): snapshot.logURL
+        case .logCorrupt(let thread, _): project?.eventsURL(thread)
+        default: nil
+        }
+    }
+
     // MARK: Choosing the project
 
     /// Opens what the preferences remember, if it is still a git repository. A path that went away is "no project", not
@@ -68,6 +77,10 @@ enum DoctorChip: Equatable {
         do {
             located = try await Project.locate(from: url, git: try GitRunner.discover())
         } catch {
+            // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
+            // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
+            generation += 1
+            (project, currentThread, lastWatch, doctor) = (nil, nil, nil, .notRun)
             screen = .notAGitRepository(path: url.path)
             return false
         }
