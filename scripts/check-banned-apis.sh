@@ -14,4 +14,21 @@ for pattern in 'waitUntilExit' 'readDataToEndOfFile' 'Process()'; do
         status=1
     fi
 done
+# The app (P19) starts nothing itself: it calls WorkbenchCore, which spawns through `Spawner`. Every way of starting a process
+# or shell out of Swift is banned there, not only the three above.
+for pattern in 'Process(' 'Subprocess' 'posix_spawn' 'NSTask' '/bin/sh' '/bin/bash' '/bin/zsh'; do
+    hits=$(grep -rnF --include='*.swift' "$pattern" Sources/WorkbenchApp 2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//')
+    if [ -n "$hits" ]; then
+        echo "$hits"
+        echo "error: process API '$pattern' used in Sources/WorkbenchApp/" >&2
+        status=1
+    fi
+done
+# libc's `system(`, not SwiftUI's `.system(`: only a bare call.
+hits=$(grep -rnE --include='*.swift' '(^|[^.A-Za-z0-9_])system\(' Sources/WorkbenchApp 2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//')
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: process API 'system(' used in Sources/WorkbenchApp/" >&2
+    status=1
+fi
 exit $status

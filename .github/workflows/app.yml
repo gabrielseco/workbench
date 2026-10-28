@@ -1,0 +1,47 @@
+name: App
+
+# Builds and tests the SwiftUI app (P19), which only exists on macOS. The PR gate is lint and Linux, which never see the app, so a
+# pull request that touches the app runs this one macOS job; every other pull request leaves the scarce macOS slots alone.
+# On main the whole suite, the app's included, runs in the CI workflow's `build-test`.
+on:
+  pull_request:
+    paths:
+      - "Sources/WorkbenchApp/**"
+      - "Tests/WorkbenchAppTests/**"
+      - "Package.swift"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+      - name: Build the app
+        run: swift build --product WorkbenchApp
+      - name: Test the app
+        # The window renders go to a folder that is uploaded below, so a reviewer sees what each state looks like.
+        env:
+          WORKBENCH_RENDER_DIR: ${{ runner.temp }}/renders
+        run: |
+          set -o pipefail
+          swift test --filter WorkbenchAppTests 2>&1 | tee app-test.log
+      - name: Upload renders and log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-renders
+          path: |
+            ${{ runner.temp }}/renders/workbench-app-renders/*.png
+            app-test.log
+          if-no-files-found: ignore
+          retention-days: 14

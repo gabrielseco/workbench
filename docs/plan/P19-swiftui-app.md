@@ -82,12 +82,12 @@ reason per commit, on purpose. A new commit is a new identity.
   workaround in `Package.swift` (SwiftPM refuses unsafe flags from a dependent package, so the app cannot live in its own).
 - **One `@Observable` store** per window: opens the project, holds `[Event]` and the derived `ThreadState`, `ReviewReport`,
   `ThreadSpine` and `Attention`, and tails the log incrementally. It polls the log's size at 250 ms while a runner is live and
-  2 s otherwise and re-derives on change; the poll is the design, FSEvents only if it shows up in a profile. **The tail is a
-  core prerequisite (task 0):** `ThreadLog.read` loads the whole file and `entries(after:)` only slices that snapshot, and
-  `EventLogReadCount.bytes` is test instrumentation, so none of them is a bounded follower. Core gets an `EventLogTail` that
-  `stat`s the file, reads only the bytes after its last offset, yields whole lines (a final line without its newline waits),
-  and detects a log that shrank or was replaced (re-read from the start, as `workbench compact` can do). The log is bounded
-  per turn (1000 activity items), so the store keeps the events it derived from and not the raw bytes. A run started in a terminal therefore appears in the app, and the
+  2 s otherwise and re-derives on change; the poll is the design, FSEvents only if it shows up in a profile. **There is no
+  `EventLogTail` (dropped 2026-10-28):** the poll `stat`s the log (size and mtime, plus the threads folder's mtime) and, only when
+  something moved, re-reads the whole file with `EventLogReader` off the main actor, which also covers a log that shrank or was
+  replaced (`workbench compact`). The largest log in this repo is 112 KB and the 58 of them total 823 KB, so a re-read costs about
+  450 KB/s at the 250 ms poll; an incremental follower is one function in the store if a profile ever says otherwise. The store keeps the
+  events it derived from, not the raw bytes. A run started in a terminal therefore appears in the app, and the
   other way round.
 - **No process code in the app.** The app calls `ThreadRunner.run(RunOptions)` (it already takes a notice callback), `ThreadService`
   and `ReviewLoader`. Anything that today shells out inside the CLI target (`gh`, `git`, the ship sequence) is lifted into
@@ -109,17 +109,18 @@ a real turn costs money, so the demo goals are small, with a stated budget. Ever
 
 ### Task 0: Core first, then the shell and spine
 
-**Core PR** (Linux-tested, no UI; `ThreadState.pullRequest`, `ThreadSpine` and `Attention` are built, with `workbench status` as their first consumer, see `docs/spec/cli-json.md`): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; `EventLogTail`; fixtures of logs for each state of
+**Core PR** (Linux-tested, no UI; `ThreadState.pullRequest`, `ThreadSpine` and `Attention` are built, with `workbench status` as their first consumer, see `docs/spec/cli-json.md`): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; fixtures of logs for each state of
 the two tables above (`Tests/Fixtures/`, built with the same recorder the legacy fixtures use).
 **App PR:** the target and its CI (below), window with toolbar (project pill, `base:`, state pill, spend meter), the spine, the
 footer bar, repo picker, remembered repo, and the empty and error states (no project, not a git repo, no thread, log corrupt,
 `.workbench/` missing).
 
 - **Reads:** `Project`, `ThreadStore.activeThreadID/newestThreadID/state(of:)`, `ThreadState` (`lastTurn`, `openTurn`, `decision`,
-  `totalCostUSD`/`knownCostUSD`, `lineage`, `agentUse`), `EventLogReader`, `EventLogTail` (new); events `thread.created`, `goal.*`,
+  `totalCostUSD`/`knownCostUSD`, `lineage`, `agentUse`), `EventLogReader`; events `thread.created`, `goal.*`,
   `turn.*`, `review.decision`, `pr.opened`, `branch.removed`, `worktree.removed`.
-- **Doctor chip** runs `Doctor.run(base:)` at open and on click; core stores no doctor result, so slice 0 first measures what
-  it costs, and the chip does not run on its own if that is more than a couple of seconds.
+- **Doctor chip** runs `Doctor.run(base:)` **on click only** and reads `Not run` at open: core stores no doctor result and doctor runs
+  the project's own setup and check in a throwaway worktree, so its cost is the project's (1.0 s on this repo, unbounded on a project
+  whose setup installs packages) and an automatic run at open could not be bounded.
 - **CI:** a path-filtered macOS job for PRs that touch `Sources/WorkbenchApp/` (the PR gate otherwise runs lint and Linux only).
   The PR touches `Package.swift`, so it carries `release-build` ([AGENTS.md](../../AGENTS.md#shipping-a-change)).
 - **Demo:** open this repo; pick it from a clean install; the spine for a recorded thread of each state matches the fixtures;
@@ -312,8 +313,8 @@ These are the [README](README.md)'s principles applied to a UI, and each is a te
   tables and for an unknown future event kind (ignored, as the log spec says). The app holds no thread state outside the log
   and the repo path.
 - **No blocking waits, no process code in the app.** The grep gate extends to `Sources/WorkbenchApp/` (`Process`, `Subprocess`,
-  `posix_spawn`, `waitUntilExit`, `readDataToEndOfFile`, `/bin/sh`). Main-thread work is bounded: the poll `stat`s first and `EventLogTail` reads only appended bytes (a test asserts the bytes read over a growing log are the
-  bytes appended, via `EventLogReadCount`); no event-log read on the main actor.
+  `posix_spawn`, `waitUntilExit`, `readDataToEndOfFile`, `/bin/sh`). Main-thread work is bounded: the poll `stat`s first and re-reads the log only when it moved (a test asserts an unchanged log is not read again, via
+  `EventLogReadCount`); no event-log read on the main actor.
 - **Everything is bounded.** The activity list is capped to the turn's stored items (1000) with `dropped` shown; transcripts and
   the raw log are paged, never loaded whole; findings and diffs shown are the sizes core already truncates, and say when cut;
   `Event log` opens the file, not an in-memory copy.
