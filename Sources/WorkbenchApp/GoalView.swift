@@ -14,6 +14,10 @@ struct GoalView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 if !goal.blockers.isEmpty { blockers }
+                if goal.placeholdersRemain {
+                    Label("Replace every TODO(workbench) in the file, then approve.", systemImage: "pencil")
+                        .font(.callout).foregroundStyle(Theme.amber)
+                }
                 if !goal.request.isEmpty { section("Request") { Text(goal.request) } }
                 if !goal.rows.isEmpty { criteria }
                 if !goal.outOfScope.isEmpty {
@@ -124,7 +128,7 @@ struct NewGoalSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New goal").font(.headline)
+            Text("New goal in \(store.project?.root.lastPathComponent ?? "this project")").font(.headline)
             TextField("Thread name", text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
             HStack {
                 Spacer()

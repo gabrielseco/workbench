@@ -39,16 +39,19 @@ struct GoalModel: Equatable {
     /// What stops the goal from being approved or run: the goal's own problems, a placeholder, a config that does not
     /// parse. Empty when nothing does.
     var blockers: [String]
+    /// The template's placeholder lines are still there: the next step, not an error.
+    var placeholdersRemain: Bool
 
     var checkable: Int { rows.filter { $0.warning == nil }.count }
     var checkableText: String { "\(checkable) of \(rows.count) checkable" }
-    var canApprove: Bool { blockers.isEmpty && rows.allSatisfy { $0.warning == nil } }
+    var canApprove: Bool { blockers.isEmpty && !placeholdersRemain && rows.allSatisfy { $0.warning == nil } }
 
     /// A goal that does not parse: the file's problems in words, and nothing else to show.
     static func invalid(path: String, problems: [String]) -> GoalModel {
         GoalModel(
             title: "", path: path, request: "", rows: [], outOfScope: [], model: "", budget: "", turnTimeout: "",
-            allowedTools: [], grantedTools: [], pill: .draft, blockers: problems)
+            allowedTools: [], grantedTools: [], pill: .draft, blockers: problems,
+            placeholdersRemain: false)
     }
 
     /// Reads the goal file, the config and the log. `verifierSkill` is asked whether the project's verifier can run on the
@@ -69,13 +72,13 @@ struct GoalModel: Equatable {
         }
         let goal = file.goal
         var blockers: [String] = []
-        if text.contains("TODO(workbench)") { blockers.append("Placeholders remain: replace every TODO(workbench).") }
+        let placeholders = text.contains("TODO(workbench)")
 
         // No config means no tool set to judge proofs against; one that is there but broken is an error to show.
         var config: Config?
         if FileManager.default.fileExists(atPath: project.configURL.path) {
             do { config = try Config.load(from: project.configURL) } catch {
-                blockers.append("The config does not load: \(error)")
+                blockers.append("The config (.workbench/config.toml) does not load: \(error)")
             }
         }
 
@@ -107,7 +110,7 @@ struct GoalModel: Equatable {
             turnTimeout: "\(goal.turnTimeoutMin) min per turn",
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
-            pill: pill, blockers: blockers)
+            pill: pill, blockers: blockers, placeholdersRemain: placeholders)
     }
 
     /// Core's own check of the verifier's skill at the goal's base commit.

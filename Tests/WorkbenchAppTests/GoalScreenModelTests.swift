@@ -113,7 +113,7 @@ private final class SkillProbe: @unchecked Sendable {
 
     @Test func aConfigThatDoesNotParseIsShownAndBlocksApproval() async throws {
         let (model, _) = try await load(goal: goal(["`swift test` passes"]), config: "[tools\nbroken")
-        #expect(model.blockers.first?.hasPrefix("The config does not load") == true)
+        #expect(model.blockers.first?.hasPrefix("The config (.workbench/config.toml) does not load") == true)
         #expect(!model.canApprove)
     }
 
@@ -125,7 +125,7 @@ private final class SkillProbe: @unchecked Sendable {
 
     @Test func aPlaceholderBlocksApproval() async throws {
         let (model, _) = try await load(goal: goal(["`swift test` passes"], extra: "\nTODO(workbench): fill in"), config: config)
-        #expect(model.blockers.contains { $0.contains("TODO(workbench)") } && !model.canApprove)
+        #expect(model.placeholdersRemain && model.blockers.isEmpty && !model.canApprove)
     }
 
     @Test func aGoalEditedAfterApprovalReadsChangedSinceApproval() async throws {

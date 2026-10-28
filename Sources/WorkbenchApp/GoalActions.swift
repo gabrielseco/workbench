@@ -99,12 +99,11 @@ struct GoalActions: Sendable {
     static func openInEditor(_ project: Project, _ thread: String) async throws {
         let path = try Editor.goalFile(project: project, threadID: thread)
         let environment = ProcessInfo.processInfo.environment
-        var editor: String?
-        do { editor = try Config.load(from: project.configURL).editor } catch let error as ConfigError {
-            guard error.problems.map(\.code) == [.notFound] else { throw error }
-        }
+        // Opening a file never depends on the config being right: a config that does not load (the goal screen says so) or a
+        // global one that does not just means no configured editor, and the file opens in the default app.
+        var editor = (try? Config.load(from: project.configURL))?.editor
         if editor == nil {
-            editor = try GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)).editor
+            editor = (try? GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)))?.editor
         }
         guard let editor else {
             guard await MainActor.run(body: { NSWorkspace.shared.open(path) }) else {
