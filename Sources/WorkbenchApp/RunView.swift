@@ -57,7 +57,9 @@ struct RunView: View {
                 Label(endTitle(result), systemImage: result == "succeeded" ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .foregroundStyle(result == "succeeded" ? Theme.green : Theme.red)
                 if let reason { Text(reason).font(.callout) }
-                Text("Review comes next.").font(.callout).foregroundStyle(.secondary)
+                if let next = RunModel.nextLine(decided: snapshot.state.decision != nil) {
+                    Text(next).font(.callout).foregroundStyle(.secondary)
+                }
             }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -90,6 +92,10 @@ struct RunView: View {
                     ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 220)
+            }
+            if filter == .edits, !run.toolsKnown {
+                Text("This turn's tools are not Claude's, so edits cannot be told apart here.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             if rows.isEmpty {
                 Text(filter == .all ? "Nothing yet." : "None.").font(.callout).foregroundStyle(.secondary)
@@ -141,7 +147,9 @@ struct RunView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("Open worktree") { Task { await store.openWorktree() } }
+                if snapshot.state.decision != "discarded", !snapshot.state.cleaned {
+                    Button("Open worktree") { Task { await store.openWorktree() } }
+                }
                 if canRunAgain { Button("Run again") { Task { await store.runAgain() } } }
                 Spacer()
                 if run.phase == .working || run.phase == .checking {

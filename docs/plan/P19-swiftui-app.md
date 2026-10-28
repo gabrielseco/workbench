@@ -263,10 +263,11 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
 1. **What is "the current thread" after accept?** The spine runs through Ship, PR review and Clean on one thread, but after
    `accept` the thread is no longer active in core (`isActive` is `decision == nil`), so core would allow a second thread while
    the first still has a PR in flight, and the app would lose the amber for it.
-   **Recommendation:** the app's current thread is the active one, else the newest thread that is not cleaned, and the app
-   disables `New goal` until it is cleaned or abandoned ("Clean or abandon this thread first"). That is app policy, with no core
-   guard change, and it matches the README's scope rule in spirit. Lifting it is [thread until
-   merged](../later/thread-until-merged.md).
+   **Decided (2026-10-28, from using the app):** the app's current thread is the active one, else the newest thread that is not
+   cleaned. `New goal` is always offered on a decided thread; for accepted or shipped work a note names the branch and the terminal
+   command (`workbench ship <id>`, `workbench clean`) that still reaches it, because the window has no thread list and `abandon`
+   refuses a decided thread, so disabling the button would leave no way forward. A list is [later](../later/thread-list.md).
+   (The earlier recommendation was to disable `New goal` until the thread was cleaned or abandoned.)
 2. **Per-criterion hand marks (task 3's core change).** Without a recorded mark, the YOU column and `Checked by hand` cannot be
    built. Recommendation: the `criterion.reviewed` event above, with a `review` column and a verify-cli scenario. The
    alternative is to leave the column out of v1 and keep the amber `by hand` row.

@@ -26,6 +26,8 @@ struct RunModel: Equatable {
     /// When the turn ended, nil while it is open.
     var endedAt: Date?
     var lastEventAt: Date?
+    /// False when the turn was not Claude's: its tool names are not known here, so no edit or file count can be told.
+    var toolsKnown = true
     var latest: String?
     var rows: [Row]
     var toolCalls: Int?
@@ -49,8 +51,14 @@ struct RunModel: Equatable {
         return age >= Self.quietThreshold ? age : nil
     }
 
-    /// The first words of the screen: `Turn 2 · started 4m00s ago`.
+    /// What comes after an ended turn: Review, unless the thread has already been decided.
+    static func nextLine(decided: Bool) -> String? { decided ? nil : "Review comes next." }
+
+    /// The first words of the screen: `Turn 2 · started 4m00s ago`, or `Turn 2 · ran 4m12s` once it ended.
     func header(now: Date) -> String {
+        if let startedAt, let endedAt {
+            return "Turn \(turn) · ran \(Progress.duration(max(0, endedAt.timeIntervalSince(startedAt))))"
+        }
         guard let elapsed = elapsed(now: now) else { return "Turn \(turn)" }
         return "Turn \(turn) · started \(Progress.duration(elapsed)) ago"
     }
@@ -65,12 +73,15 @@ struct RunModel: Equatable {
         var rows: [Row] = []
         var edited = Set<String>()
         var gap = false
+        var foreign = false
         var denied: [Int] = []
         var ended: Event?
         var checkRan: Event?
         for event in mine {
             switch event.kind {
-            case .agentActivity: if let row = row(for: event, edited: &edited) { rows.append(row) }
+            case .agentActivity:
+                if let provider = event.data["provider"]?.stringValue, provider != "claude" { foreign = true }
+                if let row = row(for: event, edited: &edited) { rows.append(row) }
             case .turnEnded: ended = event
             case .checkRan: checkRan = event
             default: break
@@ -107,11 +118,12 @@ struct RunModel: Equatable {
         }
         return RunModel(
             turn: turn, phase: phase, startedAt: progress.turnStartedAt.flatMap(date), endedAt: ended.flatMap { date($0.ts) },
-            lastEventAt: progress.lastEventAt.flatMap(date), latest: rows.last?.text ?? progress.lastEvent, rows: rows,
+            lastEventAt: progress.lastEventAt.flatMap(date), toolsKnown: !foreign,
+            latest: rows.last?.text ?? progress.lastEvent, rows: rows,
             toolCalls: progress.toolCallsKnown ? progress.toolCalls : nil,
             deniedCalls: progress.deniedCallsKnown ? progress.deniedCalls : nil,
             // A file count needs every tool row: any gap makes it a floor, so it is unknown.
-            filesChanged: progress.toolCallsKnown && !gap ? edited.count : nil,
+            filesChanged: progress.toolCallsKnown && !gap && !foreign ? edited.count : nil,
             tests: testsText(checkRan),
             spent: known.map { String(format: "$%.2f", $0) } ?? (open ? "not reported yet" : "unknown"), budget: budget,
             turnLimit: turnTimeoutMin.map { "\($0) min per turn" } ?? "unknown", fraction: fraction)

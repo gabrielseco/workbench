@@ -33,6 +33,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Review screen: criteria with core's labels, a denied call, `Accept work` disabled because the fixture has no worktree (diff unavailable) |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet |
 | `cleaned` | merged and cleaned, a turn that reported no cost (`unknown`, never `$0.00`) |
+| `discarded` | a Codex turn that ended and was discarded: the finished banner with `New goal…`, `ran 4m12s`, `Files changed: unknown`, no "Review comes next" |
 | `corrupt` | a log nothing can be read from: the corrupt-log screen |
 | `no-thread` | a project with no thread yet |
 

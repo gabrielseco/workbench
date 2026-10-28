@@ -15,6 +15,7 @@ enum AppScenario: String, CaseIterable {
     case needsYou = "needs-you"
     case prOpen = "pr-open"
     case cleaned
+    case discarded
     case corrupt
     case noThread = "no-thread"
 
@@ -73,6 +74,18 @@ enum AppScenario: String, CaseIterable {
             try fixture.decide(id, "accepted")
             try fixture.ship(id, number: 482)
             try fixture.append(id, .branchRemoved, data: ["reason": "merged"])
+        case .discarded:
+            try await fixture.addThread(id, approved: true, title: Self.title)
+            try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1", "provider": "codex"])
+            try fixture.append(
+                id, .agentActivity, turn: 1,
+                data: ["provider": "codex", "type": "text", "text": "I'll check how the page handles the dialog"])
+            try fixture.append(
+                id, .agentActivity, turn: 1,
+                data: ["provider": "codex", "type": "tool", "name": "shell", "summary": "git status --short"])
+            try fixture.append(
+                id, .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-28T11:04:12.000Z")
+            try fixture.decide(id, "discarded")
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
