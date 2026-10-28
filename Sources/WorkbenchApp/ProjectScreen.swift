@@ -68,6 +68,17 @@ struct ThreadSnapshot: Equatable {
         }
     }
 
+    /// Why `New goal…` is not offered yet; nil when it is. Work that was accepted keeps the window until it is cleaned or
+    /// abandoned, so its shipping context is not left behind (docs/plan/P19-swiftui-app.md, open decision 1).
+    var newGoalHint: String? {
+        guard state.decision != nil, !state.cleaned else { return nil }
+        if state.pullRequest != nil {
+            return "Clean this thread once its pull request is merged, then start the next goal."
+        }
+        if state.decision == "accepted" { return "Ship this thread first (`workbench ship`), or abandon it, then start the next goal." }
+        return nil
+    }
+
     /// The cost as the toolbar says it: `unknown` when a turn reported none, never `$0.00`.
     var spendText: String {
         let spent = state.knownCostUSD.map { String(format: "$%.2f", $0) } ?? "unknown"

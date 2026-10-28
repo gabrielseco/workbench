@@ -39,6 +39,24 @@ import WorkbenchCore
         #expect(accepted.finishedText == "Accepted, not shipped yet.")
     }
 
+    @Test func aNewGoalIsOfferedOnlyWhenNothingOfTheThreadIsLeftToShip() async throws {
+        #expect(try await snapshot(.discarded).newGoalHint == nil)
+        #expect(try await snapshot(.cleaned).newGoalHint == nil)
+        #expect(try await snapshot(.prOpen).newGoalHint?.hasPrefix("Clean this thread once its pull request is merged") == true)
+        let fixture = try await AppFixture(git: false)
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        try fixture.decide("t1", "accepted")
+        guard case .thread(let accepted) = ProjectLoader.load(project: fixture.project).screen else { return }
+        #expect(accepted.newGoalHint?.contains("Ship this thread first") == true)
+        let abandoned = try await AppFixture(git: false)
+        try await abandoned.addThread("t1", approved: true)
+        try abandoned.turn("t1", 1)
+        try abandoned.decide("t1", "abandoned")
+        guard case .thread(let gone) = ProjectLoader.load(project: abandoned.project).screen else { return }
+        #expect(gone.newGoalHint == nil)
+    }
+
     @Test func reviewIsNotNextOnceThereIsADecision() {
         #expect(RunModel.nextLine(decided: false) == "Review comes next.")
         #expect(RunModel.nextLine(decided: true) == nil)
