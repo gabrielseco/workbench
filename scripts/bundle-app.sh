@@ -10,7 +10,8 @@
 # .build/ (its scratch space and, for --check, .build/bundle/dock-icon.png), and replaces an existing output only if it is a
 # Workbench bundle. `--check` runs on a disposable copy with a bundle id of its own (dev.rogal.workbench.check-<pid>), so the bundle
 # it built keeps its id and signature; macOS saves the launched copy's window state under that id in ~/Library, and the script
-# deletes those files, only under that id, and nothing else outside the repository.
+# deletes those files, only under that id. The tools it runs (SwiftPM, the Swift compiler, and Chrome for render-icon.sh) keep their own
+# usual per-user caches; those are theirs, not redirected, and nothing else is written outside the repository.
 # Environment:
 #   WORKBENCH_APP        where to write the bundle (default .build/bundle/Workbench.app; with --install, $WORKBENCH_INSTALL_DIR/Workbench.app)
 #   WORKBENCH_INSTALL_DIR  where --install puts it (default ~/Applications)
