@@ -35,7 +35,7 @@ expect 1 "Nothing pressable is labelled" press "Event log in"
 expect 1 "Nothing pressable is labelled" press "Nope"
 expect 2 "usage: press <label>" press ""
 expect 2 "usage: press <label>" press
-expect 0 "AXStaticText	base: main" list
+expect 0 $'AXStaticText\tbase: main' list
 expect 2 "supports list and press" resize 1 1
 
 [ "$status" = 0 ] && echo "verify-app ax: ok"

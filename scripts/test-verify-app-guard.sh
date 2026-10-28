@@ -8,7 +8,8 @@ export TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 # If a guard under test is broken, `start` must not get as far as building or launching a real app: nothing here may reach a compiler.
 mkdir -p "$TMPDIR/stubs"
-printf '#!/bin/sh\necho "test stub: this test must never reach swift" >&2\nexit 1\n' > "$TMPDIR/stubs/swift"
+# `swift -` is the Screen Recording check, which the stub passes; anything else is a build, a window or a helper, which it refuses.
+printf '#!/bin/sh\nif [ "$1" = "-" ]; then cat >/dev/null; exit 0; fi\necho "test stub: this test must never reach swift" >&2\nexit 1\n' > "$TMPDIR/stubs/swift"
 chmod +x "$TMPDIR/stubs/swift"
 export PATH="$TMPDIR/stubs:$PATH"
 status=0
@@ -43,6 +44,13 @@ expect 1 "not a scenario name" start "needs-you/.."
 expect 1 "not a scenario name" start "Needs-You"
 expect 1 "not a scenario name" start "-rf"
 expect 1 "no such scenario" start nothing-like-it
+# a `start` that fails before it launched anything (so there is no child, and no `$!`) still removes what it made. This is the cleanup
+# path of a failed build; the Screen Recording check is passed by the stub, and the fault is injected right after the folder exists.
+out=$(WORKBENCH_VERIFY_FAULT=before-launch scripts/verify-app.sh start needs-you 2>&1); code=$?
+[ "$code" = 1 ] || fail "a start that failed before launching exits $code, not 1: $out"
+echo "$out" | grep -qF "injected fault: before-launch" || fail "a start that failed before launching does not say why: $out"
+echo "$out" | grep -qi "unbound variable" && fail "the cleanup of a start with no child stopped on an unset variable: $out"
+[ "$(ls "$TMPDIR/workbench-verify" 2>/dev/null | grep -c '^build\.')" = 0 ] || fail "a start that failed before launching left its build folder"
 # a pid file left by a run that ended is not a build either: it is refused, and nothing is killed
 mkdir -p "$TMPDIR/workbench-verify/pids"
 echo "$TMPDIR/workbench-verify/build.gone" > "$TMPDIR/workbench-verify/pids/424242"

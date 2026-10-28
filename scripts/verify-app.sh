@@ -20,7 +20,7 @@
 #   - a scenario name is lower-case letters and dashes and must be a folder of Fixtures/app/: it cannot reach anywhere else
 # A `start` that fails, or is interrupted (Ctrl-C, SIGTERM), leaves nothing: the app it launched is ended and its build folder, fixture copy
 # and settings are removed, so no process runs without the caller having its pid. Only a `start` that printed the pid leaves a build.
-# Test seam: WORKBENCH_VERIFY_FAULT=after-launch, after-window (fail there) or in-launch-gap (a SIGTERM between the launch and recording its
+# Test seam: WORKBENCH_VERIFY_FAULT=before-launch, after-launch, after-window (fail there) or in-launch-gap (a SIGTERM between the launch and recording its
 # pid) shows the cleanup without a crash. Ctrl-C has the same handler as SIGTERM and SIGHUP; no test sends it (a background job ignores it).
 # Environment: VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
 #   VERIFY_SETTLE_SECONDS wait after the window appears (default 2); WORKBENCH_PROOF_DIR where `shot` writes.
@@ -109,7 +109,12 @@ PENDING_PID=""
 abort_start() {
   # `$!` is the last process launched in the background, set the moment it was forked: a signal that arrives after the launch and before
   # PENDING_PID was recorded still finds it. (remove_build only ends a process whose command is this build's, so a stale `$!` is harmless.)
-  local code="${1:-$?}" last="$!" dir="$PENDING_DIR" id="$PENDING_ID" pid="$PENDING_PID"
+  local code="${1:-$?}" dir="$PENDING_DIR" id="$PENDING_ID" pid="$PENDING_PID" last
+  # `$!` is unset until a background process was launched, and `set -u` would stop the cleanup there: a start that failed before the launch
+  # (a failed build, say) has no child. bash 3.2 has no `${!:-}`, so unset checking is off for this one read.
+  set +u
+  last="$!"
+  set -u
   [[ -n "$pid" ]] || pid="$last"
   PENDING_DIR="" PENDING_ID="" PENDING_PID=""
   trap - EXIT INT TERM HUP
@@ -148,6 +153,7 @@ SWIFT
   trap 'abort_start 143' TERM
   trap 'abort_start 129' HUP
   printf '%s' "$id" >"$dir/bundle-id"
+  [[ "${WORKBENCH_VERIFY_FAULT:-}" != before-launch ]] || fail "injected fault: before-launch"
 
   # The fixture project: the scenario's threads in a temporary git repository (the app opens a git repository's .workbench/).
   mkdir -p "$dir/project/.workbench"
