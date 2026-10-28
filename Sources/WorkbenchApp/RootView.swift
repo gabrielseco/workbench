@@ -167,14 +167,21 @@ struct EmptyState: View {
     var title: String
     var next: String
     var store: ProjectStore
+    @State private var naming = false
 
     var body: some View {
         VStack(spacing: 10) {
             Text(title).font(.title2.weight(.semibold))
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
-            Button("Choose project…") { Picker.chooseProject(store) }.padding(.top, 6)
+            HStack {
+                Button("Choose project…") { Picker.chooseProject(store) }
+                if store.screen == .noThread { Button("New goal…") { naming = true } }
+            }
+            .padding(.top, 6)
+            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(40)
+        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 }
 

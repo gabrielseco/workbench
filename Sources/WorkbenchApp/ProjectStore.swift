@@ -70,8 +70,6 @@ enum DoctorChip: Equatable {
         }
     }
 
-    func goalFileURL(_ thread: String) -> URL? { project?.goalURL(thread) }
-
     // MARK: Choosing the project
 
     /// Opens what the preferences remember, if it is still a git repository. A path that went away is "no project", not
@@ -149,8 +147,23 @@ enum DoctorChip: Equatable {
             return
         }
         await reload()
-        let run = actions.run
-        Task.detached { _ = try? await run(project, thread) }
+        let (run, mine) = (actions.run, generation)
+        Task { [weak self] in
+            do { try await run(project, thread) } catch { self?.runFailed(error, generation: mine) }
+        }
+    }
+
+    /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only
+    /// place the person hears of it. An answer for another project is dropped.
+    private func runFailed(_ error: Error, generation mine: Int) {
+        guard mine == generation else { return }
+        actionError = "The run did not start: \(error)"
+    }
+
+    func openGoalFile() async {
+        guard let project, let thread = currentThread else { return }
+        actionError = nil
+        do { try await actions.openGoal(project, thread) } catch { actionError = "\(error)" }
     }
 
     /// Creates a thread from the template; core refuses while another thread is active, and says so.

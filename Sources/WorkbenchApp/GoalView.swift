@@ -8,7 +8,6 @@ struct GoalView: View {
     var goal: GoalModel
     var store: ProjectStore
     @State private var naming = false
-    @State private var name = ""
 
     var body: some View {
         ScrollView {
@@ -25,7 +24,7 @@ struct GoalView: View {
             }
             .padding(28).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .sheet(isPresented: $naming) { newGoalSheet }
+        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 
     private var header: some View {
@@ -90,9 +89,7 @@ struct GoalView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("Open in editor") {
-                    if let url = store.goalFileURL(snapshot.id) { NSWorkspace.shared.open(url) }
-                }
+                Button("Open in editor") { Task { await store.openGoalFile() } }
                 Button("New goal…") { naming = true }
                 Spacer()
                 if goal.pill != .approved || snapshot.state.lastTurn == 0, snapshot.state.decision == nil {
@@ -109,29 +106,35 @@ struct GoalView: View {
         .padding(.top, 6)
     }
 
-    private var newGoalSheet: some View {
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            content()
+        }
+    }
+}
+
+/// Asks for a thread name and has the store create it from the template.
+struct NewGoalSheet: View {
+    var store: ProjectStore
+    @Binding var shown: Bool
+    @State private var name = ""
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New goal").font(.headline)
             TextField("Thread name", text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
             HStack {
                 Spacer()
-                Button("Cancel") { naming = false }
+                Button("Cancel") { shown = false }
                 Button("Create") {
                     let chosen = name
-                    naming = false
-                    name = ""
+                    shown = false
                     Task { await store.newGoal(name: chosen) }
                 }
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
         .padding(20)
-    }
-
-    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            content()
-        }
     }
 }

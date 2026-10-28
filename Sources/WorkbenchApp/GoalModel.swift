@@ -103,7 +103,7 @@ struct GoalModel: Equatable {
         return GoalModel(
             title: goal.title, path: path, request: goal.request, rows: rows, outOfScope: goal.outOfScope,
             model: goal.model ?? agent?.model ?? "default",
-            budget: goal.budgetUSD.map { "$\($0) per turn" } ?? "no dollar cap",
+            budget: goal.budgetUSD.map { "$\($0) per turn" } ?? "no dollar cap: bounded by \(goal.turnTimeoutMin) min per turn",
             turnTimeout: "\(goal.turnTimeoutMin) min per turn",
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],

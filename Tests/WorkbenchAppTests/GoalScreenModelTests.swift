@@ -76,7 +76,7 @@ private final class SkillProbe: @unchecked Sendable {
         let text = goal(["`swift test` passes"]).replacingOccurrences(
             of: "budget_usd: 5", with: "spend_policy: timeout_only")
         let (model, _) = try await load(goal: text, config: config)
-        #expect(model.budget == "no dollar cap")
+        #expect(model.budget == "no dollar cap: bounded by 30 min per turn")
     }
 
     @Test func countsTheCriteriaWithNoWarningAsCheckable() async throws {
@@ -139,6 +139,22 @@ private final class SkillProbe: @unchecked Sendable {
         #expect(changed.pill == .changedSinceApproval)
     }
 
+    @Test func editingTheFileAfterApprovalShowsOnTheOpenWindowWithoutRelaunch() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil))
+        #expect(await store.open(fixture.root))
+        #expect(store.goal?.pill == .approved)
+        let url = fixture.project.goalURL("t1")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        try text.replacingOccurrences(of: "Do the thing.", with: "Do another thing.")
+            .write(to: url, atomically: true, encoding: .utf8)
+        // `stat` has a one-second floor on some filesystems; the poll reads again once the time moved.
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: url.path)
+        await store.refresh()
+        #expect(store.goal?.pill == .changedSinceApproval && store.goal?.canApprove == true)
+    }
+
     // MARK: The buttons
 
     private func actionsStore(
@@ -147,7 +163,7 @@ private final class SkillProbe: @unchecked Sendable {
     ) async throws -> (ProjectStore, AppFixture) {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1")
-        let actions = GoalActions(approve: approve, run: run, newThread: { _, _ in })
+        let actions = GoalActions(approve: approve, run: run, newThread: { _, _ in }, openGoal: { _, _ in })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         return (store, fixture)
@@ -161,6 +177,24 @@ private final class SkillProbe: @unchecked Sendable {
         await store.approveAndRun()
         try await Task.sleep(for: .milliseconds(100))
         #expect(!ran.value && store.actionError == "refused")
+    }
+
+    @Test func aRunThatCannotStartIsReported() async throws {
+        let (store, _) = try await actionsStore(approve: { _, _ in }, run: { _, _ in throw Refused() })
+        await store.approveAndRun()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(store.actionError == "The run did not start: refused")
+    }
+
+    @Test func aGoalCanBeStartedFromAProjectWithNoThread() async throws {
+        let made = Order()
+        let fixture = try await AppFixture()
+        let actions = GoalActions(
+            approve: { _, _ in }, run: { _, _ in }, newThread: { _, name in made.add(name) }, openGoal: { _, _ in })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root) && store.screen == .noThread)
+        await store.newGoal(name: "first")
+        #expect(made.items == ["first"] && store.actionError == nil)
     }
 
     @Test func approveRunsBeforeTheRun() async throws {
