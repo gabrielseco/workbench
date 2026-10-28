@@ -3,13 +3,17 @@
 # binary has no Dock icon of its own, and some things (notifications, a login item) need a bundle.
 #   scripts/bundle-app.sh            build the bundle, then check it: the plist lints, the icon has every size, the signature holds
 #   scripts/bundle-app.sh --check    the same, then launch it, find its window by pid, render the Dock icon to a PNG, end that pid
+#   scripts/bundle-app.sh --install  build into ~/Applications/Workbench.app and open it, so its Dock icon can be kept there (right-click
+#                                    the icon, Options, Keep in Dock). A Workbench already running from there is never ended: the new
+#                                    build is in place, and quitting it (⌘Q) and opening it again gives you that build.
 # Output: .build/bundle/Workbench.app, or WORKBENCH_APP=<path ending in .app>. The script writes that bundle and this repository's
 # .build/ (its scratch space and, for --check, .build/bundle/dock-icon.png), and replaces an existing output only if it is a
 # Workbench bundle. `--check` runs on a disposable copy with a bundle id of its own (dev.rogal.workbench.check-<pid>), so the bundle
 # it built keeps its id and signature; macOS saves the launched copy's window state under that id in ~/Library, and the script
 # deletes those files, only under that id, and nothing else outside the repository.
 # Environment:
-#   WORKBENCH_APP        where to write the bundle (default .build/bundle/Workbench.app)
+#   WORKBENCH_APP        where to write the bundle (default .build/bundle/Workbench.app; with --install, $WORKBENCH_INSTALL_DIR/Workbench.app)
+#   WORKBENCH_INSTALL_DIR  where --install puts it (default ~/Applications)
 #   WORKBENCH_SIGN_ID    a code-signing identity to sign with; unset: ad hoc, which needs no certificate and works in CI
 #   WORKBENCH_BUNDLE_ID  the bundle id (default dev.rogal.workbench)
 # Exit codes: 0 done, 1 a step failed (the step on stderr), 2 not macOS or a usage problem. --check prints PASS or FAIL per step.
@@ -24,14 +28,20 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK=0
+INSTALL=0
 for argument in "$@"; do
   case "$argument" in
     --check) CHECK=1 ;;
-    *) echo "usage: scripts/bundle-app.sh [--check]" >&2; exit 2 ;;
+    --install) INSTALL=1 ;;
+    *) echo "usage: scripts/bundle-app.sh [--check] [--install]" >&2; exit 2 ;;
   esac
 done
 
-APP="${WORKBENCH_APP:-$ROOT/.build/bundle/Workbench.app}"
+if [[ "$INSTALL" == 1 ]]; then
+  APP="${WORKBENCH_APP:-${WORKBENCH_INSTALL_DIR:-$HOME/Applications}/Workbench.app}"
+else
+  APP="${WORKBENCH_APP:-$ROOT/.build/bundle/Workbench.app}"
+fi
 BUNDLE_ID="${WORKBENCH_BUNDLE_ID:-dev.rogal.workbench}"
 [[ "$APP" == *.app ]] || { echo "bundle-app: WORKBENCH_APP must end in .app: $APP" >&2; exit 2; }
 [[ "$BUNDLE_ID" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "bundle-app: not a bundle id: $BUNDLE_ID" >&2; exit 2; }
@@ -66,6 +76,12 @@ step() {  # step "<name>" <command...>: prints PASS or FAIL for it and keeps goi
 nice -n 10 swift build -c release -q --product WorkbenchApp --package-path "$ROOT"
 BIN="$(swift build -c release --product WorkbenchApp --package-path "$ROOT" --show-bin-path)/WorkbenchApp"
 [[ -x "$BIN" ]] || { echo "bundle-app: the build left no $BIN" >&2; exit 1; }
+
+# A Workbench running from the output path keeps running (its files are replaced under it); it is told about at the end, never ended.
+RUNNING_FROM_APP=""
+if [[ "$INSTALL" == 1 ]]; then
+  RUNNING_FROM_APP="$(pgrep -f "$APP/Contents/MacOS/WorkbenchApp" | head -1 || true)"
+fi
 
 # Replace only what is already a Workbench bundle: a wrong WORKBENCH_APP must never delete someone else's folder.
 if [[ -e "$APP" ]]; then
@@ -178,6 +194,15 @@ if [[ "$CHECK" == 1 ]]; then
   # The bundle that was built is what the person copies: it must still have its own id and a signature that holds.
   step "the built bundle is untouched by the check (id and signature)" bash -c '
     [[ "$(plutil -extract CFBundleIdentifier raw "$1/Contents/Info.plist")" == "$2" ]] && codesign --verify --strict "$1"' _ "$APP" "$BUNDLE_ID"
+fi
+
+if [[ "$INSTALL" == 1 && "$FAILED" == 0 ]]; then
+  if [[ -n "$RUNNING_FROM_APP" ]]; then
+    echo "installed: $APP (Workbench is running from it, pid $RUNNING_FROM_APP; quit it with ⌘Q and open it again to get this build)"
+  else
+    open "$APP"
+    echo "installed and opened: $APP (right-click its Dock icon, Options, Keep in Dock, to keep it there)"
+  fi
 fi
 
 echo "$APP"

@@ -21,7 +21,7 @@ swift build                              # builds `workbench` and the `fake-clau
 scripts/soak-real.py                     # real `claude` runs; costs money, run by hand
 bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on this repo (verify-cli skill); costs money, by hand
 scripts/verify-cli/from-branch.sh <feature>  # the same on a branch from a temp clone, normal then sabotaged, with the PR snippet
-scripts/bundle-app.sh [--check]          # macOS: builds .build/bundle/Workbench.app (release, icon, signed); --check also launches it
+scripts/bundle-app.sh [--check|--install] # macOS: builds .build/bundle/Workbench.app (release, icon, signed); --check launches a copy; --install puts it in ~/Applications
 scripts/render-icon.sh                   # re-renders Resources/AppIcon.png from the SVG (Chrome headless); the PNG is committed
 ```
 

@@ -19,9 +19,10 @@ come next). Provider selection ([P9](docs/plan/P9-agent-providers.md)) is built 
 Start at [`docs/plan/README.md`](docs/plan/README.md).
 
 **Building the app (macOS):** `scripts/bundle-app.sh` builds `.build/bundle/Workbench.app`: a release build in a bundle with the
-Dock icon (`Resources/AppIcon.svg`, drawn from the thread spine; `scripts/render-icon.sh` re-renders the PNG) and an ad hoc
-signature. `scripts/bundle-app.sh --check` also launches it, finds its window and renders the Dock icon. It builds; copying
-it into `~/Applications` is yours (`cp -R .build/bundle/Workbench.app ~/Applications/`).
+Dock icon (`Resources/AppIconSource.png`; `scripts/render-icon.sh` renders `Resources/AppIcon.png` from it) and an ad hoc
+signature. `scripts/bundle-app.sh --check` also launches a copy of it, finds its window and renders the Dock icon.
+`scripts/bundle-app.sh --install` builds into `~/Applications/Workbench.app` and opens it; right-click its Dock icon, Options,
+Keep in Dock, to keep it there. A Workbench that is already running from there is not ended: quit it (⌘Q) and open it again.
 
 ## Checking a change
 

@@ -19,5 +19,10 @@ out=$(WORKBENCH_BUNDLE_UNAME=Darwin scripts/bundle-app.sh --bogus 2>&1); code=$?
 out=$(WORKBENCH_BUNDLE_UNAME=Darwin WORKBENCH_BUNDLE_ID='a b' scripts/bundle-app.sh 2>&1); code=$?
 [ "$code" = 2 ] || fail "a bundle id with a space exits $code, not 2"
 
+# --install is a flag: with an output that is no .app it gets as far as that refusal, and refuses before building anything.
+out=$(WORKBENCH_BUNDLE_UNAME=Darwin WORKBENCH_APP=/tmp/not-an-app scripts/bundle-app.sh --install 2>&1); code=$?
+[ "$code" = 2 ] || fail "--install with a WORKBENCH_APP that does not end in .app exits $code, not 2"
+echo "$out" | grep -q "must end in .app" || fail "--install did not reach the output check: $out"
+
 [ "$status" = 0 ] && echo "bundle-app guard: ok"
 exit $status
