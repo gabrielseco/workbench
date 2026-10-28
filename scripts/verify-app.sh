@@ -18,6 +18,10 @@
 #   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Event log`, `Open the event log`), by the label
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
 #   - a scenario name is lower-case letters and dashes and must be a folder of Fixtures/app/: it cannot reach anywhere else
+# A `start` that fails, or is interrupted (Ctrl-C, SIGTERM), leaves nothing: the app it launched is ended and its build folder, fixture copy
+# and settings are removed, so no process runs without the caller having its pid. Only a `start` that printed the pid leaves a build.
+# Test seam: WORKBENCH_VERIFY_FAULT=before-launch, after-launch, after-window (fail there) or in-launch-gap (a SIGTERM between the launch and recording its
+# pid) shows the cleanup without a crash. Ctrl-C has the same handler as SIGTERM and SIGHUP; no test sends it (a background job ignores it).
 # Environment: VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
 #   VERIFY_SETTLE_SECONDS wait after the window appears (default 2); WORKBENCH_PROOF_DIR where `shot` writes.
 # The terminal running this needs Screen Recording (start, shot) and Accessibility (press, list, resize).
@@ -96,6 +100,36 @@ remove_stale() {
   done
 }
 
+# What `start` has made and not yet handed over. Set from the moment the temporary folder exists; cleared only once the pid was printed.
+PENDING_DIR=""
+PENDING_ID=""
+PENDING_PID=""
+
+# Ends and removes whatever a failed or interrupted `start` made. Idempotent: it clears the pending state first.
+abort_start() {
+  # `$!` is the last process launched in the background, set the moment it was forked: a signal that arrives after the launch and before
+  # PENDING_PID was recorded still finds it. (remove_build only ends a process whose command is this build's, so a stale `$!` is harmless.)
+  local code="${1:-$?}" dir="$PENDING_DIR" id="$PENDING_ID" pid="$PENDING_PID" last
+  # `$!` is unset until a background process was launched, and `set -u` would stop the cleanup there: a start that failed before the launch
+  # (a failed build, say) has no child. bash 3.2 has no `${!:-}`, so unset checking is off for this one read.
+  set +u
+  last="$!"
+  set -u
+  [[ -n "$pid" ]] || pid="$last"
+  PENDING_DIR="" PENDING_ID="" PENDING_PID=""
+  trap - EXIT INT TERM HUP
+  if [[ -n "$dir" ]]; then
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
+      # The pid file may not exist yet (interrupted between the launch and writing it): remove_build reads the folder from it.
+      [[ -f "$PIDS/$pid" ]] || printf '%s' "$dir" >"$PIDS/$pid"
+      remove_build "$pid"
+    fi
+    [[ -n "$id" ]] && forget_settings "$id"
+    [[ "$dir" == "$STATE_ROOT"/build.* ]] && rm -rf "$dir"
+  fi
+  exit "$code"
+}
+
 start() {
   local scenario="${1:-needs-you}" size="${VERIFY_WINDOW_SIZE:-1100x700}" dir id pid window
   [[ "$scenario" =~ ^[a-z][a-z-]*$ ]] || fail "not a scenario name: $scenario (lower-case letters and dashes)"
@@ -113,7 +147,13 @@ SWIFT
   remove_stale
   dir="$(mktemp -d "$STATE_ROOT/build.XXXXXX")"
   id="$ID_PREFIX-$RANDOM$RANDOM"
+  PENDING_DIR="$dir" PENDING_ID="$id"
+  trap 'abort_start' EXIT
+  trap 'abort_start 130' INT
+  trap 'abort_start 143' TERM
+  trap 'abort_start 129' HUP
   printf '%s' "$id" >"$dir/bundle-id"
+  [[ "${WORKBENCH_VERIFY_FAULT:-}" != before-launch ]] || fail "injected fault: before-launch"
 
   # The fixture project: the scenario's threads in a temporary git repository (the app opens a git repository's .workbench/).
   mkdir -p "$dir/project/.workbench"
@@ -125,35 +165,40 @@ SWIFT
   fi
 
   # The build: bundle-app.sh, to a path and a bundle id of its own.
-  if ! WORKBENCH_APP="$dir/Workbench.app" WORKBENCH_BUNDLE_ID="$id" "$ROOT/scripts/bundle-app.sh" >&2; then
-    forget_settings "$id"; rm -rf "$dir"
-    fail "the build failed"
-  fi
+  WORKBENCH_APP="$dir/Workbench.app" WORKBENCH_BUNDLE_ID="$id" "$ROOT/scripts/bundle-app.sh" >&2 || fail "the build failed"
 
   # Launched directly, so its pid is certain, with the project in its environment.
   WORKBENCH_APP_PROJECT="$dir/project" "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
+  # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).
+  [[ "${WORKBENCH_VERIFY_FAULT:-}" != in-launch-gap ]] || kill -TERM $$
   pid=$!
+  PENDING_PID="$pid"
   disown "$pid" 2>/dev/null || true
   printf '%s' "$dir" >"$PIDS/$pid"
+  [[ "${WORKBENCH_VERIFY_FAULT:-}" != after-launch ]] || fail "injected fault: after-launch"
 
   window=""
   for _ in $(seq 1 60); do
-    kill -0 "$pid" 2>/dev/null || { remove_build "$pid"; fail "the app ended at once; see its log in $dir (removed)"; }
+    kill -0 "$pid" 2>/dev/null || fail "the app ended at once: $(head -c 300 "$dir/app.log" 2>/dev/null | tr '\n' ' ')"
     window="$(swift "$ROOT/scripts/window-info.swift" "$pid" 2>/dev/null || true)"
     [[ -n "$window" ]] && break
     sleep 0.5
   done
-  [[ -n "$window" ]] || { remove_build "$pid"; fail "no window appeared in 30 s"; }
+  [[ -n "$window" ]] || fail "no window appeared in 30 s"
 
   if ! WORKBENCH_PID="$pid" swift "$ROOT/scripts/ax.swift" resize "${size%x*}" "${size#*x}" >/dev/null 2>"$dir/ax.err"; then
     echo "verify-app: window left at its launch size: $(head -c 200 "$dir/ax.err")" >&2
   fi
+  [[ "${WORKBENCH_VERIFY_FAULT:-}" != after-window ]] || fail "injected fault: after-window"
   sleep "${VERIFY_SETTLE_SECONDS:-2}"
   window="$(swift "$ROOT/scripts/window-info.swift" "$pid")"
   read -r wid wx wy ww wh <<<"$window"
   echo "pid=$pid"
   echo "window=$wid"
   echo "size=${ww}x${wh}"
+  # Handed over: the caller has the pid, so `stop` can end it. If nobody could read the lines above, the failed write already ran the trap.
+  PENDING_DIR="" PENDING_ID="" PENDING_PID=""
+  trap - EXIT INT TERM HUP
 }
 
 command="${1:-}"
