@@ -151,6 +151,12 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                 #expect(approved["provider"] as? String == "claude" && approved["recorded"] as? Bool == false)
                 current["agents"] = nil
                 current["approved_for"] = nil
+                // `status` adds the thread spine and the attention answer (P19 task 0), also under v 1.
+                if command == "status" {
+                    #expect(current["spine"] != nil && current["attention"] != nil, "\(scenario.name)")
+                    current["spine"] = nil
+                    current["attention"] = nil
+                }
                 // PR 12 adds `spend_policy` (a goal with a cap reads `hard_cap`); status has it inside `goal`.
                 #expect(approved["spend_policy"] as? String == "hard_cap")
                 current["spend_policy"] = nil
