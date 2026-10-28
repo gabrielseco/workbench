@@ -1,0 +1,7 @@
+{"data":{},"kind":"thread.created","seq":1,"ts":"2026-10-28T10:00:01.000Z","turn":0,"v":1}
+{"data":{"hash":"h1"},"kind":"goal.approved","seq":2,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"provider":"codex","session_id":"s1"},"kind":"turn.started","seq":3,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"provider":"codex","text":"I'll check how the page handles the dialog","type":"text"},"kind":"agent.activity","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"name":"shell","provider":"codex","summary":"git status --short","type":"tool"},"kind":"agent.activity","seq":5,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"result":"succeeded"},"kind":"turn.ended","seq":6,"ts":"2026-10-28T11:04:12.000Z","turn":1,"v":1}
+{"data":{"decision":"discarded"},"kind":"review.decision","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}

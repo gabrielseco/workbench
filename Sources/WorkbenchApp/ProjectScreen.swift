@@ -55,6 +55,19 @@ struct ThreadSnapshot: Equatable {
     /// The latest turn as the Run screen shows it; nil before the first turn.
     var run: RunModel?
 
+    /// How a decided thread ended, in words; nil while it is still open.
+    var finishedText: String? {
+        if state.cleaned { return "Cleaned: the branch was removed." }
+        if let pr = state.pullRequest { return "Shipped as PR #\(pr.number)." }
+        switch state.decision {
+        case "accepted": return "Accepted, not shipped yet."
+        case "discarded": return "Discarded: the worktree and branch were removed."
+        case "abandoned": return "Abandoned."
+        case let other?: return other.capitalized + "."
+        case nil: return nil
+        }
+    }
+
     /// The cost as the toolbar says it: `unknown` when a turn reported none, never `$0.00`.
     var spendText: String {
         let spent = state.knownCostUSD.map { String(format: "$%.2f", $0) } ?? "unknown"

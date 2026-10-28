@@ -157,6 +157,7 @@ struct ThreadPane: View {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
             if let notice = store.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Theme.green) }
+            if let finished = snapshot.finishedText { FinishedBanner(text: finished, store: store) }
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else if let run = snapshot.run {
@@ -167,6 +168,26 @@ struct ThreadPane: View {
             Spacer()
         }
         .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// How a decided thread ended, and the way to the next goal: the one active thread is over, so a new one may start.
+struct FinishedBanner: View {
+    var text: String
+    var store: ProjectStore
+    @State private var naming = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
+                Spacer()
+                Button("New goal…") { naming = true }
+            }
+            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+        }
+        .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 }
 

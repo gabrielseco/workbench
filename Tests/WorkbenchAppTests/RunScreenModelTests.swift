@@ -130,6 +130,38 @@ import WorkbenchCore
         #expect(try derive(fixture)?.phase == .ended(result: result, reason: reason))
     }
 
+    @Test func anEndedTurnSaysHowLongItRanAndAnOpenOneHowLongAgoItStarted() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        let now = try #require(RunModel.date("2026-10-28T11:04:00.000Z"))
+        #expect(try derive(fixture)?.header(now: now) == "Turn 1 · started 4m00s ago")
+        try fixture.append(
+            "t1", .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-28T11:04:12.000Z")
+        let later = try #require(RunModel.date("2026-10-31T11:00:00.000Z"))
+        #expect(try derive(fixture)?.header(now: later) == "Turn 1 · ran 4m12s")
+    }
+
+    @Test func aTurnOfAnotherProviderHasNoFileCountAndSaysItsToolsAreNotKnown() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        try fixture.append("t1", .turnStarted, turn: 1, data: ["session_id": "s1", "provider": "codex"])
+        for name in ["shell", "edit file change"] {
+            try fixture.append(
+                "t1", .agentActivity, turn: 1,
+                data: ["provider": "codex", "type": "tool", "name": .string(name), "summary": "x"])
+        }
+        let run = try #require(try derive(fixture))
+        #expect(run.filesChanged == nil && !run.toolsKnown)
+    }
+
+    @Test func aClaudeTurnStillCountsItsEditedFiles() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        try activity(fixture, ["type": "tool", "name": "Edit", "summary": "a.swift"])
+        let run = try #require(try derive(fixture))
+        #expect(run.filesChanged == 1 && run.toolsKnown)
+    }
+
     @Test func aCheckStillRunningAfterTheTurnEndedKeepsTheTurnWorking() async throws {
         let fixture = try await AppFixture()
         try await started(fixture)
