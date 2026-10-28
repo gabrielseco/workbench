@@ -17,6 +17,7 @@
 #   WORKBENCH_INSTALL_DIR  where --install puts it (default ~/Applications)
 #   WORKBENCH_SIGN_ID    a code-signing identity to sign with; unset: ad hoc, which needs no certificate and works in CI
 #   WORKBENCH_BUNDLE_ID  the bundle id (default dev.rogal.workbench)
+#   WORKBENCH_INSTALL_OPEN  with --install, 0 installs without opening it (the post-merge hook does; default 1)
 # Exit codes: 0 done, 1 a step failed (the step on stderr), 2 not macOS or a usage problem. --check prints PASS or FAIL per step.
 set -euo pipefail
 
@@ -200,6 +201,8 @@ fi
 if [[ "$INSTALL" == 1 && "$FAILED" == 0 ]]; then
   if [[ -n "$RUNNING_FROM_APP" ]]; then
     echo "installed: $APP (Workbench is running from it, pid $RUNNING_FROM_APP; quit it with ⌘Q and open it again to get this build)"
+  elif [[ "${WORKBENCH_INSTALL_OPEN:-1}" == 0 ]]; then
+    echo "installed: $APP"
   else
     open "$APP"
     echo "installed and opened: $APP (right-click its Dock icon, Options, Keep in Dock, to keep it there)"
