@@ -39,7 +39,7 @@ GOAL
 
 start_thread verify-cli-status-spine "$GOAL_SRC"
 # The sabotage changes the approved goal, which sends it back to draft: the Goal step is then current, not done.
-[ "$SABOTAGE" = 1 ] && printf '\nEdited after approval.\n' >>"$THREAD_DIR/goal.md"
+[ "$SABOTAGE" = 1 ] && printf '\n- Edited after approval.\n' >>"$THREAD_DIR/goal.md"
 
 STEPS="Goal Run Review Accept Ship PR_review Clean"
 
