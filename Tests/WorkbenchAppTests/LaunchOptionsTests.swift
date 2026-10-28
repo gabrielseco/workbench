@@ -12,6 +12,17 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 
     init(_ stored: String? = nil) { self.stored = stored }
 
+    var recentProjects: [String] {
+        get {
+            reads += 1
+            return []
+        }
+        set {
+            writes += 1
+            _ = newValue
+        }
+    }
+
     var projectPath: String? {
         get {
             reads += 1

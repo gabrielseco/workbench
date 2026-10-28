@@ -75,8 +75,10 @@ list the tasks.
    crashed on ordinary source before (#250). Wait for that run to pass.
 6. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
-7. Don't merge. Leave the PR open with CI green; the user reviews and merges.
-8. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
+7. A PR that changes what the app shows posts its verify-app screenshots with `pr-shots` (the `verify-app` skill, "Post the screenshots to
+   the pull request"), the same tool Triage uses; say in the PR which scenario each one is.
+8. Don't merge. Leave the PR open with CI green; the user reviews and merges.
+9. Docs travel with the code: if behaviour in `docs/spec/` or a phase plan changes, change the doc in the
    same PR.
 
 ### Commits and PR titles

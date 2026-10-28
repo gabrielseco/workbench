@@ -11,6 +11,18 @@ enum DoctorChip: Equatable {
     case problem(String)
 }
 
+/// A project the app has opened, as the project menu lists it.
+struct RecentProject: Equatable, Identifiable {
+    var path: String
+    var name: String
+    var isCurrent: Bool
+    /// This app has a run going in it: switching away does not stop it.
+    var isRunning: Bool
+    /// Why it cannot be opened now (the folder is gone, it is no longer a git repository); nil when it can.
+    var unavailable: String?
+    var id: String { path }
+}
+
 /// The one store of a window: the project, the screen derived from its newest thread's log, and the Doctor chip. It holds
 /// no thread state outside the log and the chosen repo path, and it reads the log off the main actor, only when `stat`
 /// says it changed.
@@ -21,7 +33,8 @@ enum DoctorChip: Equatable {
     /// The goal of the thread on screen, read with the config; nil without a thread.
     private(set) var goal: GoalModel?
     /// What the last Approve, Run or New goal said when it did not go through.
-    private(set) var actionError: String?
+    /// What the last action said when it did not go through. Set by the store's own extensions too.
+    var actionError: String?
     private(set) var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
     private(set) var stopping = false
@@ -42,7 +55,11 @@ enum DoctorChip: Equatable {
         var thread: String
     }
 
-    @ObservationIgnored private let preferences: Preferences
+    @ObservationIgnored let preferences: Preferences
+    /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
+    var recentPaths: [String] = []
+    /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
+    var refusedPaths: [String: String] = [:]
     @ObservationIgnored private var currentThread: String?
     @ObservationIgnored private var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
@@ -72,6 +89,7 @@ enum DoctorChip: Equatable {
         self.goalLoader = goalLoader
         self.actions = actions
         self.preferences = preferences
+        self.recentPaths = Self.merged(preferences.recentProjects, preferences.projectPath)
         self.screen = screen
         self.project = project
         self.intervals = intervals
@@ -117,10 +135,13 @@ enum DoctorChip: Equatable {
             return false
         }
         preferences.projectPath = located.root.path
+        remember(located.root.path)
         generation += 1
         (pendingAccept, pendingDiscard, notice) = (nil, nil, nil)
         project = located
         doctor = .notRun
+        (goal, review) = (nil, nil)
+        screen = .opening(path: located.root.path)
         (currentThread, lastWatch) = (nil, nil)
         await reload()
         return true
@@ -319,6 +340,9 @@ enum DoctorChip: Equatable {
             return ReviewReport.render(patch)
         } catch { return "\(error)" }
     }
+
+    /// The project this app has a run going in, if any.
+    var runningProjectPath: String? { ownedRun?.project.root.path }
 
     /// Whether this window's thread is the one the app is running.
     var runningHere: Bool { ownedRun.map { $0.project == project && $0.thread == currentThread } ?? false }
