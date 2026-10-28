@@ -7,3 +7,6 @@ xcuserdata/
 
 # per-task scratch from agent runs
 .claude/tasks/
+
+# pr-shots' uploader (wrangler) caches here when it runs in a checkout; in a worktree it would keep `workbench ship` from removing it
+.wrangler/
