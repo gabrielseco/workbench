@@ -56,6 +56,10 @@ import WorkbenchCore
         } else {
             try FileManager.default.createDirectory(at: threads, withIntermediateDirectories: true)
         }
+        let config = committed.appendingPathComponent(scenario.rawValue).appendingPathComponent("config.toml")
+        if FileManager.default.fileExists(atPath: config.path) {
+            try FileManager.default.copyItem(at: config, to: root.appendingPathComponent(".workbench/config.toml"))
+        }
         return Project(root: root)
     }
 
@@ -87,6 +91,17 @@ import WorkbenchCore
             Issue.record("corrupt did not read as corrupt")
         }
         #expect(try screen(.noThread) == .noThread)
+    }
+
+    @Test func theGoalScenariosShowTheWarningAndTheApprovedGoal() async throws {
+        let warned = try project(for: .goalWarning)
+        let approved = try project(for: .goalApproved)
+        defer { for project in [warned, approved] { try? FileManager.default.removeItem(at: project.root) } }
+        let model = await GoalModel.load(project: warned, thread: "invoice-pagination") { _, _ in false }
+        #expect(model.checkableText == "1 of 3 checkable" && !model.canApprove)
+        #expect(model.rows.compactMap(\.warning).count == 2)
+        let ok = await GoalModel.load(project: approved, thread: "invoice-pagination") { _, _ in false }
+        #expect(ok.pill == .approved && ok.canApprove)
     }
 
     @Test func everyScenarioNameIsASafeFolderName() {

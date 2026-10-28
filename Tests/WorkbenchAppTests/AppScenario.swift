@@ -9,6 +9,8 @@ import WorkbenchCore
 ///   WORKBENCH_WRITE_FIXTURES=Fixtures/app swift test --filter FixtureScenarioTests/writeTheScenarios
 enum AppScenario: String, CaseIterable {
     case draft
+    case goalWarning = "goal-warning"
+    case goalApproved = "goal-approved"
     case running
     case needsYou = "needs-you"
     case prOpen = "pr-open"
@@ -18,12 +20,28 @@ enum AppScenario: String, CaseIterable {
 
     private static let title = "Paginate the contractor invoice list"
 
+    /// The config a scenario ships, for the ones that show how proofs are judged against the tool set.
+    var config: String? {
+        switch self {
+        case .goalWarning, .goalApproved:
+            "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
+        default: nil
+        }
+    }
+
     /// Writes this scenario's thread(s) into a fresh fixture, as the real files.
     @MainActor func build(in fixture: AppFixture) async throws {
         let id = "invoice-pagination"
         switch self {
         case .draft:
             try await fixture.addThread(id, title: Self.title)
+        case .goalWarning:
+            // The fixture repository has no commit, so no verifier skill is at the base: the screenshot proof cannot be made.
+            try await fixture.addThread(
+                id, title: Self.title,
+                proofs: ["`swift test` passes", "`./scripts/deploy.sh` exits 0", "screenshot: invoice-list"])
+        case .goalApproved:
+            try await fixture.addThread(id, approved: true, title: Self.title, proofs: ["`swift test` passes"])
         case .running:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
@@ -58,6 +76,9 @@ enum AppScenario: String, CaseIterable {
             let target = directory.appendingPathComponent(scenario.rawValue)
             try? files.removeItem(at: target)
             try files.createDirectory(at: target, withIntermediateDirectories: true)
+            if let config = scenario.config {
+                try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+            }
             let threads = fixture.project.threadsDirectory
             if (try? files.contentsOfDirectory(atPath: threads.path))?.isEmpty == false {
                 try files.copyItem(at: threads, to: target.appendingPathComponent("threads"))

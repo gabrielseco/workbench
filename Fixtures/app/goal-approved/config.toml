@@ -1,0 +1,3 @@
+[tools]
+available = ["Read", "Bash"]
+allowed = ["Read", "Bash(swift test:*)"]
