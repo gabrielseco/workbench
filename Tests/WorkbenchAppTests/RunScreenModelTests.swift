@@ -123,6 +123,46 @@ import WorkbenchCore
         #expect(try derive(fixture)?.phase == .ended(result: result, reason: reason))
     }
 
+    @Test func aCheckStillRunningAfterTheTurnEndedKeepsTheTurnWorking() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        try fixture.append("t1", .turnEnded, turn: 1, data: ["result": "succeeded", "cost_usd": 1.5])
+        try fixture.append("t1", .checkStarted, turn: 1)
+        #expect(try derive(fixture)?.phase == .checking)
+    }
+
+    @Test func theCostOfAFirstOpenTurnIsNotReportedYetNeverZero() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        let run = try #require(try derive(fixture))
+        #expect(run.spent == "not reported yet" && run.fraction == nil)
+    }
+
+    @Test func anyGapMakesTheFileCountUnknownEvenWhenToolCallsWereCounted() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        try activity(fixture, ["type": "tool", "name": "Edit", "summary": "a.swift"])
+        try activity(fixture, ["type": "dropped", "count": 5, "reason": "cap", "tool_calls": 3, "denied": 0])
+        let run = try #require(try derive(fixture))
+        #expect(run.toolCalls == 4 && run.filesChanged == nil)
+    }
+
+    @Test func aCheckThatListedNoTestsIsNotSaidToHaveNotRun() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        try fixture.append("t1", .turnEnded, turn: 1, data: ["result": "succeeded", "cost_usd": 1.5])
+        try fixture.append("t1", .checkRan, turn: 1, data: ["result": "passed"])
+        #expect(try derive(fixture)?.tests == "check passed, tests not listed")
+    }
+
+    @Test func everyStoredActivityStaysInTheList() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        for index in 0..<650 { try activity(fixture, ["type": "tool", "name": "Edit", "summary": .string("f\(index)")]) }
+        let run = try #require(try derive(fixture))
+        #expect(run.rows.count == 650 && run.filesChanged == 650)
+    }
+
     @Test func aTurnThatSucceededNeedsNoReason() async throws {
         let fixture = try await AppFixture()
         try await started(fixture)

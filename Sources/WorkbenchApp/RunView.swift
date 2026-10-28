@@ -115,10 +115,15 @@ struct RunView: View {
     private var budget: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("BUDGET").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(run.budget.map { "\(run.spent) of \($0)" } ?? run.spent).font(.system(.body, design: .monospaced))
+            Text(spentLine).font(.system(.body, design: .monospaced))
             if let fraction = run.fraction { ProgressView(value: fraction).frame(width: 160) }
             Text(run.turnLimit).font(.callout).foregroundStyle(.secondary)
         }
+    }
+
+    private var spentLine: String {
+        guard let budget = run.budget else { return run.spent }
+        return run.spent.hasPrefix("$") ? "\(run.spent) of \(budget)" : "\(run.spent) · budget \(budget)"
     }
 
     private var soFar: some View {

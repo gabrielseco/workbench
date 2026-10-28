@@ -107,6 +107,22 @@ private final class Counter: @unchecked Sendable {
         await gate.open()
     }
 
+    @Test func aRunThatReturnsWithItsTurnStillOpenIsReported() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        let actions = GoalActions(makeRun: { _, _ in
+            RunHandle(
+                run: { try? FileManager.default.removeItem(at: URL(fileURLWithPath: "/nonexistent")) }, stop: {})
+        })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        try fixture.append("t1", .turnStarted, turn: 1, data: ["session_id": "s1"])
+        await store.runAgain()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(store.actionError?.hasPrefix("The run ended without recording") == true)
+        keptFixtures.append(fixture)
+    }
+
     @Test func aRunThatCannotBeMadeIsReported() async throws {
         let fixture = try await AppFixture()
         try await interrupted(fixture)

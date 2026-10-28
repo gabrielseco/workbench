@@ -37,8 +37,6 @@ struct RunModel: Equatable {
     var fraction: Double?
 
     static let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
-    /// The most rows kept: a turn stores at most 1000 items, and the list never needs more than the newest of them.
-    static let rowLimit = 500
     static let quietThreshold = Progress.quietThreshold
 
     func elapsed(now: Date) -> TimeInterval? { startedAt.map { max(0, now.timeIntervalSince($0)) } }
@@ -64,6 +62,7 @@ struct RunModel: Equatable {
         let mine = events.filter { $0.turn == turn }
         var rows: [Row] = []
         var edited = Set<String>()
+        var gap = false
         var denied: [Int] = []
         var ended: Event?
         var checkRan: Event?
@@ -76,6 +75,7 @@ struct RunModel: Equatable {
             }
         }
         for (index, row) in rows.enumerated() where row.kind == .denied { denied.append(index) }
+        gap = rows.contains { $0.kind == .gap }
         // The refused calls' inputs arrive on `turn.ended`, whole; the live rows only know the tool.
         if let ended, case .array(let calls)? = ended.data["denials"], calls.count == denied.count {
             for (call, index) in zip(calls, denied) {
@@ -84,29 +84,34 @@ struct RunModel: Equatable {
                 rows[index].text = "denied \(tool)\(input)"
             }
         }
-        if rows.count > rowLimit { rows = Array(rows.suffix(rowLimit)) }
 
         let progress = state.progress
         let phase: Phase
-        if let ended {
-            phase = .ended(result: ended.data["result"]?.stringValue ?? "ended", reason: reason(of: ended))
-        } else if state.openCheck != nil {
+        // The check starts after `turn.ended`, so an open check is still work: Stop must stay.
+        if state.openCheck != nil {
             phase = .checking
+        } else if let ended {
+            phase = .ended(result: ended.data["result"]?.stringValue ?? "ended", reason: reason(of: ended))
         } else {
             phase = runnerAlive ? .working : .orphaned
         }
         let budget = budgetUSD.map { String(format: "$%.2f", NSDecimalNumber(decimal: $0).doubleValue) }
-        let known = state.knownCostUSD
+        // A turn's cost is reported when it ends, so while one is open the total is only what the earlier turns cost.
+        let open = ended == nil
+        let known = open && state.lastTurn == 1 ? nil : state.knownCostUSD
         var fraction: Double?
-        if let known, let budgetUSD, budgetUSD > 0 { fraction = min(1, known / NSDecimalNumber(decimal: budgetUSD).doubleValue) }
+        if !open, let known, let budgetUSD, budgetUSD > 0 {
+            fraction = min(1, known / NSDecimalNumber(decimal: budgetUSD).doubleValue)
+        }
         return RunModel(
             turn: turn, phase: phase, startedAt: progress.turnStartedAt.flatMap(date),
             lastEventAt: progress.lastEventAt.flatMap(date), latest: progress.lastEvent, rows: rows,
             toolCalls: progress.toolCallsKnown ? progress.toolCalls : nil,
             deniedCalls: progress.deniedCallsKnown ? progress.deniedCalls : nil,
-            // A file count needs the tool rows; a gap in the activity makes it a floor, so it is unknown.
-            filesChanged: progress.toolCallsKnown ? edited.count : nil,
-            tests: testsText(checkRan), spent: known.map { String(format: "$%.2f", $0) } ?? "unknown", budget: budget,
+            // A file count needs every tool row: any gap makes it a floor, so it is unknown.
+            filesChanged: progress.toolCallsKnown && !gap ? edited.count : nil,
+            tests: testsText(checkRan),
+            spent: known.map { String(format: "$%.2f", $0) } ?? (open ? "not reported yet" : "unknown"), budget: budget,
             turnLimit: turnTimeoutMin.map { "\($0) min per turn" } ?? "unknown", fraction: fraction)
     }
 
@@ -134,9 +139,9 @@ struct RunModel: Equatable {
     }
 
     private static func testsText(_ check: Event?) -> String {
-        guard let check, case .array(let passed)? = check.data["tests_passed"],
-            case .array(let failed)? = check.data["tests_failed"]
-        else { return "not run yet" }
+        guard let check else { return "not run yet" }
+        guard case .array(let passed)? = check.data["tests_passed"], case .array(let failed)? = check.data["tests_failed"]
+        else { return "check \(check.data["result"]?.stringValue ?? "ran"), tests not listed" }
         return failed.isEmpty ? "\(passed.count) passing" : "\(passed.count) passing, \(failed.count) failing"
     }
 

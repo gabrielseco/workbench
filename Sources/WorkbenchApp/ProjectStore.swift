@@ -199,6 +199,10 @@ enum DoctorChip: Equatable {
         ownedRun = nil
         stopping = false
         await reload()
+        // A run that returns leaves its turn ended in the log; one that does not has died without saying how.
+        if case .thread(let shown) = screen, shown.run?.phase == .orphaned, actionError == nil {
+            actionError = "The run ended without recording how the turn ended. Run again records it as interrupted."
+        }
     }
 
     /// The next turn after one that did not finish. A turn that succeeded goes to Review and `send-back`, which is not this.
