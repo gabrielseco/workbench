@@ -25,6 +25,30 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         #expect(summary.state == .passed && summary.checks.map(\.name) == ["test", "lint"])
         #expect(gh.calls.filter { $0.hasPrefix("pr checks") } == ["pr checks 12 --json name,bucket"])
         #expect(gh.read("repo")?.trimmingCharacters(in: .whitespacesAndNewlines) == "unset")
+        let root = fx.project.root.resolvingSymlinksInPath().path
+        let cwd = gh.read("cwd")?.trimmingCharacters(in: .whitespacesAndNewlines).map { URL(fileURLWithPath: $0) }
+        #expect(cwd?.resolvingSymlinksInPath().path == root)
+    }
+
+    @Test func aGHRepoInTheCallersEnvironmentIsDroppedSoItAsksAboutThisRepository() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shipped(fx, gh)
+        try gh.put("checks_last", list([("test", "pass")]))
+        var environment = gh.runner.environment
+        environment["GH_REPO"] = "someone/else"
+        let other = GitRunner(executable: gh.runner.executable, environment: environment, timeout: 10)
+        _ = try await fx.service.prChecks(id: id, gh: other)
+        #expect(gh.read("repo")?.trimmingCharacters(in: .whitespacesAndNewlines) == "unset")
+    }
+
+    @Test func anEmptyListIsNoneThroughTheCall() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shipped(fx, gh)
+        try gh.put("checks_last", "[]")
+        let summary = try await fx.service.prChecks(id: id, gh: gh.runner)
+        #expect(summary.state == .none && summary.checks.isEmpty)
     }
 
     @Test func pendingAndFailingListsAreReturnedEvenThoughGhExitsNonZero() async throws {
@@ -69,15 +93,27 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         await #expect(throws: ShipError.invalidName("../x")) { try await fx.service.prChecks(id: "../x", gh: gh.runner) }
     }
 
-    @Test func aBrokenAnswerAndAHangAreErrorsNotAGreenList() async throws {
+    @Test func aFailedCallIsGhFailedAndAHangIsGitFailedNeverAGreenList() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
         let id = try await shipped(fx, gh)
         try gh.put("checks_fail", "")
+        await #expect(throws: ShipError.ghFailed("boom")) { try await fx.service.prChecks(id: id, gh: gh.runner) }
+        try FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_fail"))
+        try gh.put("checks_last", "this is not json")
         await #expect(throws: ShipError.self) { try await fx.service.prChecks(id: id, gh: gh.runner) }
-        try? FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_fail"))
+        try FileManager.default.removeItem(at: gh.dir.appendingPathComponent("checks_last"))
         try gh.put("checks_hang", "")
-        await #expect(throws: ShipError.self) { try await fx.service.prChecks(id: id, gh: gh.runner, callTimeout: 1) }
+        do {
+            _ = try await fx.service.prChecks(id: id, gh: gh.runner, callTimeout: 1)
+            Issue.record("expected a timeout")
+        } catch let error as ShipError {
+            guard case .gitFailed(let why) = error else {
+                Issue.record("got \(error)")
+                return
+            }
+            #expect(why.contains("did not answer"))
+        }
     }
 
     @Test func itWritesNothingToTheLog() async throws {
