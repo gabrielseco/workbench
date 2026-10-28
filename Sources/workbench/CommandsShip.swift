@@ -115,31 +115,32 @@ extension Commands {
         }
 
         do {
-            let pushed = try await ctx.service.shipPush(id: id, gh: gh, shown: plan)
             let pushedName = plan.updatesExistingBranch ? plan.remoteBranch : plan.branch
-            pushed.ahead.map { out($0.note) }
-            out(pushed.outcome == .pushed ? "pushed \(pushedName)" : "origin already has \(pushedName)")
-            let pr = try await ctx.service.shipOpenPR(id: id, gh: gh, shown: plan, description: description)
-            out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
-            var refreshFailure: ShipError?
-            if applyRefresh, let refresh {
-                do {
-                    try await ctx.service.applyPRRefresh(id: id, plan: plan, proposal: refresh, gh: gh)
-                    out("updated the pull request title and description")
-                } catch let error as ShipError { refreshFailure = error }
-            }
-            var attached = true
-            if !noScreenshots {
-                attached = await attachScreenshots(id: id, worktree: plan.worktree, number: pr.number, ctx: ctx)
-            }
-            // Kept when the screenshots did not go up, so `ship --screenshots` can try again.
-            if !keepWorktree, attached { await cleanUp(id: id, ctx: ctx, gh: gh) }
-            out(pr.url)
-            if let refreshFailure { return refuse(refreshFailure) }
+            let outcome = try await ctx.service.publishShip(
+                id: id, gh: gh, plan: plan, description: description, refresh: applyRefresh ? refresh : nil,
+                screenshotTool: noScreenshots ? nil : try? GitRunner.discover(tool: "pr-shots", timeout: 180),
+                options: ShipPublishOptions(keepWorktree: keepWorktree, skipScreenshots: noScreenshots)
+            ) { printStep($0, pushedName: pushedName, id: id) }
+            out(outcome.pr.url)
+            if let refreshFailure = outcome.refreshFailure { return refuse(refreshFailure) }
             if wantsLoop { return try await reviewLoop(from: id, ctx: ctx, yes: yes) }
             return watch ? await follow(id: id, ctx: ctx, gh: gh, limits: limits) : 0
         } catch let error as ShipError {
             return refuse(error)
+        }
+    }
+
+    /// Says one step of `publishShip` as it finishes, in the order and words `ship` has always used.
+    private static func printStep(_ step: ShipProgress, pushedName: String, id: String) {
+        switch step {
+        case .pushed(let pushed):
+            pushed.ahead.map { out($0.note) }
+            out(pushed.outcome == .pushed ? "pushed \(pushedName)" : "origin already has \(pushedName)")
+        case .opened(let pr):
+            out(pr.outcome == .created ? "opened the pull request" : "the pull request already existed; recorded it")
+        case .refreshed: out("updated the pull request title and description")
+        case .screenshots(let result): printScreenshots(result)
+        case .cleaned(let result): printCleanup(result, id: id)
         }
     }
 
@@ -158,7 +159,13 @@ extension Commands {
     @discardableResult
     private static func attachScreenshots(id: String, worktree: URL, number: Int, ctx: Context) async -> Bool {
         let tool = try? GitRunner.discover(tool: "pr-shots", timeout: 180)
-        switch await ctx.service.shipScreenshots(id: id, worktree: worktree, number: number, tool: tool) {
+        return printScreenshots(await ctx.service.shipScreenshots(id: id, worktree: worktree, number: number, tool: tool))
+    }
+
+    /// Says what became of the screenshots; false when they were not attached.
+    @discardableResult
+    private static func printScreenshots(_ result: ShipScreenshots) -> Bool {
+        switch result {
         case .none: return true
         case .attached(let count, let note):
             out("put \(count) screenshot\(count == 1 ? "" : "s") in the pull request")
@@ -189,7 +196,11 @@ extension Commands {
     /// Removes the shipped thread's worktree when nothing could be lost, and says what happened. A worktree
     /// that stays is a note: the thread is shipped either way, and the next `ship` tries again.
     private static func cleanUp(id: String, ctx: Context, gh: GitRunner?) async {
-        switch await ctx.service.cleanShipped(id: id, gh: gh) {
+        printCleanup(await ctx.service.cleanShipped(id: id, gh: gh), id: id)
+    }
+
+    private static func printCleanup(_ result: ShipCleanup, id: String) {
+        switch result {
         case .removed(let path): out("removed the worktree \(path); \(WorktreeManager.branch(for: id)) is kept")
         case .kept(let why): out("kept the worktree: \(why)")
         case .alreadyGone, .notShipped: break
