@@ -105,7 +105,7 @@ struct RunModel: Equatable {
         }
         return RunModel(
             turn: turn, phase: phase, startedAt: progress.turnStartedAt.flatMap(date),
-            lastEventAt: progress.lastEventAt.flatMap(date), latest: progress.lastEvent, rows: rows,
+            lastEventAt: progress.lastEventAt.flatMap(date), latest: rows.last?.text ?? progress.lastEvent, rows: rows,
             toolCalls: progress.toolCallsKnown ? progress.toolCalls : nil,
             deniedCalls: progress.deniedCallsKnown ? progress.deniedCalls : nil,
             // A file count needs every tool row: any gap makes it a floor, so it is unknown.

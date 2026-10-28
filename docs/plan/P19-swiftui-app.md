@@ -173,13 +173,13 @@ the start of the slice.
   - A provider that streams no tool or denial events (Codex today): counts are `unknown`, never `0`; a provider with text only
     shows the text; a cost never reported is `unknown`, not `$0.00`. A `dropped` record is a visible gap row ("42 items not
     stored"), since a turn stores at most 1000 items.
-- **Live list:** coalesce appends to ~30 Hz, virtualize the list, keep at most the stored activity of the current turn in memory,
-  and never load a transcript file whole (the Raw log disclosure pages it).
+- **Live list:** the poll (4 Hz while working) reads the log only when it changed; the list is lazy and holds the stored activity of
+  the latest turn (core stores at most 1000 items), never a transcript file (the Raw log disclosure is a later addition).
 - **Failure states:** setup failed (the thread has not started; says so), provider not found, run refused (`busy`, another
   holder), turn `failed` / `timed_out` / `budget_exceeded` / `interrupted` (the reason, then on to Review), stuck (`quiet for`).
 - **Demo:** run a small goal; watch activity stream; deny one command and see it in the list; stop at the half-way point and see
-  `stopped` and a usable window inside 6 s; start a second turn, quit the app mid-turn, relaunch: `interrupted`, log intact, run
-  again works.
+  `stopped` and a usable window inside 6 s; start a second turn, quit the app mid-turn, relaunch: the turn reads "the runner is gone" (the app writes no log;
+  `recoverOrphanedTurn` runs when a runner starts), log intact, `Run again` records `interrupted` and goes on.
 
 ### Task 3: Review (mockup 3)
 

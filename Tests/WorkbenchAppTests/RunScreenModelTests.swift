@@ -59,6 +59,13 @@ import WorkbenchCore
         #expect(run.rows.last?.text == "denied Bash")
     }
 
+    @Test func theCurrentActivityIsWhatTheAgentLastDidNotAGenericLine() async throws {
+        let fixture = try await AppFixture()
+        try await started(fixture)
+        try activity(fixture, ["type": "text", "text": "Reading the invoice list"])
+        #expect(try derive(fixture)?.latest == "Reading the invoice list")
+    }
+
     @Test func aDroppedRecordIsAVisibleGap() async throws {
         let fixture = try await AppFixture()
         try await started(fixture)
