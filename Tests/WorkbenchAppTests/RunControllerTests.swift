@@ -34,7 +34,7 @@ private final class Counter: @unchecked Sendable {
         let fixture = try await AppFixture()
         try await thread(fixture)
         let actions = GoalActions(
-            makeRun: { _, _ in
+            makeRun: { _, _, _ in
                 calls.add("make")
                 return RunHandle(run: { await gate.wait() }, stop: { calls.add("stop"); await gate.open() })
             },
@@ -110,7 +110,7 @@ private final class Counter: @unchecked Sendable {
     @Test func aRunThatReturnsWithItsTurnStillOpenIsReported() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
-        let actions = GoalActions(makeRun: { _, _ in
+        let actions = GoalActions(makeRun: { _, _, _ in
             RunHandle(
                 run: { try? FileManager.default.removeItem(at: URL(fileURLWithPath: "/nonexistent")) }, stop: {})
         })
@@ -128,7 +128,7 @@ private final class Counter: @unchecked Sendable {
         try await interrupted(fixture)
         struct Missing: Error, CustomStringConvertible { var description: String { "no claude" } }
         let store = ProjectStore(
-            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(makeRun: { _, _ in throw Missing() }))
+            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(makeRun: { _, _, _ in throw Missing() }))
         #expect(await store.open(fixture.root))
         await store.runAgain()
         #expect(store.actionError == "The run did not start: no claude" && !store.runningHere)

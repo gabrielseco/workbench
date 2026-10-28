@@ -25,6 +25,12 @@ enum DoctorChip: Equatable {
     private(set) var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
     private(set) var stopping = false
+    /// The latest turn's review while it awaits one; nil otherwise.
+    private(set) var review: ReviewModel?
+    /// What core says Accept or Discard would do, shown for confirmation and passed back as `shown:` exactly as shown.
+    private(set) var pendingAccept: AcceptPlan?
+    private(set) var pendingDiscard: DiscardPlan?
+    private(set) var deciding = false
     /// The run this app started and has not seen end. At most one: a second start is refused.
     @ObservationIgnored private var ownedRun: OwnedRun?
 
@@ -104,6 +110,7 @@ enum DoctorChip: Equatable {
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
+            (review, pendingAccept, pendingDiscard) = (nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
@@ -137,7 +144,13 @@ enum DoctorChip: Equatable {
             model = await Task.detached { await goalLoader(project, thread) }.value
             guard mine == generation else { return }
         }
-        (screen, currentThread, lastWatch, goal) = (result.screen, result.thread, result.watch, model)
+        var reviewed: ReviewModel?
+        if let thread = result.thread, case .thread(let shown) = result.screen, shown.state.review.status == .awaitingReview {
+            let load = actions.loadReview
+            reviewed = await Task.detached { await load(project, thread) }.value.map(ReviewModel.derive)
+            guard mine == generation else { return }
+        }
+        (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
         applyOwnership()
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
     }
@@ -170,13 +183,15 @@ enum DoctorChip: Equatable {
     }
 
     /// Starts the turn and keeps hold of it, so Stop reaches it. Refused while a run of this app is still going.
-    private func startRun(_ project: Project, _ thread: String, generation mine: Int) {
+    private func startRun(
+        _ project: Project, _ thread: String, generation mine: Int, options: RunOptions = RunOptions()
+    ) {
         guard ownedRun == nil else {
             actionError = "A run is already going."
             return
         }
         let handle: RunHandle
-        do { handle = try actions.makeRun(project, thread) } catch {
+        do { handle = try actions.makeRun(project, thread, options) } catch {
             actionError = "The run did not start: \(error)"
             return
         }
@@ -210,6 +225,74 @@ enum DoctorChip: Equatable {
         guard let project, let thread = currentThread, !starting else { return }
         actionError = nil
         startRun(project, thread, generation: generation)
+    }
+
+    // MARK: Decisions
+
+    func prepareAccept() async {
+        guard let project, let thread = currentThread, !deciding else { return }
+        actionError = nil
+        do { pendingAccept = try await actions.acceptPlan(project, thread) } catch { actionError = "\(error)" }
+    }
+
+    /// Accepts what was shown: core refuses it when the work changed since, and nothing is committed then.
+    func confirmAccept(message: String?) async {
+        guard let project, let thread = currentThread, let plan = pendingAccept, !deciding else { return }
+        deciding = true
+        defer { deciding = false }
+        pendingAccept = nil
+        do { _ = try await actions.accept(project, thread, plan, message) } catch { actionError = "\(error)" }
+        await reload()
+    }
+
+    func cancelAccept() { pendingAccept = nil }
+
+    func prepareDiscard() async {
+        guard let project, let thread = currentThread, !deciding else { return }
+        actionError = nil
+        do { pendingDiscard = try await actions.discardPlan(project, thread) } catch { actionError = "\(error)" }
+    }
+
+    func confirmDiscard() async {
+        guard let project, let thread = currentThread, let plan = pendingDiscard, !deciding else { return }
+        deciding = true
+        defer { deciding = false }
+        pendingDiscard = nil
+        do { try await actions.discard(project, thread, plan) } catch { actionError = "\(error)" }
+        await reload()
+    }
+
+    func cancelDiscard() { pendingDiscard = nil }
+
+    /// The next turn with a note for the agent, and an optional dollar cap for that one turn. Core adds the failed check's output.
+    func sendBack(note: String, budget: String) {
+        guard let project, let thread = currentThread, !starting else { return }
+        var options = RunOptions(feedback: note)
+        if !budget.trimmingCharacters(in: .whitespaces).isEmpty {
+            let text = budget.trimmingCharacters(in: .whitespaces)
+            guard text.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
+                let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")), value > 0
+            else {
+                actionError = "The budget must be a positive number of dollars, got '\(text)'."
+                return
+            }
+            options.budgetOverride = value
+        }
+        guard !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            actionError = "Say what to change: a note is required."
+            return
+        }
+        actionError = nil
+        startRun(project, thread, generation: generation, options: options)
+    }
+
+    /// One file's patch as core bounds it.
+    func patchText(_ path: String) async -> String {
+        guard let project, let thread = currentThread else { return "" }
+        do {
+            guard let patch = try await actions.patch(project, thread, path) else { return "No patch for \(path)." }
+            return ReviewReport.render(patch)
+        } catch { return "\(error)" }
     }
 
     /// Whether this window's thread is the one the app is running.

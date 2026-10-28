@@ -138,7 +138,7 @@ struct ThreadPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if goal == nil || snapshot.run != nil {
+            if goal == nil {
                 Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
                 Text(".workbench/threads/\(snapshot.id)/goal.md")
                     .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
@@ -153,10 +153,12 @@ struct ThreadPane: View {
                 }
                 .padding(.top, 8)
             }
-            if case .needsYou(let reason) = snapshot.attention {
+            if case .needsYou(let reason) = snapshot.attention, store.review == nil {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
-            if let run = snapshot.run {
+            if let review = store.review {
+                ReviewView(review: review, store: store)
+            } else if let run = snapshot.run {
                 RunView(snapshot: snapshot, run: run, store: store)
             } else if let goal {
                 GoalView(snapshot: snapshot, goal: goal, store: store)
