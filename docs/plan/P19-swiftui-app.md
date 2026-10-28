@@ -109,7 +109,7 @@ a real turn costs money, so the demo goals are small, with a stated budget. Ever
 
 ### Task 0: Core first, then the shell and spine
 
-**Core PR** (Linux-tested, no UI): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; `EventLogTail`; fixtures of logs for each state of
+**Core PR** (Linux-tested, no UI; `ThreadState.pullRequest`, `ThreadSpine` and `Attention` are built, with `workbench status` as their first consumer, see `docs/spec/cli-json.md`): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; `EventLogTail`; fixtures of logs for each state of
 the two tables above (`Tests/Fixtures/`, built with the same recorder the legacy fixtures use).
 **App PR:** the target and its CI (below), window with toolbar (project pill, `base:`, state pill, spend meter), the spine, the
 footer bar, repo picker, remembered repo, and the empty and error states (no project, not a git repo, no thread, log corrupt,
