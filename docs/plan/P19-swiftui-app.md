@@ -38,7 +38,8 @@ The left rail of every window. It is the thread's state machine drawn as seven s
 | PR review | latest round `clean` and the PR's checks pass | a PR is open | `1 finding open` |
 | Clean | `branch.removed` or `worktree.removed` after merge | PR merged or closed | |
 
-- **One function.** `ThreadSpine.derive(state:goal:pullRequest:)` in `WorkbenchCore`, next to `ThreadState`, pure, returning the
+- **One function.** `ThreadSpine.derive(state:goal:remote:)` in `WorkbenchCore`, next to `ThreadState`, pure (`remote` is what
+  GitHub says about the PR, merged or closed and its checks, nil when not asked), returning the
   seven steps with a mark (`done`, `current`, `needsYou`, `pending`, `failed`) and a sublabel. The app renders it and stores
   nothing. This is how P3's "UI state drifts from the log" risk is closed: the app has no second state machine.
 - **`ThreadState` does not yet read the pull request** (`pr.opened` has a kind constant and nothing derives from it). Task 0
@@ -53,7 +54,8 @@ Colour has four meanings and no others. **Blue**: Workbench is working, or this 
 **Grey**: not yet. **Amber**: **the thread cannot go on until you decide, and you can decide now.** Red is for something broken
 (a corrupt log, a provider that is not installed) and for destructive buttons; it is not "needs you".
 
-`Attention.derive(spine:state:report:)` in core returns `none`, `working` or `needsYou(reason, since: seq)`. It is `needsYou`
+`Attention.derive(state:remote:byHand:)` in core returns `none`, `working` or `needsYou(reason, since:)` (`byHand`: the criteria the
+review report says only a person can verify; the judge's `not met` are read from the state). It is `needsYou`
 exactly in these cases:
 
 | Case | Reason shown | Why it is yours |
@@ -111,6 +113,9 @@ a real turn costs money, so the demo goals are small, with a stated budget. Ever
 
 **Core PR** (Linux-tested, no UI): `ThreadState.pullRequest`; `ThreadSpine`; `Attention`; `EventLogTail`; fixtures of logs for each state of
 the two tables above (`Tests/Fixtures/`, built with the same recorder the legacy fixtures use).
+*Done in part:* `ThreadState.pullRequest`, `ThreadSpine` and `Attention` are in core, tested on logs built in the tests for each
+row, and `workbench status` prints them (`spine`, `attention` in `--json`). No event records a failed `ship`, so that half of the
+last amber row waits for one. Open: `EventLogTail` and the recorded fixtures.
 **App PR:** the target and its CI (below), window with toolbar (project pill, `base:`, state pill, spend meter), the spine, the
 footer bar, repo picker, remembered repo, and the empty and error states (no project, not a git repo, no thread, log corrupt,
 `.workbench/` missing).

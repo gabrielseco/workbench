@@ -50,6 +50,8 @@ public struct Review: Sendable, Equatable {
         public var findingsPath: String?
         /// What the reviewer's provider reported it cost (Claude); nil when it reports none (Codex), never 0.
         public var costUSD: Double?
+        /// The `seq` of the event the round was read from.
+        public var seq = 0
     }
 
     public struct Note: Sendable, Equatable {
@@ -144,6 +146,14 @@ public struct PlanRecord: Sendable, Equatable {
 
 /// Where a review follow-up thread came from, as its `thread.created` recorded it. The tree is derived from these
 /// links; nothing stores it twice.
+public struct PullRequest: Sendable, Equatable {
+    public var number: Int
+    public var url: String?
+    public var headSHA: String?
+    /// The `seq` of the `pr.opened` it came from.
+    public var seq: Int
+}
+
 public struct ThreadLineage: Sendable, Equatable {
     /// The thread this one follows (itself a follow-up from the second round on).
     public var parent: String
@@ -190,6 +200,20 @@ public struct ThreadState: Sendable, Equatable {
     /// Usage the `agent.activity` events of non-Claude turns reported, summed per field. A field no provider ever
     /// reported is nil, never 0; nil when none did. Claude's cost is in `totalCostUSD`.
     public var reportedUsage: AgentUsage?
+    /// The latest `pr.opened`, nil before the thread shipped.
+    public var pullRequest: PullRequest?
+    /// The `reason` of `branch.removed` (`merged`, `closed`): how the pull request ended, nil while nothing recorded it.
+    public var branchRemoved: String?
+    /// The `seq` and time of the latest `turn.ended`, nil before one; where "needs you" for a review begins.
+    public var lastTurnEndedSeq: Int?
+    public var lastTurnEndedAt: String?
+    /// When the latest `goal.approved` was written.
+    public var approvedAt: String?
+    /// The `commit` the `accepted` decision recorded.
+    public var acceptedCommit: String?
+    /// A judge or a pull request review round started and has not recorded its end.
+    public var judgeOpen = false
+    public var prReviewOpen = false
 
     /// The turns' cost, nil when any turn did not report one (`--json` says null, text says `unknown`).
     public var knownCostUSD: Double? { costUnknown ? nil : totalCostUSD }
@@ -267,15 +291,17 @@ public struct ThreadState: Sendable, Equatable {
             truncated: event.data["tests_truncated"] == true)
     }
 
-    /// The runs that only advise: the judge, the plan and the pull request review. Each start is replaced by the
-    /// end that follows; if none does, the run was cut off.
+    /// The runs that only advise: the judge, the plan and the pull request review, and what `ship` and `clean`
+    /// recorded. Each start is replaced by the end that follows; if none does, the run was cut off.
     private static func applyAdvisory(_ event: Event, to state: inout ThreadState) {
         switch event.kind {
         case .judgeStarted:
+            state.judgeOpen = true
             state.review.judge = Review.Judge(
                 turn: event.turn, verdict: nil, costUSD: nil,
                 failure: "started and never recorded a result (still running, or it was interrupted)")
         case .judgeRan:
+            state.judgeOpen = false
             state.review.judge = judgeRun(event)
         case .planStarted, .planEnded, .planEdited:
             let record = PlanRecord(event)
@@ -284,8 +310,18 @@ public struct ThreadState: Sendable, Equatable {
             if event.kind == .planEnded { state.planCostUSD += record.costUSD ?? 0 }
         case .goalApproved:
             (state.approvedGoalHash, state.approvedAgent) = (event.data["hash"]?.stringValue, ApprovedAgent(event))
+            state.approvedAt = event.ts
+        case .prOpened:
+            guard let number = event.data["number"]?.intValue else { return }
+            state.pullRequest = PullRequest(
+                number: number, url: event.data["url"]?.stringValue, headSHA: event.data["head_sha"]?.stringValue,
+                seq: event.seq)
+        case .branchRemoved:
+            state.branchRemoved = event.data["reason"]?.stringValue ?? "merged"
         default:
             state.review.prReview = prReviewRound(event)
+            state.review.prReview?.seq = event.seq
+            state.prReviewOpen = event.kind == .prReviewStarted
         }
     }
 
@@ -319,6 +355,7 @@ public struct ThreadState: Sendable, Equatable {
                 if state.openTurn == event.turn { state.openTurn = nil }
                 state.progress.note(event.ts, "turn ended \(event.data["result"]?.stringValue ?? "")")
                 state.lastResult = event.data["result"]?.stringValue
+                (state.lastTurnEndedSeq, state.lastTurnEndedAt) = (event.seq, event.ts)
                 Self.recordDenials(event, into: &state.review.deniedTools)
                 Self.reconcileDenials(ended: event, into: &state)
                 switch event.data["cost_usd"] {
@@ -342,7 +379,7 @@ public struct ThreadState: Sendable, Equatable {
                         command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
-                .prReviewFinished:
+                .prReviewFinished, .prOpened, .branchRemoved:
                 Self.applyAdvisory(event, to: &state)
             case .verifierStarted, .verifierEnded, .verifierSkipped, .proofAdded:
                 Self.applyVerifier(event, to: &state, pending: &verifierProof)
@@ -358,6 +395,7 @@ public struct ThreadState: Sendable, Equatable {
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
                     state.decision = decision
+                    state.acceptedCommit = decision == "accepted" ? event.data["commit"]?.stringValue : nil
                 }
             default:
                 break

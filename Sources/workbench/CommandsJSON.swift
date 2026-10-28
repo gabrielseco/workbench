@@ -8,7 +8,7 @@ extension Commands {
 
     static func statusKeys() -> [String] {
         ["v", "thread", "ended", "goal", "turns", "open_turn", "running", "last_result", "check", "cost_usd",
-         "notes", "base_gap", "worktree", "progress"]
+         "notes", "base_gap", "worktree", "progress", "spine", "attention"]
     }
 
     static func reviewKeys() -> [String] {
@@ -145,6 +145,7 @@ extension Commands {
         let worktreeValue = worktreeJSON(id: id, ctx: ctx, events: events)
         let progressValue = progressJSON(state: state, id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
+        let (spine, attention) = spineJSON(state, approval: goalApproval(id: id, ctx: ctx))
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: id, ctx: ctx),
@@ -160,7 +161,7 @@ extension Commands {
             "plan_cost_usd": .double(state.planCostUSD),
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
             "notes": noteJSON(state.review.notes), "base_gap": gap,
-            "worktree": worktreeValue, "progress": progressValue,
+            "worktree": worktreeValue, "progress": progressValue, "spine": spine, "attention": attention,
         ]
     }
 

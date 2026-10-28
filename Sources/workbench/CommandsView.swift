@@ -211,6 +211,7 @@ extension Commands {
         } else if events.contains(where: { $0.kind == .worktreeRemoved }) {
             out("worktree:  removed after shipping (branch \(WorktreeManager.branch(for: id)) is kept)")
         }
+        for line in spineLines(state, approval: goalApproval(id: id, ctx: ctx)) { out(line) }
     }
 
     /// One line per thread on disk, newest first. A view over `.workbench/threads/`, not a thread list to act on.

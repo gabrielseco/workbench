@@ -13,7 +13,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress, spine, attention
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -38,6 +38,18 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
   tool_calls, denied_calls}`, derived from the log on each call (`tool_calls` and `denied_calls` are `null` for a turn of a provider that has not reported any: unknown, not 0). `quiet` is true when the newest event is
   60 s old or more. `cost_usd` is null when a turn reported none (the total is unknown, never 0) and does not include the open turn: `claude` reports cost only in the result line.
+- `spine`: always seven `{step, mark, sublabel}` in this order: `Goal`, `Run`, `Review`, `Accept`, `Ship`, `PR review`,
+  `Clean`. `mark` is `done`, `current`, `needs_you`, `pending` or `failed`; `sublabel` is a short line (`Approved 14:02`,
+  `Turn 2 · $1.54 (send-back)`, `PR #482 open`), empty when there is nothing to say. Derived from the log and the goal file by
+  `ThreadSpine.derive` (the table in [P19](../plan/P19-swiftui-app.md#the-thread-spine)). A discarded or abandoned thread ends at
+  `Review` with mark `failed` and the decision as its sublabel. The pull request's merge is known from `branch.removed`, which
+  `workbench clean` writes; `status` never asks GitHub.
+- `attention`: `{state, reason, since}`. `state` is `none`, `working` (a turn, check, verifier, judge or pull request review
+  is open) or `needs_you`, when the thread cannot go on until its person decides: a turn ended (any result, `interrupted`
+  too) with no decision, or the pull request's latest review round said `fix` or failed. `reason` is a line for that case
+  (`Review · turn 2 done`, with ` · C3 by hand` when the judge found a criterion not met), null otherwise; `since` is the
+  `seq` it began at, null otherwise. The CI-driven reasons (`CI failed: …`, `Ready to merge`, with `since` the pull
+  request's head sha) need the checks from GitHub and never appear in `status`. Text `status` prints both as the last lines.
 
 `workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
 cost_usd, parent, root, round}` (the last three null unless it is a review follow-up) (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
