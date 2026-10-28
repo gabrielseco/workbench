@@ -94,23 +94,19 @@ struct GoalActions: Sendable {
             try await ReviewLoader(project: project, git: try GitRunner.discover()).patch(id: thread, path: path)
         })
 
-    /// The goal file in the project's (else the global) `editor`, as `workbench open --goal` does; with none set, in the
-    /// default app for the file rather than a refusal.
+    /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not
+    /// load counts as none (the goal screen says so), so opening a file never depends on the config being right.
+    static func configuredEditor(project: Project, environment: [String: String]) -> String? {
+        if let editor = (try? Config.load(from: project.configURL))?.editor { return editor }
+        return (try? GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)))?.editor
+    }
+
+    /// The goal file in the configured editor, as `workbench open --goal` does. With none set it says so and how to set one: the
+    /// file's default app is not a guess worth making (a Markdown file opens in Xcode on some machines).
     static func openInEditor(_ project: Project, _ thread: String) async throws {
         let path = try Editor.goalFile(project: project, threadID: thread)
         let environment = ProcessInfo.processInfo.environment
-        // Opening a file never depends on the config being right: a config that does not load (the goal screen says so) or a
-        // global one that does not just means no configured editor, and the file opens in the default app.
-        var editor = (try? Config.load(from: project.configURL))?.editor
-        if editor == nil {
-            editor = (try? GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)))?.editor
-        }
-        guard let editor else {
-            guard await MainActor.run(body: { NSWorkspace.shared.open(path) }) else {
-                throw EditorError.launchFailed(editor: "the default app", reason: "it did not open \(path.path)")
-            }
-            return
-        }
+        guard let editor = configuredEditor(project: project, environment: environment) else { throw EditorError.notSet }
         let command = try Editor.command(
             for: editor, path: path.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
         try await EditorLauncher.launch(
