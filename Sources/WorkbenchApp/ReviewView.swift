@@ -100,7 +100,8 @@ struct ReviewView: View {
                     .disabled(!review.canDecide || store.deciding)
             }
             if review.undecided > 0 {
-                Text("\(review.undecided) \(review.undecided == 1 ? "criterion is" : "criteria are") for you to check. Accept does not wait.")
+                let verb = review.undecided == 1 ? "criterion is" : "criteria are"
+                Text("\(review.undecided) \(verb) for you to check. Accept does not wait.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
@@ -194,7 +195,8 @@ struct AcceptSheet: View {
                         .foregroundStyle(Theme.amber).font(.callout)
                 }
                 if undecided > 0 {
-                    Text("\(undecided) \(undecided == 1 ? "criterion is" : "criteria are") for you to check.").font(.callout).foregroundStyle(.secondary)
+                    let verb = undecided == 1 ? "criterion is" : "criteria are"
+                    Text("\(undecided) \(verb) for you to check.").font(.callout).foregroundStyle(.secondary)
                 }
                 TextField("Commit message", text: $message, prompt: Text(plan.defaultMessage)).textFieldStyle(.roundedBorder)
             }
