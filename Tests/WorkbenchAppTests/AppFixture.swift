@@ -4,7 +4,7 @@ import WorkbenchCore
 @testable import WorkbenchApp
 
 /// A throwaway git repository with a `.workbench` folder, and threads written as the real files: a goal and an event log.
-final class AppFixture {
+@MainActor final class AppFixture {
     let root: URL
     var project: Project { Project(root: root.resolvingSymlinksInPath()) }
     private var counters: [String: Int] = [:]
