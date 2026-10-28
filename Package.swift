@@ -11,13 +11,25 @@ let simplifyCFGWorkaround: [SwiftSetting] = [
     .unsafeFlags(["-Xllvm", "-sil-disable-pass=simplify-cfg"], .when(configuration: .release))
 ]
 
+// The app is SwiftUI and AppKit, which only macOS has; Linux builds the library and the CLI only (the PR gate's job).
+var appProducts: [Product] = []
+var appTargets: [Target] = []
+#if os(macOS)
+appProducts = [.executable(name: "WorkbenchApp", targets: ["WorkbenchApp"])]
+appTargets = [
+    // No process code lives here: the app calls WorkbenchCore (`scripts/check-banned-apis.sh` covers it).
+    .executableTarget(name: "WorkbenchApp", dependencies: ["WorkbenchCore"], swiftSettings: simplifyCFGWorkaround),
+    .testTarget(name: "WorkbenchAppTests", dependencies: ["WorkbenchApp", "WorkbenchCore"]),
+]
+#endif
+
 let package = Package(
     name: "workbench",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "WorkbenchCore", targets: ["WorkbenchCore"]),
         .executable(name: "workbench", targets: ["workbench"]),
-    ],
+    ] + appProducts,
     targets: [
         // zlib is on macOS and Linux alike; Apple's `Compression` framework is not.
         .systemLibrary(name: "CZlib"),
@@ -33,5 +45,5 @@ let package = Package(
         .testTarget(
             name: "WorkbenchCoreTests",
             dependencies: ["WorkbenchCore", "fake-claude", "workbench"]),
-    ]
+    ] + appTargets
 )
