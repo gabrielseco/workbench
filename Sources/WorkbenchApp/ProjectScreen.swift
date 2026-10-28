@@ -8,6 +8,8 @@ enum ProjectScreen: Equatable {
     case workbenchMissing(path: String)
     case noThread
     case logCorrupt(thread: String, problems: [String])
+    /// A project was chosen and its thread is being read: nothing of the previous project stays on screen meanwhile.
+    case opening(path: String)
     case thread(ThreadSnapshot)
 
     /// What went wrong, for the empty and error states; nil for a thread.
@@ -29,6 +31,8 @@ enum ProjectScreen: Equatable {
                 "The log of \(thread) cannot be read",
                 (problems.first ?? "It has damaged lines") + ". Open the event log to see it; Workbench never rewrites it."
             )
+        case .opening(let path):
+            ("Opening \(URL(fileURLWithPath: path).lastPathComponent)…", "Reading its threads.")
         case .thread:
             nil
         }

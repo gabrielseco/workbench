@@ -75,6 +75,21 @@ click, then `shot`.
 
 One line per checklist item: ✅ or ❌, what you saw (quote the `list` line), and the screenshot's path. Then the verdict: matches the PR,
 or what differs. Say plainly what you could not check: the project picker, opening the log, any click-through, a real project's data,
-anything a scenario does not have. Screenshots cannot be uploaded to a PR from here: list the files for the person to drag in.
+anything a scenario does not have. Put the screenshots in the pull request with `pr-shots` (below), and list the files too.
 
 This checks behaviour, not looks. A change to how it looks (layout, colour, spacing) is also reviewed against the mockups in `docs/mac-app/`.
+
+## 6. Post the screenshots to the pull request
+
+A PR that changes what the app shows carries the screenshots that prove it, with the PR's own words about what each one shows. From
+the PR's branch checkout, after `shot`:
+
+```bash
+cp .build/verify/<name>.png "$(pr-shots path <name>)"   # names it ~/screenshots/claude/<project>/<branch>-<name>-<sha>.png
+pr-shots pr                                              # uploads this branch's screenshots and writes the PR's `## Screenshots`
+```
+
+`pr-shots` is the same tool Triage uses (`~/.config/pr-shots/config.json` holds the store). Running it again replaces the section, so
+re-run it after a push that changes the screen. Only fixture screenshots go up (never a person's own project), and never one that
+shows a path or name that is not the fixture's. If `pr-shots` is missing or fails, say so in the PR; do not claim the screenshots are
+posted.

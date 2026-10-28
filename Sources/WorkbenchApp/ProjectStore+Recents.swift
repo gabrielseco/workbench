@@ -1,4 +1,5 @@
 import Foundation
+import WorkbenchCore
 
 /// The projects the app has opened: the menu behind the project pill. An app preference, never a file in a project.
 extension ProjectStore {
@@ -51,6 +52,12 @@ extension ProjectStore {
             return
         }
         actionError = nil
+        // Git decides whether it is a repository: a `.git` that points nowhere passes the check above and must not close the
+        // project that is open, which `open` does when it fails.
+        do { _ = try await Project.locate(from: URL(fileURLWithPath: path), git: try GitRunner.discover()) } catch {
+            actionError = "\(URL(fileURLWithPath: path).lastPathComponent): it is not a usable git repository."
+            return
+        }
         await open(URL(fileURLWithPath: path))
     }
 }

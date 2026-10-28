@@ -70,6 +70,48 @@ import Testing
         }
     }
 
+    @Test func aDanglingGitFileIsRefusedWithoutClosingTheOpenProject() async throws {
+        let a = try await project("a")
+        let store = store()
+        #expect(await store.open(a.root))
+        let broken = FileManager.default.temporaryDirectory.appendingPathComponent("dangling-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: broken) }
+        try "gitdir: /nonexistent/\(UUID().uuidString)\n".write(
+            to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        store.remember(broken.path)
+        #expect(store.recentProjects().first { $0.path == broken.path }?.unavailable == nil, "the cheap check passes it")
+        await store.switchTo(broken.path)
+        #expect(store.project == a.project && store.actionError?.hasSuffix("not a usable git repository.") == true)
+        guard case .thread = store.screen else {
+            Issue.record("the open project was closed")
+            return
+        }
+    }
+
+    @Test func whileTheOtherProjectIsBeingReadNothingOfTheFirstStaysOnScreen() async throws {
+        let (a, b) = (try await project("first"), try await project("second"))
+        let release = DispatchSemaphore(value: 0)
+        let target = b.project.root.path
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
+            loader: { project in
+                if project.root.path == target { release.wait() }
+                return ProjectLoader.load(project: project)
+            })
+        #expect(await store.open(a.root))
+        let switching = Task { await store.switchTo(target) }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(store.screen == .opening(path: target) && store.project == b.project && store.goal == nil)
+        release.signal()
+        await switching.value
+        guard case .thread(let now) = store.screen else {
+            Issue.record("no thread")
+            return
+        }
+        #expect(now.id == "second")
+    }
+
     @Test func anUnavailableProjectCanBeRemovedFromTheList() {
         let store = store()
         store.remember("/tmp/gone-for-good")

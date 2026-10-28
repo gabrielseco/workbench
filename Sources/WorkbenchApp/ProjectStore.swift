@@ -139,6 +139,7 @@ struct RecentProject: Equatable, Identifiable {
         project = located
         doctor = .notRun
         (goal, review) = (nil, nil)
+        screen = .opening(path: located.root.path)
         (currentThread, lastWatch) = (nil, nil)
         await reload()
         return true

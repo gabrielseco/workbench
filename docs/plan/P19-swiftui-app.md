@@ -283,8 +283,8 @@ Deferred on purpose; each is in [`../later/`](../later/README.md) or named there
 [README](README.md) still decides when any of it comes back.
 
 - **A thread list, history of finished threads, or an inbox.** The mockups have none. One current thread.
-- **A project list or switcher.** The project pill is a label with `Choose repo…` that replaces the one project; no global store
-  (D6, [many projects](../later/README.md)).
+- **A global project store.** The project pill is a menu of the projects this app has opened (an app preference, newest first, one
+  window); there is no store of threads across projects (D6, [many projects](../later/README.md)).
 - **Concurrency**: no second window, no two live threads, no concurrent runs or checks (the word "concurrent" goes in `later/`).
 - **Thread until merged**: a shipped thread does not keep the single active slot ([thread-until-merged](../later/thread-until-merged.md)).
 - **An in-app goal editor.** The goal file and the user's editor stay the source of truth.

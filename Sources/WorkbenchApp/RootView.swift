@@ -35,20 +35,19 @@ struct ToolbarBar: View {
         HStack(spacing: 12) {
             Menu {
                 ForEach(store.recentProjects()) { entry in
-                    if entry.unavailable == nil {
-                        Button {
-                            Task { await store.switchTo(entry.path) }
-                        } label: {
-                            Label(
-                                entry.name + (entry.isRunning ? " · running" : ""),
-                                systemImage: entry.isCurrent ? "checkmark" : "folder")
-                        }
-                    } else {
-                        Menu("\(entry.name) · unavailable") {
-                            Text(entry.unavailable ?? "")
-                            Button("Remove from list") { store.forget(entry.path) }
-                        }
+                    Button {
+                        Task { await store.switchTo(entry.path) }
+                    } label: {
+                        let flag = entry.unavailable == nil ? "" : " · unavailable"
+                        Label(
+                            entry.name + (entry.isRunning ? " · running" : "") + flag,
+                            systemImage: entry.isCurrent ? "checkmark" : "folder")
                     }
+                    .disabled(entry.unavailable != nil)
+                    .help(entry.unavailable ?? entry.path)
+                }
+                ForEach(store.recentProjects().filter { $0.unavailable != nil }) { entry in
+                    Button("Remove \(entry.name) from the list") { store.forget(entry.path) }
                 }
                 Divider()
                 Button("Choose folder…") { Picker.chooseProject(store) }
