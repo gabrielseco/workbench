@@ -17,6 +17,7 @@ struct FakeGH {
             d="$GH_FAKE_DIR"
             echo "$@" >> "$d/calls"
             echo "${GH_REPO:-unset}" > "$d/repo"
+            pwd -P > "$d/cwd"
             case "$1 $2" in
             "auth status") exit 0 ;;
             "pr checks")

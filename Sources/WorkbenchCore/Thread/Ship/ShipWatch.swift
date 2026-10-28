@@ -87,14 +87,8 @@ extension ThreadService {
         sleep: @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1e9)) },
         onChange: @Sendable (PRChecksSummary) -> Void
     ) async throws -> ShipWatchResult {
-        guard SafeNames.isThreadID(id) else { throw ShipError.invalidName(id) }
-        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
-        guard let opened = events.last(where: { $0.kind == .prOpened }),
-            let number = opened.data["number"]?.intValue, number > 0
-        else { throw ShipError.notShipped }
-        guard let gh else { throw ShipError.ghMissing }
-        var environment = gh.environment
-        environment["GH_REPO"] = nil
+        let recorded = try recordedPR(id: id, gh: gh)
+        let (number, gh, environment) = (recorded.number, recorded.gh, recorded.environment)
 
         let started = now()
         var failures = 0
@@ -138,6 +132,36 @@ extension ThreadService {
             }
             await sleep(min(interval, left))
         }
+    }
+
+    /// The CI checks of the thread's recorded pull request, read once. Read only, like `watchPR`: the one command it runs is
+    /// `gh pr checks <number>`, from the project root so a removed worktree does not matter, with `GH_REPO` dropped so it asks
+    /// about this repository's pull request. A screen that wants the state now calls this on its own schedule.
+    public func prChecks(
+        id: String, gh: GitRunner?, callTimeout: TimeInterval = ThreadService.watchCallTimeout
+    ) async throws -> PRChecksSummary {
+        let recorded = try recordedPR(id: id, gh: gh)
+        let runner = GitRunner(executable: recorded.gh.executable, environment: recorded.environment, timeout: callTimeout)
+        return try await pollChecks(number: recorded.number, runner: runner)
+    }
+
+    /// The pull request `ship` recorded and the environment to ask `gh` about it in.
+    private func recordedPR(id: String, gh: GitRunner?) throws -> RecordedPR {
+        guard SafeNames.isThreadID(id) else { throw ShipError.invalidName(id) }
+        let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+        guard let opened = events.last(where: { $0.kind == .prOpened }),
+            let number = opened.data["number"]?.intValue, number > 0
+        else { throw ShipError.notShipped }
+        guard let gh else { throw ShipError.ghMissing }
+        var environment = gh.environment
+        environment["GH_REPO"] = nil
+        return RecordedPR(number: number, gh: gh, environment: environment)
+    }
+
+    private struct RecordedPR {
+        var number: Int
+        var gh: GitRunner
+        var environment: [String: String]
     }
 
     private func pollChecks(number: Int, runner: GitRunner) async throws -> PRChecksSummary {
