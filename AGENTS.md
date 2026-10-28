@@ -22,6 +22,7 @@ scripts/soak-real.py                     # real `claude` runs; costs money, run 
 bash scripts/verify-cli/<feature>.sh     # a merged feature used for real on this repo (verify-cli skill); costs money, by hand
 scripts/verify-cli/from-branch.sh <feature>  # the same on a branch from a temp clone, normal then sabotaged, with the PR snippet
 scripts/bundle-app.sh [--check|--install] # macOS: builds .build/bundle/Workbench.app (release, icon, signed); --check launches a copy; --install puts it in ~/Applications
+git config core.hooksPath .githooks         # once per clone, macOS: after a pull on main that changes the app, rebuild ~/Applications/Workbench.app in the background (never quits a running one; log ~/Library/Logs/Workbench/rebuild.log); scripts/test-post-merge-hook.sh checks its decisions
 scripts/render-icon.sh                   # re-renders Resources/AppIcon.png from the SVG (Chrome headless); the PNG is committed
 scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's app on a fixture project (Fixtures/app/) and drive it (verify-app skill)
 ```

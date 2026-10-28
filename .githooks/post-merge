@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# After a pull/merge on main that changed the app or what it is built from, rebuild ~/Applications/Workbench.app in the background so
+# the installed app matches main. Never quits a running Workbench: it owns the turn it started, so ending it would end that turn; the new
+# build is put in place and the notification says to quit it (⌘Q) and open it again. Not opened if it was not running.
+# The result is a macOS notification; details in ~/Library/Logs/Workbench/rebuild.log.
+# Enable once per clone: git config core.hooksPath .githooks
+# WORKBENCH_HOOK_DRY_RUN=1 only says what it would do (scripts/test-post-merge-hook.sh uses it).
+set -euo pipefail
+
+say() { [[ "${WORKBENCH_HOOK_DRY_RUN:-0}" == 1 ]] && echo "post-merge: $1" || true; }
+
+[[ "$(uname -s)" == Darwin ]] || { say "skip: not macOS"; exit 0; }
+[[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || { say "skip: not main"; exit 0; }  # feature branches and worktrees
+if git diff --quiet ORIG_HEAD HEAD -- Sources Resources Package.swift Package.resolved scripts/bundle-app.sh; then
+  say "skip: nothing the app is built from changed"
+  exit 0
+fi
+if [[ "${WORKBENCH_HOOK_DRY_RUN:-0}" == 1 ]]; then
+  say "rebuild"
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+LOG="$HOME/Library/Logs/Workbench/rebuild.log"
+mkdir -p "$(dirname "$LOG")"
+echo "→ Workbench changed on main: rebuilding ~/Applications/Workbench.app in the background (log: ${LOG/#$HOME/~})"
+
+notify() { osascript -e "display notification \"$1\" with title \"Workbench rebuild\"" >/dev/null 2>&1 || true; }
+
+(
+  SHA="$(git -C "$ROOT" rev-parse --short HEAD)"
+  echo "=== $(date '+%F %T') $SHA"
+  APP_BIN="$HOME/Applications/Workbench.app/Contents/MacOS/WorkbenchApp"
+  RUNNING=0
+  pgrep -qf "$APP_BIN" && RUNNING=1
+  if ! WORKBENCH_INSTALL_OPEN=0 "$ROOT/scripts/bundle-app.sh" --install; then
+    notify "Build failed, see ~/Library/Logs/Workbench/rebuild.log"
+    exit 1
+  fi
+  if [[ "$RUNNING" == 1 ]]; then
+    notify "Rebuilt at $SHA; quit Workbench (⌘Q) and open it to load it"
+  else
+    notify "Rebuilt at $SHA"
+  fi
+) </dev/null >>"$LOG" 2>&1 &
