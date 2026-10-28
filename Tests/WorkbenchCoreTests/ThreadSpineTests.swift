@@ -196,4 +196,11 @@ private func marks(_ spine: ThreadSpine) -> [ThreadSpine.Mark] { spine.entries.m
         #expect(marks(spine) == [.done, .pending, .failed, .pending, .pending, .pending, .pending])
         #expect(spine.sublabel(.review) == "Abandoned")
     }
+
+    @Test func reviewIsNotAmberWhileTheVerifierOrJudgeRuns() {
+        var story = SpineStory.ended()
+        #expect(ThreadSpine.derive(state: story.state, goal: .approved).mark(.review) == .needsYou)
+        story.add(.judgeStarted, turn: 1)
+        #expect(ThreadSpine.derive(state: story.state, goal: .approved).mark(.review) == .pending)
+    }
 }

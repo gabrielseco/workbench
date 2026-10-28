@@ -102,4 +102,13 @@ private let running = PRChecksSummary(checks: [PRCheck(name: "linux", bucket: "p
             ThreadSpine.derive(state: story.state, goal: .approved, remote: .init(state: .open, checks: red))
                 .sublabel(.prReview) == "CI failed: unit tests")
     }
+
+    @Test func aFixPushIsANewCIReason() {
+        var story = SpineStory.shipped()
+        story.round(1, verdict: "clean")
+        let first = Attention.derive(state: story.state, remote: .init(state: .open, checks: red, headSHA: "aaa"))
+        let second = Attention.derive(state: story.state, remote: .init(state: .open, checks: red, headSHA: "bbb"))
+        #expect(first == .needsYou(reason: "CI failed: unit tests", since: .commit("aaa")))
+        #expect(second == .needsYou(reason: "CI failed: unit tests", since: .commit("bbb")))
+    }
 }

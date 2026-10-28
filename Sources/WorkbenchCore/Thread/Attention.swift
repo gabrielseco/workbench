@@ -40,7 +40,7 @@ public enum Attention: Sendable, Equatable {
             return .needsYou(reason: "Review round \(round.round): findings open", since: .seq(round.seq))
         }
         guard let checks = remote?.checks else { return .none }
-        let commit = Since.commit(pr.headSHA ?? "pr-\(pr.number)")
+        let commit = Since.commit(remote?.headSHA ?? pr.headSHA ?? "pr-\(pr.number)")
         if checks.state == .failed { return .needsYou(reason: ciFailedReason(checks), since: commit) }
         if checks.state == .passed, round?.verdict == "clean" { return .needsYou(reason: "Ready to merge", since: commit) }
         return .none

@@ -9,10 +9,13 @@ public struct PullRequestRemote: Sendable, Equatable {
 
     public var state: State
     public var checks: PRChecksSummary?
+    /// The head commit the checks ran on; a CI-driven reason is de-duplicated on it, so a fix push is a new reason.
+    public var headSHA: String?
 
-    public init(state: State, checks: PRChecksSummary? = nil) {
+    public init(state: State, checks: PRChecksSummary? = nil, headSHA: String? = nil) {
         self.state = state
         self.checks = checks
+        self.headSHA = headSHA
     }
 }
 
@@ -129,6 +132,9 @@ public struct ThreadSpine: Sendable, Equatable {
         case .decided("accepted"): Entry(step: .review, mark: .done, sublabel: "Accepted")
         // Discarded or abandoned: Review is where the thread ended, with the decision.
         case .decided(let decision): Entry(step: .review, mark: .failed, sublabel: decision.capitalized)
+        // Advisory work still running is never amber (the same rule as `Attention`).
+        case .awaitingReview where state.review.verifier?.open == true || state.judgeOpen:
+            Entry(step: .review, mark: .pending, sublabel: "Waiting for the verifier")
         case .awaitingReview: Entry(step: .review, mark: .needsYou, sublabel: "Needs you")
         default: Entry(step: .review, mark: .pending, sublabel: "")
         }
