@@ -35,6 +35,8 @@ public struct Review: Sendable, Equatable {
         public var verdict: JudgeVerdict?
         public var costUSD: Double?
         public var failure: String?
+        /// True for a run that only started: it is running, or it was cut off and the next command closes it.
+        public var isOpen = false
     }
 
     /// The latest `pr_review.*` event: Codex's review of the shipped pull request, or why a round has no verdict.
@@ -216,6 +218,9 @@ public struct ThreadState: Sendable, Equatable {
 
     public var isActive: Bool { decision == nil }
 
+    /// True while a verifier or judge run has started and not ended: advice is being made, nobody is asked yet.
+    public var adviceIsOpen: Bool { review.verifier?.open == true || review.judge?.isOpen == true }
+
     public static let terminalDecisions: Set<String> = ["accepted", "discarded", "abandoned"]
 
     /// The `parent`, `root` and `round` of a follow-up's `thread.created`, nil when any is missing or not a thread id.
@@ -295,7 +300,7 @@ public struct ThreadState: Sendable, Equatable {
         case .judgeStarted:
             state.review.judge = Review.Judge(
                 turn: event.turn, verdict: nil, costUSD: nil,
-                failure: "started and never recorded a result (still running, or it was interrupted)")
+                failure: "started and never recorded a result (still running, or it was interrupted)", isOpen: true)
         case .judgeRan:
             state.review.judge = judgeRun(event)
         case .planStarted, .planEnded, .planEdited:

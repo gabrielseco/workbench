@@ -25,7 +25,7 @@ public enum Attention: Sendable, Equatable {
         spine: ThreadSpine, state: ThreadState, checks: PRChecksSummary? = nil, handChecks: [String] = [],
         outcome: PullRequestOutcome = .open
     ) -> Attention {
-        if state.openTurn != nil || state.openCheck != nil { return .working }
+        if state.openTurn != nil || state.openCheck != nil || (state.adviceIsOpen && state.decision == nil) { return .working }
         if let decision = state.decision {
             guard decision == "accepted", let pr = state.pullRequest, !state.cleaned, outcome == .open else { return .none }
             return pullRequest(pr, state: state, checks: checks)
@@ -43,9 +43,11 @@ public enum Attention: Sendable, Equatable {
 
     private static func pullRequest(_ pr: PullRequestRecord, state: ThreadState, checks: PRChecksSummary?) -> Attention {
         let round = state.review.prReview.flatMap { $0.pr == nil || $0.pr == pr.number ? $0 : nil }
+        // The commit the latest round reviewed, else the one the pull request opened at: a newer commit is a new reason.
+        let commit = round?.headSHA ?? pr.headSHA
         if let failed = checks?.checks.filter({ $0.outcome == .failed }), !failed.isEmpty {
             let text = "CI failed: " + failed.map(\.name).joined(separator: ", ")
-            return .needsYou(AttentionReason(text: text, since: pr.seq, commit: pr.headSHA))
+            return .needsYou(AttentionReason(text: text, since: pr.seq, commit: commit))
         }
         if let round {
             if round.isOpen { return .working }
@@ -53,7 +55,7 @@ public enum Attention: Sendable, Equatable {
             case "fix": return .needsYou(AttentionReason(text: "Findings open", since: round.seq, commit: nil))
             case "clean":
                 if checks?.state == .passed {
-                    return .needsYou(AttentionReason(text: "Ready to merge", since: round.seq, commit: pr.headSHA))
+                    return .needsYou(AttentionReason(text: "Ready to merge", since: round.seq, commit: commit))
                 }
             default:
                 let why = round.failure.map { ": " + $0 } ?? ""

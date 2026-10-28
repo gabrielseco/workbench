@@ -41,8 +41,8 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
 - `spine`: the thread as seven steps in a fixed order (`goal`, `run`, `review`, `accept`, `ship`, `pr review`, `clean`), each
   `{step, mark, sublabel}`. `mark` is `done`, `current`, `needs_you`, `pending` or `failed`; `sublabel` is a short line, empty when there is nothing to say.
   Derived from the log and the goal file on each call (`ThreadSpine.derive`). `status` does not ask GitHub, so a pull request's CI and fate
-  are not known to it: `ship` reads `PR #n open` and `pr review` says `CI not checked` after a clean round.
-- `attention`: `{state, reason, since, commit}`. `state` is `none`, `working` (a turn or check is open, or a pull request review round is running)
+  are not known to it: `ship` reads `PR #n open`, and after a clean round `pr review` stays `current` with `Clean · CI not checked` (it is `done` only when the checks passed). A running verifier or judge shows as `run` current (`verifying`, `judging`), with `review` pending.
+- `attention`: `{state, reason, since, commit}`. `state` is `none`, `working` (a turn or check is open, a verifier or judge is running, or a pull request review round is running)
   or `needs_you` (the thread cannot go on until a person decides: a turn ended with no decision, or the pull request's latest review round found
   something or failed). `reason` and `since` (the `seq` it began at) are null unless `needs_you`; `commit` is the head commit for a reason GitHub
   can change without an event, null otherwise. A draft goal, a running turn and a merged pull request waiting for `clean` are never `needs_you`.

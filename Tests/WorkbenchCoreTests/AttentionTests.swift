@@ -125,4 +125,26 @@ import Testing
         cleaned.add(.branchRemoved, ["reason": "merged"])
         #expect(attention(cleaned, checks: green) == .none)
     }
+
+    @Test func aRunningVerifierOrJudgeIsWorkingNotAmber() {
+        var verifying = SpineStory()
+        verifying.approve()
+        verifying.turn(1)
+        verifying.verifier(open: true)
+        #expect(attention(verifying) == .working)
+        var judging = SpineStory()
+        judging.approve()
+        judging.turn(1)
+        judging.judge(open: true)
+        #expect(attention(judging) == .working)
+    }
+
+    @Test func ciIsIdentifiedByTheCommitTheLatestRoundReviewed() throws {
+        var story = shipped()
+        story.prRound(1, verdict: "clean", head: "newer456")
+        let ready = try #require(reasonOf(attention(story, checks: green)))
+        #expect(ready.commit == "newer456", "the PR opened at abc123 and moved on")
+        let red = PRChecksSummary(checks: [PRCheck(name: "linux", bucket: "fail")])
+        #expect(try #require(reasonOf(attention(story, checks: red))).commit == "newer456")
+    }
 }

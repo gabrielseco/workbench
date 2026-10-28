@@ -26,12 +26,26 @@ struct SpineStory {
         add(.prOpened, ["url": .string("https://example.test/pull/\(number)"), "number": .int(number), "head_sha": .string(head)])
     }
 
-    mutating func prRound(_ round: Int, verdict: String?, number: Int = 7, reason: String? = nil) {
-        add(.prReviewStarted, ["round": .int(round), "pr": .int(number), "head_sha": "abc123"])
-        var data: [String: JSONValue] = ["round": .int(round), "pr": .int(number), "ok": .bool(verdict != nil)]
+    mutating func prRound(
+        _ round: Int, verdict: String?, number: Int = 7, reason: String? = nil, head: String = "abc123"
+    ) {
+        add(.prReviewStarted, ["round": .int(round), "pr": .int(number), "head_sha": .string(head)])
+        var data: [String: JSONValue] = [
+            "round": .int(round), "pr": .int(number), "ok": .bool(verdict != nil), "head_sha": .string(head),
+        ]
         if let verdict { data["verdict"] = .string(verdict) }
         if let reason { data["reason"] = .string(reason) }
         add(.prReviewFinished, .object(data))
+    }
+
+    mutating func verifier(open: Bool, turn: Int = 1) {
+        add(.verifierStarted, turn: turn, [:])
+        if !open { add(.verifierEnded, turn: turn, ["ok": true]) }
+    }
+
+    mutating func judge(open: Bool, turn: Int = 1) {
+        add(.judgeStarted, turn: turn, [:])
+        if !open { add(.judgeRan, turn: turn, ["ok": false, "reason": "no verdict"]) }
     }
 
     var state: ThreadState { ThreadState.derive(from: events, id: "t") }

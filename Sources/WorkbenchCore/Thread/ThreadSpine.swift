@@ -67,6 +67,9 @@ public struct ThreadSpine: Sendable, Equatable {
             run = Entry(step: .run, mark: .current, sublabel: "Turn \(open) · working")
         } else if state.openCheck != nil {
             run = Entry(step: .run, mark: .current, sublabel: "Turn \(state.lastTurn) · checking")
+        } else if state.adviceIsOpen && !decided {
+            let what = state.review.verifier?.open == true ? "verifying" : "judging"
+            run = Entry(step: .run, mark: .current, sublabel: "Turn \(state.lastTurn) · \(what)")
         } else if state.lastTurn == 0 {
             run = Entry(step: .run, mark: decided || !approved ? .pending : .current, sublabel: approved ? "Not started" : "")
         } else if review.status == .sentBack {
@@ -81,7 +84,7 @@ public struct ThreadSpine: Sendable, Equatable {
         let reviewEntry: Entry
         if let decision = state.decision {
             reviewEntry = Entry(step: .review, mark: .done, sublabel: decision.capitalized)
-        } else if review.status == .awaitingReview {
+        } else if review.status == .awaitingReview && !state.adviceIsOpen {
             reviewEntry = Entry(step: .review, mark: .needsYou, sublabel: "Needs you")
         } else {
             reviewEntry = Entry(step: .review, mark: .pending, sublabel: "")
@@ -129,7 +132,8 @@ public struct ThreadSpine: Sendable, Equatable {
             case .passed?: return Entry(step: .prReview, mark: .done, sublabel: "Clean · CI passed")
             case .pending?: return Entry(step: .prReview, mark: .current, sublabel: "Clean · CI running")
             case .none?: return Entry(step: .prReview, mark: .done, sublabel: "Clean")
-            case nil: return Entry(step: .prReview, mark: .done, sublabel: "Clean · CI not checked")
+            // Done needs the checks to pass, and without them nobody knows.
+            case nil: return Entry(step: .prReview, mark: .current, sublabel: "Clean · CI not checked")
             case .failed?: return Entry(step: .prReview, mark: .needsYou, sublabel: "CI failed")
             }
         default:

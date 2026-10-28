@@ -117,8 +117,8 @@ import Testing
         story.prRound(1, verdict: "fix")
         #expect(ThreadSpine.derive(state: story.state)[.prReview].mark == .needsYou)
         story.prRound(2, verdict: "clean")
-        #expect(ThreadSpine.derive(state: story.state)[.prReview].mark == .done)
-        #expect(ThreadSpine.derive(state: story.state)[.prReview].sublabel == "Clean · CI not checked")
+        let unchecked = ThreadSpine.derive(state: story.state)[.prReview]
+        #expect(unchecked.mark == .current && unchecked.sublabel == "Clean · CI not checked", "done needs CI to pass")
     }
 
     @Test func aRoundThatOnlyStartedIsRunning() {
@@ -197,5 +197,26 @@ import Testing
         let spine = ThreadSpine.derive(state: story.state, approval: .draft)
         #expect(spine[.review].mark == .done && spine[.review].sublabel == "Abandoned")
         #expect(spine[.run].mark == .pending)
+    }
+
+    @Test func aRunningVerifierOrJudgeIsWorkNotAReviewRequest() {
+        for verifier in [true, false] {
+            var story = SpineStory()
+            story.approve()
+            story.turn(1)
+            if verifier { story.verifier(open: true) } else { story.judge(open: true) }
+            let spine = ThreadSpine.derive(state: story.state)
+            #expect(spine[.run].mark == .current && spine[.run].sublabel == "Turn 1 · " + (verifier ? "verifying" : "judging"))
+            #expect(spine[.review].mark == .pending)
+        }
+    }
+
+    @Test func aFinishedVerifierAndJudgeLeaveReviewToYou() {
+        var story = SpineStory()
+        story.approve()
+        story.turn(1)
+        story.verifier(open: false)
+        story.judge(open: false)
+        #expect(ThreadSpine.derive(state: story.state)[.review].mark == .needsYou)
     }
 }
