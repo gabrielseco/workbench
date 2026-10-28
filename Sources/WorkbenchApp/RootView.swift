@@ -33,14 +33,32 @@ struct ToolbarBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button {
-                Picker.chooseProject(store)
+            Menu {
+                ForEach(store.recentProjects()) { entry in
+                    if entry.unavailable == nil {
+                        Button {
+                            Task { await store.switchTo(entry.path) }
+                        } label: {
+                            Label(
+                                entry.name + (entry.isRunning ? " · running" : ""),
+                                systemImage: entry.isCurrent ? "checkmark" : "folder")
+                        }
+                    } else {
+                        Menu("\(entry.name) · unavailable") {
+                            Text(entry.unavailable ?? "")
+                            Button("Remove from list") { store.forget(entry.path) }
+                        }
+                    }
+                }
+                Divider()
+                Button("Choose folder…") { Picker.chooseProject(store) }
             } label: {
                 HStack(spacing: 4) {
                     Text(store.project?.root.lastPathComponent ?? "Choose project")
                     Image(systemName: "chevron.down").font(.caption2)
                 }
             }
+            .menuStyle(.borderlessButton).fixedSize()
             .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
             if case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
