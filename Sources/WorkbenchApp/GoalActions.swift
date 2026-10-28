@@ -11,35 +11,53 @@ struct RunHandle: Sendable {
 /// What the screens' buttons do, as core does it. Seams so a test can see the order and the refusals without a repository.
 struct GoalActions: Sendable {
     var approve: @Sendable (Project, String) async throws -> Void
-    var makeRun: @Sendable (Project, String) throws -> RunHandle
+    var makeRun: @Sendable (Project, String, RunOptions) throws -> RunHandle
     var newThread: @Sendable (Project, String) async throws -> Void
     var openGoal: @Sendable (Project, String) async throws -> Void
     /// Asks the process that holds the thread (a terminal's `workbench run`) to stop; false when nothing holds it.
     var requestStop: @Sendable (Project, String) async -> Bool
     var openWorktree: @Sendable (Project, String) async throws -> Void
+    var loadReview: @Sendable (Project, String) async -> ReviewReport?
+    var acceptPlan: @Sendable (Project, String) async throws -> AcceptPlan
+    var accept: @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult
+    var discardPlan: @Sendable (Project, String) async throws -> DiscardPlan
+    var discard: @Sendable (Project, String, DiscardPlan) async throws -> Void
+    var patch: @Sendable (Project, String, String) async throws -> FilePatch?
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
-        makeRun: @escaping @Sendable (Project, String) throws -> RunHandle = { _, _ in
+        makeRun: @escaping @Sendable (Project, String, RunOptions) throws -> RunHandle = { _, _, _ in
             RunHandle(run: {}, stop: {})
         },
         newThread: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
-        openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in }
+        openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
+        loadReview: @escaping @Sendable (Project, String) async -> ReviewReport? = { _, _ in nil },
+        acceptPlan: @escaping @Sendable (Project, String) async throws -> AcceptPlan = { _, _ in throw Unset() },
+        accept: @escaping @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult = { _, _, _, _ in
+            throw Unset()
+        },
+        discardPlan: @escaping @Sendable (Project, String) async throws -> DiscardPlan = { _, _ in throw Unset() },
+        discard: @escaping @Sendable (Project, String, DiscardPlan) async throws -> Void = { _, _, _ in },
+        patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil }
     ) {
         (self.approve, self.makeRun, self.newThread, self.openGoal) = (approve, makeRun, newThread, openGoal)
         (self.requestStop, self.openWorktree) = (requestStop, openWorktree)
+        (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
+        (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
     }
+
+    struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
 
     static let core = GoalActions(
         approve: { project, thread in
             let git = try GitRunner.discover()
             try await ThreadService(project: project, git: git).approve(id: thread)
         },
-        makeRun: { project, thread in
+        makeRun: { project, thread, options in
             let runner = ThreadRunner(project: project, threadID: thread, git: try GitRunner.discover())
-            return RunHandle(run: { _ = try await runner.run() }, stop: { await runner.stop() })
+            return RunHandle(run: { _ = try await runner.run(options) }, stop: { await runner.stop() })
         },
         newThread: { project, name in
             let git = try GitRunner.discover()
@@ -54,6 +72,26 @@ struct GoalActions: Sendable {
         openWorktree: { project, thread in
             let url = try Editor.worktree(project: project, threadID: thread)
             await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        },
+        loadReview: { project, thread in
+            guard let git = try? GitRunner.discover() else { return nil }
+            return await ReviewLoader(project: project, git: git).load(id: thread)
+        },
+        acceptPlan: { project, thread in
+            try await ThreadService(project: project, git: try GitRunner.discover()).acceptPlan(id: thread)
+        },
+        accept: { project, thread, plan, message in
+            try await ThreadService(project: project, git: try GitRunner.discover())
+                .accept(id: thread, message: message, shown: plan)
+        },
+        discardPlan: { project, thread in
+            try await ThreadService(project: project, git: try GitRunner.discover()).discardPlan(id: thread)
+        },
+        discard: { project, thread, plan in
+            try await ThreadService(project: project, git: try GitRunner.discover()).discard(id: thread, shown: plan)
+        },
+        patch: { project, thread, path in
+            try await ReviewLoader(project: project, git: try GitRunner.discover()).patch(id: thread, path: path)
         })
 
     /// The goal file in the project's (else the global) `editor`, as `workbench open --goal` does; with none set, in the

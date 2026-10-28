@@ -164,7 +164,7 @@ private final class SkillProbe: @unchecked Sendable {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1")
         let actions = GoalActions(
-            approve: approve, makeRun: { project, thread in RunHandle(run: { try await run(project, thread) }, stop: {}) })
+            approve: approve, makeRun: { project, thread, _ in RunHandle(run: { try await run(project, thread) }, stop: {}) })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         return (store, fixture)
