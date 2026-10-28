@@ -3,13 +3,15 @@
 # binary has no Dock icon of its own, and some things (notifications, a login item) need a bundle.
 #   scripts/bundle-app.sh            build the bundle, then check it: the plist lints, the icon has every size, the signature holds
 #   scripts/bundle-app.sh --check    the same, then launch it, find its window by pid, render the Dock icon to a PNG, end that pid
-# Output: .build/bundle/Workbench.app, or WORKBENCH_APP=<path ending in .app>. It writes that bundle, this repository's .build/ and a
-# temporary folder, and replaces an existing output only if it is a Workbench bundle. `--check` also removes the window state and
-# settings that its own throwaway bundle id (dev.rogal.workbench.check-<pid>) leaves under ~/Library, and nothing under any other id.
+# Output: .build/bundle/Workbench.app, or WORKBENCH_APP=<path ending in .app>. The script writes that bundle and this repository's
+# .build/ (its scratch space and, for --check, .build/bundle/dock-icon.png), and replaces an existing output only if it is a
+# Workbench bundle. `--check` runs on a disposable copy with a bundle id of its own (dev.rogal.workbench.check-<pid>), so the bundle
+# it built keeps its id and signature; macOS saves the launched copy's window state under that id in ~/Library, and the script
+# deletes those files, only under that id, and nothing else outside the repository.
 # Environment:
 #   WORKBENCH_APP        where to write the bundle (default .build/bundle/Workbench.app)
 #   WORKBENCH_SIGN_ID    a code-signing identity to sign with; unset: ad hoc, which needs no certificate and works in CI
-#   WORKBENCH_BUNDLE_ID  the bundle id (default dev.rogal.workbench); --check uses one of its own, so the check leaves no settings
+#   WORKBENCH_BUNDLE_ID  the bundle id (default dev.rogal.workbench)
 # Exit codes: 0 done, 1 a step failed (the step on stderr), 2 not macOS or a usage problem. --check prints PASS or FAIL per step.
 set -euo pipefail
 
@@ -36,7 +38,9 @@ BUNDLE_ID="${WORKBENCH_BUNDLE_ID:-dev.rogal.workbench}"
 PNG="$ROOT/Resources/AppIcon.png"
 [[ -s "$PNG" ]] || { echo "bundle-app: no $PNG (scripts/render-icon.sh makes it from the SVG)" >&2; exit 1; }
 
-TMP="$(mktemp -d)"
+# Scratch space inside this repository's .build/, so nothing is written to the system temp folder.
+mkdir -p "$ROOT/.build"
+TMP="$(mktemp -d "$ROOT/.build/bundle-tmp.XXXXXX")"
 PID=""
 cleanup() {
   [[ -n "$PID" ]] && kill "$PID" 2>/dev/null || true
@@ -120,19 +124,26 @@ icon_sizes() {
 step "Info.plist lints" plutil -lint "$APP/Contents/Info.plist"
 step "AppIcon.icns has all ten sizes" icon_sizes
 step "the signature holds" codesign --verify --strict "$APP"
+has_bundle_id() { [[ "$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")" == "$BUNDLE_ID" ]]; }
+step "the bundle id is $BUNDLE_ID" has_bundle_id
 
 # --- --check: launch it -----------------------------------------------------------------------------------------------------------
 
 if [[ "$CHECK" == 1 ]]; then
-  # A bundle id of its own, so the check saves no window state or settings under the real one, and removes what it made.
+  # On a disposable copy at a path of its own, never on the bundle that was built: the copy gets a bundle id of its own (so the
+  # check saves no window state or settings under the real one) and is signed again, while the deliverable keeps its id and its
+  # signature. The unique path also means the pid lookup below can only ever match the instance this run launched.
   CHECK_ID="dev.rogal.workbench.check-$$"
-  /usr/bin/plutil -replace CFBundleIdentifier -string "$CHECK_ID" "$APP/Contents/Info.plist"
-  codesign --force --sign "$SIGN_ID" "$APP" >/dev/null
+  CHECK_APP="$TMP/check/Workbench.app"
+  mkdir -p "$TMP/check"
+  cp -R "$APP" "$CHECK_APP"
+  /usr/bin/plutil -replace CFBundleIdentifier -string "$CHECK_ID" "$CHECK_APP/Contents/Info.plist"
+  codesign --force --sign "$SIGN_ID" "$CHECK_APP" >/dev/null 2>&1
 
   launch() {
-    open -g -n "$APP"
+    open -g -n "$CHECK_APP"
     for _ in $(seq 1 50); do
-      PID="$(pgrep -f "$APP/Contents/MacOS/WorkbenchApp" | head -1 || true)"
+      PID="$(pgrep -f "$CHECK_APP/Contents/MacOS/WorkbenchApp" | head -1 || true)"
       [[ -n "$PID" ]] && return 0
       sleep 0.2
     done
@@ -150,8 +161,10 @@ if [[ "$CHECK" == 1 ]]; then
   }
   step "the bundle launches" launch
   step "the process shows a window, found by its pid" has_window
-  step "the Dock icon is the generated one (amber in it)" swift "$ROOT/scripts/app-icon.swift" "$APP" "$TMP/dock-icon.png"
-  [[ -f "$TMP/dock-icon.png" && -n "${WORKBENCH_ICON_OUT:-}" ]] && cp "$TMP/dock-icon.png" "$WORKBENCH_ICON_OUT"
+  step "the Dock icon is the generated one (amber in it)" swift "$ROOT/scripts/app-icon.swift" "$CHECK_APP" "$TMP/dock-icon.png"
+  # What macOS showed as the icon, for a person to look at: next to the bundle's default home, inside .build.
+  mkdir -p "$ROOT/.build/bundle"
+  [[ -f "$TMP/dock-icon.png" ]] && cp "$TMP/dock-icon.png" "$ROOT/.build/bundle/dock-icon.png"
   # Only the pid this script started, then what its id left behind.
   if [[ -n "$PID" ]]; then
     kill "$PID" 2>/dev/null || true
@@ -162,6 +175,9 @@ if [[ "$CHECK" == 1 ]]; then
   defaults delete "$CHECK_ID" 2>/dev/null || true
   rm -rf "$HOME/Library/Saved Application State/$CHECK_ID.savedState" "$HOME/Library/Caches/$CHECK_ID" "$HOME/Library/HTTPStorages/$CHECK_ID"
   rm -f "$HOME/Library/Preferences/$CHECK_ID.plist"
+  # The bundle that was built is what the person copies: it must still have its own id and a signature that holds.
+  step "the built bundle is untouched by the check (id and signature)" bash -c '
+    [[ "$(plutil -extract CFBundleIdentifier raw "$1/Contents/Info.plist")" == "$2" ]] && codesign --verify --strict "$1"' _ "$APP" "$BUNDLE_ID"
 fi
 
 echo "$APP"
