@@ -15,7 +15,9 @@ extension Commands {
             let head = index == 0 ? "spine:     " : "           "
             let step = entry.step.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)
             let mark = markName(entry.mark).padding(toLength: 9, withPad: " ", startingAt: 0)
-            return (head + step + " " + mark + " " + entry.sublabel).trimmingCharacters(in: .whitespaces)
+            let line = head + step + " " + mark + " " + entry.sublabel
+            // Only the padding after an empty sublabel goes; the indent of the continuation lines stays.
+            return String(line.reversed().drop { $0 == " " }.reversed())
         }
         switch Attention.derive(state: state) {
         case .none: lines.append("attention: none")
