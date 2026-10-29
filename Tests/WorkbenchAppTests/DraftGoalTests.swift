@@ -62,8 +62,9 @@ import WorkbenchCore
     @Test func stoppingWhileItDraftsSaysSoAndASecondDraftIsRefusedMeanwhile() async throws {
         let gate = Gate()
         let calls = Seen()
-        let store = try await store { _, name, _, _ in
+        let store = try await store { _, name, _, stop in
             calls.add(name)
+            stop.attach { Task { await gate.open() } }
             await gate.wait()
             return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
         }
@@ -71,16 +72,27 @@ import WorkbenchCore
         while !store.drafting { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await store.draftGoal(request: "two") == false)
         store.stopDrafting()
-        await gate.open()
         #expect(await first.value == false)
         #expect(calls.all == ["one"])
         #expect(store.actionError == "Drafting was stopped. Nothing was written.")
     }
 
-    @Test func aStopAskedBeforeTheDrafterIsAttachedStillReachesIt() {
+    @Test func aStopAskedBeforeTheDrafterIsAttachedReachesItWhenItIs() {
         let stop = DraftStop()
+        let stopped = Seen()
         stop.stop()
         #expect(stop.wasRequested)
+        stop.attach { stopped.add("stopped") }
+        #expect(stopped.all == ["stopped"])
+    }
+
+    @Test func aStopAskedAfterTheDrafterIsAttachedEndsItOnce() {
+        let stop = DraftStop()
+        let stopped = Seen()
+        stop.attach { stopped.add("stopped") }
+        #expect(stopped.all.isEmpty)
+        stop.stop()
+        #expect(stopped.all == ["stopped"])
     }
 }
 

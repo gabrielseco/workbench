@@ -11,23 +11,26 @@ struct RunHandle: Sendable {
 /// Ends the goal drafter the app started: a stop asked before the drafter is attached takes effect when it is.
 final class DraftStop: @unchecked Sendable {
     private let lock = NSLock()
-    private var execution: AgentExecution?
+    private var stopper: (@Sendable () -> Void)?
     private var requested = false
 
-    func attach(_ new: AgentExecution) {
+    func attach(_ execution: AgentExecution) { attach { execution.stop() } }
+
+    /// What ends the drafter; called at once when a stop was already asked.
+    func attach(_ new: @escaping @Sendable () -> Void) {
         let stopNow = lock.withLock { () -> Bool in
-            execution = new
+            stopper = new
             return requested
         }
-        if stopNow { new.stop() }
+        if stopNow { new() }
     }
 
     func stop() {
-        let running = lock.withLock { () -> AgentExecution? in
+        let running = lock.withLock { () -> (@Sendable () -> Void)? in
             requested = true
-            return execution
+            return stopper
         }
-        running?.stop()
+        running?()
     }
 
     var wasRequested: Bool { lock.withLock { requested } }
