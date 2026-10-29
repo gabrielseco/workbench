@@ -18,7 +18,7 @@ public enum LoginShellPath {
         let environment = ["HOME": home, "SHELL": path, "TERM": "dumb", "PATH": current]
         let runner = GitRunner(executable: URL(fileURLWithPath: path), environment: environment, timeout: timeout)
         let script = "printf '%s%s%s' '\(startMarker)' \"$PATH\" '\(endMarker)'"
-        guard let result = try? await runner.run(["-ilc", script], in: URL(fileURLWithPath: home)),
+        guard let result = try? await runner.run(["-ilc", script], in: URL(fileURLWithPath: home)), result.succeeded,
             let login = parse(result.stdout)
         else { return current }
         return merge(login: login, current: current)
@@ -43,9 +43,13 @@ public enum LoginShellPath {
     }
 
     /// Replaces this process's `PATH` with the resolved one, so everything that reads it from here on finds the person's tools.
-    public static func applyToEnvironment(environment: [String: String] = ProcessInfo.processInfo.environment) async {
+    /// `set` is `setenv` outside tests.
+    public static func applyToEnvironment(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        set: (String) -> Void = { setenv("PATH", $0, 1) }
+    ) async {
         let current = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         let resolved = await resolve(shell: environment["SHELL"], current: current)
-        if resolved != current { setenv("PATH", resolved, 1) }
+        if resolved != current { set(resolved) }
     }
 }
