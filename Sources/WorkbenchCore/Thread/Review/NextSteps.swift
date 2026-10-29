@@ -67,6 +67,12 @@ public enum NextSteps {
         return steps
     }
 
+    /// The paths a stage's `applies_to` is matched against: where each changed file is and, for a rename, where it was, as
+    /// `review-stage` (which lists changes without rename detection) sees them.
+    public static func paths(of files: [FileChange]) -> [String] {
+        files.flatMap { [$0.path] + ($0.oldPath.map { [$0] } ?? []) }
+    }
+
     /// The lines `next` and `review` print: the first step is the next one, the others follow it.
     public static func render(_ steps: [NextStep]) -> [String] {
         guard !steps.isEmpty else { return [] }

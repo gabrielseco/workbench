@@ -138,6 +138,20 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         #expect(steps.map(\.name) == ["wait"] && steps[0].why.contains("turn 2"))
     }
 
+    @Test func aRenameOutOfTheStagesPathsStillMakesTheStageApply() throws {
+        let moved = FileChange(
+            path: "Archive/A.swift", oldPath: "Sources/A.swift", status: .renamed, isBinary: false, isUntracked: false)
+        let paths = NextSteps.paths(of: [moved])
+        #expect(paths == ["Archive/A.swift", "Sources/A.swift"])
+        let steps = NextSteps.derive(events: log(turn1), files: paths, config: try config(appliesTo: "Sources/**"), id: "t1")
+        #expect(steps.map(\.name) == ["judge", "design", "accept"])
+    }
+
+    @Test func aStoppedTurnHasNothingDue() throws {
+        let stopped = log([Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded, turn: 1, data: ["result": "stopped"])])
+        #expect(NextSteps.derive(events: stopped, files: ["a"], config: try config(), id: "t1").isEmpty)
+    }
+
     @Test func renderingMarksTheFirstStepAsNextAndAlignsTheRest() {
         let lines = NextSteps.render([
             NextStep(name: "judge", command: "workbench judge", why: "w1"),
