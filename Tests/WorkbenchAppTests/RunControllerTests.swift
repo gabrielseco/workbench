@@ -118,7 +118,9 @@ private final class Counter: @unchecked Sendable {
         #expect(await store.open(fixture.root))
         try fixture.append("t1", .turnStarted, turn: 1, data: ["session_id": "s1"])
         await store.runAgain()
-        try await Task.sleep(for: .milliseconds(200))
+        // The run ends on its own task; a loaded runner can take far longer than a fixed sleep.
+        let deadline = Date().addingTimeInterval(60)
+        while store.actionError == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
         #expect(store.actionError?.hasPrefix("The run ended without recording") == true)
         keptFixtures.append(fixture)
     }
