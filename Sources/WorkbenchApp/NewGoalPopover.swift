@@ -56,7 +56,7 @@ struct NewGoalPopover: View {
         }
         // An overlay is not yet in the window when `onAppear` runs, and focus set then is lost: one tick later it takes.
         .task {
-            try? await Task.sleep(for: .milliseconds(80))
+            try? await Task.sleep(for: .milliseconds(40))
             focused = true
         }
         .onDisappear {
@@ -89,7 +89,7 @@ struct NewGoalPopover: View {
                 if request.isEmpty {
                     Text("What needs to be done? Describe the change, the bug or the idea, and say how you will know it worked.")
                         .font(.system(size: 17, design: .serif)).lineSpacing(6)
-                        .foregroundStyle(.tertiary).padding(.top, 8).padding(.leading, 5).allowsHitTesting(false)
+                        .foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
                 }
             }
     }
