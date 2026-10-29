@@ -30,7 +30,7 @@ wbp() { # <out> args...: a workbench command in the clone, stdout and stderr tog
 }
 shown() { sed 's/^/    /' "$1" | head -${2:-8}; }
 created() { sed -n 's/^created //p' "$1"; }
-names() { sed -n -E 's/^(next|then)  workbench ([a-z-]*).*/\2/p' "$1" | tr '\n' ' '; }
+names() { sed -n -E 's/^(next|then)  workbench (review-stage [a-z-]+|[a-z-]+).*/\2/p' "$1" | tr '\n' ' '; }
 
 wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
@@ -98,7 +98,7 @@ LINES_BEFORE=$(wc -l <"$EVENTS" | tr -d ' ')
 wbp "$SCRATCH/next1.out" next
 shown "$SCRATCH/next1.out"
 check "next exits 0 and lists judge, design and accept in that order" "exit $RC, steps: $(names "$SCRATCH/next1.out")" \
-    bash -c 'test "$1" = 0 && test "$2" = "judge design accept "' _ "$RC" "$(names "$SCRATCH/next1.out")"
+    bash -c 'test "$1" = 0 && test "$2" = "judge review-stage design accept "' _ "$RC" "$(names "$SCRATCH/next1.out")"
 check "the first line is marked next and names the judge" "first line: $(head -1 "$SCRATCH/next1.out")" \
     bash -c 'head -1 "$1" | grep -q "^next  workbench judge "' _ "$SCRATCH/next1.out"
 check "the design stage line names its command" "output: $(cat "$SCRATCH/next1.out")" \
