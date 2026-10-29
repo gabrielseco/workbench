@@ -19,6 +19,14 @@ import WorkbenchCore
                     store.startPolling()
                 }
         }
+        .commands {
+            // There is one window, so File ▸ New has nothing else to mean; the buttons all set the same flag.
+            CommandGroup(replacing: .newItem) {
+                Button("New goal…") { store.namingGoal = true }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .disabled(store.project == nil || store.namingGoal)
+            }
+        }
     }
 }
 
