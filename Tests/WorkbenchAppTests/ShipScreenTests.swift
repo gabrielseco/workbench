@@ -11,6 +11,20 @@ private final class Recorder: @unchecked Sendable {
     var log: [String] { lock.withLock { items } }
 }
 
+private actor Gate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
+}
+
 @MainActor private var keptFixtures: [AppFixture] = []
 
 @MainActor @Suite struct ShipScreenTests {
@@ -122,5 +136,35 @@ private final class Recorder: @unchecked Sendable {
                 try $0.decide("t1", "accepted")
                 try $0.ship("t1")
             }?.canShip == false)
+    }
+
+    @Test func textThatChangedSinceItWasShownIsRefused() throws {
+        try ShipPreview.checkUnchanged(shown: ("t", "b"), now: ("t", "b"))
+        #expect(throws: ShipPreview.TextChanged.self) { try ShipPreview.checkUnchanged(shown: ("t", "b"), now: ("t", "b2")) }
+        #expect(throws: ShipPreview.TextChanged.self) { try ShipPreview.checkUnchanged(shown: ("t", "b"), now: ("t2", "b")) }
+    }
+
+    @Test func aShipThatEndsAfterLeavingTheProjectSaysNothingInTheOtherOne() async throws {
+        let gate = Gate()
+        let fixture = try await accepted()
+        let actions = GoalActions(
+            shipPreview: { _, _ in Self.preview },
+            ship: { _, _, shown in
+                await gate.wait()
+                return ShipOutcome(
+                    push: ShipPushResult(plan: shown.plan, outcome: .pushed, ahead: nil),
+                    pr: ShipPRResult(plan: shown.plan, url: "https://example.test/pull/7", number: 7, outcome: .created))
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        await store.prepareShip()
+        let shipping = Task { await store.confirmShip() }
+        try await Task.sleep(for: .milliseconds(100))
+        let other = try await AppFixture()
+        keptFixtures.append(other)
+        #expect(await store.open(other.root))
+        await gate.open()
+        await shipping.value
+        #expect(store.notice == nil && store.actionError == nil)
     }
 }

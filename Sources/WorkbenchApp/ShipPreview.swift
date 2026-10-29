@@ -34,12 +34,32 @@ struct ShipPreview: Equatable, Sendable {
         return ShipPreview(plan: plan, description: description, title: body.title, body: body.body, note: note)
     }
 
-    /// Pushes and opens what `preview` showed, as `workbench ship` does after its confirmation.
+    /// Pushes and opens what `preview` showed, as `workbench ship` does after its confirmation. Core builds the pull request text
+    /// again at publish time, from the goal and the log, so it is compared with what was shown first: a sheet can stay open for
+    /// minutes, and text nobody confirmed is not published.
     static func publish(_ preview: ShipPreview, project: Project, thread: String) async throws -> ShipOutcome {
         let service = ThreadService(project: project, git: try GitRunner.discover())
+        let gh = try? GitRunner.discover(tool: "gh")
+        if let title = preview.title, let body = preview.body {
+            let now = try await service.prBody(
+                plan: preview.plan, description: preview.description, environment: gh?.environment ?? [:])
+            try checkUnchanged(shown: (title, body), now: (now.title, now.body))
+        }
         return try await service.publishShip(
-            id: thread, gh: try? GitRunner.discover(tool: "gh"), plan: preview.plan, description: preview.description,
+            id: thread, gh: gh, plan: preview.plan, description: preview.description,
             screenshotTool: try? GitRunner.discover(tool: "pr-shots", timeout: 180))
+    }
+
+    struct TextChanged: Error, CustomStringConvertible {
+        var description: String {
+            "the pull request text changed since it was shown (the goal or the log was edited); nothing was pushed. "
+                + "Open Ship… again."
+        }
+    }
+
+    /// Refuses a publish whose title or body is not the one that was shown.
+    static func checkUnchanged(shown: (title: String, body: String), now: (title: String, body: String)) throws {
+        guard shown == now else { throw TextChanged() }
     }
 
     /// The lines that say what will be pushed, in the words `workbench ship` prints them.

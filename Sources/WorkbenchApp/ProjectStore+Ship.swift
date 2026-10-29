@@ -22,13 +22,17 @@ extension ProjectStore {
         deciding = true
         defer { deciding = false }
         pendingShip = nil
+        let mine = generation
         await working("Shipping: pushing the branch and opening the pull request…") {
+            // The ship goes on when the person leaves the project, but what it says belongs to the project it was for.
             do {
                 let outcome = try await actions.ship(project, thread, preview)
-                notice = "Shipped as PR #\(outcome.pr.number): \(outcome.pr.url)"
-                if let failure = outcome.refreshFailure { actionError = "\(failure)" }
-            } catch { actionError = "\(error)" }
-            await reload()
+                if mine == generation {
+                    notice = "Shipped as PR #\(outcome.pr.number): \(outcome.pr.url)"
+                    if let failure = outcome.refreshFailure { actionError = "\(failure)" }
+                }
+            } catch { if mine == generation { actionError = "\(error)" } }
+            if mine == generation { await reload() }
         }
     }
 

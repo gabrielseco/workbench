@@ -23,7 +23,11 @@ struct ShipSheet: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 if let note = preview.note { Text(note).font(.callout).foregroundStyle(Theme.amber) }
-                Text("Workbench never merges for you.").font(.callout).foregroundStyle(.secondary)
+                Text(
+                    "It also puts the turn's screenshots in the pull request and removes the worktree "
+                        + "when nothing could be lost. Workbench never merges for you."
+                )
+                .font(.callout).foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
