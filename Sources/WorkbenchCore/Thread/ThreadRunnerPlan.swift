@@ -13,7 +13,7 @@ extension ThreadRunner {
     /// the project's instructions as they were at the base commit: not the main checkout, and not the worktree,
     /// which the run may already have edited.
     func firstPrompt(
-        goal: Goal, config: Config, baseCommit: String?, options: RunOptions
+        goal: Goal, config: Config, baseCommit: String?, options: RunOptions, screenshots: [String] = []
     ) async -> (prompt: String, info: [String: JSONValue]) {
         var loaded: ProjectInstructions?
         if config.projectInstructions, let baseCommit {
@@ -26,10 +26,16 @@ extension ThreadRunner {
             if case .success = skill { verifierRuns = true }
         }
         let chosen = planForFirstPrompt(goal: goal, baseCommit: baseCommit, options: options)
+        // A Codex coding turn cannot be shown them yet (it takes images only as attachments, and refuses them while coding).
+        var shown = screenshots
+        if !shown.isEmpty, config.resolvedRunAgent(goalModel: goal.model).provider == .codex {
+            notify(.advisory("this goal has screenshots, which a Codex coding turn is not given yet"))
+            shown = []
+        }
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,
             verifies: verifierRuns,
-            plan: chosen.plan)
+            plan: chosen.plan, screenshots: shown)
         return (prompt, ["instructions": loaded?.eventData ?? .null, "plan": chosen.info])
     }
 
