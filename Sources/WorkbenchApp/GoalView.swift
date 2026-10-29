@@ -88,6 +88,10 @@ struct GoalView: View {
                 Text("Allowed tools: " + tools.joined(separator: ", "))
                     .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
             }
+            if !goal.readAlso.isEmpty {
+                Text("Also reads (read-only): " + goal.readAlso.joined(separator: ", "))
+                    .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            }
             Text("Change these in the goal file.").font(.caption).foregroundStyle(.secondary)
         }
     }

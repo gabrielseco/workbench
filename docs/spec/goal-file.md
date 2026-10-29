@@ -288,6 +288,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording for the verifier
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 # copy = [".env.*", "example/.env"]     # optional; git-ignored files copied from your checkout into each new worktree
+# read_also = ["../backend"]            # optional; other git checkouts a run may read, never change
 # default_budget_usd = 5.00            # optional; new goals get this budget_usd, else spend_policy: timeout_only
 # claude_path = "claude"                # name on PATH, or an absolute path
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
@@ -363,6 +364,16 @@ Notes:
   any turn is spent; the worktree is kept and the next `run` tries it again. What it writes into the
   worktree is untracked there: keep installs in ignored paths (`deps/`, `node_modules/`), or they show up
   in the diff.
+- **`read_also` lets a run read other repositories, and only read them.** A turn is confined to its worktree (`--restricted`), so
+  a project that works together with another checkout (the backend next door) could not be investigated. Up to 5 entries, each
+  an absolute path, `~/…` or relative to this project; each must be the root of an existing git checkout (a folder, not a link
+  into somewhere else: links are followed, and the resolved path is what counts), not the project itself, inside it or above it,
+  and made of letters, digits and `._-+@/` only (a permission rule cannot hold anything else safely). Claude coding turns get
+  each with `--add-dir`, which opens it to the file tools writes included, so `Edit`, `Write` and `NotebookEdit` are denied
+  for it with an absolute-path rule (`//<path>/**`; one slash means "from the project" and would deny nothing) in the same
+  call. The first prompt lists the folders as readable and not to be changed; the goal screen shows them. A run whose
+  list cannot be honoured is refused before any turn (`read_also entry '…': …`). A Codex coding turn does not use it yet and
+  says so as a note. Bash is not opened to them: only what `[tools] allowed` already permits runs, in the worktree.
 - **`copy` brings the ignored files a checkout needs into each new worktree.** Repo-relative paths or globs
   (`*` and `?` within one path component, no `**`), copied from the main checkout right after the worktree is
   cut and before `setup_command`, so an install step can read them (`.env.*`, `example/.env`). Only regular files

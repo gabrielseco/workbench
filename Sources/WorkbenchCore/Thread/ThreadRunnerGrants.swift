@@ -34,12 +34,27 @@ extension ThreadRunner {
             resume
             ? .resume(AgentSessionHandle(provider: .claude, purpose: .coding, value: sessionID))
             : .start(proposed: sessionID)
-        return AgentRequest(
+        var request = AgentRequest(
             provider: .claude, model: agent.model, prompt: prompt, workingDirectory: worktree,
             outputDirectory: outputDirectory, policy: .scopedCoding,
             spend: spend(for: goal, options: options), session: session, purpose: .coding,
             environment: options.parentEnvironment, limits: limits,
             rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config),
             reasoningEffort: agent.reasoningEffort)
+        request.readDirectories = readDirectories(config)
+        return request
+    }
+
+    /// Refuses a run whose `read_also` names a folder it cannot be given: the config says it, so it holds or nothing starts.
+    func requireReadAlso(_ config: Config) throws {
+        if case .failure(let problem) = ReadAlso.resolve(config.readAlso, projectRoot: project.root) {
+            throw RunnerError.invalidReadAlso("\(problem)")
+        }
+    }
+
+    /// The other checkouts this turn may read; none when the config's list cannot be resolved (a run is refused before that).
+    func readDirectories(_ config: Config) -> [URL] {
+        if case .success(let found) = ReadAlso.resolve(config.readAlso, projectRoot: project.root) { return found }
+        return []
     }
 }

@@ -63,6 +63,15 @@ private final class SkillProbe: @unchecked Sendable {
         return (model, skill)
     }
 
+    @Test func showsTheOtherRepositoriesTheConfigLetsARunRead() async throws {
+        let tools = "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
+        let (with, _) = try await load(
+            goal: goal(["`swift test` passes"]), config: "read_also = [\"../expenses-backend\"]\n" + tools)
+        #expect(with.readAlso == ["../expenses-backend"])
+        let (without, _) = try await load(goal: goal(["`swift test` passes"]), config: tools)
+        #expect(without.readAlso.isEmpty)
+    }
+
     @Test func showsWhatTheGoalFileSaysAndWhereItIs() async throws {
         let (model, _) = try await load(goal: goal(["`swift test` passes"]), config: config)
         #expect(model.title == "The goal" && model.path == ".workbench/threads/t1/goal.md")

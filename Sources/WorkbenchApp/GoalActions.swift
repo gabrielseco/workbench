@@ -111,8 +111,7 @@ struct GoalActions: Sendable {
             return false
         },
         openWorktree: { project, thread in
-            let url = try Editor.worktree(project: project, threadID: thread)
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            try await openWorktreeInEditor(project, thread)
         },
         loadReview: { project, thread in
             guard let git = try? GitRunner.discover() else { return nil }
@@ -140,6 +139,20 @@ struct GoalActions: Sendable {
     static func configuredEditor(project: Project, environment: [String: String]) -> String? {
         if let editor = (try? Config.load(from: project.configURL))?.editor { return editor }
         return (try? GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)))?.editor
+    }
+
+    /// The worktree in the configured editor, as `workbench open` does. With none set it opens the folder in Finder, as it did
+    /// before an editor could be chosen.
+    static func openWorktreeInEditor(_ project: Project, _ thread: String) async throws {
+        let url = try Editor.worktree(project: project, threadID: thread)
+        let environment = ProcessInfo.processInfo.environment
+        guard let editor = configuredEditor(project: project, environment: environment) else {
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            return
+        }
+        let command = try Editor.command(
+            for: editor, path: url.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
+        try await EditorLauncher.launch(command, editor: editor, in: url, environment: Editor.environment(from: environment))
     }
 
     /// The goal file in the configured editor, as `workbench open --goal` does. With none set it says so and how to set one: the

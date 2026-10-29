@@ -28,14 +28,16 @@ extension ThreadRunner {
         let chosen = planForFirstPrompt(goal: goal, baseCommit: baseCommit, options: options)
         // A Codex coding turn cannot be shown them yet (it takes images only as attachments, and refuses them while coding).
         var shown = screenshots
-        if !shown.isEmpty, config.resolvedRunAgent(goalModel: goal.model).provider == .codex {
-            notify(.advisory("this goal has screenshots, which a Codex coding turn is not given yet"))
-            shown = []
+        var others = readDirectories(config)
+        if config.resolvedRunAgent(goalModel: goal.model).provider == .codex {
+            if !shown.isEmpty { notify(.advisory("this goal has screenshots, which a Codex coding turn is not given yet")) }
+            if !others.isEmpty { notify(.advisory("read_also is not used by a Codex coding turn yet")) }
+            (shown, others) = ([], [])
         }
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,
             verifies: verifierRuns,
-            plan: chosen.plan, screenshots: shown)
+            plan: chosen.plan, screenshots: shown, otherRepositories: others)
         return (prompt, ["instructions": loaded?.eventData ?? .null, "plan": chosen.info])
     }
 
