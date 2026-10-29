@@ -40,11 +40,9 @@ extension WorktreeManager {
             for source in usable {
                 let name = source.lastPathComponent
                 let target = folder.appendingPathComponent(name)
-                if Self.type(of: target) == .typeRegular {
-                    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: target.path)
-                } else if Self.type(of: target) != nil {
-                    return written
-                }
+                // Replaced by a rename, never changed in place: a name that was made a hard link to another file is cut
+                // loose from it, and that file's own permissions and content are not touched.
+                if let type = Self.type(of: target), type != .typeRegular { return written }
                 try Data(contentsOf: source).write(to: target, options: .atomic)
                 try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: target.path)
                 written.append(name)
@@ -64,8 +62,7 @@ extension WorktreeManager {
     }
 
     private static func removeOwned(_ name: String, in folder: URL) {
-        let url = folder.appendingPathComponent(name)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
-        try? FileManager.default.removeItem(at: url)
+        // Unlinking needs the folder's write permission, not the file's: no chmod, which would reach a hard-linked file too.
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
     }
 }

@@ -132,6 +132,37 @@ import Testing
         }
     }
 
+    @Test func aCopyThatWasMadeAHardLinkToAnotherFileNeverChangesThatFilesPermissions() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        try keep(fx, id, ["1.png": "first", "2.jpg": "second"])
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        let folder = copies(fx, id)
+        // Two other files of the project, each linked in under a screenshot's name.
+        let scripts = ["run.sh", "other.sh"].map { worktree.appendingPathComponent($0) }
+        for (script, name) in zip(scripts, ["1.png", "2.jpg"]) {
+            try "#!/bin/sh\necho kept\n".write(to: script, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+            try FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+            try FileManager.default.linkItem(at: script, to: folder.appendingPathComponent(name))
+        }
+        // The next turn replaces 1.png with new content and removes 2.jpg (it is gone from the thread).
+        let attachments = fx.project.threadDirectory(id).appendingPathComponent("attachments")
+        try Data("changed".utf8).write(to: attachments.appendingPathComponent("1.png"))
+        try FileManager.default.removeItem(at: attachments.appendingPathComponent("2.jpg"))
+        let second = try await fx.runner(id).run(fx.options("stream-events=1", feedback: "Again."))
+        #expect(second.result == .succeeded)
+
+        #expect(try String(contentsOf: folder.appendingPathComponent("1.png"), encoding: .utf8) == "changed")
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("2.jpg").path))
+        for script in scripts {
+            let mode = try FileManager.default.attributesOfItem(atPath: script.path)[.posixPermissions] as? Int
+            #expect(mode == 0o755, "\(script.lastPathComponent) keeps its permissions")
+            #expect(try String(contentsOf: script, encoding: .utf8) == "#!/bin/sh\necho kept\n", "and its content")
+        }
+    }
+
     @Test func onlyFilesWithTheNamesTheDraftWritesAreTakenAsScreenshots() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("stored-\(UUID().uuidString)")
         let folder = dir.appendingPathComponent("attachments")
