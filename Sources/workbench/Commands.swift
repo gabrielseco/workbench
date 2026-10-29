@@ -381,7 +381,12 @@ enum Commands {
         }
 
         // Ctrl-C and SIGTERM stop the turn or check cleanly: it still ends with a recorded `stopped`.
-        let signals = installStopHandlers(for: runner)
+        // The same press stops the turn and, once it has ended, the advice that follows it.
+        let adviceStop = AdviceStop()
+        let signals = installStopHandlers(what: "the turn") {
+            await runner.stop()
+            adviceStop.stop()
+        }
         defer { signals.forEach { $0.cancel() } }
 
         let report = try await runner.run(options)
@@ -395,7 +400,7 @@ enum Commands {
         if report.result == .succeeded, !checkFailed,
             let config = try? Config.load(from: ctx.project.configURL), !config.review.auto.isEmpty {
             out()
-            let results = await ctx.service.runAutoAdvice(id: id, config: config) { out("  \($0)") }
+            let results = await ctx.service.runAutoAdvice(id: id, config: config, stop: adviceStop) { out("  \($0)") }
             for line in ThreadService.describe(results) { out(line) }
         }
         out()

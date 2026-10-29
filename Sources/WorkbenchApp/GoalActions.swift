@@ -123,6 +123,7 @@ struct GoalActions: Sendable {
         },
         makeRun: { project, thread, options in
             let runner = ThreadRunner(project: project, threadID: thread, git: try GitRunner.discover())
+            let adviceStop = AdviceStop()
             return RunHandle(
                 run: {
                     let report = try await runner.run(options)
@@ -131,10 +132,13 @@ struct GoalActions: Sendable {
                     if report.result == .succeeded, !checkFailed,
                         let config = try? Config.load(from: project.configURL), !config.review.auto.isEmpty {
                         _ = await ThreadService(project: project, git: try GitRunner.discover())
-                            .runAutoAdvice(id: thread, config: config)
+                            .runAutoAdvice(id: thread, config: config, stop: adviceStop)
                     }
                 },
-                stop: { await runner.stop() })
+                stop: {
+                    await runner.stop()
+                    adviceStop.stop()
+                })
         },
         draftGoal: { project, name, request, attachments, stop in
             let git = try GitRunner.discover()

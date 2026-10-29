@@ -15,6 +15,35 @@ public struct AutoAdviceResult: Sendable, Equatable {
     public var outcome: Outcome
 }
 
+/// How a stop reaches the advice a run is followed by: the runner that ended is no longer the thing to stop. The front end hands the
+/// same holder to the signal handler (or the app's Stop) and to `runAutoAdvice`, which attaches each running agent to it and
+/// starts no further step once it was asked.
+public final class AdviceStop: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requested = false
+    private var running: AgentExecution?
+
+    public init() {}
+
+    public var isRequested: Bool { lock.withLock { requested } }
+
+    public func attach(_ execution: AgentExecution) {
+        let stopNow = lock.withLock {
+            running = execution
+            return requested
+        }
+        if stopNow { execution.stop() }
+    }
+
+    public func stop() {
+        let current = lock.withLock {
+            requested = true
+            return running
+        }
+        current?.stop()
+    }
+}
+
 extension ThreadService {
     /// Runs the steps of `[review] auto` that `NextSteps` says are due, in the order the config lists them, one after the other.
     /// Called by whoever started the run once its turn has ended and its runner is gone (`judge` and `review-stage` refuse while one
@@ -22,11 +51,15 @@ extension ThreadService {
     /// every answer is recorded by the step itself, and the caller shows `notify` lines as they come.
     public func runAutoAdvice(
         id: String, config: Config, environment: [String: String] = ProcessInfo.processInfo.environment,
-        notify: @Sendable (String) -> Void = { _ in }
+        stop: AdviceStop = AdviceStop(), notify: @Sendable (String) -> Void = { _ in }
     ) async -> [AutoAdviceResult] {
         guard !config.review.auto.isEmpty else { return [] }
         var results: [AutoAdviceResult] = []
         for name in config.review.auto {
+            if stop.isRequested {
+                results.append(AutoAdviceResult(name: name, outcome: .skipped("stopped")))
+                continue
+            }
             // Each step is judged due on the log as it is now: an earlier step may have changed it.
             let report = await ReviewLoader(project: project, git: git).load(id: id)
             let stepKinds: [NextStep.Kind] = [.judge, .stage]
@@ -37,22 +70,26 @@ extension ThreadService {
                 continue
             }
             notify("auto: running \(name)")
-            let result = await runOne(name, id: id, config: config, environment: environment)
+            let result = await runOne(name, id: id, config: config, environment: environment, stop: stop)
             results.append(result)
         }
         return results
     }
 
-    private func runOne(_ name: String, id: String, config: Config, environment: [String: String]) async -> AutoAdviceResult {
+    private func runOne(
+        _ name: String, id: String, config: Config, environment: [String: String], stop: AdviceStop
+    ) async -> AutoAdviceResult {
         do {
             if name == "judge" {
-                let judged = try await judge(id: id, config: config, environment: environment)
+                let judged = try await judge(id: id, config: config, environment: environment, attach: { stop.attach($0) })
                 if let failure = judged.failure { return AutoAdviceResult(name: name, outcome: .failed(failure)) }
                 let met = judged.verdict?.criteria.filter(\.met).count ?? 0
                 let total = judged.verdict?.criteria.count ?? 0
                 return AutoAdviceResult(name: name, outcome: .ran(summary: "\(met) of \(total) criteria met"))
             }
-            let reviewed = try await reviewStage(named: name, id: id, config: config, environment: environment)
+            let reviewed = try await reviewStage(
+                named: name, id: id, config: config, codexPath: config.executable(for: .codex), environment: environment,
+                stopRequested: { stop.isRequested }, attach: { stop.attach($0) })
             if let skipped = reviewed.skipped { return AutoAdviceResult(name: name, outcome: .skipped(skipped)) }
             if let failure = reviewed.failure { return AutoAdviceResult(name: name, outcome: .failed(failure)) }
             return AutoAdviceResult(name: name, outcome: .ran(summary: reviewed.verdict.map { "\($0)" } ?? "no verdict"))
