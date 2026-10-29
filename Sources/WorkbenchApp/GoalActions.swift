@@ -43,7 +43,7 @@ struct GoalActions: Sendable {
     /// Has the goal agent draft a goal from a rough request, as a new thread named `name`; `DraftStop` ends the drafter early.
     var draftGoal: @Sendable (Project, String, String, DraftStop) async throws -> GoalDraftResult
     /// Names the goal agent in the project's config, so a project with none can draft.
-    var enableGoalAgent: @Sendable (Project, AgentProviderID) throws -> Void
+    var enableGoalAgent: @Sendable (Project, AgentProviderID) async throws -> Void
     var openGoal: @Sendable (Project, String) async throws -> Void
     /// Asks the process that holds the thread (a terminal's `workbench run`) to stop; false when nothing holds it.
     var requestStop: @Sendable (Project, String) async -> Bool
@@ -63,7 +63,7 @@ struct GoalActions: Sendable {
         draftGoal: @escaping @Sendable (Project, String, String, DraftStop) async throws -> GoalDraftResult = { _, _, _, _ in
             throw Unset()
         },
-        enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) throws -> Void = { _, _ in },
+        enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },

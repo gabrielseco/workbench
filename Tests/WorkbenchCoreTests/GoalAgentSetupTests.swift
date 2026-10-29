@@ -50,6 +50,13 @@ import Testing
         #expect(try String(contentsOf: project.configURL, encoding: .utf8) == broken)
     }
 
+    @Test func aHugeConfigIsNotReadIntoMemoryAndIsLeftAlone() throws {
+        let big = "# " + String(repeating: "x", count: GoalAgentSetup.limit) + "\n" + Self.tools
+        let project = try project(config: big)
+        #expect(throws: GoalAgentSetup.Failure.tooLarge) { try GoalAgentSetup.enable(provider: .claude, in: project) }
+        #expect(try String(contentsOf: project.configURL, encoding: .utf8) == big)
+    }
+
     @Test func aProviderThatCannotDraftIsRefusedBeforeAnythingIsWritten() throws {
         let project = try project(config: nil)
         let other = try #require(AgentProviderID("gemini"))

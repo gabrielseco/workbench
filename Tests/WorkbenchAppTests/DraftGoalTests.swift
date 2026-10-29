@@ -116,6 +116,41 @@ import WorkbenchCore
         #expect(store.actionError == "Drafting was stopped. Nothing was written.")
     }
 
+    @Test func quittingWaitsForTheDrafterToEndAndGivesUpAtTheDeadline() async throws {
+        let gate = Gate()
+        let polite = try await store { _, _, _, stop in
+            stop.attach { Task { await gate.open() } }
+            await gate.wait()
+            return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
+        }
+        let first = Task { await polite.draftGoal(request: "x") }
+        while !polite.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        await polite.stopDraftingAndWait(timeout: .seconds(5))
+        #expect(!polite.drafting)
+        _ = await first.value
+
+        let release = Gate()
+        let stubborn = try await store { _, _, _, stop in
+            stop.attach {}
+            await release.wait()
+            return GoalDraftResult(id: nil, provider: .claude, failure: "late")
+        }
+        let second = Task { await stubborn.draftGoal(request: "x") }
+        while !stubborn.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        let started = ContinuousClock.now
+        await stubborn.stopDraftingAndWait(timeout: .milliseconds(200))
+        #expect(stubborn.drafting && ContinuousClock.now - started < .seconds(3))
+        await release.open()
+        _ = await second.value
+    }
+
+    @Test func quittingWithNothingDraftingReturnsAtOnce() async throws {
+        let idle = try await store { _, _, _, _ in GoalDraftResult(id: nil, provider: .claude) }
+        let started = ContinuousClock.now
+        await idle.stopDraftingAndWait(timeout: .seconds(5))
+        #expect(ContinuousClock.now - started < .seconds(1))
+    }
+
     @Test func aStopAskedBeforeTheDrafterIsAttachedReachesItWhenItIs() {
         let stop = DraftStop()
         let stopped = Seen()

@@ -40,13 +40,22 @@ extension ProjectStore {
     /// Stops the drafter that is running, if any.
     func stopDrafting() { draftStop?.stop() }
 
+    /// Stops the drafter and waits until its run has ended, at most `timeout`: the drafter's agent runs in a process group of its
+    /// own, and its kill after a refused SIGTERM happens after `stop` returns, so a quit that does not wait can outlive it.
+    func stopDraftingAndWait(timeout: Duration = .seconds(8)) async {
+        guard drafting else { return }
+        stopDrafting()
+        let deadline = ContinuousClock.now + timeout
+        while drafting, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+    }
+
     /// Names `provider` as the goal agent in the project's config, then drafts. A config that cannot take it is left as it was.
     @discardableResult func enableGoalDrafting(
         _ provider: AgentProviderID, request: String, name: String? = nil
     ) async -> Bool {
         guard let project, !drafting else { return false }
         do {
-            try actions.enableGoalAgent(project, provider)
+            try await actions.enableGoalAgent(project, provider)
         } catch {
             (actionError, goalAgentOff) = ("\(error)", false)
             return false
