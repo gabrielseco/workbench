@@ -4,9 +4,24 @@ import Foundation
 /// stage whose `applies_to` matches the change, then the decision, then `ship`. Read-only and advisory: it runs nothing, and
 /// nothing here stops `accept` or `ship`. The log is the state, so a stop, a crash or a command run by hand needs no resume logic.
 public struct NextStep: Sendable, Equatable {
+    /// What a step is, apart from its name: a stage can be called anything, `accept` and `judge` included.
+    public enum Kind: Sendable, Equatable {
+        case judge, stage, wait
+        /// `accept` or `ship`: the decision itself, which the app shows as buttons.
+        case decision
+    }
+
     public var name: String
     public var command: String
     public var why: String
+    public var kind: Kind = .stage
+
+    public init(name: String, command: String, why: String, kind: Kind = .stage) {
+        self.name = name
+        self.command = command
+        self.why = why
+        self.kind = kind
+    }
 }
 
 public enum NextSteps {
@@ -29,7 +44,8 @@ public enum NextSteps {
             return [
                 NextStep(
                     name: "wait", command: "workbench log -f \(id)",
-                    why: "turn \(open.turn) has started and has no end on record (still running, or its runner stopped)")
+                    why: "turn \(open.turn) has started and has no end on record (still running, or its runner stopped)",
+                    kind: .wait)
             ]
         }
         var steps: [NextStep] = []
@@ -37,7 +53,8 @@ public enum NextSteps {
         if !events.contains(where: { $0.kind == .judgeRan && $0.turn == turn }) {
             steps.append(
                 NextStep(
-                    name: "judge", command: "workbench judge \(id)", why: "no judge has run for turn \(turn) (advisory)"))
+                    name: "judge", command: "workbench judge \(id)", why: "no judge has run for turn \(turn) (advisory)",
+                    kind: .judge))
         }
         for name in config?.review.stages ?? [] where name != ReviewConfig.prReviewStage {
             guard let config, let stage = ReviewStage.named(name, config: config) else { continue }
@@ -59,10 +76,11 @@ public enum NextSteps {
                     why: "\(scope); not run on this head since turn \(turn) ended (advisory)"))
         }
         if decision == "accepted" {
-            steps.append(NextStep(name: "ship", command: "workbench ship \(id)", why: "accepted, no pull request yet"))
+            steps.append(
+                NextStep(name: "ship", command: "workbench ship \(id)", why: "accepted, no pull request yet", kind: .decision))
         } else {
             let command = "workbench accept \(id) -m \"<message>\""
-            steps.append(NextStep(name: "accept", command: command, why: "or send-back or discard"))
+            steps.append(NextStep(name: "accept", command: command, why: "or send-back or discard", kind: .decision))
         }
         return steps
     }

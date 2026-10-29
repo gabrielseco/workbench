@@ -29,6 +29,13 @@ struct ReviewModel: Equatable {
         var count: Int
     }
 
+    /// A step core says is still due before the decision (the judge, a review stage, waiting for an open turn): advice, never a block.
+    struct Due: Equatable, Identifiable {
+        var id: String
+        var command: String
+        var why: String
+    }
+
     /// `Turn 2 succeeded`; the files and lines follow in `totals`, and the view says when it finished.
     var headline: String
     var totals: String
@@ -48,6 +55,8 @@ struct ReviewModel: Equatable {
     /// How many criteria are for the person: Accept says it, and is never blocked by it.
     var undecided: Int
     var canDecide: Bool
+    /// `NextSteps` without the decision itself (Accept and Ship are the buttons); empty when only the decision is left.
+    var due: [Due] = []
 
     static func derive(_ report: ReviewReport) -> ReviewModel {
         let state = report.state
@@ -92,7 +101,11 @@ struct ReviewModel: Equatable {
             check: checkText(state.review.check), denied: denied,
             notes: state.review.notes.map { "turn \($0.turn): " + ReviewReport.oneLine($0.text) },
             undecided: criteria.filter(\.forYou).count,
-            canDecide: report.status == .awaitingReview && diffProblem == nil)
+            canDecide: report.status == .awaitingReview && diffProblem == nil,
+            due: report.nextSteps.filter { $0.kind != .decision }.map {
+                // The command is unique per step; a stage's name is not (it can be `judge`).
+                Due(id: $0.command, command: $0.command, why: $0.why)
+            })
     }
 
     static func checkText(_ check: Review.Check?) -> String {

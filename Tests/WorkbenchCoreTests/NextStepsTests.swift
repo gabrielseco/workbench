@@ -152,6 +152,24 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         #expect(NextSteps.derive(events: stopped, files: ["a"], config: try config(), id: "t1").isEmpty)
     }
 
+    @Test func theKindsSayWhichStepsAreTheDecisionWhateverTheStagesAreCalled() throws {
+        let text = """
+            check_command = "make test"
+            [tools]
+            available = ["Read"]
+            allowed = ["Read"]
+            [review]
+            stages = ["pr-review", "accept", "judge"]
+            [review.stage.accept]
+            skill = "a.md"
+            [review.stage.judge]
+            skill = "j.md"
+            """
+        let steps = NextSteps.derive(events: log(turn1), files: ["a"], config: try Config.parse(text), id: "t1")
+        #expect(steps.map(\.name) == ["judge", "accept", "judge", "accept"])
+        #expect(steps.map(\.kind) == [.judge, .stage, .stage, .decision])
+    }
+
     @Test func renderingMarksTheFirstStepAsNextAndAlignsTheRest() {
         let lines = NextSteps.render([
             NextStep(name: "judge", command: "workbench judge", why: "w1"),
@@ -159,5 +177,52 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         ])
         #expect(lines.count == 2 && lines[0].hasPrefix("next  workbench judge") && lines[1].hasPrefix("then  workbench accept"))
         #expect(NextSteps.render([]).isEmpty)
+    }
+}
+
+@Suite(.processGate) struct NextStepsLoadedTests {
+    private static let stage = "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n"
+        + "skill = \"d.md\"\napplies_to = [\"Sources/**\"]\n"
+
+    /// A thread with a finished turn and `files` (path, content) changed in its worktree, loaded the way the screen loads it.
+    private func loaded(_ files: [String], extraConfig: String = "") async throws -> (ReviewReport, String) {
+        let fx = try await RunnerFixture(extraConfig: extraConfig)
+        let id = try await fx.approvedThread()
+        let manager = WorktreeManager(repoRoot: fx.repo, git: fx.git)
+        let created = try await manager.create(threadID: id, base: "main")
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(
+            .worktreeCreated,
+            data: ["path": .string(created.path.path), "branch": .string(created.branch),
+                "base_commit": .string(created.baseCommit)])
+        _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s1"])
+        _ = try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        await log.close()
+        for path in files {
+            let url = created.path.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try "x\n".write(to: url, atomically: true, encoding: .utf8)
+        }
+        return (await ReviewLoader(project: fx.project, git: fx.git).load(id: id), id)
+    }
+
+    @Test func theReviewLoaderCarriesTheStepsForAFinishedTurn() async throws {
+        let (report, id) = try await loaded(["made.txt"])
+        #expect(report.nextSteps.map(\.name) == ["judge", "accept"])
+        #expect(report.nextSteps.allSatisfy { $0.command.contains(id) })
+    }
+
+    @Test func aConfiguredStageIsListedOnlyWhenTheChangeTouchesItsPaths() async throws {
+        let (touching, _) = try await loaded(["Sources/a.swift"], extraConfig: Self.stage)
+        #expect(touching.nextSteps.map(\.name) == ["judge", "design", "accept"])
+        let (elsewhere, _) = try await loaded(["docs/a.md"], extraConfig: Self.stage)
+        #expect(elsewhere.nextSteps.map(\.name) == ["judge", "accept"])
+    }
+
+    @Test func aCutFileListListsTheStageAndSaysTheFilesCouldNotBeRead() async throws {
+        let many = (0...DiffProvider.fileLimit).map { "docs/f\($0).md" }
+        let (report, _) = try await loaded(many, extraConfig: Self.stage)
+        let design = try #require(report.nextSteps.first { $0.name == "design" })
+        #expect(design.why.contains("could not be read"), "a list that was cut cannot say the stage does not apply")
     }
 }

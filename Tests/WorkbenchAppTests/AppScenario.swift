@@ -36,7 +36,9 @@ enum AppScenario: String, CaseIterable {
         case .reviewChanges:
             // An editor that only writes down what it was asked to open; verify-app.sh puts its path in.
             // A config that does not load is ignored and the person's own global editor is used: it needs [tools].
-            "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
+            "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n"
+                + "[review]\nstages = [\"pr-review\", \"design\"]\n\n"
+                + "[review.stage.design]\nskill = \"design.md\"\napplies_to = [\"Sources/**\"]\n"
         case .draftGoal:
             // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
             "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"

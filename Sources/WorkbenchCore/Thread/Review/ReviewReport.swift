@@ -29,6 +29,8 @@ public struct ReviewReport: Sendable, Equatable {
     public var commits: [BranchCommit] = []
     /// How many commits the branch has on top of its base; `commits` lists at most ten of them.
     public var commitCount = 0
+    /// What is still due on the thread (`NextSteps`): advisory, empty when nothing is.
+    public var nextSteps: [NextStep] = []
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
@@ -386,13 +388,19 @@ public struct ReviewLoader: Sendable {
         async let shownDiff = diff(id: id, goalBase: goalBase, events: events, includeIgnored: includeIgnored)
         let tip = await branchTip(id)
         let commits = await branchCommits(id, base: base, tip: tip)
+        let shown = await shownDiff
+        // A cut file list cannot say whether a stage applies: the steps then say the files could not be read.
+        var changed: [String]?
+        if case .summary(let summary) = shown, !summary.truncated { changed = NextSteps.paths(of: summary.files) }
+        let steps = NextSteps.derive(
+            events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip, id: id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
-            diff: await shownDiff,
+            diff: shown,
             threadDirectory: project.threadDirectory(id), branchTip: tip,
             commits: commits?.commits ?? [],
-            commitCount: commits?.count ?? 0)
+            commitCount: commits?.count ?? 0, nextSteps: steps)
     }
 
     /// What `accept` shows and what it pins, from one read of git: the diff `review` shows, and the full summary (staged

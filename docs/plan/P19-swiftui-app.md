@@ -206,7 +206,7 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   criteria table (id, text, proof, **Check** / **Judge** / **You**), Evidence thumbnails, Denied calls grouped with a count and
   the note that the run worked around them, Changed files with `+/−`, `1 of 4 assessed`.
   Buttons: `Discard`, `View diff`, `Send back…`, `Accept work`, `Open in editor`; spend meter in the toolbar.
-- **Reads:** `ReviewLoader.load(id:)` → `ReviewReport` (`criterionStatuses`, `diff: DiffSummary`, `commits`, `branchTip`,
+- **Reads:** `ReviewLoader.load(id:)` → `ReviewReport` (`criterionStatuses`, `diff: DiffSummary`, `commits`, `branchTip`, `nextSteps` (the "Still due" section: the judge and each review stage that applies, as `workbench next` lists them; advice, never a block, and without the decision itself, which the buttons are),
   `state.review`: `check`, `judge`, `verifier`, `notes`, `deniedTools` with `identity` for grouping, `fullInput`),
   `CriterionStatus` (`passed`, `failed`, `manual`, `evidence`, `missing` and `screenshots`), `JudgeVerdict` and its concerns,
   `Review.Verifier` and the `proof.added` files (`sha256`, `commit`, `tree`: a screenshot from before the latest change is
