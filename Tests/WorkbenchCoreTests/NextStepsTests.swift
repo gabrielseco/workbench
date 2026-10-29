@@ -163,8 +163,12 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
 }
 
 @Suite(.processGate) struct NextStepsLoadedTests {
-    @Test func theReviewLoaderCarriesTheStepsForAFinishedTurn() async throws {
-        let fx = try await RunnerFixture()
+    private static let stage = "[review]\nstages = [\"pr-review\", \"design\"]\n[review.stage.design]\n"
+        + "skill = \"d.md\"\napplies_to = [\"Sources/**\"]\n"
+
+    /// A thread with a finished turn and `files` (path, content) changed in its worktree, loaded the way the screen loads it.
+    private func loaded(_ files: [String], extraConfig: String = "") async throws -> (ReviewReport, String) {
+        let fx = try await RunnerFixture(extraConfig: extraConfig)
         let id = try await fx.approvedThread()
         let manager = WorktreeManager(repoRoot: fx.repo, git: fx.git)
         let created = try await manager.create(threadID: id, base: "main")
@@ -176,10 +180,31 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s1"])
         _ = try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
         await log.close()
-        try "x\n".write(to: created.path.appendingPathComponent("made.txt"), atomically: true, encoding: .utf8)
+        for path in files {
+            let url = created.path.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try "x\n".write(to: url, atomically: true, encoding: .utf8)
+        }
+        return (await ReviewLoader(project: fx.project, git: fx.git).load(id: id), id)
+    }
 
-        let report = await ReviewLoader(project: fx.project, git: fx.git).load(id: id)
+    @Test func theReviewLoaderCarriesTheStepsForAFinishedTurn() async throws {
+        let (report, id) = try await loaded(["made.txt"])
         #expect(report.nextSteps.map(\.name) == ["judge", "accept"])
         #expect(report.nextSteps.allSatisfy { $0.command.contains(id) })
+    }
+
+    @Test func aConfiguredStageIsListedOnlyWhenTheChangeTouchesItsPaths() async throws {
+        let (touching, _) = try await loaded(["Sources/a.swift"], extraConfig: Self.stage)
+        #expect(touching.nextSteps.map(\.name) == ["judge", "design", "accept"])
+        let (elsewhere, _) = try await loaded(["docs/a.md"], extraConfig: Self.stage)
+        #expect(elsewhere.nextSteps.map(\.name) == ["judge", "accept"])
+    }
+
+    @Test func aCutFileListListsTheStageAndSaysTheFilesCouldNotBeRead() async throws {
+        let many = (0...DiffProvider.fileLimit).map { "docs/f\($0).md" }
+        let (report, _) = try await loaded(many, extraConfig: Self.stage)
+        let design = try #require(report.nextSteps.first { $0.name == "design" })
+        #expect(design.why.contains("could not be read"), "a list that was cut cannot say the stage does not apply")
     }
 }
