@@ -158,6 +158,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
+            namingGoal = false
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
             (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
@@ -166,6 +167,8 @@ struct RecentProject: Equatable, Identifiable {
         preferences.projectPath = located.root.path
         remember(located.root.path)
         generation += 1
+        // A goal being written belongs to the project it was started in: another project does not inherit it.
+        namingGoal = false
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
         project = located

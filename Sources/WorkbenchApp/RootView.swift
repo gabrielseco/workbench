@@ -17,6 +17,8 @@ struct RootView: View {
             Divider()
             FooterBar(store: store)
         }
+        // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
+        .disabled(store.namingGoal)
         .frame(minWidth: 900, minHeight: 600)
         .overlay { NewGoalLayer(store: store) }
     }
