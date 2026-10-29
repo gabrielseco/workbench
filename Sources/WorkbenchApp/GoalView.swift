@@ -120,27 +120,60 @@ struct GoalView: View {
     }
 }
 
-/// Asks for a thread name and has the store create it from the template.
+/// Asks what needs to be done and has the goal agent draft the goal from it. The sheet stays open while it drafts, and keeps
+/// the text when the draft does not come out.
 struct NewGoalSheet: View {
     var store: ProjectStore
     @Binding var shown: Bool
+    @State private var request = ""
     @State private var name = ""
+    @State private var showName = false
+    @FocusState private var focused: Bool
+
+    private var empty: Bool { request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New goal in \(store.project?.root.lastPathComponent ?? "this project")").font(.headline)
-            TextField("Thread name", text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
-            HStack {
-                Spacer()
-                Button("Cancel") { shown = false }
-                Button("Create") {
-                    let chosen = name
-                    shown = false
-                    Task { await store.newGoal(name: chosen) }
+            Text("What needs to be done?").font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $request)
+                .font(.body).focused($focused).scrollContentBackground(.hidden)
+                .padding(6).frame(width: 460, height: 160)
+                .background(Theme.grey.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .disabled(store.drafting)
+                .overlay(alignment: .topLeading) {
+                    if request.isEmpty {
+                        Text("Describe the change, the bug or the idea. Say how you will know it worked.")
+                            .foregroundStyle(.tertiary).padding(.horizontal, 11).padding(.vertical, 14).allowsHitTesting(false)
+                    }
                 }
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            DisclosureGroup("Thread name", isExpanded: $showName) {
+                TextField(ThreadName.suggest(from: request), text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
+                    .disabled(store.drafting)
+            }
+            .font(.callout)
+            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            HStack {
+                if store.drafting {
+                    ProgressView().controlSize(.small)
+                    Text("Drafting the goal…").font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if store.drafting {
+                    Button("Stop") { store.stopDrafting() }
+                } else {
+                    Button("Cancel") { shown = false }
+                    Button("Create") {
+                        Task { if await store.draftGoal(request: request, name: name) { shown = false } }
+                    }
+                    .keyboardShortcut(.return, modifiers: .command).disabled(empty)
+                }
             }
         }
         .padding(20)
+        .onAppear {
+            focused = true
+            store.actionError = nil
+        }
     }
 }
