@@ -79,8 +79,7 @@ public enum Verifier {
             says (`<name>.png`). Do not save files anywhere else the project did not ask for.
             - Never start, stop or change the installed copy of the app; use the throwaway build the skill describes.
             - Report only on criteria whose proof is a screenshot or that you can see on screen. A `test:` or \
-            `command:` proof is run by Workbench's check, not by you: do not say it is unverified because you cannot \
-            run it.
+            `command:` proof is outside your remit: you cannot run it, so do not report it as unverified or as failing.
             - Finish with a short report: one line per criterion, its id, `holds` or `does not hold`, and what you \
             saw. Your words are a note for the person reviewing; they decide nothing.
             """
