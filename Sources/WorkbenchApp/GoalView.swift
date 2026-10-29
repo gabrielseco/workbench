@@ -96,6 +96,10 @@ struct GoalView: View {
         }
     }
 
+    private var runDisabled: Bool {
+        !goal.canApprove || store.starting || store.runningHere || store.busy != nil || snapshot.state.lastTurn > 0
+    }
+
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -107,7 +111,7 @@ struct GoalView: View {
                         Task { await store.approveAndRun() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!goal.canApprove || store.starting || store.runningHere || snapshot.state.lastTurn > 0)
+                    .disabled(runDisabled)
                 }
             }
             if goal.pill != .approved { Text("Nothing runs until you approve.").font(.caption).foregroundStyle(.secondary) }

@@ -155,6 +155,7 @@ struct ThreadPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let busy = store.busy { BusyBar(text: busy) }
             if goal == nil {
                 Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
                 Text(".workbench/threads/\(snapshot.id)/goal.md")
@@ -185,6 +186,21 @@ struct ThreadPane: View {
             Spacer()
         }
         .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// What the app is doing for the person right now: a click is answered at once, even when the work behind it takes a while.
+struct BusyBar: View {
+    var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(text).font(.callout).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -110,15 +110,15 @@ struct ReviewView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("Discard…") { Task { await store.prepareDiscard() } }
-                Button("Open worktree") { Task { await store.openWorktree() } }
+                Button("Discard…") { Task { await store.prepareDiscard() } }.disabled(store.busy != nil)
+                Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
                 Button("Refresh") { Task { await store.refreshReview() } }
                     .help("Read the worktree again after editing it")
                 Spacer()
-                Button("Send back…") { sendingBack = true }
+                Button("Send back…") { sendingBack = true }.disabled(store.busy != nil)
                 Button("Accept work") { Task { await store.prepareAccept() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!review.canDecide || store.deciding)
+                    .disabled(!review.canDecide || store.deciding || store.busy != nil)
             }
             if review.undecided > 0 {
                 let verb = review.undecided == 1 ? "criterion is" : "criteria are"
