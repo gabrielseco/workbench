@@ -145,13 +145,17 @@ the start of the slice.
 - **The goal is not edited in the app.** The file is the source of truth and the editor is the user's own; the app validates and
   displays. The Run limits chips are read-only, with a pointer to the goal file. (A text editor in the window is the thing P3
   warned would become its own project.)
-- **1b, own PR, optional:** a new-thread sheet with a rough request → `ThreadService.draftGoal` (when `[agents.goal]` is set,
-  else the template); the proposal is shown beside the current draft and applied only on an explicit click, which returns an
-  approved goal to draft (P9's rule). The drafter's model is never shown as the coding model.
+- **1b (built):** `New goal…` opens a sheet with one question, "What needs to be done?", and Create hands the text to
+  `ThreadService.draftGoal` as a new thread. The thread name is made from the request's first line (editable under "Thread name"),
+  so nothing but the request is asked for. The sheet stays open while the drafter works, with Stop; a draft that fails or is
+  stopped writes nothing and the sheet keeps the text and says why. Without `[agents.goal]` the sheet offers "Draft with Claude / Codex":
+  `GoalAgentSetup` appends the table to `.workbench/config.toml` (put back as it was if the config would not load; refused when
+  the table exists, there is no config, or the file is over 256 KiB) and the draft runs. A quit waits for a running draft to end. The new thread opens as a draft, with `Open in editor` for changes.
+  Pasted screenshots are a later PR. The drafter's model is never shown as the coding model.
 - **Failure states:** invalid goal (the `GoalProblem` text, Approve disabled), placeholders remain, provider executable missing or
   capability refused (`AgentFailure` text from core), goal changed after approval (pill and spine step go back, Run disabled),
   draft failed or stopped (the previous goal is untouched, said so).
-- **Demo:** `New goal` → template opens in the editor → fill it → the criteria turn checkable → approve → spine step is green
+- **Demo:** `New goal` → say what needs to be done → the drafted goal opens (edit it in the editor if needed) → the criteria turn checkable → approve → spine step is green
   with the time; edit the file after approving and watch it return to draft with Run disabled.
 
 ### Task 2: Run (mockup 2)

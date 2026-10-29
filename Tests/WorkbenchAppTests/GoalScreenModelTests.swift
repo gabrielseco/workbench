@@ -190,10 +190,13 @@ private final class SkillProbe: @unchecked Sendable {
     @Test func aGoalCanBeStartedFromAProjectWithNoThread() async throws {
         let made = Order()
         let fixture = try await AppFixture()
-        let actions = GoalActions(newThread: { _, name in made.add(name) })
+        let actions = GoalActions(draftGoal: { _, name, _, _ in
+            made.add(name)
+            return GoalDraftResult(id: "g-\(name)", provider: .claude)
+        })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root) && store.screen == .noThread)
-        await store.newGoal(name: "first")
+        await store.draftGoal(request: "first", name: "first")
         #expect(made.items == ["first"] && store.actionError == nil)
     }
 

@@ -8,11 +8,42 @@ struct RunHandle: Sendable {
     var stop: @Sendable () async -> Void
 }
 
+/// Ends the goal drafter the app started: a stop asked before the drafter is attached takes effect when it is.
+final class DraftStop: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopper: (@Sendable () -> Void)?
+    private var requested = false
+
+    func attach(_ execution: AgentExecution) { attach { execution.stop() } }
+
+    /// What ends the drafter; called at once when a stop was already asked.
+    func attach(_ new: @escaping @Sendable () -> Void) {
+        let stopNow = lock.withLock { () -> Bool in
+            stopper = new
+            return requested
+        }
+        if stopNow { new() }
+    }
+
+    func stop() {
+        let running = lock.withLock { () -> (@Sendable () -> Void)? in
+            requested = true
+            return stopper
+        }
+        running?()
+    }
+
+    var wasRequested: Bool { lock.withLock { requested } }
+}
+
 /// What the screens' buttons do, as core does it. Seams so a test can see the order and the refusals without a repository.
 struct GoalActions: Sendable {
     var approve: @Sendable (Project, String) async throws -> Void
     var makeRun: @Sendable (Project, String, RunOptions) throws -> RunHandle
-    var newThread: @Sendable (Project, String) async throws -> Void
+    /// Has the goal agent draft a goal from a rough request, as a new thread named `name`; `DraftStop` ends the drafter early.
+    var draftGoal: @Sendable (Project, String, String, DraftStop) async throws -> GoalDraftResult
+    /// Names the goal agent in the project's config, so a project with none can draft.
+    var enableGoalAgent: @Sendable (Project, AgentProviderID) async throws -> Void
     var openGoal: @Sendable (Project, String) async throws -> Void
     /// Asks the process that holds the thread (a terminal's `workbench run`) to stop; false when nothing holds it.
     var requestStop: @Sendable (Project, String) async -> Bool
@@ -29,7 +60,10 @@ struct GoalActions: Sendable {
         makeRun: @escaping @Sendable (Project, String, RunOptions) throws -> RunHandle = { _, _, _ in
             RunHandle(run: {}, stop: {})
         },
-        newThread: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
+        draftGoal: @escaping @Sendable (Project, String, String, DraftStop) async throws -> GoalDraftResult = { _, _, _, _ in
+            throw Unset()
+        },
+        enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -42,7 +76,8 @@ struct GoalActions: Sendable {
         discard: @escaping @Sendable (Project, String, DiscardPlan) async throws -> Void = { _, _, _ in },
         patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil }
     ) {
-        (self.approve, self.makeRun, self.newThread, self.openGoal) = (approve, makeRun, newThread, openGoal)
+        (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
+        self.enableGoalAgent = enableGoalAgent
         (self.requestStop, self.openWorktree) = (requestStop, openWorktree)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
@@ -59,10 +94,15 @@ struct GoalActions: Sendable {
             let runner = ThreadRunner(project: project, threadID: thread, git: try GitRunner.discover())
             return RunHandle(run: { _ = try await runner.run(options) }, stop: { await runner.stop() })
         },
-        newThread: { project, name in
+        draftGoal: { project, name, request, stop in
             let git = try GitRunner.discover()
-            _ = try await ThreadService(project: project, git: git).newThread(name: name)
+            // A config that is there but broken is its own error, not "no goal agent".
+            let config: Config? =
+                FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
+            return try await ThreadService(project: project, git: git).draftGoal(
+                target: .newThread(name: name, base: nil), request: request, config: config, attach: { stop.attach($0) })
         },
+        enableGoalAgent: { project, provider in try GoalAgentSetup.enable(provider: provider, in: project) },
         openGoal: { project, thread in try await openInEditor(project, thread) },
         requestStop: { project, thread in
             guard let git = try? GitRunner.discover() else { return false }

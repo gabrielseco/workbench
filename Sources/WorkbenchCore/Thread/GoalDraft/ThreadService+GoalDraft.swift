@@ -20,6 +20,14 @@ public struct GoalDraftResult: Sendable, Equatable {
     public var model: String?
     public var costUSD: Double?
     public var failure: String?
+
+    public init(
+        id: String?, replaced: Bool = false, wasApproved: Bool = false, proposal: GoalProposal? = nil,
+        provider: AgentProviderID, model: String? = nil, costUSD: Double? = nil, failure: String? = nil
+    ) {
+        (self.id, self.replaced, self.wasApproved, self.proposal) = (id, replaced, wasApproved, proposal)
+        (self.provider, self.model, self.costUSD, self.failure) = (provider, model, costUSD, failure)
+    }
 }
 
 /// Why a draft was not started. Nothing was spawned, spent, written or logged.

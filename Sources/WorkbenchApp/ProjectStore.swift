@@ -36,6 +36,11 @@ struct RecentProject: Equatable, Identifiable {
     /// What the last action said when it did not go through. Set by the store's own extensions too.
     var actionError: String?
     private(set) var starting = false
+    /// The goal agent is drafting a goal from a request.
+    var drafting = false
+    /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
+    var goalAgentOff = false
+    @ObservationIgnored var draftStop: DraftStop?
     /// A turn the user is stopping: set from Stop until the log says it ended.
     private(set) var stopping = false
     /// The latest turn's review while it awaits one; nil otherwise.
@@ -60,18 +65,18 @@ struct RecentProject: Equatable, Identifiable {
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
-    @ObservationIgnored private var currentThread: String?
-    @ObservationIgnored private var lastWatch: ProjectLoader.Watch?
+    @ObservationIgnored var currentThread: String?
+    @ObservationIgnored var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private let intervals: (working: Duration, idle: Duration)
     /// Bumped each time another project is opened: an answer for an earlier one (a reload or a doctor run that was still
     /// in flight) is dropped, never shown under the new project.
-    @ObservationIgnored private var generation = 0
+    @ObservationIgnored var generation = 0
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
     @ObservationIgnored private let loader: @Sendable (Project) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
     @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
-    @ObservationIgnored private let actions: GoalActions
+    @ObservationIgnored let actions: GoalActions
 
     /// `screen` is for previews and tests that show a fixed state without a project on disk.
     init(
@@ -157,7 +162,7 @@ struct RecentProject: Equatable, Identifiable {
         if mine == generation && now != lastWatch { await reload() }
     }
 
-    private func reload() async {
+    func reload() async {
         guard let project else { return }
         let (mine, loader) = (generation, self.loader)
         let result = await Task.detached { loader(project) }.value
@@ -378,22 +383,6 @@ struct RecentProject: Equatable, Identifiable {
         guard let project, let thread = currentThread else { return }
         actionError = nil
         do { try await actions.openGoal(project, thread) } catch { actionError = "\(error)" }
-    }
-
-    /// Creates a thread from the template; core refuses while another thread is active, and says so.
-    func newGoal(name raw: String) async {
-        guard let project, !starting else { return }
-        actionError = nil
-        // A pasted name often carries a space or a newline at its edges; core takes the name as typed and refuses it.
-        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            try await actions.newThread(project, name)
-        } catch {
-            actionError = "\(error)"
-            return
-        }
-        (currentThread, lastWatch) = (nil, nil)
-        await reload()
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.

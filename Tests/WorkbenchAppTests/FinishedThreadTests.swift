@@ -66,10 +66,10 @@ import WorkbenchCore
         try await fixture.addThread("t1", approved: true)
         try fixture.turn("t1", 1)
         try fixture.decide("t1", "discarded")
-        let store = ProjectStore(
-            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(newThread: { _, name in made.add(name) }))
+        let actions = GoalActions(draftGoal: { _, name, _, _ in made.drafted(name) })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
-        await store.newGoal(name: "next")
+        await store.draftGoal(request: "next", name: "next")
         #expect(made.all == ["next"] && store.actionError == nil)
     }
 
@@ -77,10 +77,10 @@ import WorkbenchCore
         let made = Names()
         let fixture = try await AppFixture()
         keptFixtures.append(fixture)
-        let store = ProjectStore(
-            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(newThread: { _, name in made.add(name) }))
+        let actions = GoalActions(draftGoal: { _, name, _, _ in made.drafted(name) })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
-        await store.newGoal(name: " app-ship-screen\n")
+        await store.draftGoal(request: "x", name: " app-ship-screen\n")
         #expect(made.all == ["app-ship-screen"])
     }
 
@@ -92,9 +92,9 @@ import WorkbenchCore
         try fixture.turn("t1", 1)
         try fixture.decide("t1", "discarded")
         let store = ProjectStore(
-            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(newThread: { _, _ in throw Busy() }))
+            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(draftGoal: { _, _, _, _ in throw Busy() }))
         #expect(await store.open(fixture.root))
-        await store.newGoal(name: "next")
+        await store.draftGoal(request: "next", name: "next")
         #expect(store.actionError == "thread t2 is active")
     }
 }
@@ -105,5 +105,9 @@ private final class Names: @unchecked Sendable {
     private let lock = NSLock()
     private var names: [String] = []
     func add(_ name: String) { lock.withLock { names.append(name) } }
+    func drafted(_ name: String) -> GoalDraftResult {
+        add(name)
+        return GoalDraftResult(id: "g-\(name)", provider: .claude)
+    }
     var all: [String] { lock.withLock { names } }
 }

@@ -6,6 +6,7 @@
 #                                              window id and size. The app is left running.
 #   scripts/verify-app.sh list <pid>           what is on screen: role <tab> label
 #   scripts/verify-app.sh press <pid> "<label>"  press that button (an exact label, else a prefix)
+#   scripts/verify-app.sh type <pid> "<text>"  set the text of the window's focused text field (else its only one); no keystrokes are sent
 #   scripts/verify-app.sh shot <pid> <name>    screenshot the window into $WORKBENCH_PROOF_DIR (default .build/verify)/<name>.png
 #   scripts/verify-app.sh stop <pid>           end that build and remove the bundle, the fixture copy and every setting it left
 #   scripts/verify-app.sh scenarios            the scenario names
@@ -17,6 +18,8 @@
 #   - the window is found by pid, never by name, and only that pid is ever ended
 #   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Event log`, `Open the event log`), by the label
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
+#   - `type` fills a text field of this pid's window through Accessibility, never with keystrokes, so it cannot reach another app; it
+#     takes at most 2000 characters and refuses control characters, and with several fields and none focused it types nowhere
 #   - a scenario name is lower-case letters and dashes and must be a folder of Fixtures/app/: it cannot reach anywhere else
 # A `start` that fails, or is interrupted (Ctrl-C, SIGTERM), leaves nothing: the app it launched is ended and its build folder, fixture copy
 # and settings are removed, so no process runs without the caller having its pid. Only a `start` that printed the pid leaves a build.
@@ -24,7 +27,7 @@
 # pid) shows the cleanup without a crash. Ctrl-C has the same handler as SIGTERM and SIGHUP; no test sends it (a background job ignores it).
 # Environment: VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
 #   VERIFY_SETTLE_SECONDS wait after the window appears (default 2); WORKBENCH_PROOF_DIR where `shot` writes.
-# The terminal running this needs Screen Recording (start, shot) and Accessibility (press, list, resize).
+# The terminal running this needs Screen Recording (start, shot) and Accessibility (press, type, list, resize).
 # Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage or not macOS.
 set -euo pipefail
 
@@ -42,7 +45,7 @@ STATE_ROOT="${STATE_ROOT%/}/workbench-verify"
 PIDS="$STATE_ROOT/pids"
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -222,6 +225,12 @@ case "$command" in
     [[ -n "$2" ]] || fail "press needs a label"
     [[ "$2" =~ $REFUSED ]] && fail "refused: \"$2\" opens a panel or another app"
     WORKBENCH_PID="$1" WORKBENCH_REFUSE="$REFUSED" swift "$ROOT/scripts/ax.swift" press "$2"
+    ;;
+  type)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ -n "$2" ]] || fail "type needs text"
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" type "$2"
     ;;
   shot)
     [[ $# -eq 2 ]] || usage

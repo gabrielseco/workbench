@@ -33,6 +33,14 @@ expect 0 "pressed (fixture) AXButton Doctor, Not run" press "Doctor,"
 expect 1 "Nothing pressable is labelled" press "base"
 expect 1 "Nothing pressable is labelled" press "Event log in"
 expect 1 "Nothing pressable is labelled" press "Nope"
+
+# `type` names the field it would fill, refuses what is not text, and types nowhere without a field.
+expect 1 "No text field to type into" type "hello"
+printf 'AXButton\tDoctor\nAXTextArea\tDescribe the change\n' > "$tmp/fields"
+WORKBENCH_AX_FIXTURE="$tmp/fields" expect 0 "typed (fixture) AXTextArea Describe the change" type "hello"
+WORKBENCH_AX_FIXTURE="$tmp/fields" expect 2 "at most 2000 characters" type "$(printf 'x%.0s' $(seq 1 2001))"
+WORKBENCH_AX_FIXTURE="$tmp/fields" expect 2 "no control characters" type "$(printf 'a\033[31mb')"
+WORKBENCH_AX_FIXTURE="$tmp/fields" expect 0 "typed (fixture)" type "$(printf 'two\nlines')"
 expect 2 "usage: press <label>" press ""
 expect 2 "usage: press <label>" press
 expect 0 $'AXStaticText\tbase: main' list
