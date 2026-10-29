@@ -175,7 +175,9 @@ struct ThreadPane: View {
                 Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
             }
             if let notice = store.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Theme.green) }
-            if let finished = snapshot.finishedText { FinishedBanner(text: finished, note: snapshot.newGoalNote, store: store) }
+            if let finished = snapshot.finishedText {
+                FinishedBanner(text: finished, note: snapshot.newGoalNote, canShip: snapshot.canShip, store: store)
+            }
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else if let run = snapshot.run {
@@ -208,6 +210,7 @@ struct BusyBar: View {
 struct FinishedBanner: View {
     var text: String
     var note: String?
+    var canShip = false
     var store: ProjectStore
     @State private var naming = false
 
@@ -216,6 +219,7 @@ struct FinishedBanner: View {
             HStack {
                 Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
                 Spacer()
+                if canShip { Button("Ship…") { Task { await store.prepareShip() } }.disabled(store.busy != nil) }
                 Button("New goal…") { naming = true }
             }
             if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
@@ -223,6 +227,9 @@ struct FinishedBanner: View {
         }
         .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
+        .sheet(isPresented: Binding(get: { store.pendingShip != nil }, set: { if !$0 { store.cancelShip() } })) {
+            ShipSheet(store: store)
+        }
     }
 }
 

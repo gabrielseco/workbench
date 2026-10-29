@@ -64,6 +64,8 @@ struct RecentProject: Equatable, Identifiable {
     /// What core says Accept or Discard would do, shown for confirmation and passed back as `shown:` exactly as shown.
     var pendingAccept: AcceptPlan?
     var pendingDiscard: DiscardPlan?
+    /// What Ship would push and open, shown for confirmation and passed back as shown.
+    var pendingShip: ShipPreview?
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
@@ -151,14 +153,14 @@ struct RecentProject: Equatable, Identifiable {
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
-            (review, pendingAccept, pendingDiscard) = (nil, nil, nil)
+            (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
         preferences.projectPath = located.root.path
         remember(located.root.path)
         generation += 1
-        (pendingAccept, pendingDiscard, notice) = (nil, nil, nil)
+        (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         project = located
         doctor = .notRun
         (goal, review) = (nil, nil)
