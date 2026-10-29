@@ -142,6 +142,23 @@ import Testing
         #expect(store.busy == nil)
     }
 
+    @Test func openingTheDiffAsksForTheWholeReviewOrOneFileAndShowsWhatItLeftOutOrWhyItFailed() async throws {
+        let asked = Box<[String?]>([])
+        let actions = GoalActions(openDiff: { _, _, path in
+            asked.value.append(path)
+            if path == "bad.txt" { throw EditorError.noDiffMode(editor: "subl") }
+            return path == nil ? "3 more changed file(s): click one to open it." : nil
+        })
+        let (store, _) = try await store(actions)
+        await store.openDiff()
+        #expect(asked.value == [nil] && store.actionNote == "3 more changed file(s): click one to open it.")
+        await store.openDiff(path: "a.txt")
+        #expect(asked.value == [nil, "a.txt"], "one file, by its path")
+        #expect(store.actionNote == nil && store.actionError == nil, "a fresh action clears the last note")
+        await store.openDiff(path: "bad.txt")
+        #expect(store.actionError?.contains("subl") == true && store.busy == nil)
+    }
+
     @Test func theStartingLineBelongsToTheThreadItWasStartedInNotToWhicheverIsOnScreen() async throws {
         let running = Gate()
         let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
@@ -241,4 +258,14 @@ private final class Counter: @unchecked Sendable {
     private var value = 0
     func add() { lock.withLock { value += 1 } }
     var count: Int { lock.withLock { value } }
+}
+
+private final class Box<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+    init(_ value: Value) { stored = value }
+    var value: Value {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
 }

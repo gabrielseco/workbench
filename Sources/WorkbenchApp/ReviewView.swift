@@ -112,6 +112,8 @@ struct ReviewView: View {
             HStack {
                 Button("Discard…") { Task { await store.prepareDiscard() } }.disabled(store.busy != nil)
                 Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
+                Button("Open diff") { Task { await store.openDiff() } }.disabled(store.busy != nil || review.files.isEmpty)
+                    .help("Each changed file against the base, in your editor")
                 Button("Refresh") { Task { await store.refreshReview() } }
                     .help("Read the worktree again after editing it")
                 Spacer()
@@ -126,6 +128,7 @@ struct ReviewView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
         }
     }
 
@@ -185,6 +188,7 @@ struct DiffSheet: View {
             HStack {
                 Text(path).font(.headline)
                 Spacer()
+                Button("Open in editor") { Task { await store.openDiff(path: path) } }.disabled(store.busy != nil)
                 Button("Close") { dismiss() }
             }
             ScrollView {

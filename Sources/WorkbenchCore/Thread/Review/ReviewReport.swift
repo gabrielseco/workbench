@@ -429,6 +429,20 @@ public struct ReviewLoader: Sendable {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public struct ChangedFiles: Sendable {
+        public var base: String
+        public var files: [FileChange]
+        public var worktree: URL
+    }
+
+    /// The changed files and the base they differ from, with the worktree they are in; nil when there is no diff to show.
+    public func changedFiles(id: String) async -> ChangedFiles? {
+        let all = await diff(id: id, goalBase: nil, events: readEvents(id), limit: Int.max)
+        guard case .summary(let summary) = all else { return nil }
+        return ChangedFiles(
+            base: summary.base, files: summary.files, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id))
+    }
+
     /// One file's patch, by its path in the diff.
     public func patch(id: String, path: String) async throws -> FilePatch? {
         guard case .summary(let summary) = await diff(id: id, goalBase: nil, events: readEvents(id), limit: Int.max),

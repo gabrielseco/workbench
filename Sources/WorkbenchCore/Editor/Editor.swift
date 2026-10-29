@@ -41,6 +41,7 @@ public enum EditorError: Error, Equatable, Sendable, CustomStringConvertible {
     case noWorktree(id: String, path: String)
     case noGoal(id: String, path: String)
     case outsideWorktrees(path: String, resolved: String)
+    case noDiffMode(editor: String)
     case notFound(editor: String, tried: [String])
     case launchFailed(editor: String, reason: String)
     case timedOut(editor: String, seconds: Int)
@@ -57,6 +58,9 @@ public enum EditorError: Error, Equatable, Sendable, CustomStringConvertible {
         case .noGoal(let id, let path): "thread \(id) has no goal file at \(path)"
         case .outsideWorktrees(let path, let resolved):
             "\(path) resolves to \(resolved), which is outside .workbench/worktrees/; not opening it"
+        case .noDiffMode(let editor):
+            "editor '\(editor)' has no diff view we can start; use one of "
+                + "\(EditorDiff.supported.sorted().joined(separator: ", ")), or open the worktree and diff against the base there"
         case .notFound(let editor, let tried):
             "cannot start editor '\(editor)': tried \(tried.joined(separator: ", then "))"
         case .launchFailed(let editor, let reason): "cannot start editor '\(editor)': \(reason)"
