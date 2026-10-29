@@ -66,6 +66,8 @@ struct RecentProject: Equatable, Identifiable {
     var pendingDiscard: DiscardPlan?
     /// What Ship would push and open, shown for confirmation and passed back as shown.
     var pendingShip: ShipPreview?
+    /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
+    var prReviewShown: PRReviewShown?
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
@@ -161,6 +163,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
+        prReviewShown = nil
         project = located
         doctor = .notRun
         (goal, review) = (nil, nil)

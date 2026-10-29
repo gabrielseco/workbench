@@ -75,6 +75,23 @@ struct ThreadSnapshot: Equatable {
     /// Accepted and not yet shipped: the work is on its branch and no pull request exists.
     var canShip: Bool { state.decision == "accepted" && state.pullRequest == nil && !state.cleaned }
 
+    /// Shipped and not cleaned: the pull request is there to open and to have Codex review.
+    var canReviewPullRequest: Bool { state.pullRequest != nil && !state.cleaned }
+
+    var pullRequestURL: URL? { state.pullRequest.flatMap { URL(string: $0.url) } }
+
+    /// Where the latest review round stands, for the banner; nil when none has run.
+    var prReviewText: String? {
+        guard let round = state.review.prReview else { return nil }
+        let outcome =
+            switch round.verdict {
+            case "clean"?: "clean"
+            case nil: "no verdict"
+            default: "findings to fix"
+            }
+        return "PR review: round \(round.round) · \(outcome)"
+    }
+
     /// What starting the next goal leaves behind, when something of this thread is still to ship or merge. The window follows the
     /// newest thread and has no list yet ([later/thread-list.md](../later/thread-list.md)), so the way back is the terminal.
     var newGoalNote: String? {
