@@ -20,9 +20,14 @@ import WorkbenchCore
     nonisolated static let thumbnailPixels = 104
 
     private(set) var items: [Item] = []
+    /// Images being read and converted: Create waits for them, so none that was just added is left out.
+    private(set) var pending = 0
     /// Why the last image was not added.
     private(set) var problem: String?
-    @ObservationIgnored private let directory = FileManager.default.temporaryDirectory
+    /// Bumped by `clear`: an image prepared before it is dropped, and its copy removed, never added to a sheet that has moved on.
+    @ObservationIgnored private var generation = 0
+    /// Where the copies live; read by tests, which check that none is left behind.
+    @ObservationIgnored let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("workbench-attachments-\(UUID().uuidString)", isDirectory: true)
 
     var urls: [URL] { items.map(\.url) }
@@ -30,10 +35,12 @@ import WorkbenchCore
     /// Image files, from a drop, the open panel or a pasted file reference.
     func add(files: [URL]) async {
         problem = nil
+        let mine = generation
         for file in files {
-            guard room() else { return }
+            // A clear ends this add: the rest of the files are not prepared for a sheet that has moved on.
+            guard mine == generation, room() else { return }
             let folder = directory
-            await keep(Task.detached { try Self.stage(file: file, in: folder) }.result)
+            await stage(generation: mine) { try Self.stage(file: file, in: folder) }
         }
     }
 
@@ -42,7 +49,7 @@ import WorkbenchCore
         problem = nil
         guard room() else { return }
         let folder = directory
-        await keep(Task.detached { try Self.stage(imageData: data, rawLimit: rawLimit, in: folder) }.result)
+        await stage(generation: generation) { try Self.stage(imageData: data, rawLimit: rawLimit, in: folder) }
     }
 
     /// Whether a paste of this clipboard is for the screenshots: it carries an image (a file or picture data) and no text. A
@@ -75,6 +82,7 @@ import WorkbenchCore
 
     /// Removes every copy: after the draft has been made, or the sheet is dismissed.
     func clear() {
+        generation += 1
         try? FileManager.default.removeItem(at: directory)
         items = []
         problem = nil
@@ -88,17 +96,27 @@ import WorkbenchCore
         return true
     }
 
-    /// Adds a staged image, unless the sheet filled up or was cleared while it was being prepared.
-    private func keep(_ result: Result<Staged, Error>) {
+    /// Prepares one image off the main actor and adds it, unless the sheet filled up or was cleared meanwhile.
+    private func stage(generation mine: Int, _ work: @escaping @Sendable () throws -> Staged) async {
+        pending += 1
+        let result = await Task.detached { Result { try work() } }.value
+        pending -= 1
+        keep(result, generation: mine)
+    }
+
+    private func keep(_ result: Result<Staged, Error>, generation mine: Int) {
         switch result {
         case .success(let staged):
-            guard room() else {
+            guard mine == generation, room() else {
                 try? FileManager.default.removeItem(at: staged.url)
+                if mine != generation, items.isEmpty {
+                    try? FileManager.default.removeItem(at: staged.url.deletingLastPathComponent())
+                }
                 return
             }
             items.append(Item(url: staged.url, thumbnail: staged.thumbnail.flatMap { NSImage(data: $0) }))
         case .failure(let error):
-            problem = "\(error)"
+            if mine == generation { problem = "\(error)" }
         }
     }
 
@@ -115,7 +133,7 @@ import WorkbenchCore
 
     nonisolated private static func stage(file: URL, in folder: URL) throws -> Staged {
         let loaded = try GoalAttachments.load(file)
-        return try keep(loaded, in: folder)
+        return try keep(loaded, named: file.lastPathComponent, in: folder)
     }
 
     nonisolated private static func stage(imageData data: Data, rawLimit: Int, in folder: URL) throws -> Staged {
@@ -138,14 +156,18 @@ import WorkbenchCore
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try png.write(to: scratch, options: .atomic)
         defer { try? FileManager.default.removeItem(at: scratch) }
-        return try keep(try GoalAttachments.load(scratch), in: folder)
+        return try keep(try GoalAttachments.load(scratch), named: "That image", in: folder)
     }
 
-    nonisolated private static func keep(_ loaded: GoalAttachments.Loaded, in folder: URL) throws -> Staged {
+    /// Core checked the image's shape; making its thumbnail decodes it, so one with no picture in it stops here.
+    nonisolated private static func keep(_ loaded: GoalAttachments.Loaded, named name: String, in folder: URL) throws -> Staged {
+        guard let thumbnail = thumbnail(of: loaded.data) else {
+            throw Problem(description: "\(name) could not be read as an image.")
+        }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent("\(UUID().uuidString).\(loaded.ext)")
         try loaded.data.write(to: url, options: .atomic)
-        return Staged(url: url, thumbnail: thumbnail(of: loaded.data))
+        return Staged(url: url, thumbnail: thumbnail)
     }
 
     nonisolated private static func thumbnail(of data: Data) -> Data? {

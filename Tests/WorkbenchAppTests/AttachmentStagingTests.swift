@@ -134,6 +134,48 @@ import WorkbenchCore
         staging.clear()
     }
 
+    @Test func aSheetClearedWhileImagesAreBeingPreparedKeepsNoneAndLeavesNoFiles() async throws {
+        let dir = try folder()
+        let png = try picture().png
+        let files = try (0..<4).map { try file("p\($0).png", png, in: dir) }
+        let staging = AttachmentStaging()
+        let adding = Task { await staging.add(files: files) }
+        await Task.yield()
+        #expect(staging.pending > 0, "the first image is still being prepared")
+        staging.clear()
+        await adding.value
+        #expect(staging.items.isEmpty && staging.pending == 0)
+        #expect(!FileManager.default.fileExists(atPath: staging.directory.path), "no copy and no folder left behind")
+    }
+
+    @Test func nothingIsPendingOnceEveryImageIsInAndTheyKeepTheOrderGiven() async throws {
+        let dir = try folder()
+        let png = try picture().png
+        let files = try (0..<5).map { try file("q\($0).png", png, in: dir) }
+        let staging = AttachmentStaging()
+        await staging.add(files: files)
+        #expect(staging.pending == 0 && staging.items.count == 5)
+        let sizes = try staging.urls.map { try Data(contentsOf: $0).count }
+        #expect(sizes == Array(repeating: png.count, count: 5))
+        staging.clear()
+    }
+
+    @Test func aPictureWithNoPictureInItIsRefusedEvenWhenItsShapeIsRight() async throws {
+        // A header and an ending, nothing between: core's shape check passes it, decoding does not.
+        func be(_ value: Int) -> [UInt8] { (0..<4).map { UInt8((value >> (24 - 8 * $0)) & 0xFF) } }
+        var bytes: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        bytes += be(13)
+        bytes += Array("IHDR".utf8)
+        bytes += be(4)
+        bytes += be(4)
+        bytes += [8, 2, 0, 0, 0, 0, 0, 0, 0]
+        bytes += [0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+        let hollow = Data(bytes)
+        let staging = AttachmentStaging()
+        await staging.add(files: [try file("hollow.png", hollow, in: try folder())])
+        #expect(staging.items.isEmpty && staging.problem == "hollow.png could not be read as an image.")
+    }
+
     @Test func removingOneKeepsTheOthersInOrder() async throws {
         let png = try picture().png
         let dir = try folder()

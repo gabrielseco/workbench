@@ -183,6 +183,7 @@ struct NewGoalSheet: View {
                                         provider, request: request, name: name, attachments: staging.urls) { shown = false }
                                 }
                             }
+                            .disabled(staging.pending > 0)
                         }
                     } else {
                         Button("Create") {
@@ -191,7 +192,7 @@ struct NewGoalSheet: View {
                                 if made { shown = false }
                             }
                         }
-                        .keyboardShortcut(.return, modifiers: .command).disabled(empty)
+                        .keyboardShortcut(.return, modifiers: .command).disabled(empty || staging.pending > 0)
                     }
                 }
             }
@@ -236,7 +237,8 @@ struct NewGoalSheet: View {
             if !store.drafting, staging.items.count < GoalAttachments.maxCount {
                 Button("Add screenshots…") { chooseImages() }
             }
-            Text(staging.items.isEmpty ? "Paste or drop screenshots here" : "")
+            if staging.pending > 0 { ProgressView().controlSize(.small) }
+            Text(staging.items.isEmpty && staging.pending == 0 ? "Paste or drop screenshots here" : "")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

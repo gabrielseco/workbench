@@ -50,13 +50,21 @@ public enum GoalAttachments {
         guard size <= maxBytes else { throw Refusal.tooLarge(name) }
         guard let data = try? Data(contentsOf: url), data.count <= maxBytes else { throw Refusal.unreadable(name) }
         guard let shape = inspect(data) else { throw Refusal.notAnImage(name) }
-        if let width = shape.width, let height = shape.height, width * height > maxPixels { throw Refusal.tooManyPixels(name) }
+        if let width = shape.width, let height = shape.height, hasTooManyPixels(width: width, height: height) {
+            throw Refusal.tooManyPixels(name)
+        }
         return Loaded(data: data, ext: shape.ext)
     }
 
+    /// More than `maxPixels`, without a product that can overflow: each side is bounded first.
+    public static func hasTooManyPixels(width: Int, height: Int) -> Bool {
+        width > maxPixels || height > maxPixels || width * height > maxPixels
+    }
+
     /// What the bytes of a complete image say it is: its type and, where the format states them up front, its size in pixels.
-    /// Not a decoder: it checks the signature, the header's own fields and the format's ending, so a bare signature, a cut file
-    /// or text with an image's name is refused here, before a paid agent is asked to look at it.
+    /// Not a decoder (core has none): it checks the signature, the header's own fields and the format's ending, so a bare
+    /// signature, a cut file or text with an image's name is refused here, before a paid agent is asked to look at it. The app
+    /// decodes each image as well before it keeps it.
     struct Shape: Equatable {
         var ext: String
         var width: Int?
@@ -122,11 +130,27 @@ public enum GoalAttachments {
     }
 
     private static func webp(_ b: [UInt8]) -> Shape? {
-        guard b.count >= 20, b.starts(with: Array("RIFF".utf8)), Array(b[8..<12]) == Array("WEBP".utf8) else { return nil }
+        guard b.count >= 25, b.starts(with: Array("RIFF".utf8)), Array(b[8..<12]) == Array("WEBP".utf8) else { return nil }
         let size = Int(b[4]) | Int(b[5]) << 8 | Int(b[6]) << 16 | Int(b[7]) << 24
-        let chunk = String(decoding: b[12..<16], as: UTF8.self)
-        guard b.count == size + 8 || b.count == size + 9, ["VP8 ", "VP8L", "VP8X"].contains(chunk) else { return nil }
-        return Shape(ext: "webp", width: nil, height: nil)
+        guard b.count == size + 8 || b.count == size + 9 else { return nil }
+        var width = 0
+        var height = 0
+        switch String(decoding: b[12..<16], as: UTF8.self) {
+        case "VP8X":  // canvas size minus one, 24 bits each
+            guard b.count >= 30 else { return nil }
+            width = 1 + (Int(b[24]) | Int(b[25]) << 8 | Int(b[26]) << 16)
+            height = 1 + (Int(b[27]) | Int(b[28]) << 8 | Int(b[29]) << 16)
+        case "VP8L":  // a signature byte, then 14 bits each, minus one
+            guard b[20] == 0x2F else { return nil }
+            width = 1 + (Int(b[21]) | (Int(b[22]) & 0x3F) << 8)
+            height = 1 + (Int(b[22]) >> 6 | Int(b[23]) << 2 | (Int(b[24]) & 0x0F) << 10)
+        case "VP8 ":  // a frame tag, the start code, then 14 bits each
+            guard b.count >= 30, Array(b[23..<26]) == [0x9D, 0x01, 0x2A] else { return nil }
+            width = (Int(b[26]) | Int(b[27]) << 8) & 0x3FFF
+            height = (Int(b[28]) | Int(b[29]) << 8) & 0x3FFF
+        default: return nil
+        }
+        return width > 0 && height > 0 ? Shape(ext: "webp", width: width, height: height) : nil
     }
 
     /// `1.png`, `2.jpg`, …: numbered by order, never by what the file was called.

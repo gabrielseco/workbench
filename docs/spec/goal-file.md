@@ -183,8 +183,9 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   goal's coding `model`. A draft that is not a valid goal (failed, timed out, stopped, malformed) creates no thread and no
   file, prints `no draft (cost): reason. Nothing was written.` and exits 1 (3 when stopped); the agent is not retried. The
   agent's proposal is kept beside the thread as `goal-draft/proposal.json`. Nothing here approves the goal or starts a run.
-  **Screenshots (the app's New goal sheet).** A new draft may come with up to 5 images (PNG, JPEG, GIF or WebP, 5 MiB each; real
-  image bytes, not a name; no links or folders). A Codex drafter is sent them with `-i`; a Claude drafter finds them as
+  **Screenshots (the app's New goal sheet).** A new draft may come with up to 5 images (PNG, JPEG, GIF or WebP, 5 MiB and 40 million pixels
+  each; no links or folders). Each is checked by its bytes, not its name: signature, the header's size fields and the format's
+  ending, so a bare signature or a cut file is refused before anything is spent; the app also decodes each before keeping it. A Codex drafter is sent them with `-i`; a Claude drafter finds them as
   `1.png`, `2.jpg`… in its working folder and opens them with its `Read` tool, its only tool. They are kept with the thread in
   `attachments/<n>.<ext>`, numbered by order, and the goal's request ends with `![screenshot n](attachments/<n>.<ext>)` lines
   so the file and an editor's preview show them. A redraft (`--replace`) takes none; a refused or failed draft keeps none. The

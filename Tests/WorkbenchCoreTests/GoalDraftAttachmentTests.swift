@@ -28,10 +28,30 @@ enum TestImage {
 
     static func gif() -> Data { Data(Array("GIF89a".utf8) + [4, 0, 4, 0, 0, 0, 0] + [0x3B]) }
 
-    static func webp() -> Data {
-        let body = Array("WEBPVP8 ".utf8) + [0, 0, 0, 0]
+    /// A lossy WebP (`VP8 `) with a frame header that says `width` x `height`; the pixel data is not there, the checks read none.
+    static func webp(width: Int = 4, height: Int = 4) -> Data {
+        let sizes = [UInt8(width & 0xFF), UInt8(width >> 8), UInt8(height & 0xFF), UInt8(height >> 8)]
+        let frame: [UInt8] = [0x10, 0, 0, 0x9D, 0x01, 0x2A] + sizes
+        let body = Array("WEBPVP8 ".utf8) + [UInt8(frame.count), 0, 0, 0] + frame
         let size = body.count
         return Data(Array("RIFF".utf8) + [UInt8(size & 0xFF), 0, 0, 0] + body)
+    }
+
+    /// A lossless WebP (`VP8L`): 14-bit sizes, minus one.
+    static func webpLossless(width: Int, height: Int) -> Data {
+        let (w, h) = (width - 1, height - 1)
+        let bits: [UInt8] = [
+            UInt8(w & 0xFF), UInt8((w >> 8) & 0x3F) | UInt8((h & 0x03) << 6), UInt8((h >> 2) & 0xFF), UInt8((h >> 10) & 0x0F),
+        ]
+        let body = Array("WEBPVP8L".utf8) + [5, 0, 0, 0, 0x2F] + bits
+        return Data(Array("RIFF".utf8) + [UInt8(body.count & 0xFF), 0, 0, 0] + body)
+    }
+
+    /// An extended WebP (`VP8X`): 24-bit canvas sizes, minus one.
+    static func webpExtended(width: Int, height: Int) -> Data {
+        func le24(_ v: Int) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF)] }
+        let body = Array("WEBPVP8X".utf8) + [10, 0, 0, 0, 0, 0, 0, 0] + le24(width - 1) + le24(height - 1)
+        return Data(Array("RIFF".utf8) + [UInt8(body.count & 0xFF), 0, 0, 0] + body)
     }
 }
 
@@ -171,6 +191,26 @@ extension Drafting {
         #expect(d.codex?.runs == 0 && d.threads.isEmpty)
     }
 
+    @Test func aHeaderThatSaysAnAbsurdSizeIsRefusedNotMultipliedIntoACrash() async throws {
+        let d = try await drafting()
+        let max32 = 0xFFFF_FFFF
+        let bad: [URL] = [
+            try d.write("overflow.png", TestImage.png(width: max32, height: max32)),
+            try d.write("wide.png", TestImage.png(width: max32, height: 1)),
+            try d.write("big.webp", TestImage.webpExtended(width: 16_000_000, height: 16_000_000)),
+            try d.write("lossy.webp", TestImage.webp(width: 16_000, height: 16_000)),
+            try d.write("lossless.webp", TestImage.webpLossless(width: 16_000, height: 16_000)),
+            try d.write("big.jpg", TestImage.jpeg(width: 65_535, height: 65_535)),
+        ]
+        for url in bad {
+            let why = GoalAttachments.Refusal.tooManyPixels(url.lastPathComponent)
+            await #expect(throws: GoalDraftRefusal.attachment("\(why)")) {
+                _ = try await d.draft(attachments: [url])
+            }
+        }
+        #expect(d.codex?.runs == 0 && d.threads.isEmpty)
+    }
+
     @Test func tooManyTooBigAndLinkedImagesAreRefusedBeforeSpawn() async throws {
         let d = try await drafting()
         let many = try (0..<(GoalAttachments.maxCount + 1)).map { try d.image("m\($0).png") }
@@ -215,7 +255,11 @@ extension Drafting {
         #expect(GoalAttachments.inspect(TestImage.png(width: 30, height: 20)) == .init(ext: "png", width: 30, height: 20))
         #expect(GoalAttachments.inspect(TestImage.jpeg(width: 640, height: 480)) == .init(ext: "jpg", width: 640, height: 480))
         #expect(GoalAttachments.inspect(TestImage.gif()) == .init(ext: "gif", width: 4, height: 4))
-        #expect(GoalAttachments.inspect(TestImage.webp())?.ext == "webp")
+        #expect(GoalAttachments.inspect(TestImage.webp(width: 30, height: 20)) == .init(ext: "webp", width: 30, height: 20))
+        let lossless = TestImage.webpLossless(width: 300, height: 200)
+        #expect(GoalAttachments.inspect(lossless) == .init(ext: "webp", width: 300, height: 200))
+        let extended = TestImage.webpExtended(width: 5000, height: 4000)
+        #expect(GoalAttachments.inspect(extended) == .init(ext: "webp", width: 5000, height: 4000))
         #expect(GoalAttachments.inspect(Data("<svg></svg>".utf8)) == nil)
         #expect(GoalAttachments.inspect(Data()) == nil)
     }
