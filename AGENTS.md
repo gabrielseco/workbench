@@ -73,6 +73,9 @@ list the tasks.
 5. A PR that touches `Package.swift`, concurrency code, or `Codable` and enum-heavy code gets the `release-build` label
    (`gh pr edit <pr> --add-label release-build`): the optimized build is otherwise only checked nightly, and the compiler has
    crashed on ordinary source before (#250). Wait for that run to pass.
+   A PR that changes process, timing or platform-specific code (`Spawner`, the runner, probes, timeouts, tests that wait) gets the
+   `macos-test` label: the full macOS suite otherwise runs only on `main` and nightly, and the Linux gate does not show a race that
+   only a slower runner exposes. Wait for that run to pass.
 6. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
 7. A PR that changes what the app shows posts its verify-app screenshots with `pr-shots` (the `verify-app` skill, "Post the screenshots to

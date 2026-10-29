@@ -1,0 +1,58 @@
+name: macOS tests
+
+# The full macOS suite on a pull request that carries the `macos-test` label (each push re-runs it). It is the `build-test` job of ci.yml,
+# which runs on main and nightly only because it holds one of the scarce macOS slots. Put the label on a PR that touches process,
+# timing or platform-specific code (Spawner, the runner, probes, anything the Linux gate cannot show); keep the steps in step with ci.yml.
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+jobs:
+  macos-test:
+    # A PR event without the label (any other label, any push to an unlabelled PR) skips the job.
+    if: contains(github.event.pull_request.labels.*.name, 'macos-test')
+    runs-on: macos-15
+    timeout-minutes: 30
+    # On the job, not the workflow: a push to a PR that has the label supersedes the run before it, but a skipped run (no label)
+    # never takes the group, so it cannot cancel a labelled one.
+    concurrency:
+      group: macos-test-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner hardware
+        run: |
+          echo "cores: $(sysctl -n hw.ncpu)"
+          sw_vers
+          swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee test.log
+      - name: Soak (100 fake runs, failure matrix, no leaks)
+        run: |
+          set -o pipefail
+          WORKBENCH_SOAK=1 swift test --filter SoakTests 2>&1 | tee soak.log
+        timeout-minutes: 15
+      - name: Test leftovers
+        run: scripts/check-test-leftovers.sh
+      - name: Test timings
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/test-timings.py test.log --json timings.json --markdown timings.md || true
+          [ -f timings.md ] && cat timings.md >> "$GITHUB_STEP_SUMMARY"
+          true
+      - name: Upload test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            test.log
+            soak.log
+            timings.json
+            timings.md
+          if-no-files-found: ignore
+          retention-days: 14
