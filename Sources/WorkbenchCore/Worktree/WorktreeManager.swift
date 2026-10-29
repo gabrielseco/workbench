@@ -196,6 +196,10 @@ public struct WorktreeManager: Sendable {
         args.append(target.path)
         try await check(args)
 
+        // The review workspace is a clone of the repository: it goes with the worktree it was made from.
+        try? FileManager.default.removeItem(
+            at: repoRoot.appendingPathComponent(".workbench/threads/\(threadID)/\(ReviewWorkspace.folderName)"))
+
         if deleteBranch {
             try await check(["branch", "-D", Self.branch(for: threadID)])
         }

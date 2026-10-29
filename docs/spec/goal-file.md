@@ -490,7 +490,7 @@ Notes:
   whether it can be used. With `app_type = "desktop"` and a usable skill, it also checks that the process running
   doctor may record the screen (`CGPreflightScreenCaptureAccess`) and, if not, warns and names the Settings pane
   (a warning, not a failure). `web` (the default) and an unset key are never checked.
-- **`editor` is for a person, not a run.** `workbench open [id] [--editor <name-or-command>] [--print] [--goal]` opens the
+- **`editor` is for a person, not a run.** `workbench open [id] [--editor <name-or-command>] [--print] [--goal | --diff]` opens the
   thread's worktree (`.workbench/worktrees/<id>`, on `workbench/<id>`) as its own editor window, so Source Control shows
   the branch's diff, which the parent repository's window hides because `.workbench/` is ignored. The thread is the one
   named, else the active one; a thread with no worktree (shipped, accepted, discarded, abandoned, or not run yet) is
@@ -509,6 +509,14 @@ Notes:
   it needs only that the file exists, and `--print --goal` prints its path.
   `doctor` prints `editor:  <value> (from --editor|project|global)` or `editor:  none set`, never starts it and never
   fails for it; `doctor --editor <value>` shows what that flag would pick. A run never reads the key.
+  `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the
+  repository (`clone --shared`, so nothing is registered in it and no remote is left) at the thread's recorded base, with
+  every file the thread changed (committed, staged, unstaged or new) put there as the worktree has it, so the editor's
+  Source Control lists them all as uncommitted work and a click shows one diff. It works with any editor `open` does. A
+  file that is not a plain file or is over 8 MB is left out and named on stderr, as are the changed-file count and the
+  warning that edits there do not go back to the thread; a link, in the worktree or in the clone, never leads a copy
+  outside its folder. The thread's worktree is not touched. `--diff` with `--goal` is a usage error, and a thread with
+  no recorded base or no worktree is refused. `clean` removes the folder with the thread's directory.
 - Unknown keys, unknown tables and syntax outside the supported TOML subset (dotted keys, inline tables,
   multi-line strings) are errors, reported together with line numbers.
 - Bash compound commands, substitutions, redirects and out-of-tree paths were all denied by the CLI in S3

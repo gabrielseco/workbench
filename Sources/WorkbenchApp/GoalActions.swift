@@ -205,10 +205,22 @@ struct GoalActions: Sendable {
         try await EditorLauncher.launch(command, editor: editor, in: url, environment: Editor.environment(from: environment))
     }
 
-    /// The thread's changed files as diffs against its base in the configured editor. The note names what was left out.
+    /// With no path, the thread's changes as uncommitted work in a folder of their own, opened in the configured editor (any
+    /// editor: it lists every changed file); with one, that file's diff against the base in the editor's diff view. The note
+    /// names what was left out.
     static func openDiffInEditor(_ project: Project, _ thread: String, path: String?) async throws -> String? {
         let environment = ProcessInfo.processInfo.environment
         guard let editor = configuredEditor(project: project, environment: environment) else { throw EditorError.notSet }
+        if path == nil {
+            let built = try await ReviewWorkspace.prepare(project: project, threadID: thread, git: try GitRunner.discover())
+            let command = try Editor.command(
+                for: editor, path: built.path.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
+            try await EditorLauncher.launch(
+                command, editor: editor, in: built.path, environment: Editor.environment(from: environment))
+            var note = "\(built.changed) changed file(s) are open as uncommitted work; edits there do not go back to the thread"
+            if !built.skipped.isEmpty { note += "; left out: " + built.skipped.prefix(5).joined(separator: ", ") }
+            return note + "."
+        }
         // The same containment check as opening the worktree: a folder swapped for a link must not make another checkout the root.
         let worktree = try Editor.worktree(project: project, threadID: thread)
         let git = try GitRunner.discover()

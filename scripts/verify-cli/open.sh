@@ -8,10 +8,13 @@
 # and launches nothing; `--print --editor` exits 2; `--editor zed` and a named thread open the worktree (`opened <path> in
 # zed`, the launcher got the path); `editor` in the global config is used, the project's wins over it and `--editor` over
 # both; a thread whose worktree is gone exits 6 and an unknown id 7, launching nothing; `--goal` opens that same
-# thread's goal.md anyway (`--print --goal` prints its path). Exit 0 only when every step
+# thread's goal.md anyway (`--print --goal` prints its path); `--diff` builds the thread's `review-workspace` (the base
+# with the thread's edit, new file and deletion as uncommitted work; `--print` prints only its path, the thread's worktree
+# is untouched, the editor is given the workspace, `--diff --goal` exits 2). Exit 0 only when every step
 # passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 sets `editor` in the
 # global config before the first step, so the steps that expect "no editor set" (exit 6, the message, nothing launched)
-# must FAIL, and deletes the thread's goal.md before the `--goal` steps, so those must FAIL too. The frame is in lib.sh. Run by hand, not by CI.
+# must FAIL, deletes the thread's goal.md before the `--goal` steps, so those must FAIL too, and leaves the thread's
+# worktree unchanged before the `--diff` steps, so the ones that look for its changes in the workspace must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -51,6 +54,15 @@ g -C "$P" worktree add -q -b "workbench/$ID" "$P/.workbench/worktrees/$ID" main 
 # The path as the project spells it, with doubled slashes removed (a TMPDIR ending in "/" makes them), which is what `open`
 # prints and passes on: it resolves symlinks only to check the path, not to print it.
 WTP=$(cd "$P/.workbench/worktrees/$ID" && pwd)
+# What a run records when it makes the worktree; --diff reads the base commit from it.
+python3 -I - "$P/.workbench/threads/$ID/events.jsonl" "$WTP" "workbench/$ID" "$BASE_SHA" <<'PY' || die "could not record worktree.created"
+import json, sys
+path, wt, branch, base = sys.argv[1:5]
+last = json.loads(open(path).read().splitlines()[-1])
+event = {"v": 1, "seq": last["seq"] + 1, "ts": last["ts"], "turn": 0, "kind": "worktree.created",
+         "data": {"path": wt, "branch": branch, "base_commit": base}}
+open(path, "a").write(json.dumps(event, separators=(",", ":")) + "\n")
+PY
 
 # --- c2: no editor set, and c5: --print -----------------------------------------------------------------------
 
@@ -97,6 +109,37 @@ check "the project's editor wins over the global one" "exit $RC, printed: $(head
     bash -c 'test "$1" = 0 && grep -q " in zed$" "$2"' _ "$RC" "$SCRATCH/project.out"
 wbp "$SCRATCH/over.out" open --editor "rec --from-flag"
 check "--editor wins over both" "it got: $(cat "$OPENED" 2>/dev/null)" launched_with "$(printf -- '--from-flag\n%s' "$WTP")"
+
+# --- --diff: the thread's changes as uncommitted work in a folder of their own ---------------------------------------------
+
+if [ "$SABOTAGE" = 1 ]; then
+    echo "    VERIFY_CLI_SABOTAGE=1: the thread's worktree is left unchanged before the --diff steps"
+else
+    echo "changed by the thread" >>"$WTP/README.md"
+    mkdir -p "$WTP/added" && echo "new" >"$WTP/added/new.txt"
+    rm -f "$WTP/Package.swift"
+fi
+WORKSPACE="$(cd "$P/.workbench/threads/$ID" && pwd)/review-workspace"
+wbp "$SCRATCH/diffprint.out" open --diff --print
+shown "$SCRATCH/diffprint.out"
+check "--diff --print: exit 0 and only the workspace path on stdout" "exit $RC, printed: $(head -c 300 "$SCRATCH/diffprint.out")" \
+    bash -c 'test "$1" = 0 && test "$(cat "$2")" = "$3"' _ "$RC" "$SCRATCH/diffprint.out" "$WORKSPACE"
+check "--diff says how many files changed, on stderr" "stderr: $(head -c 300 "$SCRATCH/diffprint.out.err")" \
+    grep -q "3 changed file(s) as uncommitted work" "$SCRATCH/diffprint.out.err"
+check "--diff --print: nothing was launched" "the fake editor ran" launched_nothing
+STATUS=$(g -C "$WORKSPACE" status --porcelain 2>&1 | sort | tr '\n' '|')
+check "the workspace lists the edit, the new file and the deletion as uncommitted" "git status there: $STATUS" \
+    test "$STATUS" = " D Package.swift| M README.md|?? added/|"
+check "the workspace is at the thread's base" "HEAD is $(g -C "$WORKSPACE" rev-parse HEAD)" \
+    test "$(g -C "$WORKSPACE" rev-parse HEAD)" = "$BASE_SHA"
+check "the thread's worktree is as the thread left it" "git status in the worktree: $(g -C "$WTP" status --porcelain | tr '\n' '|')" \
+    test "$(g -C "$WTP" status --porcelain | wc -l | tr -d ' ')" = 3
+wbp "$SCRATCH/diffopen.out" open --diff --editor zed
+check "--diff --editor zed: exit 0 and the launcher got the workspace path" "exit $RC, it got: $(cat "$OPENED" 2>/dev/null)" \
+    bash -c 'test "$1" = 0' _ "$RC"
+check "the launcher got the workspace, not the worktree" "it got: $(cat "$OPENED" 2>/dev/null)" launched_with "$WORKSPACE"
+wbp "$SCRATCH/diffgoal.out" open --diff --goal
+check "--diff with --goal: exit 2 (usage)" "workbench open exited $RC" test "$RC" = 2
 
 # --- c1: refusals ------------------------------------------------------------------------------------------------
 

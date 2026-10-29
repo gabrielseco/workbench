@@ -44,6 +44,22 @@ import WorkbenchCore
         #expect(expected.keys.contains { $0.hasPrefix("needs-you/threads/") })
     }
 
+    /// A scenario's config that does not load is ignored by the app, which then falls back to the person's own global editor and
+    /// starts it: this is how a button that opens the editor opened a real VS Code from a fixture.
+    @Test func everyScenarioConfigLoadsAndTheStubEditorIsTheOneItNames() throws {
+        for scenario in AppScenario.allCases {
+            guard let text = scenario.config else { continue }
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("config-\(UUID().uuidString).toml")
+            defer { try? FileManager.default.removeItem(at: url) }
+            let filled = text.replacingOccurrences(of: "@EDITOR_STUB@", with: "/tmp/editor-stub")
+            try filled.write(to: url, atomically: true, encoding: .utf8)
+            let config = try Config.load(from: url)
+            if text.contains("@EDITOR_STUB@") {
+                #expect(config.editor == "/tmp/editor-stub", "\(scenario.rawValue) names the stub")
+            }
+        }
+    }
+
     /// What `verify-app.sh start` does: copy the scenario's threads into a project's `.workbench/`, then open it.
     private func project(for scenario: AppScenario) throws -> Project {
         let name = "scenario-\(scenario.rawValue)-\(UUID().uuidString)"

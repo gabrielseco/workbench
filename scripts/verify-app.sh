@@ -11,6 +11,9 @@
 #                                              pid only; the clipboard is put back as it was
 #   scripts/verify-app.sh shot <pid> <name>    screenshot the window into $WORKBENCH_PROOF_DIR (default .build/verify)/<name>.png
 #   scripts/verify-app.sh stop <pid>           end that build and remove the bundle, the fixture copy and every setting it left
+#   scripts/verify-app.sh calls <pid>          what the scenario's stand-in editor was asked to open (one `cwd=` and `arg=` line per
+#                                              argument, per call); empty when it was not started. Only a scenario that sets
+#                                              `editor = "@EDITOR_STUB@"` in its config.toml has one.
 #   scripts/verify-app.sh scenarios            the scenario names
 # Every command after `start` takes the pid `start` printed and refuses any other: a pid it did not start, an installed Workbench, or a
 # process that has since been replaced, so the window, the button and the process are always this build's.
@@ -165,14 +168,34 @@ SWIFT
   # The fixture project: the scenario's threads in a temporary git repository (the app opens a git repository's .workbench/).
   mkdir -p "$dir/project/.workbench"
   git -C "$dir/project" init -q -b main
-  if [[ -d "$ROOT/Fixtures/app/$scenario/threads" ]]; then
-    cp -R "$ROOT/Fixtures/app/$scenario/threads" "$dir/project/.workbench/threads"
+  # A scenario with `repo/` has files at its base commit; with `worktree/` as well, its thread has a real worktree on that commit
+  # with those files laid over it, so the review has a diff. The thread's log names the base and the worktree as @BASE@ and @WORKTREE@.
+  local fixture="$ROOT/Fixtures/app/$scenario" base="" worktree="" thread=""
+  if [[ -d "$fixture/repo" ]]; then
+    cp -R "$fixture/repo/." "$dir/project/"
+    git -C "$dir/project" add -A
+    git -C "$dir/project" -c user.name=verify -c user.email=verify@example.invalid commit -q -m "base"
+    base="$(git -C "$dir/project" rev-parse HEAD)"
+  fi
+  if [[ -d "$fixture/threads" ]]; then
+    cp -R "$fixture/threads" "$dir/project/.workbench/threads"
   else
     mkdir -p "$dir/project/.workbench/threads"
   fi
-  # A scenario that shows how proofs are judged ships the project's config too.
-  if [[ -f "$ROOT/Fixtures/app/$scenario/config.toml" ]]; then
-    cp "$ROOT/Fixtures/app/$scenario/config.toml" "$dir/project/.workbench/config.toml"
+  if [[ -n "$base" && -d "$fixture/worktree" ]]; then
+    thread="$(ls "$dir/project/.workbench/threads" | head -1)"
+    worktree="$dir/project/.workbench/worktrees/$thread"
+    git -C "$dir/project" worktree add -q -b "workbench/$thread" "$worktree" "$base"
+    cp -R "$fixture/worktree/." "$worktree/"
+    sed -i '' -e "s|@BASE@|$base|g" -e "s|@WORKTREE@|$worktree|g" "$dir/project/.workbench/threads/$thread/events.jsonl"
+  fi
+  # A scenario that shows how proofs are judged ships the project's config too. `@EDITOR_STUB@` is an editor that only writes down
+  # what it was asked to open, so a button that starts the editor can be pressed without one.
+  if [[ -f "$fixture/config.toml" ]]; then
+    mkdir -p "$dir/bin"
+    printf '#!/bin/sh\n{ echo "cwd=$(pwd)"; for a in "$@"; do echo "arg=$a"; done; } >>"%s/editor-calls.txt"\n' "$dir" >"$dir/bin/editor-stub"
+    chmod +x "$dir/bin/editor-stub"
+    sed -e "s|@EDITOR_STUB@|$dir/bin/editor-stub|g" "$fixture/config.toml" >"$dir/project/.workbench/config.toml"
   fi
 
   # The build: bundle-app.sh, to a path and a bundle id of its own.
@@ -257,6 +280,11 @@ case "$command" in
     screencapture -x -o -l "$wid" "$out/$2.png"
     [[ -s "$out/$2.png" ]] || fail "screencapture wrote nothing"
     echo "$out/$2.png"
+    ;;
+  calls)
+    [[ $# -eq 1 ]] || usage
+    dir="$(build_dir "$1")"
+    cat "$dir/editor-calls.txt" 2>/dev/null || true
     ;;
   stop)
     [[ $# -eq 1 ]] || usage

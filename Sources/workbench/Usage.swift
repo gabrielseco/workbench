@@ -43,9 +43,10 @@ let workbenchUsage = """
                                  --seq one event in full, --transcript what the agent printed, as stored (raw)
       status [id] [--all] [--fetch]  where the thread stands; --all: one line per thread; --fetch: ask origin if the base moved
       review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
-      open [id] [--editor <name-or-command>] [--print] [--goal]
+      open [id] [--editor <name-or-command>] [--print] [--goal | --diff]
                                  open the thread's worktree in an editor to read what the run changed (--goal: its
-                                 goal file instead, which a draft has before any run): cursor, code,
+                                 goal file instead, which a draft has before any run; --diff: a folder where the
+                                 changes are uncommitted work, so the editor lists every changed file): cursor, code,
                                  zed, subl, windsurf or one plain command (given the path last); from --editor, else
                                  `editor` in .workbench/config.toml, else in ~/.workbench/config.toml; never $EDITOR;
                                  --print prints only the path and starts nothing; changes nothing
