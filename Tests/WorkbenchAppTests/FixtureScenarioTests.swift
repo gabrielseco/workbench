@@ -83,6 +83,7 @@ import WorkbenchCore
         #expect(needsYou.spendText == "$1.88 of $5.00")
         if case .needsYou = needsYou.attention {} else { Issue.record("needs-you is not amber: \(needsYou.attention)") }
         #expect(try thread(.prOpen).spine[.ship].sublabel == "PR #482 open")
+        #expect(try thread(.accepted).canShip && !(try thread(.prOpen).canShip))
         let cleaned = try thread(.cleaned)
         #expect(cleaned.spine[.clean].mark == .done && cleaned.spendText == "unknown of $5.00")
         if case .logCorrupt(let id, _) = try screen(.corrupt) {

@@ -56,6 +56,10 @@ struct GoalActions: Sendable {
     var discardPlan: @Sendable (Project, String) async throws -> DiscardPlan
     var discard: @Sendable (Project, String, DiscardPlan) async throws -> Void
     var patch: @Sendable (Project, String, String) async throws -> FilePatch?
+    /// What Ship would push and open, with the title and body it would use: nothing is pushed.
+    var shipPreview: @Sendable (Project, String) async throws -> ShipPreview
+    /// Publishes what the preview showed; core refuses it when the target changed since.
+    var ship: @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -74,13 +78,16 @@ struct GoalActions: Sendable {
         },
         discardPlan: @escaping @Sendable (Project, String) async throws -> DiscardPlan = { _, _ in throw Unset() },
         discard: @escaping @Sendable (Project, String, DiscardPlan) async throws -> Void = { _, _, _ in },
-        patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil }
+        patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil },
+        shipPreview: @escaping @Sendable (Project, String) async throws -> ShipPreview = { _, _ in throw Unset() },
+        ship: @escaping @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome = { _, _, _ in throw Unset() }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.enableGoalAgent = enableGoalAgent
         (self.requestStop, self.openWorktree) = (requestStop, openWorktree)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
+        (self.shipPreview, self.ship) = (shipPreview, ship)
     }
 
     struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
@@ -132,7 +139,9 @@ struct GoalActions: Sendable {
         },
         patch: { project, thread, path in
             try await ReviewLoader(project: project, git: try GitRunner.discover()).patch(id: thread, path: path)
-        })
+        },
+        shipPreview: { project, thread in try await ShipPreview.fetch(project: project, thread: thread) },
+        ship: { project, thread, preview in try await ShipPreview.publish(preview, project: project, thread: thread) })
 
     /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not
     /// load counts as none (the goal screen says so), so opening a file never depends on the config being right.

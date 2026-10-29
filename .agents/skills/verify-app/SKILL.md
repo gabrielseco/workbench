@@ -1,6 +1,6 @@
 ---
 name: verify-app
-description: Run a PR's build of Workbench.app on a fixture project and check on screen that the change does what the PR says — build this checkout into a throwaway bundle, open it on a scenario (draft, running, needs-you, pr-open, cleaned, corrupt, no-thread), list what is on screen, press a safe button, screenshot the window, compare it with the PR's claims, then remove the build and its settings. Use for any PR that touches Sources/WorkbenchApp, or when asked to "verify the app", "check it in the app" or "get a screenshot of the window". Core and CLI changes are verified by their tests and the verify-cli skill instead.
+description: Run a PR's build of Workbench.app on a fixture project and check on screen that the change does what the PR says — build this checkout into a throwaway bundle, open it on a scenario (draft, running, needs-you, accepted, pr-open, cleaned, corrupt, no-thread), list what is on screen, press a safe button, screenshot the window, compare it with the PR's claims, then remove the build and its settings. Use for any PR that touches Sources/WorkbenchApp, or when asked to "verify the app", "check it in the app" or "get a screenshot of the window". Core and CLI changes are verified by their tests and the verify-cli skill instead.
 allowed-tools: Bash(scripts/verify-app.sh:*), Bash(gh:*), Bash(git:*), Read
 ---
 
@@ -32,6 +32,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `running` | a turn is open in the log with activity rows, and no live runner (a fixture cannot have one): Run is current, attention is `working`, the Run screen says the runner is gone and offers Run again. Never press Run again here: it starts a real turn |
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Review screen: criteria with core's labels, a denied call, `Accept work` disabled because the fixture has no worktree (diff unavailable) |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet |
+| `accepted` | accepted, no pull request: the finished banner with `Ship…` and `New goal…`; `Ship…` runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
 | `cleaned` | merged and cleaned, a turn that reported no cost (`unknown`, never `$0.00`) |
 | `discarded` | a Codex turn that ended and was discarded: the finished banner with `New goal…`, `ran 4m12s`, `Files changed: unknown`, no "Review comes next" |
 | `corrupt` | a log nothing can be read from: the corrupt-log screen |

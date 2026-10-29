@@ -13,6 +13,7 @@ enum AppScenario: String, CaseIterable {
     case goalApproved = "goal-approved"
     case running
     case needsYou = "needs-you"
+    case accepted
     case prOpen = "pr-open"
     case cleaned
     case discarded
@@ -71,6 +72,10 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .checkStarted, turn: 1)
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
+        case .accepted:
+            try await fixture.addThread(id, approved: true, title: Self.title)
+            try fixture.turn(id, 1, cost: 1.88)
+            try fixture.decide(id, "accepted")
         case .prOpen:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.turn(id, 1, cost: 1.88)

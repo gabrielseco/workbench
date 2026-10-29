@@ -223,14 +223,18 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
 ### Task 4: Ship and PR review (mockup 4)
 
 **Core first (two PRs):**
-1. **Lift the ship sequence into core.** Preflight, description, push, open PR, screenshots and the confirmation are orchestrated in
-   `Sources/workbench/CommandsShip.swift`, which the app cannot link. Move it to `ThreadService` (`ship(id:options:)` returning the
-   steps as it goes) and make the command a thin caller. Behaviour-preserving: the existing ship suites pass unchanged, and no
-   CLI output or flag changes, so no verify-cli scenario is needed (say so in the PR).
+1. **Lift the ship sequence into core.** Already done by the time the app needed it: `shipPreflight`, `describePR`, `prBody` and
+   `publishShip` are in `ThreadService` (`Thread/Ship/`), and `CommandsShip.swift` keeps the flags, the prompts and the printing. What
+   stays in the CLI is the refresh proposal (`proposeRefresh`, for a thread that continues an open PR) and `--watch`/`--review-loop`.
+   The app's `Ship…` (below) calls the core pieces directly; no behaviour-preserving move was needed.
 2. **`ThreadService.prChecks(id:)`**: one `gh pr checks` read into `PRChecksSummary` (the parser exists; `watchPR` is a loop with
    a deadline and is not what a screen wants). The app polls it every 30 s while the Ship screen or an open PR is showing, and
    stops when the PR ends.
 
+- **First slice (done): `Ship…` on the accepted banner.** `GoalActions.shipPreview` runs preflight, the describing turn and `prBody`;
+  the sheet shows the push lines and the PR title and text, and `Push and open PR` passes the same preview to `publishShip`. A
+  thread that continues an open PR shows that its text stays as it is (the refresh proposal is not in the app yet). The describing
+  turn has no Stop in the window yet. Not in this slice: CI checks, PR review rounds, Fix findings, Clean thread.
 - **Shows:** `Pushed and opened N min ago. Workbench never merges for you.`, the PR card (title, `#number`, `branch → base`,
   `Open on GitHub`), CI checks (name, duration, state), `PR review · round r of max`, the findings text of the latest round and
   its verdict, `Waiting on you`, and the footer `Clean becomes available once the PR is merged.`

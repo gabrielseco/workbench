@@ -72,6 +72,9 @@ struct ThreadSnapshot: Equatable {
         }
     }
 
+    /// Accepted and not yet shipped: the work is on its branch and no pull request exists.
+    var canShip: Bool { state.decision == "accepted" && state.pullRequest == nil && !state.cleaned }
+
     /// What starting the next goal leaves behind, when something of this thread is still to ship or merge. The window follows the
     /// newest thread and has no list yet ([later/thread-list.md](../later/thread-list.md)), so the way back is the terminal.
     var newGoalNote: String? {
