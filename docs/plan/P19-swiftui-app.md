@@ -151,7 +151,9 @@ the start of the slice.
   stopped writes nothing and the sheet keeps the text and says why. Without `[agents.goal]` the sheet offers "Draft with Claude / Codex":
   `GoalAgentSetup` appends the table to `.workbench/config.toml` (put back as it was if the config would not load; refused when
   the table exists, there is no config, or the file is over 256 KiB) and the draft runs. A quit waits for a running draft to end. The new thread opens as a draft, with `Open in editor` for changes.
-  Pasted screenshots are a later PR. The drafter's model is never shown as the coding model.
+  Screenshots (paste, drop or `Add screenshots…`, up to 5) go to the drafter and are kept in the thread's `attachments/`, linked from
+  the goal's request; the coding run does not read them yet (Claude's turns are confined to the worktree: it needs its own design).
+  The drafter's model is never shown as the coding model.
 - **Failure states:** invalid goal (the `GoalProblem` text, Approve disabled), placeholders remain, provider executable missing or
   capability refused (`AgentFailure` text from core), goal changed after approval (pill and spine step go back, Run disabled),
   draft failed or stopped (the previous goal is untouched, said so).

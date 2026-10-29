@@ -5,7 +5,7 @@ import WorkbenchCore
 extension ProjectStore {
     /// Has the goal agent draft a goal from what the person wrote and opens the new thread on it. The drafter is read-only and
     /// approves nothing; a draft that does not come out leaves the project as it was, so the sheet keeps the text.
-    @discardableResult func draftGoal(request raw: String, name typedName: String? = nil) async -> Bool {
+    @discardableResult func draftGoal(request raw: String, name typedName: String? = nil, attachments: [URL] = []) async -> Bool {
         guard let project, !starting, !drafting else { return false }
         (actionError, goalAgentOff) = (nil, false)
         let request = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -16,7 +16,7 @@ extension ProjectStore {
         defer { (drafting, draftStop) = (false, nil) }
         let mine = generation
         do {
-            let result = try await actions.draftGoal(project, name, request, stop)
+            let result = try await actions.draftGoal(project, name, request, attachments, stop)
             guard mine == generation else { return false }
             guard result.id != nil else {
                 let cost = result.costUSD.map { String(format: " ($%.4f spent)", $0) } ?? ""
@@ -51,7 +51,7 @@ extension ProjectStore {
 
     /// Names `provider` as the goal agent in the project's config, then drafts. A config that cannot take it is left as it was.
     @discardableResult func enableGoalDrafting(
-        _ provider: AgentProviderID, request: String, name: String? = nil
+        _ provider: AgentProviderID, request: String, name: String? = nil, attachments: [URL] = []
     ) async -> Bool {
         guard let project, !drafting else { return false }
         do {
@@ -60,6 +60,6 @@ extension ProjectStore {
             (actionError, goalAgentOff) = ("\(error)", false)
             return false
         }
-        return await draftGoal(request: request, name: name)
+        return await draftGoal(request: request, name: name, attachments: attachments)
     }
 }

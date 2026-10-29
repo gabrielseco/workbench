@@ -128,6 +128,8 @@ struct NewGoalSheet: View {
     @State private var request = ""
     @State private var name = ""
     @State private var showName = false
+    @State private var staging = AttachmentStaging()
+    @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
 
     private var empty: Bool { request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -147,11 +149,13 @@ struct NewGoalSheet: View {
                             .foregroundStyle(.tertiary).padding(.horizontal, 11).padding(.vertical, 14).allowsHitTesting(false)
                     }
                 }
+            attachments
             DisclosureGroup("Thread name", isExpanded: $showName) {
                 TextField(ThreadName.suggest(from: request), text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
                     .disabled(store.drafting)
             }
             .font(.callout)
+            if let problem = staging.problem { Text(problem).font(.callout).foregroundStyle(Theme.red) }
             if store.goalAgentOff {
                 Text(
                     "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
@@ -175,23 +179,89 @@ struct NewGoalSheet: View {
                         ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
                             Button("Draft with \(provider.rawValue.capitalized)") {
                                 Task {
-                                    if await store.enableGoalDrafting(provider, request: request, name: name) { shown = false }
+                                    if await store.enableGoalDrafting(
+                                        provider, request: request, name: name, attachments: staging.urls) { shown = false }
                                 }
                             }
+                            .disabled(staging.pending > 0)
                         }
                     } else {
                         Button("Create") {
-                            Task { if await store.draftGoal(request: request, name: name) { shown = false } }
+                            Task {
+                                let made = await store.draftGoal(request: request, name: name, attachments: staging.urls)
+                                if made { shown = false }
+                            }
                         }
-                        .keyboardShortcut(.return, modifiers: .command).disabled(empty)
+                        .keyboardShortcut(.return, modifiers: .command).disabled(empty || staging.pending > 0)
                     }
                 }
             }
         }
         .padding(20)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !store.drafting else { return false }
+            Task { await staging.add(files: urls) }
+            return true
+        }
         .onAppear {
             focused = true
             store.actionError = nil
+            watchPaste()
         }
+        .onDisappear {
+            pasteMonitor.map(NSEvent.removeMonitor)
+            pasteMonitor = nil
+            staging.clear()
+        }
+    }
+
+    /// The screenshots added so far, and the ways to add one: paste, drop or the button.
+    private var attachments: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(staging.items.enumerated()), id: \.element.id) { index, item in
+                ZStack(alignment: .topTrailing) {
+                    Group {
+                        if let image = item.thumbnail {
+                            Image(nsImage: image).resizable().scaledToFill()
+                        } else {
+                            Theme.grey.opacity(0.3)
+                        }
+                    }
+                    .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
+                    if !store.drafting {
+                        Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(2)
+                    }
+                }
+            }
+            if !store.drafting, staging.items.count < GoalAttachments.maxCount {
+                Button("Add screenshots…") { chooseImages() }
+            }
+            if staging.pending > 0 { ProgressView().controlSize(.small) }
+            Text(staging.items.isEmpty && staging.pending == 0 ? "Paste or drop screenshots here" : "")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// ⌘V while the sheet is up takes a screenshot off the clipboard. The text field cannot: to it an image is nothing to paste, so
+    /// the command never reaches a handler of ours. Text on the clipboard still goes to the text field.
+    private func watchPaste() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [staging, store] event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags == .command, event.charactersIgnoringModifiers == "v", !store.drafting,
+                AttachmentStaging.wantsImages(.general)
+            else { return event }
+            Task { await staging.add(from: .general) }
+            return nil
+        }
+    }
+
+    private func chooseImages() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK { Task { await staging.add(files: panel.urls) } }
     }
 }

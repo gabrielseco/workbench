@@ -7,7 +7,7 @@ import WorkbenchCore
 @MainActor private var keptDraftFixtures: [AppFixture] = []
 
 @MainActor @Suite struct DraftGoalTests {
-    private typealias Draft = @Sendable (Project, String, String, DraftStop) async throws -> GoalDraftResult
+    private typealias Draft = @Sendable (Project, String, String, [URL], DraftStop) async throws -> GoalDraftResult
 
     private func store(_ draft: @escaping Draft) async throws -> ProjectStore {
         let fixture = try await AppFixture()
@@ -34,7 +34,7 @@ import WorkbenchCore
 
     @Test func theRequestGoesToTheDrafterTrimmedUnderTheSuggestedNameUnlessOneWasTyped() async throws {
         let seen = Seen()
-        let store = try await store { _, name, request, _ in
+        let store = try await store { _, name, request, _, _ in
             seen.add("\(name)|\(request)")
             return GoalDraftResult(id: "g-\(name)", provider: .claude)
         }
@@ -44,8 +44,20 @@ import WorkbenchCore
         #expect(!store.drafting && store.actionError == nil)
     }
 
+    @Test func theScreenshotsAreHandedToTheDrafterInTheOrderTheyWereAdded() async throws {
+        let seen = Seen()
+        let store = try await store { _, name, _, attachments, _ in
+            seen.add(attachments.map(\.lastPathComponent).joined(separator: ","))
+            return GoalDraftResult(id: "g-\(name)", provider: .codex)
+        }
+        let urls = ["b.png", "a.jpg"].map { URL(fileURLWithPath: "/staged/\($0)") }
+        #expect(await store.draftGoal(request: "x", attachments: urls))
+        #expect(await store.enableGoalDrafting(.codex, request: "y", attachments: urls))
+        #expect(seen.all == ["b.png,a.jpg", "b.png,a.jpg"])
+    }
+
     @Test func aDraftThatDoesNotComeOutSaysWhyAndSucceedsNot() async throws {
-        let store = try await store { _, _, _, _ in
+        let store = try await store { _, _, _, _, _ in
             GoalDraftResult(id: nil, provider: .claude, costUSD: 0.5, failure: "the answer was not a goal")
         }
         #expect(await store.draftGoal(request: "x") == false)
@@ -54,15 +66,15 @@ import WorkbenchCore
     }
 
     @Test func aRefusalFromCoreIsShown() async throws {
-        let store = try await store { _, _, _, _ in throw GoalDraftRefusal.busy }
+        let store = try await store { _, _, _, _, _ in throw GoalDraftRefusal.busy }
         #expect(await store.draftGoal(request: "x") == false)
         #expect(store.actionError == "\(GoalDraftRefusal.busy)")
     }
 
     @Test func aRefusalForNoGoalAgentOffersToNameOneAndAnyOtherFailureDoesNot() async throws {
-        let off = try await store { _, _, _, _ in throw GoalDraftRefusal.noGoalAgent }
+        let off = try await store { _, _, _, _, _ in throw GoalDraftRefusal.noGoalAgent }
         #expect(await off.draftGoal(request: "x") == false && off.goalAgentOff && off.actionError == nil)
-        let other = try await store { _, _, _, _ in throw GoalDraftRefusal.busy }
+        let other = try await store { _, _, _, _, _ in throw GoalDraftRefusal.busy }
         #expect(await other.draftGoal(request: "x") == false && !other.goalAgentOff)
     }
 
@@ -71,7 +83,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptDraftFixtures.append(fixture)
         let actions = GoalActions(
-            draftGoal: { _, name, _, _ in
+            draftGoal: { _, name, _, _, _ in
                 order.add("draft \(name)")
                 return GoalDraftResult(id: "g-\(name)", provider: .codex)
             },
@@ -87,7 +99,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptDraftFixtures.append(fixture)
         let actions = GoalActions(
-            draftGoal: { _, name, _, _ in
+            draftGoal: { _, name, _, _, _ in
                 order.add("draft \(name)")
                 return GoalDraftResult(id: "g", provider: .claude)
             },
@@ -101,7 +113,7 @@ import WorkbenchCore
     @Test func stoppingWhileItDraftsSaysSoAndASecondDraftIsRefusedMeanwhile() async throws {
         let gate = Gate()
         let calls = Seen()
-        let store = try await store { _, name, _, stop in
+        let store = try await store { _, name, _, _, stop in
             calls.add(name)
             stop.attach { Task { await gate.open() } }
             await gate.wait()
@@ -118,7 +130,7 @@ import WorkbenchCore
 
     @Test func quittingWaitsForTheDrafterToEndAndGivesUpAtTheDeadline() async throws {
         let gate = Gate()
-        let polite = try await store { _, _, _, stop in
+        let polite = try await store { _, _, _, _, stop in
             stop.attach { Task { await gate.open() } }
             await gate.wait()
             return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
@@ -130,7 +142,7 @@ import WorkbenchCore
         _ = await first.value
 
         let release = Gate()
-        let stubborn = try await store { _, _, _, stop in
+        let stubborn = try await store { _, _, _, _, stop in
             stop.attach {}
             await release.wait()
             return GoalDraftResult(id: nil, provider: .claude, failure: "late")
@@ -145,7 +157,7 @@ import WorkbenchCore
     }
 
     @Test func quittingWithNothingDraftingReturnsAtOnce() async throws {
-        let idle = try await store { _, _, _, _ in GoalDraftResult(id: nil, provider: .claude) }
+        let idle = try await store { _, _, _, _, _ in GoalDraftResult(id: nil, provider: .claude) }
         let started = ContinuousClock.now
         await idle.stopDraftingAndWait(timeout: .seconds(5))
         #expect(ContinuousClock.now - started < .seconds(1))

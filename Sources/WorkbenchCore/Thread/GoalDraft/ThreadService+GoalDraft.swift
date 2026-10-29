@@ -46,6 +46,8 @@ public enum GoalDraftRefusal: Error, Equatable, Sendable, CustomStringConvertibl
     case ended(String)
     case running(pid: Int32)
     case busy
+    case imagesNeedANewThread
+    case attachment(String)
 
     public var description: String {
         switch self {
@@ -63,6 +65,8 @@ public enum GoalDraftRefusal: Error, Equatable, Sendable, CustomStringConvertibl
         case .goalUnreadable(let why): "the goal could not be read: \(why)"
         case .ended(let decision): "this thread has ended (\(decision)); its goal cannot be replaced."
         case .running(let pid): "a run is live on this thread (pid \(pid)); stop it first."
+        case .imagesNeedANewThread: "images can be attached to a new goal, not to a redrafted one."
+        case .attachment(let why): why
         case .busy: "another command is using this thread (a run, a judge or another draft); try again when it ends."
         }
     }
@@ -79,6 +83,8 @@ extension ThreadService {
         /// Removed when the draft ends.
         var scratch: URL?
         var existing: GoalFile?
+        /// The user's screenshots, checked; shown to the drafter (when it can see them) and kept with a new thread.
+        var attachments: [GoalAttachments.Loaded] = []
     }
 
     /// What one run of the drafter came to, for the caller to record.
@@ -100,12 +106,13 @@ extension ThreadService {
     ///
     /// - Parameter attach: called with the running drafter, so the caller can stop it (Ctrl-C).
     public func draftGoal(
-        target: GoalDraftTarget, request: String, config: Config?,
+        target: GoalDraftTarget, request: String, config: Config?, attachments: [URL] = [],
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = GoalDraft.timeout,
         attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> GoalDraftResult {
         let prepared = try await prepareDraft(
-            target: target, request: request, config: config, environment: environment, timeout: timeout)
+            target: target, request: request, config: config, attachments: attachments, environment: environment,
+            timeout: timeout)
         defer { prepared.scratch.map { try? FileManager.default.removeItem(at: $0) } }
         switch target {
         case .replace(let id):
@@ -122,8 +129,8 @@ extension ThreadService {
     // MARK: Before anything is spent
 
     private func prepareDraft(
-        target: GoalDraftTarget, request rough: String, config: Config?, environment: [String: String],
-        timeout: TimeInterval
+        target: GoalDraftTarget, request rough: String, config: Config?, attachments urls: [URL],
+        environment: [String: String], timeout: TimeInterval
     ) async throws -> PreparedDraft {
         guard let config, let agent = config.resolvedGoalAgent else { throw GoalDraftRefusal.noGoalAgent }
         let text = rough.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -131,6 +138,11 @@ extension ThreadService {
         guard text.utf8.count <= GoalDraft.requestLimit, !text.contains("\0") else { throw GoalDraftRefusal.requestTooLong }
         guard let provider = config.agentProvider(agent.provider) else {
             throw GoalDraftRefusal.unavailable("there is no adapter for \(agent.provider)")
+        }
+        var images: [GoalAttachments.Loaded] = []
+        if !urls.isEmpty {
+            if case .replace = target { throw GoalDraftRefusal.imagesNeedANewThread }
+            do { images = try GoalAttachments.load(urls) } catch { throw GoalDraftRefusal.attachment("\(error)") }
         }
         let spend: AgentSpend
         let decided = AgentSpendPolicy.spend(
@@ -188,15 +200,27 @@ extension ThreadService {
         } catch { throw GoalDraftRefusal.unavailable("could not make a folder for the draft: \(error)") }
 
         let context = await draftContext(base: base)
+        // A provider that takes images (Codex `-i`) is sent them from a folder beside the one it works in; one that opens files
+        // (Claude's `Read`) finds them by name in the one folder it may read, which is otherwise empty.
+        let sends = provider.capabilities.imageAttachments
+        let names = GoalAttachments.names(images)
         let prompt = GoalDraft.prompt(
-            request: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut)
+            request: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
+            attachments: images.count, readFiles: sends ? [] : names)
+        let shown: [URL]
+        do {
+            shown = try GoalAttachments.write(images, into: sends ? root.appendingPathComponent("images") : work)
+        } catch {
+            scratch.map { try? FileManager.default.removeItem(at: $0) }
+            throw GoalDraftRefusal.unavailable("could not keep the images for the draft: \(error)")
+        }
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         let agentRequest: AgentRequest
         if agent.provider == .codex {
             let answer = output.appendingPathComponent("answer.txt")
             try? FileManager.default.removeItem(at: answer)
             agentRequest = AgentRequest(
-                provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work,
+                provider: agent.provider, model: agent.model, prompt: prompt, images: sends ? shown : [], workingDirectory: work,
                 outputDirectory: output, policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment,
                 limits: limits, answerFile: answer, reasoningEffort: agent.reasoningEffort)
         } else {
@@ -204,7 +228,7 @@ extension ThreadService {
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work,
                 outputDirectory: output, policy: .readOnlyEvidence, spend: spend,
                 session: .start(proposed: UUID().uuidString.lowercased()), purpose: .goal, environment: environment,
-                limits: limits, reasoningEffort: agent.reasoningEffort)
+                limits: limits, evidenceFiles: sends ? [] : names, reasoningEffort: agent.reasoningEffort)
         }
         do {
             if let refusal = agentRequest.validate(against: provider) { throw refusal }
@@ -215,7 +239,7 @@ extension ThreadService {
         }
         return PreparedDraft(
             agent: agent, provider: provider, request: agentRequest, work: work, base: base, scratch: scratch,
-            existing: existing)
+            existing: existing, attachments: images)
     }
 
     /// The drafter's folder outside the checkout: stable for a replacement (so a leftover can be found), fresh for a new draft.
@@ -372,10 +396,19 @@ extension ThreadService {
         do {
             // The thread exists only now. Its log tells the draft after the fact: the process left no thread behind
             // to write ahead into, and a draft that did not produce a goal leaves nothing at all.
+            var body = proposal.body
+            if !prepared.attachments.isEmpty {
+                body.request += "\n\n" + GoalAttachments.markdown(GoalAttachments.names(prepared.attachments))
+            }
             let id = try await newThread(
-                name: name, base: prepared.base, config: config, body: proposal.body, title: proposal.title
+                name: name, base: prepared.base, config: config, body: body, title: proposal.title
             ) { id, log in
                 made.id = id
+                if !prepared.attachments.isEmpty {
+                    let thread = self.project.threadDirectory(id)
+                    let folder = thread.appendingPathComponent(GoalAttachments.folder, isDirectory: true)
+                    _ = try GoalAttachments.write(prepared.attachments, into: folder)
+                }
                 try self.draftFault?(id)
                 let reference = try self.keepProposal(proposal, id: id)
                 let attempts = AttemptLog(log: log, role: "goal", turn: 0, agent: agent)
