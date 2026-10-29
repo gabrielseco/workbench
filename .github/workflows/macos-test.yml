@@ -1,7 +1,7 @@
 name: macOS tests
 
 # The full macOS suite on a pull request that carries the `macos-test` label (each push re-runs it). It is the `build-test` job of ci.yml,
-# which runs on main and nightly only because it holds one of the scarce macOS slots. Put the label on a PR that touches process,
+# which runs nightly only because it holds one of the scarce macOS slots. Put the label on a PR that touches process,
 # timing or platform-specific code (Spawner, the runner, probes, anything the Linux gate cannot show); keep the steps in step with ci.yml.
 on:
   pull_request:

@@ -38,9 +38,9 @@ jobs:
         # need no macOS tool, and this test cannot start anything even if a guard is broken.
         run: scripts/test-verify-app-guard.sh
 
-  # macOS is no longer the PR gate (the Linux workflow is, P18): it holds one of the scarce macOS slots, so it runs on main, nightly and by hand.
+  # macOS is no longer the PR gate (the Linux workflow is, P18): it holds one of the scarce macOS slots, so it runs nightly and by hand (the `macos-test` label runs it on a PR).
   build-test:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4

@@ -4,7 +4,7 @@ Guidance for coding agents (Claude Code, Codex, Cursor, …) working in this rep
 imports this file, so edit this one.
 
 Workbench hands a coding task to Claude in an isolated git worktree and gives back a diff, check results
-and a decision. Swift 6, macOS 14+, a `WorkbenchCore` library and a `workbench` CLI. The library and the CLI also build and pass their tests on Linux (the PR gate runs there; macOS runs on `main` and nightly); the app, screen-recording checks and opening an editor are macOS only. Start at
+and a decision. Swift 6, macOS 14+, a `WorkbenchCore` library and a `workbench` CLI. The library and the CLI also build and pass their tests on Linux (the PR gate runs there; macOS runs nightly, by hand and on a PR labelled `macos-test`); the app, screen-recording checks and opening an editor are macOS only. Start at
 `docs/plan/README.md` (phases and the scope rule), `docs/spec/` (goal file, event log) and the current
 phase's plan.
 
@@ -74,7 +74,7 @@ list the tasks.
    (`gh pr edit <pr> --add-label release-build`): the optimized build is otherwise only checked nightly, and the compiler has
    crashed on ordinary source before (#250). Wait for that run to pass.
    A PR that changes process, timing or platform-specific code (`Spawner`, the runner, probes, timeouts, tests that wait) gets the
-   `macos-test` label: the full macOS suite otherwise runs only on `main` and nightly, and the Linux gate does not show a race that
+   `macos-test` label: the full macOS suite otherwise runs only nightly, and the Linux gate does not show a race that
    only a slower runner exposes. Wait for that run to pass.
 6. After opening a PR, or after pushing a fix to an open one, have Codex review it with
    `scripts/codex-review.sh <pr> [spec-file]` (below), and fix what it finds that holds up.
