@@ -70,13 +70,14 @@ public enum EditorDiff {
         let name = URL(fileURLWithPath: file.path).lastPathComponent
         let old = folder.appendingPathComponent("base", isDirectory: true).appendingPathComponent(name)
         try FileManager.default.createDirectory(at: old.deletingLastPathComponent(), withIntermediateDirectories: true)
-        var text = ""
+        var bytes = Data()
         if file.status != .added {
             let shown = try await git.run(["show", "\(base):\(file.oldPath ?? file.path)"], in: worktree)
-            guard shown.succeeded, !shown.outputTruncated, shown.stdout.utf8.count <= sizeLimit else { return nil }
-            text = shown.stdout
+            guard shown.succeeded, !shown.outputTruncated, shown.stdoutBytes.count <= sizeLimit else { return nil }
+            bytes = shown.stdoutBytes
         }
-        try text.write(to: old, atomically: true, encoding: .utf8)
+        // The bytes as git has them: a file in another encoding must not show changes nobody made.
+        try bytes.write(to: old, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: old.path)
 
         let live = worktree.appendingPathComponent(file.path)

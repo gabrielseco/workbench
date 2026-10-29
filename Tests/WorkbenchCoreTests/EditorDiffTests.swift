@@ -202,4 +202,18 @@ private struct DiffRig {
         let done = try await rig.open(base: base)
         #expect(done.opened.isEmpty && Set(done.skipped) == ["old-big.txt", "new-big.txt"] && rig.calls().isEmpty)
     }
+
+    @Test func aBaseFileThatIsNotUTF8IsCopiedByteForByte() async throws {
+        let rig = try await DiffRig()
+        let latin1 = Data([0x63, 0x61, 0x66, 0xE9, 0x0A])
+        try latin1.write(to: rig.root.appendingPathComponent("menu.txt"))
+        let base = try await rig.commit()
+        try rig.write("menu.txt", "café\n")
+        _ = try await rig.commit()
+
+        let done = try await rig.open(base: base)
+        #expect(done.opened == ["menu.txt"])
+        let args = try #require(rig.calls().first).split(separator: " ").map(String.init)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: args[1])) == latin1)
+    }
 }

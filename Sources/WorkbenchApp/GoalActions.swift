@@ -172,12 +172,14 @@ struct GoalActions: Sendable {
     static func openDiffInEditor(_ project: Project, _ thread: String, path: String?) async throws -> String? {
         let environment = ProcessInfo.processInfo.environment
         guard let editor = configuredEditor(project: project, environment: environment) else { throw EditorError.notSet }
+        // The same containment check as opening the worktree: a folder swapped for a link must not make another checkout the root.
+        let worktree = try Editor.worktree(project: project, threadID: thread)
         let git = try GitRunner.discover()
         guard let changes = await ReviewLoader(project: project, git: git).changedFiles(id: thread) else {
             throw EditorError.noWorktree(id: thread, path: project.worktreesDirectory.appendingPathComponent(thread).path)
         }
         let done = try await EditorDiff.open(
-            files: changes.files, only: path, base: changes.base, worktree: changes.worktree,
+            files: changes.files, only: path, base: changes.base, worktree: worktree,
             scratch: project.threadDirectory(thread).appendingPathComponent("diff-base", isDirectory: true), git: git,
             editor: editor, environment: environment)
         var notes: [String] = []

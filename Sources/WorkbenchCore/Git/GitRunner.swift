@@ -6,6 +6,8 @@ public struct GitResult: Sendable, Equatable {
     public var stderr: String
     /// `stdout` or `stderr` hit `GitRunner.outputLimit` and was cut. A caller that publishes what it parsed must check this.
     public var outputTruncated = false
+    /// What `stdout` was decoded from, for a caller that must keep the bytes (a file that is not UTF-8).
+    public var stdoutBytes = Data()
 
     public var succeeded: Bool { status == 0 }
 }
@@ -150,18 +152,26 @@ public struct GitRunner: Sendable {
         }
         let out = Self.read(outFile), err = Self.read(errFile)
         return GitResult(
-            status: status, stdout: out.text, stderr: err.text, outputTruncated: out.truncated || err.truncated)
+            status: status, stdout: out.text, stderr: err.text, outputTruncated: out.truncated || err.truncated,
+            stdoutBytes: out.bytes)
     }
 
     private static func scratchFile() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("wb-git-\(UUID().uuidString)")
     }
 
-    private static func read(_ url: URL) -> (text: String, truncated: Bool) {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return ("", false) }
+    private struct Output {
+        var text = ""
+        var truncated = false
+        var bytes = Data()
+    }
+
+    private static func read(_ url: URL) -> Output {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return Output() }
         defer { try? handle.close() }
         let data = (try? handle.read(upToCount: outputLimit + 1)) ?? Data()
-        return (String(decoding: data.prefix(outputLimit), as: UTF8.self), data.count > outputLimit)
+        let kept = data.prefix(outputLimit)
+        return Output(text: String(decoding: kept, as: UTF8.self), truncated: data.count > outputLimit, bytes: Data(kept))
     }
 }
 
