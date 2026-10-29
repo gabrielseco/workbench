@@ -98,6 +98,15 @@ struct GoalActions: Sendable {
     }
 
     struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
+    /// Why a round has no verdict, from the log of the thread that ran it (a follow-up's round is not in the parent's log).
+    static func recordedFailure(_ record: PRReviewRecord, in project: Project) -> String? {
+        let events = (try? EventLogReader.read(at: project.eventsURL(record.thread)))?.events ?? []
+        guard let logged = ThreadState.derive(from: events, id: record.thread).review.prReview, logged.round == record.round,
+            logged.pr == record.pr
+        else { return nil }
+        return logged.failure
+    }
+
     /// A refusal from core in its own words, so the window shows the sentence and not the enum case's name.
     struct RefusalText: Error, CustomStringConvertible {
         var description: String
@@ -166,11 +175,8 @@ struct GoalActions: Sendable {
             guard let git = try? GitRunner.discover() else { return nil }
             let service = ThreadService(project: project, git: git)
             guard let record = service.latestPRReview(id: thread) else { return nil }
-            let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
-            let logged = ThreadState.derive(from: events, id: thread).review.prReview
             return PRReviewShown(
-                record, findings: service.prReviewFindings(record),
-                failure: logged?.round == record.round ? logged?.failure : nil,
+                record, findings: service.prReviewFindings(record), failure: recordedFailure(record, in: project),
                 tip: await service.pullRequestBranchTip(id: thread))
         })
 

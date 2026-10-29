@@ -35,7 +35,7 @@ import Testing
         #expect(shown.canReviewPullRequest && shown.prReviewText == nil)
     }
 
-    @Test func aThreadWithoutAPullRequestOrAfterCleaningHasNothingToReview() async throws {
+    @Test func aThreadWithoutAPullRequestHasNothingToReview() async throws {
         let fixture = try await AppFixture(git: false)
         keptPRReviewFixtures.append(fixture)
         try await fixture.addThread("t1", approved: true)
@@ -81,6 +81,20 @@ import Testing
         #expect(current.notes.isEmpty)
         let unknownTip = PRReviewShown(record, findings: nil, failure: "x", tip: nil)
         #expect(unknownTip.notes.isEmpty, "a tip that cannot be read is not called stale")
+    }
+
+    @Test func aFailureReasonIsReadFromTheThreadThatRanTheRound() async throws {
+        let fixture = try await AppFixture(git: false)
+        keptPRReviewFixtures.append(fixture)
+        try await fixture.addThread("parent", approved: true)
+        try await fixture.addThread("child", approved: true)
+        try fixture.append(
+            "child", .prReviewFinished,
+            data: ["round": .int(2), "pr": .int(7), "ok": .bool(false), "reason": .string("codex timed out")])
+        let record = PRReviewRecord(thread: "child", round: 2, pr: 7, ok: false, verdict: nil)
+        #expect(GoalActions.recordedFailure(record, in: fixture.project) == "codex timed out")
+        let other = PRReviewRecord(thread: "child", round: 1, pr: 7, ok: false, verdict: nil)
+        #expect(GoalActions.recordedFailure(other, in: fixture.project) == nil, "another round's reason is not borrowed")
     }
 
     @Test func anEarlierRoundCanBeOpenedAgain() async throws {
