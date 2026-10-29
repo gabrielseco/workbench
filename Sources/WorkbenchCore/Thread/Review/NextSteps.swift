@@ -10,8 +10,10 @@ public struct NextStep: Sendable, Equatable {
 }
 
 public enum NextSteps {
-    /// `files` is what the thread changed (nil when it could not be read: a stage is then listed as applying, and says so).
-    public static func derive(events: [Event], files: [String]?, config: Config?) -> [NextStep] {
+    /// `files` is what the thread changed (nil when it could not be read: a stage is then listed as applying, and says so). `head` is
+    /// the thread's branch tip (nil when unknown): a stage round that recorded another head did not review what is there now. `id`
+    /// goes into every command, so one printed for a named thread never acts on the active one.
+    public static func derive(events: [Event], files: [String]?, config: Config?, head: String? = nil, id: String) -> [NextStep] {
         guard let ended = events.last(where: { $0.kind == .turnEnded }), ended.data["result"]?.stringValue == "succeeded" else {
             return []
         }
@@ -22,12 +24,20 @@ public enum NextSteps {
         if let decision, decision != "accepted" { return [] }
         if events.contains(where: { $0.kind == .prOpened }) { return [] }
         let turn = ended.turn
+        // A later turn that has started and not ended (still running, or its runner stopped): the finished one is not current.
+        if let open = events.last(where: { $0.kind == .turnStarted }), open.seq > ended.seq {
+            return [
+                NextStep(
+                    name: "wait", command: "workbench log -f \(id)",
+                    why: "turn \(open.turn) has started and has no end on record (still running, or its runner stopped)")
+            ]
+        }
         var steps: [NextStep] = []
 
         if !events.contains(where: { $0.kind == .judgeRan && $0.turn == turn }) {
             steps.append(
                 NextStep(
-                    name: "judge", command: "workbench judge", why: "no judge has run for turn \(turn) (advisory)"))
+                    name: "judge", command: "workbench judge \(id)", why: "no judge has run for turn \(turn) (advisory)"))
         }
         for name in config?.review.stages ?? [] where name != ReviewConfig.prReviewStage {
             guard let config, let stage = ReviewStage.named(name, config: config) else { continue }
@@ -35,6 +45,7 @@ public enum NextSteps {
             let done = events.contains {
                 $0.kind == .reviewStageFinished && $0.data["stage"]?.stringValue == name && $0.seq > ended.seq
                     && $0.data["verdict"]?.stringValue != ReviewStage.skippedVerdict
+                    && ($0.data["head_sha"]?.stringValue).map { head == nil || $0 == head } != false
             }
             guard !done else { continue }
             let globs = stage.config.appliesTo.joined(separator: ", ")
@@ -44,13 +55,14 @@ public enum NextSteps {
                 : (globs.isEmpty ? "it applies to every change" : "the change touches \(globs)")
             steps.append(
                 NextStep(
-                    name: name, command: "workbench review-stage \(name)",
-                    why: "\(scope); not run since turn \(turn) ended (advisory)"))
+                    name: name, command: "workbench review-stage \(name) \(id)",
+                    why: "\(scope); not run on this head since turn \(turn) ended (advisory)"))
         }
         if decision == "accepted" {
-            steps.append(NextStep(name: "ship", command: "workbench ship", why: "accepted, no pull request yet"))
+            steps.append(NextStep(name: "ship", command: "workbench ship \(id)", why: "accepted, no pull request yet"))
         } else {
-            steps.append(NextStep(name: "accept", command: "workbench accept -m \"<message>\"", why: "or send-back or discard"))
+            let command = "workbench accept \(id) -m \"<message>\""
+            steps.append(NextStep(name: "accept", command: command, why: "or send-back or discard"))
         }
         return steps
     }

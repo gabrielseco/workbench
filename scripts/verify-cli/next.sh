@@ -101,6 +101,8 @@ check "next exits 0 and lists judge, design and accept in that order" "exit $RC,
     bash -c 'test "$1" = 0 && test "$2" = "judge review-stage design accept "' _ "$RC" "$(names "$SCRATCH/next1.out")"
 check "the first line is marked next and names the judge" "first line: $(head -1 "$SCRATCH/next1.out")" \
     bash -c 'head -1 "$1" | grep -q "^next  workbench judge "' _ "$SCRATCH/next1.out"
+check "every printed command names the thread" "output: $(cat "$SCRATCH/next1.out")" \
+    bash -c 'test "$(grep -c "workbench .* $2" "$1")" = 3' _ "$SCRATCH/next1.out" "$ID"
 check "the design stage line names its command" "output: $(cat "$SCRATCH/next1.out")" \
     grep -q "workbench review-stage design" "$SCRATCH/next1.out"
 wbp "$SCRATCH/review.out" review

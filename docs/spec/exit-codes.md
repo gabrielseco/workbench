@@ -127,8 +127,9 @@ Read-only: what the thread's log says is still due, from its events, its changed
 one line per step, `next  <command>  <why>` and then `then  <command>  <why>`, in the order of P11: `workbench judge` when no
 `judge.ran` is on record for the latest finished turn, `workbench review-stage <name>` for each stage in `stages` (not
 `pr-review`) whose `applies_to` matches a changed file (all of them when it has none, and with a note when the changed files could
-not be read) and that has no finished, not skipped round since that turn ended, then `workbench accept` or, once accepted with no pull
-request, `workbench ship`. `review` shows the same lines above its closing hint. Every step is advisory: nothing refuses `accept` or `ship` for
+not be read) and that has no finished, not skipped round since that turn ended at the branch's current tip (a round that recorded
+another `head_sha` did not review what is there), then `workbench accept` or, once accepted with no pull
+request, `workbench ship`. `review` shows the same lines above its closing hint. Every command names the thread (`workbench ship <id>`), so one printed for a named thread never acts on the active one. A turn that has started after the last finished one and has no end on record replaces the list with `workbench log -f <id>` (it is running, or its runner stopped). Every step is advisory: nothing refuses `accept` or `ship` for
 lacking one, and `next` runs nothing and writes no event. A thread with no finished successful turn, a failed turn, a decision other
 than `accepted`, or an open pull request has no steps (`nothing is due: …`).
 
