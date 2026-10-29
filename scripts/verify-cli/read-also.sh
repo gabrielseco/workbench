@@ -69,9 +69,11 @@ remove_on_pass branch "$BRANCH"
 run_thread
 
 argv=$(wb "$T_WB" log "$ID" --json | py "s=[e for e in lines if e['kind']=='turn.started']; print(' '.join(s[-1]['data']['argv']) if s else '')")
-check "the turn was started with the folder added" "argv has no --add-dir $OTHER" bash -c '[[ $1 == *"--add-dir $2"* ]]' _ "$argv" "$OTHER"
-check "and every write to it denied" "argv lacks the Edit/Write rules" \
-    bash -c '[[ $1 == *"Edit(/$2/**)"* && $1 == *"Write(/$2/**)"* ]]' _ "$argv" "$OTHER"
+# The log records the command line with paths scrubbed (/private/var/... shows as /var/...), so the folder is matched by its name.
+check "the turn was started with the folder added" "argv has no --add-dir ...other-repo" \
+    bash -c '[[ $1 =~ --add-dir\ [^\ ]*other-repo ]]' _ "$argv"
+check "and every write to it denied" "argv lacks the Edit/Write/NotebookEdit rules" \
+    bash -c '[[ $1 == *"Edit(//"*"other-repo/**)"* && $1 == *"Write(//"*"other-repo/**)"* && $1 == *"NotebookEdit(//"*"other-repo/**)"* ]]' _ "$argv"
 check "the first prompt names the folder" "turn-1.md does not name it" grep -qF "$OTHER" "$THREAD_DIR/prompts/turn-1.md"
 answer=$(cat "$WT/verify-cli-read-also.txt" 2>/dev/null)
 echo "    the file says: ${answer:-<missing>}"
