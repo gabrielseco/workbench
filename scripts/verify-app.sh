@@ -17,6 +17,7 @@
 # Safety, each part written down because a model may be running this:
 #   - the build has a bundle id of its own, new for each start (dev.rogal.workbench.verify-<number>), and the app is opened on a
 #     fixture project (Fixtures/app/<scenario>/): it reads and writes none of a person's settings or projects
+#   - the app is launched with the Dock's environment, not this terminal's: a bare PATH, the home, user, shell and temp folder
 #   - the window is found by pid, never by name, and only that pid is ever ended
 #   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Event log`, `Open the event log`), by the label
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
@@ -177,8 +178,13 @@ SWIFT
   # The build: bundle-app.sh, to a path and a bundle id of its own.
   WORKBENCH_APP="$dir/Workbench.app" WORKBENCH_BUNDLE_ID="$id" "$ROOT/scripts/bundle-app.sh" >&2 || fail "the build failed"
 
-  # Launched directly, so its pid is certain, with the project in its environment.
-  WORKBENCH_APP_PROJECT="$dir/project" "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
+  # Launched directly, so its pid is certain, with the project in its environment. The rest of the environment is what the Dock
+  # gives an app (a bare PATH, none of this terminal's profile), so a tool that is only on the terminal's PATH is not found here
+  # either, as for a person: that is how a missing `codex` stayed hidden when it was launched with the terminal's own.
+  env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" \
+    LANG="${LANG:-en_US.UTF-8}" PATH="/usr/bin:/bin:/usr/sbin:/sbin" WORKBENCH_APP_PROJECT="$dir/project" \
+    ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
+    "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
   # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).
   [[ "${WORKBENCH_VERIFY_FAULT:-}" != in-launch-gap ]] || kill -TERM $$
   pid=$!

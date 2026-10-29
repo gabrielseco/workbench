@@ -18,6 +18,7 @@ enum AppScenario: String, CaseIterable {
     case discarded
     case corrupt
     case noThread = "no-thread"
+    case draftGoal = "draft-goal"
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -26,6 +27,9 @@ enum AppScenario: String, CaseIterable {
         switch self {
         case .goalWarning, .goalApproved:
             "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
+        case .draftGoal:
+            // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
+            "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"
         default: nil
         }
     }
@@ -89,7 +93,7 @@ enum AppScenario: String, CaseIterable {
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
-        case .noThread:
+        case .noThread, .draftGoal:
             break
         }
     }

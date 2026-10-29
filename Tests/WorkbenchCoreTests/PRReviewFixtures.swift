@@ -49,6 +49,15 @@ struct FakeCodex {
             if [ -z "$prompt" ]; then
               echo "Reading prompt from stdin..." >&2; echo "No prompt provided via stdin." >&2; exit 1
             fi
+            # Like the real CLI (0.164): it will not start outside a git repository unless it is told that is intended.
+            case " $* " in
+              *" --skip-git-repo-check "*) ;;
+              *) git -C "$tree" rev-parse --git-dir >/dev/null 2>&1 || {
+                   echo "Reading additional input from stdin..." >&2
+                   echo "Not inside a trusted directory and --skip-git-repo-check was not specified." >&2
+                   exit 1
+                 } ;;
+            esac
             brief=$(printf '%s' "$prompt" | sed -n 's/^Read the review brief at \\(.*\\) and follow it exactly\\..*/\\1/p')
             cp "$brief" "$d/brief_$n" 2>/dev/null
             diff=$(sed -n 's/.*saved at \\(.*\\)\\. Read that file.*/\\1/p' "$brief" | head -1)

@@ -219,10 +219,13 @@ extension ThreadService {
         if agent.provider == .codex {
             let answer = output.appendingPathComponent("answer.txt")
             try? FileManager.default.removeItem(at: answer)
-            agentRequest = AgentRequest(
+            var codex = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, images: sends ? shown : [], workingDirectory: work,
                 outputDirectory: output, policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment,
                 limits: limits, answerFile: answer, reasoningEffort: agent.reasoningEffort)
+            // The drafter's folder is an empty scratch folder outside any repository, which Codex otherwise refuses to start in.
+            codex.outsideRepository = true
+            agentRequest = codex
         } else {
             agentRequest = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work,
@@ -446,6 +449,11 @@ extension ThreadService {
     static func draftProcessProblem(_ exit: ProcessExit, timeout: TimeInterval, name: String) -> String? {
         if exit.cause == .stopped { return "the draft was stopped" }
         if exit.cause == .timedOut { return "\(name) did not answer within \(Int(timeout))s" }
-        return judgeProcessProblem(exit, timeout: timeout, name: name)
+        guard let problem = judgeProcessProblem(exit, timeout: timeout, name: name) else { return nil }
+        // A bare "exited with status 1" leaves the person nothing to act on: the CLI's own last line says why.
+        guard case .exited(let code) = exit.termination, code != 0 else { return problem }
+        let lines = exit.stderrTail.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let last = lines.last(where: { !$0.isEmpty }) else { return problem }
+        return "\(problem): \(last.prefix(240))"
     }
 }

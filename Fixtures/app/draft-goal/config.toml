@@ -1,0 +1,6 @@
+[tools]
+available = ["Read"]
+allowed = ["Read"]
+
+[agents.goal]
+provider = "codex"
