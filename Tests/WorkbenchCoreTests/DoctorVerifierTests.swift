@@ -113,6 +113,29 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(report.passed, "a warning, as the skill problem is")
     }
 
+    @Test func theWarningNamesWorkbenchWhenTheAppLaunchedItWithoutATerminal() async throws {
+        let path = "SKILL.md"
+        let fx = try await RunnerFixture(extraConfig: "app_type = \"desktop\"\n[verifier]\nskill = \"\(path)\"")
+        try await commitSkill(fx, path, "drive it\n")
+        var o = options()
+        o.environment["TERM_PROGRAM"] = nil
+        o.environment["__CFBundleIdentifier"] = "dev.rogal.workbench"
+        o.screenRecordingGranted = { false }
+        let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: o)
+
+        let warning = try #require(report.verifier?.screenRecording)
+        #expect(warning.contains("Workbench.app") && !warning.contains("your terminal"))
+    }
+
+    @Test func theAppThatLaunchedWorkbenchIsNamedWhenThereIsNoTerminal() {
+        #expect(Doctor.screenRecordingApp(environment: ["__CFBundleIdentifier": "dev.rogal.workbench"]) == "Workbench.app")
+        #expect(Doctor.screenRecordingApp(environment: ["__CFBundleIdentifier": "com.apple.Terminal"]) == "com.apple.Terminal")
+        #expect(
+            Doctor.screenRecordingApp(environment: ["TERM_PROGRAM": "iTerm.app", "__CFBundleIdentifier": "com.googlecode.iterm2"])
+                == "iTerm.app")
+        #expect(Doctor.screenRecordingApp(environment: [:]).contains("terminal"))
+    }
+
     @Test(arguments: ["app_type = \"desktop\"", "app_type = \"web\"", ""])
     func theGrantOrANonDesktopAppNeverWarns(extra: String) async throws {
         let path = "SKILL.md"

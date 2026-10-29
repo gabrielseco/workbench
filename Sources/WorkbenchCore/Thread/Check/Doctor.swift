@@ -263,7 +263,7 @@ public final class Doctor: @unchecked Sendable {
             report.verifier = await readVerifier(verifier, model: config.verifierModel, base: base)
             // The verifier takes screenshots of a desktop app, which macOS refuses without this permission.
             if config.appType == .desktop, report.verifier?.skill != nil, !options.screenRecordingGranted() {
-                let app = options.environment["TERM_PROGRAM"] ?? "the app that runs workbench (your terminal)"
+                let app = Self.screenRecordingApp(environment: options.environment)
                 report.verifier?.screenRecording =
                     "Screen Recording is not granted to \(app): grant it in System Settings > Privacy & Security > "
                     + "Screen & System Audio Recording, then restart the app"
@@ -339,6 +339,16 @@ public final class Doctor: @unchecked Sendable {
             }
         }
         return DoctorRun(config: run, problem: problem)
+    }
+
+    /// The app macOS holds responsible for a screenshot: the one that launched this process. A GUI launch (Workbench.app)
+    /// has no `TERM_PROGRAM`, so `__CFBundleIdentifier` names it; a terminal sets both and `TERM_PROGRAM` reads better.
+    static func screenRecordingApp(environment: [String: String]) -> String {
+        if let program = environment["TERM_PROGRAM"], !program.isEmpty { return program }
+        if let bundle = environment["__CFBundleIdentifier"], !bundle.isEmpty {
+            return bundle.hasPrefix("dev.rogal.workbench") ? "Workbench.app" : bundle
+        }
+        return "the app that runs workbench (your terminal)"
     }
 
     /// The skill at the base commit, never the working tree, which a run may have edited.
