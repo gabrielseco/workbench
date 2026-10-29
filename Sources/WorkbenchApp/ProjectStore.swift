@@ -37,12 +37,21 @@ struct RecentProject: Equatable, Identifiable {
     var actionError: String?
     private(set) var starting = false
     /// What the app is doing for the person right now, in words ("Discarding: removing the worktree and branch…"); nil when it is
-    /// waiting for them. Every action that takes a moment sets it, so a click is never followed by a window that looks asleep.
-    private(set) var busy: String?
-    /// A run was started and the log does not show a newer turn than this one yet (the worktree is being cut, setup is installing):
-    /// `busy` stays up until it does, or the run ends or fails.
+    /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
+    /// takes a moment sets it, so a click is never followed by a window that looks asleep.
+    var busy: String? { busyText.flatMap { busyScope == currentScope ? $0 : nil } }
+    private var busyText: String?
+    /// The project and thread the busy text is about: `busy` shows only while they are the ones on screen.
+    private var busyScope: String?
+    /// The project and thread on screen, as one value to compare.
+    private var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
+    /// A run was started and the log does not show a newer turn than this one yet (the worktree is being cut, setup is installing),
+    /// in the thread that scope names: the text stays up until it does, or the run ends or fails.
     @ObservationIgnored private var awaitingAfterTurn: Int?
+    @ObservationIgnored private var awaitingScope: String?
     private var awaitingRun: Bool { awaitingAfterTurn != nil }
+
+    private func setBusy(_ text: String?) { (busyText, busyScope) = (text, text == nil ? nil : currentScope) }
     /// The goal agent is drafting a goal from a request.
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
@@ -189,20 +198,27 @@ struct RecentProject: Equatable, Identifiable {
         (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
         applyOwnership()
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
-        if let after = awaitingAfterTurn, case .thread(let shown) = screen, shown.state.lastTurn > after { endRunStart() }
+        // Only the thread the run was started in can say it has begun: another project's log is not this run's.
+        if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
+            if shown.state.lastTurn > after { endRunStart() }
+        }
     }
 
     /// The window is no longer waiting for a run to show up.
     private func endRunStart() {
         guard awaitingRun else { return }
-        (awaitingAfterTurn, busy) = (nil, nil)
+        (awaitingAfterTurn, awaitingScope) = (nil, nil)
+        setBusy(nil)
     }
 
     /// Runs `body` with `text` shown as what the app is doing, and clears it after, whatever happened.
-    func working<T>(_ text: String, _ body: () async -> T) async -> T {
-        busy = text
-        defer { if !awaitingRun { busy = nil } }
-        return await body()
+    /// One at a time: a second click while the first is still working is ignored, so the first one's end cannot take the line
+    /// down while the second is still going.
+    func working(_ text: String, _ body: () async -> Void) async {
+        guard busyText == nil else { return }
+        setBusy(text)
+        defer { if !awaitingRun { setBusy(nil) } }
+        await body()
     }
 
     // MARK: Goal actions
@@ -217,11 +233,11 @@ struct RecentProject: Equatable, Identifiable {
         }
         let mine = generation
         starting = true
-        busy = "Approving the goal…"
+        setBusy("Approving the goal…")
         actionError = nil
         defer {
             starting = false
-            if !awaitingRun { busy = nil }
+            if !awaitingRun { setBusy(nil) }
         }
         do {
             try await actions.approve(project, thread)
@@ -252,7 +268,8 @@ struct RecentProject: Equatable, Identifiable {
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
         var turnNow = 0
         if case .thread(let shown) = screen { turnNow = shown.state.lastTurn }
-        (awaitingAfterTurn, busy) = (turnNow, "Starting the run…")
+        (awaitingAfterTurn, awaitingScope) = (turnNow, currentScope)
+        setBusy("Starting the run…")
         ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
         applyOwnership()
         Task { [weak self] in

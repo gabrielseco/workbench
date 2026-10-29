@@ -124,6 +124,46 @@ import Testing
         running.open()
     }
 
+    @Test func aSecondClickWhileTheFirstIsStillWorkingDoesNotTakeTheLineDown() async throws {
+        let opening = Gate()
+        let calls = Counter()
+        let actions = GoalActions(openWorktree: { _, _ in
+            calls.add()
+            await opening.wait()
+        })
+        let (store, _) = try await store(actions)
+        let first = Task { await store.openWorktree() }
+        try await until("the first is working") { store.busy == "Opening the worktree…" }
+        await store.openWorktree()
+        #expect(calls.count == 1, "the second click was ignored, not run beside the first")
+        #expect(store.busy == "Opening the worktree…", "and the line is still up")
+        opening.open()
+        await first.value
+        #expect(store.busy == nil)
+    }
+
+    @Test func theStartingLineBelongsToTheThreadItWasStartedInNotToWhicheverIsOnScreen() async throws {
+        let running = Gate()
+        let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
+        let (store, a) = try await store(actions, approved: true, turn: false)
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+        try other.turn("t1", 1)
+        try other.turn("t1", 2)
+
+        await store.approveAndRun()
+        #expect(store.busy == "Starting the run…")
+        await store.switchTo(other.project.root.path)
+        #expect(store.busy == nil, "another project is on screen: it starts nothing, and its turns are not this run's")
+        await store.switchTo(a.project.root.path)
+        #expect(store.busy == "Starting the run…", "back: still waiting, the other project's turn 2 did not end it")
+        try a.append("t1", .turnStarted, turn: 1, data: ["session_id": "s1"])
+        await store.refresh()
+        #expect(store.busy == nil)
+        running.open()
+    }
+
     @Test func anActionThatFailsStopsSayingItIsWorking() async throws {
         struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
         let actions = GoalActions(acceptPlan: { _, _ in throw Refused() }, discardPlan: { _, _ in throw Refused() })
@@ -194,4 +234,11 @@ private actor Gate {
         waiting.forEach { $0.resume() }
         waiting = []
     }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func add() { lock.withLock { value += 1 } }
+    var count: Int { lock.withLock { value } }
 }
