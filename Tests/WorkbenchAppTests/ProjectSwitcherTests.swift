@@ -28,6 +28,18 @@ import Testing
         #expect(list.map(\.isCurrent) == [true, false])
     }
 
+    @Test func aGoalBeingWrittenIsClosedWhenAnotherProjectOpens() async throws {
+        let (a, b) = (try await project("a"), try await project("b"))
+        let store = store()
+        await store.open(a.root)
+        store.namingGoal = true
+        await store.open(b.root)
+        #expect(!store.namingGoal, "the request typed in one project is never drafted into another")
+        store.namingGoal = true
+        await store.open(URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)"))
+        #expect(!store.namingGoal, "also when the project does not open")
+    }
+
     @Test func theListKeepsTheNewestTenAndSurvivesARelaunch() async throws {
         let prefs = MemoryPreferences()
         let store = store(prefs)

@@ -17,7 +17,10 @@ struct RootView: View {
             Divider()
             FooterBar(store: store)
         }
+        // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
+        .disabled(store.namingGoal)
         .frame(minWidth: 900, minHeight: 600)
+        .overlay { NewGoalLayer(store: store) }
     }
 }
 
@@ -211,7 +214,6 @@ struct FinishedBanner: View {
     var snapshot: ThreadSnapshot
     var text: String
     var store: ProjectStore
-    @State private var naming = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -230,7 +232,7 @@ struct FinishedBanner: View {
                     }
                     .disabled(store.busy != nil).help("Codex reads the pull request, read-only, and says what it found")
                 }
-                Button("New goal…") { naming = true }
+                Button("New goal…") { store.namingGoal = true }
             }
             if let line = snapshot.prReviewText {
                 HStack {
@@ -242,7 +244,6 @@ struct FinishedBanner: View {
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
         .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
             PRReviewSheet(store: store)
         }
@@ -256,7 +257,6 @@ struct EmptyState: View {
     var title: String
     var next: String
     var store: ProjectStore
-    @State private var naming = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -264,13 +264,12 @@ struct EmptyState: View {
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             HStack {
                 Button("Choose project…") { Picker.chooseProject(store) }
-                if store.screen == .noThread { Button("New goal…") { naming = true } }
+                if store.screen == .noThread { Button("New goal…") { store.namingGoal = true } }
             }
             .padding(.top, 6)
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(40)
-        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 }
 
