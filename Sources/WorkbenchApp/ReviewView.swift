@@ -16,6 +16,7 @@ struct ReviewView: View {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text("Review · \(headline(now: context.date))").font(.title2.weight(.semibold))
                 }
+                advice
                 criteria
                 files
                 if !review.commits.isEmpty { section("Commits") { ForEach(review.commits, id: \.self) { mono($0) } } }
@@ -92,6 +93,20 @@ struct ReviewView: View {
                     .help("View diff")
             }
             if let note = review.filesNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+
+    /// While this app's run goes on after the turn ended, what is running is the advice `[review] auto` asks for: say so, and let
+    /// it be stopped from the screen that is showing (the Run screen, which has the other Stop, is not).
+    @ViewBuilder private var advice: some View {
+        if store.runningHere {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Running the advice the project's config asks for (judge, review stages)…").font(.callout)
+                Spacer()
+                Button(store.stopping ? "Stopping…" : "Stop advice") { Task { await store.stopTurn() } }
+                    .disabled(store.stopping)
+            }
         }
     }
 
