@@ -72,6 +72,17 @@ import Testing
         #expect(Self.clean.headline == "Pull request #7: clean (round 1)")
     }
 
+    @Test func aReopenedRoundKeepsItsReasonAndSaysWhenTheBranchMovedOn() {
+        let record = PRReviewRecord(thread: "t1", round: 2, pr: 7, ok: false, verdict: nil, headSHA: "aaaaaaa1111")
+        let failed = PRReviewShown(record, findings: nil, failure: "codex timed out", tip: "bbbbbbb2222")
+        #expect(failed.headline == "Pull request #7: no verdict (round 2): codex timed out")
+        #expect(failed.notes.count == 1 && failed.notes[0].hasPrefix("Stale: the branch has moved"))
+        let current = PRReviewShown(record, findings: nil, failure: "x", tip: "aaaaaaa1111")
+        #expect(current.notes.isEmpty)
+        let unknownTip = PRReviewShown(record, findings: nil, failure: "x", tip: nil)
+        #expect(unknownTip.notes.isEmpty, "a tip that cannot be read is not called stale")
+    }
+
     @Test func anEarlierRoundCanBeOpenedAgain() async throws {
         let store = try await shipped(GoalActions(latestPRReview: { _, _ in Self.clean }))
         await store.showPRReview()

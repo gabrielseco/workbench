@@ -166,7 +166,12 @@ struct GoalActions: Sendable {
             guard let git = try? GitRunner.discover() else { return nil }
             let service = ThreadService(project: project, git: git)
             guard let record = service.latestPRReview(id: thread) else { return nil }
-            return PRReviewShown(record, findings: service.prReviewFindings(record))
+            let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
+            let logged = ThreadState.derive(from: events, id: thread).review.prReview
+            return PRReviewShown(
+                record, findings: service.prReviewFindings(record),
+                failure: logged?.round == record.round ? logged?.failure : nil,
+                tip: await service.pullRequestBranchTip(id: thread))
         })
 
     /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not
