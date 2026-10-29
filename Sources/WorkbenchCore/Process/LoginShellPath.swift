@@ -43,7 +43,7 @@ public enum LoginShellPath {
     }
 
     /// Replaces this process's `PATH` with the resolved one, so everything that reads it from here on finds the person's tools.
-    public static func applyToProcess(environment: [String: String] = ProcessInfo.processInfo.environment) async {
+    public static func applyToEnvironment(environment: [String: String] = ProcessInfo.processInfo.environment) async {
         let current = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         let resolved = await resolve(shell: environment["SHELL"], current: current)
         if resolved != current { setenv("PATH", resolved, 1) }
