@@ -15,7 +15,8 @@
 # Environment:
 #   WORKBENCH_APP        where to write the bundle (default .build/bundle/Workbench.app; with --install, $WORKBENCH_INSTALL_DIR/Workbench.app)
 #   WORKBENCH_INSTALL_DIR  where --install puts it (default ~/Applications)
-#   WORKBENCH_SIGN_ID    a code-signing identity to sign with; unset: ad hoc, which needs no certificate and works in CI
+#   WORKBENCH_SIGN_ID    a code-signing identity to sign with; unset: "Workbench Local Signing" if scripts/setup-signing.sh made it,
+#                        else ad hoc, which needs no certificate and works in CI
 #   WORKBENCH_BUNDLE_ID  the bundle id (default dev.rogal.workbench)
 #   WORKBENCH_INSTALL_OPEN  with --install, 0 installs without opening it (the post-merge hook does; default 1)
 # Exit codes: 0 done, 1 a step failed (the step on stderr), 2 not macOS or a usage problem. --check prints PASS or FAIL per step.
@@ -124,7 +125,13 @@ cat >"$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Sign: ad hoc unless an identity is named. A named identity that is not there is an error, not a quiet fallback.
+# Sign: with the named identity, else with "Workbench Local Signing" (scripts/setup-signing.sh) when it exists, else ad hoc. An ad hoc
+# signature differs on every build, so macOS drops the Screen Recording grant the verifier's screenshots need after each rebuild; a
+# stable identity keeps it. A named identity that is not there is an error, not a quiet fallback.
+LOCAL_SIGN_ID="Workbench Local Signing"
+if [[ -z "${WORKBENCH_SIGN_ID:-}" ]] && security find-identity -p codesigning 2>/dev/null | grep -qF "\"$LOCAL_SIGN_ID\""; then
+  WORKBENCH_SIGN_ID="$LOCAL_SIGN_ID"
+fi
 SIGN_ID="${WORKBENCH_SIGN_ID:--}"
 if [[ "$SIGN_ID" != "-" ]] && ! security find-identity -p codesigning | grep -qF "\"$SIGN_ID\""; then
   echo "bundle-app: no code-signing identity named '$SIGN_ID' (unset WORKBENCH_SIGN_ID to sign ad hoc)" >&2
