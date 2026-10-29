@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import WorkbenchCore
 
 @main struct WorkbenchApp: App {
     private static let options = LaunchOptions.from(environment: ProcessInfo.processInfo.environment)
@@ -14,6 +15,8 @@ import SwiftUI
                 .task {
                     delegate.drafting = { store.drafting }
                     delegate.stopDrafting = { await store.stopDraftingAndWait() }
+                    // A fixture (verify-app) stays hermetic; a person's own launch gets the PATH their terminal has.
+                    if Self.options.project == nil { await LoginShellPath.applyToProcess() }
                     await Self.options.start(store)
                     store.startPolling()
                 }
