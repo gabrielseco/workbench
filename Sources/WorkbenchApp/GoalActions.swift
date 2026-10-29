@@ -50,6 +50,8 @@ struct GoalActions: Sendable {
     /// Asks the process that holds the thread (a terminal's `workbench run`) to stop; false when nothing holds it.
     var requestStop: @Sendable (Project, String) async -> Bool
     var openWorktree: @Sendable (Project, String) async throws -> Void
+    /// The changed files' diffs in the editor: all of them, or the one at the path. Says what it left out, nil when nothing.
+    var openDiff: @Sendable (Project, String, String?) async throws -> String?
     var loadReview: @Sendable (Project, String) async -> ReviewReport?
     var acceptPlan: @Sendable (Project, String) async throws -> AcceptPlan
     var accept: @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult
@@ -75,6 +77,7 @@ struct GoalActions: Sendable {
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
+        openDiff: @escaping @Sendable (Project, String, String?) async throws -> String? = { _, _, _ in nil },
         loadReview: @escaping @Sendable (Project, String) async -> ReviewReport? = { _, _ in nil },
         acceptPlan: @escaping @Sendable (Project, String) async throws -> AcceptPlan = { _, _ in throw Unset() },
         accept: @escaping @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult = { _, _, _, _ in
@@ -90,7 +93,7 @@ struct GoalActions: Sendable {
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.enableGoalAgent = enableGoalAgent
-        (self.requestStop, self.openWorktree) = (requestStop, openWorktree)
+        (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
         (self.shipPreview, self.ship) = (shipPreview, ship)
@@ -141,6 +144,7 @@ struct GoalActions: Sendable {
         openWorktree: { project, thread in
             try await openWorktreeInEditor(project, thread)
         },
+        openDiff: { project, thread, path in try await openDiffInEditor(project, thread, path: path) },
         loadReview: { project, thread in
             guard let git = try? GitRunner.discover() else { return nil }
             return await ReviewLoader(project: project, git: git).load(id: thread)
@@ -199,6 +203,27 @@ struct GoalActions: Sendable {
         let command = try Editor.command(
             for: editor, path: url.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
         try await EditorLauncher.launch(command, editor: editor, in: url, environment: Editor.environment(from: environment))
+    }
+
+    /// The thread's changed files as diffs against its base in the configured editor. The note names what was left out.
+    static func openDiffInEditor(_ project: Project, _ thread: String, path: String?) async throws -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let editor = configuredEditor(project: project, environment: environment) else { throw EditorError.notSet }
+        // The same containment check as opening the worktree: a folder swapped for a link must not make another checkout the root.
+        let worktree = try Editor.worktree(project: project, threadID: thread)
+        let git = try GitRunner.discover()
+        guard let changes = await ReviewLoader(project: project, git: git).changedFiles(id: thread) else {
+            throw EditorError.noWorktree(id: thread, path: project.worktreesDirectory.appendingPathComponent(thread).path)
+        }
+        let done = try await EditorDiff.open(
+            files: changes.files, only: path, base: changes.base, worktree: worktree,
+            scratch: project.threadDirectory(thread).appendingPathComponent("diff-base", isDirectory: true), git: git,
+            editor: editor, environment: environment)
+        var notes: [String] = []
+        if !done.skipped.isEmpty { notes.append("\(done.skipped.count) binary or large file(s) not opened") }
+        if done.more > 0 { notes.append("\(done.more) more changed file(s): click one to open it") }
+        if done.opened.isEmpty, notes.isEmpty { notes.append("No changed files to open.") }
+        return notes.isEmpty ? nil : notes.joined(separator: "; ") + "."
     }
 
     /// The goal file in the configured editor, as `workbench open --goal` does. With none set it says so and how to set one: the

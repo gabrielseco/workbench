@@ -101,6 +101,9 @@ reason per commit, on purpose. A new commit is a new identity.
   `interrupted` and offers to run again. A run started elsewhere shows as running (`runnerPID`) and stops through the same call.
 - **Ids and paths** come through `SafeNames` and `Project`; the repo picker validates a git repo before it is remembered. The one
   project is remembered in app preferences (not in `.workbench/`). "Open in editor" and "Open worktree" use `EditorLauncher`.
+  Review's "Open diff", and "Open in editor" in a file's patch, open each changed file's diff against the thread's base in the editor's
+  own diff view (`EditorDiff`; `code`, `cursor`, `windsurf`, `zed`, from PATH). Editors diff two files, not folders, so "Open diff" opens
+  at most ten files and says how many it left out; the base versions are copied read-only to `threads/<id>/diff-base/`.
 
 ## Slices
 

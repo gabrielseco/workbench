@@ -35,6 +35,8 @@ struct RecentProject: Equatable, Identifiable {
     /// What the last Approve, Run or New goal said when it did not go through.
     /// What the last action said when it did not go through. Set by the store's own extensions too.
     var actionError: String?
+    /// Something an action did not do that is not a failure, such as files left out of a diff.
+    var actionNote: String?
     private(set) var starting = false
     /// What the app is doing for the person right now, in words ("Discarding: removing the worktree and branch…"); nil when it is
     /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
@@ -364,6 +366,15 @@ struct RecentProject: Equatable, Identifiable {
         actionError = nil
         await working("Opening the worktree…") {
             do { try await actions.openWorktree(project, thread) } catch { actionError = "\(error)" }
+        }
+    }
+
+    /// The diffs against the base in the editor: every changed file, or the one at `path`.
+    func openDiff(path: String? = nil) async {
+        guard let project, let thread = currentThread else { return }
+        (actionError, actionNote) = (nil, nil)
+        await working("Opening the diff…") {
+            do { actionNote = try await actions.openDiff(project, thread, path) } catch { actionError = "\(error)" }
         }
     }
 
