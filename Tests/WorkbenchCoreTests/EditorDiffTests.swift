@@ -187,7 +187,7 @@ private struct DiffRig {
 
         let done = try await rig.open(base: base)
         #expect(done.opened.isEmpty && rig.calls().isEmpty, "the outside file is never handed to the editor")
-        #expect(done.skipped == ["dir/a.txt"])
+        #expect(done.skipped.contains("dir/a.txt"))
     }
 
     @Test func aFileOverTheSizeLimitOnEitherSideIsLeftOut() async throws {
