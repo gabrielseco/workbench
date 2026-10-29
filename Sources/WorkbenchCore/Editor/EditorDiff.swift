@@ -80,6 +80,10 @@ public enum EditorDiff {
         try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: old.path)
 
         let live = worktree.appendingPathComponent(file.path)
+        // A folder the agent replaced with a link would let `lstat` below reach a file outside the worktree.
+        let home = worktree.resolvingSymlinksInPath().path
+        let parent = live.deletingLastPathComponent().resolvingSymlinksInPath().path
+        guard parent == home || parent.hasPrefix(home + "/") else { return nil }
         var metadata = stat()
         if lstat(live.path, &metadata) == 0 {
             guard metadata.st_mode & S_IFMT == S_IFREG, metadata.st_size <= sizeLimit else { return nil }

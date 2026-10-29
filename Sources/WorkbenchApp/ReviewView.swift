@@ -191,6 +191,9 @@ struct DiffSheet: View {
                 Button("Open in editor") { Task { await store.openDiff(path: path) } }.disabled(store.busy != nil)
                 Button("Close") { dismiss() }
             }
+            // The sheet covers the Review screen, where these are shown otherwise.
+            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
             ScrollView {
                 Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)

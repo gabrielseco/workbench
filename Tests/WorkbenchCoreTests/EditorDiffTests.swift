@@ -174,4 +174,32 @@ private struct DiffRig {
         _ = try await rig.open(base: base)
         #expect(!FileManager.default.fileExists(atPath: stale.path))
     }
+
+    @Test func aFolderReplacedByALinkOutOfTheWorktreeIsLeftOut() async throws {
+        let rig = try await DiffRig()
+        try rig.write("dir/a.txt", "inside\n")
+        let base = try await rig.commit()
+        let outside = rig.root.deletingLastPathComponent().appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "secret\n".write(to: outside.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: rig.root.appendingPathComponent("dir"))
+        try FileManager.default.createSymbolicLink(at: rig.root.appendingPathComponent("dir"), withDestinationURL: outside)
+
+        let done = try await rig.open(base: base)
+        #expect(done.opened.isEmpty && rig.calls().isEmpty, "the outside file is never handed to the editor")
+        #expect(done.skipped == ["dir/a.txt"])
+    }
+
+    @Test func aFileOverTheSizeLimitOnEitherSideIsLeftOut() async throws {
+        let rig = try await DiffRig()
+        let big = String(repeating: "x", count: EditorDiff.sizeLimit + 1)
+        try rig.write("old-big.txt", big)
+        let base = try await rig.commit()
+        try rig.write("old-big.txt", "small\n")
+        try rig.write("new-big.txt", big)
+        _ = try await rig.commit()
+
+        let done = try await rig.open(base: base)
+        #expect(done.opened.isEmpty && Set(done.skipped) == ["old-big.txt", "new-big.txt"] && rig.calls().isEmpty)
+    }
 }
