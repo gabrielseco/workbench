@@ -141,7 +141,12 @@ private final class Server: @unchecked Sendable {
     @Test func aCancelledCheckReturnsAtOnceInsteadOfWaitingForTheDeadline() async throws {
         let server = try #require(Server { client in
             Server.hear(client)
-            usleep(10_000_000)
+            // Held open until the client hangs up (its cancel closes the socket), so the server's own timer never ends
+            // the wait: only a cancel that works does. The cap bounds a failing run.
+            var timeout = timeval(tv_sec: 30, tv_usec: 0)
+            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            var byte: UInt8 = 0
+            _ = recv(client, &byte, 1, 0)
         })
         let target = url("127.0.0.1", server.port)
         let task = Task { await LoopbackProbe.answers(target, attempt: 30) }
