@@ -7,16 +7,17 @@ on:
   pull_request:
     types: [labeled, synchronize]
 
-concurrency:
-  group: macos-test-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   macos-test:
     # A PR event without the label (any other label, any push to an unlabelled PR) skips the job.
     if: contains(github.event.pull_request.labels.*.name, 'macos-test')
     runs-on: macos-15
     timeout-minutes: 30
+    # On the job, not the workflow: a push to a PR that has the label supersedes the run before it, but a skipped run (no label)
+    # never takes the group, so it cannot cancel a labelled one.
+    concurrency:
+      group: macos-test-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - name: Runner hardware
