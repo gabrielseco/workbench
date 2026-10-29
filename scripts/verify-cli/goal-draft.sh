@@ -10,8 +10,9 @@
 # its front matter Workbench's own, the log with a goal.draft pair and no coding turn); `--replace` over an approved goal returns
 # it to draft and the approval has to be given again.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 writes
-# `allow_unpriced = true` in the first config and makes the fake always answer with a valid goal, so the steps that expect the
-# refusal and the failed draft must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# `allow_unpriced = true` in the first config and makes the fake always answer with a valid goal (and never fail), so the steps that
+# expect the refusal and the failed drafts must FAIL. The fake refuses like the real Codex outside a git repository, so a draft
+# started without --skip-git-repo-check fails the valid-answer steps too. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -34,14 +35,26 @@ wbp() { # <out> args...: a workbench command in the clone, stdout and stderr tog
 shown() { sed 's/^/    /' "$1" | head -${2:-12}; }
 cfg="$P/.workbench/config.toml"
 
-# The fake Codex: writes the contents of $FAKE/answer to the file after -o, and counts its runs.
+# The fake Codex: writes the contents of $FAKE/answer to the file after -o, and counts its runs. Like the real CLI (0.164) it will not
+# start in a folder outside a git repository unless it is given --skip-git-repo-check, and it says so on stderr; the drafter's
+# folder is such a folder, so a draft that forgets the flag fails here as it does for a person. A file $FAKE/fail makes it exit
+# 1 with that file's text on stderr.
 FAKE="$SCRATCH/fake-codex"
 mkdir -p "$FAKE"
 cat >"$FAKE/codex" <<FAKE_SCRIPT
 #!/bin/sh
-out=""; prev=""
-for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; done
+out=""; prev=""; tree=""
+for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; [ "\$prev" = "-C" ] && tree="\$a"; prev="\$a"; done
 echo run >> "$FAKE/runs"
+case " \$* " in
+  *" --skip-git-repo-check "*) ;;
+  *) git -C "\$tree" rev-parse --git-dir >/dev/null 2>&1 || {
+       echo "Reading additional input from stdin..." >&2
+       echo "Not inside a trusted directory and --skip-git-repo-check was not specified." >&2
+       exit 1
+     } ;;
+esac
+if [ -f "$FAKE/fail" ]; then cat "$FAKE/fail" >&2; exit 1; fi
 cat "$FAKE/answer" > "\$out"
 echo "fake codex"
 FAKE_SCRIPT
@@ -101,6 +114,17 @@ check "it says why and that nothing was written" "no such message" \
     bash -c 'grep -q "not usable" "$1" && grep -q "Nothing was written" "$1"' _ "$SCRATCH/bad.out"
 check "the failed draft left no thread" "threads exist: $(threads)" test "$(threads)" = 0
 check "the fake did run (the refusal was not the reason)" "the fake ran $(runs) time(s)" test "$(runs)" -ge 1
+
+# --- 3b. an agent that fails: the CLI's own words say why --------------------------------------------------
+
+[ "$SABOTAGE" = 1 ] || echo "boom: the model is not available to this account" >"$FAKE/fail"
+wbp "$SCRATCH/failed.out" goal draft retry --request "retry uploads"
+shown "$SCRATCH/failed.out" 3
+rm -f "$FAKE/fail"
+check "a drafter that fails: exit 1" "workbench goal draft exited $RC" test "$RC" = 1
+check "it says why in the CLI's own words, not only the status" "no stderr line in the message" \
+    grep -q "exited with status 1: boom: the model is not available to this account" "$SCRATCH/failed.out"
+check "the failed draft left no thread" "threads exist: $(threads)" test "$(threads)" = 0
 
 # --- 4. a valid answer: a draft thread ----------------------------------------------------------------------
 

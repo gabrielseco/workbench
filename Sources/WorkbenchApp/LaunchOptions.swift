@@ -24,8 +24,10 @@ struct LaunchOptions: Equatable {
 
     /// What the window does when it appears: open the named project, else restore the remembered one. The `PATH` comes first, so
     /// nothing the window starts is looked for on the system's bare one.
-    @MainActor func start(_ store: ProjectStore) async {
-        if !skipsLoginPath { await LoginShellPath.applyToEnvironment() }
+    @MainActor func start(
+        _ store: ProjectStore, applyLoginPath: @MainActor () async -> Void = { await LoginShellPath.applyToEnvironment() }
+    ) async {
+        if !skipsLoginPath { await applyLoginPath() }
         if let project { await store.open(project) } else { await store.restore() }
     }
 }

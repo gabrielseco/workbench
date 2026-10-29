@@ -43,6 +43,22 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         #expect(!LaunchOptions.from(environment: ["WORKBENCH_SKIP_LOGIN_PATH": ""]).skipsLoginPath)
     }
 
+    @Test func thePathIsResolvedBeforeAnyProjectIsOpenedAndNotAtAllWhenTheSwitchIsSet() async throws {
+        let fixture = try await AppFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let seen = Seen()
+        var options = LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": fixture.root.path])
+        let store = ProjectStore(preferences: MemoryPreferences())
+        await options.start(store) { seen.add("path, project open: \(store.project != nil)") }
+        #expect(seen.all == ["path, project open: false"], "the PATH first, then the project: \(seen.all)")
+        #expect(store.project != nil)
+
+        options.skipsLoginPath = true
+        let skipped = Seen()
+        await options.start(ProjectStore(preferences: MemoryPreferences())) { skipped.add("called") }
+        #expect(skipped.all.isEmpty)
+    }
+
     @Test func theProjectComesFromTheEnvironmentOrNotAtAll() {
         #expect(LaunchOptions.from(environment: [:]).project == nil)
         #expect(LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": ""]).project == nil)
@@ -109,4 +125,11 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         await options.start(store)
         #expect(spy.reads >= 1 && spy.writes >= 1, "the spy would have shown a restore and a save")
     }
+}
+
+private final class Seen: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func add(_ item: String) { lock.withLock { items.append(item) } }
+    var all: [String] { lock.withLock { items } }
 }
