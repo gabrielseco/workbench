@@ -18,7 +18,7 @@ extension ThreadRunner {
     func grantedAgentRequest(
         sessionID: String, resume: Bool, prompt: String, config: Config, goal: Goal, worktree: URL,
         outputDirectory: URL, options: RunOptions
-    ) -> AgentRequest {
+    ) throws -> AgentRequest {
         var limits = AgentLimits(timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60)
         limits.killGrace = options.killGrace
         let agent = config.resolvedRunAgent(goalModel: goal.model)
@@ -41,20 +41,19 @@ extension ThreadRunner {
             environment: options.parentEnvironment, limits: limits,
             rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config),
             reasoningEffort: agent.reasoningEffort)
-        request.readDirectories = readDirectories(config)
+        request.readDirectories = try readDirectories(config)
         return request
     }
 
     /// Refuses a run whose `read_also` names a folder it cannot be given: the config says it, so it holds or nothing starts.
-    func requireReadAlso(_ config: Config) throws {
-        if case .failure(let problem) = ReadAlso.resolve(config.readAlso, projectRoot: project.root) {
-            throw RunnerError.invalidReadAlso("\(problem)")
-        }
-    }
+    func requireReadAlso(_ config: Config) throws { _ = try readDirectories(config) }
 
-    /// The other checkouts this turn may read; none when the config's list cannot be resolved (a run is refused before that).
-    func readDirectories(_ config: Config) -> [URL] {
-        if case .success(let found) = ReadAlso.resolve(config.readAlso, projectRoot: project.root) { return found }
-        return []
+    /// The other checkouts this turn may read, resolved now: a folder that was there when the run began and is gone before a
+    /// later turn refuses that turn, rather than starting it without the access the config promised.
+    func readDirectories(_ config: Config) throws -> [URL] {
+        switch ReadAlso.resolve(config.readAlso, projectRoot: project.root) {
+        case .success(let found): return found
+        case .failure(let problem): throw RunnerError.invalidReadAlso("\(problem)")
+        }
     }
 }

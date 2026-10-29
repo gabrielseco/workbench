@@ -8,10 +8,16 @@ import Testing
     private func folder(_ name: String, git: Bool = true, in parent: URL) throws -> URL {
         let url = parent.appendingPathComponent(name)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        if git {
-            try FileManager.default.createDirectory(at: url.appendingPathComponent(".git"), withIntermediateDirectories: true)
-        }
+        if git { try makeRepository(at: url.appendingPathComponent(".git")) }
         return url
+    }
+
+    /// What git calls a git directory: a `HEAD`, an object store and refs.
+    private func makeRepository(at git: URL) throws {
+        for sub in ["objects", "refs"] {
+            try FileManager.default.createDirectory(at: git.appendingPathComponent(sub), withIntermediateDirectories: true)
+        }
+        try "ref: refs/heads/main\n".write(to: git.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
     }
 
     private func parent() throws -> URL {
@@ -63,9 +69,44 @@ import Testing
         }
     }
 
+    @Test func anEmptyOrStrayDotGitIsNotACheckout() throws {
+        let dir = try parent()
+        let project = try folder("app", in: dir)
+        let empty = try folder("empty-git", git: false, in: dir)
+        try FileManager.default.createDirectory(at: empty.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        let noRefs = try folder("no-refs", git: false, in: dir)
+        try FileManager.default.createDirectory(at: noRefs.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try "ref: refs/heads/main".write(to: noRefs.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+        let junk = try folder("junk-file", git: false, in: dir)
+        try "not a gitdir line".write(to: junk.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        let dangling = try folder("dangling", git: false, in: dir)
+        try "gitdir: /no/such/place".write(to: dangling.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        for name in ["empty-git", "no-refs", "junk-file", "dangling"] {
+            guard case .failure(let problem) = ReadAlso.resolve(["../\(name)"], projectRoot: project) else {
+                Issue.record("\(name) was accepted as a checkout")
+                continue
+            }
+            #expect(problem.why.contains("not the root of a git checkout"), "\(problem)")
+        }
+    }
+
+    @Test func aLinkedWorktreeOrSubmoduleWhoseDotGitIsAFileIsACheckout() throws {
+        let dir = try parent()
+        let project = try folder("app", in: dir)
+        let main = try folder("main", in: dir)
+        // A linked worktree: its `.git` file leads to a folder inside the main repository that has a HEAD and a `commondir`.
+        let admin = main.appendingPathComponent(".git/worktrees/linked")
+        try FileManager.default.createDirectory(at: admin, withIntermediateDirectories: true)
+        try "ref: refs/heads/linked\n".write(to: admin.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        try "../..\n".write(to: admin.appendingPathComponent("commondir"), atomically: true, encoding: .utf8)
+        let linked = try folder("linked", git: false, in: dir)
+        try "gitdir: \(admin.path)\n".write(to: linked.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        #expect(try ReadAlso.resolve(["../linked"], projectRoot: project).get().map(\.path) == [linked.path])
+    }
+
     @Test func aCheckoutThatContainsTheProjectIsRefusedAsAboveIt() throws {
         let dir = try parent()
-        try FileManager.default.createDirectory(at: dir.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try makeRepository(at: dir.appendingPathComponent(".git"))
         let project = try folder("app", in: dir)
         guard case .failure(let problem) = ReadAlso.resolve([".."], projectRoot: project) else {
             Issue.record("the folder above the project was accepted")
@@ -190,6 +231,25 @@ import Testing
         _ = try await fx.runner(id).run(fx.options("dump=\(dump)"))
         let seen = try dumped(dump)
         #expect(!(try #require(seen["argv"] as? [String])).contains("--add-dir"))
+    }
+
+    @Test func aFolderThatGoesAwayAfterTheFirstTurnRefusesTheNextTurnInsteadOfStartingItWithoutTheAccess() async throws {
+        let fx = try await RunnerFixture()
+        let backend = try await sibling(fx)
+        try setReadAlso([backend.path], in: fx)
+        let id = try await fx.approvedThread()
+        let first = try await fx.runner(id).run(fx.options("stream-events=1"))
+        #expect(first.result == .succeeded)
+        let turnsBefore = try fx.events(id).filter { $0.kind == .turnStarted }.count
+
+        try FileManager.default.removeItem(at: backend)
+        do {
+            _ = try await fx.runner(id).run(fx.options("stream-events=1", feedback: "Again."))
+            Issue.record("the second turn started without the folder")
+        } catch let error as RunnerError {
+            #expect("\(error)".contains("read_also"), "\(error)")
+        }
+        #expect(try fx.events(id).filter { $0.kind == .turnStarted }.count == turnsBefore, "no second turn was started")
     }
 
     @Test func aFolderTheRunCannotBeGivenStopsItBeforeAnyTurnAndSaysWhich() async throws {
