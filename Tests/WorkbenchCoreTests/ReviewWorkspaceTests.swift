@@ -157,13 +157,13 @@ private struct WorkspaceRig {
 
     @Test func aFileTheRepositoryIgnoresButTheThreadAddedStillShowsInSourceControl() async throws {
         let rig = try await WorkspaceRig(files: [".gitignore": "generated/\n", "keep.txt": "keep\n"])
-        try WorkspaceRig.write(rig.worktree, "generated/result.txt", "made\n")
-        _ = try await rig.git.run(["add", "--force", "generated/result.txt"], in: rig.worktree)
+        try WorkspaceRig.write(rig.worktree, "generated/café résultat.txt", "made\n")
+        _ = try await rig.git.run(["add", "--force", "generated/café résultat.txt"], in: rig.worktree)
         _ = try await rig.git.run(["commit", "-q", "-m", "forced"], in: rig.worktree)
         let built = try await rig.build()
         #expect(built.changed == 1)
         let status = try await rig.status()
-        #expect(status == [" A generated/result.txt"], "shown as a new file: \(status)")
+        #expect(status == [" A \"generated/caf\\303\\251 r\\303\\251sultat.txt\""], "shown as a new file: \(status)")
     }
 
     @Test func aRebuildReplacesWhatWasThere() async throws {

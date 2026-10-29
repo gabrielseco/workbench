@@ -107,13 +107,11 @@ public enum ReviewWorkspace {
     /// A file the repository ignores that the thread added (it was forced into the thread's branch) would be hidden from
     /// source control; marking it as intended to be added shows it as a new file without staging its contents.
     private static func track(ignored candidates: [String], in destination: URL, git: GitRunner) async throws {
-        var ignored: [String] = []
-        for chunk in chunks(of: candidates) {
-            // Exit 1 is "none of these is ignored"; the paths come back one per line, quoted when they hold odd characters, so
-            // `-z` is not used (git allows it only with --stdin) and a quoted answer simply fails to match and is not tracked.
-            let found = try await git.run(["check-ignore", "--"] + chunk, in: destination)
-            ignored += found.stdout.split(separator: "\n").map(String.init).filter { chunk.contains($0) }
-        }
+        guard !candidates.isEmpty else { return }
+        // One listing of what the clone ignores, NUL-separated so no name is quoted (`check-ignore` quotes non-ASCII ones).
+        let listing = try await git.run(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], in: destination)
+        let wanted = Set(candidates)
+        let ignored = listing.stdout.split(separator: "\0").map(String.init).filter { wanted.contains($0) }
         for chunk in chunks(of: ignored) {
             try await run(git, ["add", "--force", "--intent-to-add", "--"] + chunk, in: destination)
         }
