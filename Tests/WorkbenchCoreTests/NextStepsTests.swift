@@ -161,3 +161,25 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         #expect(NextSteps.render([]).isEmpty)
     }
 }
+
+@Suite(.processGate) struct NextStepsLoadedTests {
+    @Test func theReviewLoaderCarriesTheStepsForAFinishedTurn() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let manager = WorktreeManager(repoRoot: fx.repo, git: fx.git)
+        let created = try await manager.create(threadID: id, base: "main")
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        _ = try await log.append(
+            .worktreeCreated,
+            data: ["path": .string(created.path.path), "branch": .string(created.branch),
+                "base_commit": .string(created.baseCommit)])
+        _ = try await log.append(.turnStarted, turn: 1, data: ["session_id": "s1"])
+        _ = try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        await log.close()
+        try "x\n".write(to: created.path.appendingPathComponent("made.txt"), atomically: true, encoding: .utf8)
+
+        let report = await ReviewLoader(project: fx.project, git: fx.git).load(id: id)
+        #expect(report.nextSteps.map(\.name) == ["judge", "accept"])
+        #expect(report.nextSteps.allSatisfy { $0.command.contains(id) })
+    }
+}

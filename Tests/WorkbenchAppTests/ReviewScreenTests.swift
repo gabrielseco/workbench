@@ -53,6 +53,21 @@ private final class Recorder: @unchecked Sendable {
         #expect(model.files.map(\.text) == ["M  a.swift  +3 −1"] && model.canDecide)
     }
 
+    @Test func theStepsStillDueAreShownWithoutTheDecisionItself() async throws {
+        let fixture = try await ended()
+        var shown = try report(fixture)
+        shown.nextSteps = [
+            NextStep(name: "judge", command: "workbench judge t1", why: "no judge has run for turn 1 (advisory)"),
+            NextStep(name: "design", command: "workbench review-stage design t1", why: "the change touches Sources/**"),
+            NextStep(name: "accept", command: "workbench accept t1 -m \"<message>\"", why: "or send-back or discard"),
+        ]
+        let model = ReviewModel.derive(shown)
+        #expect(model.due.map(\.id) == ["judge", "design"], "Accept is the button, not a line")
+        #expect(model.due[1].command == "workbench review-stage design t1")
+        shown.nextSteps = [NextStep(name: "ship", command: "workbench ship t1", why: "accepted")]
+        #expect(ReviewModel.derive(shown).due.isEmpty)
+    }
+
     @Test func aBinaryFileAndMissingCountsAreSaidNotInvented() async throws {
         let fixture = try await ended()
         let diff = ReviewReport.Diff.summary(

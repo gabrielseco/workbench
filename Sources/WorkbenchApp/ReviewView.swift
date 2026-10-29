@@ -21,6 +21,7 @@ struct ReviewView: View {
                 if !review.commits.isEmpty { section("Commits") { ForEach(review.commits, id: \.self) { mono($0) } } }
                 section("Check") { Text(review.check).font(.callout) }
                 denied
+                due
                 if !review.notes.isEmpty {
                     section("Sent back") { ForEach(review.notes, id: \.self) { Text($0).font(.callout) } }
                 }
@@ -91,6 +92,20 @@ struct ReviewView: View {
                     .help("View diff")
             }
             if let note = review.filesNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+
+    @ViewBuilder private var due: some View {
+        if !review.due.isEmpty {
+            section("Still due") {
+                ForEach(review.due) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        mono(item.command).textSelection(.enabled)
+                        Text(item.why).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Run these in a terminal. None of them blocks Accept.").font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 

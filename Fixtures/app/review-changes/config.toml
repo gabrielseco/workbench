@@ -3,3 +3,10 @@ editor = "@EDITOR_STUB@"
 [tools]
 available = ["Read"]
 allowed = ["Read"]
+
+[review]
+stages = ["pr-review", "design"]
+
+[review.stage.design]
+skill = "design.md"
+applies_to = ["Sources/**"]
