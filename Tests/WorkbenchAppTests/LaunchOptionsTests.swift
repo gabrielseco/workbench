@@ -36,6 +36,13 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 }
 
 @MainActor @Suite struct LaunchOptionsTests {
+    @Test func theLoginShellPathIsAskedForUnlessAnEnvironmentVariableSaysNot() {
+        #expect(!LaunchOptions.from(environment: [:]).skipsLoginPath)
+        #expect(!LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": "/tmp/p"]).skipsLoginPath, "a fixture asks too")
+        #expect(LaunchOptions.from(environment: ["WORKBENCH_SKIP_LOGIN_PATH": "1"]).skipsLoginPath)
+        #expect(!LaunchOptions.from(environment: ["WORKBENCH_SKIP_LOGIN_PATH": ""]).skipsLoginPath)
+    }
+
     @Test func theProjectComesFromTheEnvironmentOrNotAtAll() {
         #expect(LaunchOptions.from(environment: [:]).project == nil)
         #expect(LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": ""]).project == nil)

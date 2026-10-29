@@ -64,6 +64,14 @@ scripts/verify-app.sh stop <pid>          # always, also after a failure
   `Open the event log`: they open a file panel or another app. A claim about those buttons is checked by seeing that they are listed.
   `Doctor` can be pressed: it runs in the fixture project and reads `Problem` there (no config), which is the expected answer.
 - If a screenshot shows only a wallpaper, Screen Recording is missing for this terminal; `start` says so before it builds.
+- The app is launched with the Dock's environment (a bare `PATH`, nothing of the terminal's profile), and like a person's launch it asks the
+  login shell for the real `PATH` first; set `WORKBENCH_SKIP_LOGIN_PATH=1` only for a check that must not read a profile. A tool that
+  is only on the terminal's `PATH` is therefore not found in a check unless the app finds it, as for a person.
+- **Drafting a goal for real** (`start draft-goal`, whose config names the real Codex as the goal agent): `press "New goal…"`, `type`
+  a request, `paste <pid> <image>` (a PNG with a code word drawn in it works: the goal can only name the word if the drafter saw the
+  picture), `press "Create"`, then `list` every few seconds until "Drafting the goal…" is gone (about 10 s to a few minutes). It spends
+  Codex usage; check the goal on screen and `attachments/1.png` in the fixture project's thread folder. A fake agent cannot stand in for
+  this: it is how a Codex that will not start in the drafter's folder, or is not on the app's `PATH`, shows up.
 - A before and after: run the same commands from a throwaway worktree of `origin/main` (`git worktree add ../wb-main origin/main`),
   name the shots `before-…` and `after-…`, and remove the worktree.
 

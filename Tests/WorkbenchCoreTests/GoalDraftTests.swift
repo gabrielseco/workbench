@@ -120,7 +120,9 @@ func drafting(
         let d = try await drafting()
         _ = try await d.draft(request: "retry uploads with backoff")
         let call = try #require(d.codex?.calls.first)
-        for flag in ["exec", "-s read-only", "--ephemeral", "--ignore-rules", "approval_policy=\"never\"", "-o "] {
+        for flag in [
+            "exec", "-s read-only", "--ephemeral", "--ignore-rules", "approval_policy=\"never\"", "-o ", "--skip-git-repo-check",
+        ] {
             #expect(call.contains(flag), Comment(rawValue: "\(flag) in \(call)"))
         }
         #expect(!call.contains("workspace-write") && !call.contains("-i "), "read-only, no images")
@@ -135,6 +137,14 @@ func drafting(
         let prompt = (d.codex?.read("calls") ?? "").components(separatedBy: " -- ").last ?? ""
         #expect(prompt.contains("retry uploads with backoff") && prompt.contains("Reply with ONE JSON object"))
         #expect(prompt.contains("a.txt"), "declared repository context: the tracked files")
+    }
+
+    @Test func aDrafterThatFailsSaysWhyInTheCLIsOwnWords() async throws {
+        let d = try await drafting()
+        try d.codex?.put("crash", "")
+        let result = try await d.draft()
+        #expect(result.id == nil && d.threads.isEmpty)
+        #expect(result.failure == "codex exited with status 70: boom: it fell over", "\(String(describing: result.failure))")
     }
 
     @Test func replacementDraftsAlsoWorkOutsideTheCheckout() async throws {

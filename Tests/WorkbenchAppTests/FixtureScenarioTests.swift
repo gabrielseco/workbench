@@ -91,6 +91,14 @@ import WorkbenchCore
             Issue.record("corrupt did not read as corrupt")
         }
         #expect(try screen(.noThread) == .noThread)
+        #expect(try screen(.draftGoal) == .noThread)
+    }
+
+    @Test func theDraftGoalScenarioNamesTheRealCodexAsTheGoalAgentAndTheConfigLoads() throws {
+        let project = try project(for: .draftGoal)
+        defer { try? FileManager.default.removeItem(at: project.root) }
+        let config = try Config.load(from: project.configURL)
+        #expect(config.resolvedGoalAgent?.provider == .codex)
     }
 
     @Test func theGoalScenariosShowTheWarningAndTheApprovedGoal() async throws {

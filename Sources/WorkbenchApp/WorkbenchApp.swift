@@ -15,8 +15,6 @@ import WorkbenchCore
                 .task {
                     delegate.drafting = { store.drafting }
                     delegate.stopDrafting = { await store.stopDraftingAndWait() }
-                    // A fixture (verify-app) stays hermetic; a person's own launch gets the PATH their terminal has.
-                    if Self.options.project == nil { await LoginShellPath.applyToEnvironment() }
                     await Self.options.start(store)
                     store.startPolling()
                 }
