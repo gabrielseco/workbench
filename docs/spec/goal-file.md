@@ -188,8 +188,12 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   ending, so a bare signature or a cut file is refused before anything is spent; the app also decodes each before keeping it. A Codex drafter is sent them with `-i`; a Claude drafter finds them as
   `1.png`, `2.jpg`… in its working folder and opens them with its `Read` tool, its only tool. They are kept with the thread in
   `attachments/<n>.<ext>`, numbered by order, and the goal's request ends with `![screenshot n](attachments/<n>.<ext>)` lines
-  so the file and an editor's preview show them. A redraft (`--replace`) takes none; a refused or failed draft keeps none. The
-  coding run does not read them yet.
+  so the file and an editor's preview show them. A redraft (`--replace`) takes none; a refused or failed draft keeps none.
+  **The coding run sees them.** Every turn copies the thread's `attachments/<n>.<ext>` (only files with those names, at most 5)
+  read-only into the worktree's `.workbench/goal-copy/attachments/`, beside the goal copy, replacing the earlier turn's copies and
+  touching nothing else there; git ignores the folder, and nothing is written over a tracked file or where git would not ignore the
+  result. The first prompt then has a `## Screenshots` section naming the copies in number order for the agent to open with its
+  `Read` tool; a name is listed only if its copy was written. A Codex coding turn is not given them yet (it says so as a note).
 - **`goal draft [<id>] --replace --request …` redrafts an existing goal.** Only `title` and the three sections change;
   the id, base, spend, timeout, `model`, `push_to` and comments stay as they are. `status` becomes `draft` and
   `approved_at` and `approved_hash` are removed, so an approved goal needs `goal approve` again (the command says so). It

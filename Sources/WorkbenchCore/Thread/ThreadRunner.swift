@@ -253,7 +253,7 @@ public actor ThreadRunner {
         }
 
         // The approved goal beside the diff for anyone who opens the worktree; replaced every turn.
-        await copyGoalIntoWorktree()
+        let screenshots = await copyGoalIntoWorktree()
 
         // The install step, before the first turn only (SetupRunner says when it runs).
         try await runSetupIfNeeded(
@@ -275,7 +275,8 @@ public actor ThreadRunner {
         var promptInfo: [String: JSONValue] = [:]
         let runAgent = config.resolvedRunAgent(goalModel: goal.model)
         if builtFromGoal || codexFollowUp != nil {
-            (prompt, promptInfo) = await firstPrompt(goal: goal, config: config, baseCommit: baseCommit, options: options)
+            (prompt, promptInfo) = await firstPrompt(
+                goal: goal, config: config, baseCommit: baseCommit, options: options, screenshots: screenshots)
         }
         if runAgent.provider == .codex {
             (prompt, promptInfo) = await codexPrompt(
@@ -546,11 +547,16 @@ extension ThreadRunner {
 }
 
 extension ThreadRunner {
-    /// Says so when the copy was not written, so a person who opens the worktree and finds no goal knows why.
-    fileprivate func copyGoalIntoWorktree() async {
-        guard let text = try? String(contentsOf: project.goalURL(threadID), encoding: .utf8) else { return }
+    /// Says so when the copy was not written, so a person who opens the worktree and finds no goal knows why. Returns the
+    /// names of the goal's screenshots that are now in the worktree, for the prompt to point at.
+    fileprivate func copyGoalIntoWorktree() async -> [String] {
+        guard let text = try? String(contentsOf: project.goalURL(threadID), encoding: .utf8) else { return [] }
         if case .skipped(let why) = await worktreeManager.writeGoalCopy(text, for: threadID) {
             notify(.advisory("the goal was not copied into the worktree: \(why)"))
         }
+        let kept = GoalAttachments.stored(in: project.threadDirectory(threadID))
+        let names = await worktreeManager.writeAttachmentCopies(kept, for: threadID)
+        if names.count < kept.count { notify(.advisory("the goal's screenshots were not copied into the worktree")) }
+        return names
     }
 }

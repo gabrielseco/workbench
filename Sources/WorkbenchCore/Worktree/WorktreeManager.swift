@@ -53,7 +53,7 @@ public struct WorktreeManager: Sendable {
     public static let branchPrefix = "workbench/"
 
     public let repoRoot: URL
-    private let git: GitRunner
+    let git: GitRunner
 
     public init(repoRoot: URL, git: GitRunner) {
         self.repoRoot = repoRoot.resolvingSymlinksInPath()
@@ -177,7 +177,7 @@ public struct WorktreeManager: Sendable {
     }
 
     /// What is at `url`, without following a link; nil when nothing is.
-    private static func type(of url: URL) -> FileAttributeType? {
+    static func type(of url: URL) -> FileAttributeType? {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
     }
 

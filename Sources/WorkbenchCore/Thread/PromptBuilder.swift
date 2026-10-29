@@ -10,7 +10,7 @@ public enum PromptBuilder {
 
     public static func firstPrompt(
         goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false,
-        plan: PlanForRun? = nil
+        plan: PlanForRun? = nil, screenshots: [String] = []
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
@@ -22,6 +22,7 @@ public enum PromptBuilder {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"
             for item in goal.outOfScope { out += "- \(item)\n" }
         }
+        if !screenshots.isEmpty { out += screenshotSection(screenshots) }
         if let plan { out += planSection(plan) }
         if let instructions {
             out += "\n## Project instructions\n\n\(instructionsIntro)\n\n\(instructions.text)\n"
@@ -52,6 +53,22 @@ public enum PromptBuilder {
         }
         out += "\nWork in the current directory. When you finish, say which criteria you believe hold and why.\n"
         return out
+    }
+
+    /// The screenshots the person attached to the goal, as files in the worktree for the agent to open. They are kept out of
+    /// version control, so the agent is told not to commit or move them.
+    static func screenshotSection(_ names: [String]) -> String {
+        let list = names.map { "- `\(WorktreeManager.attachmentCopyFolder)/\($0)`" }.joined(separator: "\n")
+        return """
+
+            ## Screenshots
+
+            The request refers to screenshots the user attached. Open each with your Read tool before you start, in this \
+            order. They are outside version control: do not commit, move or edit them.
+
+            \(list)
+
+            """
     }
 
     /// The plan, as advice: another model wrote it from the same goal, and the contract is still the criteria.

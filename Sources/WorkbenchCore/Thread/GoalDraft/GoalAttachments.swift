@@ -153,6 +153,26 @@ public enum GoalAttachments {
         return width > 0 && height > 0 ? Shape(ext: "webp", width: width, height: height) : nil
     }
 
+    /// The images a thread kept (`attachments/<n>.<ext>`), in the order of their numbers: only regular files with the names
+    /// this type writes and a size within bounds, at most `maxCount`. Nothing else in the folder is ever read as one.
+    public static func stored(in threadDirectory: URL) -> [URL] {
+        let folder = threadDirectory.appendingPathComponent(Self.folder, isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        let numbered: [(Int, URL)] = names.compactMap { name in
+            let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count == 2, let number = Int(parts[0]), number > 0, String(number) == parts[0],
+                ["png", "jpg", "gif", "webp"].contains(String(parts[1]))
+            else { return nil }
+            let url = folder.appendingPathComponent(name)
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink != true, (values?.fileSize ?? .max) <= maxBytes else {
+                return nil
+            }
+            return (number, url)
+        }
+        return numbered.sorted { $0.0 < $1.0 }.prefix(maxCount).map(\.1)
+    }
+
     /// `1.png`, `2.jpg`, …: numbered by order, never by what the file was called.
     static func names(_ items: [Loaded]) -> [String] {
         items.enumerated().map { "\($0.offset + 1).\($0.element.ext)" }
