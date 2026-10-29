@@ -152,16 +152,25 @@ struct RunView: View {
                 }
                 if canRunAgain { Button("Run again") { Task { await store.runAgain() } } }
                 Spacer()
-                if run.phase == .working || run.phase == .checking {
-                    Button(store.stopping ? "Stopping…" : "Stop turn") { Task { await store.stopTurn() } }
-                        .disabled(store.stopping)
+                if let stoppable {
+                    Button(store.stopping ? "Stopping…" : (stoppable == .advice ? "Stop advice" : "Stop turn")) {
+                        Task { await store.stopTurn() }
+                    }
+                    .disabled(store.stopping)
                 }
             }
-            if run.phase == .working || run.phase == .checking {
+            if stoppable == .turn {
                 Text("You can close the window.").font(.caption).foregroundStyle(.secondary)
+            } else if stoppable == .advice {
+                Text("Running the advice the project's config asks for (judge, review stages).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
+    }
+
+    private var stoppable: RunModel.Stoppable? {
+        RunModel.stoppable(phase: run.phase, runningHere: store.runningHere)
     }
 
     private var canRunAgain: Bool {

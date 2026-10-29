@@ -23,6 +23,15 @@ import WorkbenchCore
         try fixture.append("t1", .agentActivity, turn: 1, data: .object(data), ts: "2026-10-28T11:00:10.000Z")
     }
 
+    @Test func stopIsOfferedForTheTurnAndForTheAdviceThatFollowsItWhileThisAppRunsIt() {
+        #expect(RunModel.stoppable(phase: .working, runningHere: false) == .turn)
+        #expect(RunModel.stoppable(phase: .checking, runningHere: true) == .turn)
+        // The turn is over but the app's run goes on: that is the advice `[review] auto` runs, and it can be stopped.
+        #expect(RunModel.stoppable(phase: .ended(result: "succeeded", reason: nil), runningHere: true) == .advice)
+        #expect(RunModel.stoppable(phase: .ended(result: "succeeded", reason: nil), runningHere: false) == nil)
+        #expect(RunModel.stoppable(phase: .orphaned, runningHere: true) == nil)
+    }
+
     @Test func noTurnMeansNoRunScreen() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
