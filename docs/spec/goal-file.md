@@ -300,6 +300,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # max_rounds = 3                        # reviews of one pull request, counted from the event log (1 to 10)
 # [review]                              # P6: the review stages, in order (the loop runs only pr-review so far)
 # stages = ["pr-review", "design"]      # default ["pr-review"]
+# auto = ["judge", "design"]            # run by themselves after a turn that succeeded with a passing check; default none (each costs its agent's price)
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
@@ -435,6 +436,15 @@ Notes:
   a pass; `review --json` has it as `verifier`. The judge and a review stage that reads `proof` are given every PNG of
   the turn's proof (bounded: eight for the judge, twenty for a stage), each with its pixel
   size, and `review_stage.started` names them in `proof`.
+- **`[review] auto` runs advice by itself.** Names, in the order given: `judge` or a stage in `stages` other than `pr-review`
+  (which reviews a pushed pull request); each at most once, anything else is refused when the config loads with the key named. After
+  `workbench run` (or `send-back`, or the app's Run) has ended a turn that succeeded with a check that passed, or none, and its
+  runner is gone, each entry that `workbench next` lists as due (the judge not yet run for this turn, a stage that applies to the
+  change and has no round at this head) runs once, one after the other, through the same code as `workbench judge` and
+  `workbench review-stage`: its own event, cost and refusals, and a stage's `max_rounds`. `run` prints one line each, `auto <name>: <a
+  line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. It is advice:
+  a failed or refused step never changes `run`'s exit code, the turn's result or what `accept` and `ship` do. Off by default, since
+  each step spends what its agent costs. Nothing runs after a failed turn or check.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

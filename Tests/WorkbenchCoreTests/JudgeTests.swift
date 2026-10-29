@@ -203,7 +203,7 @@ private let good = """
 
 private struct ExpectationFailed: Error {}
 
-private struct Judged {
+struct Judged {
     var fx: RunnerFixture
     var id: String
     var config: Config
@@ -220,8 +220,8 @@ private struct Judged {
     }
 }
 
-private func judged(screenshots: Bool = false) async throws -> Judged {
-    let fx = try await RunnerFixture()
+func judged(screenshots: Bool = false, extraConfig: String = "") async throws -> Judged {
+    let fx = try await RunnerFixture(extraConfig: extraConfig)
     let (id, _) = try await acceptedThread(fx)
     if screenshots { try await recordVerifierProof(fx, id, ["home.png": "pixels"]) }
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("judge-\(UUID().uuidString)")

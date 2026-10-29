@@ -440,6 +440,9 @@ public struct Config: Sendable, Equatable {
         # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set
         # ready_url = "http://localhost:{port}/"  # or ready_line = "Triage on mock data" (a regex on its output)
 
+        # [review]
+        # auto = ["judge"]                 # advice run by itself after a turn that passed its check (default none; each costs money)
+
         # [verifier]                       # on by default: runs the project's skill after a passing check
         # enabled = false                  # turn it off; with no skill file at the base it is skipped anyway
         # skill = ".claude/skills/verify/SKILL.md"  # read from the base commit

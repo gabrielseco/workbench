@@ -86,6 +86,9 @@ public struct ReviewConfig: Sendable, Equatable {
 
     /// `review.stages`, in order.
     public var stages: [String] = ReviewConfig.defaultStages
+    /// `review.auto`: the advice run by itself after a successful turn whose check passed, in this order; `judge` or a stage of
+    /// `stages` other than `pr-review` (which needs the branch pushed). Empty by default: each run costs what its agent costs.
+    public var auto: [String] = []
     /// Every defined stage by name: the built-ins and each `[review.stage.<name>]` table, listed or not.
     public var definitions: [String: ReviewStageConfig] = [prReviewStage: ReviewStageConfig(name: prReviewStage)]
     /// The names that have a `[review.stage.<name>]` table, in file order.
@@ -130,7 +133,7 @@ extension ReviewConfig {
         for (name, table) in document.tables.sorted(by: { $0.value.line < $1.value.line }) where owns(table: name) {
             let known: Set<String>
             switch name {
-            case "review": known = ["stages"]
+            case "review": known = ["stages", "auto"]
             case "pr_review": known = ["checklist", "max_rounds"]
             default:
                 let stage = String(name.dropFirst(tablePrefix.count))
@@ -172,7 +175,34 @@ extension ReviewConfig {
         if let entry = document.tables["review"]?.entries["stages"] {
             config.stages = stageList(entry, defined: config.definitions, fail: fail) ?? defaultStages
         }
+        if let entry = document.tables["review"]?.entries["auto"] {
+            config.auto = autoList(entry, stages: config.stages, fail: fail) ?? []
+        }
         return config
+    }
+
+    /// The names of `[review] auto`: `judge`, or a listed stage that is not `pr-review`; each once.
+    private static func autoList(_ entry: TOMLEntry, stages: [String], fail: Fail) -> [String]? {
+        guard case .array(let items) = entry.value else {
+            fail(.wrongType, entry.line, "'auto' must be an array of names, found \(entry.value.typeName)")
+            return nil
+        }
+        var names: [String] = []
+        for item in items {
+            guard case .string(let name) = item else {
+                fail(.wrongType, entry.line, "'auto' must contain only strings, found \(item.typeName)")
+                return nil
+            }
+            if names.contains(name) {
+                fail(.invalidValue, entry.line, "'auto' lists '\(name)' more than once")
+            } else if name == prReviewStage {
+                fail(.invalidValue, entry.line, "'auto' cannot list 'pr-review': it reviews a pushed pull request")
+            } else if name != "judge", !stages.contains(name) {
+                fail(.invalidValue, entry.line, "'auto' lists '\(name)', which is neither 'judge' nor a stage in 'stages'")
+            }
+            names.append(name)
+        }
+        return names
     }
 
     private static func stageList(_ entry: TOMLEntry, defined: [String: ReviewStageConfig], fail: Fail) -> [String]? {
