@@ -3,24 +3,57 @@ import Testing
 
 @testable import WorkbenchCore
 
+/// Images with the shape of real ones (signature, header fields, ending), as small as the test allows: the checks read no pixels.
+enum TestImage {
+    private static func be32(_ value: Int) -> [UInt8] { (0..<4).map { UInt8((value >> (24 - 8 * $0)) & 0xFF) } }
+
+    private static func chunk(_ type: String, _ data: [UInt8]) -> [UInt8] {
+        be32(data.count) + Array(type.utf8) + data + [0, 0, 0, 0]
+    }
+
+    /// `padding` extra bytes ride in an ancillary chunk, so a file can be big and small in pixels.
+    static func png(width: Int = 4, height: Int = 4, padding: Int = 0) -> Data {
+        var bytes: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        bytes += chunk("IHDR", be32(width) + be32(height) + [8, 2, 0, 0, 0])
+        if padding > 0 { bytes += chunk("prVt", [UInt8](repeating: 7, count: padding)) }
+        bytes += [0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+        return Data(bytes)
+    }
+
+    static func jpeg(width: Int = 4, height: Int = 4) -> Data {
+        let size = [UInt8(height >> 8), UInt8(height & 0xFF), UInt8(width >> 8), UInt8(width & 0xFF)]
+        let frame: [UInt8] = [0xFF, 0xC0, 0, 11, 8] + size + [1, 1, 0x11, 0]
+        return Data([0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0] + frame + [0xFF, 0xD9])
+    }
+
+    static func gif() -> Data { Data(Array("GIF89a".utf8) + [4, 0, 4, 0, 0, 0, 0] + [0x3B]) }
+
+    static func webp() -> Data {
+        let body = Array("WEBPVP8 ".utf8) + [0, 0, 0, 0]
+        let size = body.count
+        return Data(Array("RIFF".utf8) + [UInt8(size & 0xFF), 0, 0, 0] + body)
+    }
+}
+
 extension Drafting {
-    /// A file with an image's first bytes (the sniff reads no more), plus `padding` more bytes.
-    func image(
-        _ name: String, header: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], padding: Int = 16
-    ) throws -> URL {
+    func image(_ name: String, jpeg: Bool = false, width: Int = 4, height: Int = 4, padding: Int = 0) throws -> URL {
+        let data =
+            jpeg ? TestImage.jpeg(width: width, height: height) : TestImage.png(width: width, height: height, padding: padding)
+        return try write(name, data)
+    }
+
+    func write(_ name: String, _ data: Data) throws -> URL {
         let url = dir.appendingPathComponent(name)
-        try Data(header + [UInt8](repeating: 7, count: padding)).write(to: url)
+        try data.write(to: url)
         return url
     }
 }
 
 @Suite(.processGate) struct GoalDraftAttachmentTests {
-    private let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE0]
-
     @Test func imagesGoToACodexDrafterInOrderAndAreKeptWithTheThread() async throws {
         let d = try await drafting()
         let first = try d.image("shot-b.png")
-        let second = try d.image("a.jpeg", header: jpeg)
+        let second = try d.image("a.jpeg", jpeg: true)
         let result = try await d.draft(attachments: [first, second])
         let id = try #require(result.id)
         #expect(result.failure == nil)
@@ -53,7 +86,7 @@ extension Drafting {
         let answer = try d.file("answer.json", proposalJSON)
         let dump = d.dir.appendingPathComponent("dump.json")
         let result = try await d.draft(
-            attachments: [try d.image("shot.png"), try d.image("b.jpg", header: jpeg)],
+            attachments: [try d.image("shot.png"), try d.image("b.jpg", jpeg: true)],
             environment: d.claudeEnvironment("answer=\(answer)", "dump=\(dump.path)"))
         let id = try #require(result.id)
         #expect(result.failure == nil, "\(String(describing: result.failure))")
@@ -61,7 +94,9 @@ extension Drafting {
             JSONSerialization.jsonObject(with: Data(contentsOf: dump)) as? [String: Any])
         let argv = try #require(seen["argv"] as? [String]).joined(separator: "\n")
         #expect(argv.contains("--tools\nRead\n--allowedTools\nRead"), "Read is the only tool: \(argv)")
-        #expect(argv.contains("1.png, 2.jpg"), "the prompt names the files, in order")
+        let first = try #require(argv.range(of: "1.png"))
+        let second = try #require(argv.range(of: "2.jpg"))
+        #expect(first.lowerBound < second.lowerBound, "the prompt names the files, in order")
         #expect(!argv.contains("shot.png") && !argv.contains("b.jpg"))
         #expect(seen["cwd_files"] as? [String] == ["1.png", "2.jpg"], "they were in the folder it ran in")
         let kept = d.fx.project.threadDirectory(id).appendingPathComponent("attachments")
@@ -87,6 +122,51 @@ extension Drafting {
             Issue.record("a text file named .png was attached")
         } catch let refusal as GoalDraftRefusal {
             #expect("\(refusal)".contains("not.png is not a PNG"), "\(refusal)")
+        }
+        #expect(d.codex?.runs == 0 && d.threads.isEmpty)
+    }
+
+    @Test func aTruncatedOrEmptyOrDisguisedImageIsRefusedBeforeAnyAgentStarts() async throws {
+        let d = try await drafting()
+        let whole = TestImage.png()
+        let bad: [URL] = [
+            try d.write("signature.png", whole.prefix(8)),
+            try d.write("cut.png", whole.dropLast(5)),
+            try d.write("empty.png", Data()),
+            try d.write("cut.jpg", TestImage.jpeg().dropLast(2)),
+            try d.write("cut.gif", TestImage.gif().dropLast()),
+            try d.write("cut.webp", TestImage.webp().dropLast(2)),
+            try d.write("zero.png", TestImage.png(width: 0, height: 5)),
+        ]
+        for url in bad {
+            do {
+                _ = try await d.draft(attachments: [url])
+                Issue.record("\(url.lastPathComponent) was attached")
+            } catch let refusal as GoalDraftRefusal {
+                #expect("\(refusal)".contains(url.lastPathComponent), "\(refusal)")
+            }
+        }
+        #expect(d.codex?.runs == 0 && d.threads.isEmpty)
+    }
+
+    @Test func everySupportedFormatIsAcceptedWhenItIsWhole() async throws {
+        let d = try await drafting()
+        let files = [
+            try d.write("a.png", TestImage.png()), try d.write("b.jpg", TestImage.jpeg()), try d.write("c.gif", TestImage.gif()),
+            try d.write("d.webp", TestImage.webp()),
+        ]
+        let result = try await d.draft(attachments: files)
+        let id = try #require(result.id)
+        let kept = try FileManager.default.contentsOfDirectory(
+            atPath: d.fx.project.threadDirectory(id).appendingPathComponent("attachments").path)
+        #expect(kept.sorted() == ["1.png", "2.jpg", "3.gif", "4.webp"])
+    }
+
+    @Test func anImageWithTooManyPixelsIsRefusedWhateverItsFileSize() async throws {
+        let d = try await drafting()
+        let huge = try d.image("huge.png", width: 20_000, height: 20_000)
+        await #expect(throws: GoalDraftRefusal.attachment("\(GoalAttachments.Refusal.tooManyPixels("huge.png"))")) {
+            _ = try await d.draft(attachments: [huge])
         }
         #expect(d.codex?.runs == 0 && d.threads.isEmpty)
     }
@@ -118,22 +198,25 @@ extension Drafting {
         #expect(result.id == nil && result.failure != nil && d.threads.isEmpty)
     }
 
-    @Test func theScreenshotNoteIsInThePromptOnlyWhenThereAreScreenshots() {
+    @Test func theScreenshotsChangeThePromptOnlyWhenThereAreAnyAndNameTheirFilesInOrderOnlyForADrafterThatOpensFiles() {
         let none = GoalDraft.prompt(request: "x", instructions: nil, paths: [], pathsCut: false)
         let sent = GoalDraft.prompt(request: "x", instructions: nil, paths: [], pathsCut: false, attachments: 2)
         let read = GoalDraft.prompt(
             request: "x", instructions: nil, paths: [], pathsCut: false, attachments: 2, readFiles: ["1.png", "2.jpg"])
-        #expect(!none.contains("## Screenshots"))
-        #expect(sent.contains("## Screenshots") && sent.contains("attached to this message") && !sent.contains("1.png"))
-        #expect(read.contains("Read tool") && read.contains("1.png, 2.jpg") && !read.contains("attached to this message"))
+        #expect(none != sent && sent != read && none == GoalDraft.prompt(
+            request: "x", instructions: nil, paths: [], pathsCut: false, attachments: 0, readFiles: ["1.png"]))
+        #expect(!sent.contains("1.png") && !sent.contains("2.jpg"))
+        let one = read.range(of: "1.png")
+        let two = read.range(of: "2.jpg")
+        #expect(one != nil && two != nil && one!.lowerBound < two!.lowerBound)
     }
 
-    @Test func imagesAreRecognisedByTheirBytesNotTheirNames() {
-        #expect(GoalAttachments.kind(of: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) == "png")
-        #expect(GoalAttachments.kind(of: Data([0xFF, 0xD8, 0xFF])) == "jpg")
-        #expect(GoalAttachments.kind(of: Data("GIF89a".utf8)) == "gif")
-        #expect(GoalAttachments.kind(of: Data("RIFF....WEBP".utf8)) == "webp")
-        #expect(GoalAttachments.kind(of: Data("<svg></svg>".utf8)) == nil)
-        #expect(GoalAttachments.kind(of: Data()) == nil)
+    @Test func imagesAreRecognisedByTheirBytesAndSizedFromTheirHeaders() {
+        #expect(GoalAttachments.inspect(TestImage.png(width: 30, height: 20)) == .init(ext: "png", width: 30, height: 20))
+        #expect(GoalAttachments.inspect(TestImage.jpeg(width: 640, height: 480)) == .init(ext: "jpg", width: 640, height: 480))
+        #expect(GoalAttachments.inspect(TestImage.gif()) == .init(ext: "gif", width: 4, height: 4))
+        #expect(GoalAttachments.inspect(TestImage.webp())?.ext == "webp")
+        #expect(GoalAttachments.inspect(Data("<svg></svg>".utf8)) == nil)
+        #expect(GoalAttachments.inspect(Data()) == nil)
     }
 }

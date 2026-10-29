@@ -199,7 +199,7 @@ struct NewGoalSheet: View {
         .padding(20)
         .dropDestination(for: URL.self) { urls, _ in
             guard !store.drafting else { return false }
-            staging.add(files: urls)
+            Task { await staging.add(files: urls) }
             return true
         }
         .onAppear {
@@ -250,7 +250,7 @@ struct NewGoalSheet: View {
             guard flags == .command, event.charactersIgnoringModifiers == "v", !store.drafting,
                 AttachmentStaging.wantsImages(.general)
             else { return event }
-            staging.add(from: .general)
+            Task { await staging.add(from: .general) }
             return nil
         }
     }
@@ -260,6 +260,6 @@ struct NewGoalSheet: View {
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK { staging.add(files: panel.urls) }
+        if panel.runModal() == .OK { Task { await staging.add(files: panel.urls) } }
     }
 }

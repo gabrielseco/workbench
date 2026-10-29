@@ -30,11 +30,11 @@ import WorkbenchCore
         return url
     }
 
-    @Test func anImageFileIsCopiedSoMovingTheOriginalChangesNothing() throws {
+    @Test func anImageFileIsCopiedSoMovingTheOriginalChangesNothing() async throws {
         let dir = try folder()
         let original = try file("shot.png", try picture().png, in: dir)
         let staging = AttachmentStaging()
-        staging.add(files: [original])
+        await staging.add(files: [original])
         #expect(staging.items.count == 1 && staging.problem == nil)
         try FileManager.default.removeItem(at: original)
         let copy = try #require(staging.urls.first)
@@ -43,54 +43,57 @@ import WorkbenchCore
         #expect(!FileManager.default.fileExists(atPath: copy.path) && staging.items.isEmpty)
     }
 
-    @Test func somethingThatIsNotAnImageIsRefusedWithWhyAndNotAdded() throws {
+    @Test func somethingThatIsNotAnImageIsRefusedWithWhyAndNotAdded() async throws {
         let dir = try folder()
         let text = try file("notes.png", Data("hello".utf8), in: dir)
         let staging = AttachmentStaging()
-        staging.add(files: [text])
+        await staging.add(files: [text])
         #expect(staging.items.isEmpty && staging.problem?.contains("notes.png is not a PNG") == true)
     }
 
-    @Test func theSixthImageIsRefusedAndTheFirstFiveStay() throws {
+    @Test func theSixthImageIsRefusedAndTheFirstFiveStay() async throws {
         let dir = try folder()
         let png = try picture().png
         let files = try (0..<6).map { try file("s\($0).png", png, in: dir) }
         let staging = AttachmentStaging()
-        staging.add(files: files)
+        await staging.add(files: files)
         #expect(staging.items.count == GoalAttachments.maxCount)
         #expect(staging.problem == "\(GoalAttachments.Refusal.tooMany)")
     }
 
-    @Test func aScreenshotOnTheClipboardBecomesAPNG() throws {
+    @Test func aScreenshotOnTheClipboardBecomesAPNG() async throws {
         let staging = AttachmentStaging()
-        staging.add(imageData: try picture().tiff)
+        await staging.add(imageData: try picture().tiff)
         let kept = try #require(staging.urls.first)
         #expect(kept.pathExtension == "png" && staging.problem == nil)
         #expect(try GoalAttachments.load(kept).ext == "png", "what was kept reads back as a PNG")
-        staging.add(imageData: Data("nope".utf8))
+        await staging.add(imageData: Data("nope".utf8))
         #expect(staging.items.count == 1 && staging.problem == "That is not an image.")
         staging.clear()
     }
 
-    @Test func pastingTakesImagesAndLeavesTextForTheTextField() throws {
+    @Test func pastingTakesImagesAndLeavesTextForTheTextField() async throws {
         let staging = AttachmentStaging()
         let board = NSPasteboard(name: NSPasteboard.Name("workbench-test-\(UUID().uuidString)"))
         board.clearContents()
         board.setString("some words", forType: .string)
-        #expect(staging.add(from: board) == false && staging.items.isEmpty, "plain text is not ours")
+        let textTaken = await staging.add(from: board)
+        #expect(textTaken == false && staging.items.isEmpty, "plain text is not ours")
 
         board.clearContents()
         board.setData(try picture().tiff, forType: .tiff)
-        #expect(staging.add(from: board) && staging.items.count == 1)
+        let pictureTaken = await staging.add(from: board)
+        #expect(pictureTaken && staging.items.count == 1)
 
         let dir = try folder()
         board.clearContents()
         board.writeObjects([try file("a.png", try picture().png, in: dir) as NSURL])
-        #expect(staging.add(from: board) && staging.items.count == 2)
+        let fileTaken = await staging.add(from: board)
+        #expect(fileTaken && staging.items.count == 2)
         staging.clear()
     }
 
-    @Test func aPasteIsForTheScreenshotsOnlyWhenTheClipboardHoldsAnImageAndNoText() throws {
+    @Test func aPasteIsForTheScreenshotsOnlyWhenTheClipboardHoldsAnImageAndNoText() async throws {
         let board = NSPasteboard(name: NSPasteboard.Name("workbench-test-\(UUID().uuidString)"))
         board.clearContents()
         #expect(!AttachmentStaging.wantsImages(board), "empty")
@@ -109,11 +112,34 @@ import WorkbenchCore
         #expect(!AttachmentStaging.wantsImages(board), "a file that is not an image")
     }
 
-    @Test func removingOneKeepsTheOthersInOrder() throws {
+    @Test func aClipboardImageTooBigToReadIsRefusedBeforeAnythingIsDecoded() async throws {
+        let staging = AttachmentStaging()
+        await staging.add(imageData: try picture().tiff, rawLimit: 10)
+        #expect(staging.items.isEmpty && staging.problem == "That image is too large to read.")
+    }
+
+    @Test func aCutOffPictureIsRefusedNotAdded() async throws {
+        let dir = try folder()
+        let cut = try file("cut.png", try picture().png.dropLast(20), in: dir)
+        let staging = AttachmentStaging()
+        await staging.add(files: [cut])
+        #expect(staging.items.isEmpty && staging.problem?.contains("cut.png is not a PNG") == true)
+    }
+
+    @Test func eachImageGetsASmallThumbnail() async throws {
+        let staging = AttachmentStaging()
+        await staging.add(imageData: try picture().tiff)
+        let thumbnail = try #require(staging.items.first?.thumbnail)
+        #expect(thumbnail.size.width <= CGFloat(AttachmentStaging.thumbnailPixels) && thumbnail.size.width > 0)
+        staging.clear()
+    }
+
+    @Test func removingOneKeepsTheOthersInOrder() async throws {
         let png = try picture().png
         let dir = try folder()
         let staging = AttachmentStaging()
-        staging.add(files: [try file("a.png", png, in: dir), try file("b.png", png, in: dir), try file("c.png", png, in: dir)])
+        let three = try ["a", "b", "c"].map { try file("\($0).png", png, in: dir) }
+        await staging.add(files: three)
         let (first, second, third) = (staging.items[0], staging.items[1], staging.items[2])
         staging.remove(second)
         #expect(staging.items.map(\.id) == [first.id, third.id])
