@@ -13,7 +13,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
-WORD="PELICAN-7731"
+WORD="PELICAN7731"
 SHOT="$SCRATCH/shot.png"
 WORD="$WORD" SHOT="$SHOT" swift - <<'SWIFT' || die "could not draw the screenshot (this scenario needs macOS and swift)"
 import AppKit
