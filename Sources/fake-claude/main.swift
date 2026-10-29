@@ -22,7 +22,7 @@ import Foundation
 //   grandchild=<pidfile>  start a `sleep` in its own process group, write its pid to the file
 //   ready=<file>          create this file once signal handling and the grandchild are set up, so a
 //                         test can signal the process without racing its startup
-//   dump=<file>           write argv, environment, cwd, open descriptors and stdin state as JSON
+//   dump=<file>           write argv, environment, cwd (and the names in it), open descriptors and stdin state as JSON
 //   answer=<file>         with `--output-format json` (one object, not a stream) answer with this file's text
 //                         as the `result`, then exit; `exit=<n>` still applies
 //                         (json mode also takes: crash-after=<any> exits 70 and die-after=<any> kills itself, before
@@ -102,10 +102,13 @@ if let path = d.string("dump") {
     // would block here, which is exactly what the test wants to notice.
     var byte: UInt8 = 0
     let stdinEOF = read(0, &byte, 1) == 0
+    let here = FileManager.default.currentDirectoryPath
+    let cwdNames = ((try? FileManager.default.contentsOfDirectory(atPath: here)) ?? []).sorted()
     let info: [String: Any] = [
         "argv": args, "env": ProcessInfo.processInfo.environment,
         "cwd": FileManager.default.currentDirectoryPath, "fds": fds, "stdin_eof": stdinEOF,
         "pid": getpid(), "pgid": getpgrp(),
+        "cwd_files": cwdNames,
     ]
     try? json(info).write(toFile: path, atomically: true, encoding: .utf8)
 }

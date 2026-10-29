@@ -3,12 +3,12 @@ import Testing
 
 @testable import WorkbenchCore
 
-private let proposalJSON =
+let proposalJSON =
     #"{"title": "Add retry", "request": "Retry uploads with backoff.", "#
     + #""criteria": [{"text": "Delay grows exponentially.", "proof": "test: RetryTests/delay"}, "#
     + #"{"text": "Gives up after five tries.", "proof": "test: RetryTests/giveUp"}], "out_of_scope": ["Changing the timeout."]}"#
 
-private struct Drafting {
+struct Drafting {
     var fx: RunnerFixture
     var config: Config
     var codex: FakeCodex?
@@ -28,11 +28,12 @@ private struct Drafting {
 
     func draft(
         _ target: GoalDraftTarget = .newThread(name: "retry", base: "main"), request: String = "retry uploads",
-        environment: [String: String]? = nil, timeout: TimeInterval = 30,
+        attachments: [URL] = [], environment: [String: String]? = nil, timeout: TimeInterval = 30,
         attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> GoalDraftResult {
         try await fx.service.draftGoal(
-            target: target, request: request, config: config, environment: environment ?? self.environment,
+            target: target, request: request, config: config, attachments: attachments,
+            environment: environment ?? self.environment,
             timeout: timeout, attach: attach)
     }
 
@@ -47,7 +48,7 @@ private struct Drafting {
 }
 
 /// A fixture drafting on Codex (answering from a file) unless `provider` is Claude.
-private func drafting(
+func drafting(
     provider: AgentProviderID = .codex, allowUnpriced: Bool? = true, answer: String? = proposalJSON, model: String? = nil
 ) async throws -> Drafting {
     let fx = try await RunnerFixture()
