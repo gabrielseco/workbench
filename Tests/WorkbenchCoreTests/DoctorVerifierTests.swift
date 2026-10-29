@@ -113,6 +113,15 @@ private func commitSkill(_ fx: RunnerFixture, _ path: String, _ text: String) as
         #expect(report.passed, "a warning, as the skill problem is")
     }
 
+    @Test func theAppThatLaunchedWorkbenchIsNamedWhenThereIsNoTerminal() {
+        #expect(Doctor.screenRecordingApp(environment: ["__CFBundleIdentifier": "dev.rogal.workbench"]) == "Workbench.app")
+        #expect(Doctor.screenRecordingApp(environment: ["__CFBundleIdentifier": "com.apple.Terminal"]) == "com.apple.Terminal")
+        #expect(
+            Doctor.screenRecordingApp(environment: ["TERM_PROGRAM": "iTerm.app", "__CFBundleIdentifier": "com.googlecode.iterm2"])
+                == "iTerm.app")
+        #expect(Doctor.screenRecordingApp(environment: [:]).contains("terminal"))
+    }
+
     @Test(arguments: ["app_type = \"desktop\"", "app_type = \"web\"", ""])
     func theGrantOrANonDesktopAppNeverWarns(extra: String) async throws {
         let path = "SKILL.md"
