@@ -148,7 +148,7 @@ struct RunView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if snapshot.state.decision != "discarded", !snapshot.state.cleaned {
-                    Button("Open worktree") { Task { await store.openWorktree() } }
+                    Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
                 }
                 if canRunAgain { Button("Run again") { Task { await store.runAgain() } } }
                 Spacer()

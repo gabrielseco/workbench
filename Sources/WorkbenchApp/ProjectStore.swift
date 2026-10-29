@@ -36,6 +36,22 @@ struct RecentProject: Equatable, Identifiable {
     /// What the last action said when it did not go through. Set by the store's own extensions too.
     var actionError: String?
     private(set) var starting = false
+    /// What the app is doing for the person right now, in words ("Discarding: removing the worktree and branch…"); nil when it is
+    /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
+    /// takes a moment sets it, so a click is never followed by a window that looks asleep.
+    var busy: String? { busyText.flatMap { busyScope == currentScope ? $0 : nil } }
+    private var busyText: String?
+    /// The project and thread the busy text is about: `busy` shows only while they are the ones on screen.
+    private var busyScope: String?
+    /// The project and thread on screen, as one value to compare.
+    private var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
+    /// A run was started and the log does not show a newer turn than this one yet (the worktree is being cut, setup is installing),
+    /// in the thread that scope names: the text stays up until it does, or the run ends or fails.
+    @ObservationIgnored private var awaitingAfterTurn: Int?
+    @ObservationIgnored private var awaitingScope: String?
+    private var awaitingRun: Bool { awaitingAfterTurn != nil }
+
+    private func setBusy(_ text: String?) { (busyText, busyScope) = (text, text == nil ? nil : currentScope) }
     /// The goal agent is drafting a goal from a request.
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
@@ -44,13 +60,13 @@ struct RecentProject: Equatable, Identifiable {
     /// A turn the user is stopping: set from Stop until the log says it ended.
     private(set) var stopping = false
     /// The latest turn's review while it awaits one; nil otherwise.
-    private(set) var review: ReviewModel?
+    var review: ReviewModel?
     /// What core says Accept or Discard would do, shown for confirmation and passed back as `shown:` exactly as shown.
-    private(set) var pendingAccept: AcceptPlan?
-    private(set) var pendingDiscard: DiscardPlan?
-    private(set) var deciding = false
+    var pendingAccept: AcceptPlan?
+    var pendingDiscard: DiscardPlan?
+    var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
-    private(set) var notice: String?
+    var notice: String?
     /// The run this app started and has not seen end. At most one: a second start is refused.
     @ObservationIgnored private var ownedRun: OwnedRun?
 
@@ -182,6 +198,27 @@ struct RecentProject: Equatable, Identifiable {
         (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
         applyOwnership()
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
+        // Only the thread the run was started in can say it has begun: another project's log is not this run's.
+        if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
+            if shown.state.lastTurn > after { endRunStart() }
+        }
+    }
+
+    /// The window is no longer waiting for a run to show up.
+    private func endRunStart() {
+        guard awaitingRun else { return }
+        (awaitingAfterTurn, awaitingScope) = (nil, nil)
+        setBusy(nil)
+    }
+
+    /// Runs `body` with `text` shown as what the app is doing, and clears it after, whatever happened.
+    /// One at a time: a second click while the first is still working is ignored, so the first one's end cannot take the line
+    /// down while the second is still going.
+    func working(_ text: String, _ body: () async -> Void) async {
+        guard busyText == nil else { return }
+        setBusy(text)
+        defer { if !awaitingRun { setBusy(nil) } }
+        await body()
     }
 
     // MARK: Goal actions
@@ -196,8 +233,12 @@ struct RecentProject: Equatable, Identifiable {
         }
         let mine = generation
         starting = true
+        setBusy("Approving the goal…")
         actionError = nil
-        defer { starting = false }
+        defer {
+            starting = false
+            if !awaitingRun { setBusy(nil) }
+        }
         do {
             try await actions.approve(project, thread)
         } catch {
@@ -224,6 +265,11 @@ struct RecentProject: Equatable, Identifiable {
             actionError = "The run did not start: \(error)"
             return
         }
+        // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
+        var turnNow = 0
+        if case .thread(let shown) = screen { turnNow = shown.state.lastTurn }
+        (awaitingAfterTurn, awaitingScope) = (turnNow, currentScope)
+        setBusy("Starting the run…")
         ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
         applyOwnership()
         Task { [weak self] in
@@ -242,6 +288,7 @@ struct RecentProject: Equatable, Identifiable {
     private func runEnded() async {
         ownedRun = nil
         stopping = false
+        endRunStart()
         await reload()
         // A run that returns leaves its turn ended in the log; one that does not has died without saying how.
         if case .thread(let shown) = screen, shown.run?.phase == .orphaned, actionError == nil {
@@ -255,65 +302,6 @@ struct RecentProject: Equatable, Identifiable {
         actionError = nil
         startRun(project, thread, generation: generation)
     }
-
-    // MARK: Decisions
-
-    func prepareAccept() async {
-        guard let project, let thread = currentThread, !deciding else { return }
-        actionError = nil
-        notice = nil
-        let mine = generation
-        do {
-            let plan = try await actions.acceptPlan(project, thread)
-            if mine == generation { pendingAccept = plan }
-        } catch { if mine == generation { actionError = "\(error)" } }
-    }
-
-    /// Accepts what was shown: core refuses it when the work changed since, and nothing is committed then.
-    func confirmAccept(message: String?) async {
-        guard let project, let thread = currentThread, let plan = pendingAccept, !deciding else { return }
-        deciding = true
-        defer { deciding = false }
-        pendingAccept = nil
-        do {
-            let result = try await actions.accept(project, thread, plan, message)
-            notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)"
-        } catch { actionError = "\(error)" }
-        await reload()
-    }
-
-    /// Reads the review again: the worktree and the branch are not in the log, so an edit there is seen on activation or here.
-    func refreshReview() async {
-        guard let project, let thread = currentThread, review != nil else { return }
-        let (mine, load) = (generation, actions.loadReview)
-        let report = await Task.detached { await load(project, thread) }.value
-        guard mine == generation, review != nil else { return }
-        review = report.map(ReviewModel.derive)
-    }
-
-    func cancelAccept() { pendingAccept = nil }
-
-    func prepareDiscard() async {
-        guard let project, let thread = currentThread, !deciding else { return }
-        actionError = nil
-        notice = nil
-        let mine = generation
-        do {
-            let plan = try await actions.discardPlan(project, thread)
-            if mine == generation { pendingDiscard = plan }
-        } catch { if mine == generation { actionError = "\(error)" } }
-    }
-
-    func confirmDiscard() async {
-        guard let project, let thread = currentThread, let plan = pendingDiscard, !deciding else { return }
-        deciding = true
-        defer { deciding = false }
-        pendingDiscard = nil
-        do { try await actions.discard(project, thread, plan) } catch { actionError = "\(error)" }
-        await reload()
-    }
-
-    func cancelDiscard() { pendingDiscard = nil }
 
     /// The next turn with a note for the agent, and an optional dollar cap for that one turn. Core adds the failed check's output.
     func sendBack(note: String, budget: String) {
@@ -369,13 +357,16 @@ struct RecentProject: Equatable, Identifiable {
     func openWorktree() async {
         guard let project, let thread = currentThread else { return }
         actionError = nil
-        do { try await actions.openWorktree(project, thread) } catch { actionError = "\(error)" }
+        await working("Opening the worktree…") {
+            do { try await actions.openWorktree(project, thread) } catch { actionError = "\(error)" }
+        }
     }
 
     /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only
     /// place the person hears of it. An answer for another project is dropped.
     private func runFailed(_ error: Error, generation mine: Int) {
         guard mine == generation else { return }
+        endRunStart()
         actionError = "The run did not start: \(error)"
     }
 
@@ -404,6 +395,7 @@ struct RecentProject: Equatable, Identifiable {
     }
 
     private var isWorking: Bool {
+        if busy != nil || ownedRun != nil { return true }
         if case .thread(let snapshot) = screen { return snapshot.attention == .working }
         return false
     }
