@@ -54,9 +54,48 @@ import WorkbenchCore
     }
 
     @Test func aRefusalFromCoreIsShown() async throws {
-        let store = try await store { _, _, _, _ in throw GoalDraftRefusal.noGoalAgent }
+        let store = try await store { _, _, _, _ in throw GoalDraftRefusal.busy }
         #expect(await store.draftGoal(request: "x") == false)
-        #expect(store.actionError == "\(GoalDraftRefusal.noGoalAgent)")
+        #expect(store.actionError == "\(GoalDraftRefusal.busy)")
+    }
+
+    @Test func aRefusalForNoGoalAgentOffersToNameOneAndAnyOtherFailureDoesNot() async throws {
+        let off = try await store { _, _, _, _ in throw GoalDraftRefusal.noGoalAgent }
+        #expect(await off.draftGoal(request: "x") == false && off.goalAgentOff && off.actionError == nil)
+        let other = try await store { _, _, _, _ in throw GoalDraftRefusal.busy }
+        #expect(await other.draftGoal(request: "x") == false && !other.goalAgentOff)
+    }
+
+    @Test func namingTheGoalAgentWritesTheConfigBeforeTheDraftAndThenDrafts() async throws {
+        let order = Seen()
+        let fixture = try await AppFixture()
+        keptDraftFixtures.append(fixture)
+        let actions = GoalActions(
+            draftGoal: { _, name, _, _ in
+                order.add("draft \(name)")
+                return GoalDraftResult(id: "g-\(name)", provider: .codex)
+            },
+            enableGoalAgent: { _, provider in order.add("enable \(provider.rawValue)") })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        #expect(await store.enableGoalDrafting(.codex, request: "Fix the header"))
+        #expect(order.all == ["enable codex", "draft fix-the-header"] && !store.goalAgentOff && store.actionError == nil)
+    }
+
+    @Test func aConfigThatCannotTakeTheGoalAgentSaysWhyAndDraftsNothing() async throws {
+        let order = Seen()
+        let fixture = try await AppFixture()
+        keptDraftFixtures.append(fixture)
+        let actions = GoalActions(
+            draftGoal: { _, name, _, _ in
+                order.add("draft \(name)")
+                return GoalDraftResult(id: "g", provider: .claude)
+            },
+            enableGoalAgent: { _, _ in throw GoalAgentSetup.Failure.alreadyThere })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        #expect(await store.enableGoalDrafting(.claude, request: "x") == false)
+        #expect(order.all.isEmpty && store.actionError == "\(GoalAgentSetup.Failure.alreadyThere)" && !store.goalAgentOff)
     }
 
     @Test func stoppingWhileItDraftsSaysSoAndASecondDraftIsRefusedMeanwhile() async throws {

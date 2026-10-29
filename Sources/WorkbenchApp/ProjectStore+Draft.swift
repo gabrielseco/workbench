@@ -7,7 +7,7 @@ extension ProjectStore {
     /// approves nothing; a draft that does not come out leaves the project as it was, so the sheet keeps the text.
     @discardableResult func draftGoal(request raw: String, name typedName: String? = nil) async -> Bool {
         guard let project, !starting, !drafting else { return false }
-        actionError = nil
+        (actionError, goalAgentOff) = (nil, false)
         let request = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let typed = typedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let name = typed.isEmpty ? ThreadName.suggest(from: request) : typed
@@ -27,7 +27,9 @@ extension ProjectStore {
                 return false
             }
         } catch {
-            actionError = "\(error)"
+            goalAgentOff = (error as? GoalDraftRefusal) == .noGoalAgent
+            // The sheet offers to name a goal agent instead of showing the refusal, and the screen behind it stays quiet.
+            actionError = goalAgentOff ? nil : "\(error)"
             return false
         }
         (currentThread, lastWatch) = (nil, nil)
@@ -37,4 +39,18 @@ extension ProjectStore {
 
     /// Stops the drafter that is running, if any.
     func stopDrafting() { draftStop?.stop() }
+
+    /// Names `provider` as the goal agent in the project's config, then drafts. A config that cannot take it is left as it was.
+    @discardableResult func enableGoalDrafting(
+        _ provider: AgentProviderID, request: String, name: String? = nil
+    ) async -> Bool {
+        guard let project, !drafting else { return false }
+        do {
+            try actions.enableGoalAgent(project, provider)
+        } catch {
+            (actionError, goalAgentOff) = ("\(error)", false)
+            return false
+        }
+        return await draftGoal(request: request, name: name)
+    }
 }

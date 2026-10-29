@@ -152,7 +152,15 @@ struct NewGoalSheet: View {
                     .disabled(store.drafting)
             }
             .font(.callout)
-            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if store.goalAgentOff {
+                Text(
+                    "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
+                        + "[agents.goal] to .workbench/config.toml and drafts this goal."
+                )
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if let error = store.actionError {
+                Text(error).font(.callout).foregroundStyle(Theme.red)
+            }
             HStack {
                 if store.drafting {
                     ProgressView().controlSize(.small)
@@ -163,10 +171,20 @@ struct NewGoalSheet: View {
                     Button("Stop") { store.stopDrafting() }
                 } else {
                     Button("Cancel") { shown = false }
-                    Button("Create") {
-                        Task { if await store.draftGoal(request: request, name: name) { shown = false } }
+                    if store.goalAgentOff {
+                        ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
+                            Button("Draft with \(provider.rawValue.capitalized)") {
+                                Task {
+                                    if await store.enableGoalDrafting(provider, request: request, name: name) { shown = false }
+                                }
+                            }
+                        }
+                    } else {
+                        Button("Create") {
+                            Task { if await store.draftGoal(request: request, name: name) { shown = false } }
+                        }
+                        .keyboardShortcut(.return, modifiers: .command).disabled(empty)
                     }
-                    .keyboardShortcut(.return, modifiers: .command).disabled(empty)
                 }
             }
         }

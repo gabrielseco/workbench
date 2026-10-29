@@ -38,6 +38,8 @@ struct RecentProject: Equatable, Identifiable {
     private(set) var starting = false
     /// The goal agent is drafting a goal from a request.
     var drafting = false
+    /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
+    var goalAgentOff = false
     @ObservationIgnored var draftStop: DraftStop?
     /// A turn the user is stopping: set from Stop until the log says it ended.
     private(set) var stopping = false
