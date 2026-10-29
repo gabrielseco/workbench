@@ -221,7 +221,7 @@ Each task is its own PR, in this order.
 | 3. P10 verifier (config, doctor, turn) | `[verifier]`, `workbench verifier`; P10 tasks 1 and 2 | P10's failure list |
 | 4. Judge as a gate | `judge --gate`; not met with evidence becomes a request, concerns do not | a judge fixture for met, not met, concern only, bad JSON |
 | 5. `PRProof.publish` | the publish step is a function of a PR number; `ship` uses it | the ship tests, publish twice, a failing tool, a stale proof |
-| 6. Lifecycle document and `workbench next` (replaces the runner) | the document, and a read-only `next` that derives the next step from the log and the head | `next` fixtures: each step due, skipped, done at an older head, a stopped turn, a thread with no `[review]` stages |
+| 6. Lifecycle document and `workbench next` (replaces the runner) **(`next` built: judge, stages, accept, ship)** | the document, and a read-only `next` that derives the next step from the log and the head | `next` fixtures: each step due, skipped, done at an older head, a stopped turn, a thread with no `[review]` stages |
 | 7. Triage setup | `verify-app.sh`, the `/verify` Workbench section (P10 task 4), `[pipeline]` in Triage's config, `docs/DESIGN.md` inputs | `doctor` clean in Triage; a recorded dry run |
 | 8. The pilot | one small Triage feature through the whole loop | a PR, below |
 | 9. Compare (uses 0.5) | the same goal five times with the recipe files and with the pipeline: cost, time, rounds, how often the screenshot shows the state | numbers in this file |

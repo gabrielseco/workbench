@@ -40,7 +40,9 @@ with `accept`, `discard` or `abandon`.
 4. **Run.** `wb run` takes minutes; start it in the background and follow with `wb status` and `wb log` (`-f` follows). Denied tool calls are
    normal (compound `a && b`, `node -e`, an env prefix); the model works around them. `wb grant` lists them and decides each.
    `wb stop` ends a turn cleanly.
-5. **Review.** `wb review`: the criteria, the diff, the check and the denied calls. Read the diff for what you did not ask for: unrelated
+5. **Review.** `wb next` lists what is still due on the thread (the judge, each review stage that applies to the change, then accept or
+   ship); `wb review` ends with the same lines. Run what it lists before `accept`: they are advice, nothing blocks `accept` or `ship` without
+   them, and a log with no `judge.ran` or `review_stage.finished` shows they were skipped. `wb review`: the criteria, the diff, the check and the denied calls. Read the diff for what you did not ask for: unrelated
    files, a generated file with thousands of changed lines. A person can see what a run changed with `wb open` (the worktree in their
    editor, with the branch's diff in Source Control; `--print` gives the path). Run yourself what the run could not (the full check, lint, typecheck). Look
    at the verifier's screenshots with `Read`; its report is a note, not a pass. Wrong or incomplete: `wb send-back "<note>"`

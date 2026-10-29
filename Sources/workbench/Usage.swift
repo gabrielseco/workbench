@@ -43,6 +43,8 @@ let workbenchUsage = """
                                  --seq one event in full, --transcript what the agent printed, as stored (raw)
       status [id] [--all] [--fetch]  where the thread stands; --all: one line per thread; --fetch: ask origin if the base moved
       review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
+      next [id]                  what is still due on the thread, from its log: the judge, each review stage that applies to the
+                                 change, then accept or ship; the first line is the next step; runs nothing, blocks nothing
       open [id] [--editor <name-or-command>] [--print] [--goal | --diff]
                                  open the thread's worktree in an editor to read what the run changed (--goal: its
                                  goal file instead, which a draft has before any run; --diff: a folder where the

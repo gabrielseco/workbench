@@ -310,7 +310,11 @@ extension Commands {
             printJSON(await reviewJSON(report, ctx: ctx, fetch: fetch))
             return
         }
-        for line in report.render() { out(line) }
+        var lines = report.render()
+        // Above the closing hint (a blank line and the line that says what can be decided), which stays the last thing shown.
+        let due = await nextStepLines(id: id, ctx: ctx)
+        if !due.isEmpty, lines.count >= 2 { lines.insert(contentsOf: [""] + due, at: lines.count - 2) }
+        for line in lines { out(line) }
         for line in lineageLines(report.state, ctx: ctx) { out(line) }
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal, let line = await baseGapLine(goal.base, ctx: ctx, fetch: fetch) {

@@ -57,6 +57,9 @@ enum Help {
         "review": Extra(
             changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
             example: "workbench review --json"),
+        "next": Extra(
+            changes: "nothing; read-only, derived from the thread's log and its changed files",
+            example: "workbench next"),
         "open": Extra(
             changes: "nothing in the thread or its worktree; --diff builds a folder of its own under the thread, "
                 + "replaced each time; starts the editor (or, with --print, nothing)",

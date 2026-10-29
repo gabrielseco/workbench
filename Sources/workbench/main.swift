@@ -79,6 +79,8 @@ do {
         try await Commands.status(Array(arguments.dropFirst()))
     case "review":
         try await Commands.review(Array(arguments.dropFirst()))
+    case "next":
+        try await Commands.next(Array(arguments.dropFirst()))
     case "grant":
         try await Commands.grant(Array(arguments.dropFirst()))
     case "open":
