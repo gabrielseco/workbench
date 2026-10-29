@@ -72,13 +72,15 @@ public enum Verifier {
         var parts: [String] = [
             """
             You are the verifier for one piece of work in this checkout. You did not write it. Follow the skill \
-            below to build and drive the app to the state each criterion of the goal needs, look at what it shows, \
-            and say for each criterion whether it holds. Use only the tools you were given.
+            below to build and drive the app to the state each on-screen criterion of the goal needs, look at what it shows, \
+            and say for each of those whether it holds. Use only the tools you were given.
             Rules:
             - Leave every screenshot in the proof directory, named as the criterion's `proof: screenshot: <name>` \
             says (`<name>.png`). Do not save files anywhere else the project did not ask for.
             - Never start, stop or change the installed copy of the app; use the throwaway build the skill describes.
-            - Finish with a short report: one line per criterion, its id, `holds` or `does not hold`, and what you \
+            - Report only on criteria whose proof is a screenshot or that you can see on screen. A `test:` or \
+            `command:` proof is outside your remit: you cannot run it, so do not report it as unverified or as failing.
+            - Finish with a short report: one line per in-scope criterion, its id, `holds` or `does not hold`, and what you \
             saw. Your words are a note for the person reviewing; they decide nothing.
             """
         ]
