@@ -97,6 +97,10 @@ on every turn, so an edit to it lasts until the next one and never reaches the g
 opened with `open` shows the goal beside the diff. `.workbench/` is already kept out of git, so no run, `accept` or
 `ship` commits it; when git would not ignore the path (the project un-ignored it) nothing is written.
 
+With `[review] auto` in the config, a turn that succeeded with a passing check (or none) is followed, before the `review:` line, by
+the advice it names that is due: one line each, `auto judge: 1 of 1 criteria met`, `auto <stage>: clean` or `fix`, `auto <name>:
+skipped, <why>`, `auto <name>: no answer, <why>`. They never change the exit code below.
+
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the turn succeeded |

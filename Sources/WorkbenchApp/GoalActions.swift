@@ -123,7 +123,22 @@ struct GoalActions: Sendable {
         },
         makeRun: { project, thread, options in
             let runner = ThreadRunner(project: project, threadID: thread, git: try GitRunner.discover())
-            return RunHandle(run: { _ = try await runner.run(options) }, stop: { await runner.stop() })
+            let adviceStop = AdviceStop()
+            return RunHandle(
+                run: {
+                    let report = try await runner.run(options)
+                    // `[review] auto`, as `workbench run` does it once the runner is gone: advice, never the turn's result.
+                    let checkFailed = report.check.map { $0.result != .passed } ?? false
+                    if report.result == .succeeded, !checkFailed,
+                        let config = try? Config.load(from: project.configURL), !config.review.auto.isEmpty {
+                        _ = await ThreadService(project: project, git: try GitRunner.discover())
+                            .runAutoAdvice(id: thread, config: config, stop: adviceStop)
+                    }
+                },
+                stop: {
+                    await runner.stop()
+                    adviceStop.stop()
+                })
         },
         draftGoal: { project, name, request, attachments, stop in
             let git = try GitRunner.discover()

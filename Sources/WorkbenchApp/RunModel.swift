@@ -20,6 +20,20 @@ struct RunModel: Equatable {
         case ended(result: String, reason: String?)
     }
 
+    /// What Stop would end: the turn (or its check), or, once the turn has ended while this app's run is still going, the advice
+    /// that `[review] auto` runs after it. Nil when there is nothing to stop.
+    enum Stoppable: Equatable {
+        case turn, advice
+    }
+
+    static func stoppable(phase: Phase, runningHere: Bool) -> Stoppable? {
+        switch phase {
+        case .working, .checking: .turn
+        case .ended: runningHere ? .advice : nil
+        case .orphaned: nil
+        }
+    }
+
     var turn: Int
     var phase: Phase
     var startedAt: Date?
