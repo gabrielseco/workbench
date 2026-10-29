@@ -102,8 +102,9 @@ struct ReviewModel: Equatable {
             notes: state.review.notes.map { "turn \($0.turn): " + ReviewReport.oneLine($0.text) },
             undecided: criteria.filter(\.forYou).count,
             canDecide: report.status == .awaitingReview && diffProblem == nil,
-            due: report.nextSteps.filter { $0.name != "accept" && $0.name != "ship" }.map {
-                Due(id: $0.name, command: $0.command, why: $0.why)
+            due: report.nextSteps.filter { $0.kind != .decision }.map {
+                // The command is unique per step; a stage's name is not (it can be `judge`).
+                Due(id: $0.command, command: $0.command, why: $0.why)
             })
     }
 

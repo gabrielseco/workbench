@@ -152,6 +152,24 @@ private let turn1 = [Entry(kind: .turnStarted, turn: 1), Entry(kind: .turnEnded,
         #expect(NextSteps.derive(events: stopped, files: ["a"], config: try config(), id: "t1").isEmpty)
     }
 
+    @Test func theKindsSayWhichStepsAreTheDecisionWhateverTheStagesAreCalled() throws {
+        let text = """
+            check_command = "make test"
+            [tools]
+            available = ["Read"]
+            allowed = ["Read"]
+            [review]
+            stages = ["pr-review", "accept", "judge"]
+            [review.stage.accept]
+            skill = "a.md"
+            [review.stage.judge]
+            skill = "j.md"
+            """
+        let steps = NextSteps.derive(events: log(turn1), files: ["a"], config: try Config.parse(text), id: "t1")
+        #expect(steps.map(\.name) == ["judge", "accept", "judge", "accept"])
+        #expect(steps.map(\.kind) == [.judge, .stage, .stage, .decision])
+    }
+
     @Test func renderingMarksTheFirstStepAsNextAndAlignsTheRest() {
         let lines = NextSteps.render([
             NextStep(name: "judge", command: "workbench judge", why: "w1"),

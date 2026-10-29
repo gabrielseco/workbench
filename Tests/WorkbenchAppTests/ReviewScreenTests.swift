@@ -57,15 +57,24 @@ private final class Recorder: @unchecked Sendable {
         let fixture = try await ended()
         var shown = try report(fixture)
         shown.nextSteps = [
-            NextStep(name: "judge", command: "workbench judge t1", why: "no judge has run for turn 1 (advisory)"),
+            NextStep(name: "judge", command: "workbench judge t1", why: "no judge has run for turn 1 (advisory)", kind: .judge),
             NextStep(name: "design", command: "workbench review-stage design t1", why: "the change touches Sources/**"),
-            NextStep(name: "accept", command: "workbench accept t1 -m \"<message>\"", why: "or send-back or discard"),
+            NextStep(
+                name: "accept", command: "workbench accept t1 -m \"<message>\"", why: "or send-back or discard", kind: .decision),
         ]
         let model = ReviewModel.derive(shown)
-        #expect(model.due.map(\.id) == ["judge", "design"], "Accept is the button, not a line")
+        #expect(model.due.map(\.command) == ["workbench judge t1", "workbench review-stage design t1"], "Accept is the button")
         #expect(model.due[1].command == "workbench review-stage design t1")
-        shown.nextSteps = [NextStep(name: "ship", command: "workbench ship t1", why: "accepted")]
+        shown.nextSteps = [NextStep(name: "ship", command: "workbench ship t1", why: "accepted", kind: .decision)]
         #expect(ReviewModel.derive(shown).due.isEmpty)
+        // Stages are named by the project: one called accept or judge is advice like any other, with an id of its own.
+        shown.nextSteps = [
+            NextStep(name: "judge", command: "workbench judge t1", why: "w", kind: .judge),
+            NextStep(name: "judge", command: "workbench review-stage judge t1", why: "w"),
+            NextStep(name: "accept", command: "workbench review-stage accept t1", why: "w"),
+        ]
+        let named = ReviewModel.derive(shown).due
+        #expect(named.count == 3 && Set(named.map(\.id)).count == 3)
     }
 
     @Test func aBinaryFileAndMissingCountsAreSaidNotInvented() async throws {
