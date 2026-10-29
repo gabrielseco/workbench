@@ -30,7 +30,7 @@ wbp() { # <out> args...: a workbench command in the clone, stdout and stderr tog
 }
 shown() { sed 's/^/    /' "$1" | head -${2:-8}; }
 created() { sed -n 's/^created //p' "$1"; }
-names() { sed -n 's/^\(next\|then\)  workbench \([a-z-]*\).*/\2/p' "$1" | tr '\n' ' '; }
+names() { sed -n -E 's/^(next|then)  workbench ([a-z-]*).*/\2/p' "$1" | tr '\n' ' '; }
 
 wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
