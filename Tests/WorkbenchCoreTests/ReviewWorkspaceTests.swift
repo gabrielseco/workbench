@@ -128,6 +128,44 @@ private struct WorkspaceRig {
         #expect(built.changed == 1)
     }
 
+    @Test func aNewFileAtARenamedFilesOldPathIsNotErasedWhateverTheOrder() async throws {
+        let rig = try await WorkspaceRig(files: ["a.txt": "old a\n"])
+        try WorkspaceRig.write(rig.worktree, "a.txt", "new a\n")
+        try WorkspaceRig.write(rig.worktree, "z.txt", "old a\n")
+        let files = [
+            FileChange(path: "a.txt", status: .added, isBinary: false, isUntracked: false),
+            FileChange(path: "z.txt", oldPath: "a.txt", status: .renamed, isBinary: false, isUntracked: false),
+        ]
+        _ = try await ReviewWorkspace.build(
+            files: files, base: rig.base, worktree: rig.worktree, repository: rig.repo, destination: rig.destination,
+            git: rig.git)
+        #expect(try String(contentsOf: rig.destination.appendingPathComponent("a.txt"), encoding: .utf8) == "new a\n")
+        #expect(FileManager.default.fileExists(atPath: rig.destination.appendingPathComponent("z.txt").path))
+    }
+
+    @Test func aRenameWhoseNewVersionIsLeftOutIsNotShownAsADeletion() async throws {
+        let rig = try await WorkspaceRig(files: ["big.txt": String(repeating: "x", count: ReviewWorkspace.sizeLimit + 1)])
+        try FileManager.default.moveItem(
+            at: rig.worktree.appendingPathComponent("big.txt"), to: rig.worktree.appendingPathComponent("big2.txt"))
+        let files = [FileChange(path: "big2.txt", oldPath: "big.txt", status: .renamed, isBinary: false, isUntracked: false)]
+        let built = try await ReviewWorkspace.build(
+            files: files, base: rig.base, worktree: rig.worktree, repository: rig.repo, destination: rig.destination,
+            git: rig.git)
+        #expect(built.skipped == ["big2.txt"])
+        #expect(try await rig.status().isEmpty, "the base's file is still there, unchanged")
+    }
+
+    @Test func aFileTheRepositoryIgnoresButTheThreadAddedStillShowsInSourceControl() async throws {
+        let rig = try await WorkspaceRig(files: [".gitignore": "generated/\n", "keep.txt": "keep\n"])
+        try WorkspaceRig.write(rig.worktree, "generated/result.txt", "made\n")
+        _ = try await rig.git.run(["add", "--force", "generated/result.txt"], in: rig.worktree)
+        _ = try await rig.git.run(["commit", "-q", "-m", "forced"], in: rig.worktree)
+        let built = try await rig.build()
+        #expect(built.changed == 1)
+        let status = try await rig.status()
+        #expect(status == [" A generated/result.txt"], "shown as a new file: \(status)")
+    }
+
     @Test func aRebuildReplacesWhatWasThere() async throws {
         let rig = try await WorkspaceRig()
         try WorkspaceRig.write(rig.worktree, "edit.txt", "two\n")
