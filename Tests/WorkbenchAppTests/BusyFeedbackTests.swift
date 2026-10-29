@@ -133,7 +133,7 @@ import Testing
         })
         let (store, _) = try await store(actions)
         let first = Task { await store.openWorktree() }
-        try await until("the first is working") { store.busy == "Opening the worktree…" }
+        try await until("the first is working") { store.busy == "Opening the worktree…" && calls.count == 1 }
         await store.openWorktree()
         #expect(calls.count == 1, "the second click was ignored, not run beside the first")
         #expect(store.busy == "Opening the worktree…", "and the line is still up")
