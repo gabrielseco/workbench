@@ -58,8 +58,9 @@ enum Help {
             changes: "nothing in the thread; --fetch updates origin/<base> in your repository",
             example: "workbench review --json"),
         "open": Extra(
-            changes: "nothing in the thread or its worktree; starts the editor (or, with --print, nothing)",
-            example: "workbench open --editor cursor   or   cd \"$(workbench open --print)\""),
+            changes: "nothing in the thread or its worktree; --diff builds a folder of its own under the thread, "
+                + "replaced each time; starts the editor (or, with --print, nothing)",
+            example: "workbench open --editor cursor   or   workbench open --diff   or   cd \"$(workbench open --print)\""),
         "grant": Extra(
             changes:
                 "the list: nothing; a decision (--once, --thread, --never): appends "

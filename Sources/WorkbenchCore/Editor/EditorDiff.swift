@@ -99,7 +99,7 @@ public enum EditorDiff {
     }
 
     /// A relative path of plain parts: nothing that climbs out of the worktree.
-    private static func isInside(_ path: String) -> Bool {
+    static func isInside(_ path: String) -> Bool {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
         return !path.hasPrefix("/") && !parts.contains { [".", "..", ""].contains($0) }
     }

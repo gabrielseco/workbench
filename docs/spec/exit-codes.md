@@ -143,9 +143,9 @@ criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sh
 
 | Code | Kind | When |
 |---|---|---|
-| 0 |  | the editor's launcher returned 0 (`opened <path> in <editor>`), or `--print` printed the path |
-| 1 | `failed` | the launcher exited non-zero (its last output line is in the message), was killed, could not be started, or did not return within 10 seconds (it is stopped) |
-| 2 | `usage`, `invalid-config` | `--editor` with `--print`, a bad `--editor` value, or a bad `editor` in the project's or the global config (named in the message) |
+| 0 |  | the editor's launcher returned 0 (`opened <path> in <editor>`), or `--print` printed the path; with `--diff` the path is the thread's `review-workspace` |
+| 1 | `failed` | the launcher exited non-zero (its last output line is in the message), was killed, could not be started, or did not return within 10 seconds (it is stopped); with `--diff`, git could not make the review workspace |
+| 2 | `usage`, `invalid-config` | `--editor` with `--print`, `--goal` with `--diff`, a bad `--editor` value, or a bad `editor` in the project's or the global config (named in the message) |
 | 6 | `refused` | nothing is launched: the thread has no worktree (shipped, accepted, discarded, abandoned, or not run yet; the message points to `--goal`), with `--goal` the thread has no `goal.md`, its worktree resolves outside `.workbench/worktrees/`, no editor is set (pass `--editor`, set `editor`, or use `--print`), no active thread, or the editor cannot be found (the message names what was tried) |
 | 7 | `not-found` | no such thread |
 
