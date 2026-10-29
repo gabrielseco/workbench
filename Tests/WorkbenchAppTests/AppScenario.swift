@@ -25,8 +25,12 @@ enum AppScenario: String, CaseIterable {
     /// The config a scenario ships, for the ones that show how proofs are judged against the tool set.
     var config: String? {
         switch self {
-        case .goalWarning, .goalApproved:
+        case .goalWarning:
             "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
+        case .goalApproved:
+            // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
+            "read_also = [\"../expenses-backend\"]\n\n"
+                + "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
         case .draftGoal:
             // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
             "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"

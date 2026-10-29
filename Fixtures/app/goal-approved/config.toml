@@ -1,3 +1,5 @@
+read_also = ["../expenses-backend"]
+
 [tools]
 available = ["Read", "Bash"]
 allowed = ["Read", "Bash(swift test:*)"]
