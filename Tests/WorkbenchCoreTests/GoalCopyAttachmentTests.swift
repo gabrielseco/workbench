@@ -208,5 +208,8 @@ import Testing
         let first = some.range(of: "/2.jpg")
         let second = some.range(of: "/1.png")
         #expect(first != nil && second != nil && first!.lowerBound < second!.lowerBound, "the order given, not sorted")
+        let tree = URL(fileURLWithPath: "/p/.workbench/worktrees/t")
+        let absolute = PromptBuilder.firstPrompt(goal: goal, checkCommand: nil, screenshots: ["1.png"], worktree: tree)
+        #expect(absolute.contains("`/p/.workbench/worktrees/t/\(WorktreeManager.attachmentCopyFolder)/1.png`"))
     }
 }
