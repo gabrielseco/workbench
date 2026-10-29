@@ -150,9 +150,8 @@ the start of the slice.
 - **The goal is not edited in the app.** The file is the source of truth and the editor is the user's own; the app validates and
   displays. The Run limits chips are read-only, with a pointer to the goal file. (A text editor in the window is the thing P3
   warned would become its own project.)
-- **1b (built):** `New goal…` opens a popover over the window (`NewGoalLayer`; a card you write in, with the text in a serif face, the thread name shown as an editable line, screenshots as thumbnails and Cancel, Esc and ⌘↵; a click outside closes nothing) with one question, "What needs to be done?", and Create hands the text to
-  `ThreadService.draftGoal` as a new thread. The thread name is made from the request's first line (editable in place, on the thread line),
-  so nothing but the request is asked for. The popover stays open while the drafter works, with Stop; a draft that fails or is
+- **1b (built):** `New goal…` opens a popover over the window (`NewGoalLayer`; a card you write in, with the text in a serif face, screenshots as thumbnails and Cancel, Esc and ⌘↵; a click outside closes nothing) with one question, "What needs to be done?", and Create hands the text to
+  `ThreadService.draftGoal` as a new thread. The thread name is made from the request's first line, so nothing but the request is asked for (the popover shows no name field). The popover stays open while the drafter works, with Stop; a draft that fails or is
   stopped writes nothing and the popover keeps the text and says why. Without `[agents.goal]` the popover offers "Draft with Claude / Codex":
   `GoalAgentSetup` appends the table to `.workbench/config.toml` (put back as it was if the config would not load; refused when
   the table exists, there is no config, or the file is over 256 KiB) and the draft runs. A quit waits for a running draft to end. The new thread opens as a draft, with `Open in editor` for changes.

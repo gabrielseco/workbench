@@ -24,7 +24,6 @@ struct NewGoalLayer: View {
 struct NewGoalPopover: View {
     var store: ProjectStore
     @State private var request = ""
-    @State private var name = ""
     @State private var staging = AttachmentStaging()
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
@@ -36,8 +35,7 @@ struct NewGoalPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             writing.padding(.top, 16)
-            threadLine.padding(.top, 14)
-            attachments.padding(.top, 22)
+            attachments.padding(.top, 20)
             messages
             footer.padding(.top, 26)
         }
@@ -94,19 +92,6 @@ struct NewGoalPopover: View {
                         .foregroundStyle(.tertiary).padding(.top, 8).padding(.leading, 5).allowsHitTesting(false)
                 }
             }
-    }
-
-    /// The thread's name, made from the first line of the text and editable in place; it replaces the collapsed "Thread name".
-    private var threadLine: some View {
-        HStack(spacing: 8) {
-            Text("thread").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
-            TextField(ThreadName.suggest(from: request), text: $name)
-                .textFieldStyle(.plain).font(.system(.caption, design: .monospaced)).disabled(store.drafting)
-                .accessibilityLabel("Thread name")
-        }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Theme.grey.opacity(0.12), in: Capsule())
-        .frame(maxWidth: 360, alignment: .leading)
     }
 
     /// The screenshots added so far, and the ways to add one: paste, drop or the button.
@@ -176,7 +161,7 @@ struct NewGoalPopover: View {
                         Button("Draft with \(provider.rawValue.capitalized)") {
                             Task {
                                 if await store.enableGoalDrafting(
-                                    provider, request: request, name: name, attachments: staging.urls) { close() }
+                                    provider, request: request, attachments: staging.urls) { close() }
                             }
                         }
                         .disabled(staging.pending > 0)
@@ -184,7 +169,7 @@ struct NewGoalPopover: View {
                 } else {
                     Button("Create") {
                         Task {
-                            let made = await store.draftGoal(request: request, name: name, attachments: staging.urls)
+                            let made = await store.draftGoal(request: request, attachments: staging.urls)
                             if made { close() }
                         }
                     }
