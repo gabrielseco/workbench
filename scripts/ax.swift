@@ -3,9 +3,10 @@
 //   WORKBENCH_PID=<pid> swift scripts/ax.swift list             what is on screen: role <tab> label
 //   WORKBENCH_PID=<pid> swift scripts/ax.swift tree             the whole hierarchy: indent, role, own text (to find a label)
 //   WORKBENCH_PID=<pid> swift scripts/ax.swift press "Doctor"   press the first button whose label is that, else starts with it
+//   WORKBENCH_PID=<pid> swift scripts/ax.swift type "text"     set the text of the window's focused text field, else its only one
 //   WORKBENCH_PID=<pid> swift scripts/ax.swift resize 1100 700  set the main window's size in points
-//   WORKBENCH_AX_FIXTURE=<file>  a stand-in for the live tree, for scripts/test-verify-app-ax.sh: one `role<TAB>label` per line. `list` and
-//                             `press` work on it, `press` only names the button it would press, and no process or permission is needed.
+//   WORKBENCH_AX_FIXTURE=<file>  a stand-in for the live tree, for scripts/test-verify-app-ax.sh: one `role<TAB>label` per line. `list`,
+//                             `press` and `type` work on it, they only name what they would press or fill, and no process or permission is needed.
 //   WORKBENCH_REFUSE=<regex>  a label `press` must not resolve to: checked on the label found, not on the one asked for, because
 //                             the match is by prefix ("Eve" resolves to "Event log 5")
 import AppKit
@@ -50,6 +51,18 @@ func walk(_ element: AXUIElement, into found: inout [Found]) {
     }
 }
 
+/// The text fields and text areas of the window, labelled or not: an empty one has no text to find it by.
+let editableRoles: Set<String> = ["AXTextField", "AXTextArea"]
+func editables(_ element: AXUIElement, depth: Int = 0) -> [AXUIElement] {
+    guard depth < 14 else { return [] }
+    return children(element).flatMap { child -> [AXUIElement] in
+        let role = attribute(child, kAXRoleAttribute) as? String ?? ""
+        return (editableRoles.contains(role) ? [child] : []) + editables(child, depth: depth + 1)
+    }
+}
+/// What `type` accepts: printable text and newlines, bounded, so a script cannot paste a payload.
+let typeLimit = 2000
+
 func fail(_ message: String, code: Int32 = 1) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
     exit(code)
@@ -59,7 +72,7 @@ let args = Array(CommandLine.arguments.dropFirst())
 var found: [Found] = []
 var window: AXUIElement?
 if let path = ProcessInfo.processInfo.environment["WORKBENCH_AX_FIXTURE"] {
-    guard ["list", "press"].contains(args.first ?? ""), let text = try? String(contentsOfFile: path, encoding: .utf8)
+    guard ["list", "press", "type"].contains(args.first ?? ""), let text = try? String(contentsOfFile: path, encoding: .utf8)
     else { fail("a fixture supports list and press, and must be a readable file", code: 2) }
     for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
         let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
@@ -95,6 +108,24 @@ case "press":
     let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
     guard result == .success else { fail("failed (\(result.rawValue)) on \(hit.label)") }
     print("pressed \(hit.role) \(hit.label)")
+case "type":
+    guard args.count == 2, !args[1].isEmpty else { fail("usage: type <text>", code: 2) }
+    guard args[1].count <= typeLimit, !args[1].unicodeScalars.contains(where: { $0.value < 0x20 && $0 != "\n" && $0 != "\t" })
+    else { fail("type takes at most \(typeLimit) characters, with no control characters but newline and tab", code: 2) }
+    guard let window else {
+        // A fixture names the field it would fill: its first `AXTextArea` or `AXTextField` line.
+        guard let field = found.first(where: { editableRoles.contains($0.role) }) else { fail("No text field to type into") }
+        print("typed (fixture) \(field.role) \(field.label)")
+        exit(0)
+    }
+    let fields = editables(window)
+    let focused = fields.first { (attribute($0, kAXFocusedAttribute) as? Bool) == true }
+    guard let field = focused ?? (fields.count == 1 ? fields.first : nil) else {
+        fail(fields.isEmpty ? "No text field to type into" : "\(fields.count) text fields and none is focused: nothing was typed")
+    }
+    let result = AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, args[1] as CFString)
+    guard result == .success else { fail("typing failed (\(result.rawValue))") }
+    print("typed \(args[1].count) characters into \(attribute(field, kAXRoleAttribute) as? String ?? "a text field")")
 case "resize":
     let sizes = args.dropFirst().compactMap { Int($0) }.filter { $0 > 0 }
     guard args.count == 3, sizes.count == 2 else { fail("resize needs two positive integers: <width> <height>", code: 2) }
@@ -117,5 +148,5 @@ case "list":
         print("\(item.role)\t\(item.label.replacingOccurrences(of: "\n", with: " ").prefix(120))")
     }
 default:
-    fail("usage: ax.swift list | press <label> | resize <w> <h>", code: 2)
+    fail("usage: ax.swift list | press <label> | type <text> | resize <w> <h>", code: 2)
 }

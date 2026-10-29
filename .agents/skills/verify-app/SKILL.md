@@ -49,6 +49,7 @@ From the PR's worktree, never the main checkout:
 scripts/verify-app.sh start needs-you     # builds, launches, prints pid=, window=, size=. Keep the pid: every other command needs it.
 scripts/verify-app.sh list <pid>          # role <tab> label of what is on screen, as text you can read
 scripts/verify-app.sh press <pid> "Doctor"  # an exact label, else a prefix; wait about two seconds after it
+scripts/verify-app.sh type <pid> "text"   # sets the focused text field (else the only one); Accessibility, no keystrokes, 2000 characters at most
 scripts/verify-app.sh shot <pid> <name>   # writes <name>.png into $WORKBENCH_PROOF_DIR (default .build/verify); Read it
 scripts/verify-app.sh stop <pid>          # always, also after a failure
 ```
