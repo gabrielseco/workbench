@@ -87,6 +87,13 @@ extension ThreadService {
                 let total = judged.verdict?.criteria.count ?? 0
                 return AutoAdviceResult(name: name, outcome: .ran(summary: "\(met) of \(total) criteria met"))
             }
+            // A stage reads the branch's commits. A Codex turn leaves its work uncommitted until `accept`, and a Claude turn that
+            // left nothing has no commit either: a stage run now would read an older or empty diff and could say `clean` about it.
+            if let why = await uncommittedWork(id: id) {
+                return AutoAdviceResult(
+                    name: name,
+                    outcome: .skipped("\(why); run `workbench review-stage \(name) \(id)` once it is committed (after accept)"))
+            }
             let reviewed = try await reviewStage(
                 named: name, id: id, config: config, codexPath: config.executable(for: .codex), environment: environment,
                 stopRequested: { stop.isRequested }, attach: { stop.attach($0) })
@@ -96,6 +103,20 @@ extension ThreadService {
         } catch {
             return AutoAdviceResult(name: name, outcome: .failed("\(error)"))
         }
+    }
+
+    /// Why the thread's branch does not yet hold the finished turn's work, nil when it does: edits are uncommitted in the worktree,
+    /// or the branch has no commit past the base the stage compares with.
+    private func uncommittedWork(id: String) async -> String? {
+        let worktree = WorktreeManager(repoRoot: project.root, git: git).path(for: id)
+        guard let status = try? await git.run(["status", "--porcelain"], in: worktree), status.succeeded else { return nil }
+        if !status.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "the turn left changes uncommitted" }
+        guard let events = try? EventLogReader.read(at: project.eventsURL(id)).events,
+            let base = events.last(where: { $0.kind == .worktreeCreated })?.data["base_commit"]?.stringValue,
+            let ahead = try? await git.run(["rev-list", "--count", "\(base)..HEAD"], in: worktree), ahead.succeeded
+        else { return nil }
+        let count = ahead.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return count == "0" ? "the branch has no commit past its base" : nil
     }
 
     /// The lines a front end prints for `results`, one per step.

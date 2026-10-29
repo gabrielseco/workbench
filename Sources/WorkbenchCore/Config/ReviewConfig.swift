@@ -197,6 +197,8 @@ extension ReviewConfig {
                 fail(.invalidValue, entry.line, "'auto' lists '\(name)' more than once")
             } else if name == prReviewStage {
                 fail(.invalidValue, entry.line, "'auto' cannot list 'pr-review': it reviews a pushed pull request")
+            } else if name == "judge", stages.contains("judge") {
+                fail(.invalidValue, entry.line, "'auto' lists 'judge', which is also the name of a stage: rename the stage")
             } else if name != "judge", !stages.contains(name) {
                 fail(.invalidValue, entry.line, "'auto' lists '\(name)', which is neither 'judge' nor a stage in 'stages'")
             }

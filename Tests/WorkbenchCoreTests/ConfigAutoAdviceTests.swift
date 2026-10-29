@@ -39,6 +39,11 @@ import Testing
         #expect(problems(review).contains { $0.contains(message) }, "\(problems(review))")
     }
 
+    @Test func aStageCalledJudgeCannotBeAutoBecauseTheJudgeHasThatName() {
+        let review = "stages = [\"pr-review\", \"judge\"]\nauto = [\"judge\"]\n[review.stage.judge]\nskill = \"j.md\"\n"
+        #expect(problems(review).contains { $0.contains("also the name of a stage") }, "\(problems(review))")
+    }
+
     @Test func aStageThatHasATableButIsNotListedIsRefused() {
         let review = "stages = [\"pr-review\"]\nauto = [\"design\"]\n" + Self.designTable
         #expect(problems(review).contains { $0.contains("neither 'judge' nor a stage") }, "\(problems(review))")

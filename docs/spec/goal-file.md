@@ -444,7 +444,10 @@ Notes:
   `workbench review-stage`: its own event, cost and refusals, and a stage's `max_rounds`. `run` prints one line each, `auto <name>: <a
   line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. It is advice:
   a failed or refused step never changes `run`'s exit code, the turn's result or what `accept` and `ship` do. Off by default, since
-  each step spends what its agent costs. Nothing runs after a failed turn or check.
+  each step spends what its agent costs. Nothing runs after a failed turn or check. A stage reads the branch's commits, so while the turn's
+  work is uncommitted (a Codex turn leaves it for `accept`) or the branch has no commit past its base, the stage is skipped with that
+  reason and the command to run after `accept`; the judge reads the worktree and is not held back. A stage named `judge` cannot be
+  listed in `auto` (the name is the judge's): rename the stage.
 - **Review stages are checked when the config loads** ([P6](../plan/P6-review-stages.md)). A name in
   `review.stages` needs a `[review.stage.<name>]` table unless it is built in (only `pr-review` is); a stage
   name is lower case (letters, digits, `-`, `_`, up to 40), since it becomes a folder in the thread's

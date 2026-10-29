@@ -73,4 +73,22 @@ private let autoVerdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": 
         let aboutConfigured = why.contains("`<path>` was not found") && !why.contains("`codex`")
         #expect(aboutConfigured, "the refusal is about the configured executable: \(why)")
     }
+
+    @Test func anAutomaticStageWaitsWhileTheTurnsWorkIsUncommitted() async throws {
+        let stage = "[review]\nstages = [\"pr-review\", \"design\"]\nauto = [\"design\"]\n"
+            + "[review.stage.design]\nskill = \"d.md\"\n"
+        let fx = try await RunnerFixture(extraConfig: stage)
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "work\n".write(to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        let config = try Config.load(from: fx.project.configURL)
+        let results = await fx.service.runAutoAdvice(id: id, config: config, environment: ["PATH": "/usr/bin:/bin"])
+        guard case .skipped(let why)? = results.first?.outcome else {
+            Issue.record("expected skipped, got \(results)")
+            return
+        }
+        #expect(why.contains("uncommitted") && why.contains("workbench review-stage design \(id)"), "\(why)")
+        #expect(try fx.events(id).allSatisfy { $0.kind != .reviewStageStarted }, "no round was started or counted")
+    }
 }
