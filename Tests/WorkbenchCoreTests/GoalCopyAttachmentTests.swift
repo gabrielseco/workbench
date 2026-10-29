@@ -32,7 +32,7 @@ import Testing
         #expect(try FileManager.default.attributesOfItem(atPath: first.path)[.posixPermissions] as? Int == 0o444)
 
         let text = try prompt(fx, id)
-        let base = WorktreeManager.attachmentCopyFolder
+        let base = fx.project.worktreesDirectory.appendingPathComponent(id).path + "/" + WorktreeManager.attachmentCopyFolder
         let at = ["1.png", "2.jpg", "10.png"].compactMap { text.range(of: "\(base)/\($0)")?.lowerBound }
         #expect(at.count == 3 && at == at.sorted(), "all three named, in number order, not name order: \(text)")
     }
@@ -208,5 +208,8 @@ import Testing
         let first = some.range(of: "/2.jpg")
         let second = some.range(of: "/1.png")
         #expect(first != nil && second != nil && first!.lowerBound < second!.lowerBound, "the order given, not sorted")
+        let tree = URL(fileURLWithPath: "/p/.workbench/worktrees/t")
+        let absolute = PromptBuilder.firstPrompt(goal: goal, checkCommand: nil, screenshots: ["1.png"], worktree: tree)
+        #expect(absolute.contains("`/p/.workbench/worktrees/t/\(WorktreeManager.attachmentCopyFolder)/1.png`"))
     }
 }

@@ -37,7 +37,7 @@ extension ThreadRunner {
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,
             verifies: verifierRuns,
-            plan: chosen.plan, screenshots: shown, otherRepositories: others)
+            plan: chosen.plan, screenshots: shown, worktree: worktreeManager.path(for: threadID), otherRepositories: others)
         return (prompt, ["instructions": loaded?.eventData ?? .null, "plan": chosen.info])
     }
 

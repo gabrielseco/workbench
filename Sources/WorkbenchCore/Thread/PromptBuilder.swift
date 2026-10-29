@@ -10,7 +10,7 @@ public enum PromptBuilder {
 
     public static func firstPrompt(
         goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false,
-        plan: PlanForRun? = nil, screenshots: [String] = [], otherRepositories: [URL] = []
+        plan: PlanForRun? = nil, screenshots: [String] = [], worktree: URL? = nil, otherRepositories: [URL] = []
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
@@ -22,7 +22,7 @@ public enum PromptBuilder {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"
             for item in goal.outOfScope { out += "- \(item)\n" }
         }
-        if !screenshots.isEmpty { out += screenshotSection(screenshots) }
+        if !screenshots.isEmpty { out += screenshotSection(screenshots, in: worktree) }
         if !otherRepositories.isEmpty { out += otherRepositoriesSection(otherRepositories) }
         if let plan { out += planSection(plan) }
         if let instructions {
@@ -58,8 +58,12 @@ public enum PromptBuilder {
 
     /// The screenshots the person attached to the goal, as files in the worktree for the agent to open. They are kept out of
     /// version control, so the agent is told not to commit or move them.
-    static func screenshotSection(_ names: [String]) -> String {
-        let list = names.map { "- `\(WorktreeManager.attachmentCopyFolder)/\($0)`" }.joined(separator: "\n")
+    /// Absolute when the worktree is known: the file tools are confined to it, and a relative path was guessed against the
+    /// project root instead, which they refuse.
+    static func screenshotSection(_ names: [String], in worktree: URL? = nil) -> String {
+        let relative = WorktreeManager.attachmentCopyFolder
+        let folder = worktree?.appendingPathComponent(relative).path ?? relative
+        let list = names.map { "- `\(folder)/\($0)`" }.joined(separator: "\n")
         return """
 
             ## Screenshots
