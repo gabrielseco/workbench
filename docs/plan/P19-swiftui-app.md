@@ -154,6 +154,9 @@ the start of the slice.
   Screenshots (paste, drop or `Add screenshots…`, up to 5) go to the drafter and are kept in the thread's `attachments/`, linked from
   the goal's request; a Claude coding turn reads them from read-only copies in the worktree's `.workbench/goal-copy/attachments/` (a Codex one is not given them yet).
   The drafter's model is never shown as the coding model.
+- **The person's `PATH`.** An app opened from the Dock gets the system's bare `PATH`, so `codex`, `claude`, `node` and the check command
+  were "not found" there. At launch the app asks the login shell (`$SHELL -ilc`, 5 s, output between markers) for its `PATH` and
+  puts it first (`LoginShellPath`); a shell that cannot be asked leaves the `PATH` as it was. A fixture launch (verify-app) skips it.
 - **Failure states:** invalid goal (the `GoalProblem` text, Approve disabled), placeholders remain, provider executable missing or
   capability refused (`AgentFailure` text from core), goal changed after approval (pill and spine step go back, Run disabled),
   draft failed or stopped (the previous goal is untouched, said so).
