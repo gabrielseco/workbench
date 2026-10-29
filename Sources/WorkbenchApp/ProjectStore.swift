@@ -55,6 +55,8 @@ struct RecentProject: Equatable, Identifiable {
 
     private func setBusy(_ text: String?) { (busyText, busyScope) = (text, text == nil ? nil : currentScope) }
     /// The goal agent is drafting a goal from a request.
+    /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
+    var namingGoal = false
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false

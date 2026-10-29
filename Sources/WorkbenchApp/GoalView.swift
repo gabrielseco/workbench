@@ -7,7 +7,6 @@ struct GoalView: View {
     var snapshot: ThreadSnapshot
     var goal: GoalModel
     var store: ProjectStore
-    @State private var naming = false
 
     var body: some View {
         ScrollView {
@@ -28,7 +27,6 @@ struct GoalView: View {
             }
             .padding(28).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
     }
 
     private var header: some View {
@@ -104,7 +102,7 @@ struct GoalView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Button("Open in editor") { Task { await store.openGoalFile() } }
-                Button("New goal…") { naming = true }
+                Button("New goal…") { store.namingGoal = true }
                 Spacer()
                 if goal.pill != .approved || snapshot.state.lastTurn == 0, snapshot.state.decision == nil {
                     Button(goal.pill == .approved ? "Run" : "Approve and run") {
@@ -125,151 +123,5 @@ struct GoalView: View {
             Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             content()
         }
-    }
-}
-
-/// Asks what needs to be done and has the goal agent draft the goal from it. The sheet stays open while it drafts, and keeps
-/// the text when the draft does not come out.
-struct NewGoalSheet: View {
-    var store: ProjectStore
-    @Binding var shown: Bool
-    @State private var request = ""
-    @State private var name = ""
-    @State private var showName = false
-    @State private var staging = AttachmentStaging()
-    @State private var pasteMonitor: Any?
-    @FocusState private var focused: Bool
-
-    private var empty: Bool { request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("New goal in \(store.project?.root.lastPathComponent ?? "this project")").font(.headline)
-            Text("What needs to be done?").font(.callout).foregroundStyle(.secondary)
-            TextEditor(text: $request)
-                .font(.body).focused($focused).scrollContentBackground(.hidden)
-                .padding(6).frame(width: 460, height: 160)
-                .background(Theme.grey.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-                .disabled(store.drafting)
-                .overlay(alignment: .topLeading) {
-                    if request.isEmpty {
-                        Text("Describe the change, the bug or the idea. Say how you will know it worked.")
-                            .foregroundStyle(.tertiary).padding(.horizontal, 11).padding(.vertical, 14).allowsHitTesting(false)
-                    }
-                }
-            attachments
-            DisclosureGroup("Thread name", isExpanded: $showName) {
-                TextField(ThreadName.suggest(from: request), text: $name).textFieldStyle(.roundedBorder).frame(width: 280)
-                    .disabled(store.drafting)
-            }
-            .font(.callout)
-            if let problem = staging.problem { Text(problem).font(.callout).foregroundStyle(Theme.red) }
-            if store.goalAgentOff {
-                Text(
-                    "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
-                        + "[agents.goal] to .workbench/config.toml and drafts this goal."
-                )
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            } else if let error = store.actionError {
-                Text(error).font(.callout).foregroundStyle(Theme.red)
-            }
-            HStack {
-                if store.drafting {
-                    ProgressView().controlSize(.small)
-                    Text("Drafting the goal…").font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if store.drafting {
-                    Button("Stop") { store.stopDrafting() }
-                } else {
-                    Button("Cancel") { shown = false }
-                    if store.goalAgentOff {
-                        ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
-                            Button("Draft with \(provider.rawValue.capitalized)") {
-                                Task {
-                                    if await store.enableGoalDrafting(
-                                        provider, request: request, name: name, attachments: staging.urls) { shown = false }
-                                }
-                            }
-                            .disabled(staging.pending > 0)
-                        }
-                    } else {
-                        Button("Create") {
-                            Task {
-                                let made = await store.draftGoal(request: request, name: name, attachments: staging.urls)
-                                if made { shown = false }
-                            }
-                        }
-                        .keyboardShortcut(.return, modifiers: .command).disabled(empty || staging.pending > 0)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard !store.drafting else { return false }
-            Task { await staging.add(files: urls) }
-            return true
-        }
-        .onAppear {
-            focused = true
-            store.actionError = nil
-            watchPaste()
-        }
-        .onDisappear {
-            pasteMonitor.map(NSEvent.removeMonitor)
-            pasteMonitor = nil
-            staging.clear()
-        }
-    }
-
-    /// The screenshots added so far, and the ways to add one: paste, drop or the button.
-    private var attachments: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(staging.items.enumerated()), id: \.element.id) { index, item in
-                ZStack(alignment: .topTrailing) {
-                    Group {
-                        if let image = item.thumbnail {
-                            Image(nsImage: image).resizable().scaledToFill()
-                        } else {
-                            Theme.grey.opacity(0.3)
-                        }
-                    }
-                    .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
-                    if !store.drafting {
-                        Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
-                            .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(2)
-                    }
-                }
-            }
-            if !store.drafting, staging.items.count < GoalAttachments.maxCount {
-                Button("Add screenshots…") { chooseImages() }
-            }
-            if staging.pending > 0 { ProgressView().controlSize(.small) }
-            Text(staging.items.isEmpty && staging.pending == 0 ? "Paste or drop screenshots here" : "")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    /// ⌘V while the sheet is up takes a screenshot off the clipboard. The text field cannot: to it an image is nothing to paste, so
-    /// the command never reaches a handler of ours. Text on the clipboard still goes to the text field.
-    private func watchPaste() {
-        guard pasteMonitor == nil else { return }
-        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [staging, store] event in
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == .command, event.charactersIgnoringModifiers == "v", !store.drafting,
-                AttachmentStaging.wantsImages(.general)
-            else { return event }
-            Task { await staging.add(from: .general) }
-            return nil
-        }
-    }
-
-    private func chooseImages() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK { Task { await staging.add(files: panel.urls) } }
     }
 }
