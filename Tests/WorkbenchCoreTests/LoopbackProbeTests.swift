@@ -141,15 +141,16 @@ private final class Server: @unchecked Sendable {
     @Test func aCancelledCheckReturnsAtOnceInsteadOfWaitingForTheDeadline() async throws {
         let server = try #require(Server { client in
             Server.hear(client)
-            usleep(3_000_000)
+            usleep(10_000_000)
         })
         let target = url("127.0.0.1", server.port)
-        let started = Date()
         let task = Task { await LoopbackProbe.answers(target, attempt: 30) }
         try await Task.sleep(nanoseconds: 200_000_000)
+        // Timed from the cancel, not the start: a loaded runner can delay the sleep above, which is not what is measured.
+        let cancelled = Date()
         task.cancel()
         #expect(await task.value == false)
-        #expect(Date().timeIntervalSince(started) < 3, "cancelled, it did not wait out its 30 seconds")
+        #expect(Date().timeIntervalSince(cancelled) < 5, "cancelled, it did not wait for the server or its 30 seconds")
     }
 
     @Test func aRedirectIsAnAnswerAndIsNotFollowed() async throws {
