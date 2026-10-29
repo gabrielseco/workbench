@@ -125,7 +125,7 @@ check "after the stage ran, only accept is left" "steps: $(names "$SCRATCH/next3
 
 # --- a change the stage does not apply to ---------------------------------------------------------------------------------
 
-rm -rf "$WTP/Sources" && mkdir -p "$WTP/docs" && echo note >"$WTP/docs/note.md"
+rm -f "$WTP/Sources/change.txt" && mkdir -p "$WTP/docs" && echo note >"$WTP/docs/note.md"
 append turn.started 2 '{"session_id":"s2"}'
 append turn.ended 2 '{"result":"succeeded","cost_usd":0.1}'
 wbp "$SCRATCH/next4.out" next
