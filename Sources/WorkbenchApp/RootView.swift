@@ -176,7 +176,7 @@ struct ThreadPane: View {
             }
             if let notice = store.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Theme.green) }
             if let finished = snapshot.finishedText {
-                FinishedBanner(text: finished, note: snapshot.newGoalNote, canShip: snapshot.canShip, store: store)
+                FinishedBanner(snapshot: snapshot, text: finished, store: store)
             }
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
@@ -208,25 +208,44 @@ struct BusyBar: View {
 
 /// How a decided thread ended, and the way to the next goal: the one active thread is over, so a new one may start.
 struct FinishedBanner: View {
+    var snapshot: ThreadSnapshot
     var text: String
-    var note: String?
-    var canShip = false
     var store: ProjectStore
     @State private var naming = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
+                if let url = snapshot.pullRequestURL {
+                    Link(destination: url) { Label(text, systemImage: "flag.checkered") }
+                        .help("Opens \(url.absoluteString) in the browser")
+                } else {
+                    Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
+                }
                 Spacer()
-                if canShip { Button("Ship…") { Task { await store.prepareShip() } }.disabled(store.busy != nil) }
+                if snapshot.canShip { Button("Ship…") { Task { await store.prepareShip() } }.disabled(store.busy != nil) }
+                if snapshot.canReviewPullRequest {
+                    Button(snapshot.state.review.prReview == nil ? "Review PR" : "Review again") {
+                        Task { await store.reviewPullRequest() }
+                    }
+                    .disabled(store.busy != nil).help("Codex reads the pull request, read-only, and says what it found")
+                }
                 Button("New goal…") { naming = true }
             }
-            if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
+            if let line = snapshot.prReviewText {
+                HStack {
+                    Text(line).font(.callout).foregroundStyle(.secondary)
+                    Button("Show findings") { Task { await store.showPRReview() } }.buttonStyle(.link)
+                }
+            }
+            if let note = snapshot.newGoalNote { Text(note).font(.callout).foregroundStyle(.secondary) }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .sheet(isPresented: $naming) { NewGoalSheet(store: store, shown: $naming) }
+        .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
+            PRReviewSheet(store: store)
+        }
         .sheet(isPresented: Binding(get: { store.pendingShip != nil }, set: { if !$0 { store.cancelShip() } })) {
             ShipSheet(store: store)
         }

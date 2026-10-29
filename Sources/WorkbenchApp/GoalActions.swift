@@ -60,6 +60,10 @@ struct GoalActions: Sendable {
     var shipPreview: @Sendable (Project, String) async throws -> ShipPreview
     /// Publishes what the preview showed; core refuses it when the target changed since.
     var ship: @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome
+    /// One Codex review round of the thread's pull request, recorded in its log.
+    var prReview: @Sendable (Project, String) async throws -> PRReviewShown
+    /// The latest recorded round with what Codex wrote; nil when none has run.
+    var latestPRReview: @Sendable (Project, String) async -> PRReviewShown?
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -80,7 +84,9 @@ struct GoalActions: Sendable {
         discard: @escaping @Sendable (Project, String, DiscardPlan) async throws -> Void = { _, _, _ in },
         patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil },
         shipPreview: @escaping @Sendable (Project, String) async throws -> ShipPreview = { _, _ in throw Unset() },
-        ship: @escaping @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome = { _, _, _ in throw Unset() }
+        ship: @escaping @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome = { _, _, _ in throw Unset() },
+        prReview: @escaping @Sendable (Project, String) async throws -> PRReviewShown = { _, _ in throw Unset() },
+        latestPRReview: @escaping @Sendable (Project, String) async -> PRReviewShown? = { _, _ in nil }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.enableGoalAgent = enableGoalAgent
@@ -88,9 +94,24 @@ struct GoalActions: Sendable {
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
         (self.shipPreview, self.ship) = (shipPreview, ship)
+        (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
     }
 
     struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
+    /// Why a round has no verdict, from the log of the thread that ran it (a follow-up's round is not in the parent's log).
+    static func recordedFailure(_ record: PRReviewRecord, in project: Project) -> String? {
+        let events = (try? EventLogReader.read(at: project.eventsURL(record.thread)))?.events ?? []
+        guard let logged = ThreadState.derive(from: events, id: record.thread).review.prReview, logged.round == record.round,
+            logged.pr == record.pr
+        else { return nil }
+        return logged.failure
+    }
+
+    /// A refusal from core in its own words, so the window shows the sentence and not the enum case's name.
+    struct RefusalText: Error, CustomStringConvertible {
+        var description: String
+        init(_ description: String) { self.description = description }
+    }
 
     static let core = GoalActions(
         approve: { project, thread in
@@ -141,7 +162,23 @@ struct GoalActions: Sendable {
             try await ReviewLoader(project: project, git: try GitRunner.discover()).patch(id: thread, path: path)
         },
         shipPreview: { project, thread in try await ShipPreview.fetch(project: project, thread: thread) },
-        ship: { project, thread, preview in try await ShipPreview.publish(preview, project: project, thread: thread) })
+        ship: { project, thread, preview in try await ShipPreview.publish(preview, project: project, thread: thread) },
+        prReview: { project, thread in
+            let config = try Config.load(from: project.configURL)
+            let service = ThreadService(project: project, git: try GitRunner.discover())
+            do {
+                return PRReviewShown(
+                    try await service.prReview(id: thread, config: config, codexPath: config.executable(for: .codex)))
+            } catch let refusal as PRReviewRefusal { throw RefusalText("\(refusal)") }
+        },
+        latestPRReview: { project, thread in
+            guard let git = try? GitRunner.discover() else { return nil }
+            let service = ThreadService(project: project, git: git)
+            guard let record = service.latestPRReview(id: thread) else { return nil }
+            return PRReviewShown(
+                record, findings: service.prReviewFindings(record), failure: recordedFailure(record, in: project),
+                tip: await service.pullRequestBranchTip(id: thread))
+        })
 
     /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not
     /// load counts as none (the goal screen says so), so opening a file never depends on the config being right.
