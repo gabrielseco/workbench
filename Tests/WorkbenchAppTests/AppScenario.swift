@@ -17,6 +17,7 @@ enum AppScenario: String, CaseIterable {
     case prOpen = "pr-open"
     case cleaned
     case discarded
+    case reviewChanges = "review-changes"
     case corrupt
     case noThread = "no-thread"
     case draftGoal = "draft-goal"
@@ -32,11 +33,37 @@ enum AppScenario: String, CaseIterable {
             // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
             "read_also = [\"../expenses-backend\"]\n\n"
                 + "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
+        case .reviewChanges:
+            // An editor that only writes down what it was asked to open; verify-app.sh puts its path in.
+            // A config that does not load is ignored and the person's own global editor is used: it needs [tools].
+            "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
         case .draftGoal:
             // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
             "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"
         default: nil
         }
+    }
+
+    /// The files at the base commit of the scenario's repository, and the files the thread's worktree has on top of them. Only a scenario
+    /// with both has a worktree, which `verify-app.sh start` makes (a fixture cannot commit one).
+    var repoFiles: [String: String] {
+        guard self == .reviewChanges else { return [:] }
+        return [
+            "Sources/Invoices/List.swift": "struct List {\n    func page() -> [Invoice] { all }\n}\n",
+            "Sources/Invoices/Totals.swift": "struct Totals {\n    var sum = 0\n}\n",
+            "README.md": "Invoices\n",
+        ]
+    }
+
+    var worktreeFiles: [String: String] {
+        guard self == .reviewChanges else { return [:] }
+        return [
+            "Sources/Invoices/List.swift":
+                "struct List {\n    func page(_ n: Int, size: Int = 25) -> [Invoice] {\n"
+                + "        Array(all.dropFirst(n * size).prefix(size))\n    }\n}\n",
+            "Sources/Invoices/Totals.swift": "struct Totals {\n    var sum = 0\n    var pages = 0\n}\n",
+            "Tests/InvoiceListTests.swift": "import Testing\n\n@Test func pagesAreTwentyFiveLong() {}\n",
+        ]
     }
 
     /// Writes this scenario's thread(s) into a fresh fixture, as the real files.
@@ -59,8 +86,15 @@ enum AppScenario: String, CaseIterable {
             try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "permission_denied", "tool": "Bash"])
-        case .needsYou:
+        case .needsYou, .reviewChanges:
             try await fixture.addThread(id, approved: true, title: Self.title)
+            if self == .reviewChanges {
+                // verify-app.sh start fills in the base commit and the worktree it makes.
+                let created: JSONValue = [
+                    "path": .string("@WORKTREE@"), "branch": .string("workbench/\(id)"), "base_commit": .string("@BASE@"),
+                ]
+                try fixture.append(id, .worktreeCreated, data: created)
+            }
             try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Write", "summary": "Tests/InvoiceListTests.swift"])
@@ -118,6 +152,13 @@ enum AppScenario: String, CaseIterable {
             try files.createDirectory(at: target, withIntermediateDirectories: true)
             if let config = scenario.config {
                 try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+            }
+            for (folder, contents) in [("repo", scenario.repoFiles), ("worktree", scenario.worktreeFiles)] {
+                for (path, content) in contents {
+                    let url = target.appendingPathComponent(folder).appendingPathComponent(path)
+                    try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try content.write(to: url, atomically: true, encoding: .utf8)
+                }
             }
             let threads = fixture.project.threadsDirectory
             if (try? files.contentsOfDirectory(atPath: threads.path))?.isEmpty == false {

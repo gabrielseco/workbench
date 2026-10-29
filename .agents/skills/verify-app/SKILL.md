@@ -30,6 +30,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `goal-warning` | a draft with three criteria, two of which cannot be checked (a command not in `[tools] allowed`, a `screenshot:` with no verifier): `Heads up` rows, `1 OF 3 CHECKABLE`, Approve disabled |
 | `goal-approved` | an approved goal, nothing run yet: `Approved` pill, a `Run` button |
 | `running` | a turn is open in the log with activity rows, and no live runner (a fixture cannot have one): Run is current, attention is `working`, the Run screen says the runner is gone and offers Run again. Never press Run again here: it starts a real turn |
+| `review-changes` | `needs-you` with a real worktree on a base commit and three changed files (two edited, one new), so the Review screen lists them and `Open diff` is enabled. Its config names a stand-in editor, so pressing `Open diff` is safe: it only writes down what it was asked to open (`scripts/verify-app.sh calls <pid>` prints it) |
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Review screen: criteria with core's labels, a denied call, `Accept work` disabled because the fixture has no worktree (diff unavailable) |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet |
 | `accepted` | accepted, no pull request: the finished banner with `Ship…` and `New goal…`; `Ship…` runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
@@ -53,6 +54,7 @@ scripts/verify-app.sh press <pid> "Doctor"  # an exact label, else a prefix; wai
 scripts/verify-app.sh type <pid> "text"   # sets the focused text field (else the only one); Accessibility, no keystrokes, 2000 characters at most
 scripts/verify-app.sh paste <pid> [image]  # Cmd-V to that pid only, with a generated picture or an image file; the clipboard is restored
 scripts/verify-app.sh shot <pid> <name>   # writes <name>.png into $WORKBENCH_PROOF_DIR (default .build/verify); Read it
+scripts/verify-app.sh calls <pid>         # what the scenario's stand-in editor was asked to open (review-changes only)
 scripts/verify-app.sh stop <pid>          # always, also after a failure
 ```
 

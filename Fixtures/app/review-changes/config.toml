@@ -1,0 +1,5 @@
+editor = "@EDITOR_STUB@"
+
+[tools]
+available = ["Read"]
+allowed = ["Read"]
