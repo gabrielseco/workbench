@@ -159,10 +159,7 @@ public enum GoalAttachments {
         let folder = threadDirectory.appendingPathComponent(Self.folder, isDirectory: true)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         let numbered: [(Int, URL)] = names.compactMap { name in
-            let parts = name.split(separator: ".", omittingEmptySubsequences: false)
-            guard parts.count == 2, let number = Int(parts[0]), number > 0, String(number) == parts[0],
-                ["png", "jpg", "gif", "webp"].contains(String(parts[1]))
-            else { return nil }
+            guard let number = number(inStoredName: name) else { return nil }
             let url = folder.appendingPathComponent(name)
             let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
             guard values?.isRegularFile == true, values?.isSymbolicLink != true, (values?.fileSize ?? .max) <= maxBytes else {
@@ -171,6 +168,16 @@ public enum GoalAttachments {
             return (number, url)
         }
         return numbered.sorted { $0.0 < $1.0 }.prefix(maxCount).map(\.1)
+    }
+
+    /// The number in a name this type writes (`<n>.<png|jpg|gif|webp>`, n a positive number without leading zeros or a sign);
+    /// nil for any other name, which is therefore never read, copied or removed as one of ours.
+    public static func number(inStoredName name: String) -> Int? {
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2, let number = Int(parts[0]), number > 0, String(number) == parts[0],
+            ["png", "jpg", "gif", "webp"].contains(String(parts[1]))
+        else { return nil }
+        return number
     }
 
     /// `1.png`, `2.jpg`, …: numbered by order, never by what the file was called.

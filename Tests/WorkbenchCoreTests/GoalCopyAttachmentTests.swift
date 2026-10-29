@@ -93,6 +93,45 @@ import Testing
         #expect(!(try prompt(fx, id)).contains("## Screenshots"))
     }
 
+    @Test func aNameTheProjectsIgnoreRulesLetGitSeeIsNeverCopiedAndAnEarlierCopyIsRemoved() async throws {
+        let fx = try await RunnerFixture()
+        // The project un-ignores one screenshot name (and the folders above it), so `git add -A` would stage a copy of it.
+        let rules = ["!.workbench/", "!.workbench/goal-copy/", ".workbench/goal-copy/attachments/*",
+            "!.workbench/goal-copy/attachments/2.jpg", ""].joined(separator: "\n")
+        try rules.write(to: fx.repo.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", ".gitignore"], in: fx.repo)
+        _ = try await fx.git.run(["commit", "-q", "-m", "ignore rules"], in: fx.repo)
+        let id = try await fx.approvedThread()
+        try keep(fx, id, ["1.png": "first", "2.jpg": "second"])
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+
+        let folder = copies(fx, id)
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("1.png").path), "an ignored name is copied")
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("2.jpg").path), "a visible one is not")
+        let text = try prompt(fx, id)
+        #expect(text.contains("/1.png") && !text.contains("/2.jpg"), "the prompt names only what was written")
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        _ = try await fx.git.run(["add", "-A"], in: worktree)
+        let staged = try await fx.git.run(["diff", "--cached", "--name-only"], in: worktree)
+        #expect(!staged.stdout.contains("attachments"), "nothing of the screenshots is staged: \(staged.stdout)")
+    }
+
+    @Test func cleanupTouchesOnlyNamesTheFeatureWritesNotLookAlikes() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        try keep(fx, id, ["1.png": "first"])
+        _ = try await fx.runner(id).run(fx.options("stream-events=1"))
+        let folder = copies(fx, id)
+        for name in ["01.png", "-1.png", "1.png.bak", "a.png"] {
+            try "mine".write(to: folder.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        let second = try await fx.runner(id).run(fx.options("stream-events=1", feedback: "Again."))
+        #expect(second.result == .succeeded)
+        for name in ["01.png", "-1.png", "1.png.bak", "a.png"] {
+            #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path), "\(name) was left alone")
+        }
+    }
+
     @Test func onlyFilesWithTheNamesTheDraftWritesAreTakenAsScreenshots() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("stored-\(UUID().uuidString)")
         let folder = dir.appendingPathComponent("attachments")
