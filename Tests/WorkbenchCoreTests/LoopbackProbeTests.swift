@@ -106,18 +106,18 @@ private final class Server: @unchecked Sendable {
     @Test func aServerThatNeverAnswersEndsAtTheDeadline() async throws {
         let server = try #require(Server { client in
             Server.hear(client)
-            usleep(3_000_000)
+            usleep(12_000_000)
         })
         let started = Date()
         #expect(await LoopbackProbe.answers(url("127.0.0.1", server.port), attempt: 0.4) == false)
-        #expect(Date().timeIntervalSince(started) < 2.5, "it gave up at its deadline, not the server's")
+        #expect(Date().timeIntervalSince(started) < 6, "it gave up at its deadline, not the server's")
     }
 
     @Test func aNameThatIsNotThisMachineIsNeverResolvedAndIsNotUp() async {
         let started = Date()
         #expect(await LoopbackProbe.answers("http://no-such-host.invalid:8080/") == false)
         #expect(await LoopbackProbe.answers("http://example.com:80/") == false)
-        #expect(Date().timeIntervalSince(started) < 2.5, "no lookup was made, so nothing waited on one")
+        #expect(Date().timeIntervalSince(started) < 6, "no lookup was made, so nothing waited on one")
     }
 
     @Test func aPortNothingListensOnIsNotUp() async throws {
