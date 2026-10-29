@@ -11,6 +11,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     case feedbackWithoutPriorTurn
     case emptyFeedback
     case invalidBudget(String)
+    /// `read_also` names a folder a run cannot be given (missing, not a checkout, the project itself); the text says which.
+    case invalidReadAlso(String)
     case alreadyRunning
     case claudeNotFound(String)
     /// The configured coding provider's executable is not there (`claude` has its own case and wording).
@@ -43,6 +45,7 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .feedbackWithoutPriorTurn: "there is nothing to send feedback on yet; run the goal first."
         case .emptyFeedback: "the note is empty. Say what should change."
         case .invalidBudget(let why): "the budget is not usable: \(why)"
+        case .invalidReadAlso(let why): "\(why). Fix read_also in .workbench/config.toml, or remove it."
         case .alreadyRunning: "another `workbench run` holds this thread's log."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
         case .agentNotFound(let provider, let name):

@@ -154,6 +154,8 @@ public struct AgentRequest: Sendable, Equatable {
     public var answerFile: URL?
     /// The working directory is an empty scratch folder outside any repository, which Codex otherwise refuses to start in.
     public var outsideRepository = false
+    /// Other checkouts a Claude coding turn may read, never write (`ReadAlso`).
+    public var readDirectories: [URL] = []
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],

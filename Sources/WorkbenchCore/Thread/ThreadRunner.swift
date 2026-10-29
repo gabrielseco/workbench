@@ -131,6 +131,7 @@ public actor ThreadRunner {
         // What this provider cannot do comes before the approval check: it is what has to change, and approving again
         // before changing it would only meet it next.
         try Self.requireProviderCanCode(agent: agent, goal: goal, options: options)
+        try requireReadAlso(config)
         try Self.requireApprovedAgent(
             state: store.state(of: threadID), agent: agent, spendPolicy: goal.spendPolicyName)
         let name = config.executable(for: agent.provider)
@@ -275,7 +276,7 @@ public actor ThreadRunner {
         var promptInfo: [String: JSONValue] = [:]
         let runAgent = config.resolvedRunAgent(goalModel: goal.model)
         if builtFromGoal || codexFollowUp != nil {
-            (prompt, promptInfo) = await firstPrompt(
+            (prompt, promptInfo) = try await firstPrompt(
                 goal: goal, config: config, baseCommit: baseCommit, options: options, screenshots: screenshots)
         }
         if runAgent.provider == .codex {
@@ -348,7 +349,7 @@ public actor ThreadRunner {
         codingProvider = agent.provider
         let provider: any AgentProvider =
             agent.provider == .codex ? CodexProvider(executable: config.executable(for: .codex)) : ClaudeProvider(config: config)
-        let request = grantedAgentRequest(
+        let request = try grantedAgentRequest(
             sessionID: sessionID, resume: resume, prompt: prompt, config: config, goal: goal, worktree: worktree,
             outputDirectory: promptURL.deletingLastPathComponent(), options: options)
         if let refusal = request.validate(against: provider) { throw refusal }

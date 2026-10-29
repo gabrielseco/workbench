@@ -15,11 +15,14 @@ public struct TurnRequest: Sendable, Equatable {
     public var reasoningEffort: String?
     /// Patterns the user granted this thread for this turn, on top of the project's (`GrantLedger`).
     public var extraAllowed: [String]
+    /// Other checkouts the turn may read (`ReadAlso.resolve`): added to what the file tools may see, with every write to them denied.
+    public var readDirectories: [URL]
 
     public init(
         sessionID: UUID, resume: Bool, budgetUSD: Decimal?, prompt: String, appendSystemPrompt: String? = nil,
-        model: String? = nil, extraAllowed: [String] = [], reasoningEffort: String? = nil
+        model: String? = nil, extraAllowed: [String] = [], reasoningEffort: String? = nil, readDirectories: [URL] = []
     ) {
+        self.readDirectories = readDirectories
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.extraAllowed = extraAllowed
@@ -85,6 +88,10 @@ extension Config {
         if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
         if let model = turn.model { args += ["--model", model] }
         if let effort = turn.reasoningEffort { args += ["--effort", effort] }
+        // `--add-dir` opens a folder to the file tools, writes included, so every write to it is denied in the same breath. A rule
+        // that names an absolute path starts with `//`: one slash means "from the project", which would deny nothing here.
+        let readPaths = turn.readDirectories.map(\.path)
+        if !readPaths.isEmpty { args += ["--add-dir"] + readPaths }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools
         // A grant never repeats a pattern or revives one the project denies; `--disallowedTools` still wins.
@@ -92,7 +99,8 @@ extension Config {
             allowed.append(pattern)
         }
         if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
-        if !tools.denied.isEmpty { args += ["--disallowedTools"] + tools.denied }
+        let readOnlyRules = readPaths.flatMap { path in ["Edit", "Write", "NotebookEdit"].map { "\($0)(/\(path)/**)" } }
+        if !tools.denied.isEmpty || !readOnlyRules.isEmpty { args += ["--disallowedTools"] + tools.denied + readOnlyRules }
         if let rules = turn.appendSystemPrompt, !rules.isEmpty { args += ["--append-system-prompt", rules] }
         args += ["--", turn.prompt]
         return ClaudeInvocation(executable: claudePath, arguments: args)

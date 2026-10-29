@@ -10,7 +10,7 @@ public enum PromptBuilder {
 
     public static func firstPrompt(
         goal: Goal, checkCommand: String?, instructions: ProjectInstructions? = nil, verifies: Bool = false,
-        plan: PlanForRun? = nil, screenshots: [String] = []
+        plan: PlanForRun? = nil, screenshots: [String] = [], otherRepositories: [URL] = []
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
@@ -23,6 +23,7 @@ public enum PromptBuilder {
             for item in goal.outOfScope { out += "- \(item)\n" }
         }
         if !screenshots.isEmpty { out += screenshotSection(screenshots) }
+        if !otherRepositories.isEmpty { out += otherRepositoriesSection(otherRepositories) }
         if let plan { out += planSection(plan) }
         if let instructions {
             out += "\n## Project instructions\n\n\(instructionsIntro)\n\n\(instructions.text)\n"
@@ -65,6 +66,22 @@ public enum PromptBuilder {
 
             The request refers to screenshots the user attached. Open each with your Read tool before you start, in this \
             order. They are outside version control: do not commit, move or edit them.
+
+            \(list)
+
+            """
+    }
+
+    /// The other checkouts the project says a run may read. Read-only: a write there is refused, so the agent is told not to try.
+    static func otherRepositoriesSection(_ folders: [URL]) -> String {
+        let list = folders.map { "- `\($0.path)`" }.joined(separator: "\n")
+        return """
+
+            ## Other repositories
+
+            This project works together with other repositories. You may read them to see how something is done there, with \
+            your Read, Grep and Glob tools and these absolute paths. They are read-only: a change there is refused, and \
+            nothing in them is yours to commit. Do your work in the current directory.
 
             \(list)
 

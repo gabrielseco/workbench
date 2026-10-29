@@ -35,6 +35,8 @@ struct GoalModel: Equatable {
     var turnTimeout: String
     var allowedTools: [String]
     var grantedTools: [String]
+    /// Other repositories the project's config lets a run read, as written there (read-only).
+    var readAlso: [String] = []
     var pill: Pill
     /// What stops the goal from being approved or run: the goal's own problems, a placeholder, a config that does not
     /// parse. Empty when nothing does.
@@ -110,6 +112,7 @@ struct GoalModel: Equatable {
             turnTimeout: "\(goal.turnTimeoutMin) min per turn",
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
+            readAlso: config?.readAlso ?? [],
             pill: pill, blockers: blockers, placeholdersRemain: placeholders)
     }
 
