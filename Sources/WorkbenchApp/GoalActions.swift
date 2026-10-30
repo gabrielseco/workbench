@@ -197,7 +197,8 @@ struct GoalActions: Sendable {
         openWorktree: { project, thread in
             try await openWorktreeInEditor(project, thread)
         },
-        herdrFound: { project in herdrExecutable(project) != nil },
+        // A config that does not load still shows the button: the click says why, where a hidden one would not.
+        herdrFound: { project in (try? herdrExecutable(project)).map { $0 != nil } ?? true },
         openInHerdr: { project, thread in try await openInHerdr(project, thread) },
         openDiff: { project, thread, path in try await openDiffInEditor(project, thread, path: path) },
         loadReview: { project, thread in
@@ -273,19 +274,27 @@ struct GoalActions: Sendable {
             } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") }
         })
 
-    /// The `herdr` to run: the project's config key, else the global one, else the usual places. A config that does not load counts
-    /// as naming none, as it does for the editor.
-    static func herdrExecutable(_ project: Project) -> URL? {
+    /// The `herdr` to run: the project's config key, else the global one, else the usual places. A config file that is there and
+    /// does not load is an error, not "names none": the key it may hold could name a stand-in, and guessing would run the real one.
+    static func herdrExecutable(_ project: Project) throws -> URL? {
         let environment = ProcessInfo.processInfo.environment
-        let configured =
-            (try? Config.load(from: project.configURL))?.herdr
-            ?? (try? GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)))?.herdr
+        var configured: String?
+        do {
+            if FileManager.default.fileExists(atPath: project.configURL.path) {
+                configured = try Config.load(from: project.configURL).herdr
+            }
+            if configured == nil {
+                configured = try GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment)).herdr
+            }
+        } catch {
+            throw RefusalText("A config does not load, so it is not guessed which herdr to run: \(error)")
+        }
         return HerdrLocator.find(configured: configured, searchPath: environment["PATH"], home: NSHomeDirectory())
     }
 
     /// Opens the thread's worktree in Herdr, starting the Herdr app first when its server is down.
     static func openInHerdr(_ project: Project, _ thread: String) async throws -> HerdrOpened {
-        guard let executable = herdrExecutable(project) else {
+        guard let executable = try herdrExecutable(project) else {
             throw RefusalText("Herdr was not found: install it, or name it in the config's `herdr` key.")
         }
         let folder = try Editor.worktree(project: project, threadID: thread)

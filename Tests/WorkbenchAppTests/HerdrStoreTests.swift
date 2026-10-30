@@ -54,4 +54,31 @@ import Testing
         #expect(store.actionError == "herdr did not answer within 10 seconds" && store.actionNote == nil)
         #expect(store.busy == nil && !store.runningHere)
     }
+
+    @Test func aConfigThatDoesNotLoadNeverFallsBackToTheRealHerdr() async throws {
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        let project = fixture.project
+        try FileManager.default.createDirectory(
+            at: project.configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let marker = fixture.root.appendingPathComponent("stand-in-ran")
+        let stub = fixture.root.appendingPathComponent("stand-in.sh")
+        try "#!/bin/sh\ntouch '\(marker.path)'\n".write(to: stub, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
+        // The stand-in is named, but another key is wrong: the file does not load.
+        try "herdr = \"\(stub.path)\"\nnot_a_key = 1\n[tools]\navailable = [\"Read\"]\n".write(
+            to: project.configURL, atomically: true, encoding: .utf8)
+        #expect(GoalActions.core.herdrFound(project), "the button stays, so the click can say why")
+        do {
+            _ = try await GoalActions.core.openInHerdr(project, "t1")
+            Issue.record("a config that does not load still ran a herdr")
+        } catch {
+            #expect("\(error)".contains("does not load"))
+        }
+        #expect(!FileManager.default.fileExists(atPath: marker.path), "the stand-in ran")
+        // With the config fixed, the same key finds the stand-in.
+        try "herdr = \"\(stub.path)\"\n[tools]\navailable = [\"Read\"]\n".write(
+            to: project.configURL, atomically: true, encoding: .utf8)
+        #expect(try GoalActions.herdrExecutable(project)?.path == stub.path)
+    }
 }

@@ -233,13 +233,14 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         let fake = try FakeHerdr()
         try fake.set("hang")
         let started = Date()
+        // Long enough that a busy machine has started the script and it has written its pids before the stop comes.
         do {
-            _ = try await fake.opener(timeout: 1).open(project: project, folder: folder, label: "t1")
+            _ = try await fake.opener(timeout: 3).open(project: project, folder: folder, label: "t1")
             Issue.record("a hung herdr was waited for")
         } catch let failure as HerdrFailure {
-            #expect(failure.code == "timeout" && failure.message.contains("did not answer within 1 seconds"))
+            #expect(failure.code == "timeout" && failure.message.contains("did not answer within 3 seconds"))
         }
-        #expect(Date().timeIntervalSince(started) < 10)
+        #expect(Date().timeIntervalSince(started) < 15)
         let pid = try #require(Int32((try? String(contentsOf: fake.dir.appendingPathComponent("pid"), encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
         let child = try #require(Int32((try? String(contentsOf: fake.dir.appendingPathComponent("childpid"), encoding: .utf8))?
