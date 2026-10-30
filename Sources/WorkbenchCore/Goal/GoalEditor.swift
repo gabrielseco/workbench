@@ -48,28 +48,31 @@ public enum GoalEditor {
         case .addCriterion(let text, let proof):
             let text = try singleLine(text, "a criterion's text"), proof = try singleLine(proof, "a criterion's proof")
             // The next free number, never a gap filled: the log and the judge refer to ids.
-            let id = "c\((goal.criteria.compactMap { Int($0.id.dropFirst()) }.max() ?? 0) + 1)"
-            var blocks = try criterionBlocks(lines, file: file)
-            blocks.append(CriterionBlock(id: id, lines: block(id, text, proof)))
-            try writeCriteria(blocks, in: &lines, file: file)
+            let highest = goal.criteria.compactMap { Int($0.id.dropFirst()) }.max() ?? 0
+            let (next, overflow) = highest.addingReportingOverflow(1)
+            guard !overflow else { throw GoalEditError(reason: "the criterion ids are used up: no free number after the highest") }
+            let id = "c\(next)"
+            var layout = try criterionBlocks(lines, file: file)
+            layout.blocks.append(CriterionBlock(id: id, lines: block(id, text, proof)))
+            try writeCriteria(layout, in: &lines, file: file)
             expected = { $0.criteria.map(\.id) == goal.criteria.map(\.id) + [id] && $0.criteria.last?.text == text }
 
         case .updateCriterion(let id, let text, let proof):
             guard let current = goal.criteria.first(where: { $0.id == id }) else { throw unknown(id) }
             let newText = try text.map { try singleLine($0, "a criterion's text") } ?? current.text
             let newProof = try proof.map { try singleLine($0, "a criterion's proof") } ?? current.proof
-            var blocks = try criterionBlocks(lines, file: file)
-            guard let index = blocks.firstIndex(where: { $0.id == id }) else { throw unknown(id) }
-            blocks[index].lines = block(id, newText, newProof)
-            try writeCriteria(blocks, in: &lines, file: file)
+            var layout = try criterionBlocks(lines, file: file)
+            guard let index = layout.blocks.firstIndex(where: { $0.id == id }) else { throw unknown(id) }
+            layout.blocks[index].lines = block(id, newText, newProof)
+            try writeCriteria(layout, in: &lines, file: file)
             expected = { $0.criteria.first { $0.id == id }.map { $0.text == newText && $0.proof == newProof } == true }
 
         case .removeCriterion(let id):
             guard goal.criteria.contains(where: { $0.id == id }) else { throw unknown(id) }
             guard goal.criteria.count > 1 else { throw GoalEditError(reason: "a goal needs at least one criterion") }
-            var blocks = try criterionBlocks(lines, file: file)
-            blocks.removeAll { $0.id == id }
-            try writeCriteria(blocks, in: &lines, file: file)
+            var layout = try criterionBlocks(lines, file: file)
+            layout.blocks.removeAll { $0.id == id }
+            try writeCriteria(layout, in: &lines, file: file)
             expected = { $0.criteria.map(\.id) == goal.criteria.map(\.id).filter { $0 != id } }
 
         case .moveCriterion(let id, let position):
@@ -77,11 +80,11 @@ public enum GoalEditor {
             guard (0..<goal.criteria.count).contains(position) else {
                 throw GoalEditError(reason: "there is no position \(position): the goal has \(goal.criteria.count) criteria")
             }
-            var blocks = try criterionBlocks(lines, file: file)
-            guard let from = blocks.firstIndex(where: { $0.id == id }) else { throw unknown(id) }
-            blocks.insert(blocks.remove(at: from), at: position)
-            try writeCriteria(blocks, in: &lines, file: file)
-            let order = blocks.map(\.id)
+            var layout = try criterionBlocks(lines, file: file)
+            guard let from = layout.blocks.firstIndex(where: { $0.id == id }) else { throw unknown(id) }
+            layout.blocks.insert(layout.blocks.remove(at: from), at: position)
+            try writeCriteria(layout, in: &lines, file: file)
+            let order = layout.blocks.map(\.id)
             expected = { $0.criteria.map(\.id) == order }
 
         case .setOutOfScope(let items):
@@ -111,9 +114,18 @@ public enum GoalEditor {
 
     // MARK: Pieces
 
+    /// A criterion's own lines, and the blank lines that followed it in the file (`gap`).
     private struct CriterionBlock {
         var id: String
         var lines: [String]
+        var gap: [String] = []
+    }
+
+    /// What the criteria section holds besides the criteria: the blank lines before the first and after the last.
+    private struct CriteriaLayout {
+        var blocks: [CriterionBlock]
+        var head: [String]
+        var tail: [String]
     }
 
     private static func unknown(_ id: String) -> GoalEditError { GoalEditError(reason: "the goal has no criterion [\(id)]") }
@@ -147,25 +159,45 @@ public enum GoalEditor {
         lines.replaceSubrange(range, with: body)
     }
 
-    /// The criteria as the file has them: a criterion's line and everything indented under it.
-    private static func criterionBlocks(_ lines: [String], file: GoalFile) throws -> [CriterionBlock] {
+    /// The criteria as the file has them: a criterion's line and everything indented under it, with the spacing around them,
+    /// so an edit that changes nothing writes the same bytes (blank lines are part of the hash).
+    private static func criterionBlocks(_ lines: [String], file: GoalFile) throws -> CriteriaLayout {
         guard let range = sectionRange("criteria", in: lines, file: file) else {
             throw GoalEditError(reason: "the goal has no '## Criteria' section")
         }
-        var blocks: [CriterionBlock] = []
+        var layout = CriteriaLayout(blocks: [], head: [], tail: [])
         for index in range {
             let line = lines[index]
             if let match = line.wholeMatch(of: #/- \[(c[0-9]+)\]\s+(.+)/#) {
-                blocks.append(CriterionBlock(id: String(match.1), lines: [line]))
-            } else if !blocks.isEmpty, line.hasPrefix(" ") || line.hasPrefix("\t") {
-                blocks[blocks.count - 1].lines.append(line)
+                layout.blocks.append(CriterionBlock(id: String(match.1), lines: [line]))
+            } else if layout.blocks.isEmpty {
+                layout.head.append(line)
+            } else if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                layout.blocks[layout.blocks.count - 1].gap.append(line)
+            } else if let last = layout.blocks.indices.last, layout.blocks[last].gap.isEmpty {
+                layout.blocks[last].lines.append(line)
+            } else {
+                // Text after a blank line is not part of a criterion the editor knows; the parse would have refused it.
+                throw GoalEditError(reason: "the criteria section holds text the editor cannot place: '\(line)'")
             }
         }
-        return blocks
+        if let last = layout.blocks.indices.last {
+            layout.tail = layout.blocks[last].gap
+            layout.blocks[last].gap = []
+        }
+        return layout
     }
 
-    private static func writeCriteria(_ blocks: [CriterionBlock], in lines: inout [String], file: GoalFile) throws {
-        try replaceSection("criteria", with: [""] + blocks.flatMap(\.lines) + [""], in: &lines, file: file)
+    /// The blocks in their new order. A block between others keeps its own gap, or takes the one the file already uses.
+    private static func writeCriteria(_ layout: CriteriaLayout, in lines: inout [String], file: GoalFile) throws {
+        let usual = layout.blocks.first { !$0.gap.isEmpty }?.gap ?? []
+        var body = layout.head.isEmpty ? [""] : layout.head
+        for (index, block) in layout.blocks.enumerated() {
+            body += block.lines
+            if index < layout.blocks.count - 1 { body += block.gap.isEmpty ? usual : block.gap }
+        }
+        body += layout.tail.isEmpty ? [""] : layout.tail
+        try replaceSection("criteria", with: body, in: &lines, file: file)
     }
 
     /// Sets (or, with nil, removes) one front matter line, keeping its comment and every other line as written.

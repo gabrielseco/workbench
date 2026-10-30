@@ -46,12 +46,41 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
             .deletingLastPathComponent().appendingPathComponent("Fixtures/app")
         let goals = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
             .compactMap { $0 as? URL }.filter { $0.lastPathComponent == "goal.md" } ?? []
+        var checked = 0
         for url in goals {
-            guard let file = try? parsed(String(contentsOf: url, encoding: .utf8)) else { continue }
-            // Setting the title to itself is an edit that changes nothing.
-            let same = try GoalEditor.apply(.setTitle(file.goal.title), to: file)
-            #expect(same.text == file.text, "\(url.path)")
+            let original = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\r\n", with: "\n")
+            guard let file = try? parsed(original) else { continue }
+            // Edits that change nothing: the title to itself, and each criterion to what it already says.
+            #expect(try GoalEditor.apply(.setTitle(file.goal.title), to: file).text == original, "\(url.path)")
+            for criterion in file.goal.criteria {
+                let same = GoalEdit.updateCriterion(id: criterion.id, text: criterion.text, proof: criterion.proof)
+                #expect(try GoalEditor.apply(same, to: file).text == original, "\(url.path) \(criterion.id)")
+            }
+            checked += 1
         }
+        #expect(checked >= 3, "the fixtures stopped parsing, or moved")
+    }
+
+    @Test func aNoOpEditKeepsTheBlankLinesBetweenCriteriaAndSoTheApproval() throws {
+        let spaced = sample.replacingOccurrences(
+            of: "  - proof: test: Suite/first\n- [c3]", with: "  - proof: test: Suite/first\n\n- [c3]")
+        let approved = try parsed(spaced).approving()
+        let moved = try GoalEditor.apply(.moveCriterion(id: "c1", to: 0), to: approved)
+        #expect(moved.text == approved.text && moved.goal.approval == .approved)
+        let same = try GoalEditor.apply(.updateCriterion(id: "c3", text: nil, proof: "cat third"), to: approved)
+        #expect(same.text == approved.text)
+    }
+
+    @Test func aCriterionAddedToASpacedListGetsTheSameSpacing() throws {
+        let spaced = sample.replacingOccurrences(
+            of: "  - proof: test: Suite/first\n- [c3]", with: "  - proof: test: Suite/first\n\n- [c3]")
+        let edited = try GoalEditor.apply(.addCriterion(text: "Fourth.", proof: "cat 4"), to: parsed(spaced))
+        #expect(edited.text.contains("  - proof: cat third\n\n- [c4] Fourth.\n  - proof: cat 4\n\n## Notes"))
+    }
+
+    @Test func aCriterionIdAtTheTopOfTheRangeRefusesInsteadOfCrashing() throws {
+        let huge = sample.replacingOccurrences(of: "[c3]", with: "[c9223372036854775807]")
+        #expect(throws: GoalEditError.self) { try GoalEditor.apply(.addCriterion(text: "x", proof: "y"), to: parsed(huge)) }
     }
 
     @Test func theTitleEditKeepsItsCommentAndEverythingElse() throws {
@@ -173,6 +202,24 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
         let before = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
         await #expect(throws: ThreadServiceError.self) { try await fx.service.editGoal(id: id, .removeCriterion(id: "c9")) }
         #expect(try String(contentsOf: fx.project.goalURL(id), encoding: .utf8) == before)
+    }
+
+    @Test func aLiveRunIsRefusedAndNothingIsWritten() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let before = try String(contentsOf: fx.project.goalURL(id), encoding: .utf8)
+        // This test process stands in for the runner: same pid and start time as runner.json records.
+        let me = getpid()
+        let started = try #require(ProcessTree.member(for: me))
+        let info: [String: Any] = ["pid": me, "started_seconds": started.startSeconds, "started_micros": started.startMicros]
+        try JSONSerialization.data(withJSONObject: info).write(to: fx.project.runnerURL(id))
+        await #expect(throws: ThreadServiceError.running(pid: me)) { try await fx.service.editGoal(id: id, .setTitle("x")) }
+        #expect(try String(contentsOf: fx.project.goalURL(id), encoding: .utf8) == before)
+    }
+
+    @Test func aThreadIdThatIsNotOneIsRefusedBeforeAnythingIsOpened() async throws {
+        let fx = try await RunnerFixture()
+        await #expect(throws: ThreadStoreError.self) { try await fx.service.editGoal(id: "../outside", .setTitle("x")) }
     }
 
     @Test func anEndedThreadCannotBeEdited() async throws {

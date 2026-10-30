@@ -29,6 +29,8 @@ private let autoVerdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": 
         let env = j.environment("answer=\(try j.file("a.json", autoVerdict))")
         let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: env)
         #expect(results == [AutoAdviceResult(name: "judge", outcome: .skipped("the goal skips it"))])
+        let report = await ReviewLoader(project: j.fx.project, git: j.fx.git).load(id: j.id)
+        #expect(!report.nextSteps.contains { $0.name == "judge" }, "review and next read the same goal")
         #expect(try j.fx.events(j.id).allSatisfy { $0.kind != .judgeStarted && $0.kind != .judgeRan })
     }
 

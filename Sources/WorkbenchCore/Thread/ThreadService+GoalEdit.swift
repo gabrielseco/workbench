@@ -7,7 +7,8 @@ extension ThreadService {
     /// leave a goal that does not parse.
     @discardableResult
     public func editGoal(id: String, _ edit: GoalEdit) async throws -> GoalFile {
-        try await withLog(id) { log in
+        guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
+        return try await withLog(id) { log in
             let state = ThreadStore(project: project).state(of: id)
             if let decision = state.decision { throw ThreadServiceError.threadEnded(decision) }
             if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }

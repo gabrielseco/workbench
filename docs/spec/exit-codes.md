@@ -99,7 +99,7 @@ opened with `open` shows the goal beside the diff. `.workbench/` is already kept
 
 With `[review] auto` in the config, a turn that succeeded with a passing check (or none) is followed, before the `review:` line, by
 the advice it names that is due: one line each, `auto judge: 1 of 1 criteria met`, `auto <stage>: clean` or `fix`, `auto <name>:
-skipped, <why>`, `auto <name>: no answer, <why>`. They never change the exit code below.
+skipped, <why>`, `auto <name>: no answer, <why>`. A step the goal's `skip` names prints `auto <name>: skipped, the goal skips it`. They never change the exit code below.
 
 | Code | Kind | When |
 |---|---|---|
@@ -133,7 +133,7 @@ one line per step, `next  <command>  <why>` and then `then  <command>  <why>`, i
 `pr-review`) whose `applies_to` matches a changed file (all of them when it has none, and with a note when the changed files could
 not be read) and that has no finished, not skipped round since that turn ended at the branch's current tip (a round that recorded
 another `head_sha` did not review what is there), then `workbench accept` or, once accepted with no pull
-request, `workbench ship`. `review` shows the same lines above its closing hint. Every command names the thread (`workbench ship <id>`), so one printed for a named thread never acts on the active one. A turn that has started after the last finished one and has no end on record replaces the list with `workbench log -f <id>` (it is running, or its runner stopped). Every step is advisory: nothing refuses `accept` or `ship` for
+request, `workbench ship`. A step the goal's `skip` names is not listed. `review` shows the same lines above its closing hint. Every command names the thread (`workbench ship <id>`), so one printed for a named thread never acts on the active one. A turn that has started after the last finished one and has no end on record replaces the list with `workbench log -f <id>` (it is running, or its runner stopped). Every step is advisory: nothing refuses `accept` or `ship` for
 lacking one, and `next` runs nothing and writes no event. A thread with no finished successful turn, a failed turn, a decision other
 than `accepted`, or an open pull request has no steps (`nothing is due: …`).
 
