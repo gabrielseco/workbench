@@ -67,15 +67,18 @@ struct FollowUpPlan: Equatable, Sendable {
     /// Which follow-up of this pull request it would be, and how many `[pr_review] max_rounds` allows.
     var round: Int
     var allowed: Int
-    /// The most its turn can cost.
-    var budget: Decimal
+    /// The most its turn can cost, nil when the project sets no dollar cap (`default_budget_usd`): the turn is then limited by its
+    /// timeout only, as every new goal of such a project is.
+    var budget: Decimal?
     /// Core's reason there can be none (no rounds left); the confirm says it and offers no start.
     var refusal: String?
 
     var text: String {
-        let cost = NSDecimalNumber(decimal: budget).doubleValue
+        let cost =
+            budget.map { "up to $\(String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue))" }
+            ?? "with no dollar cap (this project sets none, so only its timeout limits the turn)"
         return "Starts follow-up \(round) of at most \(allowed) on pull request #\(pr): a new thread on the same branch, "
-            + "whose goal is these findings, and runs its first turn, up to $\(String(format: "%.2f", cost)). "
+            + "whose goal is these findings, and runs its first turn, \(cost). "
             + "You then review, accept and ship it as any thread; shipping updates the pull request. Nothing is merged."
     }
 }

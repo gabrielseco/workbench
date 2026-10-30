@@ -53,7 +53,7 @@ extension ProjectStore {
         let mine = generation
         var made: String?
         await working("Starting the fix round…") {
-            do { made = try await actions.startFollowUp(project, thread, shown.findings ?? "", shown.round) } catch {
+            do { made = try await actions.startFollowUp(project, thread, shown.findings ?? "", shown.round, plan.budget) } catch {
                 if mine == generation { followUpError = "\(error)" }
             }
         }

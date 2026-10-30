@@ -41,7 +41,7 @@ private final class Calls: @unchecked Sendable {
                 return RunHandle(run: {}, stop: {})
             },
             followUpPlan: { _, _, _ in plan },
-            startFollowUp: { _, thread, findings, round in
+            startFollowUp: { _, thread, findings, round, _ in
                 if let startError { throw startError }
                 calls.started("\(thread) round \(round): \(findings)")
                 try await fixture.addThread("t2", approved: true)
@@ -74,7 +74,12 @@ private final class Calls: @unchecked Sendable {
 
     @Test func theConfirmSaysWhatItStartsAndWhatItCanCost() {
         let text = Self.plan.text
-        #expect(text.contains("follow-up 1 of at most 2") && text.contains("#7") && text.contains("$5.00"))
+        #expect(text.contains("follow-up 1 of at most 2") && text.contains("#7") && text.contains("up to $5.00"))
+    }
+
+    @Test func theConfirmSaysWhenThereIsNoDollarCap() {
+        let text = FollowUpPlan(pr: 7, round: 1, allowed: 2, budget: nil).text
+        #expect(text.contains("no dollar cap") && !text.contains("$"))
     }
 
     @Test func confirmingStartsTheFollowUpWithTheRoundsFindings() async throws {
@@ -130,7 +135,7 @@ private final class Calls: @unchecked Sendable {
     @Test func coreRefusesAThreadWithNoPullRequestInItsOwnWords() async throws {
         let (_, project) = try await coreProject("[tools]\navailable = [\"Read\"]\n")
         do {
-            _ = try await GoalActions.core.startFollowUp(project, "t1", "- a bug", 1)
+            _ = try await GoalActions.core.startFollowUp(project, "t1", "- a bug", 1, nil)
             Issue.record("a thread with no pull request on record started a follow-up")
         } catch {
             #expect("\(error)".contains("no recorded pull request"))
@@ -144,6 +149,64 @@ private final class Calls: @unchecked Sendable {
         #expect(plan.allowed == 0 && plan.round == 1 && plan.refusal?.contains("max_rounds") == true)
         let (_, open) = try await coreProject("[tools]\navailable = [\"Read\"]\n")
         let planned = try await GoalActions.core.followUpPlan(open, "t1", 7)
-        #expect(planned.allowed == 2 && planned.refusal == nil && planned.budget == Config.defaultBudgetUSD)
+        #expect(planned.allowed == 2 && planned.refusal == nil && planned.budget == nil)
+    }
+
+    @Test func coreRefusesToStartDearerThanTheConfirmShowed() async throws {
+        let (_, project) = try await coreProject("default_budget_usd = 9\n\n[tools]\navailable = [\"Read\"]\n")
+        let shown = try await GoalActions.core.followUpPlan(project, "t1", 7)
+        #expect(shown.budget == 9)
+        // The config changed while the confirm was open: what it showed is not what would start.
+        try "default_budget_usd = 50\n\n[tools]\navailable = [\"Read\"]\n".write(
+            to: project.configURL, atomically: true, encoding: .utf8)
+        do {
+            _ = try await GoalActions.core.startFollowUp(project, "t1", "- a bug", 1, shown.budget)
+            Issue.record("a follow-up started with a different budget than the one shown")
+        } catch {
+            #expect("\(error)".contains("budget changed"))
+        }
+    }
+
+    @Test func aNoPullRequestRefusalFromCoreReachesTheSheetThroughTheStore() async throws {
+        let (fixture, _) = try await coreProject("[tools]\navailable = [\"Read\"]\n")
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: .core)
+        #expect(await store.open(fixture.root))
+        store.prReviewShown = fixing()
+        await store.prepareFollowUp()
+        await store.confirmFollowUp()
+        #expect(store.followUpError?.contains("no recorded pull request") == true)
+        #expect(store.prReviewShown != nil && store.currentThread == "t1" && !store.runningHere)
+        #expect(ThreadStore(project: fixture.project).followUps(of: "t1").isEmpty)
+    }
+
+    @Test func approvingWhileARunIsGoingDoesNotReopenTheSendBackCard() async throws {
+        let gate = RunGate()
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        keptFixtures.append(fixture)
+        let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await gate.wait() }, stop: {}) })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        await store.approveAndRun()
+        #expect(store.runningHere)
+        // A note left from an earlier send must not bring the card back for an approve that was refused.
+        store.sendBackNote = "left over"
+        await store.approveAndRun()
+        #expect(store.actionError == "A run is already going." && !store.sendingBack)
+        await gate.open()
+    }
+}
+
+private actor RunGate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
     }
 }
