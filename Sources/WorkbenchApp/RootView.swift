@@ -190,8 +190,13 @@ struct ThreadPane: View {
             }
             Spacer()
         }
-        .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 28).padding(.top, 28).padding(.bottom, scrollsItself ? 0 : 28)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// The Goal screen is a scroll view with its own padding: no bottom padding here, so it scrolls to the footer and does not
+    /// cut its last row off in the middle of the window.
+    private var scrollsItself: Bool { store.review == nil && snapshot.run == nil && goal != nil }
 }
 
 /// What the app is doing for the person right now: a click is answered at once, even when the work behind it takes a while.
