@@ -55,6 +55,26 @@ import Testing
         #expect(store.busy == nil && !store.runningHere)
     }
 
+    @Test func theRealGateShowsTheButtonOnlyForAHerdrThatIsThere() async throws {
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        let project = fixture.project
+        try FileManager.default.createDirectory(
+            at: project.configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let stub = fixture.root.appendingPathComponent("stand-in.sh")
+        try "#!/bin/sh\n".write(to: stub, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
+        func write(_ herdr: String) throws {
+            try "herdr = \"\(herdr)\"\n[tools]\navailable = [\"Read\"]\n".write(
+                to: project.configURL, atomically: true, encoding: .utf8)
+        }
+        try write(stub.path)
+        #expect(GoalActions.core.herdrFound(project))
+        // Named, but not there: no button (and no falling back to a herdr that is).
+        try write(fixture.root.appendingPathComponent("gone").path)
+        #expect(!GoalActions.core.herdrFound(project))
+    }
+
     @Test func aConfigThatDoesNotLoadNeverFallsBackToTheRealHerdr() async throws {
         let fixture = try await AppFixture()
         keptFixtures.append(fixture)
