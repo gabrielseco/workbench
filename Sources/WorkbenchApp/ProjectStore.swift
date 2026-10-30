@@ -37,6 +37,9 @@ struct RecentProject: Equatable, Identifiable {
     var actionError: String?
     /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
     var goalEditError: String?
+    /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
+    var goalEditSerial = 0
+    @ObservationIgnored var goalEdits: Task<Void, Never>?
     /// Something an action did not do that is not a failure, such as files left out of a diff.
     var actionNote: String?
     private(set) var starting = false

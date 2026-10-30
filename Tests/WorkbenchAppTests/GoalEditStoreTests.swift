@@ -60,4 +60,37 @@ private final class Seen: @unchecked Sendable {
         await store.editGoal(.setRequest("Changed."))
         #expect(store.goal?.request != before)
     }
+
+    @Test func twoQuickEditsEachBuildOnTheOthersResultAndNoneIsLost() async throws {
+        let fixture = try await AppFixture()
+        keptEditFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: false)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: .core)
+        #expect(await store.open(fixture.root))
+        let before = try #require(store.goal).outOfScope
+        // Both are made from the displayed goal, before either has been written: the second must not undo the first.
+        async let first: Void = store.editGoal { .setOutOfScope($0.outOfScope + ["First."]) }
+        async let second: Void = store.editGoal { .setOutOfScope($0.outOfScope + ["Second."]) }
+        _ = await (first, second)
+        #expect(try #require(store.goal).outOfScope == before + ["First.", "Second."])
+        #expect(store.goalEditError == nil)
+    }
+
+    @Test func anEditThatNoLongerMakesSenseIsDroppedNotWritten() async throws {
+        let seen = Seen()
+        let store = try await store(GoalActions(editGoal: { _, thread, edit in seen.add(thread, edit) }))
+        await store.editGoal { _ in nil }
+        #expect(seen.all.isEmpty)
+    }
+
+    @Test func everyEditThatEndsCountsSoARefusedFieldCanShowWhatTheFileHas() async throws {
+        let store = try await store(
+            GoalActions(editGoal: { _, _, edit in
+                if case .setTitle = edit { throw GoalActions.RefusalText("no") }
+            }))
+        let start = store.goalEditSerial
+        await store.editGoal(.setTitle(""))
+        await store.editGoal(.setSkip([]))
+        #expect(store.goalEditSerial == start + 2, "a refusal counts too")
+    }
 }

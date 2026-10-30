@@ -94,6 +94,12 @@ private final class SkillProbe: @unchecked Sendable {
         #expect(off.steps.map(\.name) == ["judge"], "a project that switched the verifier off has no verifier step")
     }
 
+    @Test func eachCriterionSaysWhatKindOfProofItHas() async throws {
+        let (model, _) = try await load(
+            goal: goal(["test: Suite/name", "`swift test` passes", "screenshot: settings", "a person reads it"]), config: config)
+        #expect(model.rows.map(\.kind) == ["test", "command", "screenshot", "by hand"])
+    }
+
     @Test func showsTheGoalsOwnFoldersApartFromTheConfigs() async throws {
         let (model, _) = try await load(
             goal: goal(["`swift test` passes"], frontMatter: "read_also: ../api, ~/shared\n"),

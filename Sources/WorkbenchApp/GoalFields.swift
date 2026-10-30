@@ -1,5 +1,15 @@
 import SwiftUI
 
+private struct GoalEditSerialKey: EnvironmentKey { static let defaultValue = 0 }
+
+extension EnvironmentValues {
+    /// Counts the goal edits that have ended; a field shows what the file has again when it changes and the field is not being typed in.
+    var goalEditSerial: Int {
+        get { self[GoalEditSerialKey.self] }
+        set { self[GoalEditSerialKey.self] = newValue }
+    }
+}
+
 /// One line of the goal you can change in place. The change is made when you press Return or leave the field, never per
 /// keystroke; Esc puts back what the file has. `commit` gets the trimmed text and only when it differs from `value`.
 struct CommitField: View {
@@ -9,6 +19,7 @@ struct CommitField: View {
     var commit: (String) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
+    @Environment(\.goalEditSerial) private var serial
 
     var body: some View {
         TextField(placeholder, text: $text)
@@ -16,6 +27,7 @@ struct CommitField: View {
             .focused($focused)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
+            .onChange(of: serial) { _, _ in if !focused { text = value } }
             .onSubmit(push)
             .onChange(of: focused) { _, now in if !now { push() } }
             .onExitCommand { text = value }
@@ -33,6 +45,7 @@ struct CommitEditor: View {
     var commit: (String) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
+    @Environment(\.goalEditSerial) private var serial
 
     var body: some View {
         TextEditor(text: $text)
@@ -42,6 +55,7 @@ struct CommitEditor: View {
             .focused($focused)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
+            .onChange(of: serial) { _, _ in if !focused { text = value } }
             .onChange(of: focused) { _, now in
                 guard !now else { return }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

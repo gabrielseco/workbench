@@ -23,6 +23,14 @@ struct GoalModel: Equatable {
         /// Why Workbench cannot check this proof; nil when it can.
         var warning: String?
         var suggestion: String?
+
+        /// What kind of proof it is, for the chip: `test`, `screenshot`, `command` (a backticked command) or `by hand`.
+        var kind: String {
+            let trimmed = proof.trimmingCharacters(in: .whitespaces)
+            if trimmed.lowercased().hasPrefix("test:") { return "test" }
+            if ScreenshotProof.name(in: proof) != nil { return "screenshot" }
+            return trimmed.contains("`") ? "command" : "by hand"
+        }
     }
 
     /// A step the goal can switch off for itself (`skip:`); `known` is false for a name the goal skips that the project has no step for.

@@ -18,6 +18,9 @@ struct GoalView: View {
 
     private func edit(_ change: GoalEdit) { Task { await store.editGoal(change) } }
 
+    /// An edit built from the goal as it is when it runs, for a change to a list or the switches.
+    private func edit(_ make: @escaping @MainActor (GoalModel) -> GoalEdit?) { Task { await store.editGoal(make) } }
+
     var body: some View { ScrollView { content } }
 
     /// The blocks, apart from the scroll view (which `ImageRenderer` cannot draw), so a test can render them.
@@ -41,6 +44,7 @@ struct GoalView: View {
             actions
         }
         .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.goalEditSerial, store.goalEditSerial)
     }
 
     private var header: some View {
@@ -96,16 +100,21 @@ struct GoalView: View {
                                     edit(.updateCriterion(id: row.id, text: $0, proof: nil))
                                 }
                                 HStack(spacing: 4) {
-                                    Text("proof:").font(.callout).foregroundStyle(.secondary)
+                                    Text(row.kind).font(.caption).foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6).padding(.vertical, 1)
+                                        .background(Theme.grey.opacity(0.12), in: Capsule())
                                     CommitField(placeholder: "How it will be shown", value: row.proof, font: .callout) {
                                         edit(.updateCriterion(id: row.id, text: nil, proof: $0))
                                     }
                                 }
                             } else {
                                 Text(row.text)
-                                Text(row.proof).font(.callout).foregroundStyle(.secondary)
-                                    .padding(.horizontal, 8).padding(.vertical, 2)
-                                    .background(Theme.grey.opacity(0.12), in: Capsule())
+                                HStack(spacing: 6) {
+                                    Text(row.kind).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6).padding(.vertical, 1)
+                                        .background(Theme.grey.opacity(0.12), in: Capsule())
+                                    Text(row.proof).font(.callout).foregroundStyle(.secondary)
+                                }
                             }
                             if let warning = row.warning {
                                 Label("Heads up: \(warning)", systemImage: "exclamationmark.triangle.fill")
@@ -143,14 +152,20 @@ struct GoalView: View {
                             if editable {
                                 Text("•")
                                 CommitField(placeholder: "What must not change", value: item) { new in
-                                    var items = goal.outOfScope
-                                    items[index] = new
-                                    edit(.setOutOfScope(items))
+                                    edit { g in
+                                        guard g.outOfScope.indices.contains(index) else { return nil }
+                                        var items = g.outOfScope
+                                        items[index] = new
+                                        return .setOutOfScope(items)
+                                    }
                                 }
                                 Button {
-                                    var items = goal.outOfScope
-                                    items.remove(at: index)
-                                    edit(.setOutOfScope(items))
+                                    edit { g in
+                                        guard g.outOfScope.indices.contains(index) else { return nil }
+                                        var items = g.outOfScope
+                                        items.remove(at: index)
+                                        return .setOutOfScope(items)
+                                    }
                                 } label: { Image(systemName: "xmark") }
                                     .buttonStyle(.borderless).help("Remove")
                             } else {
@@ -161,7 +176,7 @@ struct GoalView: View {
                     if editable {
                         if addingScope {
                             NewLine(placeholder: "What must not change") { text in
-                                edit(.setOutOfScope(goal.outOfScope + [text]))
+                                edit { .setOutOfScope($0.outOfScope + [text]) }
                                 addingScope = false
                             } cancel: { addingScope = false }
                         } else {
@@ -191,14 +206,20 @@ struct GoalView: View {
                             HStack {
                                 if editable {
                                     CommitField(placeholder: "../backend", value: folder, font: mono) { new in
-                                        var all = goal.goalReadAlso
-                                        all[index] = new
-                                        edit(.setReadAlso(all))
+                                        edit { g in
+                                            guard g.goalReadAlso.indices.contains(index) else { return nil }
+                                            var all = g.goalReadAlso
+                                            all[index] = new
+                                            return .setReadAlso(all)
+                                        }
                                     }
                                     Button {
-                                        var all = goal.goalReadAlso
-                                        all.remove(at: index)
-                                        edit(.setReadAlso(all))
+                                        edit { g in
+                                            guard g.goalReadAlso.indices.contains(index) else { return nil }
+                                            var all = g.goalReadAlso
+                                            all.remove(at: index)
+                                            return .setReadAlso(all)
+                                        }
                                     } label: { Image(systemName: "xmark") }
                                         .buttonStyle(.borderless).help("Remove")
                                 } else {
@@ -211,7 +232,7 @@ struct GoalView: View {
                         if editable {
                             if addingFolder {
                                 NewLine(placeholder: "A git checkout: ../backend, ~/shared or an absolute path") { text in
-                                    edit(.setReadAlso(goal.goalReadAlso + [text]))
+                                    edit { .setReadAlso($0.goalReadAlso + [text]) }
                                     addingFolder = false
                                 } cancel: { addingFolder = false }
                             } else {
@@ -231,8 +252,11 @@ struct GoalView: View {
                 ForEach(goal.steps, id: \.name) { step in
                     let on = !step.skipped
                     Button {
-                        let skipped = goal.steps.filter { $0.skipped && $0.name != step.name }.map(\.name)
-                        edit(.setSkip(on ? skipped + [step.name] : skipped))
+                        edit { g in
+                            let others = g.steps.filter { $0.skipped && $0.name != step.name }.map(\.name)
+                            let now = g.steps.first { $0.name == step.name }?.skipped ?? false
+                            return .setSkip(now ? others : others + [step.name])
+                        }
                     } label: {
                         Label(step.label, systemImage: on ? "checkmark.circle.fill" : "circle")
                             .font(.callout)
