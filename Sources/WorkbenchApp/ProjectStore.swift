@@ -35,6 +35,8 @@ struct RecentProject: Equatable, Identifiable {
     /// What the last Approve, Run or New goal said when it did not go through.
     /// What the last action said when it did not go through. Set by the store's own extensions too.
     var actionError: String?
+    /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
+    var goalEditError: String?
     /// Something an action did not do that is not a failure, such as files left out of a diff.
     var actionNote: String?
     private(set) var starting = false
@@ -173,7 +175,7 @@ struct RecentProject: Equatable, Identifiable {
         prReviewShown = nil
         project = located
         doctor = .notRun
-        (goal, review) = (nil, nil)
+        (goal, review, goalEditError) = (nil, nil, nil)
         screen = .opening(path: located.root.path)
         (currentThread, lastWatch) = (nil, nil)
         await reload()

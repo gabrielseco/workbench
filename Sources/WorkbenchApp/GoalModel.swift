@@ -25,6 +25,14 @@ struct GoalModel: Equatable {
         var suggestion: String?
     }
 
+    /// A step the goal can switch off for itself (`skip:`); `known` is false for a name the goal skips that the project has no step for.
+    struct Step: Equatable {
+        var name: String
+        var label: String
+        var skipped: Bool
+        var known: Bool
+    }
+
     var title: String
     var path: String
     var request: String
@@ -37,6 +45,12 @@ struct GoalModel: Equatable {
     var grantedTools: [String]
     /// Other repositories the project's config lets a run read, as written there (read-only).
     var readAlso: [String] = []
+    /// Folders this goal adds to those (`read_also:` in the goal), editable while the goal is a draft.
+    var goalReadAlso: [String] = []
+    /// Steps after a turn and whether this goal skips them.
+    var steps: [Step] = []
+    /// The goal can be changed here: it is not approved (an approved goal is in another step), no run holds it and it has not ended.
+    var editable = false
     var pill: Pill
     /// What stops the goal from being approved or run: the goal's own problems, a placeholder, a config that does not
     /// parse. Empty when nothing does.
@@ -98,6 +112,9 @@ struct GoalModel: Equatable {
         }
 
         let events = (try? EventLogReader.read(at: project.eventsURL(id)).events) ?? []
+        let state = ThreadState.derive(from: events, id: id)
+        let editable =
+            goal.approval != .approved && state.decision == nil && ThreadStore(project: project).runnerPID(id: id) == nil
         let agent = config?.resolvedRunAgent(goalModel: goal.model)
         let pill: Pill =
             switch goal.approval {
@@ -112,8 +129,21 @@ struct GoalModel: Equatable {
             turnTimeout: "\(goal.turnTimeoutMin) min per turn",
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
-            readAlso: config?.readAlso ?? [],
-            pill: pill, blockers: blockers, placeholdersRemain: placeholders)
+            readAlso: config?.readAlso ?? [], goalReadAlso: goal.readAlso, steps: steps(goal: goal, config: config),
+            editable: editable, pill: pill, blockers: blockers, placeholdersRemain: placeholders)
+    }
+
+    /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is none of them.
+    static func steps(goal: Goal, config: Config?) -> [Step] {
+        var names: [(String, String)] = []
+        if config?.verifier != nil { names.append(("verifier", "Verifier")) }
+        names.append(("judge", "Judge"))
+        for stage in config?.review.stages ?? [] where stage != ReviewConfig.prReviewStage { names.append((stage, stage)) }
+        var steps = names.map { Step(name: $0.0, label: $0.1, skipped: goal.skips($0.0), known: true) }
+        for name in goal.skip where !steps.contains(where: { $0.name == name }) {
+            steps.append(Step(name: name, label: name, skipped: true, known: false))
+        }
+        return steps
     }
 
     /// Core's own check of the verifier's skill at the goal's base commit.

@@ -1,6 +1,6 @@
 # P20: Edit the goal in the app
 
-Status: plan; slice 1 (#302) and 1b built. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
+Status: slices 1 (#302), 1b (#303) and 2 built; 3 is later. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
 This document describes future behaviour; `docs/spec/` still describes what ships.
 
 **Outcome:** you write what needs to be done in the New goal popover, the agent drafts the goal, and you review, correct and
@@ -66,7 +66,7 @@ popover: write the request ──▶ agent drafts goal.md ──▶ Goal screen:
   `goal approve` resolves them and refuses one that is no checkout or too many together.
 - verify-cli: `read-also.sh` puts a second repository in the goal's line and the turn must read both words.
 
-### 2. The Goal screen as blocks you can edit
+### 2. The Goal screen as blocks you can edit (built)
 
 - Replace the read-only sections with blocks in the prototype's look: the request in the serif face, each criterion as a card
   with a proof chip (test, command, screenshot, by hand) and a status line from the existing `CriteriaStatus` / proof-command
