@@ -52,13 +52,7 @@ extension ThreadRunner {
     /// later turn refuses that turn, rather than starting it without the access the config promised.
     /// The project's `read_also` first, then the goal's own, each folder once.
     func readDirectories(_ config: Config, goal: Goal) throws -> [URL] {
-        var entries = config.readAlso
-        for entry in goal.readAlso where !entries.contains(entry) { entries.append(entry) }
-        guard entries.count <= ReadAlso.maxEntries else {
-            throw RunnerError.invalidReadAlso(
-                "read_also: the project's and the goal's folders together are more than \(ReadAlso.maxEntries)")
-        }
-        switch ReadAlso.resolve(entries, projectRoot: project.root) {
+        switch ReadAlso.resolve(config: config.readAlso, goal: goal.readAlso, projectRoot: project.root) {
         case .success(let found): return found
         case .failure(let problem): throw RunnerError.invalidReadAlso("\(problem)")
         }

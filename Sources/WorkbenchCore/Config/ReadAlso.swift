@@ -48,6 +48,20 @@ public enum ReadAlso {
         return linked && kind("commondir").exists && !kind("commondir").directory
     }
 
+    /// The project's folders then the goal's, resolved together: a folder named twice (a relative path and an absolute one to the
+    /// same checkout) is one, and the limit counts the distinct folders that would be opened.
+    public static func resolve(
+        config: [String], goal: [String], projectRoot: URL, home: String = NSHomeDirectory()
+    ) -> Result<[URL], ReadAlsoProblem> {
+        switch resolve(config + goal, projectRoot: projectRoot, home: home) {
+        case .failure(let problem): return .failure(problem)
+        case .success(let found) where found.count > maxEntries:
+            let why = "the project's folders and the goal's are \(found.count), more than \(maxEntries)"
+            return .failure(ReadAlsoProblem(entry: "read_also", why: why))
+        case .success(let found): return .success(found)
+        }
+    }
+
     /// The folders, as absolute resolved paths, or the first reason one cannot be used. A folder must exist, be a git checkout of its
     /// own (so a parent folder of everything is not opened by a stray `..`), and be neither the project nor inside it nor above it.
     public static func resolve(

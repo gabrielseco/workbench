@@ -42,13 +42,12 @@ extension ThreadService {
             throw ThreadServiceError.goalInvalid("'skip' names '\(name)', \(why)")
         }
         // The goal's folders must hold now, so the person hears it at approval and not at the first turn.
-        var folders = config?.readAlso ?? []
-        for entry in goal.readAlso where !folders.contains(entry) { folders.append(entry) }
-        if folders.count > ReadAlso.maxEntries {
-            let why = "the project's read_also and the goal's are more than \(ReadAlso.maxEntries) folders together"
-            throw ThreadServiceError.goalInvalid(why)
-        }
         if case .failure(let problem) = ReadAlso.resolve(goal.readAlso, projectRoot: project.root) {
+            throw ThreadServiceError.goalInvalid("\(problem)")
+        }
+        // The project's own folders are the run's to report; here they only count against the limit.
+        let together = ReadAlso.resolve(config: config?.readAlso ?? [], goal: goal.readAlso, projectRoot: project.root)
+        if case .failure(let problem) = together, problem.entry == "read_also" {
             throw ThreadServiceError.goalInvalid("\(problem)")
         }
         return config
