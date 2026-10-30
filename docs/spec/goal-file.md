@@ -16,6 +16,7 @@ turn_timeout_min: 30        # runner kills the turn after this
 model: opus                 # optional; --model for every turn of this thread
 push_to: feature/x          # optional; continue this branch of origin (base must be origin/feature/x)
 skip: judge, design         # optional; steps that do not run for this goal only
+read_also: ../backend       # optional; more checkouts a run may read, on top of the config's read_also
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -254,6 +255,11 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   and `review` do not list it. The project's config still says what runs by default; `skip` only turns steps off. A name
   that is none of those is refused by `goal approve`. `goal new --from` does not carry `skip` (it is left behind
   like `base`). An older Workbench reports `unknown key 'skip'` and refuses the goal.
+  **Optional:** `read_also`, folders separated by commas, a run of this goal may read besides the project's own `read_also` (below):
+  the config's list first, then the goal's, each folder once, at most 5 together. Each entry follows the config's rules (an absolute
+  path, `~/…` or relative to the project; the root of a git checkout, not the project or inside or above it). The approval binds
+  them (a wider read surface is something the person approves), so changing them returns an approved goal to draft; `goal approve`
+  resolves them and refuses one that cannot be used, and the run refuses before any turn. `goal new --from` does not carry it.
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole
@@ -278,12 +284,12 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   (status says approved but the hash is missing or differs). Only `approved` runs.
 - **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`) or, for a
   `timeout_only` goal, the line `spend_policy=timeout_only` in its place (so a goal with a cap keeps its hash, and
-  dropping a cap needs a fresh approval), `turn_timeout_min`, `model`, `push_to` and `skip` (each only when set, so a goal without them keeps its hash; `skip` is hashed sorted, so its order is not a change), and the body after the
+  dropping a cap needs a fresh approval), `turn_timeout_min`, `model`, `push_to`, `skip` and `read_also` (each only when set, so a goal without them keeps its hash; the two lists are hashed sorted, so their order is not a change), and the body after the
   front matter. Line endings, trailing whitespace and blank
   lines at the edges are normalized first. `title` and `id` are not covered, so renaming a goal does not
   revoke approval.
 - **Editing goes through `GoalEditor`** (`ThreadService.editGoal`, used by the app; no CLI command). One edit at a time:
-  title, request, add, update, remove or move a criterion, out of scope, `skip`. Each reads the file, changes the one
+  title, request, add, update, remove or move a criterion, out of scope, `skip`, `read_also`. Each reads the file, changes the one
   part and writes it atomically; comments, other front matter and sections it does not know are kept as written. A new
   criterion takes the next free `cN` and a removed one does not renumber the rest. It refuses, writing nothing, when the
   thread has ended, a run is live on it, the file does not parse, the edit would leave a goal that does not parse (a
@@ -387,7 +393,7 @@ Notes:
   and made of letters, digits and `._-+@/` only (a permission rule cannot hold anything else safely). Claude coding turns get
   each with `--add-dir`, which opens it to the file tools writes included, so `Edit`, `Write` and `NotebookEdit` are denied
   for it with an absolute-path rule (`//<path>/**`; one slash means "from the project" and would deny nothing) in the same
-  call. The first prompt lists the folders as readable and not to be changed; the goal screen shows them. A run whose
+  call. The goal's own `read_also` line adds to the list. The first prompt lists the folders as readable and not to be changed; the goal screen shows them. A run whose
   list cannot be honoured is refused before any turn (`read_also entry '…': …`). A Codex coding turn does not use it yet and
   says so as a note. Bash is not opened to them: only what `[tools] allowed` already permits runs, in the worktree.
 - **`copy` brings the ignored files a checkout needs into each new worktree.** Repo-relative paths or globs

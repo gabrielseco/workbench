@@ -174,6 +174,8 @@ start_thread() {
     # The draft takes the config's budget and a 30 minute timeout; this run is capped lower and uses $MODEL.
     perl -pi -e "s/^budget_usd: .*/budget_usd: $BUDGET_USD/; s/^turn_timeout_min: .*/turn_timeout_min: $TURN_TIMEOUT_MIN/; s/^# model: .*/model: $MODEL/" \
         "$THREAD_DIR/goal.md"
+    # A front matter line `goal new --from` does not carry (GOAL_EXTRA_KEY='read_also: /path'), put in before approval.
+    [ -z "${GOAL_EXTRA_KEY:-}" ] || perl -pi -e 'print "$ENV{GOAL_EXTRA_KEY}\n" if /^turn_timeout_min: /' "$THREAD_DIR/goal.md"
 
     wb "$T_WB" goal approve "$ID"
     goal=$(wb "$T_WB" status "$ID" --json | py "g=d['goal']; print(g['approval'], g['budget_usd'], g['turn_timeout_min'])")

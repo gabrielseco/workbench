@@ -71,6 +71,7 @@ public struct GoalFile: Sendable, Equatable {
         let model = modelValue(value("model"), add: add)
         let pushTo = pushToValue(value("push_to"), add: add)
         let skip = skipValue(value("skip"), add: add)
+        let readAlso = readAlsoValue(value("read_also"), add: add)
         if let pushTo, let base, let entry = value("base"), base != "origin/\(pushTo)" {
             add(.invalidValue, entry.lineNumber, "'base' must be 'origin/\(pushTo)' when 'push_to' is set, found '\(base)'")
         }
@@ -95,11 +96,12 @@ public struct GoalFile: Sendable, Equatable {
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, spend: spend,
             turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
-            approvedAt: value("approved_at")?.value,
+            readAlso: readAlso, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
             contentHash: GoalHash.hash(
-                base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip, body: body))
+                base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
+                readAlso: readAlso, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
@@ -384,8 +386,8 @@ public struct GoalFile: Sendable, Equatable {
 /// One `key: value  # comment` line of the front matter.
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
-        "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to", "skip",
-        "approved_at", "approved_hash",
+        "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to",
+        "skip", "read_also", "approved_at", "approved_hash",
     ]
 
     var key: String
@@ -470,5 +472,27 @@ extension GoalFile {
             return []
         }
         return names
+    }
+
+    /// `read_also: ../backend, ~/shared`: the goal's own folders, each with the config's syntax rules, each once, and with the
+    /// config's, no more than `ReadAlso.maxEntries` (checked where the config is known). Whether a folder is a checkout is checked
+    /// by `approve` and by the run, which resolve it.
+    static func readAlsoValue(
+        _ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> [String] {
+        guard let entry else { return [] }
+        let paths = entry.value.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        if let bad = paths.compactMap({ path in ReadAlso.entryProblem(path).map { "'\(path)' \($0)" } }).first {
+            add(.invalidValue, entry.lineNumber, "'read_also' entry \(bad)")
+            return []
+        }
+        guard paths.count <= ReadAlso.maxEntries, Set(paths).count == paths.count else {
+            add(
+                .invalidValue, entry.lineNumber,
+                "'read_also' lists a folder twice or more than \(ReadAlso.maxEntries) folders: '\(entry.value)'")
+            return []
+        }
+        return paths
     }
 }

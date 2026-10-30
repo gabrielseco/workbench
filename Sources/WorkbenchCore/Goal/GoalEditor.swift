@@ -14,6 +14,8 @@ public enum GoalEdit: Sendable, Equatable {
     case setOutOfScope([String])
     /// Steps this goal turns off: `verifier`, `judge` or a stage's name. Empty clears the key.
     case setSkip([String])
+    /// Folders this goal's runs may read besides the config's. Empty clears the key.
+    case setReadAlso([String])
 }
 
 /// Why an edit was refused. Nothing is written in that case.
@@ -101,6 +103,10 @@ public enum GoalEditor {
         case .setSkip(let steps):
             try setFrontMatter("skip", steps.isEmpty ? nil : steps.joined(separator: ", "), in: &lines, file: file)
             expected = { $0.skip == steps }
+
+        case .setReadAlso(let folders):
+            try setFrontMatter("read_also", folders.isEmpty ? nil : folders.joined(separator: ", "), in: &lines, file: file)
+            expected = { $0.readAlso == folders }
         }
 
         let edited: GoalFile

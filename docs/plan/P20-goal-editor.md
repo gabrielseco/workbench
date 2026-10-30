@@ -1,6 +1,6 @@
 # P20: Edit the goal in the app
 
-Status: plan; slice 1 (core) built, in review. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
+Status: plan; slice 1 (#302) and 1b built. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
 This document describes future behaviour; `docs/spec/` still describes what ships.
 
 **Outcome:** you write what needs to be done in the New goal popover, the agent drafts the goal, and you review, correct and
@@ -21,8 +21,11 @@ popover: write the request ──▶ agent drafts goal.md ──▶ Goal screen:
   request, switch steps off for this goal. Everything else stays in the file; "Open in editor" stays as the escape hatch.
 - **Per-goal steps:** a `skip:` list in the goal's front matter turns the verifier, the judge or a review stage off for that
   goal only. The project's config still says what is on by default.
-- **Approval rules do not change:** editing a draft is free; editing an approved goal makes the approval stale (the existing
-  "changed since approval" state), so it is approved again. The editor says so before the first edit.
+- **The app edits drafts only** (decided 2026-10-30): once a goal is approved the thread is in another step (Run, Review), so
+  the Goal screen shows it read-only. Core stays permissive: `editGoal` on an approved goal still works and the hash makes it
+  `stale` (an edit in the file by hand does the same), so the approval rules do not change.
+- **Reference folders:** the project config's `read_also` shows read-only ("from project config"); a goal may add its own with a
+  `read_also:` line, bound by the approval hash, at most 5 together (slice 1b).
 - **The thread name stays derived** from the request's first line. No field for it anywhere.
 - **No new CLI command** for editing in this phase: core gets an API, the app is its only caller.
 
@@ -42,7 +45,7 @@ popover: write the request ──▶ agent drafts goal.md ──▶ Goal screen:
 ### 1. Core: edit a goal file, and `skip:`
 
 - `GoalEditor` in `WorkbenchCore/Goal/`: operations `setTitle`, `setRequest`, `addCriterion`, `updateCriterion(id:text:proof:)`,
-  `removeCriterion(id:)`, `moveCriterion`, `setOutOfScope`, `setSkip`. (`setReadAlso` was dropped: reference folders are `[read_also]` in the project config, not in the goal file.) Each reads the file, applies one change and
+  `removeCriterion(id:)`, `moveCriterion`, `setOutOfScope`, `setSkip`, `setReadAlso` (slice 1b). Each reads the file, applies one change and
   writes it atomically (temp file and rename). Parts it does not model are kept as written.
 - Refuses with a reason (never guesses) when the file does not parse cleanly, when a turn is running, or when the thread has ended.
 - Criterion ids: new ones take the next free `cN`; removing one does not renumber the others (the proofs, the log and the
@@ -56,21 +59,26 @@ popover: write the request ──▶ agent drafts goal.md ──▶ Goal screen:
 - **verify-cli:** extend `scripts/verify-cli/next.sh` and `auto-advice.sh` with a goal that skips the judge (the step must not be
   listed or run), run normally and with `VERIFY_CLI_SABOTAGE=1`. Costs nothing (they use the fake claude).
 
+### 1b. Core: `read_also:` in the goal (built)
+
+- Optional `read_also:` front matter line (comma-separated folders, the config's syntax rules, each once, at most 5 with the
+  config's). In the approval hash when set, sorted. `GoalEdit.setReadAlso`. The run reads the config's list then the goal's;
+  `goal approve` resolves them and refuses one that is no checkout or too many together.
+- verify-cli: `read-also.sh` puts a second repository in the goal's line and the turn must read both words.
+
 ### 2. The Goal screen as blocks you can edit
 
 - Replace the read-only sections with blocks in the prototype's look: the request in the serif face, each criterion as a card
   with a proof chip (test, command, screenshot, by hand) and a status line from the existing `CriteriaStatus` / proof-command
-  logic (the "Heads up" rows become the amber status on the card), out of scope, reference folders.
+  logic (the "Heads up" rows become the amber status on the card), out of scope, and reference folders (the config's read-only, the goal's editable).
 - Edit in place through `GoalEditor`; saving on commit (Return or focus out), never on every keystroke. A write that is refused
   shows the reason on the card.
 - The "After the turn" chips (verifier, judge, design review) write `skip:`.
-- Editing an approved goal: a banner says the approval will be stale and offers to continue; the spine shows approval as stale
-  after the first edit.
+- Editable only while the goal is a draft; an approved goal shows the same blocks read-only (`Open in editor` stays).
 - Buttons as today: `Approve and run` / `Run` / `Approve`, `Open in editor`, `New goal…`.
 - Keep a way to add a block (`+ criterion`, `+ out of scope`, `+ reference folder`); the `/` menu is a later nicety.
-- **Tests:** `GoalModel` derivations (cards, statuses, banner); editing through a stub `GoalActions`; stale-after-edit.
-- **verify-app:** drive `goal-warning` (edit a criterion's proof so the warning clears) and `goal-approved` (edit shows the stale
-  banner). Add a fixture with a skipped step if none shows it. Screenshots only if the owner asks for them on that PR.
+- **Tests:** `GoalModel` derivations (cards, statuses, banner); editing through a stub `GoalActions`; an approved goal offers no edit.
+- **verify-app:** drive `goal-warning` (edit a criterion's proof so the warning clears) and `goal-approved` (the blocks are read-only). Add a fixture with a skipped step if none shows it. Screenshots only if the owner asks for them on that PR.
 
 ### 3. Later, not planned yet
 
@@ -96,8 +104,7 @@ Clickable, private to the owner, HTML and Tailwind; the SwiftUI versions should 
 
 ## Open questions
 
-1. Should an approved goal be editable at all in the app, or only drafts (approved ones stay "edit in the file")? Leaning:
-   editable, with the stale banner, because "send back" flows often tweak a criterion.
+1. (Decided: drafts only; see above.)
 2. Should `skip:` accept `design` as an alias for a stage named `design`, or only exact stage names? Leaning: exact names only.
 3. Does a goal with the verifier skipped still accept `screenshot:` proofs? Today that is the "Heads up" case (a screenshot proof
    with no verifier); keep it, and word the warning for the skip case.

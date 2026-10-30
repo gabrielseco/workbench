@@ -41,17 +41,18 @@ extension ThreadRunner {
             environment: options.parentEnvironment, limits: limits,
             rules: PromptBuilder.rules(checkCommand: config.checkCommand), grants: grantsForNextTurn(config: config),
             reasoningEffort: agent.reasoningEffort)
-        request.readDirectories = try readDirectories(config)
+        request.readDirectories = try readDirectories(config, goal: goal)
         return request
     }
 
     /// Refuses a run whose `read_also` names a folder it cannot be given: the config says it, so it holds or nothing starts.
-    func requireReadAlso(_ config: Config) throws { _ = try readDirectories(config) }
+    func requireReadAlso(_ config: Config, goal: Goal) throws { _ = try readDirectories(config, goal: goal) }
 
     /// The other checkouts this turn may read, resolved now: a folder that was there when the run began and is gone before a
     /// later turn refuses that turn, rather than starting it without the access the config promised.
-    func readDirectories(_ config: Config) throws -> [URL] {
-        switch ReadAlso.resolve(config.readAlso, projectRoot: project.root) {
+    /// The project's `read_also` first, then the goal's own, each folder once.
+    func readDirectories(_ config: Config, goal: Goal) throws -> [URL] {
+        switch ReadAlso.resolve(config: config.readAlso, goal: goal.readAlso, projectRoot: project.root) {
         case .success(let found): return found
         case .failure(let problem): throw RunnerError.invalidReadAlso("\(problem)")
         }
