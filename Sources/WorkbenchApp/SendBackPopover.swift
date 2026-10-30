@@ -13,6 +13,7 @@ struct SendBackPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             writing.padding(.top, 16)
+            SendBackGrants(store: store).padding(.top, 14)
             if let error = store.actionError {
                 Text(error).font(.callout).foregroundStyle(Theme.red).padding(.top, 14)
             }
@@ -20,6 +21,7 @@ struct SendBackPopover: View {
         }
         .overlayCard()
         .onExitCommand(perform: close)
+        .task { await store.loadSendBackGrants() }
         // An overlay is not yet in the window when `onAppear` runs, and focus set then is lost: one tick later it takes.
         .task {
             try? await Task.sleep(for: .milliseconds(40))
@@ -62,7 +64,7 @@ struct SendBackPopover: View {
             Button("Cancel", action: close).keyboardShortcut(.cancelAction)
             Button("Send back") { store.sendBack() }
                 .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: .command).disabled(empty)
+                .keyboardShortcut(.return, modifiers: .command).disabled(empty || store.grantsInFlight > 0)
         }
     }
 }
