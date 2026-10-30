@@ -111,7 +111,7 @@ public struct HerdrOpener: Sendable {
 
     /// Never passes `--trust-repository`: that is for a person who has verified the repository.
     public func open(project: URL, folder: URL, label: String) async throws -> HerdrOpened {
-        if await serverIsDown() {
+        if try await serverIsDown() {
             try await launchApp()
             try await waitForServer()
         }
@@ -132,18 +132,19 @@ public struct HerdrOpener: Sendable {
         return .folder(workspace: made["workspace"]?["workspace_id"]?.stringValue ?? "", alreadyOpen: false)
     }
 
-    /// Only a server that says it is not running is down; any other failure is left for the real command to report.
-    func serverIsDown() async -> Bool {
+    /// Down only when the server says it is not running. Any other failure (a hang, an error of its own) is thrown as it is: starting
+    /// another command on top of it would lose what Herdr said and wait twice.
+    func serverIsDown() async throws -> Bool {
         do {
             _ = try await client.call(["workspace", "list"])
             return false
-        } catch let failure as HerdrFailure { return failure.serverDown } catch { return false }
+        } catch let failure as HerdrFailure where failure.serverDown { return true }
     }
 
     func waitForServer() async throws {
         let deadline = Date().addingTimeInterval(startupWait)
         while Date() < deadline {
-            if !(await serverIsDown()) { return }
+            if try await !serverIsDown() { return }
             try await Task.sleep(for: .seconds(pollInterval))
         }
         throw HerdrFailure(

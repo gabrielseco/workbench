@@ -20,9 +20,13 @@ private final class FakeHerdr: @unchecked Sendable {
             err() { printf '{"id":"x","error":{"code":"%s","message":"%s"}}\\n' "$1" "$2" >&2; exit 1; }
             if [ -f "$FAKE_HERDR_DIR/down" ]; then err server_not_running "no herdr server is running"; fi
             case "$1 $2" in
-              "workspace list") echo '{"id":"x","result":{"type":"workspace_list","workspaces":[]}}' ;;
+              "workspace list")
+                if [ -f "$FAKE_HERDR_DIR/listfail" ]; then err internal_error "herdr is unwell"; fi
+                echo '{"id":"x","result":{"type":"workspace_list","workspaces":[]}}' ;;
               "worktree open")
-                if [ -f "$FAKE_HERDR_DIR/hang" ]; then echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30; fi
+                if [ -f "$FAKE_HERDR_DIR/hang" ]; then
+                  echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30 & echo $! > "$FAKE_HERDR_DIR/childpid"; wait
+                fi
                 if [ -f "$FAKE_HERDR_DIR/refuse" ]; then err worktree_not_found "worktree path not found"; fi
                 if [ -f "$FAKE_HERDR_DIR/open" ]; then
                   echo '{"id":"x","result":{"already_open":true,"workspace":{"workspace_id":"w1"},"type":"worktree_opened"}}'
@@ -86,14 +90,20 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         defer { try? FileManager.default.removeItem(at: root) }
         let (bin, home) = (root.appendingPathComponent("bin"), root.appendingPathComponent("home"))
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        #expect(HerdrLocator.find(configured: nil, searchPath: bin.path, home: home.path) == nil)
+        // Only this folder's own places are searched: a herdr installed on the machine running the test must not count.
+        let places = [home.appendingPathComponent(".local/bin").path]
+        func find() -> URL? {
+            HerdrLocator.find(configured: nil, searchPath: bin.path, home: home.path, extraDirectories: places)
+        }
+        #expect(find() == nil)
         try place("herdr", in: bin)
-        let found = HerdrLocator.find(configured: nil, searchPath: bin.path, home: home.path)
+        let found = find()
         #expect(found?.path == bin.appendingPathComponent("herdr").path)
         // A Dock-launched app has a bare PATH: the usual install place is looked in.
         try FileManager.default.removeItem(at: bin)
         try place("herdr", in: home.appendingPathComponent(".local/bin"))
-        #expect(HerdrLocator.find(configured: nil, searchPath: "/usr/bin", home: home.path) != nil)
+        let bare = HerdrLocator.find(configured: nil, searchPath: "/nowhere", home: home.path, extraDirectories: places)
+        #expect(bare != nil)
     }
 
     @Test func aConfiguredStandInIsNeverSkippedForARealOne() throws {
@@ -132,6 +142,18 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         // It asked until the server answered, and only then opened.
         let calls = down.calls
         #expect(calls.first == "workspace list" && calls.last?.hasPrefix("worktree open") == true)
+    }
+
+    @Test func aProbeThatFailsForAnotherReasonIsThrownAndNothingElseIsStarted() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("listfail")
+        do {
+            _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
+            Issue.record("a herdr that was unwell was asked to open something")
+        } catch let failure as HerdrFailure {
+            #expect(failure.code == "internal_error" && failure.message == "herdr is unwell")
+        }
+        #expect(fake.calls == ["workspace list"] && fake.launches == 0)
     }
 
     @Test func waitsABoundedTimeForTheServerAfterStartingTheApp() async throws {
@@ -206,7 +228,10 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(Date().timeIntervalSince(started) < 10)
         let pid = try #require(Int32((try? String(contentsOf: fake.dir.appendingPathComponent("pid"), encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
-        for _ in 0..<50 where kill(pid, 0) == 0 { try await Task.sleep(for: .milliseconds(100)) }
+        let child = try #require(Int32((try? String(contentsOf: fake.dir.appendingPathComponent("childpid"), encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
+        for _ in 0..<50 where kill(pid, 0) == 0 || kill(child, 0) == 0 { try await Task.sleep(for: .milliseconds(100)) }
         #expect(kill(pid, 0) != 0, "the hung herdr is still running")
+        #expect(kill(child, 0) != 0, "what the hung herdr started is still running")
     }
 }

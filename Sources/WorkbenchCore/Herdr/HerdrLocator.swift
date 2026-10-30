@@ -19,10 +19,13 @@ public enum HerdrLocator {
 
     /// The configured executable when one is named (and only that one: a stand-in must not be skipped for a real one), else `herdr` on
     /// `PATH`'s absolute entries and then the usual install places. nil when there is none.
-    public static func find(configured: String?, searchPath: String?, home: String) -> URL? {
+    public static func find(
+        configured: String?, searchPath: String?, home: String, extraDirectories extra: [String]? = nil
+    ) -> URL? {
         let absolute = (searchPath ?? "").split(separator: ":").filter { $0.hasPrefix("/") }.map(String.init)
         if let configured { return ExecutableResolver.resolve(configured, searchPath: absolute.joined(separator: ":")) }
-        return ExecutableResolver.resolve("herdr", searchPath: (absolute + extraDirectories(home: home)).joined(separator: ":"))
+        let places = extra ?? extraDirectories(home: home)
+        return ExecutableResolver.resolve("herdr", searchPath: (absolute + places).joined(separator: ":"))
     }
 }
 
