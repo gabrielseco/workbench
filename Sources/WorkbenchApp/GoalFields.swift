@@ -65,13 +65,13 @@ struct CommitEditor: View {
     }
 }
 
-/// A block of the goal: a rounded card, the same whether it can be changed or not.
+/// A block of the goal: one rounded card around everything in it (not one card per child), the same whether it can be changed or not.
 struct GoalCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
-            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 10) { content }
+            .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
     }
@@ -128,5 +128,24 @@ struct NewCriterionCard: View {
 
     private func send() {
         if ready { add(text.trimmingCharacters(in: .whitespaces), proof.trimmingCharacters(in: .whitespaces)) }
+    }
+}
+
+/// A row whose buttons are quiet until the pointer is over it, so a column of them does not read as a column of icons.
+struct HoverRow<Content: View>: View {
+    @ViewBuilder var content: (Bool) -> Content
+    @State private var hovering = false
+
+    var body: some View { content(hovering).onHover { hovering = $0 } }
+}
+
+/// What kind of proof a criterion has, as a small label.
+struct KindChip: View {
+    var kind: String
+
+    var body: some View {
+        Text(kind).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Theme.grey.opacity(0.14), in: Capsule())
     }
 }

@@ -25,11 +25,15 @@ struct GoalModel: Equatable {
         var suggestion: String?
 
         /// What kind of proof it is, for the chip: `test`, `screenshot`, `command` (a backticked command) or `by hand`.
+        var isCommand: Bool { kind == "command" }
+
         var kind: String {
             let trimmed = proof.trimmingCharacters(in: .whitespaces)
-            if trimmed.lowercased().hasPrefix("test:") { return "test" }
+            let lower = trimmed.lowercased()
+            if lower.hasPrefix("test:") { return "test" }
             if ScreenshotProof.name(in: proof) != nil { return "screenshot" }
-            return trimmed.contains("`") ? "command" : "by hand"
+            // A drafted goal writes `command: pnpm run lint`; a hand-written one may put the command in backticks.
+            return lower.hasPrefix("command:") || trimmed.contains("`") ? "command" : "by hand"
         }
     }
 

@@ -21,7 +21,7 @@ import WorkbenchCore
         - [c1] The client retries on 5xx and network errors, not on 4xx.
           - proof: test: SyncClientTests/retries
         - [c2] The delay grows exponentially with jitter and is capped at 30 seconds.
-          - proof: `swift test` passes
+          - proof: command: pnpm run type-check && pnpm run lint
         - [c3] The settings screen shows no change.
           - proof: screenshot: settings
 

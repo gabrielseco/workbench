@@ -96,8 +96,12 @@ private final class SkillProbe: @unchecked Sendable {
 
     @Test func eachCriterionSaysWhatKindOfProofItHas() async throws {
         let (model, _) = try await load(
-            goal: goal(["test: Suite/name", "`swift test` passes", "screenshot: settings", "a person reads it"]), config: config)
-        #expect(model.rows.map(\.kind) == ["test", "command", "screenshot", "by hand"])
+            goal: goal([
+                "test: Suite/name", "`swift test` passes", "screenshot: settings", "a person reads it",
+                "command: pnpm run seed:onboarding --country=CZE --env=sandbox", "Command: pnpm run lint",
+            ]), config: config)
+        #expect(model.rows.map(\.kind) == ["test", "command", "screenshot", "by hand", "command", "command"])
+        #expect(model.rows.map(\.isCommand) == [false, true, false, false, true, true])
     }
 
     @Test func showsTheGoalsOwnFoldersApartFromTheConfigs() async throws {
