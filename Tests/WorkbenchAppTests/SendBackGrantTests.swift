@@ -39,6 +39,27 @@ private final class Core: @unchecked Sendable {
     }
 }
 
+private final class Recorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var runOptions: [RunOptions] = []
+    func add(_ options: RunOptions) { lock.withLock { runOptions.append(options) } }
+    var options: [RunOptions] { lock.withLock { runOptions } }
+}
+
+private actor Gate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
+}
+
 @MainActor private var keptFixtures: [AppFixture] = []
 
 @MainActor @Suite struct SendBackGrantTests {
@@ -63,11 +84,20 @@ private final class Core: @unchecked Sendable {
         GrantCandidates.derive(events: try EventLogReader.read(at: fixture.project.eventsURL("t1")).events)
     }
 
-    private func store(_ core: Core, _ fixture: AppFixture) async throws -> ProjectStore {
+    private func store(
+        _ core: Core, _ fixture: AppFixture, gate: Gate? = nil, recorder: Recorder? = nil
+    ) async throws -> ProjectStore {
         let actions = GoalActions(
+            makeRun: { _, _, options in
+                recorder?.add(options)
+                return RunHandle(run: {}, stop: {})
+            },
             loadReview: { _, _ in nil },
             grantCandidates: { _, _ in core.candidates() },
-            grant: { _, _, target, scope, dangerous in try core.grant(target, scope, dangerous) })
+            grant: { _, _, target, scope, dangerous in
+                await gate?.wait()
+                try core.grant(target, scope, dangerous)
+            })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         return store
@@ -160,5 +190,82 @@ private final class Core: @unchecked Sendable {
         await store.loadSendBackGrants()
         // No rows is what the card leaves its whole section out for.
         #expect(store.sendBackGrants.isEmpty)
+    }
+
+    @Test func aSendWaitsForADecisionStillBeingSaved() async throws {
+        let fixture = try await ended()
+        let (gate, recorder) = (Gate(), Recorder())
+        let store = try await store(Core(try candidates(fixture)), fixture, gate: gate, recorder: recorder)
+        await store.loadSendBackGrants()
+        store.sendingBack = true
+        store.sendBackNote = "go on"
+        let first = store.sendBackGrants[0]
+        let pending = Task { await store.decide(first, .once) }
+        for _ in 0..<100 where store.grantsInFlight == 0 { await Task.yield() }
+        #expect(store.grantsInFlight == 1)
+        // Neither another decision nor the send gets past it, and the card stays up with the note.
+        await store.decide(store.sendBackGrants[1], .once)
+        store.sendBack()
+        #expect(recorder.options.isEmpty && store.sendingBack && store.sendBackNote == "go on")
+        await gate.open()
+        await pending.value
+        store.sendBack()
+        #expect(recorder.options.first?.feedback == "go on" && !store.sendingBack)
+    }
+
+    @Test func aRefusalThatArrivesAfterLeavingTheProjectIsNotShownThere() async throws {
+        let (first, second) = (try await ended(), try await ended())
+        let core = Core(try candidates(first))
+        core.refusal = "refused"
+        let gate = Gate()
+        let store = try await store(core, first, gate: gate)
+        await store.loadSendBackGrants()
+        let pending = Task { await store.decide(store.sendBackGrants[0], .once) }
+        for _ in 0..<100 where store.grantsInFlight == 0 { await Task.yield() }
+        #expect(await store.open(second.root))
+        await store.loadSendBackGrants()
+        await gate.open()
+        await pending.value
+        // Both projects have a row `1`: the other one's refusal is not this one's.
+        #expect(store.sendBackGrants.allSatisfy { $0.refusal == nil })
+    }
+
+    // MARK: Core itself
+
+    private func coreStore(_ fixture: AppFixture, config: String) async throws -> ProjectStore {
+        let project = fixture.project
+        try FileManager.default.createDirectory(
+            at: project.configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try config.write(to: project.configURL, atomically: true, encoding: .utf8)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: .core)
+        #expect(await store.open(fixture.root))
+        return store
+    }
+
+    @Test func aChoiceIsAGrantAddedEventInTheLogAndTheNextReadSeesIt() async throws {
+        let fixture = try await ended()
+        let store = try await coreStore(fixture, config: "[tools]\navailable = [\"Read\", \"Bash\"]\n")
+        await store.loadSendBackGrants()
+        await store.decide(store.sendBackGrants[0], .thread)
+        let events = try EventLogReader.read(at: fixture.project.eventsURL("t1")).events
+        let added = try #require(events.last { $0.kind == .grantAdded })
+        #expect(added.data["scope"]?.stringValue == "thread" && added.data["by"]?.stringValue == "user")
+        #expect(store.sendBackGrants[0].status == .granted(.thread) && store.sendBackGrants[0].refusal == nil)
+    }
+
+    @Test func coresRefusalsReachTheRowAndRecordNothing() async throws {
+        let fixture = try await ended()
+        let store = try await coreStore(fixture, config: "[tools]\navailable = [\"Read\", \"Bash\"]\ndenied = [\"Bash\"]\n")
+        await store.loadSendBackGrants()
+        // A pattern the project denies is not overridden by a grant.
+        await store.decide(store.sendBackGrants[0], .once)
+        #expect(store.sendBackGrants[0].refusal?.contains("[tools] denied") == true)
+        // A thread that has been decided takes no more grants.
+        try fixture.decide("t1", "accepted")
+        await store.decide(store.sendBackGrants[0], .never)
+        let ended = try #require(store.sendBackGrants[0].refusal)
+        #expect(!ended.isEmpty && !ended.contains("[tools] denied"))
+        let events = try EventLogReader.read(at: fixture.project.eventsURL("t1")).events
+        #expect(!events.contains { $0.kind == .grantAdded })
     }
 }

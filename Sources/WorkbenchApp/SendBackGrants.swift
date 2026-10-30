@@ -105,5 +105,6 @@ private struct GrantRowView: View {
             Button("Never") { Task { await store.decide(row, .never) } }
         }
         .controlSize(.small)
+        .disabled(store.grantsInFlight > 0)
     }
 }

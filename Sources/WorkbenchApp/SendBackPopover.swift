@@ -64,7 +64,7 @@ struct SendBackPopover: View {
             Button("Cancel", action: close).keyboardShortcut(.cancelAction)
             Button("Send back") { store.sendBack() }
                 .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: .command).disabled(empty)
+                .keyboardShortcut(.return, modifiers: .command).disabled(empty || store.grantsInFlight > 0)
         }
     }
 }

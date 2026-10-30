@@ -69,6 +69,8 @@ struct RecentProject: Equatable, Identifiable {
     var sendBackNote = ""
     /// The denied calls the card offers to decide; read when it opens.
     var sendBackGrants: [GrantRow] = []
+    /// Decisions being recorded. One at a time, and a send waits for them: a grant refused for a live run is lost.
+    var grantsInFlight = 0
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false
