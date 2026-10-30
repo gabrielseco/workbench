@@ -41,6 +41,8 @@ struct GoalActions: Sendable {
     typealias DraftGoal = @Sendable (Project, String, String, [URL], DraftStop) async throws -> GoalDraftResult
 
     var approve: @Sendable (Project, String) async throws -> Void
+    /// One edit to a draft's goal file, as `ThreadService.editGoal` makes it.
+    var editGoal: @Sendable (Project, String, GoalEdit) async throws -> Void
     var makeRun: @Sendable (Project, String, RunOptions) throws -> RunHandle
     /// Has the goal agent draft a goal from a rough request (and screenshots), as a new thread named `name`; `DraftStop` ends the drafter early.
     var draftGoal: DraftGoal
@@ -69,6 +71,7 @@ struct GoalActions: Sendable {
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
+        editGoal: @escaping @Sendable (Project, String, GoalEdit) async throws -> Void = { _, _, _ in },
         makeRun: @escaping @Sendable (Project, String, RunOptions) throws -> RunHandle = { _, _, _ in
             RunHandle(run: {}, stop: {})
         },
@@ -92,6 +95,7 @@ struct GoalActions: Sendable {
         latestPRReview: @escaping @Sendable (Project, String) async -> PRReviewShown? = { _, _ in nil }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
+        self.editGoal = editGoal
         self.enableGoalAgent = enableGoalAgent
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
@@ -120,6 +124,11 @@ struct GoalActions: Sendable {
         approve: { project, thread in
             let git = try GitRunner.discover()
             try await ThreadService(project: project, git: git).approve(id: thread)
+        },
+        editGoal: { project, thread, edit in
+            do {
+                try await ThreadService(project: project, git: try GitRunner.discover()).editGoal(id: thread, edit)
+            } catch let refusal as ThreadServiceError { throw RefusalText("\(refusal)") }
         },
         makeRun: { project, thread, options in
             let runner = ThreadRunner(project: project, threadID: thread, git: try GitRunner.discover())

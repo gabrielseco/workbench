@@ -72,6 +72,52 @@ private final class SkillProbe: @unchecked Sendable {
         #expect(without.readAlso.isEmpty)
     }
 
+    @Test func listsTheStepsAfterATurnAndWhichOnesTheGoalSkips() async throws {
+        let withSteps = config + """
+
+            [verifier]
+            skill = ".claude/skills/verify/SKILL.md"
+            [review]
+            stages = ["pr-review", "design"]
+            [review.stage.design]
+            skill = "d.md"
+            """
+        let (none, _) = try await load(goal: goal(["`swift test` passes"]), config: withSteps)
+        #expect(none.steps.map(\.name) == ["verifier", "judge", "design"] && none.steps.allSatisfy { !$0.skipped && $0.known })
+        let (some, _) = try await load(
+            goal: goal(["`swift test` passes"], frontMatter: "skip: judge, nonesuch\n"), config: withSteps)
+        #expect(some.steps.map(\.name) == ["verifier", "judge", "design", "nonesuch"])
+        #expect(some.steps.map(\.skipped) == [false, true, false, true])
+        #expect(some.steps.last?.known == false, "a name that is no step is shown, not hidden")
+        let (off, _) = try await load(
+            goal: goal(["`swift test` passes"]), config: config + "\n[verifier]\nenabled = false\n")
+        #expect(off.steps.map(\.name) == ["judge"], "a project that switched the verifier off has no verifier step")
+    }
+
+    @Test func eachCriterionSaysWhatKindOfProofItHas() async throws {
+        let (model, _) = try await load(
+            goal: goal(["test: Suite/name", "`swift test` passes", "screenshot: settings", "a person reads it"]), config: config)
+        #expect(model.rows.map(\.kind) == ["test", "command", "screenshot", "by hand"])
+    }
+
+    @Test func showsTheGoalsOwnFoldersApartFromTheConfigs() async throws {
+        let (model, _) = try await load(
+            goal: goal(["`swift test` passes"], frontMatter: "read_also: ../api, ~/shared\n"),
+            config: "read_also = [\"../backend\"]\n" + config)
+        #expect(model.readAlso == ["../backend"] && model.goalReadAlso == ["../api", "~/shared"])
+    }
+
+    @Test func aDraftCanBeEditedAndAnApprovedGoalCannot() async throws {
+        let (draft, _) = try await load(goal: goal(["`swift test` passes"]), config: config)
+        #expect(draft.editable)
+        let approved = try GoalFile.parse(goal(["`swift test` passes"])).approving().text
+        let (locked, _) = try await load(goal: approved, config: config)
+        #expect(locked.pill == .approved && !locked.editable)
+        let stale = approved.replacingOccurrences(of: "Do the thing.", with: "Do another thing.")
+        let (lapsed, _) = try await load(goal: stale, config: config)
+        #expect(lapsed.pill == .changedSinceApproval && lapsed.editable, "a lapsed approval is a draft again")
+    }
+
     @Test func showsWhatTheGoalFileSaysAndWhereItIs() async throws {
         let (model, _) = try await load(goal: goal(["`swift test` passes"]), config: config)
         #expect(model.title == "The goal" && model.path == ".workbench/threads/t1/goal.md")
@@ -192,7 +238,8 @@ private final class SkillProbe: @unchecked Sendable {
     @Test func aRunThatCannotStartIsReported() async throws {
         let (store, _) = try await actionsStore(approve: { _, _ in }, run: { _, _ in throw Refused() })
         await store.approveAndRun()
-        try await Task.sleep(for: .milliseconds(200))
+        // The run starts in a task of its own: wait for what it says, not for a fixed time a loaded runner may overrun.
+        for _ in 0..<1000 where store.actionError == nil { try await Task.sleep(for: .milliseconds(5)) }
         #expect(store.actionError == "The run did not start: refused")
     }
 
@@ -228,7 +275,7 @@ private final class SkillProbe: @unchecked Sendable {
         let (store, _) = try await actionsStore(
             approve: { _, _ in order.add("approve") }, run: { _, _ in order.add("run") })
         await store.approveAndRun()
-        try await Task.sleep(for: .milliseconds(200))
+        for _ in 0..<1000 where order.items.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
         #expect(order.items == ["approve", "run"] && store.actionError == nil)
     }
 }

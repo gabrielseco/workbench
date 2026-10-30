@@ -147,9 +147,11 @@ the start of the slice.
 - **Does:** `ThreadService.newThread` (the template), `Open in editor` (`EditorLauncher`), re-read the file when it changes (same
   poll), `ThreadService.approve`, then `ThreadRunner.run` for **Approve and run**. Approve and run is two operations in order,
   never one: a failed approve starts nothing.
-- **The goal is not edited in the app.** The file is the source of truth and the editor is the user's own; the app validates and
-  displays. The Run limits chips are read-only, with a pointer to the goal file. (A text editor in the window is the thing P3
-  warned would become its own project.)
+- **The goal is edited in the app only while it is a draft** ([P20](P20-goal-editor.md)): the request, each criterion's text and
+  proof, out of scope, the goal's own reference folders and the "After the turn" switches (`skip:`) change in place, through core's
+  `GoalEditor`, on Return or leaving the field; the project config's folders show read-only. An approved goal shows the same blocks
+  read-only (the thread is in another step). The file stays the source of truth and `Open in editor` stays for anything else; the
+  Run limits chips are read-only, with a pointer to the goal file.
 - **1b (built):** `New goal…` opens a popover over the window (`NewGoalLayer`; a card you write in, with the text in a serif face, screenshots as thumbnails and Cancel, Esc and ⌘↵; a click outside closes nothing) with one question, "What needs to be done?", and Create hands the text to
   `ThreadService.draftGoal` as a new thread. The thread name is made from the request's first line, so nothing but the request is asked for (the popover shows no name field). The popover stays open while the drafter works, with Stop; a draft that fails or is
   stopped writes nothing and the popover keeps the text and says why. Without `[agents.goal]` the popover offers "Draft with Claude / Codex":
