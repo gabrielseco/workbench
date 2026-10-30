@@ -41,10 +41,34 @@ WORKBENCH_AX_FIXTURE="$tmp/fields" expect 0 "typed (fixture) AXTextArea Describe
 WORKBENCH_AX_FIXTURE="$tmp/fields" expect 2 "at most 2000 characters" type "$(printf 'x%.0s' $(seq 1 2001))"
 WORKBENCH_AX_FIXTURE="$tmp/fields" expect 2 "no control characters" type "$(printf 'a\033[31mb')"
 WORKBENCH_AX_FIXTURE="$tmp/fields" expect 0 "typed (fixture)" type "$(printf 'two\nlines')"
+# `focus` names an editable field by its text or its placeholder and nothing else; `click` and `hover` name what they would hit and refuse
+# the labels `press` refuses; `key` takes five names; `typekeys` is bounded and printable.
+printf 'AXButton\tEvent log 4\nAXButton\tJudge\nAXTextField\tWhat must hold\nAXTextArea\tDo the thing.\nAXStaticText\tbase: main\n' > "$tmp/drive"
+export WORKBENCH_AX_FIXTURE="$tmp/drive"
+expect 0 "focused (fixture) AXTextField What must hold" focus "What must"
+expect 0 "focused (fixture) AXTextArea Do the thing." focus "Do the"
+expect 1 "Nothing is labelled" focus "Judge"
+expect 1 "Nothing is labelled" focus "base: main"
+expect 0 "clicked (fixture) AXButton Judge" click Judge
+expect 0 "hovered (fixture) AXTextField What must hold" hover "What must hold"
+expect 1 'Refused: "Eve" is "Event log 4"' click Eve
+expect 1 'Refused: "Event log" is "Event log 4"' hover "Event log"
+expect 2 "usage: click <label>" click ""
+expect 0 "key (fixture) tab" key tab
+expect 0 "key (fixture) escape" key escape
+expect 2 "usage: key return|tab|escape|up|down" key q
+expect 2 "usage: key return|tab|escape|up|down" key cmd-q
+expect 2 "usage: key return|tab|escape|up|down" key
+expect 0 "typekeys (fixture) 5 characters" typekeys hello
+expect 2 "at most 200 printable characters" typekeys "$(printf 'x%.0s' $(seq 1 201))"
+expect 2 "at most 200 printable characters" typekeys "$(printf 'two\nlines')"
+expect 2 "at most 200 printable characters" typekeys "$(printf 'a\033b')"
+export WORKBENCH_AX_FIXTURE="$tmp/tree"
 expect 2 "usage: press <label>" press ""
 expect 2 "usage: press <label>" press
 expect 0 $'AXStaticText\tbase: main' list
 expect 2 "supports list and press" resize 1 1
+expect 2 "supports list and press" scroll 1
 
 [ "$status" = 0 ] && echo "verify-app ax: ok"
 exit $status

@@ -11,6 +11,7 @@ enum AppScenario: String, CaseIterable {
     case draft
     case goalWarning = "goal-warning"
     case goalApproved = "goal-approved"
+    case goalLongRequest = "goal-long-request"
     case running
     case needsYou = "needs-you"
     case accepted
@@ -29,6 +30,8 @@ enum AppScenario: String, CaseIterable {
         switch self {
         case .goalWarning:
             "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
+        case .goalLongRequest:
+            "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(pnpm run:*)\"]\n"
         case .goalApproved:
             // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
             "read_also = [\"../expenses-backend\"]\n\n"
@@ -79,6 +82,18 @@ enum AppScenario: String, CaseIterable {
             try await fixture.addThread(
                 id, title: Self.title,
                 proofs: ["`swift test` passes", "`./scripts/deploy.sh` exits 0", "screenshot: invoice-list"])
+        case .goalLongRequest:
+            // An approved goal whose request is long enough to be folded, with the `command:` proofs a drafted goal has.
+            let request = (1...6).map {
+                "Paragraph \($0): the seed script fails for one country because a call that used to answer 404 now answers 422, "
+                    + "and the script must treat both as not found, the way it always treated the 404."
+            }.joined(separator: " ")
+            try await fixture.addThread(
+                id, approved: true, title: Self.title,
+                proofs: [
+                    "command: pnpm run seed:onboarding --country=CZE --env=sandbox",
+                    "test: seed-onboarding/treats a 422 like a 404",
+                ], request: request)
         case .goalApproved:
             try await fixture.addThread(id, approved: true, title: Self.title, proofs: ["`swift test` passes"])
         case .running:

@@ -28,6 +28,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 |---|---|
 | `draft` | a goal being written, not approved: Goal is current, nothing else started |
 | `goal-warning` | a draft with three criteria, two of which cannot be checked (a command not in `[tools] allowed`, a `screenshot:` with no verifier): `Heads up` rows, `1 OF 3 CHECKABLE`, Approve disabled |
+| `goal-long-request` | an approved goal with a request long enough to be folded ("Show more"), `command:` and `test:` proofs |
 | `goal-approved` | an approved goal, nothing run yet: `Approved` pill, a `Run` button |
 | `running` | a turn is open in the log with activity rows, and no live runner (a fixture cannot have one): Run is current, attention is `working`, the Run screen says the runner is gone and offers Run again. Never press Run again here: it starts a real turn |
 | `review-changes` | `needs-you` with a real worktree on a base commit and three changed files (two edited, one new), so the Review screen lists them, shows a `Still due` section (the judge, and the `design` stage its config declares for `Sources/**`) and `Open diff` is enabled. Its config names a stand-in editor, so pressing `Open diff` is safe: it only writes down what it was asked to open (`scripts/verify-app.sh calls <pid>` prints it) |
@@ -52,12 +53,26 @@ scripts/verify-app.sh start needs-you     # builds, launches, prints pid=, windo
 scripts/verify-app.sh list <pid>          # role <tab> label of what is on screen, as text you can read
 scripts/verify-app.sh press <pid> "Doctor"  # an exact label, else a prefix; wait about two seconds after it
 scripts/verify-app.sh type <pid> "text"   # sets the focused text field (else the only one); Accessibility, no keystrokes, 2000 characters at most
+scripts/verify-app.sh focus <pid> "field" # focuses the text field or area with that text or placeholder and selects what it holds
+scripts/verify-app.sh typekeys <pid> "text"  # presses the keys of that text (200 printable characters) into the focused field: the app sees real edits
+scripts/verify-app.sh key <pid> tab       # one of return, tab, escape, up, down: Tab or a click away leaves a field, Return and Esc end an edit
+scripts/verify-app.sh click <pid> "label" # a real left click in the middle of that label; hover <pid> "label" moves the pointer there
+scripts/verify-app.sh scroll <pid> 5      # scroll the content down 5 steps of 40 points (negative: up); it settles for a second or two
 scripts/verify-app.sh paste <pid> [image]  # Cmd-V to that pid only, with a generated picture or an image file; the clipboard is restored
 scripts/verify-app.sh shot <pid> <name>   # writes <name>.png into $WORKBENCH_PROOF_DIR (default .build/verify); Read it
 scripts/verify-app.sh calls <pid>         # what the scenario's stand-in editor was asked to open (review-changes only)
 scripts/verify-app.sh stop <pid>          # always, also after a failure
 ```
 
+- **Which command for what.** `type` sets a field's value through Accessibility, which an app that waits for edits does not see (a SwiftUI
+  field that commits on leaving it keeps the old text): to try an edit use `focus`, `typekeys`, then `key tab` or a `click` elsewhere. `press`
+  uses Accessibility and never moves focus; `click` is a real click, so it focuses a field and takes the focus from the last one, and
+  `hover` shows a hover state.
+- **`click`, `hover`, `key`, `typekeys` and `scroll` take over the machine while they run**: they bring the build's window to the front,
+  move the pointer (it is put back) and send events. A click or hover happens only when this pid's window is the topmost at that point
+  and Accessibility says the element there is the one named (a row scrolled out of view, or under the footer, is refused: scroll to it,
+  and wait a second). Run them when nobody is using the computer, and on the Space where the window is: a window on another Space cannot
+  be clicked ("Another window is on top there").
 - `list` first: it shows the text, the step marks (`Review, needs_you, Needs you`) and the buttons, so most claims can be checked
   without looking at pixels. Then `shot`, and **look at the image**: a claim about colour or layout is checked by the picture.
 - A `start` that fails or is interrupted (SIGTERM, SIGHUP, Ctrl-C, a window that never appears) leaves nothing (Ctrl-C has the same handler
