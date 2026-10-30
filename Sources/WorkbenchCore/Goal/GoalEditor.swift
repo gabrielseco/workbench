@@ -50,7 +50,7 @@ public enum GoalEditor {
             // The next free number, never a gap filled: the log and the judge refer to ids.
             let highest = goal.criteria.compactMap { Int($0.id.dropFirst()) }.max() ?? 0
             let (next, overflow) = highest.addingReportingOverflow(1)
-            guard !overflow else { throw GoalEditError(reason: "the criterion ids are used up: no free number after the highest") }
+            guard !overflow else { throw GoalEditError(reason: "no criterion number is free after the highest") }
             let id = "c\(next)"
             var layout = try criterionBlocks(lines, file: file)
             layout.blocks.append(CriterionBlock(id: id, lines: block(id, text, proof)))
