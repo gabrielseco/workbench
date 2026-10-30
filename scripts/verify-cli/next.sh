@@ -8,7 +8,7 @@
 # finished turn `next` exits 0 and lists, in order, `workbench judge` (the first line, marked `next`), `workbench review-stage design`
 # and `workbench accept`; `review` shows the same lines above its closing hint; after a `judge.ran` for the turn the first line is the design stage;
 # after a `review_stage.finished` for it only `accept` is left; a thread whose change touches nothing the stage applies to does not
-# list it; after the decision `accepted` the last step is `workbench ship`; a discarded thread says nothing is due. `next` writes no
+# list it; a goal that says `skip: judge, design` lists neither (under SABOTAGE the line is not written, so that step must FAIL); after the decision `accepted` the last step is `workbench ship`; a discarded thread says nothing is due. `next` writes no
 # event. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 records the judge and the design stage as done before the first `next`, so the steps that expect them to be
 # listed must FAIL. The frame is in lib.sh. Run by hand, not by CI.
@@ -133,6 +133,23 @@ append turn.ended 2 '{"result":"succeeded","cost_usd":0.1}'
 wbp "$SCRATCH/next4.out" next
 check "a change that touches nothing under Sources lists no design stage" "steps: $(names "$SCRATCH/next4.out")" \
     bash -c 'test "$1" = "judge accept "' _ "$(names "$SCRATCH/next4.out")"
+
+# --- a goal that skips the judge and the stage -------------------------------------------------------------------------
+
+if [ "$SABOTAGE" != 1 ]; then
+    python3 -I - "$P/.workbench/threads/$ID/goal.md" <<'PY' || die "could not add skip to the goal"
+import sys
+path = sys.argv[1]
+lines = open(path).read().split("\n")
+close = [i for i, l in enumerate(lines) if l == "---"][1]
+lines.insert(close, "skip: judge, design")
+open(path, "w").write("\n".join(lines))
+PY
+fi
+rm -f "$WTP/docs/note.md" && mkdir -p "$WTP/Sources" && echo change >"$WTP/Sources/change.txt"
+wbp "$SCRATCH/next4b.out" next
+check "a goal that skips the judge and the design stage lists only accept" "steps: $(names "$SCRATCH/next4b.out")" \
+    bash -c 'test "$1" = "accept "' _ "$(names "$SCRATCH/next4b.out")"
 
 # --- after the decision ---------------------------------------------------------------------------------------------------
 

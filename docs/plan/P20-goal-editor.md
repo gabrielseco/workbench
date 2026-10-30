@@ -1,6 +1,6 @@
 # P20: Edit the goal in the app
 
-Status: plan, nothing built. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
+Status: plan; slice 1 (core) built, in review. Written 2026-10-29. Follows [P19](P19-swiftui-app.md) slice 1b (the New goal popover, built in #300).
 This document describes future behaviour; `docs/spec/` still describes what ships.
 
 **Outcome:** you write what needs to be done in the New goal popover, the agent drafts the goal, and you review, correct and
@@ -42,14 +42,13 @@ popover: write the request ──▶ agent drafts goal.md ──▶ Goal screen:
 ### 1. Core: edit a goal file, and `skip:`
 
 - `GoalEditor` in `WorkbenchCore/Goal/`: operations `setTitle`, `setRequest`, `addCriterion`, `updateCriterion(id:text:proof:)`,
-  `removeCriterion(id:)`, `moveCriterion`, `setOutOfScope`, `setReadAlso`, `setSkip`. Each reads the file, applies one change and
+  `removeCriterion(id:)`, `moveCriterion`, `setOutOfScope`, `setSkip`. (`setReadAlso` was dropped: reference folders are `[read_also]` in the project config, not in the goal file.) Each reads the file, applies one change and
   writes it atomically (temp file and rename). Parts it does not model are kept as written.
 - Refuses with a reason (never guesses) when the file does not parse cleanly, when a turn is running, or when the thread has ended.
 - Criterion ids: new ones take the next free `cN`; removing one does not renumber the others (the proofs, the log and the
   judge refer to ids).
 - `skip:` in the front matter: entries are `verifier`, `judge` or a stage name from `[review] stages`; an unknown name is a
-  goal error naming the key. Honoured by `runVerifier`, `runAutoAdvice`, `NextSteps` (a skipped step is not listed) and the first
-  prompt's "the verifier captures it" line. Check that `contentHash` covers the front matter, so changing `skip:` after approval
+  goal error naming the key. Honoured by `runVerifier`, `runAutoAdvice`, `NextSteps` (a skipped step is not listed) (the first prompt has no verifier line to change). Check that `contentHash` covers the front matter, so changing `skip:` after approval
   makes the approval stale (write the test that proves it).
 - Docs in the same PR: `docs/spec/goal-file.md` (the `skip:` key and the editor's rules), `exit-codes.md` if `run` or `next` output changes.
 - **Tests:** round-trip every fixture goal (parse, edit nothing, write: bytes unchanged); each operation on a goal with an unknown

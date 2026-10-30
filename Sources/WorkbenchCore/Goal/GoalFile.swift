@@ -6,8 +6,8 @@ public struct GoalFile: Sendable, Equatable {
     public let goal: Goal
     public let text: String
 
-    private let frontMatter: [FrontMatterLine]
-    private let bodyStartLine: Int
+    let frontMatter: [FrontMatterLine]
+    let bodyStartLine: Int
 
     // MARK: Parsing
 
@@ -70,6 +70,7 @@ public struct GoalFile: Sendable, Equatable {
         }
         let model = modelValue(value("model"), add: add)
         let pushTo = pushToValue(value("push_to"), add: add)
+        let skip = skipValue(value("skip"), add: add)
         if let pushTo, let base, let entry = value("base"), base != "origin/\(pushTo)" {
             add(.invalidValue, entry.lineNumber, "'base' must be 'origin/\(pushTo)' when 'push_to' is set, found '\(base)'")
         }
@@ -93,11 +94,12 @@ public struct GoalFile: Sendable, Equatable {
         let body = lines[bodyStart...].joined(separator: "\n")
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, spend: spend,
-            turnTimeoutMin: timeout, model: model, pushTo: pushTo, approvedAt: value("approved_at")?.value,
+            turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
+            approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
             contentHash: GoalHash.hash(
-                base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, body: body))
+                base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
@@ -382,8 +384,8 @@ public struct GoalFile: Sendable, Equatable {
 /// One `key: value  # comment` line of the front matter.
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
-        "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to", "approved_at",
-        "approved_hash",
+        "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to", "skip",
+        "approved_at", "approved_hash",
     ]
 
     var key: String
@@ -446,5 +448,27 @@ struct FrontMatterLine: Sendable, Equatable {
         let quote = Self.needsQuotes(value) ? Self.quote(for: value) : nil
         let shown = quote.map { "\($0)\(value)\($0)" } ?? value
         return "\(key): \(shown)" + (comment.map { "  # \($0)" } ?? "")
+    }
+}
+
+extension GoalFile {
+    /// `skip: judge, verifier`: names of steps, each once. Whether a name is a step this project has is checked where the
+    /// config is known (`approve`), since a review stage is called whatever `[review] stages` says.
+    static func skipValue(
+        _ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void
+    ) -> [String] {
+        guard let entry else { return [] }
+        let names = entry.value.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let pattern = #"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"#
+        guard !entry.value.isEmpty, names.allSatisfy({ $0.range(of: pattern, options: .regularExpression) != nil }) else {
+            add(.invalidValue, entry.lineNumber, "'skip' must be step names separated by commas, found '\(entry.value)'")
+            return []
+        }
+        guard Set(names).count == names.count else {
+            add(.invalidValue, entry.lineNumber, "'skip' names a step more than once: '\(entry.value)'")
+            return []
+        }
+        return names
     }
 }

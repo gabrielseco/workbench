@@ -24,7 +24,9 @@ extension Commands {
         // The branch's tip, as `accept` and `ship` will see it; a stage round that recorded another head did not review it.
         let tip = try? await ctx.git.run(["rev-parse", "refs/heads/\(WorktreeManager.branch(for: id))"], in: ctx.project.root)
         let head = tip?.succeeded == true ? tip?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        let steps = NextSteps.derive(events: events, files: files, config: config, head: head, id: id)
+        let goalText = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8)
+        let skip = (goalText.flatMap { try? GoalFile.parse($0) })?.goal.skip ?? []
+        let steps = NextSteps.derive(events: events, files: files, config: config, head: head, skip: skip, id: id)
         return NextSteps.render(steps)
     }
 }

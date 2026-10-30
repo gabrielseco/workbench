@@ -139,6 +139,7 @@ extension ThreadRunner {
         guard let verifier = config.verifier, report.result == .succeeded else { return nil }
         if let check, check.result != .passed { return nil }
         let turn = report.turn
+        if goal.skips("verifier") { return try await skip("the goal skips the verifier", turn: turn, log: log) }
         guard let base = await recordedBaseCommit(goal: goal) else {
             return try await skip("the base commit is unknown, so its skill cannot be read", turn: turn, log: log)
         }
