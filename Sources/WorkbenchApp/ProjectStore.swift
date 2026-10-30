@@ -62,6 +62,11 @@ struct RecentProject: Equatable, Identifiable {
     /// The goal agent is drafting a goal from a request.
     /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
     var namingGoal = false
+    /// Whether the Send back card is up; the Review screen's button sets it, `sendBack` clears it once a turn has started.
+    var sendingBack = false
+    /// What is written in the Send back card. It lives here, not in the card, so a send that the run refuses to start does not
+    /// lose it; it is cleared when a turn has begun, on Cancel and when the project changes.
+    var sendBackNote = ""
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false
@@ -164,6 +169,7 @@ struct RecentProject: Equatable, Identifiable {
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
             namingGoal = false
+            cancelSendBack()
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
             (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
@@ -174,6 +180,7 @@ struct RecentProject: Equatable, Identifiable {
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         namingGoal = false
+        cancelSendBack()
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
         project = located
@@ -217,7 +224,10 @@ struct RecentProject: Equatable, Identifiable {
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
         if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
-            if shown.state.lastTurn > after { endRunStart() }
+            if shown.state.lastTurn > after {
+                sendBackNote = ""
+                endRunStart()
+            }
         }
     }
 
@@ -246,6 +256,7 @@ struct RecentProject: Equatable, Identifiable {
         guard let project, let thread = currentThread, !starting else { return }
         if ownedRun != nil {
             actionError = "A run is already going."
+            reopenSendBack()
             return
         }
         // Changes already made to the goal are written first, so what is approved is what the window shows.
@@ -272,16 +283,18 @@ struct RecentProject: Equatable, Identifiable {
     }
 
     /// Starts the turn and keeps hold of it, so Stop reaches it. Refused while a run of this app is still going.
-    private func startRun(
+    func startRun(
         _ project: Project, _ thread: String, generation mine: Int, options: RunOptions = RunOptions()
     ) {
         guard ownedRun == nil else {
             actionError = "A run is already going."
+            reopenSendBack()
             return
         }
         let handle: RunHandle
         do { handle = try actions.makeRun(project, thread, options) } catch {
             actionError = "The run did not start: \(error)"
+            reopenSendBack()
             return
         }
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
@@ -292,7 +305,11 @@ struct RecentProject: Equatable, Identifiable {
         ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
         applyOwnership()
         Task { [weak self] in
-            do { try await handle.run() } catch { self?.runFailed(error, generation: mine) }
+            do {
+                try await handle.run()
+                // A turn quick enough to end between two polls is never seen to begin: its note is spent all the same.
+                if self?.sendingBack == false { self?.sendBackNote = "" }
+            } catch { self?.runFailed(error, generation: mine) }
             await self?.runEnded()
         }
     }
@@ -320,28 +337,6 @@ struct RecentProject: Equatable, Identifiable {
         guard let project, let thread = currentThread, !starting else { return }
         actionError = nil
         startRun(project, thread, generation: generation)
-    }
-
-    /// The next turn with a note for the agent, and an optional dollar cap for that one turn. Core adds the failed check's output.
-    func sendBack(note: String, budget: String) {
-        guard let project, let thread = currentThread, !starting else { return }
-        var options = RunOptions(feedback: note)
-        if !budget.trimmingCharacters(in: .whitespaces).isEmpty {
-            let text = budget.trimmingCharacters(in: .whitespaces)
-            guard text.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
-                let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")), value > 0
-            else {
-                actionError = "The budget must be a positive number of dollars, got '\(text)'."
-                return
-            }
-            options.budgetOverride = value
-        }
-        guard !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            actionError = "Say what to change: a note is required."
-            return
-        }
-        actionError = nil
-        startRun(project, thread, generation: generation, options: options)
     }
 
     /// One file's patch as core bounds it.
@@ -396,6 +391,7 @@ struct RecentProject: Equatable, Identifiable {
         guard mine == generation else { return }
         endRunStart()
         actionError = "The run did not start: \(error)"
+        reopenSendBack()
     }
 
     func openGoalFile() async {

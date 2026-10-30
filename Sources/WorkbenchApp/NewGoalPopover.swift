@@ -2,23 +2,6 @@ import AppKit
 import SwiftUI
 import WorkbenchCore
 
-/// Puts the New goal popover over the whole window while `store.namingGoal` is set. The layer takes every click, and a click
-/// outside the card closes nothing: a half-written goal is not lost to a stray one. Cancel, Esc and the close button do.
-struct NewGoalLayer: View {
-    var store: ProjectStore
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            if store.namingGoal {
-                Color.black.opacity(0.32).contentShape(Rectangle()).onTapGesture {}.transition(.opacity)
-                NewGoalPopover(store: store).padding(.top, 52).transition(.opacity.combined(with: .offset(y: -8)))
-            }
-        }
-        .animation(.easeOut(duration: 0.18), value: store.namingGoal)
-        .accessibilityAddTraits(store.namingGoal ? .isModal : [])
-    }
-}
-
 /// Asks what needs to be done and has the goal agent draft the goal from it, in a card you write in: the text is the point, the
 /// rest is small. It stays up while it drafts and keeps the text when the draft does not come out.
 struct NewGoalPopover: View {
@@ -39,11 +22,7 @@ struct NewGoalPopover: View {
             messages
             footer.padding(.top, 26)
         }
-        .padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 22)
-        .frame(width: 600)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.1)))
-        .shadow(color: .black.opacity(0.35), radius: 32, y: 14)
+        .overlayCard()
         .onExitCommand { if !store.drafting { close() } }
         .dropDestination(for: URL.self) { urls, _ in
             guard !store.drafting else { return false }
