@@ -145,7 +145,7 @@ struct ReviewView: View {
                 Button("Refresh") { Task { await store.refreshReview() } }
                     .help("Read the worktree again after editing it")
                 Spacer()
-                Button("Send back…") { store.sendingBack = true }.disabled(store.busy != nil)
+                Button("Send back…") { (store.actionError, store.sendingBack) = (nil, true) }.disabled(store.busy != nil)
                 Button("Accept work") { Task { await store.prepareAccept() } }
                     .buttonStyle(.borderedProminent)
                     .disabled(!review.canDecide || store.deciding || store.busy != nil)

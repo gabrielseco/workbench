@@ -133,7 +133,8 @@ private final class Recorder: @unchecked Sendable {
     // MARK: The decisions
 
     private func store(
-        _ recorder: Recorder, accept: AcceptPlan? = nil, acceptError: Error? = nil
+        _ recorder: Recorder, accept: AcceptPlan? = nil, acceptError: Error? = nil, runError: Error? = nil,
+        makeRunError: Error? = nil
     ) async throws -> ProjectStore {
         let fixture = try await ended()
         keptFixtures.append(fixture)
@@ -141,7 +142,8 @@ private final class Recorder: @unchecked Sendable {
         let actions = GoalActions(
             makeRun: { _, _, options in
                 recorder.add(options)
-                return RunHandle(run: {}, stop: {})
+                if let makeRunError { throw makeRunError }
+                return RunHandle(run: { if let runError { throw runError } }, stop: {})
             },
             loadReview: { _, _ in reported },
             acceptPlan: { _, _ in accept ?? Self.plan },
@@ -289,25 +291,47 @@ private final class Recorder: @unchecked Sendable {
         let recorder = Recorder()
         let store = try await store(recorder)
         store.sendingBack = true
-        store.sendBack(note: "  \n", budget: "")
+        store.sendBack()
         #expect(store.actionError == "Say what to change: a note is required." && recorder.options.isEmpty)
+        store.sendBackNote = "  \n"
+        store.sendBack()
+        #expect(store.actionError == "Say what to change: a note is required." && recorder.options.isEmpty)
+        store.sendBackNote = "fix it"
         for bad in ["0", "-1", "12.5oops", "abc"] {
-            store.sendBack(note: "fix it", budget: bad)
+            store.sendBackBudget = bad
+            store.sendBack()
             #expect(store.actionError?.hasPrefix("The budget must be a positive number") == true)
         }
-        // A refused send leaves the card up, so the note is not lost.
-        #expect(recorder.options.isEmpty && store.sendingBack)
+        // A refused send leaves the card up with what was written, so the note is not lost.
+        #expect(recorder.options.isEmpty && store.sendingBack && store.sendBackNote == "fix it")
     }
 
     @Test func sendBackStartsATurnWithTheNoteAndTheOneTurnBudget() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
         store.sendingBack = true
-        store.sendBack(note: "handle the empty list", budget: "2.5")
+        (store.sendBackNote, store.sendBackBudget) = ("handle the empty list", "2.5")
+        store.sendBack()
         #expect(!store.sendingBack)
         let options = try #require(recorder.options.first)
         #expect(options.feedback == "handle the empty list" && options.budgetOverride == Decimal(string: "2.5"))
         #expect(store.runningHere)
+    }
+
+    @Test func aRunThatWillNotStartBringsTheCardBackWithTheNote() async throws {
+        struct Refused: Error {}
+        for (runError, makeRunError) in [(Refused?.none, Refused()), (Refused(), nil)] as [(Refused?, Refused?)] {
+            let store = try await store(Recorder(), runError: runError, makeRunError: makeRunError)
+            store.sendingBack = true
+            store.sendBackNote = "handle the empty list"
+            store.sendBack()
+            // The refusal of an asynchronous start arrives a moment later.
+            for _ in 0..<100 where !store.sendingBack || store.actionError == nil { try await Task.sleep(for: .milliseconds(20)) }
+            #expect(store.sendingBack && store.sendBackNote == "handle the empty list")
+            #expect(store.actionError?.hasPrefix("The run did not start") == true)
+            store.cancelSendBack()
+            #expect(!store.sendingBack && store.sendBackNote.isEmpty)
+        }
     }
 
     @Test func viewDiffReadsOneFilesPatchFromCore() async throws {
