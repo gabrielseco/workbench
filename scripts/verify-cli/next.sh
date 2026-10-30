@@ -150,6 +150,13 @@ rm -f "$WTP/docs/note.md" && mkdir -p "$WTP/Sources" && echo change >"$WTP/Sourc
 wbp "$SCRATCH/next4b.out" next
 check "a goal that skips the judge and the design stage lists only accept" "steps: $(names "$SCRATCH/next4b.out")" \
     bash -c 'test "$1" = "accept "' _ "$(names "$SCRATCH/next4b.out")"
+# The later steps expect the project's own steps again.
+python3 -I - "$P/.workbench/threads/$ID/goal.md" <<'PY' || die "could not take skip out of the goal"
+import sys
+path = sys.argv[1]
+lines = [l for l in open(path).read().split("\n") if not l.startswith("skip:")]
+open(path, "w").write("\n".join(lines))
+PY
 
 # --- after the decision ---------------------------------------------------------------------------------------------------
 
