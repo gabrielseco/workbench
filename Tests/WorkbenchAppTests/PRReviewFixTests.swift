@@ -8,8 +8,11 @@ private final class Calls: @unchecked Sendable {
     private let lock = NSLock()
     private var started: [String] = []
     private var runs: [String] = []
+    private var plans = 0
     func started(_ item: String) { lock.withLock { started.append(item) } }
     func ran(_ thread: String) { lock.withLock { runs.append(thread) } }
+    func planning() { lock.withLock { plans += 1 } }
+    var planReads: Int { lock.withLock { plans } }
     var followUps: [String] { lock.withLock { started } }
     var runThreads: [String] { lock.withLock { runs } }
 }
@@ -27,7 +30,7 @@ private final class Calls: @unchecked Sendable {
 
     /// A shipped thread `t1`, and a window on it showing a round of findings. Starting a follow-up writes `t2` into the project.
     private func store(
-        _ calls: Calls, plan: FollowUpPlan = plan, startError: Error? = nil
+        _ calls: Calls, plan: FollowUpPlan = plan, startError: Error? = nil, planGate: RunGate? = nil
     ) async throws -> (ProjectStore, AppFixture) {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
@@ -40,7 +43,11 @@ private final class Calls: @unchecked Sendable {
                 calls.ran(thread)
                 return RunHandle(run: {}, stop: {})
             },
-            followUpPlan: { _, _, _ in plan },
+            followUpPlan: { _, _, _ in
+                calls.planning()
+                await planGate?.wait()
+                return plan
+            },
             startFollowUp: { _, thread, findings, round, _ in
                 if let startError { throw startError }
                 calls.started("\(thread) round \(round): \(findings)")
@@ -70,6 +77,25 @@ private final class Calls: @unchecked Sendable {
         // Confirming without the confirm having been read does nothing either.
         await store.confirmFollowUp()
         #expect(calls.followUps.isEmpty && calls.runThreads.isEmpty && store.prReviewShown != nil)
+    }
+
+    @Test func aPlanStillBeingReadWhenTheSheetClosesIsDropped() async throws {
+        let calls = Calls()
+        let gate = RunGate()
+        let (store, _) = try await store(calls, planGate: gate)
+        for how in ["close", "not now"] {
+            store.prReviewShown = fixing()
+            let before = calls.planReads
+            let reading = Task { await store.prepareFollowUp() }
+            for _ in 0..<200 where calls.planReads == before { await Task.yield() }
+            #expect(calls.planReads == before + 1)
+            if how == "close" { store.closePRReview() } else { store.cancelFollowUp() }
+            await gate.open()
+            await reading.value
+            // What it read belongs to a confirm that is gone: it must not come back on reopening.
+            #expect(store.pendingFollowUp == nil, "after \(how)")
+            await gate.reset()
+        }
     }
 
     @Test func theConfirmSaysWhatItStartsAndWhatItCanCost() {
@@ -198,6 +224,7 @@ private final class Calls: @unchecked Sendable {
 }
 
 private actor RunGate {
+    func reset() { opened = false }
     private var opened = false
     private var waiting: [CheckedContinuation<Void, Never>] = []
     func wait() async {

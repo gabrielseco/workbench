@@ -89,6 +89,8 @@ struct RecentProject: Equatable, Identifiable {
     /// The confirm in the findings sheet for a fix round, and why a start was refused (the sheet covers the window's own error line).
     var pendingFollowUp: FollowUpPlan?
     var followUpError: String?
+    /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
+    @ObservationIgnored var followUpRequest = 0
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?

@@ -28,20 +28,28 @@ extension ProjectStore {
         if let shown { prReviewShown = shown } else { actionError = "No pull request review has run for this thread yet." }
     }
 
-    func closePRReview() { (prReviewShown, pendingFollowUp, followUpError) = (nil, nil, nil) }
+    func closePRReview() {
+        followUpRequest += 1
+        (prReviewShown, pendingFollowUp, followUpError) = (nil, nil, nil)
+    }
 
     /// Reads what a fix round would start, to show it before anything is made.
     func prepareFollowUp() async {
         guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix else { return }
         followUpError = nil
         let mine = generation
+        followUpRequest += 1
+        let request = followUpRequest
         do {
             let plan = try await actions.followUpPlan(project, thread, shown.pr)
-            if mine == generation { pendingFollowUp = plan }
-        } catch { if mine == generation { followUpError = "\(error)" } }
+            if mine == generation, request == followUpRequest { pendingFollowUp = plan }
+        } catch { if mine == generation, request == followUpRequest { followUpError = "\(error)" } }
     }
 
-    func cancelFollowUp() { (pendingFollowUp, followUpError) = (nil, nil) }
+    func cancelFollowUp() {
+        followUpRequest += 1
+        (pendingFollowUp, followUpError) = (nil, nil)
+    }
 
     /// Starts core's follow-up from the round shown, then shows it and runs its first turn. A refusal stays in the sheet and
     /// starts nothing.
