@@ -28,5 +28,47 @@ extension ProjectStore {
         if let shown { prReviewShown = shown } else { actionError = "No pull request review has run for this thread yet." }
     }
 
-    func closePRReview() { prReviewShown = nil }
+    func closePRReview() {
+        followUpRequest += 1
+        (prReviewShown, pendingFollowUp, followUpError) = (nil, nil, nil)
+    }
+
+    /// Reads what a fix round would start, to show it before anything is made.
+    func prepareFollowUp() async {
+        guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix else { return }
+        followUpError = nil
+        let mine = generation
+        followUpRequest += 1
+        let request = followUpRequest
+        do {
+            let plan = try await actions.followUpPlan(project, thread, shown.pr)
+            if mine == generation, request == followUpRequest { pendingFollowUp = plan }
+        } catch { if mine == generation, request == followUpRequest { followUpError = "\(error)" } }
+    }
+
+    func cancelFollowUp() {
+        followUpRequest += 1
+        (pendingFollowUp, followUpError) = (nil, nil)
+    }
+
+    /// Starts core's follow-up from the round shown, then shows it and runs its first turn. A refusal stays in the sheet and
+    /// starts nothing.
+    func confirmFollowUp() async {
+        guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix,
+            let plan = pendingFollowUp, plan.refusal == nil, !starting
+        else { return }
+        followUpError = nil
+        let mine = generation
+        var made: String?
+        await working("Starting the fix round…") {
+            do { made = try await actions.startFollowUp(project, thread, shown.findings ?? "", shown.round, plan.budget) } catch {
+                if mine == generation { followUpError = "\(error)" }
+            }
+        }
+        guard let id = made, mine == generation else { return }
+        closePRReview()
+        await reload()
+        guard mine == generation else { return }
+        startRun(project, id, generation: mine)
+    }
 }

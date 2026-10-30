@@ -72,6 +72,11 @@ struct GoalActions: Sendable {
     var prReview: @Sendable (Project, String) async throws -> PRReviewShown
     /// The latest recorded round with what Codex wrote; nil when none has run.
     var latestPRReview: @Sendable (Project, String) async -> PRReviewShown?
+    /// What a fix round for the pull request `pr` of this thread would start, read from the log and the config; creates nothing.
+    var followUpPlan: @Sendable (Project, String, Int) async throws -> FollowUpPlan
+    /// Starts core's follow-up thread for the thread's pull request from a round's findings, and returns its id.
+    /// The last argument is the budget the confirm showed: a project whose budget changed since is refused, not started dearer.
+    var startFollowUp: @Sendable (Project, String, String, Int, Decimal?) async throws -> String
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -98,7 +103,11 @@ struct GoalActions: Sendable {
         shipPreview: @escaping @Sendable (Project, String) async throws -> ShipPreview = { _, _ in throw Unset() },
         ship: @escaping @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome = { _, _, _ in throw Unset() },
         prReview: @escaping @Sendable (Project, String) async throws -> PRReviewShown = { _, _ in throw Unset() },
-        latestPRReview: @escaping @Sendable (Project, String) async -> PRReviewShown? = { _, _ in nil }
+        latestPRReview: @escaping @Sendable (Project, String) async -> PRReviewShown? = { _, _ in nil },
+        followUpPlan: @escaping @Sendable (Project, String, Int) async throws -> FollowUpPlan = { _, _, _ in throw Unset() },
+        startFollowUp: @escaping @Sendable (Project, String, String, Int, Decimal?) async throws -> String = { _, _, _, _, _ in
+            throw Unset()
+        }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.editGoal = editGoal
@@ -109,6 +118,7 @@ struct GoalActions: Sendable {
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
         (self.shipPreview, self.ship) = (shipPreview, ship)
         (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
+        (self.followUpPlan, self.startFollowUp) = (followUpPlan, startFollowUp)
     }
 
     struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
@@ -119,6 +129,11 @@ struct GoalActions: Sendable {
             logged.pr == record.pr
         else { return nil }
         return logged.failure
+    }
+
+    /// What a follow-up's turn is capped at: the config's default budget when it sets one, else nothing but its timeout.
+    static func followUpBudget(_ config: Config) -> Decimal? {
+        config.defaultBudgetConfigured ? config.defaultBudgetUSD : nil
     }
 
     /// A refusal from core in its own words, so the window shows the sentence and not the enum case's name.
@@ -228,6 +243,25 @@ struct GoalActions: Sendable {
             return PRReviewShown(
                 record, findings: service.prReviewFindings(record), failure: recordedFailure(record, in: project),
                 tip: await service.pullRequestBranchTip(id: thread))
+        },
+        followUpPlan: { project, thread, pr in
+            let config = try Config.load(from: project.configURL)
+            let store = ThreadStore(project: project)
+            let used = store.followUps(of: store.rootID(of: thread)).count
+            let maxRounds = config.prReview.maxRounds
+            return FollowUpPlan(
+                pr: pr, round: used + 1, allowed: max(0, maxRounds - 1), budget: followUpBudget(config),
+                refusal: used >= max(0, maxRounds - 1) ? "\(FollowUpError.tooMany(used: used, max: maxRounds))" : nil)
+        },
+        startFollowUp: { project, thread, findings, round, shown in
+            let config = try Config.load(from: project.configURL)
+            guard followUpBudget(config) == shown else {
+                throw RefusalText("The project's budget changed since this was shown. Look at the fix round again.")
+            }
+            do {
+                return try await ThreadService(project: project, git: try GitRunner.discover())
+                    .startFollowUp(parent: thread, findings: findings, reviewRound: round, config: config)
+            } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") }
         })
 
     /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not

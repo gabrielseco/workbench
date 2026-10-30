@@ -86,6 +86,11 @@ struct RecentProject: Equatable, Identifiable {
     var pendingShip: ShipPreview?
     /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
     var prReviewShown: PRReviewShown?
+    /// The confirm in the findings sheet for a fix round, and why a start was refused (the sheet covers the window's own error line).
+    var pendingFollowUp: FollowUpPlan?
+    var followUpError: String?
+    /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
+    @ObservationIgnored var followUpRequest = 0
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
@@ -260,7 +265,6 @@ struct RecentProject: Equatable, Identifiable {
         guard let project, let thread = currentThread, !starting else { return }
         if ownedRun != nil {
             actionError = "A run is already going."
-            reopenSendBack()
             return
         }
         // Changes already made to the goal are written first, so what is approved is what the window shows.
