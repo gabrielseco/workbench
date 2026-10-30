@@ -22,7 +22,9 @@ import WorkbenchCore
 
     deinit { try? FileManager.default.removeItem(at: root) }
 
-    func goalText(id: String, approved: Bool, title: String? = nil, proofs: [String]? = nil) throws -> String {
+    func goalText(
+        id: String, approved: Bool, title: String? = nil, proofs: [String]? = nil, request: String = "Do the thing."
+    ) throws -> String {
         let all = proofs ?? ["test: Thing/works"]
         let criteria = all.enumerated().map { index, proof in
             "- [c\(index + 1)] It works\(all.count > 1 ? " \(index + 1)" : "").\n  - proof: \(proof)"
@@ -38,7 +40,7 @@ import WorkbenchCore
 
             ## Request
 
-            Do the thing.
+            \(request)
 
             ## Criteria
 
@@ -58,11 +60,11 @@ import WorkbenchCore
     /// Creates the thread with `thread.created` and its goal, and returns it for more events.
     @discardableResult
     func addThread(
-        _ id: String, approved: Bool = false, title: String? = nil, proofs: [String]? = nil
+        _ id: String, approved: Bool = false, title: String? = nil, proofs: [String]? = nil, request: String = "Do the thing."
     ) async throws -> String {
         let directory = project.threadDirectory(id)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let text = try goalText(id: id, approved: approved, title: title, proofs: proofs)
+        let text = try goalText(id: id, approved: approved, title: title, proofs: proofs, request: request)
         try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
         created += 1
         try append(id, .threadCreated, ts: "2026-10-28T10:00:\(String(format: "%02d", created)).000Z")

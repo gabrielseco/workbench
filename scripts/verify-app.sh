@@ -7,6 +7,14 @@
 #   scripts/verify-app.sh list <pid>           what is on screen: role <tab> label
 #   scripts/verify-app.sh press <pid> "<label>"  press that button (an exact label, else a prefix)
 #   scripts/verify-app.sh type <pid> "<text>"  set the text of the window's focused text field (else its only one); no keystrokes are sent
+#   scripts/verify-app.sh focus <pid> "<field>"  focus the text field or area with that text or placeholder (then `type` fills it)
+#   scripts/verify-app.sh typekeys <pid> "<text>"  press the keys of that text (200 printable characters at most) into the focused field, to that
+#                                              pid only; after `focus` it replaces what the field holds, and the app sees real edits
+#   scripts/verify-app.sh click <pid> "<label>"  a real left click in the middle of what is labelled that (an exact label, else a prefix),
+#                                              sent to that pid only: it focuses a field and takes the focus from the last one
+#   scripts/verify-app.sh hover <pid> "<label>"  move the pointer there, so a hover state shows (sent to that pid only)
+#   scripts/verify-app.sh key <pid> <key>      one of return, tab, escape, up, down, sent to that pid only (no letters, no modifiers)
+#   scripts/verify-app.sh scroll <pid> <steps>  scroll the window's content down by 1 to 30 steps of 40 points (negative: up)
 #   scripts/verify-app.sh paste <pid> [image]  paste a picture (a generated one, or an image file of at most 5 MiB) with Cmd-V sent to that
 #                                              pid only; the clipboard is put back as it was
 #   scripts/verify-app.sh shot <pid> <name>    screenshot the window into $WORKBENCH_PROOF_DIR (default .build/verify)/<name>.png
@@ -26,6 +34,10 @@
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
 #   - `type` fills a text field of this pid's window through Accessibility, never with keystrokes, so it cannot reach another app; it
 #     takes at most 2000 characters and refuses control characters, and with several fields and none focused it types nowhere
+#   - `focus` sets Accessibility focus on a text field of this pid's window; `click`, `hover`, `key` and `scroll` post mouse, key and
+#     scroll events to this pid only (never to the front app), and a click or hover refuses a point outside the window and the same labels
+#     `press` refuses; `key` takes five names and no modifier, and `typekeys` sends characters with no modifier, so no shortcut (⌘Q, ⌘W) can be sent;
+#     `typekeys` takes at most 200 printable characters; `scroll` takes at most 30 steps
 #   - `paste` sends its keystroke to this pid only (never to the front app) and restores the clipboard; it reads one image file at most
 #   - a scenario name is lower-case letters and dashes and must be a folder of Fixtures/app/: it cannot reach anywhere else
 # A `start` that fails, or is interrupted (Ctrl-C, SIGTERM), leaves nothing: the app it launched is ended and its build folder, fixture copy
@@ -52,7 +64,7 @@ STATE_ROOT="${STATE_ROOT%/}/workbench-verify"
 PIDS="$STATE_ROOT/pids"
 
 usage() {
-  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -263,6 +275,37 @@ case "$command" in
     build_dir "$1" >/dev/null
     [[ -n "$2" ]] || fail "type needs text"
     WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" type "$2"
+    ;;
+  focus)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ -n "$2" ]] || fail "focus needs the text or placeholder of a field"
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" focus "$2"
+    ;;
+  click | hover)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ -n "$2" ]] || fail "$command needs a label"
+    [[ "$2" =~ $REFUSED ]] && fail "refused: \"$2\" opens a panel or another app"
+    WORKBENCH_PID="$1" WORKBENCH_REFUSE="$REFUSED" swift "$ROOT/scripts/ax.swift" "$command" "$2"
+    ;;
+  typekeys)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ -n "$2" ]] || fail "typekeys needs text"
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" typekeys "$2"
+    ;;
+  key)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ "$2" =~ ^(return|tab|escape|up|down)$ ]] || fail "key takes return, tab, escape, up or down, not \"$2\""
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" key "$2"
+    ;;
+  scroll)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ "$2" =~ ^-?[1-9][0-9]?$ ]] && (( $2 >= -30 && $2 <= 30 )) || fail "scroll takes a number of steps from -30 to 30, not \"$2\""
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" scroll "$2"
     ;;
   paste)
     [[ $# -ge 1 && $# -le 2 ]] || usage

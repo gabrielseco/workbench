@@ -35,6 +35,12 @@ expect 1 "is not a build started by verify-app.sh start" list 1
 expect 1 "is not a build started by verify-app.sh start" press 1 "Doctor"
 expect 1 "is not a build started by verify-app.sh start" type 1 "text"
 expect 1 "is not a build started by verify-app.sh start" paste 1
+expect 1 "is not a build started by verify-app.sh start" focus 1 "What must hold"
+expect 1 "is not a build started by verify-app.sh start" click 1 "Judge"
+expect 1 "is not a build started by verify-app.sh start" hover 1 "Judge"
+expect 1 "is not a build started by verify-app.sh start" key 1 tab
+expect 1 "is not a build started by verify-app.sh start" typekeys 1 text
+expect 1 "is not a build started by verify-app.sh start" scroll 1 3
 expect 1 "is not a build started by verify-app.sh start" shot 1 name
 expect 1 "is not a build started by verify-app.sh start" stop 99999
 expect 1 "is not a build started by verify-app.sh start" calls 1
@@ -86,7 +92,7 @@ alive() { kill -0 "$1" 2>/dev/null; }
 fake_app "$TMPDIR/Applications"
 installed=$FAKE_PID
 echo "$STATE/build.recorded" > "$PIDS/$installed"
-for command in "stop $installed" "list $installed" "press $installed Doctor" "type $installed text" "paste $installed" "shot $installed name" "calls $installed"; do
+for command in "stop $installed" "list $installed" "press $installed Doctor" "type $installed text" "focus $installed field" "click $installed Judge" "hover $installed Judge" "key $installed tab" "typekeys $installed text" "scroll $installed 3" "paste $installed" "shot $installed name" "calls $installed"; do
   # shellcheck disable=SC2086
   expect 1 "is not running the build" $command
 done
