@@ -10,9 +10,13 @@ extension ProjectStore {
     /// one's reload, so two quick clicks (two switches, two list items) each build on the other's result and none is lost.
     /// `make` may answer nil when the goal no longer has what the click was about.
     func editGoal(_ make: @escaping @MainActor (GoalModel) -> GoalEdit?) async {
+        // The goal an edit is for is the one on screen when it was made: if the window has moved to another project or thread by
+        // the time its turn comes, it is dropped.
+        let target = (generation, currentThread)
         let previous = goalEdits
         let task = Task { @MainActor in
             await previous?.value
+            guard target == (generation, currentThread) else { return }
             await perform(make)
         }
         goalEdits = task

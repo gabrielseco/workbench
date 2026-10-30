@@ -13,6 +13,20 @@ private final class Seen: @unchecked Sendable {
     var all: [(String, GoalEdit)] { lock.withLock { edits } }
 }
 
+private actor EditGate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
+}
+
 /// The store hands an edit to core's `editGoal` for the thread on screen, says why a refusal was one, and reads the file again.
 @MainActor @Suite struct GoalEditStoreTests {
     private func store(_ actions: GoalActions) async throws -> ProjectStore {
@@ -92,5 +106,44 @@ private final class Seen: @unchecked Sendable {
         await store.editGoal(.setTitle(""))
         await store.editGoal(.setSkip([]))
         #expect(store.goalEditSerial == start + 2, "a refusal counts too")
+    }
+
+    @Test func anEditQueuedForAnotherProjectIsDroppedWhenTheWindowHasMoved() async throws {
+        let first = try await AppFixture(), second = try await AppFixture()
+        keptEditFixtures += [first, second]
+        try await first.addThread("t1", approved: false)
+        try await second.addThread("t1", approved: false)
+        let seen = Seen()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(projectPath: nil), actions: GoalActions(editGoal: { project, thread, edit in
+                seen.add("\(project.root.lastPathComponent)/\(thread)", edit)
+            }))
+        #expect(await store.open(first.root))
+        async let queued: Void = store.editGoal(.setTitle("For the first project."))
+        // The window moves before the queued edit's turn comes.
+        _ = await store.open(second.root)
+        await queued
+        #expect(seen.all.allSatisfy { !$0.0.hasPrefix(second.project.root.lastPathComponent) }, "\(seen.all.map(\.0))")
+    }
+
+    @Test func approvalWaitsForTheEditsAlreadyMade() async throws {
+        let order = Seen()
+        let gate = EditGate()
+        let actions = GoalActions(
+            approve: { _, _ in order.add("approve", .setSkip([])) },
+            editGoal: { _, _, edit in
+                await gate.wait()
+                order.add("edit", edit)
+            })
+        let store = try await store(actions)
+        let editing = Task { await store.editGoal(.setSkip(["judge"])) }
+        try await Task.sleep(for: .milliseconds(50))
+        let approving = Task { await store.approveAndRun() }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(order.all.isEmpty, "the approval did not go ahead of the edit")
+        await gate.open()
+        await editing.value
+        await approving.value
+        #expect(order.all.map(\.0) == ["edit", "approve"])
     }
 }

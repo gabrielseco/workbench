@@ -248,6 +248,8 @@ struct RecentProject: Equatable, Identifiable {
             actionError = "A run is already going."
             return
         }
+        // Changes already made to the goal are written first, so what is approved is what the window shows.
+        await goalEdits?.value
         let mine = generation
         starting = true
         setBusy("Approving the goal…")

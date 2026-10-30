@@ -147,23 +147,23 @@ struct GoalView: View {
         section("Out of scope") {
             if !goal.outOfScope.isEmpty || editable {
                 GoalCard {
-                    ForEach(Array(goal.outOfScope.enumerated()), id: \.offset) { index, item in
+                    ForEach(Array(goal.outOfScope.enumerated()), id: \.offset) { _, item in
                         HStack {
                             if editable {
                                 Text("•")
                                 CommitField(placeholder: "What must not change", value: item) { new in
                                     edit { g in
-                                        guard g.outOfScope.indices.contains(index) else { return nil }
+                                        guard let at = g.outOfScope.firstIndex(of: item) else { return nil }
                                         var items = g.outOfScope
-                                        items[index] = new
+                                        items[at] = new
                                         return .setOutOfScope(items)
                                     }
                                 }
                                 Button {
                                     edit { g in
-                                        guard g.outOfScope.indices.contains(index) else { return nil }
+                                        guard let at = g.outOfScope.firstIndex(of: item) else { return nil }
                                         var items = g.outOfScope
-                                        items.remove(at: index)
+                                        items.remove(at: at)
                                         return .setOutOfScope(items)
                                     }
                                 } label: { Image(systemName: "xmark") }
@@ -202,22 +202,22 @@ struct GoalView: View {
                                 Text("from project config").font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                        ForEach(Array(goal.goalReadAlso.enumerated()), id: \.offset) { index, folder in
+                        ForEach(Array(goal.goalReadAlso.enumerated()), id: \.offset) { _, folder in
                             HStack {
                                 if editable {
                                     CommitField(placeholder: "../backend", value: folder, font: mono) { new in
                                         edit { g in
-                                            guard g.goalReadAlso.indices.contains(index) else { return nil }
+                                            guard let at = g.goalReadAlso.firstIndex(of: folder) else { return nil }
                                             var all = g.goalReadAlso
-                                            all[index] = new
+                                            all[at] = new
                                             return .setReadAlso(all)
                                         }
                                     }
                                     Button {
                                         edit { g in
-                                            guard g.goalReadAlso.indices.contains(index) else { return nil }
+                                            guard let at = g.goalReadAlso.firstIndex(of: folder) else { return nil }
                                             var all = g.goalReadAlso
-                                            all.remove(at: index)
+                                            all.remove(at: at)
                                             return .setReadAlso(all)
                                         }
                                     } label: { Image(systemName: "xmark") }
