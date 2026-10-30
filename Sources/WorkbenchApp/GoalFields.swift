@@ -51,7 +51,7 @@ struct CommitEditor: View {
         TextEditor(text: $text)
             .font(.system(size: 16, design: .serif)).lineSpacing(5)
             .scrollContentBackground(.hidden).scrollDisabled(true)
-            .frame(minHeight: 60)
+            .frame(minHeight: 30)
             .focused($focused)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
