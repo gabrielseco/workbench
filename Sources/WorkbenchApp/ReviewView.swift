@@ -140,6 +140,10 @@ struct ReviewView: View {
             HStack {
                 Button("Discard…") { Task { await store.prepareDiscard() } }.disabled(store.busy != nil)
                 Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
+                if store.herdrFound {
+                    Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
+                        .help("Herdr opens this worktree as a workspace and brings it forward")
+                }
                 Button("Open diff") { Task { await store.openDiff() } }.disabled(store.busy != nil || review.files.isEmpty)
                     .help("Each changed file against the base, in your editor")
                 Button("Refresh") { Task { await store.refreshReview() } }

@@ -4,7 +4,7 @@ import Foundation
 /// `workbench open`. It supplies a few keys and nothing else; a project's own `.workbench/config.toml` is still the
 /// only thing a run reads, so a global file can never change what an existing project does.
 public struct GlobalConfig: Sendable, Equatable {
-    public static let allowedKeys: [String] = ["claude_path", "editor", "projects_dir"]
+    public static let allowedKeys: [String] = ["claude_path", "editor", "herdr", "projects_dir"]
     /// The one table it may have, and its one key: the coding model a new project starts with.
     static let runTable = "agents.run"
 
@@ -15,12 +15,18 @@ public struct GlobalConfig: Sendable, Equatable {
     public var model: String?
     /// What `workbench open` starts when neither `--editor` nor the project names one.
     public var editor: String?
+    /// The `herdr` executable the window's "Open in Herdr" runs when the project names none.
+    public var herdr: String?
 
-    public init(projectsDirectory: URL? = nil, claudePath: String? = nil, model: String? = nil, editor: String? = nil) {
+    public init(
+        projectsDirectory: URL? = nil, claudePath: String? = nil, model: String? = nil, editor: String? = nil,
+        herdr: String? = nil
+    ) {
         self.projectsDirectory = projectsDirectory
         self.claudePath = claudePath
         self.model = model
         self.editor = editor
+        self.herdr = herdr
     }
 
     /// `~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`.
@@ -106,6 +112,7 @@ public struct GlobalConfig: Sendable, Equatable {
             }
         }
         if let (value, line) = string("editor") { result.editor = Config.editorValue(value, line: line, fail: fail) }
+        if let (value, line) = string("herdr") { result.herdr = Config.herdrValue(value, line: line, fail: fail) }
         if let (value, line) = string("projects_dir") {
             if let url = expandedDirectory(value, home: home) {
                 result.projectsDirectory = url

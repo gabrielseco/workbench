@@ -149,6 +149,10 @@ struct RunView: View {
             HStack {
                 if snapshot.state.decision != "discarded", !snapshot.state.cleaned {
                     Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
+                    if store.herdrFound {
+                        Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
+                            .help("Herdr opens this worktree as a workspace and brings it forward")
+                    }
                 }
                 if canRunAgain { Button("Run again") { Task { await store.runAgain() } } }
                 Spacer()

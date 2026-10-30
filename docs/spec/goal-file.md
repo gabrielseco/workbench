@@ -543,6 +543,16 @@ Notes:
   it needs only that the file exists, and `--print --goal` prints its path.
   `doctor` prints `editor:  <value> (from --editor|project|global)` or `editor:  none set`, never starts it and never
   fails for it; `doctor --editor <value>` shows what that flag would pick. A run never reads the key.
+- **`herdr` names the `herdr` executable the window's "Open in Herdr" runs.** One command name or an absolute path, no
+  spaces, quotes or shell characters (an `invalid-config` error naming `herdr` otherwise), in the project's config or
+  `~/.workbench/config.toml` (the global file allows it too). When it is set only that file is used: a stand-in is never
+  skipped for a real one. Unset, `herdr` is looked for on `PATH` and in `~/.local/bin`, `/opt/homebrew/bin` and
+  `/usr/local/bin`; with none found, or a config that does not load, the button is not shown. The window starts Herdr's app when its
+  server is down (waiting about 20 s, plus at most one probe's 10 s limit), then runs
+  `herdr worktree open --cwd <project> --path <worktree> --focus`; only when Herdr answers `worktree_not_found` does it open the
+  folder instead (`herdr workspace create --cwd <worktree> --label <thread> --focus`, or `workspace focus` when a pane of a
+  workspace is already in it). Any other answer, a hang or a down server is shown as it is and nothing else is started. It never passes `--trust-repository`, and a call that does not answer in 10 s is stopped with its process group.
+  No command reads the key and a run never does.
   `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the
   repository (`clone --shared`, so nothing is registered in it and no remote is left) at the thread's recorded base, with
   every file the thread changed (committed, staged, unstaged or new) put there as the worktree has it, so the editor's
