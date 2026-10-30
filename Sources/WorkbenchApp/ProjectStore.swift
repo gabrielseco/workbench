@@ -67,6 +67,8 @@ struct RecentProject: Equatable, Identifiable {
     /// What is written in the Send back card. It lives here, not in the card, so a send that the run refuses to start does not
     /// lose it; it is cleared when a turn has begun, on Cancel and when the project changes.
     var sendBackNote = ""
+    /// The denied calls the card offers to decide; read when it opens.
+    var sendBackGrants: [GrantRow] = []
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false

@@ -17,7 +17,7 @@ extension ProjectStore {
 
     /// Closes the card and drops what was written in it.
     func cancelSendBack() {
-        (sendingBack, sendBackNote) = (false, "")
+        (sendingBack, sendBackNote, sendBackGrants) = (false, "", [])
     }
 
     /// A send the run would not start: the card comes back with the text, and the error under it.

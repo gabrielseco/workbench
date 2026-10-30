@@ -55,6 +55,10 @@ struct GoalActions: Sendable {
     /// The changed files' diffs in the editor: all of them, or the one at the path. Says what it left out, nil when nothing.
     var openDiff: @Sendable (Project, String, String?) async throws -> String?
     var loadReview: @Sendable (Project, String) async -> ReviewReport?
+    /// The thread's denied calls with what was decided about each; empty when the thread's coding turns take no grants (Codex).
+    var grantCandidates: @Sendable (Project, String) async throws -> [GrantCandidate]
+    /// Records one decision, as `workbench grant <target> --once|--thread|--never` does; core's refusal comes back as its own text.
+    var grant: @Sendable (Project, String, String, GrantScope, Bool) async throws -> Void
     var acceptPlan: @Sendable (Project, String) async throws -> AcceptPlan
     var accept: @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult
     var discardPlan: @Sendable (Project, String) async throws -> DiscardPlan
@@ -82,6 +86,8 @@ struct GoalActions: Sendable {
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         openDiff: @escaping @Sendable (Project, String, String?) async throws -> String? = { _, _, _ in nil },
         loadReview: @escaping @Sendable (Project, String) async -> ReviewReport? = { _, _ in nil },
+        grantCandidates: @escaping @Sendable (Project, String) async throws -> [GrantCandidate] = { _, _ in [] },
+        grant: @escaping @Sendable (Project, String, String, GrantScope, Bool) async throws -> Void = { _, _, _, _, _ in },
         acceptPlan: @escaping @Sendable (Project, String) async throws -> AcceptPlan = { _, _ in throw Unset() },
         accept: @escaping @Sendable (Project, String, AcceptPlan, String?) async throws -> AcceptResult = { _, _, _, _ in
             throw Unset()
@@ -99,6 +105,7 @@ struct GoalActions: Sendable {
         self.enableGoalAgent = enableGoalAgent
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
+        (self.grantCandidates, self.grant) = (grantCandidates, grant)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
         (self.shipPreview, self.ship) = (shipPreview, ship)
         (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
@@ -172,6 +179,21 @@ struct GoalActions: Sendable {
         loadReview: { project, thread in
             guard let git = try? GitRunner.discover() else { return nil }
             return await ReviewLoader(project: project, git: git).load(id: thread)
+        },
+        grantCandidates: { project, thread in
+            // A grant is a Claude tool pattern: the Codex coding turn takes none, so nothing is offered for it.
+            if let config = try? Config.load(from: project.configURL), config.resolvedRunAgent().provider != .claude { return [] }
+            return try ThreadService(project: project, git: try GitRunner.discover()).grantCandidates(id: thread)
+        },
+        grant: { project, thread, target, scope, dangerous in
+            do {
+                _ = try await ThreadService(project: project, git: try GitRunner.discover())
+                    .grant(id: thread, target: target, scope: scope, allowDangerous: dangerous)
+            } catch let refusal as GrantError {
+                throw RefusalText("\(refusal)")
+            } catch let refusal as ThreadServiceError {
+                throw RefusalText("\(refusal)")
+            }
         },
         acceptPlan: { project, thread in
             try await ThreadService(project: project, git: try GitRunner.discover()).acceptPlan(id: thread)

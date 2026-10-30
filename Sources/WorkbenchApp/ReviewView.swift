@@ -129,7 +129,7 @@ struct ReviewView: View {
                     Text("\(item.text) ×\(item.count)")
                         .font(.system(.callout, design: .monospaced)).foregroundStyle(Theme.amber)
                 }
-                Text("Allow one in a terminal with `workbench grant`, then send the work back.")
+                Text("Decide each one in Send back before you send the work back.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
