@@ -197,9 +197,9 @@ struct GoalActions: Sendable {
         openWorktree: { project, thread in
             try await openWorktreeInEditor(project, thread)
         },
-        // A config that does not load still shows the button: the click says why, where a hidden one would not.
+        // Shown only for a herdr that is found. A config that does not load finds none: it is not guessed which one to run.
         herdrFound: { project in
-            do { return try herdrExecutable(project) != nil } catch { return true }
+            do { return try herdrExecutable(project) != nil } catch { return false }
         },
         openInHerdr: { project, thread in try await openInHerdr(project, thread) },
         openDiff: { project, thread, path in try await openDiffInEditor(project, thread, path: path) },

@@ -88,7 +88,8 @@ import Testing
         // The stand-in is named, but another key is wrong: the file does not load.
         try "herdr = \"\(stub.path)\"\nnot_a_key = 1\n[tools]\navailable = [\"Read\"]\n".write(
             to: project.configURL, atomically: true, encoding: .utf8)
-        #expect(GoalActions.core.herdrFound(project), "the button stays, so the click can say why")
+        #expect(!GoalActions.core.herdrFound(project), "no button for a config that does not load")
+        // Not reachable from the window, but the action itself still refuses to guess.
         do {
             _ = try await GoalActions.core.openInHerdr(project, "t1")
             Issue.record("a config that does not load still ran a herdr")
