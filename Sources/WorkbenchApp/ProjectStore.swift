@@ -69,6 +69,8 @@ struct RecentProject: Equatable, Identifiable {
     var sendBackNote = ""
     /// The denied calls the card offers to decide; read when it opens.
     var sendBackGrants: [GrantRow] = []
+    /// Whether a `herdr` was found for the open project: "Open in Herdr" is shown only then.
+    var herdrFound = false
     /// Decisions being recorded. One at a time, and a send waits for them: a grant refused for a live run is lost.
     var grantsInFlight = 0
     var drafting = false
@@ -193,6 +195,7 @@ struct RecentProject: Equatable, Identifiable {
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
         project = located
+        herdrFound = actions.herdrFound(located)
         doctor = .notRun
         (goal, review, goalEditError) = (nil, nil, nil)
         screen = .opening(path: located.root.path)

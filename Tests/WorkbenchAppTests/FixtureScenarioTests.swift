@@ -52,10 +52,14 @@ import WorkbenchCore
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("config-\(UUID().uuidString).toml")
             defer { try? FileManager.default.removeItem(at: url) }
             let filled = text.replacingOccurrences(of: "@EDITOR_STUB@", with: "/tmp/editor-stub")
+                .replacingOccurrences(of: "@HERDR_STUB@", with: "/tmp/herdr-stub")
             try filled.write(to: url, atomically: true, encoding: .utf8)
             let config = try Config.load(from: url)
             if text.contains("@EDITOR_STUB@") {
                 #expect(config.editor == "/tmp/editor-stub", "\(scenario.rawValue) names the stub")
+            }
+            if text.contains("@HERDR_STUB@") {
+                #expect(config.herdr == "/tmp/herdr-stub", "\(scenario.rawValue) names the herdr stub")
             }
         }
     }

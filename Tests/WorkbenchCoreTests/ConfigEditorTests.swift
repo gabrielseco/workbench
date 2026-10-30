@@ -46,7 +46,7 @@ private let tools = "\n[tools]\navailable = [\"Read\"]\n"
         #expect {
             try GlobalConfig.parse("check_command = \"x\"\n")
         } throws: { error in
-            "\(error)".contains("allowed: claude_path, editor, projects_dir")
+            "\(error)".contains("allowed: claude_path, editor, herdr, projects_dir")
         }
     }
 }
