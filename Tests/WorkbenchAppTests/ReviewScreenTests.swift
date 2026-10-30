@@ -309,7 +309,9 @@ private final class Recorder: @unchecked Sendable {
         #expect(!store.sendingBack)
         let options = try #require(recorder.options.first)
         #expect(options.feedback == "handle the empty list" && options.budgetOverride == nil)
-        #expect(store.runningHere)
+        // The run here ends at once, before any poll could see the turn begin: the spent note must still be gone.
+        for _ in 0..<100 where !store.sendBackNote.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(store.sendBackNote.isEmpty)
     }
 
     @Test func aRunThatWillNotStartBringsTheCardBackWithTheNote() async throws {

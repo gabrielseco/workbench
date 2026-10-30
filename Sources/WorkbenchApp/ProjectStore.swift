@@ -305,7 +305,11 @@ struct RecentProject: Equatable, Identifiable {
         ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
         applyOwnership()
         Task { [weak self] in
-            do { try await handle.run() } catch { self?.runFailed(error, generation: mine) }
+            do {
+                try await handle.run()
+                // A turn quick enough to end between two polls is never seen to begin: its note is spent all the same.
+                if self?.sendingBack == false { self?.sendBackNote = "" }
+            } catch { self?.runFailed(error, generation: mine) }
             await self?.runEnded()
         }
     }
