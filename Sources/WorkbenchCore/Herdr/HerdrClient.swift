@@ -109,6 +109,9 @@ public struct HerdrOpener: Sendable {
         self.launchApp = launchApp
     }
 
+    /// The one error code Herdr gives for a folder that is not a worktree it can open (seen in `worktree open --path <plain folder>`).
+    static let notAWorktree = "worktree_not_found"
+
     /// Never passes `--trust-repository`: that is for a person who has verified the repository.
     public func open(project: URL, folder: URL, label: String) async throws -> HerdrOpened {
         if try await serverIsDown() {
@@ -121,8 +124,9 @@ public struct HerdrOpener: Sendable {
             return .worktree(
                 workspace: result["workspace"]?["workspace_id"]?.stringValue ?? "", alreadyOpen: result["already_open"] == true)
         } catch let refusal as HerdrFailure {
-            // Not a refusal of the folder: the server went away or hung, and a second command would say the same.
-            if refusal.serverDown || refusal.code == "timeout" || refusal.code == "launch_failed" { throw refusal }
+            // Only Herdr saying the folder is not a worktree it can open sends us to the plain folder; any other answer (a hang, the
+            // server gone, an error of its own) is shown as it is, never worked around by starting another workspace.
+            if refusal.code != Self.notAWorktree { throw refusal }
         }
         if let existing = try await workspace(showing: folder) {
             _ = try await client.call(["workspace", "focus", existing])

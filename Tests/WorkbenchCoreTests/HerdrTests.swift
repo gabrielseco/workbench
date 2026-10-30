@@ -28,6 +28,7 @@ private final class FakeHerdr: @unchecked Sendable {
                   echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30 & echo $! > "$FAKE_HERDR_DIR/childpid"; wait
                 fi
                 if [ -f "$FAKE_HERDR_DIR/refuse" ]; then err worktree_not_found "worktree path not found"; fi
+                if [ -f "$FAKE_HERDR_DIR/broken" ]; then err internal_error "herdr is unwell"; fi
                 if [ -f "$FAKE_HERDR_DIR/open" ]; then
                   echo '{"id":"x","result":{"already_open":true,"workspace":{"workspace_id":"w1"},"type":"worktree_opened"}}'
                 else
@@ -175,6 +176,19 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         let second = try await fake.opener().open(project: project, folder: folder, label: "t1")
         #expect(second == .folder(workspace: "w9", alreadyOpen: false))
         #expect(fake.calls.contains("workspace create --cwd /work/project-wt/t1 --label t1 --focus"))
+    }
+
+    @Test func onlyANotAWorktreeAnswerSendsItToThePlainFolder() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("broken")
+        do {
+            _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
+            Issue.record("an error of Herdr's own was worked around")
+        } catch let failure as HerdrFailure {
+            #expect(failure.code == "internal_error" && failure.message == "herdr is unwell")
+        }
+        // Nothing was started on top of it: no pane list, no workspace made.
+        #expect(fake.calls.count == 2 && fake.calls.last?.hasPrefix("worktree open") == true)
     }
 
     @Test func aSecondClickFocusesInsteadOfCreating() async throws {
