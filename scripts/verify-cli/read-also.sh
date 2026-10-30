@@ -87,8 +87,10 @@ check "and every write to it denied" "argv lacks the Edit/Write/NotebookEdit rul
     bash -c '[[ $1 == *"Edit(//"*"other-repo/**)"* && $1 == *"Write(//"*"other-repo/**)"* && $1 == *"NotebookEdit(//"*"other-repo/**)"* ]]' _ "$argv"
 check "and the goal's folder too" "argv has no --add-dir ...goal-repo" \
     bash -c '[[ $1 == *"goal-repo"* && $1 == *"Edit(//"*"goal-repo/**)"* ]]' _ "$argv"
-check "the first prompt names both folders" "turn-1.md does not name them" \
-    bash -c 'grep -qF "$1" "$3" && grep -qF "$2" "$3"' _ "$OTHER" "$OTHER2" "$THREAD_DIR/prompts/turn-1.md"
+# The goal's request names both paths itself, so the check looks for the section the run generates, with a line for each.
+check "the first prompt lists both folders under Other repositories" "turn-1.md has no such list" \
+    bash -c 'grep -qx "## Other repositories" "$3" && grep -qxF "- \`$1\`" "$3" && grep -qxF "- \`$2\`" "$3"' _ "$OTHER" "$OTHER2" \
+    "$THREAD_DIR/prompts/turn-1.md"
 answer=$(cat "$WT/verify-cli-read-also.txt" 2>/dev/null)
 echo "    the file says: ${answer:-<missing>}"
 check "the turn read both repositories: the file has both words" "the file says '${answer:-<missing>}', not $WORD and $WORD2" \
