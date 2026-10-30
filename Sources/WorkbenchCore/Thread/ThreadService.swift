@@ -23,6 +23,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case noFreeID(String)
     case abandonNotSaved(String)
     case budgetNeedsCap(provider: String)
+    case goalEditRefused(String)
 
     public var description: String {
         switch self {
@@ -35,6 +36,7 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
         case .budgetNeedsCap(let provider):
             "\(provider) cannot enforce a dollar limit, and this goal has a budget_usd, so it was not approved. "
                 + "Change the goal to `spend_policy: timeout_only` (and remove budget_usd), then approve it again."
+        case .goalEditRefused(let reason): "the goal was not changed: \(reason)"
         case .noFreeID(let id): "could not find a free id for '\(id)'; try another name"
         case .invalidPushTarget(let name):
             "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
@@ -197,7 +199,7 @@ public struct ThreadService: Sendable {
             throw ThreadServiceError.goalInvalid(error.description)
         }
         if text.contains("TODO(workbench)") { throw ThreadServiceError.goalPlaceholdersRemain }
-        let config = config ?? (try? Config.load(from: project.configURL))
+        let config = try configChecked(config, against: file.goal)
         let agent = config?.resolvedRunAgent(goalModel: file.goal.model)
             ?? ResolvedAgent(provider: .claude, model: file.goal.model, allowUnpriced: false)
         // The run would refuse this goal, so say so now rather than after the approval.

@@ -39,6 +39,16 @@ import Testing
         #expect(try verifierKinds(v).isEmpty)
     }
 
+    @Test func itDoesNotRunWhenTheGoalSkipsItAndSaysSo() async throws {
+        let v = try await VerifierFixture(check: "true", runTurn: false)
+        try await v.fx.service.editGoal(id: v.id, .setSkip(["verifier"]))
+        try await v.fx.service.approve(id: v.id)
+        let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))
+        #expect(report.result == .succeeded && report.verifier == nil)
+        #expect(try verifierKinds(v) == ["verifier.skipped"])
+        #expect(try skipReason(v) == "the goal skips the verifier")
+    }
+
     @Test func itDoesNotRunAfterAFailedCheck() async throws {
         let v = try await VerifierFixture(check: "false", runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))

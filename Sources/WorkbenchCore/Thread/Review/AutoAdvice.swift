@@ -55,9 +55,14 @@ extension ThreadService {
     ) async -> [AutoAdviceResult] {
         guard !config.review.auto.isEmpty else { return [] }
         var results: [AutoAdviceResult] = []
+        let goalSkips = (try? GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)))?.goal.skip ?? []
         for name in config.review.auto {
             if stop.isRequested {
                 results.append(AutoAdviceResult(name: name, outcome: .skipped("stopped")))
+                continue
+            }
+            if goalSkips.contains(name) {
+                results.append(AutoAdviceResult(name: name, outcome: .skipped("the goal skips it")))
                 continue
             }
             // Each step is judged due on the log as it is now: an earlier step may have changed it.

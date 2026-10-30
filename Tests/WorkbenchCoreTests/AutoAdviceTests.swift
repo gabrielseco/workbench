@@ -20,6 +20,20 @@ private let autoVerdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": 
         #expect(try j.fx.events(j.id).filter { $0.kind == .judgeRan }.count == 1, "not run twice for one turn")
     }
 
+    @Test func aJudgeTheGoalSkipsIsNotRunAndNotSpentOn() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto = [\"judge\"]\n")
+        // The thread is accepted, so the service would refuse; the file is what the advice reads.
+        let url = j.fx.project.goalURL(j.id)
+        let skipped = try GoalEditor.apply(.setSkip(["judge"]), to: GoalFile.parse(String(contentsOf: url, encoding: .utf8)))
+        try skipped.text.write(to: url, atomically: true, encoding: .utf8)
+        let env = j.environment("answer=\(try j.file("a.json", autoVerdict))")
+        let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: env)
+        #expect(results == [AutoAdviceResult(name: "judge", outcome: .skipped("the goal skips it"))])
+        let report = await ReviewLoader(project: j.fx.project, git: j.fx.git).load(id: j.id)
+        #expect(!report.nextSteps.contains { $0.name == "judge" }, "review and next read the same goal")
+        #expect(try j.fx.events(j.id).allSatisfy { $0.kind != .judgeStarted && $0.kind != .judgeRan })
+    }
+
     @Test func nothingRunsWhenAutoIsEmpty() async throws {
         let j = try await judged()
         let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: j.environment())

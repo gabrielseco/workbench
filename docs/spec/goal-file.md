@@ -15,6 +15,7 @@ budget_usd: 5.00            # hard cap passed to the CLI (or `spend_policy: time
 turn_timeout_min: 30        # runner kills the turn after this
 model: opus                 # optional; --model for every turn of this thread
 push_to: feature/x          # optional; continue this branch of origin (base must be origin/feature/x)
+skip: judge, design         # optional; steps that do not run for this goal only
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -247,6 +248,12 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. `ship` pushes the work to that
   branch and records the branch's open pull request, instead of creating a branch and a PR
   ([P2.5](../plan/P2.5-ship.md)).
+  **Optional:** `skip`, step names separated by commas, each once: `verifier`, `judge`, or a stage named in
+  `[review] stages`. A step the goal skips does not run for this goal: the verifier records `verifier.skipped` ("the
+  goal skips the verifier") after a turn, `[review] auto` prints `auto judge: skipped, the goal skips it`, and `next`
+  and `review` do not list it. The project's config still says what runs by default; `skip` only turns steps off. A name
+  that is none of those is refused by `goal approve`. `goal new --from` does not carry `skip` (it is left behind
+  like `base`). An older Workbench reports `unknown key 'skip'` and refuses the goal.
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole
@@ -271,10 +278,18 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   (status says approved but the hash is missing or differs). Only `approved` runs.
 - **What the hash covers:** a version tag, `base`, `budget_usd` (as a number, so `5` equals `5.00`) or, for a
   `timeout_only` goal, the line `spend_policy=timeout_only` in its place (so a goal with a cap keeps its hash, and
-  dropping a cap needs a fresh approval), `turn_timeout_min`, `model` and `push_to` (each only when set, so a goal without them keeps its hash), and the body after the
+  dropping a cap needs a fresh approval), `turn_timeout_min`, `model`, `push_to` and `skip` (each only when set, so a goal without them keeps its hash; `skip` is hashed sorted, so its order is not a change), and the body after the
   front matter. Line endings, trailing whitespace and blank
   lines at the edges are normalized first. `title` and `id` are not covered, so renaming a goal does not
   revoke approval.
+- **Editing goes through `GoalEditor`** (`ThreadService.editGoal`, used by the app; no CLI command). One edit at a time:
+  title, request, add, update, remove or move a criterion, out of scope, `skip`. Each reads the file, changes the one
+  part and writes it atomically; comments, other front matter and sections it does not know are kept as written. A new
+  criterion takes the next free `cN` and a removed one does not renumber the rest. It refuses, writing nothing, when the
+  thread has ended, a run is live on it, the file does not parse, the edit would leave a goal that does not parse (a
+  malformed screenshot proof, a request line that starts a `## ` section, the last criterion removed) or would not read
+  back as written. Editing a draft is free; editing an approved goal changes the hash, so it is `stale` and approved
+  again. Each edit appends `goal.saved` with the goal's resulting `status` and `hash`.
 - **Approving rewrites only** `status`, `approved_at` and `approved_hash`; the body and the author's
   comments are kept as written. Approving an already approved goal changes nothing.
 

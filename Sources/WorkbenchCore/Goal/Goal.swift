@@ -34,6 +34,8 @@ public struct Goal: Sendable, Equatable {
     public var model: String?
     /// An existing branch the thread's work is pushed to by `ship`, instead of a new `workbench/<id>` branch.
     public var pushTo: String?
+    /// Steps that do not run for this goal: `verifier`, `judge`, or a stage named in `[review] stages`.
+    public var skip: [String] = []
     public var approvedAt: String?
     public var approvedHash: String?
 
@@ -46,6 +48,9 @@ public struct Goal: Sendable, Equatable {
         if case .hardCap(let budget) = spend { return budget }
         return nil
     }
+
+    /// Whether the goal turns `step` off (`verifier`, `judge` or a review stage's name).
+    public func skips(_ step: String) -> Bool { skip.contains(step) }
 
     public var isTimeoutOnly: Bool { spend == .timeoutOnly }
 
@@ -61,7 +66,7 @@ public struct Goal: Sendable, Equatable {
     }
 
     /// Hash of the body and the front matter fields that change what runs (`base`, `budget_usd` or
-    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`). This is what approval binds.
+    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`, `skip`). This is what approval binds.
     public var contentHash: String
 
     public var approval: ApprovalState {
@@ -93,7 +98,7 @@ enum GoalHash {
 
     static func hash(
         base: String, spend: AgentSpend, turnTimeoutMin: Int, model: String? = nil, pushTo: String? = nil,
-        body: String
+        skip: [String] = [], body: String
     ) -> String {
         // The model line exists only when set, so a goal without one keeps the hash it was approved with.
         // `spend_policy` replaces the `budget_usd` line only when set, so a goal with a cap keeps its hash.
@@ -105,6 +110,8 @@ enum GoalHash {
         fields.append("turn_timeout_min=\(turnTimeoutMin)")
         if let model { fields.append("model=\(model)") }
         if let pushTo { fields.append("push_to=\(pushTo)") }
+        // Like `model`, only when set; sorted, so the order the person lists the steps in does not revoke an approval.
+        if !skip.isEmpty { fields.append("skip=\(skip.sorted().joined(separator: ","))") }
         let canonical = (fields + ["---", canonicalBody(body)]).joined(separator: "\n")
         return SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
     }

@@ -359,6 +359,7 @@ public struct ReviewLoader: Sendable {
         var title: String?
         var criteria: [Criterion] = []
         var goalBase: String?
+        var skipped: [String] = []
         var approval: String?
         var spend: (name: String, line: String?)?
         var problem: String?
@@ -367,6 +368,7 @@ public struct ReviewLoader: Sendable {
             title = goal.title
             criteria = goal.criteria
             goalBase = goal.base
+            skipped = goal.skip
             spend = (goal.spendPolicyName, goal.isTimeoutOnly ? goal.spendLine : nil)
             switch goal.approval {
             case .approved: approval = "approved"
@@ -393,7 +395,8 @@ public struct ReviewLoader: Sendable {
         var changed: [String]?
         if case .summary(let summary) = shown, !summary.truncated { changed = NextSteps.paths(of: summary.files) }
         let steps = NextSteps.derive(
-            events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip, id: id)
+            events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip,
+            skip: skipped, id: id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
