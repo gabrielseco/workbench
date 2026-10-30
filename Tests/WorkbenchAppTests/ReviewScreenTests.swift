@@ -288,19 +288,23 @@ private final class Recorder: @unchecked Sendable {
     @Test func sendBackNeedsANoteAndAPositiveBudget() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
+        store.sendingBack = true
         store.sendBack(note: "  \n", budget: "")
         #expect(store.actionError == "Say what to change: a note is required." && recorder.options.isEmpty)
         for bad in ["0", "-1", "12.5oops", "abc"] {
             store.sendBack(note: "fix it", budget: bad)
             #expect(store.actionError?.hasPrefix("The budget must be a positive number") == true)
         }
-        #expect(recorder.options.isEmpty)
+        // A refused send leaves the card up, so the note is not lost.
+        #expect(recorder.options.isEmpty && store.sendingBack)
     }
 
     @Test func sendBackStartsATurnWithTheNoteAndTheOneTurnBudget() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
+        store.sendingBack = true
         store.sendBack(note: "handle the empty list", budget: "2.5")
+        #expect(!store.sendingBack)
         let options = try #require(recorder.options.first)
         #expect(options.feedback == "handle the empty list" && options.budgetOverride == Decimal(string: "2.5"))
         #expect(store.runningHere)

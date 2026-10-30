@@ -62,6 +62,8 @@ struct RecentProject: Equatable, Identifiable {
     /// The goal agent is drafting a goal from a request.
     /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
     var namingGoal = false
+    /// Whether the Send back card is up; the Review screen's button sets it, `sendBack` clears it once a turn has started.
+    var sendingBack = false
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false
@@ -164,6 +166,7 @@ struct RecentProject: Equatable, Identifiable {
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
             namingGoal = false
+            sendingBack = false
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
             (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
@@ -174,6 +177,7 @@ struct RecentProject: Equatable, Identifiable {
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         namingGoal = false
+        sendingBack = false
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
         project = located
@@ -341,6 +345,7 @@ struct RecentProject: Equatable, Identifiable {
             return
         }
         actionError = nil
+        sendingBack = false
         startRun(project, thread, generation: generation, options: options)
     }
 

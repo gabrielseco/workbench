@@ -7,7 +7,6 @@ struct ReviewView: View {
     var finishedAt: Date?
     var store: ProjectStore
 
-    @State private var sendingBack = false
     @State private var diffPath: String?
 
     var body: some View {
@@ -33,7 +32,6 @@ struct ReviewView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.refreshReview() }
         }
-        .sheet(isPresented: $sendingBack) { SendBackSheet(store: store, shown: $sendingBack) }
         .sheet(item: Binding(get: { diffPath.map(DiffTarget.init) }, set: { diffPath = $0?.path })) { target in
             DiffSheet(store: store, path: target.path)
         }
@@ -147,7 +145,7 @@ struct ReviewView: View {
                 Button("Refresh") { Task { await store.refreshReview() } }
                     .help("Read the worktree again after editing it")
                 Spacer()
-                Button("Send back…") { sendingBack = true }.disabled(store.busy != nil)
+                Button("Send back…") { store.sendingBack = true }.disabled(store.busy != nil)
                 Button("Accept work") { Task { await store.prepareAccept() } }
                     .buttonStyle(.borderedProminent)
                     .disabled(!review.canDecide || store.deciding || store.busy != nil)
@@ -177,34 +175,6 @@ struct ReviewView: View {
 private struct DiffTarget: Identifiable {
     var path: String
     var id: String { path }
-}
-
-struct SendBackSheet: View {
-    var store: ProjectStore
-    @Binding var shown: Bool
-    @State private var note = ""
-    @State private var budget = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Send back").font(.headline)
-            Text("What should change? The next turn also gets the failed check's output.")
-                .font(.callout).foregroundStyle(.secondary)
-            TextEditor(text: $note).font(.body).frame(width: 420, height: 120).border(Theme.grey.opacity(0.4))
-            TextField("Budget for this turn, in dollars (optional)", text: $budget).textFieldStyle(.roundedBorder)
-            HStack {
-                Spacer()
-                Button("Cancel") { shown = false }
-                Button("Send back") {
-                    let (text, cap) = (note, budget)
-                    shown = false
-                    store.sendBack(note: text, budget: cap)
-                }
-                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-    }
 }
 
 struct DiffSheet: View {
