@@ -49,7 +49,10 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
         var checked = 0
         for url in goals {
             let original = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\r\n", with: "\n")
-            guard let file = try? parsed(original) else { continue }
+            guard let file = try? parsed(original) else {
+                #expect(url.path.contains("corrupt"), "\(url.path) no longer parses")
+                continue
+            }
             // Edits that change nothing: the title to itself, and each criterion to what it already says.
             #expect(try GoalEditor.apply(.setTitle(file.goal.title), to: file).text == original, "\(url.path)")
             for criterion in file.goal.criteria {
@@ -69,6 +72,23 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
         #expect(moved.text == approved.text && moved.goal.approval == .approved)
         let same = try GoalEditor.apply(.updateCriterion(id: "c3", text: nil, proof: "cat third"), to: approved)
         #expect(same.text == approved.text)
+    }
+
+    @Test func savingAWrappedCriterionAsItIsChangesNothingAndAProofEditKeepsItsText() throws {
+        let approved = try parsed().approving()
+        let same = try GoalEditor.apply(.updateCriterion(id: "c1", text: "The first criterion wraps onto a second line.",
+            proof: "test: Suite/first"), to: approved)
+        #expect(same.text == approved.text && same.goal.approval == .approved)
+        let proofOnly = try GoalEditor.apply(.updateCriterion(id: "c1", text: nil, proof: "cat first"), to: approved)
+        #expect(proofOnly.text.contains("- [c1] The first criterion\n  wraps onto a second line.\n  - proof: cat first"))
+    }
+
+    @Test func aSectionWithoutBlankLinesAroundItsCriteriaGetsNone() throws {
+        let tight = sample.replacingOccurrences(of: "## Criteria\n\n- [c1]", with: "## Criteria\n- [c1]")
+            .replacingOccurrences(of: "cat third\n\n## Notes", with: "cat third\n## Notes")
+        let file = try parsed(tight)
+        let moved = try GoalEditor.apply(.moveCriterion(id: "c1", to: 0), to: file)
+        #expect(moved.text == file.text)
     }
 
     @Test func aCriterionAddedToASpacedListGetsTheSameSpacing() throws {

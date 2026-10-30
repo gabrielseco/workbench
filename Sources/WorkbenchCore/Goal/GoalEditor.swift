@@ -63,7 +63,7 @@ public enum GoalEditor {
             let newProof = try proof.map { try singleLine($0, "a criterion's proof") } ?? current.proof
             var layout = try criterionBlocks(lines, file: file)
             guard let index = layout.blocks.firstIndex(where: { $0.id == id }) else { throw unknown(id) }
-            layout.blocks[index].lines = block(id, newText, newProof)
+            layout.blocks[index].lines = rewritten(layout.blocks[index].lines, text: newText, proof: newProof, current: current)
             try writeCriteria(layout, in: &lines, file: file)
             expected = { $0.criteria.first { $0.id == id }.map { $0.text == newText && $0.proof == newProof } == true }
 
@@ -137,6 +137,15 @@ public enum GoalEditor {
         return trimmed
     }
 
+    /// A criterion with new text or proof. What did not change stays as written: nothing changed keeps every line (wrapping
+    /// included), only the proof changed keeps the text's lines.
+    private static func rewritten(_ lines: [String], text: String, proof: String, current: Criterion) -> [String] {
+        if text == current.text && proof == current.proof { return lines }
+        let proofLine = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- proof:") }
+        if text == current.text, let at = proofLine { return Array(lines[..<at]) + ["  - proof: \(proof)"] }
+        return block(current.id, text, proof)
+    }
+
     private static func block(_ id: String, _ text: String, _ proof: String) -> [String] {
         ["- [\(id)] \(text)", "  - proof: \(proof)"]
     }
@@ -191,12 +200,12 @@ public enum GoalEditor {
     /// The blocks in their new order. A block between others keeps its own gap, or takes the one the file already uses.
     private static func writeCriteria(_ layout: CriteriaLayout, in lines: inout [String], file: GoalFile) throws {
         let usual = layout.blocks.first { !$0.gap.isEmpty }?.gap ?? []
-        var body = layout.head.isEmpty ? [""] : layout.head
+        var body = layout.head
         for (index, block) in layout.blocks.enumerated() {
             body += block.lines
             if index < layout.blocks.count - 1 { body += block.gap.isEmpty ? usual : block.gap }
         }
-        body += layout.tail.isEmpty ? [""] : layout.tail
+        body += layout.tail
         try replaceSection("criteria", with: body, in: &lines, file: file)
     }
 
