@@ -117,7 +117,8 @@ import Testing
             })
         #expect(await store.open(a.root))
         let switching = Task { await store.switchTo(target) }
-        try await Task.sleep(for: .milliseconds(300))
+        // Wait for the switch to have begun, not for a fixed time a loaded runner may overrun; the loader holds it open.
+        for _ in 0..<1000 where store.screen != .opening(path: target) { try await Task.sleep(for: .milliseconds(5)) }
         #expect(store.screen == .opening(path: target) && store.project == b.project && store.goal == nil)
         release.signal()
         await switching.value

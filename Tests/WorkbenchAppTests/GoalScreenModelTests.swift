@@ -238,7 +238,8 @@ private final class SkillProbe: @unchecked Sendable {
     @Test func aRunThatCannotStartIsReported() async throws {
         let (store, _) = try await actionsStore(approve: { _, _ in }, run: { _, _ in throw Refused() })
         await store.approveAndRun()
-        try await Task.sleep(for: .milliseconds(200))
+        // The run starts in a task of its own: wait for what it says, not for a fixed time a loaded runner may overrun.
+        for _ in 0..<1000 where store.actionError == nil { try await Task.sleep(for: .milliseconds(5)) }
         #expect(store.actionError == "The run did not start: refused")
     }
 
@@ -274,7 +275,7 @@ private final class SkillProbe: @unchecked Sendable {
         let (store, _) = try await actionsStore(
             approve: { _, _ in order.add("approve") }, run: { _, _ in order.add("run") })
         await store.approveAndRun()
-        try await Task.sleep(for: .milliseconds(200))
+        for _ in 0..<1000 where order.items.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
         #expect(order.items == ["approve", "run"] && store.actionError == nil)
     }
 }
