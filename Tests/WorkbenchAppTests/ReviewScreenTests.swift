@@ -287,34 +287,28 @@ private final class Recorder: @unchecked Sendable {
         #expect(recorder.log.isEmpty && store.pendingAccept == nil && store.pendingDiscard == nil)
     }
 
-    @Test func sendBackNeedsANoteAndAPositiveBudget() async throws {
+    @Test func sendBackNeedsANote() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
         store.sendingBack = true
-        store.sendBack()
-        #expect(store.actionError == "Say what to change: a note is required." && recorder.options.isEmpty)
-        store.sendBackNote = "  \n"
-        store.sendBack()
-        #expect(store.actionError == "Say what to change: a note is required." && recorder.options.isEmpty)
-        store.sendBackNote = "fix it"
-        for bad in ["0", "-1", "12.5oops", "abc"] {
-            store.sendBackBudget = bad
+        for blank in ["", "  \n"] {
+            store.sendBackNote = blank
             store.sendBack()
-            #expect(store.actionError?.hasPrefix("The budget must be a positive number") == true)
+            #expect(store.actionError == "Say what to change: a note is required.")
         }
-        // A refused send leaves the card up with what was written, so the note is not lost.
-        #expect(recorder.options.isEmpty && store.sendingBack && store.sendBackNote == "fix it")
+        // A refused send leaves the card up, so what was written is not lost.
+        #expect(recorder.options.isEmpty && store.sendingBack)
     }
 
-    @Test func sendBackStartsATurnWithTheNoteAndTheOneTurnBudget() async throws {
+    @Test func sendBackStartsATurnWithTheNote() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
         store.sendingBack = true
-        (store.sendBackNote, store.sendBackBudget) = ("handle the empty list", "2.5")
+        store.sendBackNote = "handle the empty list"
         store.sendBack()
         #expect(!store.sendingBack)
         let options = try #require(recorder.options.first)
-        #expect(options.feedback == "handle the empty list" && options.budgetOverride == Decimal(string: "2.5"))
+        #expect(options.feedback == "handle the empty list" && options.budgetOverride == nil)
         #expect(store.runningHere)
     }
 

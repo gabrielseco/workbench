@@ -2,7 +2,7 @@ import SwiftUI
 import WorkbenchCore
 
 /// Asks what should change and starts the next turn with it, in the same card New goal is. The card stays up, with the text,
-/// when the send is refused (a bad budget) or the run will not start; the text is the store's, so it survives both.
+/// when the send is refused or the run will not start; the text is the store's, so it survives both.
 struct SendBackPopover: View {
     @Bindable var store: ProjectStore
     @FocusState private var focused: Bool
@@ -13,8 +13,6 @@ struct SendBackPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             writing.padding(.top, 16)
-            TextField("Budget for this turn, in dollars (optional)", text: $store.sendBackBudget)
-                .textFieldStyle(.roundedBorder).padding(.top, 14)
             if let error = store.actionError {
                 Text(error).font(.callout).foregroundStyle(Theme.red).padding(.top, 14)
             }
