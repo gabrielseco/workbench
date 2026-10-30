@@ -8,7 +8,8 @@
 # and every write to it denied, the first prompt names it, the word is in this repository's file, and the other repository is
 # byte for byte as it was. Costs at most the turn cap ($VERIFY_CLI_BUDGET_USD, default 0.50). Exit 0 only when every step passed, 1
 # when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 leaves `read_also` out, so the turn cannot read
-# the folder: the argv, prompt and word steps must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# the folder: the argv, prompt and word steps must FAIL. A second repository is named in the goal's own `read_also` line (the goal
+# adds to the config's list), and the turn must read both words. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -31,10 +32,19 @@ git -C "$OTHER" add -A && git -C "$OTHER" -c user.name=verify -c user.email=veri
     || die "could not commit in the other repository"
 BEFORE=$(git -C "$OTHER" rev-parse HEAD)
 
+WORD2="OKAPI4472"
+OTHER2="$SCRATCH/goal-repo"
+mkdir -p "$OTHER2" && OTHER2=$(cd "$OTHER2" && pwd -P)
+git -C "$OTHER2" init -q -b main || die "could not make the goal's repository"
+echo "$WORD2" >"$OTHER2/secret.txt"
+git -C "$OTHER2" add -A && git -C "$OTHER2" -c user.name=verify -c user.email=verify@example.invalid commit -q -m "goal repository" \
+    || die "could not commit in the goal's repository"
+
 if [ "$SABOTAGE" = 1 ]; then
-    echo "    VERIFY_CLI_SABOTAGE=1: read_also is left out"
+    echo "    VERIFY_CLI_SABOTAGE=1: read_also is left out of the config and of the goal"
 else
     { printf 'read_also = ["%s"]\n' "$OTHER"; cat "$ORIG"; } >"$CONFIG"
+    export GOAL_EXTRA_KEY="read_also: $OTHER2"
 fi
 
 GOAL_SRC="$SCRATCH/goal.md"
@@ -49,14 +59,15 @@ turn_timeout_min: 10
 
 ## Request
 
-This is a throwaway thread that tests reading another repository. Another git repository is at \`$OTHER\`. Read its file
-\`secret.txt\` and create the file \`verify-cli-read-also.txt\` in this repository's root whose only content is the word in it.
+This is a throwaway thread that tests reading another repository. Another git repository is at \`$OTHER\`. A second
+one is at \`$OTHER2\`. Read the file \`secret.txt\` of each and create the file \`verify-cli-read-also.txt\` in this repository's
+root whose content is the two words, one per line.
 Also try, once, to append the line \`changed\` to \`$OTHER/change-me.txt\` (that repository is read-only for you, so expect to be
 refused) and say in your final answer whether it was refused. Change nothing else, do not commit, and do not run any test.
 
 ## Criteria
 
-- [c1] \`verify-cli-read-also.txt\` exists and holds the word from the other repository's \`secret.txt\`.
+- [c1] \`verify-cli-read-also.txt\` exists and holds the word from each other repository's \`secret.txt\`.
   - proof: a person reads the file
 
 ## Out of scope
@@ -74,11 +85,14 @@ check "the turn was started with the folder added" "argv has no --add-dir ...oth
     bash -c '[[ $1 =~ --add-dir\ [^\ ]*other-repo ]]' _ "$argv"
 check "and every write to it denied" "argv lacks the Edit/Write/NotebookEdit rules" \
     bash -c '[[ $1 == *"Edit(//"*"other-repo/**)"* && $1 == *"Write(//"*"other-repo/**)"* && $1 == *"NotebookEdit(//"*"other-repo/**)"* ]]' _ "$argv"
-check "the first prompt names the folder" "turn-1.md does not name it" grep -qF "$OTHER" "$THREAD_DIR/prompts/turn-1.md"
+check "and the goal's folder too" "argv has no --add-dir ...goal-repo" \
+    bash -c '[[ $1 == *"goal-repo"* && $1 == *"Edit(//"*"goal-repo/**)"* ]]' _ "$argv"
+check "the first prompt names both folders" "turn-1.md does not name them" \
+    bash -c 'grep -qF "$1" "$3" && grep -qF "$2" "$3"' _ "$OTHER" "$OTHER2" "$THREAD_DIR/prompts/turn-1.md"
 answer=$(cat "$WT/verify-cli-read-also.txt" 2>/dev/null)
 echo "    the file says: ${answer:-<missing>}"
-check "the turn read the other repository: the file has the word" "the file says '${answer:-<missing>}', not $WORD" \
-    bash -c 'grep -q "$2" <<<"$1"' _ "$answer" "$WORD"
+check "the turn read both repositories: the file has both words" "the file says '${answer:-<missing>}', not $WORD and $WORD2" \
+    bash -c 'grep -q "$2" <<<"$1" && grep -q "$3" <<<"$1"' _ "$answer" "$WORD" "$WORD2"
 check "the other repository is untouched" "its status: $(git -C "$OTHER" status --porcelain) / head $(git -C "$OTHER" rev-parse HEAD)" \
     bash -c 'test -z "$(git -C "$1" status --porcelain)" && test "$(git -C "$1" rev-parse HEAD)" = "$2" && grep -qx original "$1/change-me.txt"' _ "$OTHER" "$BEFORE"
 

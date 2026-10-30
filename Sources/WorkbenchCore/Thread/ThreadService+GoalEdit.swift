@@ -41,6 +41,16 @@ extension ThreadService {
             let why = "which is not a step: use verifier, judge or a stage in [review] stages"
             throw ThreadServiceError.goalInvalid("'skip' names '\(name)', \(why)")
         }
+        // The goal's folders must hold now, so the person hears it at approval and not at the first turn.
+        var folders = config?.readAlso ?? []
+        for entry in goal.readAlso where !folders.contains(entry) { folders.append(entry) }
+        if folders.count > ReadAlso.maxEntries {
+            let why = "the project's read_also and the goal's are more than \(ReadAlso.maxEntries) folders together"
+            throw ThreadServiceError.goalInvalid(why)
+        }
+        if case .failure(let problem) = ReadAlso.resolve(goal.readAlso, projectRoot: project.root) {
+            throw ThreadServiceError.goalInvalid("\(problem)")
+        }
         return config
     }
 }

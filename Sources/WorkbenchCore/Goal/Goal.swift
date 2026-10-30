@@ -36,6 +36,8 @@ public struct Goal: Sendable, Equatable {
     public var pushTo: String?
     /// Steps that do not run for this goal: `verifier`, `judge`, or a stage named in `[review] stages`.
     public var skip: [String] = []
+    /// Other checkouts this goal's runs may read, read-only, on top of the config's `read_also` (`ReadAlso`).
+    public var readAlso: [String] = []
     public var approvedAt: String?
     public var approvedHash: String?
 
@@ -66,7 +68,7 @@ public struct Goal: Sendable, Equatable {
     }
 
     /// Hash of the body and the front matter fields that change what runs (`base`, `budget_usd` or
-    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`, `skip`). This is what approval binds.
+    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`, `skip`, `read_also`). This is what approval binds.
     public var contentHash: String
 
     public var approval: ApprovalState {
@@ -98,7 +100,7 @@ enum GoalHash {
 
     static func hash(
         base: String, spend: AgentSpend, turnTimeoutMin: Int, model: String? = nil, pushTo: String? = nil,
-        skip: [String] = [], body: String
+        skip: [String] = [], readAlso: [String] = [], body: String
     ) -> String {
         // The model line exists only when set, so a goal without one keeps the hash it was approved with.
         // `spend_policy` replaces the `budget_usd` line only when set, so a goal with a cap keeps its hash.
@@ -112,6 +114,8 @@ enum GoalHash {
         if let pushTo { fields.append("push_to=\(pushTo)") }
         // Like `model`, only when set; sorted, so the order the person lists the steps in does not revoke an approval.
         if !skip.isEmpty { fields.append("skip=\(skip.sorted().joined(separator: ","))") }
+        // A wider read surface is something the person approves; sorted for the same reason.
+        if !readAlso.isEmpty { fields.append("read_also=\(readAlso.sorted().joined(separator: ","))") }
         let canonical = (fields + ["---", canonicalBody(body)]).joined(separator: "\n")
         return SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
     }

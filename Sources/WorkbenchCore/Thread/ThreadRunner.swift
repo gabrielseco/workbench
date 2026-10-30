@@ -131,7 +131,7 @@ public actor ThreadRunner {
         // What this provider cannot do comes before the approval check: it is what has to change, and approving again
         // before changing it would only meet it next.
         try Self.requireProviderCanCode(agent: agent, goal: goal, options: options)
-        try requireReadAlso(config)
+        try requireReadAlso(config, goal: goal)
         try Self.requireApprovedAgent(
             state: store.state(of: threadID), agent: agent, spendPolicy: goal.spendPolicyName)
         let name = config.executable(for: agent.provider)
