@@ -1,0 +1,8 @@
+{"data":{},"kind":"thread.created","seq":1,"ts":"2026-10-28T10:00:01.000Z","turn":0,"v":1}
+{"data":{"hash":"h1"},"kind":"goal.approved","seq":2,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"session_id":"s1"},"kind":"turn.started","seq":3,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"cost_usd":1.88,"result":"succeeded"},"kind":"turn.ended","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"decision":"accepted"},"kind":"review.decision","seq":5,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"head_sha":"abc123","number":482,"url":"https:\/\/example.test\/pull\/482"},"kind":"pr.opened","seq":6,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"head_sha":"abc123","pr":482,"round":1},"kind":"pr_review.started","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"findings_path":"pr-review\/round-1\/findings.md","head_sha":"abc123","ok":true,"pr":482,"round":1,"verdict":"fix"},"kind":"pr_review.finished","seq":8,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}

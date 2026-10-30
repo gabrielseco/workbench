@@ -16,6 +16,7 @@ enum AppScenario: String, CaseIterable {
     case needsYou = "needs-you"
     case accepted
     case prOpen = "pr-open"
+    case prFindings = "pr-findings"
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
@@ -32,6 +33,9 @@ enum AppScenario: String, CaseIterable {
             "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
         case .goalLongRequest:
             "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(pnpm run:*)\"]\n"
+        case .prFindings:
+            // Loads, so the fix round's confirm can read `[pr_review] max_rounds` and the budget from it.
+            "[tools]\navailable = [\"Read\"]\n"
         case .goalApproved:
             // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
             "read_also = [\"../expenses-backend\"]\n\n"
@@ -132,6 +136,28 @@ enum AppScenario: String, CaseIterable {
             try fixture.turn(id, 1, cost: 1.88)
             try fixture.decide(id, "accepted")
             try fixture.ship(id, number: 482)
+        case .prFindings:
+            // A shipped thread whose pull request review found things to fix: the findings sheet offers a fix round.
+            try await fixture.addThread(id, approved: true, title: Self.title)
+            try fixture.turn(id, 1, cost: 1.88)
+            try fixture.decide(id, "accepted")
+            try fixture.ship(id, number: 482)
+            let round: [String: JSONValue] = ["round": 1, "pr": 482, "head_sha": "abc123"]
+            try fixture.append(id, .prReviewStarted, data: .object(round))
+            var finished = round
+            finished["ok"] = true
+            finished["verdict"] = "fix"
+            finished["findings_path"] = "pr-review/round-1/findings.md"
+            try fixture.append(id, .prReviewFinished, data: .object(finished))
+            let folder = fixture.project.threadDirectory(id).appendingPathComponent("pr-review/round-1")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try """
+                - Sources/Invoices/List.swift: the page size is read from the request and never capped, so one call can ask for
+                  every invoice. Cap it.
+                - Tests/InvoiceListTests.swift: nothing covers an empty last page.
+
+                VERDICT: FIX
+                """.write(to: folder.appendingPathComponent("findings.md"), atomically: true, encoding: .utf8)
         case .cleaned:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.turn(id, 1, cost: nil)

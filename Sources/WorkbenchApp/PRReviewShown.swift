@@ -54,4 +54,28 @@ struct PRReviewShown: Equatable, Sendable {
         case nil: "Pull request #\(pr): no verdict (round \(round)): \(failure ?? "unknown")"
         }
     }
+
+    /// Whether a fix round can be started from this round: it found things to fix, and what it found is there to hand on.
+    var canFix: Bool {
+        verdict == .fix && findings?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
+/// What "Fix these findings" would start, shown before it does: core's follow-up thread on the pull request's branch.
+struct FollowUpPlan: Equatable, Sendable {
+    var pr: Int
+    /// Which follow-up of this pull request it would be, and how many `[pr_review] max_rounds` allows.
+    var round: Int
+    var allowed: Int
+    /// The most its turn can cost.
+    var budget: Decimal
+    /// Core's reason there can be none (no rounds left); the confirm says it and offers no start.
+    var refusal: String?
+
+    var text: String {
+        let cost = NSDecimalNumber(decimal: budget).doubleValue
+        return "Starts follow-up \(round) of at most \(allowed) on pull request #\(pr): a new thread on the same branch, "
+            + "whose goal is these findings, and runs its first turn, up to $\(String(format: "%.2f", cost)). "
+            + "You then review, accept and ship it as any thread; shipping updates the pull request. Nothing is merged."
+    }
 }
