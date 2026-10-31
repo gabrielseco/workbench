@@ -146,11 +146,12 @@ public struct TaskDefinition: Sendable, Equatable {
         }
         if let every {
             if days != nil { add(days?.lineNumber, "'days' goes with 'at', not with 'every'") }
-            if let match = every.value.wholeMatch(of: #/([0-9]+)([mhd])/#), let n = Int(match.1) {
+            if let match = every.value.wholeMatch(of: #/([0-9]+)([mhd])/#) {
                 let unit = ["m": 60, "h": 3600, "d": 86_400][String(match.2)] ?? 0
-                let seconds = n * unit
-                if (TaskSchedule.minimumInterval...TaskSchedule.maximumInterval).contains(seconds) {
-                    return .every(seconds: seconds)
+                // The count is bounded before the multiplication: a number that fits an Int can still overflow it.
+                if let n = Int(match.1), n <= TaskSchedule.maximumInterval,
+                    (TaskSchedule.minimumInterval...TaskSchedule.maximumInterval).contains(n * unit) {
+                    return .every(seconds: n * unit)
                 }
                 add(every.lineNumber, "'every' must be from 5m to 30d, found '\(every.value)'")
             } else {

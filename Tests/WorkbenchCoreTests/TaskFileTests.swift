@@ -60,6 +60,13 @@ struct TaskFileTests {
         }
     }
 
+    @Test func anIntervalTooBigToMultiplyIsRefusedNotTrapped() {
+        for value in ["9223372036854775807d", "99999999999999999999h", "3000000m", "9223372036854775807m"] {
+            let found = problems(Self.task("every: \(value)"))
+            #expect(found.contains { $0.contains("'every'") }, "every: \(value) -> \(found)")
+        }
+    }
+
     @Test func atAndEveryTogetherAreRefused() {
         let found = problems(Self.task("at: 04:00\nevery: 1h"))
         #expect(found.contains { $0.contains("either 'at' or 'every'") })

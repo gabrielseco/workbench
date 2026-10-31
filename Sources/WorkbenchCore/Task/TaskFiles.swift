@@ -40,13 +40,16 @@ struct TaskFiles {
     /// A single file, read whole, up to `limit` bytes.
     func read(_ relative: String, limit: Int) throws -> Data {
         let url = try resolve(relative)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
-            throw TaskFileError.unreadable(relative)
-        }
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        // A regular file only: opening a pipe or a device for reading can block with no timeout to end it.
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values?.isRegularFile == true else { throw TaskFileError.unreadable(relative) }
+        let size = values?.fileSize ?? 0
         guard size <= limit else { throw TaskFileError.tooLarge(relative, bytes: size, limit: limit) }
-        guard let data = try? Data(contentsOf: url) else { throw TaskFileError.unreadable(relative) }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { throw TaskFileError.unreadable(relative) }
+        defer { try? handle.close() }
+        // One byte past the limit shows a file that grew since it was measured.
+        guard let data = try? handle.read(upToCount: limit + 1) else { throw TaskFileError.unreadable(relative) }
+        guard data.count <= limit else { throw TaskFileError.tooLarge(relative, bytes: data.count, limit: limit) }
         return data
     }
 }
@@ -64,6 +67,7 @@ extension TaskFiles {
     func inputs(_ paths: [String]) throws -> [TaskInput] {
         var result: [TaskInput] = []
         var total = 0
+        var count = 0
         for relative in paths {
             let url = try resolve(relative)
             var isDirectory: ObjCBool = false
@@ -77,20 +81,26 @@ extension TaskFiles {
                 while let next = walker?.nextObject() as? URL {
                     guard (try? next.resourceValues(forKeys: Set(keys)).isRegularFile) == true else { continue }
                     files.append(next)
-                    if files.count > Self.maxInputFiles { throw TaskFileError.tooMany(relative, limit: Self.maxInputFiles) }
+                    if count + files.count > Self.maxInputFiles {
+                        throw TaskFileError.tooMany(relative, limit: Self.maxInputFiles)
+                    }
                 }
                 files.sort { $0.path < $1.path }
             }
+            count += files.count
+            if count > Self.maxInputFiles { throw TaskFileError.tooMany(relative, limit: Self.maxInputFiles) }
             for file in files {
                 let resolved = file.resolvingSymlinksInPath()
                 let rel = String(resolved.path.dropFirst(root.path.count + 1))
                 guard resolved.path.hasPrefix(root.path + "/") else { throw TaskFileError.outsideProject(relative) }
-                let size = (try? resolved.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values?.isRegularFile == true else { throw TaskFileError.unreadable(rel) }
+                let size = values?.fileSize ?? 0
                 total += size
                 guard total <= Self.maxInputBytes else {
                     throw TaskFileError.tooLarge(relative, bytes: total, limit: Self.maxInputBytes)
                 }
-                guard let data = try? Data(contentsOf: resolved) else { throw TaskFileError.unreadable(rel) }
+                guard let data = try? read(rel, limit: Self.maxInputBytes) else { throw TaskFileError.unreadable(rel) }
                 result.append(TaskInput(path: rel, text: String(decoding: data, as: UTF8.self)))
             }
         }

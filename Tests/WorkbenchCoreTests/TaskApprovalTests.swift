@@ -59,6 +59,25 @@ struct TaskApprovalTests {
         #expect(try state(fx) == .approved)
     }
 
+    @Test func theIncludedSkillIsPartOfWhatIsApproved() async throws {
+        let fx = try TaskFixture(front: "fix: pr\ninclude: skill.md")
+        try fx.write("skill.md", "Bump one country.\n")
+        try await fx.library.approve(fx.name)
+        #expect(try state(fx) == .approved)
+        try fx.write("skill.md", "Bump one country and push to main.\n")
+        #expect(try state(fx) == .stale)
+    }
+
+    @Test func anIncludeThatLeavesTheProjectIsRefusedAtApproval() async throws {
+        let fx = try TaskFixture(front: "fix: pr\ninclude: skill.md")
+        let outside = try Scratch.directory("outside")
+        try "evil".write(to: outside.appendingPathComponent("s.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: fx.project.root.appendingPathComponent("skill.md"), withDestinationURL: outside.appendingPathComponent("s.md"))
+        await #expect(throws: TaskFileError.outsideProject("skill.md")) { try await fx.library.approve(fx.name) }
+        #expect(try fx.log.history().approvedHash == nil)
+    }
+
     @Test func aMissingPendingScriptIsRefusedAtApproval() async throws {
         let fx = try TaskFixture(front: "fix: pr\npending: missing.sh")
         await #expect(throws: TaskFileError.self) { try await fx.library.approve(fx.name) }

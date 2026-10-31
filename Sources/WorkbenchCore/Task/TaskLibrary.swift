@@ -4,7 +4,9 @@ import Foundation
 public struct LoadedTask: Sendable {
     public var definition: TaskDefinition
     public var pendingScript: Data?
-    /// What approval binds to: the file and the script.
+    /// The skill text that goes into the prompt.
+    public var includeText: Data?
+    /// What approval binds to: the settings, the instructions, the script and the included skill.
     public var hash: String
 }
 
@@ -41,10 +43,12 @@ public struct TaskLibrary: Sendable {
         }
         let text = try String(contentsOf: project.taskFileURL(name), encoding: .utf8)
         let definition = try TaskDefinition.parse(text, name: name)
-        let script = try definition.pending.map { try TaskFiles(project: project).read($0, limit: TaskFiles.maxScriptBytes) }
+        let files = TaskFiles(project: project)
+        let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
+        let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
         return LoadedTask(
-            definition: definition, pendingScript: script,
-            hash: TaskApproval.hash(task: definition, pendingScript: script))
+            definition: definition, pendingScript: script, includeText: include,
+            hash: TaskApproval.hash(task: definition, pendingScript: script, include: include))
     }
 
     /// Records that the task, as it is now, may run unattended.

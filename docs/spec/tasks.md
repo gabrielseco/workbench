@@ -35,7 +35,7 @@ Bump the next countries. Follow the skill exactly.
 | `every` | `5m` to `30d`, counted from the start of the last run. `at` and `every` together are refused |
 | `batch` | how many pending units one run takes |
 | `include` | one file whose text is added to the prompt |
-| `inputs` | up to 20 paths, 200 files and 1 MiB in all, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
+| `inputs` | up to 20 paths, 200 files and 1 MiB in all (across every path), regular files only, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
 | `pending` | the script that names the units (below) |
 | `fix` | `report`: a read-only turn that writes a summary. `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
 | `budget` | a cap for one run |
@@ -63,7 +63,7 @@ request closed unmerged brings the unit back. A `report` run does the work of no
 ## Approval
 
 `workbench task approve <name>` records `task.approved` with a hash of what runs unattended: the settings, the instructions (whitespace
-normalised) and the bytes of the pending script. Editing any of them revokes the approval (`task list` says STALE) until it is approved
+normalised), the bytes of the pending script and of the `include` file (the skill is instructions the agent follows with nobody watching). Editing any of them revokes the approval (`task list` says STALE) until it is approved
 again. The input files are data and are not in the hash, so a new list needs no approval. Nothing runs unapproved.
 
 ## The run log

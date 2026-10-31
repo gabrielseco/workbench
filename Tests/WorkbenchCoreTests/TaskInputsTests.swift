@@ -46,6 +46,25 @@ struct TaskInputsTests {
         }
     }
 
+    @Test func theFileLimitCountsAcrossAllTheInputs() throws {
+        let fx = try TaskFixture()
+        for index in 0..<150 {
+            try fx.write("one/f\(index).txt", "x")
+            try fx.write("two/f\(index).txt", "x")
+        }
+        #expect(throws: TaskFileError.self) { try TaskFiles(project: fx.project).inputs(["one", "two"]) }
+        #expect(try TaskFiles(project: fx.project).inputs(["one"]).count == 150)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func aPipeIsRefusedAsAnInputAndAsAScript() throws {
+        let fx = try TaskFixture()
+        let fifo = fx.project.root.appendingPathComponent("pipe").path
+        try #require(mkfifo(fifo, 0o600) == 0)
+        let files = TaskFiles(project: fx.project)
+        #expect(throws: TaskFileError.unreadable("pipe")) { try files.inputs(["pipe"]) }
+        #expect(throws: TaskFileError.unreadable("pipe")) { try files.read("pipe", limit: 100) }
+    }
+
     @Test func hiddenFilesInADirectoryAreSkipped() throws {
         let fx = try TaskFixture()
         try fx.write("d/.secret", "x")
