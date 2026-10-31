@@ -42,10 +42,5 @@ extension ThreadService {
         return PreparedHandoff(worktree: manager.path(for: id), turnTimeoutMin: file.goal.turnTimeoutMin)
     }
 
-    /// Where a handoff whose space was made but whose command was not typed is remembered, so trying again sends it.
-    public func handoffPendingURL(id: String) -> URL {
-        project.threadDirectory(id).appendingPathComponent("herdr-pending.json")
-    }
-
     static let handoffAgent = "An interactive Claude session in Herdr"
 }

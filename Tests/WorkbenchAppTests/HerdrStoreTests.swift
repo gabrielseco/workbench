@@ -49,16 +49,16 @@ import Testing
         #expect(store.busy == nil && !store.runningHere)
     }
 
-    /// A `herdr-app` stand-in that answers `ls`, `space.new` and `terminal.send` as the real one does, and writes down what it was asked.
+    /// A `herdr-app` stand-in that answers `ls` and `space.new` as the real one does, and writes down what it was asked.
     private func standIn(in dir: URL) throws -> HerdrOpener {
         let script = """
             #!/bin/sh
             echo $1 $2 $3 $4 >> "\(dir.path)/calls"
+            printf '%s' "$*" > "\(dir.path)/last"
             case "$1 $2" in
               "ls ") printf '{\\n  "spaces": [],\\n  "recent": []\\n}\\n' ;;
               "do space.new")
                 printf '%s' "$6" > "\(dir.path)/folder"; printf '{"space": "sp9", "tab": "tb9", "terminal": "t9"}\\n' ;;
-              "do terminal.send") printf '%s' "$6" > "\(dir.path)/sent"; printf '{"ok": true}\\n' ;;
               *) printf '{"error": "unexpected"}\\n'; exit 1 ;;
             esac
             """
@@ -164,15 +164,18 @@ import Testing
             contentsOf: worktree.appendingPathComponent(WorktreeManager.goalCopyPath), encoding: .utf8)
         #expect(copied == (try String(contentsOf: project.goalURL("t1"), encoding: .utf8)))
         #expect(try GoalFile.parse(copied).goal.approval == .approved)
-        // Herdr made a space on that worktree, and Claude was typed into its terminal.
+        // Herdr made a space on that worktree, and Claude was started as its terminal.
         let calls = try String(contentsOf: herdrDir.appendingPathComponent("calls"), encoding: .utf8)
             .split(separator: "\n").map(String.init)
-        #expect(calls == ["ls", "ls", "do space.new --name t1", "do terminal.send --id t9"])
+        #expect(calls == ["ls", "ls", "do space.new --name t1"])
         let folder = try String(contentsOf: herdrDir.appendingPathComponent("folder"), encoding: .utf8)
         #expect(URL(fileURLWithPath: folder).resolvingSymlinksInPath().path == worktree.resolvingSymlinksInPath().path)
         // Claude, stopped at the approved goal's timeout.
-        let sent = try String(contentsOf: herdrDir.appendingPathComponent("sent"), encoding: .utf8)
-        #expect(sent == HerdrOpener.claudeCommand(turnTimeoutMin: 30) + "\n")
+        let last = try String(contentsOf: herdrDir.appendingPathComponent("last"), encoding: .utf8)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        let argv = String(data: try encoder.encode(HerdrOpener.claudeArguments(turnTimeoutMin: 30)), encoding: .utf8)
+        #expect(last.hasSuffix(" --argv \(try #require(argv))"))
     }
 
     @Test func goalHandoffOutcome() async throws {
