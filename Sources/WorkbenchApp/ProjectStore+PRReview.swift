@@ -76,12 +76,11 @@ extension ProjectStore {
     /// The rest of a fix round once its turn has ended, as `ship --review-loop --yes` does it: the confirm in the findings sheet
     /// was the yes, so the work is accepted, pushed to the same pull request and reviewed again without another click. Stops, and
     /// leaves the thread for the person, on a turn that did not succeed, a check that did not pass or a step that was refused.
-    func continueFixRound() async {
+    func continueFixRound(runFailed: Bool) async {
         guard let round = fixRoundToShip else { return }
         // Held until the round is done, so a reader can tell the window is still on it.
         defer { fixRoundToShip = nil }
-        // Read before waiting: an error here is the run's, one set later is the other action's and does not stop the round.
-        guard actionError == nil else { return }
+        guard !runFailed else { return }
         await untilIdle()
         guard let project, round.generation == generation, currentThread == round.thread,
             case .thread(let shown) = screen

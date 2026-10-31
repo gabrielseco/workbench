@@ -165,12 +165,16 @@ private final class Recorder: @unchecked Sendable {
     /// A window that confirms a fix round whose turn ends with `result` (and a check with `check`, when given), and records
     /// what the decisions after it were called with, in order.
     private func fixRound(
-        result: String = "succeeded", check: String? = nil, acceptError: Error? = nil, herdrHeld: RunGate? = nil
+        result: String = "succeeded", check: String? = nil, acceptError: Error? = nil, herdrHeld: RunGate? = nil,
+        herdrFails: Bool = false
     ) async throws -> (ProjectStore, Recorder) {
         let recorder = Recorder()
         // Without a held action the turn ends at once; with one, it ends only after "Open in Herdr" has begun.
         let turnGate = RunGate()
         if herdrHeld == nil { await turnGate.open() }
+        // With `herdrFails`, the run returns only after Herdr's failure is on screen: it fails between the turn and the round.
+        let runReturns = RunGate()
+        if !herdrFails { await runReturns.open() }
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
         try fixture.turn("t1", 1)
@@ -187,10 +191,13 @@ private final class Recorder: @unchecked Sendable {
                             try fixture.append(thread, .turnEnded, turn: 1, data: ["result": .string(result)])
                             if let check { try fixture.append(thread, .checkRan, turn: 1, data: ["result": .string(check)]) }
                         }
+                        if herdrFails { await herdrHeld?.open() }
+                        await runReturns.wait()
                     }, stop: {})
             },
             openInHerdr: { _, _ in
                 await herdrHeld?.wait()
+                if herdrFails { throw HerdrFailure(message: "Herdr went away") }
                 return GoalActions.HerdrOpenAnswer(
                     opened: HerdrOpened(space: "sp1", alreadyOpen: false), projectInstead: false)
             },
@@ -238,11 +245,18 @@ private final class Recorder: @unchecked Sendable {
             for _ in 0..<500 where store.busy != "Opening in Herdr…" { try await Task.sleep(for: .milliseconds(10)) }
             #expect(store.busy == "Opening in Herdr…")
             await turnGate.open()
-            for _ in 0..<500 where store.runningHere { try await Task.sleep(for: .milliseconds(10)) }
-            try await Task.sleep(for: .milliseconds(50))
-            #expect(recorder.log.isEmpty && store.fixRoundToShip != nil, "the round went on while Herdr was opening")
-            await herdrHeld.open()
-            await opening.value
+            if herdrFails {
+                // The turn has ended and Herdr's failure is the error line before the run hands over to the round.
+                await opening.value
+                #expect(store.actionError != nil && store.runningHere && store.fixRoundToShip != nil)
+                await runReturns.open()
+            } else {
+                for _ in 0..<500 where store.runningHere { try await Task.sleep(for: .milliseconds(10)) }
+                try await Task.sleep(for: .milliseconds(50))
+                #expect(recorder.log.isEmpty && store.fixRoundToShip != nil, "the round went on while Herdr was opening")
+                await herdrHeld.open()
+                await opening.value
+            }
         }
         // The run ends on its own task: wait, bounded, until what follows it is done.
         for _ in 0..<500 where store.fixRoundToShip != nil || store.runningHere {
@@ -268,6 +282,15 @@ private final class Recorder: @unchecked Sendable {
                 "plan t2", "accept t2: fix: address review round 2", "preview t2", "ship t2", "review t2",
             ])
         #expect(store.prReviewShown?.round == 3 && store.actionError == nil)
+    }
+
+    @Test func aFailedActionAfterTheTurnEndedDoesNotStopTheFixRound() async throws {
+        let (store, recorder) = try await fixRound(check: "passed", herdrHeld: RunGate(), herdrFails: true)
+        #expect(
+            recorder.log == [
+                "plan t2", "accept t2: fix: address review round 2", "preview t2", "ship t2", "review t2",
+            ])
+        #expect(store.prReviewShown?.round == 3)
     }
 
     @Test func aFixRoundWhoseTurnFailedIsLeftForThePerson() async throws {

@@ -354,12 +354,16 @@ struct RecentProject: Equatable, Identifiable {
         ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
         applyOwnership()
         Task { [weak self] in
+            var failed = false
             do {
                 try await handle.run()
                 // A turn quick enough to end between two polls is never seen to begin: its note is spent all the same.
                 if self?.sendingBack == false { self?.sendBackNote = "" }
-            } catch { self?.runFailed(error, generation: mine) }
-            await self?.runEnded()
+            } catch {
+                failed = true
+                self?.runFailed(error, generation: mine)
+            }
+            await self?.runEnded(failed: failed)
         }
     }
 
@@ -370,16 +374,18 @@ struct RecentProject: Equatable, Identifiable {
         screen = .thread(shown)
     }
 
-    private func runEnded() async {
+    private func runEnded(failed: Bool) async {
         ownedRun = nil
         stopping = false
         endRunStart()
         await reload()
         // A run that returns leaves its turn ended in the log; one that does not has died without saying how.
-        if case .thread(let shown) = screen, shown.run?.phase == .orphaned, actionError == nil {
+        let orphaned = if case .thread(let shown) = screen { shown.run?.phase == .orphaned } else { false }
+        if orphaned, actionError == nil {
             actionError = "The run ended without recording how the turn ended. Run again records it as interrupted."
         }
-        await continueFixRound()
+        // The run's own outcome, not `actionError`: another action (an "Open in Herdr" still going) may set that meanwhile.
+        await continueFixRound(runFailed: failed || orphaned)
     }
 
     /// The next turn after one that did not finish. A turn that succeeded goes to Review and `send-back`, which is not this.
