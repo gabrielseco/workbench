@@ -235,8 +235,11 @@ public struct HerdrOpener: Sendable {
         #"sub hit { my ($s, $pids, $groups) = @_; kill $s, @$pids if @$pids; kill $s, map { -$_ } @$groups if @$groups }"#,
         #"sub clean { look(); my %was = %seen; hit("TERM", [keys %was], [keys %groups]); "#
             + #"for (1 .. $w * 10) { waitpid $c, WNOHANG; last unless kill 0, keys %was; select undef, undef, undef, 0.1 } "#,
-        #"my $now = table(); my @left = grep { ($now->{$_} // -1) == $was{$_} } keys %was; "#
+        #"my ($now) = table(); my @left = grep { ($now->{$_} // -1) == $was{$_} } keys %was; "#
             + #"look(); hit("KILL", [@left, grep { !exists $was{$_} } keys %seen], [keys %groups]) }"#,
+        // A request to stop (the app's Stop sends SIGTERM to the pid in the marker) stops claude and what it started, not only this.
+        #"$SIG{TERM} = sub { $SIG{TERM} = "IGNORE"; print STDERR $/, "claude: stopped on request", $/; "#
+            + #"clean(); waitpid $c, 0; exit 143 };"#,
         #"my $end = $at + $t; my $r;"#,
         #"until (($r = waitpid $c, WNOHANG) == $c) { look(); "#
             + #"if (time >= $end) { last if waitpid($c, WNOHANG) == $c; "#
