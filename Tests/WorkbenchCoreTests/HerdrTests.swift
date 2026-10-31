@@ -124,7 +124,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     }
 }
 
-@Suite struct HerdrHandOffTests {
+@Suite struct HerdrClientTests {
     private let command = HerdrOpener.claudeCommand(turnTimeoutMin: 30)
     private var send: String { "do terminal.send --id t9 --text \(command)" }
 
@@ -151,7 +151,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(fake.calls == ["ls", "do space.select --id sp3"])
     }
 
-    @Test func aSendThatFailedIsSentOnTheNextTryAndThenNotAgain() async throws {
+    @Test func retryFailedSend() async throws {
         let fake = try FakeHerdr()
         try fake.set("nosend")
         await #expect(throws: HerdrFailure.self) { try await handOff(fake) }
@@ -234,7 +234,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     }
 
     /// The typed command, run by a shell with a stand-in `claude` that never ends: it is stopped at the goal's timeout.
-    @Test func theSessionIsStoppedAtTheTimeout() async throws {
+    @Test func executionLimits() async throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let argsFile = dir.appendingPathComponent("args")

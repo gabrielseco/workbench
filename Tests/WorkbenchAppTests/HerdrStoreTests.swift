@@ -103,7 +103,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: worktree.path), "a worktree was cut")
     }
 
-    @Test func herdrAppMissingApprovesAndCutsNothing() async throws {
+    @Test func unavailableHerdr() async throws {
         let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-down-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: herdrDir) }
