@@ -8,7 +8,8 @@ import Testing
 
 @MainActor @Suite struct HerdrStoreTests {
     private func store(
-        found: Bool, opened: HerdrOpened = HerdrOpened(space: "sp1", alreadyOpen: false), error: Error? = nil
+        found: Bool, opened: HerdrOpened = HerdrOpened(space: "sp1", alreadyOpen: false), projectInstead: Bool = false,
+        error: Error? = nil
     ) async throws -> ProjectStore {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
@@ -17,7 +18,7 @@ import Testing
             herdrFound: { _ in found },
             openInHerdr: { _, _ in
                 if let error { throw error }
-                return opened
+                return GoalActions.HerdrOpenAnswer(opened: opened, projectInstead: projectInstead)
             })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
@@ -39,6 +40,67 @@ import Testing
             await store.openInHerdr()
             #expect(store.actionNote == note && store.actionError == nil)
         }
+    }
+
+    @Test func openingTheProjectInsteadIsSaidApartFromOpeningTheWorktree() async throws {
+        let worktree = try await store(found: true)
+        await worktree.openInHerdr()
+        let project = try await store(found: true, projectInstead: true)
+        await project.openInHerdr()
+        #expect(project.actionNote != nil && project.actionNote != worktree.actionNote && project.actionError == nil)
+    }
+
+    @Test func aThreadWithoutAWorktreeOpensTheProjectWithNothingStartedInIt() async throws {
+        let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-gone-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: herdrDir) }
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+
+        let answer = try await GoalActions.openInHerdr(fixture.project, "t1", opener: try standIn(in: herdrDir))
+
+        let expected = GoalActions.HerdrOpenAnswer(opened: HerdrOpened(space: "sp9", alreadyOpen: false), projectInstead: true)
+        #expect(answer == expected)
+        let folder = try String(contentsOf: herdrDir.appendingPathComponent("folder"), encoding: .utf8)
+        #expect(URL(fileURLWithPath: folder).resolvingSymlinksInPath().path == fixture.root.resolvingSymlinksInPath().path)
+        // A plain space: no `--argv`, so nothing is typed or started in it.
+        let last = try String(contentsOf: herdrDir.appendingPathComponent("last"), encoding: .utf8)
+        #expect(!last.contains("--argv"))
+    }
+
+    @Test func aThreadWithAWorktreeStillOpensItsWorktree() async throws {
+        let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-wt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: herdrDir) }
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        let worktree = fixture.project.worktreesDirectory.appendingPathComponent("t1")
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+
+        let answer = try await GoalActions.openInHerdr(fixture.project, "t1", opener: try standIn(in: herdrDir))
+
+        #expect(!answer.projectInstead)
+        let folder = try String(contentsOf: herdrDir.appendingPathComponent("folder"), encoding: .utf8)
+        #expect(URL(fileURLWithPath: folder).resolvingSymlinksInPath().path == worktree.resolvingSymlinksInPath().path)
+    }
+
+    @Test func aWorktreeThatLeadsOutsideIsRefusedNotSwappedForTheProject() async throws {
+        let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-out-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: herdrDir) }
+        let fixture = try await AppFixture()
+        keptFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        let worktrees = fixture.project.worktreesDirectory
+        try FileManager.default.createDirectory(at: worktrees, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: worktrees.appendingPathComponent("t1"), withDestinationURL: herdrDir)
+
+        await #expect(throws: EditorError.self) {
+            _ = try await GoalActions.openInHerdr(fixture.project, "t1", opener: try standIn(in: herdrDir))
+        }
+        #expect(!FileManager.default.fileExists(atPath: herdrDir.appendingPathComponent("calls").path), "Herdr was asked")
     }
 
     @Test func anErrorIsTheErrorLineAndNothingElse() async throws {

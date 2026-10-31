@@ -161,10 +161,11 @@ struct RunView: View {
             HStack {
                 if snapshot.state.decision != "discarded", !snapshot.state.cleaned {
                     Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
-                    if store.herdrFound {
-                        Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
-                            .help("Herdr opens this worktree as a workspace and brings it forward")
-                    }
+                }
+                // Also once the worktree is gone: Herdr then opens the project, for a session on the shipped pull request.
+                if store.herdrFound {
+                    Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
+                        .help("Herdr opens this worktree, or the project when it is gone, as a workspace and brings it forward")
                 }
                 if canRunAgain { Button("Run again") { Task { await store.runAgain() } } }
                 Spacer()
@@ -182,6 +183,7 @@ struct RunView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
         }
     }
 
