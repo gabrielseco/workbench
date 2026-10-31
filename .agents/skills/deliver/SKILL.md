@@ -34,6 +34,11 @@ Take current changes to open, reviewed PR(s). **Never merge** — stop once PRs 
 - Fix the findings it confirms: apply the change, add a test that covers each one, run the relevant tests, commit, push to the same branch.
 - Do NOT post review comments to GitHub without asking (the skill's own rule).
 
+### 5b. Verify, when the change calls for it
+- A change to what a `workbench` command does: run its verify-cli scenario from the branch, normally and sabotaged (`scripts/verify-cli/from-branch.sh <feature>`), and put both results in the PR body.
+- A change to what the app shows (`Sources/WorkbenchApp`): run the `verify-app` skill on the fixture scenarios, then post the screenshots with `pr-shots` ("Post the screenshots to the pull request" in that skill), and say in the PR which scenario each one is. If `pr-shots` fails, say so in the PR.
+- Neither applies: say that in the PR.
+
 ### 6. CI checks
 - Watch CI to completion: `gh pr checks <n> --watch`. Do this after step 5's fixes are pushed, so it reflects the final state, not a run that's about to be superseded.
 - Any red check tied to this change (lint, type-check, tests, build) → pull the failure log (`gh run view <run-id> --log-failed`, from the check's URL), fix it, verify locally the same way as step 3 (swiftlint on the changed files, `swift test --filter` on the failing suite; never `scripts/check.sh`), commit, push, and re-watch.
