@@ -11,11 +11,27 @@ struct TaskFixture {
         name: String = "bump", front: String = "at: 04:00\ndays: weekdays\nfix: pr",
         body: String = "Bump the next countries."
     ) throws {
+        try self.init(in: Project(root: try Scratch.directory("task-project")), name: name, front: front, body: body)
+    }
+
+    /// A task in a project that already exists (a `RunnerFixture`'s, with a real repository and a fake claude).
+    init(
+        in project: Project, name: String = "bump", front: String = "at: 04:00\ndays: weekdays\nfix: pr",
+        body: String = "Bump the next countries."
+    ) throws {
         self.name = name
-        let root = try Scratch.directory("task-project")
-        project = Project(root: root)
+        self.project = project
         try FileManager.default.createDirectory(at: project.taskDirectory(name), withIntermediateDirectories: true)
         try write(task: "---\n\(front)\n---\n\(body)\n")
+    }
+
+    /// A `pending` script that lists these ids, and the front matter line that names it.
+    @discardableResult
+    func script(_ body: String, as file: String = "pending.sh") throws -> String {
+        try write(file, "#!/bin/sh\n\(body)\n")
+        let path = project.root.appendingPathComponent(file).path
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return file
     }
 
     var library: TaskLibrary { TaskLibrary(project: project) }

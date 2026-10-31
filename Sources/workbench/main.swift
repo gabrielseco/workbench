@@ -106,7 +106,7 @@ do {
     case "abandon":
         try await Commands.abandon(Array(arguments.dropFirst()))
     case "task":
-        try await Commands.task(Array(arguments.dropFirst()))
+        exit(try await Commands.task(Array(arguments.dropFirst())))
     default:
         throw CLIError.usage("unknown command '\(arguments[0])'. `workbench help` lists the commands.")
     }

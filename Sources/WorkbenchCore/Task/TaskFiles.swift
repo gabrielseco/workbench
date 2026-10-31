@@ -23,7 +23,8 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
 struct TaskFiles {
     static let maxTaskFileBytes = 64 << 10
     static let maxScriptBytes = 256 << 10
-    static let maxInputBytes = 1 << 20
+    static let maxInputBytes = 32 << 10
+    static let maxIncludeBytes = 16 << 10
     static let maxInputFiles = 200
 
     let root: URL
