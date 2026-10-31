@@ -109,6 +109,11 @@ enum Help {
                 "ends the thread, saves uncommitted changes as abandon.patch in the thread "
                 + "folder, removes the worktree, keeps the branch",
             example: "workbench abandon"),
+        "task": Extra(
+            changes:
+                "task list: nothing; read-only; task approve: appends task.approved to the task's own run log "
+                + "(.workbench/tasks/<name>/runs.jsonl)",
+            example: "workbench task list   or   workbench task approve bump-countries"),
         "version": Extra(changes: "nothing; read-only", example: "workbench version"),
     ]
 
