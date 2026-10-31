@@ -29,7 +29,7 @@ scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's a
 
 ## Skills
 
-Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `verify-app`, `workbench`). Agents that don't read that directory
+Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `verify-app`, `design-review`, `workbench`). Agents that don't read that directory
 natively can open the `SKILL.md` and follow it. Claude Code reads them through the symlinks in
 `.claude/skills/`; when adding a skill, add its symlink there too:
 `ln -s ../../.agents/skills/<name> .claude/skills/<name>`.

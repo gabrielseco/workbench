@@ -10,9 +10,32 @@ The core and the CLI have tests and `verify-cli`; nothing else looks at the Swif
 on a **fixture project** (never a person's own), looks at it, and says whether it matches what the PR claims. Everything that keeps this
 safe is in `scripts/verify-app.sh`; do not call `open`, `kill`, `pkill`, `screencapture` or `scripts/bundle-app.sh` yourself.
 
-Workbench's own verifier turn does not run this skill: it looks for `.claude/skills/verify/SKILL.md`, and this one is named `verify-app`
-so that no paid turn is added to every run in this repository. To let a thread's verifier use it, set `[verifier] skill` and its `tools`
-in `.workbench/config.toml` on purpose; that costs a turn per run.
+Workbench's verifier turn runs this skill on a thread's worktree: `[verifier] skill` in `.workbench/config.toml` names this file by its
+real path (a symlink is refused), after a turn whose check passed. That costs a turn per run; `enabled = false` turns it off.
+
+## Under Workbench
+
+If `WORKBENCH_PROOF_DIR` is set, Workbench started you (`workbench verifier`) and only this section applies; sections 1, 5 and 6
+are for a person's checkout. You have `Read` and `scripts/verify-app.sh`, nothing else: no `gh`, no `git`, no `open`, `kill` or
+`scripts/bundle-app.sh`. There is no pull request: the change is in your worktree and the goal is the claim.
+
+1. **What to show.** Read `$WORKBENCH_GOAL`: each criterion and its `proof:`. A `proof: screenshot: <name>` line names `<name>.png`,
+   which you leave in `$WORKBENCH_PROOF_DIR`. `Read` the files the criteria name when you need to know what should be on screen.
+2. **Pick the scenario** from the table in section 2 and `scripts/verify-app.sh start <scenario>` (the build takes minutes: it is a
+   release bundle). Keep the pid; every other command needs it. If the state a criterion needs is in no scenario, say so in the report;
+   do not use a real project.
+3. **Drive it** as in section 3, except: never `start draft-goal` (it spends Codex usage), never press `Run` or `Run again` on `running`
+   (it starts a real turn), and do not try `Ship…` beyond seeing the refusal it shows on the fixture. `press`, `type`, `focus`, `typekeys`,
+   `key`, `click`, `hover` and `scroll` are all yours; `click`, `hover`, `key`, `typekeys` and `scroll` take over the machine while
+   they run, which is expected here.
+4. **Capture.** `scripts/verify-app.sh shot <pid> <name>` writes `$WORKBENCH_PROOF_DIR/<name>.png`; `Read` it and look. If it does not
+   show the state, press again and shoot again under the same name. A criterion that names several screenshots (before and after a
+   press, a second window size with `VERIFY_WINDOW_SIZE=900x600`) gets one `shot` each, in the order the goal names them. A design
+   change is captured at 900×600 and at a roomy size.
+5. **Stop it, always,** with `scripts/verify-app.sh stop <pid>`, also when a step failed.
+6. **Report.** One line per criterion: its id, `holds` or `does not hold`, what you saw (quote the `list` line) and the file. Say plainly
+   what you could not reach or may not press. Workbench shows this as a note beside the screenshots; it decides nothing, a person
+   looks at them.
 
 ## 1. What should be visible
 
