@@ -10,3 +10,6 @@ xcuserdata/
 
 # pr-shots' uploader (wrangler) caches here when it runs in a checkout; in a worktree it would keep `workbench ship` from removing it
 .wrangler/
+
+# local editor launch configuration
+.vscode/launch.json
