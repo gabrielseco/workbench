@@ -14,9 +14,12 @@ public enum PromptBuilder {
     ) -> String {
         var out = "# \(goal.title)\n\n"
         out += "## Request\n\n\(goal.request)\n\n"
-        out += "## Criteria\n\nThe work is done when every criterion holds. Each says how it will be shown.\n\n"
-        for criterion in goal.criteria {
-            out += "- [\(criterion.id)] \(criterion.text)\n  - proof: \(criterion.proof)\n"
+        // A quick goal may have no criteria: the request is then all there is, and no empty list says otherwise.
+        if !goal.criteria.isEmpty {
+            out += "## Criteria\n\nThe work is done when every criterion holds. Each says how it will be shown.\n\n"
+            for criterion in goal.criteria {
+                out += "- [\(criterion.id)] \(criterion.text)\n  - proof: \(criterion.proof)\n"
+            }
         }
         if !goal.outOfScope.isEmpty {
             out += "\n## Out of scope\n\nDo not do any of these:\n\n"
@@ -52,7 +55,10 @@ public enum PromptBuilder {
 
                 """
         }
-        out += "\nWork in the current directory. When you finish, say which criteria you believe hold and why.\n"
+        out +=
+            goal.criteria.isEmpty
+            ? "\nWork in the current directory. When you finish, say what you changed and how it does what the request asks.\n"
+            : "\nWork in the current directory. When you finish, say which criteria you believe hold and why.\n"
         return out
     }
 

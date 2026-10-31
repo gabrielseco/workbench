@@ -22,8 +22,10 @@ let workbenchUsage = """
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
                                  base without --base: the default branch, as for doctor; printed as base:
                                  --from <goal-file> copies its request, criteria and out of scope into the draft,
-                                 and its budget_usd, turn_timeout_min and model; prints the front matter it ignored
+                                 and its budget_usd, turn_timeout_min, model and quick; prints the front matter it ignored
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
+                                 --quick "<text>" writes a quick goal: the text as its request, `quick: true`, no
+                                 criteria (so no judge and no verifier); no agent runs
       goal draft <name> --request "<text>" | --request-file <path>  [--base <branch>] [--replace]
                                  have the goal agent ([agents.goal]) draft the goal from a rough request, read-only and
                                  bounded (300 s; $0.50 on Claude; Codex has no dollar cap, allow_unpriced = false

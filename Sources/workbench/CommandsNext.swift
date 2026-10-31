@@ -25,7 +25,7 @@ extension Commands {
         let tip = try? await ctx.git.run(["rev-parse", "refs/heads/\(WorktreeManager.branch(for: id))"], in: ctx.project.root)
         let head = tip?.succeeded == true ? tip?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         let goalText = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8)
-        let skip = (goalText.flatMap { try? GoalFile.parse($0) })?.goal.skip ?? []
+        let skip = (goalText.flatMap { try? GoalFile.parse($0) })?.goal.stepsOff ?? []
         let steps = NextSteps.derive(events: events, files: files, config: config, head: head, skip: skip, id: id)
         return NextSteps.render(steps)
     }

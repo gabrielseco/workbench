@@ -71,7 +71,9 @@ public enum GoalEditor {
 
         case .removeCriterion(let id):
             guard goal.criteria.contains(where: { $0.id == id }) else { throw unknown(id) }
-            guard goal.criteria.count > 1 else { throw GoalEditError(reason: "a goal needs at least one criterion") }
+            guard goal.criteria.count > 1 || goal.quick else {
+                throw GoalEditError(reason: "a goal needs at least one criterion, unless it is a quick goal")
+            }
             var layout = try criterionBlocks(lines, file: file)
             layout.blocks.removeAll { $0.id == id }
             try writeCriteria(layout, in: &lines, file: file)

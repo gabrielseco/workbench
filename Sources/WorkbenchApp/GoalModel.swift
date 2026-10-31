@@ -43,6 +43,9 @@ struct GoalModel: Equatable {
         var label: String
         var skipped: Bool
         var known: Bool
+        /// Why the step cannot run for this goal whatever the switch says (core's `Goal.unavailable`): the judge of a goal with no
+        /// criteria. Nil when it can.
+        var unavailable: String?
     }
 
     var title: String
@@ -61,6 +64,8 @@ struct GoalModel: Equatable {
     var goalReadAlso: [String] = []
     /// Steps after a turn and whether this goal skips them.
     var steps: [Step] = []
+    /// `quick: true`: the goal may have no criteria, and with none the request is all there is to check against.
+    var quick = false
     /// The goal can be changed here: it is not approved (an approved goal is in another step), no run holds it and it has not ended.
     var editable = false
     var pill: Pill
@@ -142,7 +147,7 @@ struct GoalModel: Equatable {
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
             readAlso: config?.readAlso ?? [], goalReadAlso: goal.readAlso, steps: steps(goal: goal, config: config),
-            editable: editable, pill: pill, blockers: blockers, placeholdersRemain: placeholders)
+            quick: goal.quick, editable: editable, pill: pill, blockers: blockers, placeholdersRemain: placeholders)
     }
 
     /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is none of them.
@@ -151,7 +156,9 @@ struct GoalModel: Equatable {
         if config?.verifier != nil { names.append(("verifier", "Verifier")) }
         names.append(("judge", "Judge"))
         for stage in config?.review.stages ?? [] where stage != ReviewConfig.prReviewStage { names.append((stage, stage)) }
-        var steps = names.map { Step(name: $0.0, label: $0.1, skipped: goal.skips($0.0), known: true) }
+        var steps = names.map {
+            Step(name: $0.0, label: $0.1, skipped: goal.skips($0.0), known: true, unavailable: goal.unavailable($0.0))
+        }
         for name in goal.skip where !steps.contains(where: { $0.name == name }) {
             steps.append(Step(name: name, label: name, skipped: true, known: false))
         }

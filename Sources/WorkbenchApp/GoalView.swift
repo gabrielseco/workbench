@@ -98,8 +98,15 @@ struct GoalView: View {
     }
 
     private var criteria: some View {
-        section("Criteria · \(goal.checkableText)") {
+        section(goal.rows.isEmpty && goal.quick ? "Criteria · none, a quick goal" : "Criteria · \(goal.checkableText)") {
             VStack(alignment: .leading, spacing: 14) {
+                if goal.rows.isEmpty && goal.quick {
+                    Text(
+                        "The request is the goal. With no criteria the judge and the verifier do not run, and you check the "
+                            + "work against the request. Add a criterion to have them check it."
+                    )
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(goal.rows, id: \.id) { row in
                     GoalCard { criterion(row) }
                 }
@@ -145,7 +152,7 @@ struct GoalView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if editable, goal.rows.count > 1 {
+                if editable, goal.rows.count > 1 || goal.quick {
                     Spacer()
                     Button { edit(.removeCriterion(id: row.id)) } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless).help("Remove \(row.id)").opacity(hovering ? 1 : 0.3)
@@ -265,7 +272,7 @@ struct GoalView: View {
         section("After the turn") {
             HStack {
                 ForEach(goal.steps, id: \.name) { step in
-                    let on = !step.skipped
+                    let on = !step.skipped && step.unavailable == nil
                     Button {
                         edit { g in
                             let others = g.steps.filter { $0.skipped && $0.name != step.name }.map(\.name)
@@ -277,9 +284,15 @@ struct GoalView: View {
                             .font(.callout)
                             .foregroundStyle(!step.known ? Theme.red : on ? Theme.green : Theme.grey)
                     }
-                    .buttonStyle(.bordered).disabled(!editable)
-                    .help(step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project")
+                    .buttonStyle(.bordered).disabled(!editable || step.unavailable != nil)
+                    .help(
+                        step.unavailable.map { "Not available: \($0)" }
+                            ?? (step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project"))
                 }
+            }
+            ForEach(goal.steps.filter { $0.unavailable != nil }, id: \.name) { step in
+                Text("\(step.label) not available: \(step.unavailable ?? "")")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }

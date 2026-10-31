@@ -2,22 +2,25 @@ import AppKit
 import SwiftUI
 import WorkbenchCore
 
-/// Asks what needs to be done and has the goal agent draft the goal from it, in a card you write in: the text is the point, the
-/// rest is small. It stays up while it drafts and keeps the text when the draft does not come out.
+/// Asks what needs to be done, in a card you write in: the text is the point, the rest is small. It opens on a quick goal (the text
+/// as written, no criteria); Advanced has the goal agent draft criteria from the same text. It stays up while it works and keeps the
+/// text when the goal does not come out.
 struct NewGoalPopover: View {
     var store: ProjectStore
-    @State private var request = ""
+    @State private var form = NewGoalForm()
     @State private var staging = AttachmentStaging()
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
 
-    private var empty: Bool { request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var project: String { store.project?.root.lastPathComponent ?? "this project" }
+    /// The goal agent is asked for only in Advanced: a quick goal needs none.
+    private var agentOff: Bool { form.mode == .advanced && store.goalAgentOff }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            writing.padding(.top, 16)
+            modes.padding(.top, 14)
+            writing.padding(.top, 12)
             attachments.padding(.top, 20)
             messages
             footer.padding(.top, 26)
@@ -58,15 +61,31 @@ struct NewGoalPopover: View {
         }
     }
 
+    /// Quick or Advanced. The text stays as it is either way.
+    private var modes: some View {
+        Picker("Kind of goal", selection: $form.mode) {
+            ForEach(NewGoalForm.Mode.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented).labelsHidden().fixedSize()
+        .disabled(store.drafting)
+        .help("Quick keeps your words as the goal. Advanced has the goal agent draft criteria that the judge can check.")
+    }
+
+    private var placeholder: String {
+        form.mode == .quick
+            ? "What needs to be done? A sentence or two is enough."
+            : "What needs to be done? Describe the change, the bug or the idea, and say how you will know it worked."
+    }
+
     private var writing: some View {
-        TextEditor(text: $request)
+        TextEditor(text: $form.request)
             .font(.system(size: 17, design: .serif)).lineSpacing(6)
             .focused($focused).scrollContentBackground(.hidden)
             .frame(height: 170)
             .disabled(store.drafting)
             .overlay(alignment: .topLeading) {
-                if request.isEmpty {
-                    Text("What needs to be done? Describe the change, the bug or the idea, and say how you will know it worked.")
+                if form.request.isEmpty {
+                    Text(placeholder)
                         .font(.system(size: 17, design: .serif)).lineSpacing(6)
                         .foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
                 }
@@ -110,7 +129,7 @@ struct NewGoalPopover: View {
         if let problem = staging.problem {
             Text(problem).font(.callout).foregroundStyle(Theme.red).padding(.top, 14)
         }
-        if store.goalAgentOff {
+        if agentOff {
             Text(
                 "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
                     + "[agents.goal] to .workbench/config.toml and drafts this goal."
@@ -125,22 +144,22 @@ struct NewGoalPopover: View {
         HStack(spacing: 12) {
             if store.drafting {
                 ProgressView().controlSize(.small)
-                Text("Drafting the goal…").font(.callout).foregroundStyle(.secondary)
+                Text(form.busyText).font(.callout).foregroundStyle(.secondary)
             } else {
-                Text("Creates a draft. You read it and approve it next; nothing runs before that.")
+                Text(form.note)
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
             if store.drafting {
-                Button("Stop") { store.stopDrafting() }
+                if form.mode == .advanced { Button("Stop") { store.stopDrafting() } }
             } else {
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)
-                if store.goalAgentOff {
+                if agentOff {
                     ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
                         Button("Draft with \(provider.rawValue.capitalized)") {
                             Task {
                                 if await store.enableGoalDrafting(
-                                    provider, request: request, attachments: staging.urls) { close() }
+                                    provider, request: form.request, attachments: staging.urls) { close() }
                             }
                         }
                         .disabled(staging.pending > 0)
@@ -148,12 +167,12 @@ struct NewGoalPopover: View {
                 } else {
                     Button("Create") {
                         Task {
-                            let made = await store.draftGoal(request: request, attachments: staging.urls)
+                            let made = await store.createGoal(form, attachments: staging.urls)
                             if made { close() }
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: .command).disabled(empty || staging.pending > 0)
+                    .keyboardShortcut(.return, modifiers: .command).disabled(form.isEmpty || staging.pending > 0)
                 }
             }
         }
