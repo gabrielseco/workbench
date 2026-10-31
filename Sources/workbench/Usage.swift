@@ -111,6 +111,14 @@ let workbenchUsage = """
       abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
                              are saved as abandon.patch in the thread folder first, the branch is kept
 
+    scheduled tasks
+      task list                  the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
+                                 report or pr), whether its approval still matches the file and its pending script,
+                                 the next due time and how the last run ended
+      task approve <name>        record that the task, as it is now, may run unattended; editing the file or its
+                                 pending script revokes it. With fix: pr the task accepts its own work when the check
+                                 and the verifier pass and opens the pull request; it never merges
+
       --json on status, review, log, grant and doctor; exit codes: docs/spec/exit-codes.md
 
       version
