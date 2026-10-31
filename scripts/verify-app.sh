@@ -22,7 +22,7 @@
 #   scripts/verify-app.sh calls <pid>          what the scenario's stand-in editor was asked to open (one `cwd=` and `arg=` line per
 #                                              argument, per call); empty when it was not started. Only a scenario that sets
 #                                              `editor = "@EDITOR_STUB@"` in its config.toml has one.
-#   scripts/verify-app.sh herdr-calls <pid>    what the scenario's stand-in `herdr` was asked (one line per call, its arguments); empty when
+#   scripts/verify-app.sh herdr-calls <pid>    what the scenario's stand-in `herdr-app` was asked (one line per call, its arguments); empty when
 #                                              it was not started. Only a scenario whose config.toml sets `herdr = "@HERDR_STUB@"` has one.
 #   scripts/verify-app.sh scenarios            the scenario names
 # Every command after `start` takes the pid `start` printed and refuses any other: a pid it did not start, an installed Workbench, or a
@@ -209,15 +209,15 @@ SWIFT
     mkdir -p "$dir/bin"
     printf '#!/bin/sh\n{ echo "cwd=$(pwd)"; for a in "$@"; do echo "arg=$a"; done; } >>"%s/editor-calls.txt"\n' "$dir" >"$dir/bin/editor-stub"
     chmod +x "$dir/bin/editor-stub"
-    # `@HERDR_STUB@` is a `herdr` that writes down its arguments and answers the way the real one does (JSON, one line), so "Open in
+    # `@HERDR_STUB@` is a `herdr-app` that writes down its arguments and answers the way the real one does (JSON on stdout), so "Open in
     # Herdr" can be pressed without touching a person's Herdr.
     cat >"$dir/bin/herdr-stub" <<'STUB'
 #!/bin/sh
 echo "$@" >>"@DIR@/herdr-calls.txt"
 case "$1 $2" in
-  "workspace list") echo '{"id":"stub","result":{"type":"workspace_list","workspaces":[]}}' ;;
-  "worktree open") echo '{"id":"stub","result":{"already_open":false,"type":"worktree_opened","workspace":{"workspace_id":"w1"}}}' ;;
-  *) echo '{"id":"stub","result":{"type":"ok"}}' ;;
+  "ls ") echo '{"spaces":[],"recent":[]}' ;;
+  "do space.new") echo '{"space":"sp1","tab":"tb1","terminal":"t1"}' ;;
+  *) echo '{"ok":true}' ;;
 esac
 STUB
     sed -i '' "s|@DIR@|$dir|g" "$dir/bin/herdr-stub"

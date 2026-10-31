@@ -94,7 +94,7 @@ public struct Config: Sendable, Equatable {
 
     /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
     public var editor: String?
-    /// The `herdr` executable the window's "Open in Herdr" runs. Only the window reads it; a run never does.
+    /// The `herdr-app` executable the window's "Open in Herdr" runs. Only the window reads it; a run never does.
     public var herdr: String?
 
     /// `--model` for the verifier: its own, else nil for the CLI's default.
@@ -417,7 +417,7 @@ public struct Config: Sendable, Equatable {
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
-        # herdr = "/opt/homebrew/bin/herdr" # the window's "Open in Herdr"; else `herdr` on PATH or in ~/.local/bin
+        # herdr = "/Users/me/.local/bin/herdr-app" # the window's "Open in Herdr"; else `herdr-app` on PATH or in ~/.local/bin
 
         # [pr_review]                      # `workbench pr-review`: Codex reviews the shipped pull request
         # checklist = "docs/REVIEW.md"     # optional: this project's review invariants, read from the PR head
