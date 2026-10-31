@@ -178,9 +178,14 @@ public struct HerdrOpener: Sendable {
 
     private static let supervisor = [
         #"my ($t, $w, $m) = splice @ARGV, 0, 3; my $me = $$; my $at = time;"#,
-        // The marker's start time is read after the process began; `runnerPID` accepts it within a couple of seconds.
-        #"if (open my $f, ">", $m) { print $f qq({"pid":$me,"session":"herdr","started_seconds":$at}); close $f }"#,
-        #"END { unlink $m if $$ == $me }"#,
+        // A `workbench run` that took the thread first keeps it: nothing is started beside it. The marker's start time is read after
+        // the process began; `runnerPID` accepts it within a couple of seconds.
+        #"my $owned; if (open my $o, "<", $m) { local $/; my $x = <$o>; close $o; "#
+            + #"my ($p) = $x =~ /"pid":(\d+)/; if ($p && $p != $me && $x =~ /started_micros/ && kill 0, $p) "#
+            + #"{ print STDERR "claude: a workbench run holds this thread", "\n"; exit 1 } }"#,
+        #"open my $f, ">", $m or die "claude: cannot write $m: $!$/"; "#
+            + #"print $f qq({"pid":$me,"session":"herdr","started_seconds":$at}); close $f; $owned = 1;"#,
+        #"END { unlink $m if $owned && $$ == $me }"#,
         #"defined(my $c = fork) or die "claude: $!$/";"#,
         #"unless ($c) { exec @ARGV or die "claude: $!$/" }"#,
         // Ctrl-C reaches the whole foreground group; it is claude's to handle, and must not take the supervisor away.
@@ -194,7 +199,10 @@ public struct HerdrOpener: Sendable {
         #"my %skip = (getpgrp() => 1, ($g->{getppid()} // 0) => 1, 0 => 1, 1 => 1); "#
             + #"for (@found) { $seen{$_} = $g->{$_}; $groups{$g->{$_}} = 1 unless $skip{$g->{$_}} } return $g }"#,
         #"sub hit { my ($s, $pids, $groups) = @_; kill $s, @$pids if @$pids; kill $s, map { -$_ } @$groups if @$groups }"#,
-        #"sub clean { look(); my %was = %seen; hit("TERM", [keys %was], [keys %groups]); "#
+        // What was seen and is gone, or whose pid now has another group, may be someone else's by now: only what is still there is signalled.
+        #"sub clean { look(); my ($n) = table(); delete @seen{grep { ($n->{$_} // -1) != $seen{$_} } keys %seen}; "#
+            + #"my %live = map { $_ => 1 } values %seen; delete @groups{grep { !$live{$_} } keys %groups}; "#
+            + #"my %was = %seen; hit("TERM", [keys %was], [keys %groups]); "#
             + #"for (1 .. $w * 10) { waitpid $c, WNOHANG; last unless kill 0, keys %was; select undef, undef, undef, 0.1 } "#,
         #"my ($now) = table(); my @left = grep { ($now->{$_} // -1) == $was{$_} } keys %was; "#
             + #"look(); hit("KILL", [@left, grep { !exists $was{$_} } keys %seen], [keys %groups]) }"#,

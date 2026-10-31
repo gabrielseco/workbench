@@ -315,6 +315,21 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(!FileManager.default.fileExists(atPath: marker.path))
     }
 
+    /// A `workbench run` took the thread between the handoff's preparation and the supervisor's start: no second Claude is started.
+    @Test func aSessionIsNotStartedBesideARunThatHoldsTheThread() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = dir.appendingPathComponent("runner.json")
+        let me = try #require(ProcessTree.member(for: getpid()))
+        let held = #"{"pid":\#(getpid()),"started_micros":\#(me.startMicros),"started_seconds":\#(me.startSeconds)}"#
+        try held.write(to: marker, atomically: true, encoding: .utf8)
+        let started = dir.appendingPathComponent("started")
+        let ended = try await runTimed("touch '\(started.path)'\nexit 0\n", in: dir, marker: marker, seconds: 20)
+        #expect(ended.termination == .exited(1), "\(ended.termination): \(ended.stderrTail)")
+        #expect(!FileManager.default.fileExists(atPath: started.path), "claude was started beside the run")
+        #expect(try String(contentsOf: marker, encoding: .utf8) == held, "the run's marker was replaced or removed")
+    }
+
     @Test func theSessionHoldsTheThreadWhileItRunsAndLetsGoAfter() async throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

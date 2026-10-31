@@ -573,7 +573,7 @@ Notes:
   on a stop; when claude ends by itself it keeps claude's exit status. A tool that started and lost its parent within one second
   is not found. Nothing from the goal reaches a shell. While it runs the supervisor holds the thread: it writes the thread's
   `runner.json` with its pid, `"session": "herdr"` and its start time in whole seconds (the pid counts only while that process
-  started within 2 s before that time), and removes it when it ends. So `workbench run` (`herdrSessionRunning`), discard, abandon
+  started within 2 s before that time), and removes it when it ends; it starts nothing, and exits 1, when a `workbench run` already holds the thread. So `workbench run` (`herdrSessionRunning`), discard, abandon
   and the like refuse as they do for a run, and "Run in Herdr" is not refused: it brings the space forward. A space the worktree
   already had is only brought forward and is not sent the goal again.
   The goal screen shows the outcome: sent, already open,
