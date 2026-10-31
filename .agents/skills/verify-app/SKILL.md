@@ -101,8 +101,9 @@ scripts/verify-app.sh stop <pid>          # always, also after a failure
 - A `start` that fails or is interrupted (SIGTERM, SIGHUP, Ctrl-C, a window that never appears) leaves nothing (Ctrl-C has the same handler
   as the others; no test sends it): it ends the app it launched and
   removes the build, the fixture copy and the settings. So if `start` printed no `pid=`, nothing is running and there is nothing to `stop`.
-- Every command refuses a pid that `start` did not print. `press` refuses `Choose project…` (the project pill), `Event log` and
-  `Open the event log`: they open a file panel or another app. A claim about those buttons is checked by seeing that they are listed.
+- Every command refuses a pid that `start` did not print. `press` refuses `Choose project…` (the empty screen's button),
+  `Choose folder…` (in the project card), `Event log` and `Open the event log`: they open a file panel or another app. A claim about those
+  buttons is checked by seeing that they are listed. The project pill (`Projects, now …`) can be pressed: it opens the project card.
   `Doctor` can be pressed: it runs in the fixture project and reads `Problem` there (no config), which is the expected answer.
 - If a screenshot shows only a wallpaper, Screen Recording is missing for this terminal; `start` says so before it builds.
 - The app is launched with the Dock's environment (a bare `PATH`, nothing of the terminal's profile), and like a person's launch it asks the

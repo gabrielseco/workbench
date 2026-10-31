@@ -32,7 +32,7 @@
 #     fixture project (Fixtures/app/<scenario>/): it reads and writes none of a person's settings or projects
 #   - the app is launched with the Dock's environment, not this terminal's: a bare PATH, the home, user, shell and temp folder
 #   - the window is found by pid, never by name, and only that pid is ever ended
-#   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Event log`, `Open the event log`), by the label
+#   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Choose folder`, `Event log`, `Open the event log`), by the label
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
 #   - `type` fills a text field of this pid's window through Accessibility, never with keystrokes, so it cannot reach another app; it
 #     takes at most 2000 characters and refuses control characters, and with several fields and none focused it types nowhere
@@ -60,7 +60,7 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ID_PREFIX="dev.rogal.workbench.verify"
-REFUSED='^(Choose project|Event log|Open the event log)'
+REFUSED='^(Choose project|Choose folder|Event log|Open the event log)'
 STATE_ROOT="${TMPDIR:-/tmp}"
 STATE_ROOT="${STATE_ROOT%/}/workbench-verify"
 PIDS="$STATE_ROOT/pids"
