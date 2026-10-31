@@ -14,7 +14,7 @@ struct VerifierFixture {
 
     init(
         verifier: String = "", skill: String? = skillText, check: String? = nil, runTurn: Bool = true, root: String = "",
-        run: String = "", files: [String: String] = [:]
+        run: String = "", files: [String: String] = [:], quick: Bool = false
     ) async throws {
         let table = """
             [verifier]
@@ -47,7 +47,12 @@ struct VerifierFixture {
             _ = try await fx.git.run(["add", "-A"], in: fx.repo)
             _ = try await fx.git.run(["commit", "-q", "-m", "skill"], in: fx.repo)
         }
-        id = try await fx.approvedThread()
+        if quick {
+            id = try await fx.service.newQuickGoal(name: "quick", request: "Make the header blue.", base: "main")
+            try await fx.service.approve(id: id)
+        } else {
+            id = try await fx.approvedThread()
+        }
         config = try Config.load(from: fx.project.configURL)
         if runTurn { _ = try await fx.runner(id).run(fx.options()) }
     }
