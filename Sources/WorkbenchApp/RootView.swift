@@ -287,11 +287,12 @@ struct FooterBar: View {
         HStack {
             if let url = store.logURL {
                 Button {
-                    NSWorkspace.shared.open(url)
+                    // A .jsonl may have no app to open it: show it in Finder rather than do nothing.
+                    if !NSWorkspace.shared.open(url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 } label: {
-                    Text(label).foregroundStyle(Theme.blue)
+                    Label(label, systemImage: "doc.text").foregroundStyle(Theme.blue)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered).controlSize(.small)
                 .help("Opens the raw log file")
             } else {
                 Text("Nothing is running.").foregroundStyle(.secondary)

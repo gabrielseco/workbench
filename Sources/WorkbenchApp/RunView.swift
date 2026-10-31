@@ -100,10 +100,22 @@ struct RunView: View {
             if rows.isEmpty {
                 Text(filter == .all ? "Nothing yet." : "None.").font(.callout).foregroundStyle(.secondary)
             } else {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(rows) { row in
-                        Text(row.text).font(.system(.callout, design: .monospaced))
-                            .foregroundStyle(color(row.kind)).lineLimit(2)
+                // Its own pane that follows the newest row: in the page's scroll the rows grew below the fold and the
+                // screen looked stopped while the log went on.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(rows) { row in
+                                Text(row.text).font(.system(.callout, design: .monospaced))
+                                    .foregroundStyle(color(row.kind)).lineLimit(2).id(row.id)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .defaultScrollAnchor(.bottom)
+                    .frame(maxHeight: 260)
+                    .onChange(of: rows.last?.id) { _, last in
+                        if let last { proxy.scrollTo(last, anchor: .bottom) }
                     }
                 }
             }
