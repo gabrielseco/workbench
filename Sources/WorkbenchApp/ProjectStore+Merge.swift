@@ -51,7 +51,8 @@ extension ProjectStore {
 
     /// Puts what GitHub said into the thread on screen: the banner's CI, and the spine's Ship, PR review and Clean steps.
     func applyPullRequestCI() {
-        guard let scope = pullRequestScope, prCI.scope == scope, let ci = prCI.ci, case .thread(var shown) = screen else { return }
+        guard let scope = pullRequestScope, prCI.scope == scope, let ci = prCI.ci, case .thread(var shown) = screen
+        else { return }
         shown.ci = ci
         if let status = ci.status {
             let outcome: PullRequestOutcome =
