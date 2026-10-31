@@ -178,12 +178,22 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
             executable: URL(fileURLWithPath: stand[0]), arguments: Array(stand.dropFirst()),
             environment: ["PATH": "\(dir.path):/usr/bin:/bin"], workingDirectory: dir, timeout: 30)
         request.killGrace = 1
-        let run = try ProcessRunner.start(request)
-        var exit: ProcessExit?
-        for await event in run.events { if case .exited(let ended) = event { exit = ended } }
-        let ended = try #require(exit)
-        #expect(ended.cause != .timedOut, "the supervisor did not stop the session")
-        return ended
+        // Linux refuses to exec a script that another thread's fork still holds open for writing (ETXTBSY), and the
+        // shell reports it as exit 26 instead of running it; it clears in milliseconds, so the session is started again.
+        var attempts = 0
+        while true {
+            attempts += 1
+            let run = try ProcessRunner.start(request)
+            var exit: ProcessExit?
+            for await event in run.events { if case .exited(let ended) = event { exit = ended } }
+            let ended = try #require(exit)
+            if ended.stderrTail.contains("Text file busy"), attempts < 10 {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                continue
+            }
+            #expect(ended.cause != .timedOut, "the supervisor did not stop the session")
+            return ended
+        }
     }
 
     private func tempDir() throws -> URL {
