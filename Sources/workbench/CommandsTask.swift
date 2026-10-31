@@ -148,11 +148,18 @@ extension Commands {
         if !FileManager.default.fileExists(atPath: ctx.project.configURL.path) {
             out("note: no .workbench/config.toml yet; run `workbench init` (fix: pr needs check_command in it)")
         }
-        // Tasks are local: a `.workbench/` that git would commit puts them in the repository.
-        let ignored = try? await ctx.git.run(
-            ["check-ignore", "-q", ".workbench/tasks/\(name)/task.md"], in: ctx.project.root)
-        if let ignored, ignored.status == 1 {
-            out("note: git does not ignore .workbench/ here; add it to .gitignore or .git/info/exclude, since tasks are local")
+        // Tasks are local: a `.workbench/` that git would commit puts them in the repository. Every file the task will hold is
+        // asked about, not only task.md: a rule such as `*.md` ignores that one and leaves the script and the run log.
+        var exposed: [String] = []
+        for file in ["task.md", "pending.sh", "runs.jsonl"] {
+            let ignored = try? await ctx.git.run(
+                ["check-ignore", "-q", ".workbench/tasks/\(name)/\(file)"], in: ctx.project.root)
+            if let ignored, ignored.status == 1 { exposed.append(file) }
+        }
+        if !exposed.isEmpty {
+            out(
+                "note: git does not ignore \(exposed.joined(separator: ", ")) here; add .workbench/ to .gitignore or "
+                    + ".git/info/exclude, since tasks are local")
         }
         out("then:    edit .workbench/tasks/\(name)/task.md and pending.sh")
         out("         workbench task run \(name)       (lists what it would take while fix: report)")

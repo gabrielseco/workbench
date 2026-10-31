@@ -12,7 +12,7 @@
 # must refuse it (exit 6) while its instructions still say TODO(workbench) and accept it once they are written, a second `task new`
 # of the same name must refuse (exit 6) and leave the file as it was, and a bad name or path must be a usage error (exit 2) that
 # creates nothing (also a path with a comma, which would read back as two). In a repository with no config and no ignore rule it
-# must say both. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
+# must say both, and a rule that ignores only the markdown (`*.md`) must not silence the warning. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 skips the approve, makes the word edits whitespace-only and leaves the scaffold's placeholder in, so
 # "approve prints the approval", "approve writes one task.approved line", "list: approved after approve", "editing the words
 # says STALE", "editing the pending script says STALE" and "a scaffold can be approved once its instructions are written" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
@@ -137,5 +137,13 @@ g -C "$PLAIN" -c user.email=v@example.invalid -c user.name=verify commit -q --al
 ( cd "$PLAIN" && with_timeout "$T_WB" "$WB" task new demo >"$SCRATCH/plain.out" 2>&1 ); RC=$?
 check "task new in a repository with no config and no ignore rule says both" "exit $RC: $(head -c 500 "$SCRATCH/plain.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "no .workbench/config.toml yet" "$2" && grep -q "git does not ignore .workbench/" "$2"' _ "$RC" "$SCRATCH/plain.out"
+
+PART="$SCRATCH/partial"
+mkdir -p "$PART"; g -C "$PART" init -q -b main || die "git init failed"
+g -C "$PART" -c user.email=v@example.invalid -c user.name=verify commit -q --allow-empty -m init || die "git commit failed"
+printf '*.md\n' >"$PART/.gitignore"
+( cd "$PART" && with_timeout "$T_WB" "$WB" task new demo >"$SCRATCH/partial.out" 2>&1 ); RC=$?
+check "a rule that ignores only the markdown does not silence the git warning" "exit $RC: $(head -c 500 "$SCRATCH/partial.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "git does not ignore pending.sh, runs.jsonl" "$2" && ! grep -q "ignore task.md" "$2"' _ "$RC" "$SCRATCH/partial.out"
 
 finish
