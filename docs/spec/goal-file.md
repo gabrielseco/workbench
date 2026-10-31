@@ -17,6 +17,7 @@ model: opus                 # optional; --model for every turn of this thread
 push_to: feature/x          # optional; continue this branch of origin (base must be origin/feature/x)
 skip: judge, design         # optional; steps that do not run for this goal only
 read_also: ../backend       # optional; more checkouts a run may read, on top of the config's read_also
+quick: true                 # optional; a quick goal, which may have no criteria (below)
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -42,7 +43,8 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
 
 ## Rules
 
-- **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown.
+- **Criteria are checkable.** Each has an id (`c1`…) and a `proof` line saying how it will be shown. A goal has at least
+  one, unless it is a quick goal (`quick: true`, below).
   `proof` is free text for now; typed proofs (`check:`, `screenshot:`, `diff:`) are described in
   [`later/proof.md`](../later/proof.md).
 - **A test proof is `proof: test: <Suite>/<name>[, …]`.** It is decided by the tests the latest turn's check saw
@@ -260,6 +262,17 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   path, `~/…` or relative to the project; the root of a git checkout, not the project or inside or above it). The approval binds
   them (a wider read surface is something the person approves), so changing them returns an approved goal to draft; `goal approve`
   resolves them and refuses one that cannot be used, and the run refuses before any turn. `goal new --from` does not carry it.
+  **Optional:** `quick`, `true` or `false` (absent is false). A quick goal may leave `## Criteria` out or empty; any other goal
+  needs at least one criterion. `workbench goal new <name> --quick "<text>"` and the app's New goal card (which opens on Quick;
+  Advanced has the goal agent draft criteria from the same text, as `goal draft` does) write one: the text, trimmed at its ends,
+  is the request word for word, the title is its first line, and no agent runs. A line of the text that starts with `## ` is
+  refused rather than changed, since it would start a section. A goal with no criteria has no judge and no verifier: `judge`
+  and `verifier` are refused (exit 6, nothing written) saying the goal has no criteria, the verifier after a turn records
+  `verifier.skipped` with that reason, `[review] auto` prints `auto judge: skipped, the goal has no criteria …`, `next` and
+  `review` do not list the judge, and `review` prints `Judge      not available: …`. The coding prompt then has no
+  `## Criteria` section. Adding a criterion brings them back, `quick` or not; removing the last one is allowed only with
+  `quick: true`. The approval binds it, so setting or clearing it returns an approved goal to draft; `goal new --from` carries
+  it. An older Workbench reports `unknown key 'quick'` and refuses the goal.
 - **Unsafe values are rejected, not escaped.** `id` becomes a directory name and `base` goes into git
   arguments, so `id` is letters, digits, `.`, `_`, `-` (max 100, must start alphanumeric) and `base` may not
   start with `-` or contain `..` or whitespace. `budget_usd` is a positive number, `turn_timeout_min` a whole

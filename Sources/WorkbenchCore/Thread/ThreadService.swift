@@ -157,7 +157,7 @@ public struct ThreadService: Sendable {
             status: draft
             base: \(baseBranch)\(pushToLine)
             \(spendLine)
-            turn_timeout_min: \(settings.turnTimeoutMin ?? 30)
+            turn_timeout_min: \(settings.turnTimeoutMin ?? 30)\(settings.quick ? "\nquick: true" : "")
             \(modelLine)
             ---
 

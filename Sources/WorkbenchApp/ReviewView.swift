@@ -52,6 +52,11 @@ struct ReviewView: View {
             if let problem = review.goalProblem {
                 Label("The goal file is not valid, so the criteria are unknown: \(problem)", systemImage: "xmark.octagon.fill")
                     .foregroundStyle(Theme.red).font(.callout)
+            } else if review.criteria.isEmpty, !review.unavailable.isEmpty {
+                Text("None: a quick goal. Check the work against the request.").font(.callout)
+                ForEach(review.unavailable, id: \.self) {
+                    Text($0).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 Text("\(review.assessed) · \(review.criteriaSummary)").font(.callout).foregroundStyle(.secondary)
                 ForEach(review.criteria) { criterion in

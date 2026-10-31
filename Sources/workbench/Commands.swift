@@ -224,19 +224,31 @@ enum Commands {
         let base = try a.value("--base")
         let updating = try a.value("--update")
         let from = try a.value("--from")
+        let quick = try a.value("--quick")
         guard let name = a.positional() else {
             throw CLIError.usage(
-                "usage: workbench goal new <name> [--base <branch> | --update <branch>] [--from <goal-file>]")
+                "usage: workbench goal new <name> [--base <branch> | --update <branch>]"
+                    + " [--from <goal-file> | --quick \"<text>\"]")
         }
         try a.requireEmpty()
+        if quick != nil, from != nil || updating != nil {
+            throw CLIError.usage("--quick writes the goal from its text alone: it takes neither --from nor --update")
+        }
         let copy = try from.map { try ThreadService.goalCopy(copying: URL(fileURLWithPath: $0)) }
 
         let ctx = try await Context.load()
         let config = try? Config.load(from: ctx.project.configURL)
-        let id = try await ctx.service.newThread(
-            name: name, base: base, updating: updating, config: config, body: copy?.body,
-            settings: copy?.settings ?? GoalSettings(), title: copy?.title)
+        let id: String
+        if let quick {
+            do { id = try await ctx.service.newQuickGoal(name: name, request: quick, base: base, config: config) } catch
+                let refusal as QuickGoalRefusal { throw CLIError.refused("\(refusal)") }
+        } else {
+            id = try await ctx.service.newThread(
+                name: name, base: base, updating: updating, config: config, body: copy?.body,
+                settings: copy?.settings ?? GoalSettings(), title: copy?.title)
+        }
         out("created \(id)")
+        if quick != nil { out("quick:   no criteria; the judge and the verifier do not run for it") }
         if let ignored = copy?.ignoredKeys, !ignored.isEmpty {
             out("ignored from the file: \(ignored.joined(separator: ", "))")
         }

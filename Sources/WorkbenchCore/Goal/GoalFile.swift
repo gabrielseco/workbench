@@ -72,6 +72,7 @@ public struct GoalFile: Sendable, Equatable {
         let pushTo = pushToValue(value("push_to"), add: add)
         let skip = skipValue(value("skip"), add: add)
         let readAlso = readAlsoValue(value("read_also"), add: add)
+        let quick = quickValue(value("quick"), add: add)
         if let pushTo, let base, let entry = value("base"), base != "origin/\(pushTo)" {
             add(.invalidValue, entry.lineNumber, "'base' must be 'origin/\(pushTo)' when 'push_to' is set, found '\(base)'")
         }
@@ -85,7 +86,7 @@ public struct GoalFile: Sendable, Equatable {
         }
 
         let bodyStart = closing + 1
-        let parsed = parseBody(lines, from: bodyStart, add: add)
+        let parsed = parseBody(lines, from: bodyStart, quick: quick, add: add)
         let (request, criteria, outOfScope) = (parsed.request, parsed.criteria, parsed.outOfScope)
 
         guard problems.isEmpty, let id, let title, let base, let spend, let timeout else {
@@ -96,12 +97,12 @@ public struct GoalFile: Sendable, Equatable {
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, spend: spend,
             turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
-            readAlso: readAlso, approvedAt: value("approved_at")?.value,
+            readAlso: readAlso, quick: quick, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
             contentHash: GoalHash.hash(
                 base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
-                readAlso: readAlso, body: body))
+                readAlso: readAlso, quick: quick, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
@@ -151,9 +152,10 @@ public struct GoalFile: Sendable, Equatable {
         var outOfScope: [String]
     }
 
-    /// The request, criteria and out of scope of the lines from `bodyStart` on.
+    /// The request, criteria and out of scope of the lines from `bodyStart` on. A `quick` goal may leave the criteria out
+    /// (no section, or an empty one); any other goal needs at least one.
     static func parseBody(
-        _ lines: [String], from bodyStart: Int, add: (GoalProblem.Code, Int?, String) -> Void
+        _ lines: [String], from bodyStart: Int, quick: Bool = false, add: (GoalProblem.Code, Int?, String) -> Void
     ) -> Body {
         var malformedCriterion = false
         func note(_ code: GoalProblem.Code, _ line: Int?, _ message: String) {
@@ -173,11 +175,13 @@ public struct GoalFile: Sendable, Equatable {
         var criteria: [Criterion] = []
         if let section = sections["criteria"] {
             criteria = parseCriteria(section, add: note)
-            if criteria.isEmpty && !malformedCriterion {
-                note(.emptySection, section.headingLine, "'## Criteria' has no criteria")
+            if criteria.isEmpty && !malformedCriterion && !quick {
+                note(
+                    .emptySection, section.headingLine,
+                    "'## Criteria' has no criteria (add one, or set 'quick: true' for a goal without them)")
             }
-        } else {
-            note(.missingSection, nil, "missing '## Criteria' section")
+        } else if !quick {
+            note(.missingSection, nil, "missing '## Criteria' section (or set 'quick: true' for a goal without criteria)")
         }
 
         let outOfScope = sections["out of scope"].map { parseOutOfScope($0, add: note) } ?? []
@@ -387,7 +391,7 @@ public struct GoalFile: Sendable, Equatable {
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
         "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to",
-        "skip", "read_also", "approved_at", "approved_hash",
+        "skip", "read_also", "quick", "approved_at", "approved_hash",
     ]
 
     var key: String
@@ -472,6 +476,18 @@ extension GoalFile {
             return []
         }
         return names
+    }
+
+    /// `quick: true` or `quick: false`; absent is false.
+    static func quickValue(_ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void) -> Bool {
+        guard let entry else { return false }
+        switch entry.value {
+        case "true": return true
+        case "false": return false
+        default:
+            add(.invalidValue, entry.lineNumber, "'quick' must be 'true' or 'false', found '\(entry.value)'")
+            return false
+        }
     }
 
     /// `read_also: ../backend, ~/shared`: the goal's own folders, each with the config's syntax rules, each once, and with the

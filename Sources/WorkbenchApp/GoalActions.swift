@@ -46,6 +46,8 @@ struct GoalActions: Sendable {
     var makeRun: @Sendable (Project, String, RunOptions) throws -> RunHandle
     /// Has the goal agent draft a goal from a rough request (and screenshots), as a new thread named `name`; `DraftStop` ends the drafter early.
     var draftGoal: DraftGoal
+    /// Writes a quick goal from the request as typed (and screenshots), as a new thread named `name`, and returns its id. No agent runs.
+    var quickGoal: @Sendable (Project, String, String, [URL]) async throws -> String
     /// Names the goal agent in the project's config, so a project with none can draft.
     var enableGoalAgent: @Sendable (Project, AgentProviderID) async throws -> Void
     var openGoal: @Sendable (Project, String) async throws -> Void
@@ -95,6 +97,7 @@ struct GoalActions: Sendable {
             RunHandle(run: {}, stop: {})
         },
         draftGoal: @escaping DraftGoal = { _, _, _, _, _ in throw Unset() },
+        quickGoal: @escaping @Sendable (Project, String, String, [URL]) async throws -> String = { _, _, _, _ in throw Unset() },
         enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
@@ -126,7 +129,7 @@ struct GoalActions: Sendable {
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.editGoal = editGoal
-        self.enableGoalAgent = enableGoalAgent
+        (self.quickGoal, self.enableGoalAgent) = (quickGoal, enableGoalAgent)
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.herdrFound, self.openInHerdr, self.runGoalInHerdr) = (herdrFound, openInHerdr, runGoalInHerdr)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
@@ -197,6 +200,7 @@ struct GoalActions: Sendable {
                 target: .newThread(name: name, base: nil), request: request, config: config, attachments: attachments,
                 abandonActive: true, attach: { stop.attach($0) })
         },
+        quickGoal: { project, name, request, attachments in try await quickGoal(project, name, request, attachments) },
         enableGoalAgent: { project, provider in try GoalAgentSetup.enable(provider: provider, in: project) },
         openGoal: { project, thread in try await openInEditor(project, thread) },
         requestStop: { project, thread in
@@ -430,5 +434,18 @@ struct GoalActions: Sendable {
             for: editor, path: path.path, searchPath: environment["PATH"], isMacOS: Editor.isMacOS)
         try await EditorLauncher.launch(
             command, editor: editor, in: path.deletingLastPathComponent(), environment: Editor.environment(from: environment))
+    }
+}
+
+extension GoalActions {
+    /// A quick goal as core writes it, replacing the active thread as a drafted goal does; core's refusal comes back in its own words.
+    static func quickGoal(_ project: Project, _ name: String, _ request: String, _ attachments: [URL]) async throws -> String {
+        // A config that is there but broken is its own error, as for a draft.
+        let config: Config? =
+            FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
+        do {
+            return try await ThreadService(project: project, git: try GitRunner.discover()).newQuickGoal(
+                name: name, request: request, config: config, attachments: attachments, abandonActive: true)
+        } catch let refusal as QuickGoalRefusal { throw RefusalText("\(refusal)") }
     }
 }

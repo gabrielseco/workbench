@@ -54,9 +54,14 @@ public enum GoalEditor {
             let (next, overflow) = highest.addingReportingOverflow(1)
             guard !overflow else { throw GoalEditError(reason: "no criterion number is free after the highest") }
             let id = "c\(next)"
-            var layout = try criterionBlocks(lines, file: file)
-            layout.blocks.append(CriterionBlock(id: id, lines: block(id, text, proof)))
-            try writeCriteria(layout, in: &lines, file: file)
+            if sectionRange("criteria", in: lines, file: file) == nil {
+                // A quick goal may leave the section out; its first criterion brings it, after the request as the spec orders it.
+                insertCriteriaSection(block(id, text, proof), in: &lines, file: file)
+            } else {
+                var layout = try criterionBlocks(lines, file: file)
+                layout.blocks.append(CriterionBlock(id: id, lines: block(id, text, proof)))
+                try writeCriteria(layout, in: &lines, file: file)
+            }
             expected = { $0.criteria.map(\.id) == goal.criteria.map(\.id) + [id] && $0.criteria.last?.text == text }
 
         case .updateCriterion(let id, let text, let proof):
@@ -71,7 +76,9 @@ public enum GoalEditor {
 
         case .removeCriterion(let id):
             guard goal.criteria.contains(where: { $0.id == id }) else { throw unknown(id) }
-            guard goal.criteria.count > 1 else { throw GoalEditError(reason: "a goal needs at least one criterion") }
+            guard goal.criteria.count > 1 || goal.quick else {
+                throw GoalEditError(reason: "a goal needs at least one criterion, unless it is a quick goal")
+            }
             var layout = try criterionBlocks(lines, file: file)
             layout.blocks.removeAll { $0.id == id }
             try writeCriteria(layout, in: &lines, file: file)
@@ -201,6 +208,19 @@ public enum GoalEditor {
             layout.blocks[last].gap = []
         }
         return layout
+    }
+
+    /// A new `## Criteria` section holding `block`, right after the request (or at the end of a file without one), with one
+    /// blank line around it.
+    private static func insertCriteriaSection(_ block: [String], in lines: inout [String], file: GoalFile) {
+        let at = sectionRange("request", in: lines, file: file)?.upperBound ?? lines.count
+        if at == lines.count {
+            while lines.last?.isEmpty == true { lines.removeLast() }
+            lines += ["", "## Criteria", ""] + block + [""]
+            return
+        }
+        let before = at > 0 && !lines[at - 1].isEmpty ? [""] : []
+        lines.insert(contentsOf: before + ["## Criteria", ""] + block + [""], at: at)
     }
 
     /// The blocks in their new order. A block between others keeps its own gap, or takes the one the file already uses.

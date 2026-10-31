@@ -31,6 +31,13 @@ public struct ReviewReport: Sendable, Equatable {
     public var commitCount = 0
     /// What is still due on the thread (`NextSteps`): advisory, empty when nothing is.
     public var nextSteps: [NextStep] = []
+    /// Steps this goal cannot have, with why (`Goal.unavailable`): the judge and the verifier of a goal without criteria.
+    public var unavailableSteps: [UnavailableStep] = []
+
+    public struct UnavailableStep: Sendable, Equatable {
+        public var name: String
+        public var why: String
+    }
     /// One entry per criterion: who verifies it, from the log and the goal alone.
     public var criterionStatuses: [CriterionStatus] {
         CriteriaStatus.evaluate(
@@ -176,7 +183,7 @@ public struct ReviewReport: Sendable, Equatable {
             lines.append("  goal file not valid, criteria unknown:")
             for line in goalProblem.split(separator: "\n") { lines.append("    \(line)") }
         } else if criteria.isEmpty {
-            lines.append("  (none)")
+            lines.append(unavailableSteps.isEmpty ? "  (none)" : "  (none: a quick goal, judged by you from the request)")
         } else {
             for c in criteria {
                 lines.append("  [\(c.id)] ☐ \(c.text)")
@@ -228,6 +235,9 @@ public struct ReviewReport: Sendable, Equatable {
 
         lines.append(contentsOf: verifierLines())
         lines.append(contentsOf: judgeLines())
+        if review.judge == nil, let off = unavailableSteps.first(where: { $0.name == "judge" }) {
+            lines.append("Judge      not available: \(off.why)")
+        }
         lines.append(contentsOf: prReviewLines())
 
         if review.deniedTools.isEmpty {
@@ -360,6 +370,7 @@ public struct ReviewLoader: Sendable {
         var criteria: [Criterion] = []
         var goalBase: String?
         var skipped: [String] = []
+        var unavailable: [ReviewReport.UnavailableStep] = []
         var approval: String?
         var spend: (name: String, line: String?)?
         var problem: String?
@@ -369,6 +380,9 @@ public struct ReviewLoader: Sendable {
             criteria = goal.criteria
             goalBase = goal.base
             skipped = goal.skip
+            unavailable = ["verifier", "judge"].compactMap { name in
+                goal.unavailable(name).map { ReviewReport.UnavailableStep(name: name, why: $0) }
+            }
             spend = (goal.spendPolicyName, goal.isTimeoutOnly ? goal.spendLine : nil)
             switch goal.approval {
             case .approved: approval = "approved"
@@ -396,14 +410,14 @@ public struct ReviewLoader: Sendable {
         if case .summary(let summary) = shown, !summary.truncated { changed = NextSteps.paths(of: summary.files) }
         let steps = NextSteps.derive(
             events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip,
-            skip: skipped, id: id)
+            skip: skipped, judgeUnavailable: unavailable.contains { $0.name == "judge" }, id: id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
             diff: shown,
             threadDirectory: project.threadDirectory(id), branchTip: tip,
             commits: commits?.commits ?? [],
-            commitCount: commits?.count ?? 0, nextSteps: steps)
+            commitCount: commits?.count ?? 0, nextSteps: steps, unavailableSteps: unavailable)
     }
 
     /// What `accept` shows and what it pins, from one read of git: the diff `review` shows, and the full summary (staged

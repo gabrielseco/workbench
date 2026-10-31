@@ -38,6 +38,8 @@ public struct Goal: Sendable, Equatable {
     public var skip: [String] = []
     /// Other checkouts this goal's runs may read, read-only, on top of the config's `read_also` (`ReadAlso`).
     public var readAlso: [String] = []
+    /// `quick: true`: the request alone says what to do, so the goal may have no criteria. One with none has no judge or verifier.
+    public var quick = false
     public var approvedAt: String?
     public var approvedHash: String?
 
@@ -56,6 +58,23 @@ public struct Goal: Sendable, Equatable {
 
     public var isTimeoutOnly: Bool { spend == .timeoutOnly }
 
+    /// Why the built-in `judge` or `verifier` cannot run for this goal whatever `skip` says, nil when it can: they report on
+    /// criteria, and a quick goal may have none. A review stage that shares one of these names is not meant: callers ask
+    /// only for the built-in step, since a stage reviews the diff and runs without criteria.
+    public func unavailable(_ step: String) -> String? {
+        guard criteria.isEmpty else { return nil }
+        switch step {
+        case "judge": return Self.noCriteriaJudge
+        case "verifier": return Self.noCriteriaVerifier
+        default: return nil
+        }
+    }
+
+    public static let noCriteriaJudge =
+        "the goal has no criteria (a quick goal), so there is nothing to judge against; add a criterion to judge it"
+    public static let noCriteriaVerifier =
+        "the goal has no criteria (a quick goal), so there is nothing for the verifier to show"
+
     /// The wording logs and `--json` use: `hard_cap` or `timeout_only`.
     public var spendPolicyName: String { isTimeoutOnly ? "timeout_only" : "hard_cap" }
 
@@ -68,7 +87,7 @@ public struct Goal: Sendable, Equatable {
     }
 
     /// Hash of the body and the front matter fields that change what runs (`base`, `budget_usd` or
-    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`, `skip`, `read_also`). This is what approval binds.
+    /// `spend_policy`, `turn_timeout_min`, `model`, `push_to`, `skip`, `read_also`, `quick`). This is what approval binds.
     public var contentHash: String
 
     public var approval: ApprovalState {
@@ -100,7 +119,7 @@ enum GoalHash {
 
     static func hash(
         base: String, spend: AgentSpend, turnTimeoutMin: Int, model: String? = nil, pushTo: String? = nil,
-        skip: [String] = [], readAlso: [String] = [], body: String
+        skip: [String] = [], readAlso: [String] = [], quick: Bool = false, body: String
     ) -> String {
         // The model line exists only when set, so a goal without one keeps the hash it was approved with.
         // `spend_policy` replaces the `budget_usd` line only when set, so a goal with a cap keeps its hash.
@@ -116,6 +135,8 @@ enum GoalHash {
         if !skip.isEmpty { fields.append("skip=\(skip.sorted().joined(separator: ","))") }
         // A wider read surface is something the person approves; sorted for the same reason.
         if !readAlso.isEmpty { fields.append("read_also=\(readAlso.sorted().joined(separator: ","))") }
+        // Only when set: it lets the goal run without criteria, which is something the person approves.
+        if quick { fields.append("quick=true") }
         let canonical = (fields + ["---", canonicalBody(body)]).joined(separator: "\n")
         return SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
     }

@@ -57,6 +57,8 @@ struct ReviewModel: Equatable {
     var canDecide: Bool
     /// `NextSteps` without the decision itself (Accept and Ship are the buttons); empty when only the decision is left.
     var due: [Due] = []
+    /// `Judge not available: …` for each step the goal cannot have (a goal without criteria has no judge or verifier).
+    var unavailable: [String] = []
 
     static func derive(_ report: ReviewReport) -> ReviewModel {
         let state = report.state
@@ -105,7 +107,8 @@ struct ReviewModel: Equatable {
             due: report.nextSteps.filter { $0.kind != .decision }.map {
                 // The command is unique per step; a stage's name is not (it can be `judge`).
                 Due(id: $0.command, command: $0.command, why: $0.why)
-            })
+            },
+            unavailable: report.unavailableSteps.map { "\($0.name.capitalized) not available: \($0.why)." })
     }
 
     static func checkText(_ check: Review.Check?) -> String {

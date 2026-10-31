@@ -16,10 +16,13 @@ public enum JudgeRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     case goalUnreadable(String)
     case invalidModel(String)
     case busy
+    /// The goal has no criteria (a quick goal): there is nothing to give a verdict on.
+    case noCriteria
 
     public var description: String {
         switch self {
         case .noTurn: "nothing to judge: no turn has run."
+        case .noCriteria: "not judged: \(Goal.noCriteriaJudge)."
         case .alreadyJudged(let turn):
             "turn \(turn) was judged already (`workbench review` shows it). Pass --again to ask once more."
         case .goalUnreadable(let why): "the goal could not be read: \(why)"
@@ -67,6 +70,11 @@ extension ThreadService {
     ) async throws -> JudgeResult {
         // A judge a killed process left open ends here, before anything is read or refused.
         try await log.recoverOrphanedEvaluations()
+        // A goal without criteria is refused before anything else, turn or not: no turn would give it anything to judge.
+        if let goal = try? GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal,
+            goal.unavailable("judge") != nil {
+            throw JudgeRefusal.noCriteria
+        }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         let state = ThreadState.derive(from: events, id: id)
         guard state.lastTurn > 0 else { throw JudgeRefusal.noTurn }

@@ -7,12 +7,18 @@ public struct GoalSettings: Sendable, Equatable {
     public var timeoutOnly: Bool
     public var turnTimeoutMin: Int?
     public var model: String?
+    /// `quick: true`: the draft may have no criteria.
+    public var quick: Bool
 
-    public init(budgetUSD: Decimal? = nil, timeoutOnly: Bool = false, turnTimeoutMin: Int? = nil, model: String? = nil) {
+    public init(
+        budgetUSD: Decimal? = nil, timeoutOnly: Bool = false, turnTimeoutMin: Int? = nil, model: String? = nil,
+        quick: Bool = false
+    ) {
         self.budgetUSD = budgetUSD
         self.timeoutOnly = timeoutOnly
         self.turnTimeoutMin = turnTimeoutMin
         self.model = model
+        self.quick = quick
     }
 }
 
@@ -34,7 +40,7 @@ public struct GoalCopyValueError: Error, Equatable, Sendable, CustomStringConver
 
 extension GoalFile {
     /// The front matter keys `goal new --from` carries into the draft.
-    static let carriedKeys: Set<String> = ["title", "budget_usd", "spend_policy", "turn_timeout_min", "model"]
+    static let carriedKeys: Set<String> = ["title", "budget_usd", "spend_policy", "turn_timeout_min", "model", "quick"]
 
     /// Reads `text` for `goal new --from`. The front matter keys are not required here (the draft gets its own id,
     /// base and status, and a title from its name when the file has none), but the block must be well formed and the body must parse as a goal's. A carried value
@@ -48,15 +54,17 @@ extension GoalFile {
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
             .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         let (entries, closing) = try frontMatter(lines, add: add)
-        let parsed = parseBody(lines, from: closing + 1, add: add)
+        let quick = quickValue(entries.first { $0.key == "quick" }, add: add)
+        let parsed = parseBody(lines, from: closing + 1, quick: quick, add: add)
         guard problems.isEmpty else {
             throw GoalParseError(problems: problems.sorted { ($0.line ?? .max) < ($1.line ?? .max) })
         }
 
         var title: String?
-        var settings = GoalSettings()
+        var settings = GoalSettings(quick: quick)
         for entry in entries where carriedKeys.contains(entry.key) {
             switch entry.key {
+            case "quick": continue  // read above, since the body's rules depend on it
             case "title":
                 guard !entry.value.trimmingCharacters(in: .whitespaces).isEmpty else {
                     throw GoalCopyValueError(message: "'title' must not be empty")
