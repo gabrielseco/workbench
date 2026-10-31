@@ -327,14 +327,22 @@ struct GoalActions: Sendable {
         return try await opener.open(folder: try Editor.worktree(project: project, threadID: thread), label: thread)
     }
 
-    /// Herdr is looked for before anything is approved or cut, so a machine without it changes nothing.
     static func runGoalInHerdr(_ project: Project, _ thread: String) async throws -> HerdrHandoff {
-        let opener = try herdrOpener(project)
-        do {
-            _ = try await ThreadService(project: project, git: try GitRunner.discover()).prepareHandoff(id: thread)
-        } catch let refusal as ThreadServiceError { throw RefusalText("\(refusal)") }
+        try await runGoalInHerdr(project, thread, opener: try herdrOpener(project))
+    }
+
+    /// Herdr is found and its window brought up before anything is approved or cut, so a machine without it changes nothing.
+    static func runGoalInHerdr(_ project: Project, _ thread: String, opener: HerdrOpener) async throws -> HerdrHandoff {
+        try await opener.ensureWindow()
+        let service = ThreadService(project: project, git: try GitRunner.discover())
+        let prepared: PreparedHandoff
+        do { prepared = try await service.prepareHandoff(id: thread) } catch let refusal as ThreadServiceError {
+            throw RefusalText("\(refusal)")
+        }
         let folder = try Editor.worktree(project: project, threadID: thread)
-        return try await opener.handOff(folder: folder, label: thread, command: HerdrOpener.claudeCommand)
+        return try await opener.handOff(
+            folder: folder, label: thread, command: HerdrOpener.claudeCommand(turnTimeoutMin: prepared.turnTimeoutMin),
+            pending: service.handoffPendingURL(id: thread))
     }
 
     static func herdrOpener(_ project: Project) throws -> HerdrOpener {

@@ -1,13 +1,27 @@
 import Foundation
 
+/// The worktree a handed-off goal works in, and the bound its approval set.
+public struct PreparedHandoff: Equatable, Sendable {
+    public var worktree: URL
+    /// The approved goal's `turn_timeout_min`: the session is stopped after it.
+    public var turnTimeoutMin: Int
+}
+
 extension ThreadService {
-    /// The worktree a goal handed to another tool (Herdr) works in. The goal is approved first; a thread with no worktree gets one cut
-    /// as a run cuts it, recorded with `worktree.created`, so a later run, review or accept finds the same base. The approved goal and
-    /// its screenshots are copied in at `WorktreeManager.goalCopyPath`, where the session is told to read it.
-    public func prepareHandoff(id: String) async throws -> URL {
+    /// What a goal handed to another tool (Herdr) is prepared with. The goal is approved first; a thread with no worktree gets one
+    /// cut as a run cuts it, recorded with `worktree.created`, so a later run, review or accept finds the same base. The approved goal
+    /// and its screenshots are copied in at `WorktreeManager.goalCopyPath`, where the session is told to read it. A goal with a dollar
+    /// cap is refused before anything is approved or cut: an interactive session cannot enforce one.
+    public func prepareHandoff(id: String) async throws -> PreparedHandoff {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8)
+        if let text, (try? GoalFile.parse(text))?.goal.budgetUSD != nil {
+            throw ThreadServiceError.budgetNeedsCap(provider: Self.handoffAgent)
+        }
         let file = try await approve(id: id)
+        // The file can change between the read above and the approval; what was approved is what counts.
+        if file.goal.budgetUSD != nil { throw ThreadServiceError.budgetNeedsCap(provider: Self.handoffAgent) }
         let copy = (try? Config.load(from: project.configURL))?.copy ?? []
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         if !manager.exists(id) {
@@ -25,6 +39,13 @@ extension ThreadService {
             throw ThreadServiceError.goalNotCopied(why)
         }
         _ = await manager.writeAttachmentCopies(GoalAttachments.stored(in: project.threadDirectory(id)), for: id)
-        return manager.path(for: id)
+        return PreparedHandoff(worktree: manager.path(for: id), turnTimeoutMin: file.goal.turnTimeoutMin)
     }
+
+    /// Where a handoff whose space was made but whose command was not typed is remembered, so trying again sends it.
+    public func handoffPendingURL(id: String) -> URL {
+        project.threadDirectory(id).appendingPathComponent("herdr-pending.json")
+    }
+
+    static let handoffAgent = "An interactive Claude session in Herdr"
 }

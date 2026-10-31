@@ -555,14 +555,20 @@ Notes:
   window after the wait is shown as it is and nothing else is started. A call that does not answer in 10 s is stopped with its process group.
   No command reads the key and a run never does.
   The goal screen's "Run in Herdr" ("Approve and run in Herdr" for a draft) hands the goal to a Claude session in Herdr instead of
-  a run of the window's own. It is offered where Run is, whether or not a `herdr-app` was found; with none found, or Herdr.app
-  missing when its window is closed, it says Herdr is unavailable and approves and cuts nothing. Otherwise it approves the goal,
+  a run of the window's own. It is offered where Run is, whether or not a `herdr-app` was found. Herdr's window is brought up
+  first (Herdr.app started when it is closed); with no `herdr-app` found, or Herdr.app missing, or the window not coming up, it
+  says Herdr is unavailable and approves and cuts nothing. An interactive session cannot enforce a dollar cap, so a goal with
+  `budget_usd` is refused, also before anything is approved or cut, naming `spend_policy: timeout_only` as the change to make.
+  Otherwise it approves the goal,
   cuts the thread's worktree as a run would when it has none (recorded with `worktree.created`, so a later run, review or accept
   uses the same base), copies the approved goal and its screenshots in (`.workbench/goal-copy/`; refused when the goal cannot be
   copied), and opens the worktree in Herdr as above. In a space it made it types
-  `claude '<fixed prompt naming .workbench/goal-copy/goal.md>'` into the terminal `space.new` named
-  (`herdr-app do terminal.send --id <terminal> --text <command>`); nothing from the goal reaches the shell. A space the worktree
-  already had is only brought forward and is not sent the goal again. The goal screen shows the outcome: sent, already open,
+  `/usr/bin/perl -e 'alarm shift; exec @ARGV …' <turn_timeout_min × 60> claude '<fixed prompt naming .workbench/goal-copy/goal.md>'`
+  into the terminal `space.new` named (`herdr-app do terminal.send --id <terminal> --text <command>`): the alarm survives the
+  `exec`, so claude itself is stopped at the approved timeout. Nothing from the goal reaches the shell. Until that send succeeds
+  the space and terminal are kept in `.workbench/threads/<id>/herdr-pending.json`, so pressing it again after a refused send
+  sends the goal to that space; any other space the worktree already had is only brought forward and is not sent the goal again.
+  The goal screen shows the outcome: sent, already open,
   Herdr unavailable, or the refusal or failure in Herdr's or core's words. No event records the handoff itself.
   `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the
   repository (`clone --shared`, so nothing is registered in it and no remote is left) at the thread's recorded base, with

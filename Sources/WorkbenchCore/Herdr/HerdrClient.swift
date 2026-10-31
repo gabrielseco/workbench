@@ -110,6 +110,22 @@ public struct HerdrHandoff: Equatable, Sendable {
     }
 }
 
+/// A space a handoff made whose terminal has not been sent the goal yet.
+struct HerdrPendingSend: Codable, Equatable {
+    var space: String
+    var terminal: String
+
+    static func read(from url: URL) -> HerdrPendingSend? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(HerdrPendingSend.self, from: data)
+    }
+
+    func write(to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(self).write(to: url, options: .atomic)
+    }
+}
+
 /// "Open in Herdr": starts the Herdr app when its window is not open, then gives the thread's worktree a space (or selects the one it
 /// has) and brings the app forward. The app's own server comes up with its window, so there is nothing else to start.
 public struct HerdrOpener: Sendable {
@@ -132,30 +148,62 @@ public struct HerdrOpener: Sendable {
         return space.opened
     }
 
+    /// Herdr's window, started when it is not open. True when it was down. Called before anything is changed for Herdr, so a
+    /// machine where it cannot come up changes nothing.
+    @discardableResult
+    public func ensureWindow() async throws -> Bool {
+        do {
+            _ = try await listSpaces()
+            return false
+        } catch let failure as HerdrFailure where failure.windowDown {
+            try await launchApp()
+            _ = try await waitForWindow()
+            return true
+        }
+    }
+
     /// "Run in Herdr": opens the worktree as a space like `open`, and types `command` into the terminal of a space it made. A space
-    /// the worktree already had is only brought forward: a session already working there is not given the goal a second time.
-    public func handOff(folder: URL, label: String, command: String) async throws -> HerdrHandoff {
+    /// the worktree already had is only brought forward: a session already working there is not given the goal a second time. The
+    /// exception is a space this made whose send failed: `pending` remembers its terminal until a send succeeds, so trying again
+    /// sends the goal there.
+    public func handOff(folder: URL, label: String, command: String, pending: URL) async throws -> HerdrHandoff {
         let space = try await openSpace(folder: folder, label: label)
         let opened = space.opened
+        let unsent = HerdrPendingSend.read(from: pending)
+        var terminal: String?
         if !opened.alreadyOpen {
-            guard let terminal = space.terminal, !terminal.isEmpty else {
+            guard let made = space.terminal, !made.isEmpty else {
                 throw HerdrFailure(
                     code: "bad_answer", message: "Herdr made a space but did not name its terminal, so the goal was not sent")
             }
+            try HerdrPendingSend(space: opened.space, terminal: made).write(to: pending)
+            terminal = made
+        } else if let unsent, unsent.space == opened.space {
+            terminal = unsent.terminal
+        }
+        if let terminal {
             _ = try await client.call(["do", Self.sendCommand, "--id", terminal, "--text", command + "\n"])
+            try? FileManager.default.removeItem(at: pending)
         }
         if !space.wasDown { try? await launchApp() }
-        return HerdrHandoff(space: opened.space, alreadyOpen: opened.alreadyOpen)
+        return HerdrHandoff(space: opened.space, alreadyOpen: terminal == nil)
     }
 
     /// The `herdr-app do` command that types text into a terminal, as if it were typed there.
     public static let sendCommand = "terminal.send"
 
     /// What is typed into the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
-    /// itself reaches the shell.
-    public static let claudeCommand =
-        "claude 'Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
-        + "Work on it here until every criterion holds, and commit your work.'"
+    /// itself reaches the shell, stopped by an alarm after the goal's `turn_timeout_min`.
+    public static func claudeCommand(turnTimeoutMin: Int) -> String {
+        claudeCommand(timeoutSeconds: max(1, turnTimeoutMin) * 60)
+    }
+
+    /// The alarm outlives `exec`, so it is claude itself that is stopped, with nothing left waiting behind it.
+    static func claudeCommand(timeoutSeconds: Int) -> String {
+        "/usr/bin/perl -e 'alarm shift; exec @ARGV or die \"claude: $!\"' \(timeoutSeconds) "
+            + "claude 'Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
+            + "Work on it here until every criterion holds, and commit your work.'"
+    }
 
     /// The space showing `folder`, selected or made; the terminal Herdr names for a space it made; and whether the app was started.
     private struct OpenedSpace {
