@@ -11,7 +11,8 @@
 # runs.jsonl. `task new` must create task.md and an executable pending.sh that list as a draft with fix: report, `task approve`
 # must refuse it (exit 6) while its instructions still say TODO(workbench) and accept it once they are written, a second `task new`
 # of the same name must refuse (exit 6) and leave the file as it was, and a bad name or path must be a usage error (exit 2) that
-# creates nothing. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
+# creates nothing (also a path with a comma, which would read back as two). In a repository with no config and no ignore rule it
+# must say both. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 skips the approve, makes the word edits whitespace-only and leaves the scaffold's placeholder in, so
 # "approve prints the approval", "approve writes one task.approved line", "list: approved after approve", "editing the words
 # says STALE", "editing the pending script says STALE" and "a scaffold can be approved once its instructions are written" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
@@ -125,8 +126,16 @@ wbp "$SCRATCH/again.out" task new fresh
 check "task new on an existing task is refused (exit 6) and leaves the file as it was" "exit $RC: $(head -c 200 "$SCRATCH/again.out")" \
     bash -c '[ "$1" = 6 ] && [ "$(cksum <"$2/task.md")" = "$3" ]' _ "$RC" "$NEW" "$BEFORE_SUM"
 wbp "$SCRATCH/badname.out" task new ../x; NAME_RC=$RC
-wbp "$SCRATCH/badpath.out" task new other --input /etc/passwd
+wbp "$SCRATCH/badpath.out" task new other --input /etc/passwd; PATH_RC=$RC
+wbp "$SCRATCH/comma.out" task new comma --input 'a,b.txt'
 check "a bad name or path is a usage error (exit 2) and creates nothing" "name: $(head -c 100 "$SCRATCH/badname.out") path: $(head -c 100 "$SCRATCH/badpath.out")" \
-    bash -c '[ "$1" = 2 ] && [ "$2" = 2 ] && [ ! -e "$3/other" ] && [ ! -e "$3/../x" ]' _ "$NAME_RC" "$RC" "$TASKS"
+    bash -c '[ "$1" = 2 ] && [ "$2" = 2 ] && [ "$4" = 2 ] && [ ! -e "$3/other" ] && [ ! -e "$3/comma" ] && [ ! -e "$3/../x" ]' _ "$NAME_RC" "$PATH_RC" "$TASKS" "$RC"
+
+PLAIN="$SCRATCH/plain"
+mkdir -p "$PLAIN"; g -C "$PLAIN" init -q -b main || die "git init failed"
+g -C "$PLAIN" -c user.email=v@example.invalid -c user.name=verify commit -q --allow-empty -m init || die "git commit failed"
+( cd "$PLAIN" && with_timeout "$T_WB" "$WB" task new demo >"$SCRATCH/plain.out" 2>&1 ); RC=$?
+check "task new in a repository with no config and no ignore rule says both" "exit $RC: $(head -c 500 "$SCRATCH/plain.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "no .workbench/config.toml yet" "$2" && grep -q "git does not ignore .workbench/" "$2"' _ "$RC" "$SCRATCH/plain.out"
 
 finish

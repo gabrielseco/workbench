@@ -137,7 +137,7 @@ extension Commands {
             result = try TaskScaffold.create(project: ctx.project, name: name, include: include, inputs: inputs)
         } catch let error as TaskScaffoldError {
             switch error {
-            case .exists: throw CLIError.refused("\(error)")
+            case .exists, .outsideProject: throw CLIError.refused("\(error)")
             default: throw CLIError.usage("\(error)")
             }
         }

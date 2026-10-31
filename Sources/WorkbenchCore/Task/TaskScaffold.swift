@@ -5,6 +5,10 @@ public enum TaskScaffoldError: Error, Equatable, Sendable, CustomStringConvertib
     case exists(String)
     case unsafePath(key: String, path: String)
     case cannotWrite(String)
+    /// A path that, written into `task.md`, would read back as something else (a comma splits it, a quote or `#` changes it).
+    case unrepresentable([String])
+    /// The tasks folder is, or is reached through, a link that leaves the project.
+    case outsideProject(String)
 
     public var description: String {
         switch self {
@@ -12,6 +16,10 @@ public enum TaskScaffoldError: Error, Equatable, Sendable, CustomStringConvertib
         case .exists(let path): "\(path) exists already; nothing was changed."
         case .unsafePath(let key, let path): "'\(path)' is not a path inside the project (for \(key))."
         case .cannotWrite(let why): "the task could not be written: \(why)"
+        case .unrepresentable(let paths):
+            "these paths cannot be written into task.md as they are (a comma, quote, bracket or '#' in a name): "
+                + paths.joined(separator: ", ")
+        case .outsideProject(let path): "\(path) leaves the project (a link points elsewhere); nothing was written."
         }
     }
 }
@@ -43,26 +51,58 @@ public enum TaskScaffold {
         if inputs.count > TaskDefinition.maxInputs {
             throw TaskScaffoldError.unsafePath(key: "inputs", path: "more than \(TaskDefinition.maxInputs) paths")
         }
+        let script = ".workbench/tasks/\(name)/\(scriptName)"
+        let text = taskFile(name: name, script: script, include: include, inputs: inputs)
+        // What is written must read back as what was asked for: a comma would split one path into two inputs.
+        guard let parsed = try? TaskDefinition.parse(text, name: name), parsed.include == include, parsed.inputs == inputs
+        else { throw TaskScaffoldError.unrepresentable(([include].compactMap { $0 }) + inputs) }
+        try requireInsideProject(project)
         let directory = project.taskDirectory(name)
         guard !FileManager.default.fileExists(atPath: directory.path) else {
             throw TaskScaffoldError.exists(".workbench/tasks/\(name)")
         }
-        let script = ".workbench/tasks/\(name)/\(scriptName)"
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try taskFile(name: name, script: script, include: include, inputs: inputs)
-                .write(to: project.taskFileURL(name), atomically: true, encoding: .utf8)
+            try FileManager.default.createDirectory(at: project.tasksDirectory, withIntermediateDirectories: true)
+        } catch { throw TaskScaffoldError.cannotWrite("\(error)") }
+        try claim(directory, name: name)
+        do {
+            try text.write(to: project.taskFileURL(name), atomically: true, encoding: .utf8)
             let scriptURL = directory.appendingPathComponent(scriptName)
             try scriptText.write(to: scriptURL, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         } catch {
-            // Only the folder this call made goes: it did not exist before.
+            // Only the folder this call claimed goes: `claim` made it, so nobody else's task is in it.
             try? FileManager.default.removeItem(at: directory)
             throw TaskScaffoldError.cannotWrite("\(error)")
         }
         let files = TaskFiles(project: project)
         let missing = ([include].compactMap { $0 } + inputs).filter { (try? files.resolve($0)) == nil }
         return TaskScaffoldResult(directory: directory, missing: missing)
+    }
+
+    /// Makes the task's folder, and only if nobody has: two `task new` of one name cannot both succeed, and the one that lost never
+    /// removes the folder of the one that won.
+    static func claim(_ directory: URL, name: String) throws {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        } catch {
+            if FileManager.default.fileExists(atPath: directory.path) {
+                throw TaskScaffoldError.exists(".workbench/tasks/\(name)")
+            }
+            throw TaskScaffoldError.cannotWrite("\(error)")
+        }
+    }
+
+    /// The tasks folder, or the nearest folder above it that exists, must really be inside the project: a link at `.workbench` or
+    /// `.workbench/tasks` would take the task, and its executable script, somewhere else.
+    static func requireInsideProject(_ project: Project) throws {
+        let root = project.root.resolvingSymlinksInPath().path
+        var nearest = project.tasksDirectory
+        while !FileManager.default.fileExists(atPath: nearest.path), nearest.path != "/" {
+            nearest = nearest.deletingLastPathComponent()
+        }
+        let real = nearest.resolvingSymlinksInPath().path
+        guard real == root || real.hasPrefix(root + "/") else { throw TaskScaffoldError.outsideProject(".workbench/tasks") }
     }
 
     static func taskFile(name: String, script: String, include: String?, inputs: [String]) -> String {

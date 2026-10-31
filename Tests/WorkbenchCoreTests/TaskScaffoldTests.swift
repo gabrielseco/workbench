@@ -66,6 +66,70 @@ struct TaskScaffoldTests {
         #expect(!FileManager.default.fileExists(atPath: project.tasksDirectory.path))
     }
 
+    @Test func anInputThatWouldReadBackAsSomethingElseIsRefusedAndNothingIsCreated() throws {
+        // A comma splits it in two, `  #` starts a comment, and the parser trims the ends: each reads back as another file.
+        for path in ["countries,old.txt", "a  #b.txt", " lead.txt", "trail.txt "] {
+            let project = try project()
+            #expect(throws: TaskScaffoldError.unrepresentable([path]), "\(path)") {
+                try TaskScaffold.create(project: project, name: "bump", inputs: [path])
+            }
+            #expect(!FileManager.default.fileExists(atPath: project.tasksDirectory.path), "\(path)")
+        }
+    }
+
+    @Test func anInputThatReadsBackAsGivenIsKeptEvenWithOddCharacters() throws {
+        // The check is the round trip, not a list of characters: these are all read back exactly.
+        for path in ["my list.txt", "a[1].txt", "it's.txt", "\"q\".txt", "dir/a#b.txt"] {
+            let project = try project()
+            _ = try TaskScaffold.create(project: project, name: "bump", inputs: [path])
+            #expect(try loaded(project).inputs == [path], "\(path)")
+        }
+    }
+
+    @Test func anIncludeIsWrittenOnlyIfItReadsBackAsGiven() throws {
+        for path in ["skill.md", "dir/with,comma.md", "a  #b.md", "\"q\".md", "it's.md"] {
+            let project = try project()
+            if (try? TaskScaffold.create(project: project, name: "bump", include: path)) != nil {
+                #expect(try loaded(project).include == path, "\(path)")
+            } else {
+                #expect(!FileManager.default.fileExists(atPath: project.tasksDirectory.path), "\(path)")
+            }
+        }
+        #expect(throws: TaskScaffoldError.self) {
+            try TaskScaffold.create(project: try project(), name: "bump", include: "a  #b.md")
+        }
+    }
+
+    @Test func claimingAFolderIsExclusiveAndNeverTouchesWhatIsThere() throws {
+        let project = try project()
+        try FileManager.default.createDirectory(at: project.tasksDirectory, withIntermediateDirectories: true)
+        let directory = project.taskDirectory("bump")
+        try TaskScaffold.claim(directory, name: "bump")
+        try "mine".write(to: directory.appendingPathComponent("task.md"), atomically: true, encoding: .utf8)
+        // The second of two creations that both passed the "does it exist" check.
+        #expect(throws: TaskScaffoldError.exists(".workbench/tasks/bump")) { try TaskScaffold.claim(directory, name: "bump") }
+        #expect(try String(contentsOf: directory.appendingPathComponent("task.md"), encoding: .utf8) == "mine")
+    }
+
+    @Test func aLinkThatLeavesTheProjectTakesNothing() throws {
+        let project = try project()
+        let outside = try Scratch.directory("outside-tasks")
+        try FileManager.default.createDirectory(at: project.workbenchDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: project.tasksDirectory, withDestinationURL: outside)
+        #expect(throws: TaskScaffoldError.outsideProject(".workbench/tasks")) {
+            try TaskScaffold.create(project: project, name: "bump")
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+
+        let other = try self.project()
+        let away = try Scratch.directory("outside-workbench")
+        try FileManager.default.createSymbolicLink(at: other.workbenchDirectory, withDestinationURL: away)
+        #expect(throws: TaskScaffoldError.outsideProject(".workbench/tasks")) {
+            try TaskScaffold.create(project: other, name: "bump")
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: away.path).isEmpty)
+    }
+
     @Test func anExistingTaskIsNeverOverwritten() throws {
         let project = try project()
         _ = try TaskScaffold.create(project: project, name: "bump")
