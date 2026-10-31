@@ -165,9 +165,12 @@ private final class Recorder: @unchecked Sendable {
     /// A window that confirms a fix round whose turn ends with `result` (and a check with `check`, when given), and records
     /// what the decisions after it were called with, in order.
     private func fixRound(
-        result: String = "succeeded", check: String? = nil, acceptError: Error? = nil
+        result: String = "succeeded", check: String? = nil, acceptError: Error? = nil, herdrHeld: RunGate? = nil
     ) async throws -> (ProjectStore, Recorder) {
         let recorder = Recorder()
+        // Without a held action the turn ends at once; with one, it ends only after "Open in Herdr" has begun.
+        let turnGate = RunGate()
+        if herdrHeld == nil { await turnGate.open() }
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
         try fixture.turn("t1", 1)
@@ -178,11 +181,18 @@ private final class Recorder: @unchecked Sendable {
             makeRun: { _, thread, _ in
                 RunHandle(
                     run: {
+                        try await MainActor.run { try fixture.append(thread, .turnStarted, turn: 1, data: ["session_id": "s1"]) }
+                        await turnGate.wait()
                         try await MainActor.run {
-                            try fixture.turn(thread, 1, result: result)
+                            try fixture.append(thread, .turnEnded, turn: 1, data: ["result": .string(result)])
                             if let check { try fixture.append(thread, .checkRan, turn: 1, data: ["result": .string(check)]) }
                         }
                     }, stop: {})
+            },
+            openInHerdr: { _, _ in
+                await herdrHeld?.wait()
+                return GoalActions.HerdrOpenAnswer(
+                    opened: HerdrOpened(space: "sp1", alreadyOpen: false), projectInstead: false)
             },
             acceptPlan: { _, thread in
                 recorder.add("plan \(thread)")
@@ -218,6 +228,22 @@ private final class Recorder: @unchecked Sendable {
         store.prReviewShown = fixing()
         await store.prepareFollowUp()
         await store.confirmFollowUp()
+        if let herdrHeld {
+            // "Open in Herdr" is clicked while the turn runs and is still going when the turn ends.
+            for _ in 0..<500 where store.busy != nil {
+                await store.reload()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            let opening = Task { await store.openInHerdr() }
+            for _ in 0..<500 where store.busy != "Opening in Herdr…" { try await Task.sleep(for: .milliseconds(10)) }
+            #expect(store.busy == "Opening in Herdr…")
+            await turnGate.open()
+            for _ in 0..<500 where store.runningHere { try await Task.sleep(for: .milliseconds(10)) }
+            try await Task.sleep(for: .milliseconds(50))
+            #expect(recorder.log.isEmpty && store.fixRoundToShip != nil, "the round went on while Herdr was opening")
+            await herdrHeld.open()
+            await opening.value
+        }
         // The run ends on its own task: wait, bounded, until what follows it is done.
         for _ in 0..<500 where store.fixRoundToShip != nil || store.runningHere {
             try await Task.sleep(for: .milliseconds(10))
@@ -233,6 +259,15 @@ private final class Recorder: @unchecked Sendable {
                 "plan t2", "accept t2: fix: address review round 2", "preview t2", "ship t2", "review t2",
             ])
         #expect(store.prReviewShown?.round == 3 && store.actionError == nil && store.busy == nil)
+    }
+
+    @Test func aFixRoundWaitsForAnActionStillGoingWhenItsTurnEnds() async throws {
+        let (store, recorder) = try await fixRound(check: "passed", herdrHeld: RunGate())
+        #expect(
+            recorder.log == [
+                "plan t2", "accept t2: fix: address review round 2", "preview t2", "ship t2", "review t2",
+            ])
+        #expect(store.prReviewShown?.round == 3 && store.actionError == nil)
     }
 
     @Test func aFixRoundWhoseTurnFailedIsLeftForThePerson() async throws {

@@ -59,7 +59,27 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored private var awaitingScope: String?
     private var awaitingRun: Bool { awaitingAfterTurn != nil }
 
-    private func setBusy(_ text: String?) { (busyText, busyScope) = (text, text == nil ? nil : currentScope) }
+    private func setBusy(_ text: String?) {
+        (busyText, busyScope) = (text, text == nil ? nil : currentScope)
+        resumeIdleWaiters()
+    }
+    /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
+    @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Returns once no other action holds the window (an "Open in Herdr" still going, a decision being recorded), so work the
+    /// app does on its own is not refused for a click that was already in progress.
+    func untilIdle() async {
+        while busyText != nil || deciding {
+            await withCheckedContinuation { idleWaiters.append($0) }
+        }
+    }
+
+    private func resumeIdleWaiters() {
+        guard busyText == nil, !deciding, !idleWaiters.isEmpty else { return }
+        let waiting = idleWaiters
+        idleWaiters = []
+        waiting.forEach { $0.resume() }
+    }
     /// The goal agent is drafting a goal from a request.
     /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
     var namingGoal = false
@@ -99,7 +119,7 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var fixRoundToShip: FixRound?
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
-    var deciding = false
+    var deciding = false { didSet { resumeIdleWaiters() } }
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
     /// The run this app started and has not seen end. At most one: a second start is refused.

@@ -80,7 +80,10 @@ extension ProjectStore {
         guard let round = fixRoundToShip else { return }
         // Held until the round is done, so a reader can tell the window is still on it.
         defer { fixRoundToShip = nil }
-        guard let project, round.generation == generation, currentThread == round.thread, actionError == nil,
+        // Read before waiting: an error here is the run's, one set later is the other action's and does not stop the round.
+        guard actionError == nil else { return }
+        await untilIdle()
+        guard let project, round.generation == generation, currentThread == round.thread,
             case .thread(let shown) = screen
         else { return }
         let review = shown.state.review
