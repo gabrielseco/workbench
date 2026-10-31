@@ -563,9 +563,12 @@ Notes:
   cuts the thread's worktree as a run would when it has none (recorded with `worktree.created`, so a later run, review or accept
   uses the same base), copies the approved goal and its screenshots in (`.workbench/goal-copy/`; refused when the goal cannot be
   copied), and opens the worktree in Herdr as above. In a space it made it types
-  `/usr/bin/perl -e 'alarm shift; exec @ARGV …' <turn_timeout_min × 60> claude '<fixed prompt naming .workbench/goal-copy/goal.md>'`
-  into the terminal `space.new` named (`herdr-app do terminal.send --id <terminal> --text <command>`): the alarm survives the
-  `exec`, so claude itself is stopped at the approved timeout. Nothing from the goal reaches the shell. Until that send succeeds
+  `/usr/bin/perl -MPOSIX=WNOHANG -e '<supervisor>' <turn_timeout_min × 60> 10 claude '<fixed prompt naming .workbench/goal-copy/goal.md>'`
+  into the terminal `space.new` named (`herdr-app do terminal.send --id <terminal> --text <command>`). The supervisor runs
+  claude as its child in the terminal's foreground (it ignores Ctrl-C, which is claude's) and at the approved timeout stops
+  claude and everything it started: SIGTERM to each descendant and to the process groups they are in, 10 seconds' grace, then
+  SIGKILL to what is left, also a tool child that ignored SIGTERM or was orphaned when claude died. It then exits 124; a
+  session that ends by itself keeps claude's exit status. Nothing from the goal reaches the shell. Until that send succeeds
   the space and terminal are kept in `.workbench/threads/<id>/herdr-pending.json`, so pressing it again after a refused send
   sends the goal to that space; any other space the worktree already had is only brought forward and is not sent the goal again.
   The goal screen shows the outcome: sent, already open,

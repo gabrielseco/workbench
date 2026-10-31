@@ -193,17 +193,45 @@ public struct HerdrOpener: Sendable {
     public static let sendCommand = "terminal.send"
 
     /// What is typed into the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
-    /// itself reaches the shell, stopped by an alarm after the goal's `turn_timeout_min`.
+    /// itself reaches the shell, stopped with everything it started after the goal's `turn_timeout_min`.
     public static func claudeCommand(turnTimeoutMin: Int) -> String {
         claudeCommand(timeoutSeconds: max(1, turnTimeoutMin) * 60)
     }
 
-    /// The alarm outlives `exec`, so it is claude itself that is stopped, with nothing left waiting behind it.
-    static func claudeCommand(timeoutSeconds: Int) -> String {
-        "/usr/bin/perl -e 'alarm shift; exec @ARGV or die \"claude: $!\"' \(timeoutSeconds) "
+    /// A Perl supervisor runs claude as its child, in the shell's foreground group so it keeps the terminal. At the timeout it
+    /// sends SIGTERM to every descendant and to the process groups they lead or joined, waits `graceSeconds`, then SIGKILLs what
+    /// it saw (a pid only while it is still in the group it was seen in, so a reused pid is spared) and what is there now. The
+    /// tree is taken before anything is signalled: a tool child whose parent dies is reparented and would not be found after.
+    static func claudeCommand(timeoutSeconds: Int, graceSeconds: Int = 10) -> String {
+        "/usr/bin/perl -MPOSIX=WNOHANG -e '\(supervisor)' \(timeoutSeconds) \(graceSeconds) "
             + "claude 'Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
             + "Work on it here until every criterion holds, and commit your work.'"
     }
+
+    /// One line with no single quote (it goes inside the shell's) and no `\n` escape, so it can be typed into a terminal as it is.
+    private static let supervisor = [
+        #"my ($t, $w) = splice @ARGV, 0, 2;"#,
+        #"defined(my $c = fork) or die "claude: $!$/";"#,
+        #"unless ($c) { exec @ARGV or die "claude: $!$/" }"#,
+        // Ctrl-C reaches the whole foreground group; it is claude's to handle, and must not take the supervisor away.
+        #"$SIG{$_} = "IGNORE" for qw(INT QUIT);"#,
+        #"sub table { my %g; my %k; for (`/bin/ps -A -o pid= -o ppid= -o pgid=`) { my ($p, $q, $r) = split; "#
+            + #"next unless defined $r; $g{$p} = $r; push @{$k{$q}}, $p } return (\%g, \%k) }"#,
+        #"sub tree { my ($g, $k) = table(); my @todo = ($$); my @found; "#
+            + #"while (@todo) { for (@{$k->{shift @todo} || []}) { push @found, $_; push @todo, $_ } } "#,
+        #"my %skip = (getpgrp() => 1, ($g->{getppid()} // 0) => 1, 0 => 1, 1 => 1); "#
+            + #"my %groups = map { $g->{$_} => 1 } grep { !$skip{$g->{$_}} } @found; "#
+            + #"return ({ map { $_ => $g->{$_} } @found }, [keys %groups]) }"#,
+        #"sub hit { my ($s, $pids, $groups) = @_; kill $s, @$pids if @$pids; kill $s, map { -$_ } @$groups if @$groups }"#,
+        #"sub stop { my ($seen, $groups) = tree(); hit("TERM", [keys %$seen], $groups); "#
+            + #"for (1 .. $w * 10) { waitpid $c, WNOHANG; last unless kill 0, keys %$seen; select undef, undef, undef, 0.1 } "#,
+        #"my ($now) = table(); my @left = grep { ($now->{$_} // -1) == $seen->{$_} } keys %$seen; "#
+            + #"my ($more, $late) = tree(); hit("KILL", [@left, keys %$more], [@$groups, @$late]); "#
+            + #"waitpid $c, 0; exit 124 }"#,
+        #"$SIG{ALRM} = sub { print STDERR $/, "claude: stopped after $t seconds, the goal turn_timeout_min", $/; stop() };"#,
+        #"alarm $t; waitpid $c, 0; alarm 0;"#,
+        #"exit($? & 127 ? 128 + ($? & 127) : $? >> 8);"#,
+    ].joined(separator: " ")
 
     /// The space showing `folder`, selected or made; the terminal Herdr names for a space it made; and whether the app was started.
     private struct OpenedSpace {

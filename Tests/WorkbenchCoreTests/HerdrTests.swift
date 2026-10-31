@@ -209,31 +209,65 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(!fake.calls.contains { $0.hasPrefix("do ") }, "probing the window changed something in Herdr")
     }
 
-    /// The typed command, run by a shell with a stand-in `claude` that never ends: the alarm stops it at the goal's timeout.
-    @Test func theSessionIsStoppedAtTheTimeout() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("timed-claude-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+    /// Runs the typed command in a shell, with `claude` the stand-in `script`, until it ends; the supervisor's own timeout is 3 s.
+    private func runTimed(_ script: String, in dir: URL) async throws -> ProcessExit {
         let claude = dir.appendingPathComponent("claude")
-        let argsFile = dir.appendingPathComponent("args")
-        try "#!/bin/sh\nprintf '%s' \"$*\" > '\(argsFile.path)'\nexec sleep 60\n".write(
-            to: claude, atomically: true, encoding: .utf8)
+        try ("#!/bin/sh\n" + script).write(to: claude, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         var request = SpawnRequest(
-            executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", HerdrOpener.claudeCommand(timeoutSeconds: 3)],
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", HerdrOpener.claudeCommand(timeoutSeconds: 3, graceSeconds: 1)],
             environment: ["PATH": "\(dir.path):/usr/bin:/bin"], workingDirectory: dir, timeout: 30)
         request.killGrace = 1
         let run = try ProcessRunner.start(request)
         var exit: ProcessExit?
         for await event in run.events { if case .exited(let ended) = event { exit = ended } }
         let ended = try #require(exit)
-        #expect(ended.cause != .timedOut, "the alarm did not stop the session")
-        #expect(
-            ended.termination == .signaled(SIGALRM) || ended.termination == .exited(128 + SIGALRM),
-            "\(ended.termination): \(ended.stderrTail)")
+        #expect(ended.cause != .timedOut, "the supervisor did not stop the session")
+        return ended
+    }
+
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("timed-claude-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// The typed command, run by a shell with a stand-in `claude` that never ends: it is stopped at the goal's timeout.
+    @Test func theSessionIsStoppedAtTheTimeout() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let argsFile = dir.appendingPathComponent("args")
+        let ended = try await runTimed("printf '%s' \"$*\" > '\(argsFile.path)'\nexec sleep 60\n", in: dir)
+        #expect(ended.termination == .exited(124), "\(ended.termination): \(ended.stderrTail)")
         // The prompt points at the goal copy and carries nothing from the goal.
         let args = try String(contentsOf: argsFile, encoding: .utf8)
         #expect(args.hasPrefix("Read \(WorktreeManager.goalCopyPath)"))
+    }
+
+    /// A tool claude started, in a group of its own and ignoring SIGTERM, does not outlive the timeout.
+    @Test func aToolChildThatIgnoresTermIsStoppedWithTheSession() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pidFile = dir.appendingPathComponent("tool.pid")
+        let tool = #"perl -e 'setpgrp(0, 0); $SIG{TERM} = "IGNORE"; open my $f, ">", shift; print $f $$; close $f; sleep 300' "#
+            + "'\(pidFile.path)' &\nexec sleep 60\n"
+        let ended = try await runTimed(tool, in: dir)
+        #expect(ended.termination == .exited(124), "\(ended.termination): \(ended.stderrTail)")
+        let text = try String(contentsOf: pidFile, encoding: .utf8)
+        let pid = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { kill(pid, SIGKILL) }
+        // Killed, it is reparented and reaped; give that a moment.
+        let deadline = Date().addingTimeInterval(5)
+        while kill(pid, 0) == 0, Date() < deadline { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(kill(pid, 0) != 0, "the tool child outlived the session's timeout")
+    }
+
+    @Test func aSessionThatEndsByItselfKeepsItsExitStatus() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let ended = try await runTimed("exit 3\n", in: dir)
+        #expect(ended.termination == .exited(3), "\(ended.termination): \(ended.stderrTail)")
     }
 
     @Test func theTimeoutIsTheGoalsInSeconds() {
