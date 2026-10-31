@@ -8,10 +8,13 @@
 # and say that fix: pr accepts its own work and never merges; a broken task must be refused (exit 6) and an unknown one
 # not found (exit 7). After approval `task list` says approved; editing the file's words or its pending script says STALE, and
 # a whitespace-only edit or a new input file keeps it approved. The approval is one task.approved line in the task's own
-# runs.jsonl. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 skips the approve and makes the word edits whitespace-only, so "approve prints the approval",
-# "approve writes one task.approved line", "list: approved after approve", "editing the words says STALE" and "editing the
-# pending script says STALE" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# runs.jsonl. `task new` must create task.md and an executable pending.sh that list as a draft with fix: report, `task approve`
+# must refuse it (exit 6) while its instructions still say TODO(workbench) and accept it once they are written, a second `task new`
+# of the same name must refuse (exit 6) and leave the file as it was, and a bad name or path must be a usage error (exit 2) that
+# creates nothing. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
+# VERIFY_CLI_SABOTAGE=1 skips the approve, makes the word edits whitespace-only and leaves the scaffold's placeholder in, so
+# "approve prints the approval", "approve writes one task.approved line", "list: approved after approve", "editing the words
+# says STALE", "editing the pending script says STALE" and "a scaffold can be approved once its instructions are written" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -94,5 +97,36 @@ check "approving an unknown task is not found (exit 7)" "exit $RC: $(head -c 200
 wbp "$SCRATCH/usage.out" task
 check "task alone is a usage error (exit 2)" "exit $RC" test "$RC" = 2
 check "the broken task got no run log" "runs.jsonl exists" test ! -e "$TASKS/broken/runs.jsonl"
+
+# --- 5. task new --------------------------------------------------------------------------------------------
+
+printf 'Follow this.\n' >"$P/skill.md"; printf 'ROU\n' >"$P/list.txt"
+wbp "$SCRATCH/new.out" task new fresh --include skill.md --input list.txt; shown "$SCRATCH/new.out" 12
+NEW="$P/.workbench/tasks/fresh"
+check "task new creates task.md and an executable pending.sh" "exit $RC: $(head -c 300 "$SCRATCH/new.out")" \
+    bash -c '[ "$1" = 0 ] && [ -f "$2/task.md" ] && [ -x "$2/pending.sh" ] && grep -q "^include: skill.md" "$2/task.md" && grep -q "^inputs: \[list.txt\]" "$2/task.md"' _ "$RC" "$NEW"
+check "task new says what to do next and does not warn about git (this repository ignores .workbench/)" "got: $(head -c 400 "$SCRATCH/new.out")" \
+    bash -c 'grep -q "workbench task approve fresh" "$1" && ! grep -q "git does not ignore" "$1"' _ "$SCRATCH/new.out"
+wbp "$SCRATCH/list6.out" task list
+check "the new task lists as a draft that only reports" "got: $(grep '^fresh' "$SCRATCH/list6.out")" \
+    bash -c 'grep -E "^fresh +no schedule +fix: report +not approved" "$1" >/dev/null' _ "$SCRATCH/list6.out"
+wbp "$SCRATCH/draft.out" task approve fresh
+check "a scaffold cannot be approved while it says TODO(workbench) (exit 6)" "exit $RC: $(head -c 300 "$SCRATCH/draft.out")" \
+    bash -c '[ "$1" = 6 ] && grep -q "TODO(workbench)" "$2"' _ "$RC" "$SCRATCH/draft.out"
+if [ "$SABOTAGE" != 1 ]; then
+    grep -v 'TODO(workbench)\|Delete this line' "$NEW/task.md" >"$NEW/task.md.new" && mv "$NEW/task.md.new" "$NEW/task.md"
+    printf 'Bump the next country.\n' >>"$NEW/task.md"
+fi
+wbp "$SCRATCH/written.out" task approve fresh
+check "a scaffold can be approved once its instructions are written" "exit $RC: $(head -c 300 "$SCRATCH/written.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^approved fresh" "$2"' _ "$RC" "$SCRATCH/written.out"
+BEFORE_SUM=$(cksum <"$NEW/task.md")
+wbp "$SCRATCH/again.out" task new fresh
+check "task new on an existing task is refused (exit 6) and leaves the file as it was" "exit $RC: $(head -c 200 "$SCRATCH/again.out")" \
+    bash -c '[ "$1" = 6 ] && [ "$(cksum <"$2/task.md")" = "$3" ]' _ "$RC" "$NEW" "$BEFORE_SUM"
+wbp "$SCRATCH/badname.out" task new ../x; NAME_RC=$RC
+wbp "$SCRATCH/badpath.out" task new other --input /etc/passwd
+check "a bad name or path is a usage error (exit 2) and creates nothing" "name: $(head -c 100 "$SCRATCH/badname.out") path: $(head -c 100 "$SCRATCH/badpath.out")" \
+    bash -c '[ "$1" = 2 ] && [ "$2" = 2 ] && [ ! -e "$3/other" ] && [ ! -e "$3/../x" ]' _ "$NAME_RC" "$RC" "$TASKS"
 
 finish

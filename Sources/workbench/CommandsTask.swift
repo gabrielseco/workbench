@@ -2,7 +2,8 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    private static let taskUsage = "usage: workbench task list | task approve <name> | task run <name> | task tick"
+    private static let taskUsage =
+        "usage: workbench task list | task new <name> | task approve <name> | task run <name> | task tick"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
     /// one now; `task tick` runs the ones that are due, one after the other.
@@ -13,6 +14,15 @@ extension Commands {
         case "list":
             try a.requireEmpty()
             try await taskList()
+        case "new":
+            let include = try a.value("--include")
+            var inputs: [String] = []
+            while let input = try a.value("--input") { inputs.append(input) }
+            guard let name = a.positional() else {
+                throw CLIError.usage("usage: workbench task new <name> [--include <file>] [--input <path>]...")
+            }
+            try a.requireEmpty()
+            try await taskNew(name, include: include, inputs: inputs)
         case "approve":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench task approve <name>") }
             try a.requireEmpty()
@@ -120,6 +130,35 @@ extension Commands {
         }
     }
 
+    private static func taskNew(_ name: String, include: String?, inputs: [String]) async throws {
+        let ctx = try await Context.load()
+        let result: TaskScaffoldResult
+        do {
+            result = try TaskScaffold.create(project: ctx.project, name: name, include: include, inputs: inputs)
+        } catch let error as TaskScaffoldError {
+            switch error {
+            case .exists: throw CLIError.refused("\(error)")
+            default: throw CLIError.usage("\(error)")
+            }
+        }
+        out("created .workbench/tasks/\(name)/")
+        out("  task.md     every setting, explained; fix: report until you change it")
+        out("  pending.sh  prints the units of work; it lists none yet")
+        for path in result.missing { out("note: \(path) does not exist yet; create it before the task runs") }
+        if !FileManager.default.fileExists(atPath: ctx.project.configURL.path) {
+            out("note: no .workbench/config.toml yet; run `workbench init` (fix: pr needs check_command in it)")
+        }
+        // Tasks are local: a `.workbench/` that git would commit puts them in the repository.
+        let ignored = try? await ctx.git.run(
+            ["check-ignore", "-q", ".workbench/tasks/\(name)/task.md"], in: ctx.project.root)
+        if let ignored, ignored.status == 1 {
+            out("note: git does not ignore .workbench/ here; add it to .gitignore or .git/info/exclude, since tasks are local")
+        }
+        out("then:    edit .workbench/tasks/\(name)/task.md and pending.sh")
+        out("         workbench task run \(name)       (lists what it would take while fix: report)")
+        out("         workbench task approve \(name)")
+    }
+
     private static func taskApprove(_ name: String) async throws {
         let ctx = try await Context.load()
         let library = TaskLibrary(project: ctx.project)
@@ -133,6 +172,8 @@ extension Commands {
         let hash: String
         do { hash = try await library.approve(name) } catch let error as EventLogError {
             throw CLIError.refused("the task's run log is in use or damaged: \(error)")
+        } catch let error as TaskFileError {
+            throw CLIError.refused("the task cannot be approved: \(error)")
         }
         out("approved \(name) (\(hash.prefix(12)))")
         if let schedule = loaded.definition.schedule { out("it is due \(schedule.summary)") }

@@ -111,11 +111,12 @@ enum Help {
             example: "workbench abandon"),
         "task": Extra(
             changes:
-                "task list: nothing; read-only; task approve: appends task.approved to the task's own run log "
+                "task new: creates .workbench/tasks/<name>/ with task.md and pending.sh; task list: nothing; read-only; "
+                + "task approve: appends task.approved to the task's own run log "
                 + "(.workbench/tasks/<name>/runs.jsonl); task run and task tick: append task.run.started and task.run.ended "
                 + "there and, with fix: pr, create a thread, run Claude and the check in its worktree, accept it and push "
                 + "its branch to open a pull request",
-            example: "workbench task list   or   workbench task run bump-countries"),
+            example: "workbench task new bump-countries --input countries.txt   or   workbench task run bump-countries"),
         "version": Extra(changes: "nothing; read-only", example: "workbench version"),
     ]
 

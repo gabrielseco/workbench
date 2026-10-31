@@ -86,6 +86,12 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 
 ## Commands
 
+- `workbench task new <name> [--include <file>] [--input <path>]...`: starts a task. It writes `.workbench/tasks/<name>/task.md` with every
+  setting present and explained (the schedule keys commented out, `fix: report`, `batch: 1`, `pending` pointing at the stub) and an executable
+  `pending.sh` that prints `[]`, and runs no agent. `--include` and `--input` fill those lines; a path that does not exist yet is a note.
+  The instructions start with a `TODO(workbench)` line, and `task approve` refuses a task that still has it. A name or path that is not
+  safe is a usage error (exit 2); a task that exists is never touched (exit 6). The command notes a project with no `.workbench/config.toml`
+  and a repository that does not ignore `.workbench/` (tasks are local).
 - `workbench task list`: one line per task: schedule, fix level, approval (approved, STALE, not approved), next due time, last outcome. A task
   that does not load is a PROBLEM line with the line and key.
 - `workbench task approve <name>`: records the approval. Exit 6 for a task that does not parse, 7 for no such task.
