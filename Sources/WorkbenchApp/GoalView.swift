@@ -102,8 +102,8 @@ struct GoalView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if goal.rows.isEmpty && goal.quick {
                     Text(
-                        "The request is the goal. With no criteria the judge and the verifier do not run, and you check the "
-                            + "work against the request. Add a criterion to have them check it."
+                        "The request is the goal. With no criteria the judge does not run, the verifier drives the app from the "
+                            + "request, and you check the work against it. Add a criterion to have the judge check it."
                     )
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }

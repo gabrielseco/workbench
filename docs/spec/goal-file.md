@@ -266,10 +266,11 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   needs at least one criterion. `workbench goal new <name> --quick "<text>"` and the app's New goal card (which opens on Quick;
   Advanced has the goal agent draft criteria from the same text, as `goal draft` does) write one: the text, trimmed at its ends,
   is the request word for word, the title is its first line, and no agent runs. A line of the text that starts with `## ` is
-  refused rather than changed, since it would start a section. A goal with no criteria has no judge and no verifier: `judge`
-  and `verifier` are refused (exit 6, nothing written) saying the goal has no criteria, the verifier after a turn records
-  `verifier.skipped` with that reason, `[review] auto` prints `auto judge: skipped, the goal has no criteria …`, `next` and
-  `review` do not list the judge, and `review` prints `Judge      not available: …`. The coding prompt then has no
+  refused rather than changed, since it would start a section. A goal with no criteria has no judge: `judge` is refused (exit 6, nothing written) saying the goal has no
+  criteria, `[review] auto` prints `auto judge: skipped, the goal has no criteria …`, `next` and `review` do not list the
+  judge, and `review` prints `Judge      not available: …`. The verifier still runs, after a turn and by `workbench verifier`:
+  with no criteria it is told to drive the app from the request, leave a screenshot of each thing the request asks to see and
+  say whether it holds, so the design stage has proof to read. The coding prompt then has no
   `## Criteria` section. Adding a criterion brings them back, `quick` or not; removing the last one is allowed only with
   `quick: true`. The approval binds it, so setting or clearing it returns an approved goal to draft; `goal new --from` carries
   it. An older Workbench reports `unknown key 'quick'` and refuses the goal.

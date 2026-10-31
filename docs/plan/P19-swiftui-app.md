@@ -163,7 +163,7 @@ the start of the slice.
   **Quick and Advanced (built).** The card opens on Quick: Create writes the text as a quick goal (`ThreadService.newQuickGoal`,
   `quick: true`, no criteria, no agent; docs/spec/goal-file.md), so a brief request is not expanded into generated criteria.
   Advanced is the drafted goal above, from the same text: switching never touches what was typed. The goal screen of a goal
-  without criteria says the judge and the verifier do not run and why (their switches are disabled), and the Review screen says
+  without criteria says the judge does not run and why (its switch is disabled) and that the verifier works from the request, and the Review screen says
   `Judge not available: …` where the criteria would be.
 - **The person's `PATH`.** An app opened from the Dock gets the system's bare `PATH`, so `codex`, `claude`, `node` and the check command
   were "not found" there. At launch the app asks the login shell (`$SHELL -ilc`, 5 s, output between markers) for its `PATH` and

@@ -22,7 +22,8 @@ struct NewGoalForm: Equatable {
     var note: String {
         switch mode {
         case .quick:
-            "Keeps your words as the goal, with no criteria: the judge and the verifier do not run. You approve it next."
+            "Keeps your words as the goal, with no criteria: the judge does not run and the verifier works from "
+                + "your words. You approve it next."
         case .advanced: "The goal agent drafts criteria from this. You read it and approve it next; nothing runs before that."
         }
     }

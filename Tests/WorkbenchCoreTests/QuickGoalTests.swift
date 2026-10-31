@@ -83,11 +83,6 @@ private func headings(_ prompt: String) -> [String] {
             _ = try await fx.service.judge(id: id, config: config, environment: ["PATH": "/usr/bin:/bin"])
         }
         #expect("\(JudgeRefusal.noCriteria)".contains(Goal.noCriteriaJudge))
-        if config.verifier != nil {
-            await #expect(throws: VerifierRefusal.noCriteria) {
-                _ = try await fx.service.verifier(id: id, config: config, environment: ["PATH": "/usr/bin:/bin"])
-            }
-        }
         #expect(try fx.kinds(id) == before, "a refusal writes nothing")
 
         // `[review] auto` skips it and says why.
@@ -99,7 +94,7 @@ private func headings(_ prompt: String) -> [String] {
         // `review` and `next` leave it out of what is due, and say why it is not there.
         let review = await ReviewLoader(project: fx.project, git: fx.git).load(id: id)
         #expect(!review.nextSteps.contains { $0.kind == .judge })
-        #expect(review.unavailableSteps.map(\.name) == ["verifier", "judge"])
+        #expect(review.unavailableSteps.map(\.name) == ["judge"], "the verifier works from the request")
         #expect(review.unavailableSteps.last?.why == Goal.noCriteriaJudge)
         #expect(review.render().contains("Judge      not available: \(Goal.noCriteriaJudge)"))
 
@@ -108,6 +103,27 @@ private func headings(_ prompt: String) -> [String] {
         let edited = try GoalEditor.apply(.addCriterion(text: "The header is blue.", proof: "screenshot: header"), to: file)
         #expect(edited.goal.unavailable("judge") == nil)
         #expect(try GoalEditor.apply(.removeCriterion(id: "c1"), to: edited).goal.criteria.isEmpty, "and can go again")
+    }
+
+    @Test func theVerifierIsToldTheRequestAndNoCriteriaForAQuickGoal() throws {
+        let skill = VerifierSkill(path: "v.md", text: "SKILL TEXT", sha256: "", bytes: 10, truncated: false)
+        let dir = URL(fileURLWithPath: "/tmp/proof")
+        let quick = try GoalFile.parse(
+            "---\nid: g\ntitle: T\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\nquick: true\n---\n\n"
+                + "## Request\n\nMake the header blue.\n").goal
+        let text = Verifier.prompt(skill: skill, goal: quick, proofDirectory: dir, threadID: "g", goalPath: "/g.md")
+        // The request and the skill reach it, and the section for criteria says there are none instead of being empty.
+        #expect(text.contains("Make the header blue.") && text.contains("SKILL TEXT"))
+        let sections = text.components(separatedBy: "\n## ").map { $0.prefix { $0 != "\n" } }
+        #expect(sections.filter { $0 == "Criteria" }.count == 1)
+        #expect(!text.contains("\n  - proof:"), "no criterion is invented")
+
+        let ordinary = try GoalFile.parse(
+            "---\nid: g\ntitle: T\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\n---\n\n## Request\n\nDo it.\n\n"
+                + "## Criteria\n\n- [c1] Done.\n  - proof: screenshot: done\n").goal
+        let withCriterion = Verifier.prompt(skill: skill, goal: ordinary, proofDirectory: dir, threadID: "g", goalPath: "/g.md")
+        #expect(withCriterion.contains("- [c1] Done.") && withCriterion.contains("proof: screenshot: done"))
+        #expect(!withCriterion.contains("None: this is a quick goal"))
     }
 
     @Test func aStageNamedLikeABuiltInStepStillRunsWithoutCriteria() async throws {
@@ -127,7 +143,7 @@ private func headings(_ prompt: String) -> [String] {
         config.review.auto = ["verifier"]
         let advice = await fx.service.runAutoAdvice(id: id, config: config)
         // Uncommitted work stops it before anything starts; what matters is that it got past the criteria check.
-        #expect(advice.count == 1 && advice.first?.outcome != .skipped(Goal.noCriteriaVerifier))
+        #expect(advice.count == 1)
         #expect(advice.first.map { "\($0.outcome)".contains("uncommitted") } == true, "\(advice)")
     }
 

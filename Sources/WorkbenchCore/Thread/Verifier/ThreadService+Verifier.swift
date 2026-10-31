@@ -9,11 +9,9 @@ public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible
     case noWorktree
     case claudeNotFound(String)
     case busy
-    case noCriteria
 
     public var description: String {
         switch self {
-        case .noCriteria: "not verified: \(Goal.noCriteriaVerifier)."
         case .notConfigured:
             "this project turned the verifier off with [verifier] enabled = false in .workbench/config.toml."
         case .noTurn: "nothing to verify: no turn has run."
@@ -78,7 +76,6 @@ extension ThreadService {
         do {
             goal = try GoalFile.parse(String(contentsOf: project.goalURL(id), encoding: .utf8)).goal
         } catch { throw VerifierRefusal.goalUnreadable("\(error)") }
-        if goal.unavailable("verifier") != nil { throw VerifierRefusal.noCriteria }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { throw VerifierRefusal.noWorktree }
         guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
@@ -152,8 +149,6 @@ extension ThreadRunner {
         case .failure(.missing): return nil  // most projects have no verify skill; that is not worth a line per turn
         case .failure(let problem): return try await skip("\(problem)", turn: turn, log: log)
         }
-        // After the skill is found: a project with none says nothing per turn, quick goal or not.
-        if let why = goal.unavailable("verifier") { return try await skip(why, turn: turn, log: log) }
         if stopRequested { return try await skip("the run was stopped", turn: turn, log: log) }
         if let events = try? EventLogReader.read(at: project.eventsURL(threadID)).events,
             events.contains(where: { $0.kind == .verifierEnded && $0.turn == turn }) {

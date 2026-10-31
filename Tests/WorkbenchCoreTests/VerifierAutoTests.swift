@@ -32,6 +32,22 @@ import Testing
         #expect(seen == ["started \(".claude/skills/verify/SKILL.md")", "ended true"])
     }
 
+    @Test func aQuickGoalWithoutCriteriaIsVerifiedAfterAPassingCheckAndLeavesItsProof() async throws {
+        let v = try await VerifierFixture(check: "true", runTurn: false, quick: true)
+        let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt,proof=shot.png"))
+        let verifier = try #require(report.verifier, "a quick goal's verifier must run")
+        #expect(verifier.ok && verifier.files.map(\.name) == ["shot.png"])
+        #expect(try verifierKinds(v) == ["verifier.started", "verifier.ended"])
+        #expect(try kinds(v).contains("proof.added"), "the design stage reads this")
+    }
+
+    @Test func aQuickGoalWithoutCriteriaIsVerifiedWhenAskedFor() async throws {
+        let v = try await VerifierFixture(quick: true)
+        let report = try await v.verify("proof=shot.png")
+        #expect(report.ok && report.files.map(\.name) == ["shot.png"])
+        try v.expectPaired(1)
+    }
+
     @Test func itDoesNotRunWhenSwitchedOff() async throws {
         let v = try await VerifierFixture(verifier: "enabled = false", check: "true", runTurn: false)
         let report = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt"))

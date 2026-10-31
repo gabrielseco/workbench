@@ -8,7 +8,7 @@
 # Steps: `goal new --quick` exits 0 and writes a draft goal with `quick: true`, no criteria and the request exactly as typed (a
 # blank line and an indented line kept); `goal approve` takes it; after a finished turn `next` lists only `accept` (no judge);
 # `review` says `Judge      not available` and why; `judge` is refused (exit 6) saying the goal has no criteria, and writes no
-# event; `--quick` with only blanks is refused (exit 6) and with `--from` is a usage error (exit 2), both making no thread.
+# event; `verifier` is not refused for that (it goes on to look for claude, which is not there); `--quick` with only blanks is refused (exit 6) and with `--from` is a usage error (exit 2), both making no thread.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 turns the goal into an ordinary one (no `quick`, one criterion) before it is approved, so the steps that
 # expect no judge (`next`, `review`, `judge` refused) must FAIL. The frame is in lib.sh. Run by hand, not by CI.
@@ -101,7 +101,12 @@ wbp "$SCRATCH/judge.out" judge "$ID"
 shown "$SCRATCH/judge.out"
 check "judge is refused (exit 6), saying the goal has no criteria" "exit $RC: $(cat "$SCRATCH/judge.out")" \
     bash -c 'test "$1" = 6 && grep -q "has no criteria" "$2"' _ "$RC" "$SCRATCH/judge.out"
-check "next, review and judge wrote no event" "the log grew" test "$(wc -l <"$EVENTS" | tr -d ' ')" = "$LINES_BEFORE"
+# The verifier is not refused for want of criteria: it gets as far as looking for claude, which is nowhere, so nothing starts.
+wbp "$SCRATCH/verifier.out" verifier "$ID"
+shown "$SCRATCH/verifier.out"
+check "verifier is not refused for having no criteria: it only fails to find claude" "exit $RC: $(cat "$SCRATCH/verifier.out")" \
+    bash -c '! grep -q "no criteria" "$1" && grep -q "was not found" "$1"' _ "$SCRATCH/verifier.out"
+check "next, review, judge and verifier wrote no event" "the log grew" test "$(wc -l <"$EVENTS" | tr -d ' ')" = "$LINES_BEFORE"
 
 # --- what --quick refuses ----------------------------------------------------------------------------------------------
 
