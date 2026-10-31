@@ -74,81 +74,59 @@ private final class Recorder: @unchecked Sendable {
         #expect(!fixing(nil).canFix && !fixing("  \n").canFix)
     }
 
-    @Test func theConfirmCreatesNothingUntilItIsAccepted() async throws {
-        let calls = Calls()
-        let (store, _) = try await store(calls)
-        await store.prepareFollowUp()
-        #expect(store.pendingFollowUp == Self.plan)
-        store.cancelFollowUp()
-        #expect(store.pendingFollowUp == nil)
-        // Confirming without the confirm having been read does nothing either.
-        await store.confirmFollowUp()
-        #expect(calls.followUps.isEmpty && calls.runThreads.isEmpty && store.prReviewShown != nil)
-    }
-
-    @Test func aPlanStillBeingReadWhenTheSheetClosesIsDropped() async throws {
+    @Test func aFixRoundStillBeingReadWhenTheSheetClosesStartsNothing() async throws {
         let calls = Calls()
         let gate = RunGate()
         let (store, _) = try await store(calls, planGate: gate)
-        for how in ["close", "not now"] {
-            store.prReviewShown = fixing()
-            let before = calls.planReads
-            let reading = Task { await store.prepareFollowUp() }
-            for _ in 0..<200 where calls.planReads == before { await Task.yield() }
-            #expect(calls.planReads == before + 1)
-            if how == "close" { store.closePRReview() } else { store.cancelFollowUp() }
-            await gate.open()
-            await reading.value
-            // What it read belongs to a confirm that is gone: it must not come back on reopening.
-            #expect(store.pendingFollowUp == nil, "after \(how)")
-            await gate.reset()
-        }
+        let reading = Task { await store.fixFindings() }
+        for _ in 0..<200 where calls.planReads == 0 { await Task.yield() }
+        #expect(calls.planReads == 1)
+        store.closePRReview()
+        await gate.open()
+        await reading.value
+        #expect(calls.followUps.isEmpty && calls.runThreads.isEmpty && store.currentThread == "t1")
+        #expect(store.followUpError == nil && store.busy == nil)
     }
 
-    @Test func theConfirmSaysWhatItStartsAndWhatItCanCost() {
-        let text = Self.plan.text
-        #expect(text.contains("follow-up 1 of at most 2") && text.contains("#7") && text.contains("up to $5.00"))
-    }
-
-    @Test func theConfirmSaysWhenThereIsNoDollarCap() {
-        let text = FollowUpPlan(pr: 7, round: 1, allowed: 2, budget: nil).text
-        #expect(text.contains("no dollar cap") && !text.contains("$"))
-    }
-
-    @Test func confirmingStartsTheFollowUpWithTheRoundsFindings() async throws {
+    @Test func oneClickStartsTheFollowUpWithTheRoundsFindingsAndTheBudgetRead() async throws {
         let calls = Calls()
         let (store, _) = try await store(calls)
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
-        #expect(calls.followUps == ["t1 round 2: - a bug"])
+        await store.fixFindings()
+        #expect(calls.planReads == 1 && calls.followUps == ["t1 round 2: - a bug"])
     }
 
     @Test func theFollowUpIsShownAndItsTurnStarted() async throws {
         let calls = Calls()
         let (store, _) = try await store(calls)
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
-        #expect(store.prReviewShown == nil && store.pendingFollowUp == nil)
+        await store.fixFindings()
+        #expect(store.prReviewShown == nil && store.followUpError == nil)
         #expect(store.currentThread == "t2" && calls.runThreads == ["t2"])
     }
 
-    @Test func aRefusalShowsInTheSheetAndStartsNothing() async throws {
+    @Test func aRefusedStartShowsInTheSheetAndStartsNothing() async throws {
         struct Refused: Error, CustomStringConvertible { var description = "no rounds left" }
         let calls = Calls()
         let (store, _) = try await store(calls, startError: Refused())
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
+        await store.fixFindings()
         #expect(store.followUpError == "no rounds left" && store.prReviewShown != nil)
         #expect(calls.followUps.isEmpty && calls.runThreads.isEmpty && store.currentThread == "t1")
     }
 
-    @Test func aPlanWithNoRoundsLeftOffersNoStart() async throws {
+    @Test func aPlanWithNoRoundsLeftShowsWhyAndStartsNothing() async throws {
         let calls = Calls()
         let none = FollowUpPlan(pr: 7, round: 3, allowed: 2, budget: 5, refusal: "no rounds left")
         let (store, _) = try await store(calls, plan: none)
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
-        #expect(store.pendingFollowUp?.refusal == "no rounds left" && calls.followUps.isEmpty)
+        await store.fixFindings()
+        #expect(store.followUpError == "no rounds left" && store.prReviewShown != nil)
+        #expect(calls.followUps.isEmpty && calls.runThreads.isEmpty)
+    }
+
+    @Test func aClickOnANonFixRoundDoesNothing() async throws {
+        let calls = Calls()
+        let (store, _) = try await store(calls)
+        store.prReviewShown = fixing(verdict: .clean)
+        await store.fixFindings()
+        #expect(calls.planReads == 0 && calls.followUps.isEmpty)
     }
 
     // MARK: After the fix round's turn
@@ -162,7 +140,7 @@ private final class Recorder: @unchecked Sendable {
         base: "origin/main", head: "abcdef1234567890", origin: "git@example.test:me/repo.git", remote: .absent,
         pullRequest: nil)
 
-    /// A window that confirms a fix round whose turn ends with `result` (and a check with `check`, when given), and records
+    /// A window that starts a fix round whose turn ends with `result` (and a check with `check`, when given), and records
     /// what the decisions after it were called with, in order.
     private func fixRound(
         result: String = "succeeded", check: String? = nil, acceptError: Error? = nil, herdrHeld: RunGate? = nil,
@@ -233,8 +211,7 @@ private final class Recorder: @unchecked Sendable {
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         store.prReviewShown = fixing()
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
+        await store.fixFindings()
         if let herdrHeld {
             // "Open in Herdr" is clicked while the turn runs and is still going when the turn ends.
             for _ in 0..<500 where store.busy != nil {
@@ -366,8 +343,7 @@ private final class Recorder: @unchecked Sendable {
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: .core)
         #expect(await store.open(fixture.root))
         store.prReviewShown = fixing()
-        await store.prepareFollowUp()
-        await store.confirmFollowUp()
+        await store.fixFindings()
         #expect(store.followUpError?.contains("no recorded pull request") == true)
         #expect(store.prReviewShown != nil && store.currentThread == "t1" && !store.runningHere)
         #expect(ThreadStore(project: fixture.project).followUps(of: "t1").isEmpty)

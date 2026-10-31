@@ -110,12 +110,11 @@ struct RecentProject: Equatable, Identifiable {
     var pendingDiscard: DiscardPlan?
     /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
     var prReviewShown: PRReviewShown?
-    /// The confirm in the findings sheet for a fix round, and why a start was refused (the sheet covers the window's own error line).
-    var pendingFollowUp: FollowUpPlan?
+    /// Why a fix round from the findings sheet was refused (the sheet covers the window's own error line).
     var followUpError: String?
-    /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
+    /// Bumped when the sheet closes: a fix round still being read for it starts nothing.
     @ObservationIgnored var followUpRequest = 0
-    /// A fix round confirmed in the findings sheet: when its run ends well it is accepted, shipped and reviewed without asking again.
+    /// A fix round started from the findings sheet: when its run ends well it is accepted, shipped and reviewed without asking.
     @ObservationIgnored var fixRoundToShip: FixRound?
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
