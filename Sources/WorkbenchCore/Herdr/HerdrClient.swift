@@ -110,22 +110,6 @@ public struct HerdrHandoff: Equatable, Sendable {
     }
 }
 
-/// A space a handoff made whose terminal has not been sent the goal yet.
-struct HerdrPendingSend: Codable, Equatable {
-    var space: String
-    var terminal: String
-
-    static func read(from url: URL) -> HerdrPendingSend? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(HerdrPendingSend.self, from: data)
-    }
-
-    func write(to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(self).write(to: url, options: .atomic)
-    }
-}
-
 /// "Open in Herdr": starts the Herdr app when its window is not open, then gives the thread's worktree a space (or selects the one it
 /// has) and brings the app forward. The app's own server comes up with its window, so there is nothing else to start.
 public struct HerdrOpener: Sendable {
@@ -162,53 +146,34 @@ public struct HerdrOpener: Sendable {
         }
     }
 
-    /// "Run in Herdr": opens the worktree as a space like `open`, and types `command` into the terminal of a space it made. A space
-    /// the worktree already had is only brought forward: a session already working there is not given the goal a second time. The
-    /// exception is a space this made whose send failed: `pending` remembers its terminal until a send succeeds, so trying again
-    /// sends the goal there.
-    public func handOff(folder: URL, label: String, command: String, pending: URL) async throws -> HerdrHandoff {
-        let space = try await openSpace(folder: folder, label: label)
-        let opened = space.opened
-        let unsent = HerdrPendingSend.read(from: pending)
-        var terminal: String?
-        if !opened.alreadyOpen {
-            guard let made = space.terminal, !made.isEmpty else {
-                throw HerdrFailure(
-                    code: "bad_answer", message: "Herdr made a space but did not name its terminal, so the goal was not sent")
-            }
-            try HerdrPendingSend(space: opened.space, terminal: made).write(to: pending)
-            terminal = made
-        } else if let unsent, unsent.space == opened.space {
-            terminal = unsent.terminal
-        }
-        if let terminal {
-            _ = try await client.call(["do", Self.sendCommand, "--id", terminal, "--text", command + "\n"])
-            try? FileManager.default.removeItem(at: pending)
-        }
+    /// "Run in Herdr": opens the worktree as a space like `open`, and starts `argv` as the first terminal of a space it made (`space.new
+    /// --argv`; this `herdr-app` has no command that types into a terminal). A space the worktree already had is only brought
+    /// forward: a session already working there is not given the goal a second time.
+    public func handOff(folder: URL, label: String, argv: [String]) async throws -> HerdrHandoff {
+        let space = try await openSpace(folder: folder, label: label, argv: argv)
         if !space.wasDown { try? await launchApp() }
-        return HerdrHandoff(space: opened.space, alreadyOpen: terminal == nil)
+        return HerdrHandoff(space: space.opened.space, alreadyOpen: space.opened.alreadyOpen)
     }
 
-    /// The `herdr-app do` command that types text into a terminal, as if it were typed there.
-    public static let sendCommand = "terminal.send"
-
-    /// What is typed into the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
-    /// itself reaches the shell, stopped with everything it started after the goal's `turn_timeout_min`.
-    public static func claudeCommand(turnTimeoutMin: Int) -> String {
-        claudeCommand(timeoutSeconds: max(1, turnTimeoutMin) * 60)
+    /// What is started in the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
+    /// itself reaches a shell, stopped with everything it started after the goal's `turn_timeout_min`.
+    public static func claudeArguments(turnTimeoutMin: Int) -> [String] {
+        claudeArguments(timeoutSeconds: max(1, turnTimeoutMin) * 60)
     }
 
     /// A Perl supervisor runs claude as its child, in the shell's foreground group so it keeps the terminal. At the timeout it
     /// sends SIGTERM to every descendant and to the process groups they lead or joined, waits `graceSeconds`, then SIGKILLs what
     /// it saw (a pid only while it is still in the group it was seen in, so a reused pid is spared) and what is there now. The
     /// tree is taken before anything is signalled: a tool child whose parent dies is reparented and would not be found after.
-    static func claudeCommand(timeoutSeconds: Int, graceSeconds: Int = 10) -> String {
-        "/usr/bin/perl -MPOSIX=WNOHANG -e '\(supervisor)' \(timeoutSeconds) \(graceSeconds) "
-            + "claude 'Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
-            + "Work on it here until every criterion holds, and commit your work.'"
+    static func claudeArguments(timeoutSeconds: Int, graceSeconds: Int = 10) -> [String] {
+        [
+            "/usr/bin/perl", "-MPOSIX=WNOHANG", "-e", supervisor, String(timeoutSeconds), String(graceSeconds),
+            "claude",
+            "Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
+                + "Work on it here until every criterion holds, and commit your work.",
+        ]
     }
 
-    /// One line with no single quote (it goes inside the shell's) and no `\n` escape, so it can be typed into a terminal as it is.
     private static let supervisor = [
         #"my ($t, $w) = splice @ARGV, 0, 2;"#,
         #"defined(my $c = fork) or die "claude: $!$/";"#,
@@ -236,11 +201,10 @@ public struct HerdrOpener: Sendable {
     /// The space showing `folder`, selected or made; the terminal Herdr names for a space it made; and whether the app was started.
     private struct OpenedSpace {
         var opened: HerdrOpened
-        var terminal: String?
         var wasDown: Bool
     }
 
-    private func openSpace(folder: URL, label: String) async throws -> OpenedSpace {
+    private func openSpace(folder: URL, label: String, argv: [String]? = nil) async throws -> OpenedSpace {
         var spaces: [JSONValue]
         let wasDown: Bool
         do {
@@ -255,10 +219,17 @@ public struct HerdrOpener: Sendable {
             _ = try await client.call(["do", "space.select", "--id", existing])
             return OpenedSpace(opened: HerdrOpened(space: existing, alreadyOpen: true), wasDown: wasDown)
         }
-        let made = try await client.call(["do", "space.new", "--name", label, "--folder", folder.path])
-        return OpenedSpace(
-            opened: HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false),
-            terminal: made["terminal"]?.stringValue, wasDown: wasDown)
+        var arguments = ["do", "space.new", "--name", label, "--folder", folder.path]
+        if let argv {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .withoutEscapingSlashes
+            guard let json = try? encoder.encode(argv), let text = String(data: json, encoding: .utf8) else {
+                throw HerdrFailure(code: "bad_argv", message: "the command to start could not be encoded")
+            }
+            arguments += ["--argv", text]
+        }
+        let made = try await client.call(arguments)
+        return OpenedSpace(opened: HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false), wasDown: wasDown)
     }
 
     /// Down only when the app says it has no window. Any other failure (a hang, an error of its own) is thrown as it is: starting
