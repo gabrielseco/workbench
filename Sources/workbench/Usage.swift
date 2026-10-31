@@ -119,6 +119,10 @@ let workbenchUsage = """
                                  it when the check passed and open the pull request; fix: report only lists the units;
                                  exit 6 when skipped (a thread is active, the approval is stale), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
+      task new <name> [--include <file>] [--input <path>]...
+                                 start a task: .workbench/tasks/<name>/task.md with every setting explained and fix: report, and
+                                 a pending.sh that lists nothing; no agent runs. approve refuses it until its instructions
+                                 no longer say TODO(workbench). exit 2 for a bad name or path, 6 when the task exists
       task approve <name>        record that the task, as it is now, may run unattended; editing the file or its
                                  pending script revokes it. With fix: pr the task accepts its own work when the check
                                  and the verifier pass and opens the pull request; it never merges

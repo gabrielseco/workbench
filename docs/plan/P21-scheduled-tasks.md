@@ -21,3 +21,8 @@ committed tasks location shared by a team, unattended credentials (signing, 1Pas
 2. **Running it** (done): `task run` and `task tick` over the existing goal, run, check, accept and ship path; the run outcomes; recovery of a run
    whose process died; the scenario `task-run.sh` with the fake claude and a stand-in `gh`. `fix: report` is a dry run; the read-only agent turn,
    `task list`'s pending count and ticking every project (`--all`) are left for later.
+
+## After the two pull requests
+
+- **`task new`** (done): the scaffold, free and without an agent. A `task draft` that has an agent write `task.md` and the pending script from a
+  pasted request needs the agent role in the config that `fix: report`'s read-only turn needs too, so the two come together.

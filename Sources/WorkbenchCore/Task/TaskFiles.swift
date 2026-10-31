@@ -6,6 +6,8 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
     case tooLarge(String, bytes: Int, limit: Int)
     case tooMany(String, limit: Int)
     case unreadable(String)
+    /// The instructions still hold the scaffold's placeholder.
+    case placeholder
 
     public var description: String {
         switch self {
@@ -14,6 +16,7 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
         case .tooLarge(let path, let bytes, let limit): "'\(path)' is \(bytes) bytes; the limit is \(limit)"
         case .tooMany(let path, let limit): "'\(path)' holds more than \(limit) files"
         case .unreadable(let path): "'\(path)' cannot be read"
+        case .placeholder: "the instructions still say \(TaskScaffold.placeholder): write what each run should do, then approve"
         }
     }
 }

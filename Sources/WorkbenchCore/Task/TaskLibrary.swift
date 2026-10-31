@@ -58,6 +58,8 @@ public struct TaskLibrary: Sendable {
     @discardableResult
     public func approve(_ name: String, now: @escaping @Sendable () -> Date = { Date() }) async throws -> String {
         let loaded = try load(name)
+        // A scaffold waiting to be written is not something to run unattended.
+        if loaded.definition.instructions.contains(TaskScaffold.placeholder) { throw TaskFileError.placeholder }
         let log = TaskRunLog(project: project, name: name)
         let writer = try await log.openWriter(now: now)
         do {
