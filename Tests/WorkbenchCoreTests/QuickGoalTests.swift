@@ -196,6 +196,14 @@ private func headings(_ prompt: String) -> [String] {
             + "\n## Criteria\n\n- [c1] Done.\n  - proof: cat a.txt\n"
         #expect(try GoalFile.parse(withCriterion).goal.approval == .stale)
 
+        // Only the setting changes here: a goal with a criterion, approved, then marked quick, is stale too.
+        let withProof = plain + "\n## Criteria\n\n- [c1] Done.\n  - proof: cat a.txt\n"
+        let approvedWithCriterion = try GoalFile.parse(withProof).approving()
+        #expect(approvedWithCriterion.goal.approval == .approved)
+        let flipped = approvedWithCriterion.text.replacingOccurrences(
+            of: "turn_timeout_min: 30", with: "turn_timeout_min: 30\nquick: true")
+        #expect(try GoalFile.parse(flipped).goal.approval == .stale)
+
         // `goal new --from` carries it, so a copy of a quick goal is one too.
         #expect(try GoalFile.copy(quick.text).settings.quick)
     }
