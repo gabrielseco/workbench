@@ -95,8 +95,19 @@ public enum Verifier {
                 """)
         }
         parts.append("## Goal: \(oneLine(goal.title))\n\n\(goal.request)")
-        let criteria = goal.criteria.map { "- [\($0.id)] \(oneLine($0.text))\n  - proof: \(oneLine($0.proof))" }
-        parts.append("## Criteria\n\n" + criteria.joined(separator: "\n"))
+        if goal.criteria.isEmpty {
+            parts.append(
+                """
+                ## Criteria
+
+                None: this is a quick goal. Work from the request above. Drive the app to the state that shows what it asks \
+                for, take one screenshot of each thing it asks to see (`<short-name>.png` in the proof directory), and in \
+                your report say for each whether it holds and what you saw. If the request has nothing to see on screen, say so.
+                """)
+        } else {
+            let criteria = goal.criteria.map { "- [\($0.id)] \(oneLine($0.text))\n  - proof: \(oneLine($0.proof))" }
+            parts.append("## Criteria\n\n" + criteria.joined(separator: "\n"))
+        }
         if !goal.outOfScope.isEmpty {
             parts.append("## Out of scope\n\n" + goal.outOfScope.map { "- \(oneLine($0))" }.joined(separator: "\n"))
         }
