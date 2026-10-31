@@ -174,9 +174,14 @@ private actor Gate {
         }
     }
 
-    private func shippedStore(_ github: GitHub) async throws -> ProjectStore {
+    private func shippedStore(_ github: GitHub, verdict: String? = nil) async throws -> ProjectStore {
         let fixture = try await accepted()
         try fixture.ship("t1")
+        if let verdict {
+            try fixture.append(
+                "t1", .prReviewFinished,
+                data: ["ok": true, "verdict": .string(verdict), "round": 1, "pr": 7, "head_sha": .string(Self.head)])
+        }
         let actions = GoalActions(
             pullRequestStatus: { _, _ in try github.read() }, mergePullRequest: { _, _, head in try github.doMerge(head) })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
@@ -265,6 +270,42 @@ private actor Gate {
 
         await store.mergePullRequest()
         #expect(github.mergedHeads.isEmpty, "Merge does nothing while CI is unavailable")
+    }
+
+    @Test func aFailedReadClearsTheGreenFromTheSpineAndAttention() async throws {
+        let github = GitHub()
+        let store = try await shippedStore(github, verdict: "clean")
+        github.answer(.success(Self.status(.open, ["pass"])))
+        await store.refreshPullRequestCI()
+        var snapshot = try shown(store)
+        #expect(snapshot.spine[.prReview].sublabel == "Clean · CI passed")
+        #expect(reason(snapshot) == "Ready to merge")
+
+        github.answer(.failure(.ghFailed("HTTP 502")))
+        await store.refreshPullRequestCI()
+        snapshot = try shown(store)
+        #expect(snapshot.spine[.prReview].sublabel == "Clean · CI not checked")
+        #expect(reason(snapshot) == nil, "unknown CI is not ready to merge")
+    }
+
+    @Test func attentionFollowsWhatGitHubSaid() async throws {
+        let github = GitHub()
+        let store = try await shippedStore(github, verdict: "fix")
+        #expect(try reason(shown(store)) == "Findings open")
+
+        github.answer(.success(Self.status(.open, ["fail", "pass"])))
+        await store.refreshPullRequestCI()
+        #expect(try reason(shown(store)) == "CI failed: c0")
+
+        github.answer(.success(Self.status(.open, ["pass"])))
+        await store.refreshPullRequestCI()
+        github.merging(.success(Self.status(.merged, nil)))
+        await store.mergePullRequest()
+        #expect(try shown(store).attention == .none, "a merged pull request asks nothing about its findings")
+    }
+
+    private func reason(_ snapshot: ThreadSnapshot) -> String? {
+        if case .needsYou(let reason) = snapshot.attention { reason.text } else { nil }
     }
 
     @Test func ciProgressIsShownCheckByCheck() {

@@ -54,18 +54,19 @@ extension ProjectStore {
         guard let scope = pullRequestScope, prCI.scope == scope, let ci = prCI.ci, case .thread(var shown) = screen
         else { return }
         shown.ci = ci
-        if let status = ci.status {
-            let outcome: PullRequestOutcome =
-                switch status.state {
-                case .open: .open
-                case .merged: .merged
-                case .closed: .closed
-                }
-            shown.spine = ThreadSpine.derive(
-                state: shown.state, approval: shown.approval, outcome: outcome,
-                checks: status.checksError == nil ? status.checks : nil, currentHead: status.head)
-            shown.attention = Attention.derive(spine: shown.spine, state: shown.state)
-        }
+        // Unknown CI is derived as not checked, so an earlier green read is not left on the spine.
+        let status = ci.status
+        let outcome: PullRequestOutcome =
+            switch status?.state {
+            case .merged?: .merged
+            case .closed?: .closed
+            case .open?, nil: .open
+            }
+        let checks = status?.checksError == nil ? status?.checks : nil
+        shown.spine = ThreadSpine.derive(
+            state: shown.state, approval: shown.approval, outcome: outcome, checks: checks, currentHead: status?.head)
+        shown.attention = Attention.derive(
+            spine: shown.spine, state: shown.state, checks: checks, outcome: outcome, currentHead: status?.head)
         screen = .thread(shown)
     }
 

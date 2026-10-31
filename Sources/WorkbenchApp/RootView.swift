@@ -288,6 +288,22 @@ struct PullRequestCIView: View {
                 Label(ci.summary, systemImage: icon).foregroundStyle(color).font(.callout)
                 Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).font(.callout)
             }
+            // The banner sits outside the scrolling content, so a long list scrolls in its own box instead of pushing the window.
+            if ci.rows.count > Self.unscrolledRows {
+                ScrollView { rows }.frame(maxHeight: 130)
+            } else {
+                rows
+            }
+            if !ci.canMerge, let blocker = ci.mergeBlocker, ci.unavailableReason == nil {
+                Text("Merge waits: \(blocker)").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    static let unscrolledRows = 6
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 3) {
             ForEach(ci.rows, id: \.self) { row in
                 HStack(spacing: 6) {
                     Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
@@ -296,10 +312,8 @@ struct PullRequestCIView: View {
                 }
                 .padding(.leading, 20)
             }
-            if !ci.canMerge, let blocker = ci.mergeBlocker, ci.unavailableReason == nil {
-                Text("Merge waits: \(blocker)").font(.callout).foregroundStyle(.secondary)
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var icon: String {
