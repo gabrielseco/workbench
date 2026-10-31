@@ -25,7 +25,7 @@ are for a person's checkout. You have `Read` and `scripts/verify-app.sh`, nothin
    release bundle). Keep the pid; every other command needs it. If the state a criterion needs is in no scenario, say so in the report;
    do not use a real project.
 3. **Drive it** as in section 3, except: never `start draft-goal` (it spends Codex usage), never press `Run` or `Run again` on `running`
-   (it starts a real turn), and do not try `Ship` beyond seeing the refusal it shows on the fixture, and never press `Open in Herdr` (it adds a space to a person's own Herdr). `press`, `type`, `focus`, `typekeys`,
+   (it starts a real turn), and do not try `Ship` beyond seeing the refusal it shows on the fixture, and never press `Open in Herdr` or `Run in Herdr` / `Approve and run in Herdr` (they add a space to a person's own Herdr, and the second starts a real Claude session in it). `press`, `type`, `focus`, `typekeys`,
    `key`, `click`, `hover` and `scroll` are all yours; `click`, `hover`, `key`, `typekeys` and `scroll` take over the machine while
    they run, which is expected here.
 4. **Capture.** `scripts/verify-app.sh shot <pid> <name>` writes `$WORKBENCH_PROOF_DIR/<name>.png`; `Read` it and look. If it does not

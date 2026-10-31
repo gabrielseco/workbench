@@ -97,6 +97,19 @@ public struct HerdrOpened: Equatable, Sendable {
     public var alreadyOpen: Bool
 }
 
+/// What handing a goal to Herdr did.
+public struct HerdrHandoff: Equatable, Sendable {
+    /// The space Herdr shows the worktree in.
+    public var space: String
+    /// The worktree already had a space: it was brought forward and nothing was typed into it.
+    public var alreadyOpen: Bool
+
+    public init(space: String, alreadyOpen: Bool) {
+        self.space = space
+        self.alreadyOpen = alreadyOpen
+    }
+}
+
 /// "Open in Herdr": starts the Herdr app when its window is not open, then gives the thread's worktree a space (or selects the one it
 /// has) and brings the app forward. The app's own server comes up with its window, so there is nothing else to start.
 public struct HerdrOpener: Sendable {
@@ -113,6 +126,45 @@ public struct HerdrOpener: Sendable {
     }
 
     public func open(folder: URL, label: String) async throws -> HerdrOpened {
+        let space = try await openSpace(folder: folder, label: label)
+        // A running app does not come forward by itself when a space is added; a launch already did. Best effort: the space is open.
+        if !space.wasDown { try? await launchApp() }
+        return space.opened
+    }
+
+    /// "Run in Herdr": opens the worktree as a space like `open`, and types `command` into the terminal of a space it made. A space
+    /// the worktree already had is only brought forward: a session already working there is not given the goal a second time.
+    public func handOff(folder: URL, label: String, command: String) async throws -> HerdrHandoff {
+        let space = try await openSpace(folder: folder, label: label)
+        let opened = space.opened
+        if !opened.alreadyOpen {
+            guard let terminal = space.terminal, !terminal.isEmpty else {
+                throw HerdrFailure(
+                    code: "bad_answer", message: "Herdr made a space but did not name its terminal, so the goal was not sent")
+            }
+            _ = try await client.call(["do", Self.sendCommand, "--id", terminal, "--text", command + "\n"])
+        }
+        if !space.wasDown { try? await launchApp() }
+        return HerdrHandoff(space: opened.space, alreadyOpen: opened.alreadyOpen)
+    }
+
+    /// The `herdr-app do` command that types text into a terminal, as if it were typed there.
+    public static let sendCommand = "terminal.send"
+
+    /// What is typed into the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
+    /// itself reaches the shell.
+    public static let claudeCommand =
+        "claude 'Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
+        + "Work on it here until every criterion holds, and commit your work.'"
+
+    /// The space showing `folder`, selected or made; the terminal Herdr names for a space it made; and whether the app was started.
+    private struct OpenedSpace {
+        var opened: HerdrOpened
+        var terminal: String?
+        var wasDown: Bool
+    }
+
+    private func openSpace(folder: URL, label: String) async throws -> OpenedSpace {
         var spaces: [JSONValue]
         let wasDown: Bool
         do {
@@ -123,17 +175,14 @@ public struct HerdrOpener: Sendable {
             spaces = try await waitForWindow()
             wasDown = true
         }
-        let opened: HerdrOpened
         if let existing = space(showing: folder, in: spaces) {
             _ = try await client.call(["do", "space.select", "--id", existing])
-            opened = HerdrOpened(space: existing, alreadyOpen: true)
-        } else {
-            let made = try await client.call(["do", "space.new", "--name", label, "--folder", folder.path])
-            opened = HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false)
+            return OpenedSpace(opened: HerdrOpened(space: existing, alreadyOpen: true), wasDown: wasDown)
         }
-        // A running app does not come forward by itself when a space is added; a launch already did. Best effort: the space is open.
-        if !wasDown { try? await launchApp() }
-        return opened
+        let made = try await client.call(["do", "space.new", "--name", label, "--folder", folder.path])
+        return OpenedSpace(
+            opened: HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false),
+            terminal: made["terminal"]?.stringValue, wasDown: wasDown)
     }
 
     /// Down only when the app says it has no window. Any other failure (a hang, an error of its own) is thrown as it is: starting

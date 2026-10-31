@@ -74,6 +74,8 @@ struct RecentProject: Equatable, Identifiable {
     var sendBackGrants: [GrantRow] = []
     /// Whether a `herdr` was found for the open project: "Open in Herdr" is shown only then.
     var herdrFound = false
+    /// What the last "Run in Herdr" did; `herdrHandoffOutcome` shows it for its own thread.
+    var herdrHandoff: HerdrHandoffShown?
     /// Decisions being recorded. One at a time, and a send waits for them: a grant refused for a live run is lost.
     var grantsInFlight = 0
     var drafting = false

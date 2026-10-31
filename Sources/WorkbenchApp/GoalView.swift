@@ -307,6 +307,12 @@ struct GoalView: View {
                 Button("New goal…") { store.namingGoal = true }
                 Spacer()
                 if goal.pill != .approved || snapshot.state.lastTurn == 0, snapshot.state.decision == nil {
+                    // Shown with no Herdr found too: pressing it then says Herdr is unavailable rather than hiding why it is missing.
+                    Button(goal.pill == .approved ? "Run in Herdr" : "Approve and run in Herdr") {
+                        Task { await store.runGoalInHerdr() }
+                    }
+                    .disabled(runDisabled)
+                    .help("Approves the goal, cuts the worktree and starts a Claude session on it in Herdr")
                     Button(goal.pill == .approved ? "Run" : "Approve and run") {
                         Task { await store.approveAndRun() }
                     }
@@ -315,6 +321,9 @@ struct GoalView: View {
                 }
             }
             if goal.pill != .approved { Text("Nothing runs until you approve.").font(.caption).foregroundStyle(.secondary) }
+            if let handoff = store.herdrHandoffOutcome {
+                Text(handoff.text).font(.callout).foregroundStyle(handoff.isProblem ? Theme.red : Theme.green)
+            }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
         }
         .padding(.top, 6)

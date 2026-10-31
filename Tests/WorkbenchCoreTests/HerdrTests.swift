@@ -30,8 +30,12 @@ private final class FakeHerdr: @unchecked Sendable {
                   echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30 & echo $! > "$FAKE_HERDR_DIR/childpid"; wait
                 fi
                 if [ -f "$FAKE_HERDR_DIR/nocreate" ]; then refuse "cannot start a terminal: line one"; fi
+                if [ -f "$FAKE_HERDR_DIR/noterminal" ]; then printf '{\\n  "space": "sp9"\\n}\\n'; exit 0; fi
                 printf '{\\n  "space": "sp9",\\n  "tab": "tb9",\\n  "terminal": "t9"\\n}\\n' ;;
               "do space.select") printf '{\\n  "ok": true\\n}\\n' ;;
+              "do terminal.send")
+                if [ -f "$FAKE_HERDR_DIR/nosend" ]; then refuse "terminal t9 is gone"; fi
+                printf '{\\n  "ok": true\\n}\\n' ;;
               *) refuse "unexpected: $*" ;;
             esac
             """
@@ -117,6 +121,56 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(throws: ConfigError.self) { try Config.parse("herdr = \"herdr --x\"\n[tools]\navailable = [\"Read\"]\n") }
         #expect((try? Config.parse("herdr = \"/opt/homebrew/bin/herdr\"\n[tools]\navailable = [\"Read\"]\n"))?.herdr != nil)
         #expect((try? GlobalConfig.parse("herdr = \"herdr\"\n"))?.herdr == "herdr")
+    }
+}
+
+@Suite struct HerdrHandOffTests {
+    private let send = "do terminal.send --id t9 --text \(HerdrOpener.claudeCommand)"
+
+    @Test func typesClaudeIntoTheTerminalOfTheSpaceItMade() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("down")
+        let handoff = try await fake.opener().handOff(folder: folder, label: "t1", command: HerdrOpener.claudeCommand)
+        #expect(handoff == HerdrHandoff(space: "sp9", alreadyOpen: false))
+        #expect(fake.launches == 1)
+        // The space first, then the command into the terminal Herdr named for it, and nothing after.
+        #expect(fake.calls.suffix(2) == ["do space.new --name t1 --folder /work/project-wt/t1", send])
+    }
+
+    @Test func aSpaceTheWorktreeHadIsBroughtForwardAndNotSentTheGoalAgain() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("spaces", text: #"{"spaces":[{"id":"sp3","folder":"/work/project-wt/t1"}],"recent":[]}"#)
+        let handoff = try await fake.opener().handOff(folder: folder, label: "t1", command: HerdrOpener.claudeCommand)
+        #expect(handoff == HerdrHandoff(space: "sp3", alreadyOpen: true))
+        #expect(fake.calls == ["ls", "do space.select --id sp3"])
+    }
+
+    @Test func aSpaceWithNoTerminalNamedOrASendRefusedIsAFailure() async throws {
+        let unnamed = try FakeHerdr()
+        try unnamed.set("noterminal")
+        do {
+            _ = try await unnamed.opener().handOff(folder: folder, label: "t1", command: HerdrOpener.claudeCommand)
+            Issue.record("a space with no terminal was reported as handed over")
+        } catch let failure as HerdrFailure {
+            #expect(failure.code == "bad_answer" && !failure.windowDown)
+        }
+        #expect(!unnamed.calls.contains { $0.hasPrefix("do terminal.send") })
+
+        let refused = try FakeHerdr()
+        try refused.set("nosend")
+        do {
+            _ = try await refused.opener().handOff(folder: folder, label: "t1", command: HerdrOpener.claudeCommand)
+            Issue.record("a refused send was reported as handed over")
+        } catch let failure as HerdrFailure {
+            #expect(failure.code == "refused" && failure.message == "terminal t9 is gone")
+        }
+    }
+
+    @Test func theCommandCarriesNothingFromTheGoal() {
+        // Fixed text: the goal is read from the worktree's copy, so nothing a goal says can reach the shell.
+        let command = HerdrOpener.claudeCommand
+        #expect(command.hasPrefix("claude '") && command.hasSuffix("'"))
+        #expect(command.dropFirst("claude '".count).dropLast().allSatisfy { $0 != "'" && !$0.isNewline })
     }
 }
 

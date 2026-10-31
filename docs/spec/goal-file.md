@@ -554,6 +554,16 @@ Notes:
   (`herdr-app do space.new --name <thread> --folder <worktree>`), and brings the app forward. Any other answer, a hang or a missing
   window after the wait is shown as it is and nothing else is started. A call that does not answer in 10 s is stopped with its process group.
   No command reads the key and a run never does.
+  The goal screen's "Run in Herdr" ("Approve and run in Herdr" for a draft) hands the goal to a Claude session in Herdr instead of
+  a run of the window's own. It is offered where Run is, whether or not a `herdr-app` was found; with none found, or Herdr.app
+  missing when its window is closed, it says Herdr is unavailable and approves and cuts nothing. Otherwise it approves the goal,
+  cuts the thread's worktree as a run would when it has none (recorded with `worktree.created`, so a later run, review or accept
+  uses the same base), copies the approved goal and its screenshots in (`.workbench/goal-copy/`; refused when the goal cannot be
+  copied), and opens the worktree in Herdr as above. In a space it made it types
+  `claude '<fixed prompt naming .workbench/goal-copy/goal.md>'` into the terminal `space.new` named
+  (`herdr-app do terminal.send --id <terminal> --text <command>`); nothing from the goal reaches the shell. A space the worktree
+  already had is only brought forward and is not sent the goal again. The goal screen shows the outcome: sent, already open,
+  Herdr unavailable, or the refusal or failure in Herdr's or core's words. No event records the handoff itself.
   `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the
   repository (`clone --shared`, so nothing is registered in it and no remote is left) at the thread's recorded base, with
   every file the thread changed (committed, staged, unstaged or new) put there as the worktree has it, so the editor's
