@@ -136,7 +136,7 @@ mkdir -p "$PLAIN"; g -C "$PLAIN" init -q -b main || die "git init failed"
 g -C "$PLAIN" -c user.email=v@example.invalid -c user.name=verify commit -q --allow-empty -m init || die "git commit failed"
 ( cd "$PLAIN" && with_timeout "$T_WB" "$WB" task new demo >"$SCRATCH/plain.out" 2>&1 ); RC=$?
 check "task new in a repository with no config and no ignore rule says both" "exit $RC: $(head -c 500 "$SCRATCH/plain.out")" \
-    bash -c '[ "$1" = 0 ] && grep -q "no .workbench/config.toml yet" "$2" && grep -q "git does not ignore .workbench/" "$2"' _ "$RC" "$SCRATCH/plain.out"
+    bash -c '[ "$1" = 0 ] && grep -q "no .workbench/config.toml yet" "$2" && grep -q "git does not ignore task.md, pending.sh, runs.jsonl" "$2"' _ "$RC" "$SCRATCH/plain.out"
 
 PART="$SCRATCH/partial"
 mkdir -p "$PART"; g -C "$PART" init -q -b main || die "git init failed"
