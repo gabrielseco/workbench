@@ -227,7 +227,8 @@ enum Commands {
         let quick = try a.value("--quick")
         guard let name = a.positional() else {
             throw CLIError.usage(
-                "usage: workbench goal new <name> [--base <branch> | --update <branch>] [--from <goal-file> | --quick \"<text>\"]")
+                "usage: workbench goal new <name> [--base <branch> | --update <branch>]"
+                    + " [--from <goal-file> | --quick \"<text>\"]")
         }
         try a.requireEmpty()
         if quick != nil, from != nil || updating != nil {
