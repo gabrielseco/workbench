@@ -86,10 +86,10 @@ enum PullRequestCI: Equatable {
             if let why = status.checksError { return "CI status unavailable: \(why)" }
             guard let checks = status.checks, !checks.checks.isEmpty else { return "CI: no checks reported" }
             let rows = self.rows
-            let counts: [(Row.Kind, String)] = [(.running, "running"), (.failed, "failed"), (.passed, "passed"), (.skipped, "skipped")]
-            let parts = counts.compactMap { kind, word -> String? in
-                let count = rows.filter { $0.kind == kind }.count
-                return count == 0 ? nil : "\(count) \(word)"
+            let order: [Row.Kind] = [.running, .failed, .passed, .skipped]
+            let parts = order.compactMap { kind -> String? in
+                let matching = rows.filter { $0.kind == kind }
+                return matching.first.map { "\(matching.count) \($0.word)" }
             }
             let verdict =
                 switch checks.state {

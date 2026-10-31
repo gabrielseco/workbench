@@ -149,7 +149,9 @@ private actor Gate {
     private nonisolated static let head = String(repeating: "a", count: 40)
 
     private nonisolated static func status(_ state: PRState = .open, _ buckets: [String]?, error: String? = nil) -> PRStatus {
-        let checks = buckets.map { PRChecksSummary(checks: $0.enumerated().map { PRCheck(name: "c\($0.offset)", bucket: $0.element) }) }
+        let checks = buckets.map { list in
+            PRChecksSummary(checks: list.enumerated().map { PRCheck(name: "c\($0.offset)", bucket: $0.element) })
+        }
         return PRStatus(number: 7, state: state, head: head, checks: checks, checksError: error)
     }
 

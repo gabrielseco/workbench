@@ -293,7 +293,9 @@ struct GoalActions: Sendable {
     /// The `gh` that reads and merges the shipped pull request: `WORKBENCH_APP_GH` when the launch sets it (`scripts/verify-app.sh`
     /// sets a stand-in, so a fixture project never asks GitHub), else `gh` on PATH. None found is nil, which core reports.
     static func pullRequestGH(environment: [String: String] = ProcessInfo.processInfo.environment) -> GitRunner? {
-        if let stub = environment["WORKBENCH_APP_GH"], !stub.isEmpty { return try? GitRunner.discover(tool: stub, from: environment) }
+        if let stub = environment["WORKBENCH_APP_GH"], !stub.isEmpty {
+            return try? GitRunner.discover(tool: stub, from: environment)
+        }
         return try? GitRunner.discover(tool: "gh", from: environment)
     }
 

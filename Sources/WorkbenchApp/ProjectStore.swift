@@ -94,13 +94,8 @@ struct RecentProject: Equatable, Identifiable {
     var followUpError: String?
     /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
     @ObservationIgnored var followUpRequest = 0
-    /// The shipped pull request's CI as last read, for the project and thread `prCIScope` names; the snapshot shows it only there.
-    @ObservationIgnored var prCI: PullRequestCI?
-    @ObservationIgnored var prCIScope: String?
-    @ObservationIgnored var prCIReadAt: ContinuousClock.Instant?
-    @ObservationIgnored var readingPRCI = false
-    /// How often CI is read again: while checks run, and once they settled or could not be read.
-    @ObservationIgnored let ciIntervals: (pending: Duration, settled: Duration)
+    /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
+    @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
@@ -152,7 +147,7 @@ struct RecentProject: Equatable, Identifiable {
         self.screen = screen
         self.project = project
         self.intervals = intervals
-        self.ciIntervals = ciIntervals
+        self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
         self.doctorRunner = doctorRunner
     }
@@ -204,7 +199,6 @@ struct RecentProject: Equatable, Identifiable {
         cancelSendBack()
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
-        (prCI, prCIScope, prCIReadAt) = (nil, nil, nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
