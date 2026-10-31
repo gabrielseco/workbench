@@ -132,7 +132,7 @@ extension ThreadService {
 
     /// `gh pr view <number> --json state,headRefOid` from the project root, so a removed worktree does not
     /// matter. Any answer that is not exactly that shape is a failure, never "open".
-    private func prState(number: Int, gh: GitRunner?) async -> Result<(PRState, String), CleanLookupError> {
+    func prState(number: Int, gh: GitRunner?) async -> Result<(PRState, String), CleanLookupError> {
         guard let gh else { return .failure(CleanLookupError("`gh` was not found")) }
         var environment = gh.environment
         environment["GH_REPO"] = nil

@@ -221,6 +221,7 @@ struct FinishedBanner: View {
     var snapshot: ThreadSnapshot
     var text: String
     var store: ProjectStore
+    @State private var confirmingMerge = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -239,7 +240,15 @@ struct FinishedBanner: View {
                     }
                     .disabled(store.busy != nil).help("Codex reads the pull request, read-only, and says what it found")
                 }
+                if snapshot.watchesPullRequest {
+                    Button("Merge…") { confirmingMerge = true }
+                        .disabled(!snapshot.canMerge || store.busy != nil || store.deciding)
+                        .help(snapshot.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub")
+                }
                 Button("New goal…") { store.namingGoal = true }
+            }
+            if snapshot.watchesPullRequest, let ci = snapshot.ci {
+                PullRequestCIView(ci: ci, store: store)
             }
             if let line = snapshot.prReviewText {
                 HStack {
@@ -256,6 +265,92 @@ struct FinishedBanner: View {
         }
         .sheet(isPresented: Binding(get: { store.pendingShip != nil }, set: { if !$0 { store.cancelShip() } })) {
             ShipSheet(store: store)
+        }
+        .confirmationDialog(mergeTitle, isPresented: $confirmingMerge) {
+            Button("Merge") { Task { await store.mergePullRequest() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Squash-merges it on GitHub at the commit whose checks are green. This cannot be undone from Workbench.")
+        }
+    }
+
+    private var mergeTitle: String { snapshot.state.pullRequest.map { "Merge PR #\($0.number)?" } ?? "Merge?" }
+}
+
+/// The shipped pull request's CI as GitHub said it last: one line, then one row per check, and why Merge waits when it does.
+struct PullRequestCIView: View {
+    var ci: PullRequestCI
+    var store: ProjectStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Label(ci.summary, systemImage: icon).foregroundStyle(color).font(.callout)
+                Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).font(.callout)
+            }
+            // The banner sits outside the scrolling content, so a long list scrolls in its own box instead of pushing the window.
+            if ci.rows.count > Self.unscrolledRows {
+                ScrollView { rows }.frame(maxHeight: 130)
+            } else {
+                rows
+            }
+            if !ci.canMerge, let blocker = ci.mergeBlocker, ci.unavailableReason == nil {
+                Text("Merge waits: \(blocker)").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    static let unscrolledRows = 6
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(ci.rows, id: \.self) { row in
+                HStack(spacing: 6) {
+                    Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
+                    Text(row.name).font(.system(.callout, design: .monospaced))
+                    Text(row.word).font(.callout).foregroundStyle(.secondary)
+                }
+                .padding(.leading, 20)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var icon: String {
+        if ci.unavailableReason != nil { return "questionmark.circle.fill" }
+        if ci.isPending { return "clock.fill" }
+        switch ci.status?.checks?.state {
+        case .passed?: return "checkmark.circle.fill"
+        case .failed?: return "xmark.circle.fill"
+        default: return "minus.circle"
+        }
+    }
+
+    private var color: Color {
+        if ci.unavailableReason != nil { return Theme.amber }
+        if ci.isPending { return Theme.blue }
+        switch ci.status?.checks?.state {
+        case .passed?: return Theme.green
+        case .failed?: return Theme.red
+        default: return .secondary
+        }
+    }
+
+    private func rowIcon(_ kind: PullRequestCI.Row.Kind) -> String {
+        switch kind {
+        case .passed: "checkmark.circle.fill"
+        case .skipped: "minus.circle"
+        case .running: "clock"
+        case .failed: "xmark.circle.fill"
+        }
+    }
+
+    private func rowColor(_ kind: PullRequestCI.Row.Kind) -> Color {
+        switch kind {
+        case .passed: Theme.green
+        case .skipped: Theme.grey
+        case .running: Theme.blue
+        case .failed: Theme.red
         }
     }
 }

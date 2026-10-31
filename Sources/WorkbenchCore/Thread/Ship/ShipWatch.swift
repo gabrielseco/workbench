@@ -146,7 +146,7 @@ extension ThreadService {
     }
 
     /// The pull request `ship` recorded and the environment to ask `gh` about it in.
-    private func recordedPR(id: String, gh: GitRunner?) throws -> RecordedPR {
+    func recordedPR(id: String, gh: GitRunner?) throws -> RecordedPR {
         guard SafeNames.isThreadID(id) else { throw ShipError.invalidName(id) }
         let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
         guard let opened = events.last(where: { $0.kind == .prOpened }),
@@ -158,13 +158,13 @@ extension ThreadService {
         return RecordedPR(number: number, gh: gh, environment: environment)
     }
 
-    private struct RecordedPR {
+    struct RecordedPR {
         var number: Int
         var gh: GitRunner
         var environment: [String: String]
     }
 
-    private func pollChecks(number: Int, runner: GitRunner) async throws -> PRChecksSummary {
+    func pollChecks(number: Int, runner: GitRunner) async throws -> PRChecksSummary {
         let result: GitResult
         do {
             result = try await runner.run(["pr", "checks", String(number), "--json", "name,bucket"], in: project.root)
