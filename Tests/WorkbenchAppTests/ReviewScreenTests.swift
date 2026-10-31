@@ -260,7 +260,7 @@ private final class Recorder: @unchecked Sendable {
         keptFixtures.append(other)
         #expect(await store.open(other.root))
         await release.open()
-        await accepting.value
+        _ = await accepting.value
         #expect(recorder.log.isEmpty && store.notice == nil)
     }
 

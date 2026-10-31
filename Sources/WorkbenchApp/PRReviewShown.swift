@@ -79,6 +79,7 @@ struct FollowUpPlan: Equatable, Sendable {
             ?? "with no dollar cap (this project sets none, so only its timeout limits the turn)"
         return "Starts follow-up \(round) of at most \(allowed) on pull request #\(pr): a new thread on the same branch, "
             + "whose goal is these findings, and runs its first turn, \(cost). "
-            + "You then review, accept and ship it as any thread; shipping updates the pull request. Nothing is merged."
+            + "When the turn succeeds and the check passes, it is accepted, pushed to the pull request and reviewed again "
+            + "without asking; otherwise it waits for you as any thread. Nothing is merged."
     }
 }
