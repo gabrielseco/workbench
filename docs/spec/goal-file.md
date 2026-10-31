@@ -564,7 +564,11 @@ Notes:
   `/usr/local/bin`; with none found, or a config that does not load, the button is not shown. The window asks `herdr-app ls`; when
   Herdr says it has no window it starts Herdr.app (bundle id `dev.herdr.app`; its server comes up with its window) and asks again for
   about 20 s. It then selects the space whose folder is the worktree (`herdr-app do space.select --id <space>`) or makes one
-  (`herdr-app do space.new --name <thread> --folder <worktree>`), and brings the app forward. Any other answer, a hang or a missing
+  (`herdr-app do space.new --name <thread> --folder <worktree>`), and brings the app forward. A thread whose worktree is gone
+  (shipped, accepted, discarded, cleaned or not run yet) opens the project's own checkout the same way instead
+  (`--name <project folder> --folder <project root>`), with nothing started or typed in it, and the window says the project was
+  opened; the button is shown for such a thread too. A worktree path that resolves outside `.workbench/worktrees/` is still refused,
+  not swapped for the project. Any other answer, a hang or a missing
   window after the wait is shown as it is and nothing else is started. A call that does not answer in 10 s is stopped with its process group.
   No command reads the key and a run never does.
   The goal screen's "Run in Herdr" ("Approve and run in Herdr" for a draft) hands the goal to a Claude session in Herdr instead of

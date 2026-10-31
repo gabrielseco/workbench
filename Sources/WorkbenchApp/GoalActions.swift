@@ -56,8 +56,9 @@ struct GoalActions: Sendable {
     var openWorktree: @Sendable (Project, String) async throws -> Void
     /// Whether a `herdr-app` executable is found for this project (its config, else PATH and the usual places): the button is shown only then.
     var herdrFound: @Sendable (Project) -> Bool
-    /// Starts the Herdr app when its window is not open, then opens the thread's worktree there and brings it forward.
-    var openInHerdr: @Sendable (Project, String) async throws -> HerdrOpened
+    /// Starts the Herdr app when its window is not open, then opens the thread's worktree there (the project when it has none) and
+    /// brings it forward.
+    var openInHerdr: @Sendable (Project, String) async throws -> HerdrOpenAnswer
     /// Approves the goal, cuts the thread's worktree when it has none, and has Herdr open it and start a Claude session on the goal.
     var runGoalInHerdr: @Sendable (Project, String) async throws -> HerdrHandoff
     /// The changed files' diffs in the editor: all of them, or the one at the path. Says what it left out, nil when nothing.
@@ -103,7 +104,7 @@ struct GoalActions: Sendable {
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         herdrFound: @escaping @Sendable (Project) -> Bool = { _ in false },
-        openInHerdr: @escaping @Sendable (Project, String) async throws -> HerdrOpened = { _, _ in throw Unset() },
+        openInHerdr: @escaping @Sendable (Project, String) async throws -> HerdrOpenAnswer = { _, _ in throw Unset() },
         runGoalInHerdr: @escaping @Sendable (Project, String) async throws -> HerdrHandoff = { _, _ in throw Unset() },
         openDiff: @escaping @Sendable (Project, String, String?) async throws -> String? = { _, _, _ in nil },
         loadReview: @escaping @Sendable (Project, String) async -> ReviewReport? = { _, _ in nil },
@@ -326,9 +327,25 @@ struct GoalActions: Sendable {
     }
 
     /// Opens the thread's worktree in Herdr, starting the Herdr app first when its window is not open.
-    static func openInHerdr(_ project: Project, _ thread: String) async throws -> HerdrOpened {
-        let opener = try herdrOpener(project)
-        return try await opener.open(folder: try Editor.worktree(project: project, threadID: thread), label: thread)
+    static func openInHerdr(_ project: Project, _ thread: String) async throws -> HerdrOpenAnswer {
+        try await openInHerdr(project, thread, opener: try herdrOpener(project))
+    }
+
+    /// A thread whose worktree is gone (shipped, accepted, discarded) opens the project's own checkout instead, with nothing typed
+    /// into it: a session there can still pick up the pull request, for example to resolve its conflicts.
+    static func openInHerdr(_ project: Project, _ thread: String, opener: HerdrOpener) async throws -> HerdrOpenAnswer {
+        let folder: URL
+        do { folder = try Editor.worktree(project: project, threadID: thread) } catch EditorError.noWorktree {
+            let opened = try await opener.open(folder: project.root, label: project.root.lastPathComponent)
+            return HerdrOpenAnswer(opened: opened, projectInstead: true)
+        }
+        return HerdrOpenAnswer(opened: try await opener.open(folder: folder, label: thread), projectInstead: false)
+    }
+
+    /// What "Open in Herdr" opened: the thread's worktree, or the project because the worktree is gone.
+    struct HerdrOpenAnswer: Equatable, Sendable {
+        var opened: HerdrOpened
+        var projectInstead: Bool
     }
 
     static func runGoalInHerdr(_ project: Project, _ thread: String) async throws -> HerdrHandoff {
