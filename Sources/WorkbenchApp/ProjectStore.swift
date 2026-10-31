@@ -448,9 +448,11 @@ struct RecentProject: Equatable, Identifiable {
         if case .thread(let snapshot) = screen { return snapshot.attention == .working }
         return false
     }
+}
 
-    // MARK: Doctor
+// MARK: Doctor
 
+extension ProjectStore {
     /// Runs doctor on the thread's base (else the project's default one) and reports what it found. Off the main actor:
     /// the work is core's, awaited here. An answer for a project that is no longer the open one is dropped.
     func runDoctor() async {
