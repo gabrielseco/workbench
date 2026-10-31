@@ -133,16 +133,31 @@ public struct ThreadStore: Sendable {
 
     /// The pid of the `workbench run` holding this thread, if there is one: same pid *and* same start time
     /// as recorded, so a process that merely reused the number is not mistaken for it.
-    public func runnerPID(id: String) -> Int32? {
+    public func runnerPID(id: String) -> Int32? { holder(id: id)?.pid }
+
+    /// A Claude session handed to Herdr holds the thread too: its supervisor writes `runner.json` with `"session": "herdr"` and no
+    /// start microseconds (a shell script cannot read them), so the start time matches to within `sessionStartSlack` seconds.
+    public func holdsHerdrSession(id: String) -> Bool { holder(id: id)?.herdrSession == true }
+
+    static let sessionStartSlack: UInt64 = 2
+
+    private func holder(id: String) -> (pid: Int32, herdrSession: Bool)? {
         guard
             let data = try? Data(contentsOf: project.runnerURL(id)),
             let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let pid = (info["pid"] as? NSNumber)?.int32Value,
-            let seconds = (info["started_seconds"] as? NSNumber)?.uint64Value,
-            let micros = (info["started_micros"] as? NSNumber)?.uint64Value
+            let seconds = (info["started_seconds"] as? NSNumber)?.uint64Value
         else { return nil }
-        let expected = ProcessMember(pid: pid, startSeconds: seconds, startMicros: micros)
-        return ProcessTree.isAlive(expected) ? pid : nil
+        guard let current = ProcessTree.member(for: pid) else { return nil }
+        if let micros = (info["started_micros"] as? NSNumber)?.uint64Value {
+            let expected = ProcessMember(pid: pid, startSeconds: seconds, startMicros: micros)
+            return current == expected ? (pid, false) : nil
+        }
+        // The marker's time is read after the process started, so a process that reused the pid started later than it.
+        guard info["session"] as? String == "herdr", current.startSeconds <= seconds,
+            seconds - current.startSeconds <= Self.sessionStartSlack
+        else { return nil }
+        return (pid, true)
     }
 
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
