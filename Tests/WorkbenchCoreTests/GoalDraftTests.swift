@@ -401,6 +401,28 @@ func drafting(
         #expect(ThreadStore(project: d.fx.project).activeThreadID() == id)
     }
 
+    @Test func abandonActiveSaysSoWhenTheNewThreadCouldNotBeMade() async throws {
+        let d = try await drafting()
+        let old = try await d.fx.approvedThread()
+        var service = d.fx.service
+        struct Disk: Error {}
+        service.draftFault = { _ in throw Disk() }
+        let result = try await service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, abandonActive: true,
+            environment: d.environment)
+        #expect(result.id == nil && result.failure?.contains("\(old) was already abandoned") == true)
+    }
+
+    @Test func abandonActiveLeavesAThreadMadeWhileDraftingAlone() async throws {
+        let d = try await drafting()
+        let result = try await d.fx.service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, abandonActive: true,
+            environment: d.environment, attach: { _ in try? ThreadStore(project: d.fx.project).create(id: "g-2026-01-01-other") })
+        let other = try #require(ThreadStore(project: d.fx.project).activeThreadID())
+        #expect(result.id == nil && result.failure?.contains("changed while drafting") == true)
+        #expect(ThreadStore(project: d.fx.project).state(of: other).decision == nil)
+    }
+
     @Test func abandonActiveKeepsTheOldThreadWhenTheDraftFails() async throws {
         let d = try await drafting(answer: "I would rather not.")
         let old = try await d.fx.approvedThread()

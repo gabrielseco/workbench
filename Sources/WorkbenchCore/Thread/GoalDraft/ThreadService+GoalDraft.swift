@@ -83,6 +83,8 @@ extension ThreadService {
         /// Removed when the draft ends.
         var scratch: URL?
         var existing: GoalFile?
+        /// The thread that was active when the draft was asked for; the only one `abandonActive` may end.
+        var activeAtStart: String?
         /// The user's screenshots, checked; shown to the drafter (when it can see them) and kept with a new thread.
         var attachments: [GoalAttachments.Loaded] = []
     }
@@ -156,13 +158,13 @@ extension ThreadService {
 
         let base: String
         var existing: GoalFile?
+        var activeAtStart: String?
         switch target {
         case .newThread(let name, let named):
             guard SafeNames.isThreadID(name) else { throw GoalDraftRefusal.invalidName(name) }
             // With `abandonActive` the active thread is abandoned once the draft is good, not before: a failed draft changes nothing.
-            if !abandonActive, let active = ThreadStore(project: project).activeThreadID() {
-                throw GoalDraftRefusal.activeThread(active)
-            }
+            activeAtStart = ThreadStore(project: project).activeThreadID()
+            if !abandonActive, let active = activeAtStart { throw GoalDraftRefusal.activeThread(active) }
             do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
             if let named { base = named } else { base = await defaultBase() }
         case .replace(let id):
@@ -246,7 +248,7 @@ extension ThreadService {
         }
         return PreparedDraft(
             agent: agent, provider: provider, request: agentRequest, work: work, base: base, scratch: scratch,
-            existing: existing, attachments: images)
+            existing: existing, activeAtStart: activeAtStart, attachments: images)
     }
 
     /// The drafter's folder outside the checkout: stable for a replacement (so a leftover can be found), fresh for a new draft.
@@ -400,10 +402,20 @@ extension ThreadService {
             id: nil, replaced: false, wasApproved: false, proposal: nil, provider: agent.provider, model: agent.model,
             costUSD: run.cost, failure: run.failure)
         guard let proposal = run.proposal else { return result }
-        if abandonActive, let active = ThreadStore(project: project).activeThreadID() {
-            do { try await abandon(id: active) } catch {
-                result.failure = "the draft is ready, but thread \(active) could not be abandoned: \(error)"
+        var abandoned: String?
+        if abandonActive {
+            // Only the thread that was active when the draft was asked for: one made while the drafter ran is not ours to end.
+            let now = ThreadStore(project: project).activeThreadID()
+            if now != prepared.activeAtStart {
+                result.failure = "the active thread changed while drafting (\(now ?? "none")); nothing was abandoned or written."
                 return result
+            }
+            if let active = now {
+                do { try await abandon(id: active) } catch {
+                    result.failure = "the draft is ready, but thread \(active) could not be abandoned: \(error)"
+                    return result
+                }
+                abandoned = active
             }
         }
         let made = MadeThread()
@@ -441,7 +453,10 @@ extension ThreadService {
             // A thread left half made would be an active, goal-less draft that blocks the next one: take it back.
             // Only the directory this draft made: another command may have made its own since the preflight.
             if let id = made.id { try? FileManager.default.removeItem(at: project.threadDirectory(id)) }
-            result.failure = "the proposal was valid but no thread could be made for it: \(error)"
+            let gone =
+                abandoned.map { " Thread \($0) was already abandoned (changes in abandon.patch, branch kept)." }
+                ?? ""
+            result.failure = "the proposal was valid but no thread could be made for it: \(error).\(gone)"
         }
         return result
     }

@@ -47,7 +47,7 @@ What got in the way while using Workbench on itself is kept in [`FRICTION.md`](F
 
 At any moment there is **one project** (a git repo you point Workbench at) and **one active thread**.
 
-- Starting a new thread while another is not finished is refused with a clear message. No queue.
+- Starting a new thread while another is not finished is refused with a clear message (the CLI). The app's New Goal sheet instead abandons the active thread once the draft is good (patch saved, branch kept). No queue.
 - There is no thread list, no project list, no inbox. There is "the current thread" and a short history.
 - Nothing runs concurrently. Not turns, not checks, not two threads.
 
