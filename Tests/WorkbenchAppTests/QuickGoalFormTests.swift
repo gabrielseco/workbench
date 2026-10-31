@@ -99,6 +99,18 @@ private final class Calls: @unchecked Sendable {
         #expect(judge.unavailable == Goal.noCriteriaJudge)
     }
 
+    @Test func aStageNamedLikeABuiltInStepIsAvailableWithoutCriteria() throws {
+        let config = try Config.parse(
+            "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
+                + "[review]\nstages = [\"verifier\"]\n[review.stage.verifier]\nskill = \"v.md\"\n")
+        let goal = try GoalFile.parse(
+            "---\nid: g\ntitle: T\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\nquick: true\n---\n\n"
+                + "## Request\n\nDo it.\n").goal
+        let steps = GoalModel.steps(goal: goal, config: config)
+        #expect(steps.first { $0.name == "judge" }?.unavailable == Goal.noCriteriaJudge)
+        #expect(steps.contains { $0.name == "verifier" && $0.unavailable == nil })
+    }
+
     @Test func theReviewScreenSaysWhyThereIsNoJudge() {
         var report = ReviewReport(
             state: ThreadState.derive(from: [], id: "t1"), title: "T", criteria: [], approval: "approved", goalProblem: nil,

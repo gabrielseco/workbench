@@ -39,7 +39,8 @@ check "init writes a config in the clone" "workbench init exited $RC" test "$RC"
 python3 -I - "$P/.workbench/config.toml" <<'PY' || die "could not point claude_path nowhere"
 import sys
 path = sys.argv[1]
-open(path, "w").write('claude_path = "/nonexistent/claude-for-verify-cli"\n' + open(path).read())
+text = open(path).read()
+open(path, "w").write('claude_path = "/nonexistent/claude-for-verify-cli"\n' + text)
 PY
 
 REQUEST=$'Make the header blue.\n\n  and keep   the logo where it is'

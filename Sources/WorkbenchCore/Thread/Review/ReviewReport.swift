@@ -379,7 +379,7 @@ public struct ReviewLoader: Sendable {
             title = goal.title
             criteria = goal.criteria
             goalBase = goal.base
-            skipped = goal.stepsOff
+            skipped = goal.skip
             unavailable = ["verifier", "judge"].compactMap { name in
                 goal.unavailable(name).map { ReviewReport.UnavailableStep(name: name, why: $0) }
             }
@@ -410,7 +410,7 @@ public struct ReviewLoader: Sendable {
         if case .summary(let summary) = shown, !summary.truncated { changed = NextSteps.paths(of: summary.files) }
         let steps = NextSteps.derive(
             events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip,
-            skip: skipped, id: id)
+            skip: skipped, judgeUnavailable: unavailable.contains { $0.name == "judge" }, id: id)
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,

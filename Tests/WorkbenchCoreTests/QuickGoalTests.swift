@@ -106,8 +106,44 @@ private func headings(_ prompt: String) -> [String] {
         // A criterion added to the quick goal brings the judge back.
         let file = try goal(fx, id)
         let edited = try GoalEditor.apply(.addCriterion(text: "The header is blue.", proof: "screenshot: header"), to: file)
-        #expect(edited.goal.unavailable("judge") == nil && edited.goal.stepsOff.isEmpty)
+        #expect(edited.goal.unavailable("judge") == nil)
         #expect(try GoalEditor.apply(.removeCriterion(id: "c1"), to: edited).goal.criteria.isEmpty, "and can go again")
+    }
+
+    @Test func aStageNamedLikeABuiltInStepStillRunsWithoutCriteria() async throws {
+        // A stage reviews the diff, not the criteria: one called `verifier` is due and run by `auto` like any other.
+        let fx = try await RunnerFixture(
+            extraConfig: "[review]\nstages = [\"verifier\"]\n[review.stage.verifier]\nskill = \"v.md\"\n")
+        let id = try await fx.service.newQuickGoal(name: "header", request: brief, base: "main")
+        try await fx.service.approve(id: id)
+        _ = try await fx.runner(id).run(fx.options())
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try "one\nblue\n".write(to: worktree.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+
+        let review = await ReviewLoader(project: fx.project, git: fx.git).load(id: id)
+        #expect(review.nextSteps.map(\.name) == ["verifier", "accept"], "the stage stays, the judge does not")
+
+        var config = try Config.load(from: fx.project.configURL)
+        config.review.auto = ["verifier"]
+        let advice = await fx.service.runAutoAdvice(id: id, config: config)
+        // Uncommitted work stops it before anything starts; what matters is that it got past the criteria check.
+        #expect(advice.count == 1 && advice.first?.outcome != .skipped(Goal.noCriteriaVerifier))
+        #expect(advice.first.map { "\($0.outcome)".contains("uncommitted") } == true, "\(advice)")
+    }
+
+    @Test func theFirstCriterionOfAQuickGoalWithoutTheSectionAddsIt() throws {
+        let head = "---\nid: g\ntitle: T\nbase: main\nbudget_usd: 1\nturn_timeout_min: 30\nquick: true\n---\n\n"
+            + "## Request\n\nDo it.\n"
+        for text in [head, head + "\n## Out of scope\n\n- Nothing else.\n"] {
+            let file = try GoalFile.parse(text)
+            #expect(file.goal.criteria.isEmpty)
+            let edited = try GoalEditor.apply(.addCriterion(text: "Done.", proof: "cat a.txt"), to: file)
+            #expect(edited.goal.criteria.map(\.id) == ["c1"] && edited.goal.criteria.first?.proof == "cat a.txt")
+            #expect(edited.goal.request == "Do it." && edited.goal.outOfScope == file.goal.outOfScope)
+            let section = "Do it.\n\n## Criteria\n\n- [c1] Done.\n  - proof: cat a.txt\n"
+            #expect(edited.text.contains(section), "\(edited.text)")
+            #expect(try GoalEditor.apply(.addCriterion(text: "Also.", proof: "p"), to: edited).goal.criteria.count == 2)
+        }
     }
 
     @Test func switchToAdvanced() async throws {

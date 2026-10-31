@@ -58,8 +58,9 @@ public struct Goal: Sendable, Equatable {
 
     public var isTimeoutOnly: Bool { spend == .timeoutOnly }
 
-    /// Why `step` cannot run for this goal whatever `skip` says, nil when it can: the judge and the verifier report on
-    /// criteria, and a quick goal may have none.
+    /// Why the built-in `judge` or `verifier` cannot run for this goal whatever `skip` says, nil when it can: they report on
+    /// criteria, and a quick goal may have none. A review stage that shares one of these names is not meant: callers ask
+    /// only for the built-in step, since a stage reviews the diff and runs without criteria.
     public func unavailable(_ step: String) -> String? {
         guard criteria.isEmpty else { return nil }
         switch step {
@@ -73,11 +74,6 @@ public struct Goal: Sendable, Equatable {
         "the goal has no criteria (a quick goal), so there is nothing to judge against; add a criterion to judge it"
     public static let noCriteriaVerifier =
         "the goal has no criteria (a quick goal), so there is nothing for the verifier to show"
-
-    /// The steps that do not run for this goal: the ones it skips, then the ones it cannot have.
-    public var stepsOff: [String] {
-        skip + ["verifier", "judge"].filter { !skip.contains($0) && unavailable($0) != nil }
-    }
 
     /// The wording logs and `--json` use: `hard_cap` or `timeout_only`.
     public var spendPolicyName: String { isTimeoutOnly ? "timeout_only" : "hard_cap" }

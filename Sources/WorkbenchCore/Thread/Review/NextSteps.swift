@@ -28,9 +28,10 @@ public enum NextSteps {
     /// `files` is what the thread changed (nil when it could not be read: a stage is then listed as applying, and says so). `head` is
     /// the thread's branch tip (nil when unknown): a stage round that recorded another head did not review what is there now. `id`
     /// goes into every command, so one printed for a named thread never acts on the active one. `skip` is the goal's: a step it
-    /// names is not listed.
+    /// names is not listed. `judgeUnavailable` leaves out the built-in judge only (a goal without criteria), never a stage.
     public static func derive(
-        events: [Event], files: [String]?, config: Config?, head: String? = nil, skip: [String] = [], id: String
+        events: [Event], files: [String]?, config: Config?, head: String? = nil, skip: [String] = [],
+        judgeUnavailable: Bool = false, id: String
     ) -> [NextStep] {
         guard let ended = events.last(where: { $0.kind == .turnEnded }), ended.data["result"]?.stringValue == "succeeded" else {
             return []
@@ -53,7 +54,7 @@ public enum NextSteps {
         }
         var steps: [NextStep] = []
 
-        if !skip.contains("judge"), !events.contains(where: { $0.kind == .judgeRan && $0.turn == turn }) {
+        if !skip.contains("judge"), !judgeUnavailable, !events.contains(where: { $0.kind == .judgeRan && $0.turn == turn }) {
             steps.append(
                 NextStep(
                     name: "judge", command: "workbench judge \(id)", why: "no judge has run for turn \(turn) (advisory)",

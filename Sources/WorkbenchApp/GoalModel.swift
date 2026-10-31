@@ -152,12 +152,20 @@ struct GoalModel: Equatable {
 
     /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is none of them.
     static func steps(goal: Goal, config: Config?) -> [Step] {
-        var names: [(String, String)] = []
-        if config?.verifier != nil { names.append(("verifier", "Verifier")) }
-        names.append(("judge", "Judge"))
-        for stage in config?.review.stages ?? [] where stage != ReviewConfig.prReviewStage { names.append((stage, stage)) }
-        var steps = names.map {
-            Step(name: $0.0, label: $0.1, skipped: goal.skips($0.0), known: true, unavailable: goal.unavailable($0.0))
+        // Only the built-in steps need criteria: a stage that shares a name with one reviews the diff and is never unavailable.
+        var steps: [Step] = []
+        if config?.verifier != nil {
+            steps.append(
+                Step(
+                    name: "verifier", label: "Verifier", skipped: goal.skips("verifier"), known: true,
+                    unavailable: goal.unavailable("verifier")))
+        }
+        steps.append(
+            Step(
+                name: "judge", label: "Judge", skipped: goal.skips("judge"), known: true,
+                unavailable: goal.unavailable("judge")))
+        for stage in config?.review.stages ?? [] where stage != ReviewConfig.prReviewStage {
+            steps.append(Step(name: stage, label: stage, skipped: goal.skips(stage), known: true))
         }
         for name in goal.skip where !steps.contains(where: { $0.name == name }) {
             steps.append(Step(name: name, label: name, skipped: true, known: false))

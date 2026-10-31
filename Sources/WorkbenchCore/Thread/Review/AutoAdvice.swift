@@ -65,7 +65,9 @@ extension ThreadService {
                 results.append(AutoAdviceResult(name: name, outcome: .skipped("the goal skips it")))
                 continue
             }
-            if let why = goal?.unavailable(name) {
+            // `auto` names the built-in judge as `judge` (config refuses a stage of that name there); every other name is a stage,
+            // which reviews the diff and needs no criteria, whatever it is called.
+            if name == "judge", let why = goal?.unavailable(name) {
                 results.append(AutoAdviceResult(name: name, outcome: .skipped(why)))
                 continue
             }
