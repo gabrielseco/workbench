@@ -110,11 +110,19 @@ struct ProjectPickerCard: View {
             Text(store.recentPaths.isEmpty ? "No recent projects yet." : "No project matches \"\(query)\".")
                 .font(.callout).foregroundStyle(.secondary).padding(.vertical, 10).padding(.horizontal, 4)
         } else {
-            ScrollView {
-                VStack(spacing: 2) {
-                    ForEach(rows) { entry in
-                        ProjectRow(entry: entry, highlighted: entry.path == selected, pick: pick) { store.forget(entry.path) }
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(rows) { entry in
+                            ProjectRow(entry: entry, highlighted: entry.path == selected, pick: pick) { store.forget(entry.path) }
+                                .id(entry.path)
+                        }
                     }
+                }
+                // More rows than fit: keep the one ↑↓ and ↵ act on in view.
+                .onChange(of: selected) {
+                    guard let selected else { return }
+                    scroller.scrollTo(selected)
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
