@@ -389,6 +389,27 @@ func drafting(
         }
         #expect(d.codex?.runs == 0, "no money spent on a draft that cannot be saved")
     }
+
+    @Test func abandonActiveEndsTheOldThreadOnceTheDraftIsGood() async throws {
+        let d = try await drafting()
+        let old = try await d.fx.approvedThread()
+        let result = try await d.fx.service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "retry uploads", config: d.config,
+            abandonActive: true, environment: d.environment)
+        let id = try #require(result.id)
+        #expect(ThreadStore(project: d.fx.project).state(of: old).decision == "abandoned")
+        #expect(ThreadStore(project: d.fx.project).activeThreadID() == id)
+    }
+
+    @Test func abandonActiveKeepsTheOldThreadWhenTheDraftFails() async throws {
+        let d = try await drafting(answer: "I would rather not.")
+        let old = try await d.fx.approvedThread()
+        let result = try await d.fx.service.draftGoal(
+            target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, abandonActive: true,
+            environment: d.environment)
+        #expect(result.id == nil)
+        #expect(ThreadStore(project: d.fx.project).state(of: old).decision == nil, "the old thread is still active")
+    }
 }
 
 @Suite(.processGate) struct GoalDraftReplaceTests {

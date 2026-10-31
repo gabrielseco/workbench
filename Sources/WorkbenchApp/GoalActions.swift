@@ -195,7 +195,7 @@ struct GoalActions: Sendable {
                 FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
             return try await ThreadService(project: project, git: git).draftGoal(
                 target: .newThread(name: name, base: nil), request: request, config: config, attachments: attachments,
-                attach: { stop.attach($0) })
+                abandonActive: true, attach: { stop.attach($0) })
         },
         enableGoalAgent: { project, provider in try GoalAgentSetup.enable(provider: provider, in: project) },
         openGoal: { project, thread in try await openInEditor(project, thread) },

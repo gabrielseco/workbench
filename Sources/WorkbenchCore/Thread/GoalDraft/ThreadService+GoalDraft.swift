@@ -106,13 +106,13 @@ extension ThreadService {
     ///
     /// - Parameter attach: called with the running drafter, so the caller can stop it (Ctrl-C).
     public func draftGoal(
-        target: GoalDraftTarget, request: String, config: Config?, attachments: [URL] = [],
+        target: GoalDraftTarget, request: String, config: Config?, attachments: [URL] = [], abandonActive: Bool = false,
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = GoalDraft.timeout,
         attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> GoalDraftResult {
         let prepared = try await prepareDraft(
-            target: target, request: request, config: config, attachments: attachments, environment: environment,
-            timeout: timeout)
+            target: target, request: request, config: config, attachments: attachments, abandonActive: abandonActive,
+            environment: environment, timeout: timeout)
         defer { prepared.scratch.map { try? FileManager.default.removeItem(at: $0) } }
         switch target {
         case .replace(let id):
@@ -122,7 +122,8 @@ extension ThreadService {
                 }
             } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
         case .newThread(let name, _):
-            return try await newDraft(name: name, prepared: prepared, config: config, attach: attach)
+            return try await newDraft(
+                name: name, prepared: prepared, config: config, abandonActive: abandonActive, attach: attach)
         }
     }
 
@@ -130,7 +131,7 @@ extension ThreadService {
 
     private func prepareDraft(
         target: GoalDraftTarget, request rough: String, config: Config?, attachments urls: [URL],
-        environment: [String: String], timeout: TimeInterval
+        abandonActive: Bool, environment: [String: String], timeout: TimeInterval
     ) async throws -> PreparedDraft {
         guard let config, let agent = config.resolvedGoalAgent else { throw GoalDraftRefusal.noGoalAgent }
         let text = rough.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,7 +159,10 @@ extension ThreadService {
         switch target {
         case .newThread(let name, let named):
             guard SafeNames.isThreadID(name) else { throw GoalDraftRefusal.invalidName(name) }
-            if let active = ThreadStore(project: project).activeThreadID() { throw GoalDraftRefusal.activeThread(active) }
+            // With `abandonActive` the active thread is abandoned once the draft is good, not before: a failed draft changes nothing.
+            if !abandonActive, let active = ThreadStore(project: project).activeThreadID() {
+                throw GoalDraftRefusal.activeThread(active)
+            }
             do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
             if let named { base = named } else { base = await defaultBase() }
         case .replace(let id):
@@ -386,7 +390,8 @@ extension ThreadService {
     // MARK: A new thread
 
     private func newDraft(
-        name: String, prepared: PreparedDraft, config: Config?, attach: @Sendable (AgentExecution) -> Void
+        name: String, prepared: PreparedDraft, config: Config?, abandonActive: Bool,
+        attach: @Sendable (AgentExecution) -> Void
     ) async throws -> GoalDraftResult {
         let agent = prepared.agent
         let run = try await runDrafter(
@@ -395,6 +400,12 @@ extension ThreadService {
             id: nil, replaced: false, wasApproved: false, proposal: nil, provider: agent.provider, model: agent.model,
             costUSD: run.cost, failure: run.failure)
         guard let proposal = run.proposal else { return result }
+        if abandonActive, let active = ThreadStore(project: project).activeThreadID() {
+            do { try await abandon(id: active) } catch {
+                result.failure = "the draft is ready, but thread \(active) could not be abandoned: \(error)"
+                return result
+            }
+        }
         let made = MadeThread()
         do {
             // The thread exists only now. Its log tells the draft after the fact: the process left no thread behind
