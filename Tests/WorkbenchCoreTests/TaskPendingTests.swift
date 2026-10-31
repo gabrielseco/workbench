@@ -72,6 +72,17 @@ struct TaskPendingTests {
         #expect(open.map(\.id) == ["PAN", "PRI"])
     }
 
+    @Test func aFailedRunsThreadHoldsItsUnitsButAnAbandonedOneDoesNot() async throws {
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "failed", "units": ["ROU"], "thread": "g-1"])
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "nothing-to-do", "units": ["TUR"], "thread": "g-2"])
+        await writer.close()
+        #expect(try fx.log.history().unitsWithThreads == ["ROU": "g-1"])
+    }
+
     @Test func aReportRunDoesTheWorkOfNoUnit() async throws {
         let fx = try TaskFixture()
         let writer = try await fx.log.openWriter()

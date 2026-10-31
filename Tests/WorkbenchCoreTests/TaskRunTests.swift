@@ -213,6 +213,27 @@ private struct Run {
         #expect(try run.task.log.history().runs.first?.thread == result.thread)
     }
 
+    @Test func aFailedRunWhoseThreadAPersonShippedByHandIsNotDoneAgain() async throws {
+        let run = try await Run()
+        _ = try await addOrigin(run.fx)
+        // The change cannot be described, so the thread is accepted and left for `workbench ship`.
+        let first = await run.runner("write=a.txt").run("bump", trigger: .tick)
+        #expect(first.outcome == .failed && first.units == ["ROU", "TUR"])
+        // The person ships it: its branch now has an open pull request.
+        try run.gh.put("list", #"[{"state":"OPEN"}]"#)
+        let second = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(second.outcome == .prOpened && second.units == ["PAN"])
+    }
+
+    @Test func theThreadEventCarriesTheApprovalTheRunRanUnder() async throws {
+        let run = try await Run(extraConfig: #"check_command = "false""#)
+        _ = await run.runner("write=a.txt").run("bump", trigger: .manual)
+        let history = try run.task.log.history()
+        let event = try #require(
+            EventLogReader.read(at: run.task.log.url).events.first { $0.kind == .taskRunThread })
+        #expect(event.data["hash"]?.stringValue == history.approvedHash)
+    }
+
     @Test func aTaskThatChangesNothingIsNothingToDoAndLeavesNoThreadBehind() async throws {
         let run = try await Run(front: "fix: pr")
         try await run.task.library.approve("bump")

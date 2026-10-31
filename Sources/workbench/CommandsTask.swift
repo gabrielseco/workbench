@@ -65,15 +65,20 @@ extension Commands {
 
     private static func taskTick() async throws -> Int32 {
         let ctx = try await Context.load()
-        let names = TaskTick.due(project: ctx.project)
+        let plan = TaskTick.plan(project: ctx.project)
+        // A task that cannot be loaded is said out loud and fails the tick: a timer that hears nothing assumes all is well.
+        for broken in plan.broken {
+            out("\(broken.name): PROBLEM  \(broken.reason.split(whereSeparator: \.isNewline).joined(separator: "; "))")
+        }
+        let names = plan.due
         guard !names.isEmpty else {
-            out("no task is due")
-            return 0
+            if plan.broken.isEmpty { out("no task is due") }
+            return plan.broken.isEmpty ? 0 : 1
         }
         let runner = taskRunner(ctx)
         let signals = installStopHandlers(what: "the run") { await runner.stop.stop() }
         defer { signals.forEach { $0.cancel() } }
-        var code: Int32 = 0
+        var code: Int32 = plan.broken.isEmpty ? 0 : 1
         for name in names {
             // One after the other: a project has one active thread.
             let result = await runner.run(name, trigger: .tick)

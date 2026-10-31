@@ -59,6 +59,21 @@ struct TaskTickTests {
         #expect(due(fx, at: date(7, 5)) == ["bump"])
     }
 
+    @Test func anApprovedTaskThatCanNoLongerBeLoadedIsReportedNotDropped() async throws {
+        let fx = try TaskFixture(front: "at: 04:00\nfix: pr\npending: pending.sh")
+        try fx.script("echo '[]'")
+        try await fx.library.approve(fx.name, now: { date(2, 9) })
+        try FileManager.default.removeItem(at: fx.project.root.appendingPathComponent("pending.sh"))
+        let plan = TaskTick.plan(project: fx.project, now: date(3, 5), calendar: Self.utc)
+        #expect(plan.due.isEmpty && plan.broken.map(\.name) == ["bump"])
+        #expect(plan.broken.first?.reason.contains("pending.sh") == true)
+    }
+
+    @Test func aDraftThatNeverLoadedIsNotAProblemForTheTimer() throws {
+        let fx = try TaskFixture(front: "at: 04:00\nbatch: 0")
+        #expect(TaskTick.plan(project: fx.project, now: date(3, 5), calendar: Self.utc) == TaskTick.Plan(due: [], broken: []))
+    }
+
     @Test func dueTasksComeEarliestFirst() async throws {
         let late = try TaskFixture(name: "late", front: "at: 06:00\nfix: report")
         let early = try TaskFixture(in: late.project, name: "early", front: "at: 03:00\nfix: report")

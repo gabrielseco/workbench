@@ -56,8 +56,9 @@ Ids are letters, digits, `.`, `_` and `-` (they reach branch names and paths), a
 timeout, too much output or anything else than that list ends the run as `failed` with the reason. A task without `pending` has one
 unit, the run itself, and no batching.
 
-Which units are pending is **derived**, never stored: the script's list, minus the units a past run opened a pull request for, as `gh pr list
---head workbench/<thread> --state all` says: open or merged keeps a unit out, closed unmerged brings it back. When that cannot be found out (`gh`
+Which units are pending is **derived**, never stored: the script's list, minus the units a past run made a thread for (a run that opened its
+pull request, failed with its thread left for `workbench ship`, or died), as `gh pr list
+--head workbench/<thread> --state all` says: open or merged keeps a unit out; closed unmerged, or no pull request at all, brings it back (unless a run recorded opening one). When that cannot be found out (`gh`
 is missing or unreachable) the unit stays out: work done twice costs more than waiting a day. Only units a past run recorded are checked; a pull
 request opened by hand for a unit is not seen. A `report` run does the work of no unit.
 
@@ -76,7 +77,7 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 |---|---|---|
 | `task.approved` | `task approve` | `hash` |
 | `task.run.started` | a run is about to begin, before anything is spent | `trigger` (`tick`, `manual`) |
-| `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units` |
+| `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units`, `hash` (the approval the run ran under) |
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started |
 
 Outcomes: `pr-opened`, `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `budget-exceeded`,
@@ -94,7 +95,9 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
 - `workbench task tick`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
   task with no approval and no run has nothing to count from and never fires; one whose approval went stale is due, so its run can record
-  `stale-approval`. Exit 1 only when a run failed or went over budget; a skip is a note. This is what a timer calls; the app will call the same
+  `stale-approval`. A task that was approved once and can no longer be loaded (its script deleted, its skill grown past the limit) has no
+  schedule to read: the tick prints `<name>: PROBLEM <why>` and exits 1, so a timer does not take its silence for "all is well". Exit 1
+  also when a run failed or went over budget; a skip is a note. This is what a timer calls; the app will call the same
   code for each project it has open.
 
 ## A run

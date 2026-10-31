@@ -196,7 +196,8 @@ public struct TaskRunner: Sendable {
         // Before any work: which units this thread is for, so a run that dies later is still known to have had them.
         do {
             try await writer.append(
-                .taskRunThread, data: ["thread": .string(id), "units": .array(ids.map { .string($0) })])
+                .taskRunThread,
+                data: ["thread": .string(id), "units": .array(ids.map { .string($0) }), "hash": .string(loaded.hash)])
         } catch {
             _ = try? await service.abandon(id: id)
             return fail("the run could not be recorded, so nothing was started: \(error)", units: ids)

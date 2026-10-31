@@ -46,15 +46,17 @@ public struct TaskHistory: Sendable, Equatable {
     public var openRun: Run? { runs.last.flatMap { $0.outcome == nil ? $0 : nil } }
     public var lastRun: Run? { runs.last }
 
-    /// Units a run opened a pull request for, with the thread that did: they are not offered again unless that pull
-    /// request was closed unmerged (see `PendingUnits`). A report run does the work of no unit.
+    /// Units a run made a thread for, with that thread: they are not offered again while its pull request is open or merged, or
+    /// while GitHub cannot be asked (see `PendingUnits`). A report run does the work of no unit.
     ///
     /// A run that died (`interrupted`) counts as well: it may have died after the pull request was open. GitHub then says whether one
     /// exists (`PendingUnits.select`).
     public var unitsWithThreads: [String: String] {
         var result: [String: String] = [:]
         for run in runs {
-            guard let thread = run.thread, run.outcome == .prOpened || run.outcome == .interrupted else { continue }
+            // A run that abandoned its thread (nothing to do) has nothing to wait for; any other run may have left a thread that a
+            // person finishes by hand (`workbench ship`) or that died after its pull request was open.
+            guard let thread = run.thread, run.outcome != .nothingToDo, run.outcome != .reported else { continue }
             for unit in run.units { result[unit] = thread }
         }
         return result

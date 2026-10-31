@@ -8,7 +8,8 @@
 # `task run` must open one pull request for ROU and TUR, accepted by the task (`by: task:bump`) and pushed to origin; the
 # second must take only PAN; the third must say nothing-pending and start no thread. The task's own log must hold the approval
 # and three run ends with those outcomes. While a thread is active `task run` must exit 6 as skipped-project-busy, and after
-# the task file is edited it must exit 6 as stale-approval and start nothing; `task tick` must find nothing due. Exit 0 only
+# the task file is edited it must exit 6 as stale-approval and start nothing; `task tick` must find nothing due, and once the
+# pending script is deleted it must say out loud that the task cannot be loaded and exit 1. Exit 0 only
 # when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gh say every pull request it opened was closed unmerged, so the units come back:
 # "the second run takes only the last country", "the third run finds nothing pending", "the third run started no thread" and
@@ -143,5 +144,10 @@ check "after the task file is edited the run is refused (exit 6) and starts noth
 wbp "$SCRATCH/tick.out" task tick
 check "task tick finds nothing due (the task has no schedule)" "exit $RC: $(head -c 200 "$SCRATCH/tick.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "no task is due" "$2"' _ "$RC" "$SCRATCH/tick.out"
+
+rm "$TASK/pending.sh"
+wbp "$SCRATCH/broken.out" task tick
+check "task tick says out loud that an approved task can no longer be loaded (exit 1)" "exit $RC: $(head -c 300 "$SCRATCH/broken.out")" \
+    bash -c '[ "$1" = 1 ] && grep -q "^bump: PROBLEM" "$2"' _ "$RC" "$SCRATCH/broken.out"
 
 finish
