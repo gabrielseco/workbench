@@ -233,7 +233,10 @@ struct FinishedBanner: View {
                     Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
                 }
                 Spacer()
-                if snapshot.canShip { Button("Ship…") { Task { await store.prepareShip() } }.disabled(store.busy != nil) }
+                if snapshot.canShip {
+                    Button("Ship") { Task { await store.ship() } }.disabled(store.busy != nil || store.deciding)
+                        .help("Pushes the branch and opens or updates its pull request")
+                }
                 if snapshot.canReviewPullRequest {
                     Button(snapshot.state.review.prReview == nil ? "Review PR" : "Review again") {
                         Task { await store.reviewPullRequest() }
@@ -262,9 +265,6 @@ struct FinishedBanner: View {
         .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
             PRReviewSheet(store: store)
-        }
-        .sheet(isPresented: Binding(get: { store.pendingShip != nil }, set: { if !$0 { store.cancelShip() } })) {
-            ShipSheet(store: store)
         }
         .confirmationDialog(mergeTitle, isPresented: $confirmingMerge) {
             Button("Merge") { Task { await store.mergePullRequest() } }

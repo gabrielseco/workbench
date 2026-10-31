@@ -172,22 +172,20 @@ private final class Recorder: @unchecked Sendable {
         #expect(store.review?.canDecide == true)
     }
 
-    @Test func acceptPassesTheShownPlanAndTheMessage() async throws {
+    /// One click accepts core's plan with the default message, with no confirmation in between, and says what it made.
+    @Test func acceptWorkImmediately() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
-        await store.prepareAccept()
-        #expect(store.pendingAccept == Self.plan)
-        await store.confirmAccept(message: "my message")
-        #expect(recorder.log == ["accept true my message"] && store.pendingAccept == nil)
+        await store.accept()
+        #expect(recorder.log == ["accept true -"])
+        #expect(store.notice == "Accepted: c on b" && store.actionError == nil && store.busy == nil && !store.deciding)
     }
 
     @Test func aPlanThatChangedIsRefusedWithCoresMessageAndCommitsNothing() async throws {
         let recorder = Recorder()
         let store = try await store(recorder, acceptError: ThreadServiceError.changedSinceAcceptShown)
-        await store.prepareAccept()
-        await store.confirmAccept(message: nil)
-        #expect(store.actionError != nil)
-        #expect(store.pendingAccept == nil)
+        await store.accept()
+        #expect(store.actionError != nil && store.notice == nil && !store.deciding)
     }
 
     @Test func discardPassesTheShownPlan() async throws {
@@ -243,23 +241,27 @@ private final class Recorder: @unchecked Sendable {
         #expect(store.review?.canDecide == true)
     }
 
-    @Test func aPlanThatArrivesAfterLeavingTheProjectIsNotShown() async throws {
+    @Test func aPlanThatArrivesAfterLeavingTheProjectIsNotAccepted() async throws {
         let fixture = try await ended()
         keptFixtures.append(fixture)
         let reported = try report(fixture)
-        let release = Release()
+        let (release, recorder) = (Release(), Recorder())
         let actions = GoalActions(
-            loadReview: { _, _ in reported }, acceptPlan: { _, _ in await release.wait(); return Self.plan })
+            loadReview: { _, _ in reported }, acceptPlan: { _, _ in await release.wait(); return Self.plan },
+            accept: { _, _, _, _ in
+                recorder.add("accept")
+                return AcceptResult(branch: "b", commit: "c", committedNow: true)
+            })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
-        let preparing = Task { await store.prepareAccept() }
+        let accepting = Task { await store.accept() }
         try await Task.sleep(for: .milliseconds(100))
         let other = try await AppFixture()
         keptFixtures.append(other)
         #expect(await store.open(other.root))
         await release.open()
-        await preparing.value
-        #expect(store.pendingAccept == nil)
+        await accepting.value
+        #expect(recorder.log.isEmpty && store.notice == nil)
     }
 
     @Test func aTruncatedDiffSaysTheLineCountsCoverTheListedFiles() async throws {
@@ -270,21 +272,12 @@ private final class Recorder: @unchecked Sendable {
         #expect(model.totals == "300 files · +5 −1 in the 1 listed")
     }
 
-    @Test func acceptingSaysWhichCommitWasMade() async throws {
-        let store = try await store(Recorder())
-        await store.prepareAccept()
-        await store.confirmAccept(message: nil)
-        #expect(store.notice == "Accepted: c on b")
-    }
-
-    @Test func cancellingADecisionDoesNothing() async throws {
+    @Test func cancellingADiscardDoesNothing() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
-        await store.prepareAccept()
-        store.cancelAccept()
         await store.prepareDiscard()
         store.cancelDiscard()
-        #expect(recorder.log.isEmpty && store.pendingAccept == nil && store.pendingDiscard == nil)
+        #expect(recorder.log.isEmpty && store.pendingDiscard == nil)
     }
 
     @Test func sendBackNeedsANote() async throws {

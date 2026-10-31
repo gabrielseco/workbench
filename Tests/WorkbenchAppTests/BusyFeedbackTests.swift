@@ -70,16 +70,12 @@ import Testing
                 return AcceptResult(branch: "b", commit: "c", committedNow: true)
             })
         let (store, _) = try await store(actions)
-        let preparing = Task { await store.prepareAccept() }
+        let accepting = Task { await store.accept() }
         try await until("it says it is checking") { store.busy == "Checking what Accept would do…" }
         looking.open()
-        await preparing.value
-        #expect(store.busy == nil)
-
-        let confirming = Task { await store.confirmAccept(message: nil) }
         try await until("it says it is accepting") { store.busy == "Accepting: committing the work…" }
         committing.open()
-        await confirming.value
+        await accepting.value
         #expect(store.busy == nil && store.notice?.hasPrefix("Accepted") == true)
     }
 
@@ -185,8 +181,8 @@ import Testing
         struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
         let actions = GoalActions(acceptPlan: { _, _ in throw Refused() }, discardPlan: { _, _ in throw Refused() })
         let (store, _) = try await store(actions)
-        await store.prepareAccept()
-        #expect(store.busy == nil && store.actionError == "refused")
+        await store.accept()
+        #expect(store.busy == nil && store.actionError == "refused" && !store.deciding)
         await store.prepareDiscard()
         #expect(store.busy == nil)
     }

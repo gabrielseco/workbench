@@ -213,8 +213,9 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   `Review.Verifier` and the `proof.added` files (`sha256`, `commit`, `tree`: a screenshot from before the latest change is
   marked stale, as core already decides), `ReviewLoader.patch(id:path:)` for View diff, `GrantLedger` and
   `ThreadService.grantCandidates` for "grant only if you want them next time".
-- **Does:** `acceptPlan` then `accept` (and `discardPlan` then `discard`): the plan is shown in a confirmation, and the app
-  passes it as `shown:` exactly as the CLI does, so what is confirmed is what runs. `Send back…` takes a note and an optional
+- **Does:** `acceptPlan` then `accept` on the one click of `Accept work`, with the default commit message and no confirmation
+  (the person asked for none); core still refuses a plan the work moved away from. `discardPlan` then `discard`: the plan is shown
+  in a confirmation, and the app passes it as `shown:` exactly as the CLI does, so what is confirmed is what runs. `Send back…` takes a note and an optional
   one-turn budget and calls `ThreadRunner.run(RunOptions(feedback:, budgetOverride:))`; the failed check's output goes in as the
   CLI sends it. `judge(…)` on demand (advisory). `grant(…)` per denied command with scope `once`, `thread` or `never`; an unsafe
   level needs the same explicit extra step as `--allow-dangerous`.
@@ -232,14 +233,15 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
 1. **Lift the ship sequence into core.** Already done by the time the app needed it: `shipPreflight`, `describePR`, `prBody` and
    `publishShip` are in `ThreadService` (`Thread/Ship/`), and `CommandsShip.swift` keeps the flags, the prompts and the printing. What
    stays in the CLI is the refresh proposal (`proposeRefresh`, for a thread that continues an open PR) and `--watch`/`--review-loop`.
-   The app's `Ship…` (below) calls the core pieces directly; no behaviour-preserving move was needed.
+   The app's `Ship` (below) calls the core pieces directly; no behaviour-preserving move was needed.
 2. **`ThreadService.prChecks(id:)`**: one `gh pr checks` read into `PRChecksSummary` (the parser exists; `watchPR` is a loop with
    a deadline and is not what a screen wants). The app polls it every 30 s while the Ship screen or an open PR is showing, and
    stops when the PR ends.
 
-- **First slice (done): `Ship…` on the accepted banner.** `GoalActions.shipPreview` runs preflight, the describing turn and `prBody`;
-  the sheet shows the push lines and the PR title and text, and `Push and open PR` passes the same preview to `publishShip`. A
-  thread that continues an open PR shows that its text stays as it is (the refresh proposal is not in the app yet). The describing
+- **First slice (done): `Ship` on the accepted banner.** One click runs `GoalActions.shipPreview` (preflight, the describing turn
+  and `prBody`) and passes that preview straight to `publishShip`, with no confirmation sheet (the person asked for none); the busy
+  line says which step it is on, and the notice gives the PR. A thread that continues an open PR keeps its text as it is (the
+  refresh proposal is not in the app yet). The describing
   turn has no Stop in the window yet. Not in this slice: CI checks, PR review rounds, Fix findings, Clean thread.
 - **Shows:** `Pushed and opened N min ago. Workbench never merges for you.`, the PR card (title, `#number`, `branch → base`,
   `Open on GitHub`), CI checks (name, duration, state), `PR review · round r of max`, the findings text of the latest round and
@@ -248,7 +250,7 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   `prReviewFindings`, `latestReviewStages` (each stage with its record), `ReviewConfig` (`max_rounds`, stages), `pullRequestBranchTip`
   and `ReviewReport.prReviewIsStale`; events `pr.described`, `pr.opened`, `pr.refreshed`, `proof.published`, `branch.ahead`,
   `pr_review.started/finished`, `review_stage.started/finished`, `worktree.removed`, `branch.removed`.
-- **Does:** `ship` (with a confirmation, because it publishes), `prReview` / `reviewStage` (`Run round 2`), `ReviewLoop.startFollowUp`
+- **Does:** `ship` (on the click, without a confirmation), `prReview` / `reviewStage` (`Run round 2`), `ReviewLoop.startFollowUp`
   for **Fix findings** (the findings quoted, as core already does), `cleanMerged` for `Clean thread` (dry run first, shown, then
   confirmed). Never post review comments (posting is the user's call, as in `pr-review`), and never merge on its own: see Merge below.
 - **CI and Merge (done).** While the shipped pull request is open the banner reads `ThreadService.prStatus` (`gh pr view` for its

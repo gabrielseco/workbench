@@ -1,8 +1,8 @@
 import Foundation
 import Testing
-import WorkbenchCore
 
 @testable import WorkbenchApp
+@testable import WorkbenchCore
 
 /// What the Codex reviews of the app shell found: a damaged log, a failed switch, and reads and doctor runs that finish for a
 /// project that is no longer the open one.
@@ -175,6 +175,94 @@ import WorkbenchCore
         await running.value
         #expect(store.doctor == .notRun, "the first project's answer is not the second's")
     }
+
+    // MARK: Accept and Ship start on the click
+
+    /// A click while Accept or Ship is still going starts nothing, the failure stays on screen, and the next click runs again.
+    @Test func acceptAndShipPreventDuplicateOperations() async throws {
+        struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
+        let (reading, calls) = (Latch(), Calls())
+        let plan = AcceptPlan(
+            id: "t1", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1", diff: .unavailable(reason: "x"),
+            hasPendingChanges: true, commits: [], check: nil, openWork: false, snapshot: "s", defaultMessage: "m")
+        let shipPlan = ShipPlan(
+            id: "t1", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1", remoteBranch: "workbench/t1",
+            base: "origin/main", head: "abcdef1234567890", origin: "git@example.test:me/repo.git", remote: .absent,
+            pullRequest: nil)
+        let actions = GoalActions(
+            acceptPlan: { _, _ in
+                calls.add("plan")
+                await reading.wait()
+                return plan
+            },
+            accept: { _, _, _, _ in
+                calls.add("accept")
+                throw Refused()
+            },
+            shipPreview: { _, _ in
+                calls.add("preview")
+                await reading.wait()
+                return ShipPreview(plan: shipPlan)
+            },
+            ship: { _, _, _ in
+                calls.add("ship")
+                throw Refused()
+            })
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        let store = ProjectStore(preferences: MemoryPreferences(), actions: actions)
+        #expect(await store.open(fixture.root))
+
+        let accepting = Task { await store.accept() }
+        for _ in 0..<200 where calls.log.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        await store.accept()
+        await store.ship()
+        #expect(calls.log == ["plan"], "the clicks while Accept is going started nothing")
+        #expect(store.deciding && store.busy != nil)
+        await reading.open()
+        await accepting.value
+        #expect(calls.log == ["plan", "accept"] && store.actionError == "refused" && !store.deciding)
+
+        try fixture.decide("t1", "accepted")
+        await store.reload()
+        await reading.close()
+        let shipping = Task { await store.ship() }
+        for _ in 0..<200 where calls.log.count < 3 { try await Task.sleep(for: .milliseconds(10)) }
+        await store.ship()
+        await store.accept()
+        #expect(calls.log == ["plan", "accept", "preview"], "the clicks while Ship is going started nothing")
+        await reading.open()
+        await shipping.value
+        #expect(calls.log == ["plan", "accept", "preview", "ship"] && store.actionError == "refused")
+        #expect(store.notice == nil && store.busy == nil && !store.deciding)
+
+        await store.ship()
+        #expect(calls.log.suffix(2) == ["preview", "ship"], "a click after a failure runs again")
+    }
+}
+
+/// Holds the seams that wait on it until opened; closing it holds the next ones.
+private actor Latch {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
+    func close() { opened = false }
+}
+
+private final class Calls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func add(_ item: String) { lock.withLock { items.append(item) } }
+    var log: [String] { lock.withLock { items } }
 }
 
 private final class HoldFlag: @unchecked Sendable {
