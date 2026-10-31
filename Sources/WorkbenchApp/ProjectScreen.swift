@@ -58,11 +58,19 @@ struct ThreadSnapshot: Equatable {
     var problems: [String] = []
     /// The latest turn as the Run screen shows it; nil before the first turn.
     var run: RunModel?
+    /// The shipped pull request and its CI as GitHub said it last; set by the store, never by the loader, and nil before the first read.
+    var ci: PullRequestCI?
 
     /// How a decided thread ended, in words; nil while it is still open.
     var finishedText: String? {
         if state.cleaned { return "Cleaned: the branch was removed." }
-        if let pr = state.pullRequest { return "Shipped as PR #\(pr.number)." }
+        if let pr = state.pullRequest {
+            switch ci?.status?.state {
+            case .merged?: return "Merged: PR #\(pr.number)."
+            case .closed?: return "PR #\(pr.number) was closed without merging."
+            default: return "Shipped as PR #\(pr.number)."
+            }
+        }
         switch state.decision {
         case "accepted": return "Accepted, not shipped yet."
         case "discarded": return "Discarded: the worktree and branch were removed."
@@ -75,8 +83,14 @@ struct ThreadSnapshot: Equatable {
     /// Accepted and not yet shipped: the work is on its branch and no pull request exists.
     var canShip: Bool { state.decision == "accepted" && state.pullRequest == nil && !state.cleaned }
 
-    /// Shipped and not cleaned: the pull request is there to open and to have Codex review.
-    var canReviewPullRequest: Bool { state.pullRequest != nil && !state.cleaned }
+    /// Shipped, not cleaned and not known to be merged or closed: the pull request is there to have Codex review.
+    var canReviewPullRequest: Bool { watchesPullRequest }
+
+    /// Shipped, not cleaned and not known to have ended: its CI is worth reading and Merge is shown (enabled only when green).
+    var watchesPullRequest: Bool { state.pullRequest != nil && !state.cleaned && ci?.ended != true }
+
+    /// GitHub said just now that the pull request is open and every check passed.
+    var canMerge: Bool { watchesPullRequest && (ci?.canMerge ?? false) }
 
     var pullRequestURL: URL? { state.pullRequest.flatMap { URL(string: $0.url) } }
 
@@ -98,6 +112,7 @@ struct ThreadSnapshot: Equatable {
         guard state.decision != nil, !state.cleaned else { return nil }
         let branch = WorktreeManager.branch(for: id)
         if state.pullRequest != nil {
+            if ci?.status?.state == .merged { return "Its pull request is merged. `workbench clean` removes \(branch)." }
             return "Its pull request stays open. After it is merged, `workbench clean` removes \(branch)."
         }
         if state.decision == "accepted" {

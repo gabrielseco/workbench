@@ -72,6 +72,10 @@ struct GoalActions: Sendable {
     var shipPreview: @Sendable (Project, String) async throws -> ShipPreview
     /// Publishes what the preview showed; core refuses it when the target changed since.
     var ship: @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome
+    /// The shipped pull request's state, head and CI checks, read from GitHub now; writes nothing.
+    var pullRequestStatus: @Sendable (Project, String) async throws -> PRStatus
+    /// Merges the shipped pull request at the head whose green CI was shown, and returns what GitHub says after.
+    var mergePullRequest: @Sendable (Project, String, String) async throws -> PRStatus
     /// One Codex review round of the thread's pull request, recorded in its log.
     var prReview: @Sendable (Project, String) async throws -> PRReviewShown
     /// The latest recorded round with what Codex wrote; nil when none has run.
@@ -108,6 +112,8 @@ struct GoalActions: Sendable {
         patch: @escaping @Sendable (Project, String, String) async throws -> FilePatch? = { _, _, _ in nil },
         shipPreview: @escaping @Sendable (Project, String) async throws -> ShipPreview = { _, _ in throw Unset() },
         ship: @escaping @Sendable (Project, String, ShipPreview) async throws -> ShipOutcome = { _, _, _ in throw Unset() },
+        pullRequestStatus: @escaping @Sendable (Project, String) async throws -> PRStatus = { _, _ in throw Unset() },
+        mergePullRequest: @escaping @Sendable (Project, String, String) async throws -> PRStatus = { _, _, _ in throw Unset() },
         prReview: @escaping @Sendable (Project, String) async throws -> PRReviewShown = { _, _ in throw Unset() },
         latestPRReview: @escaping @Sendable (Project, String) async -> PRReviewShown? = { _, _ in nil },
         followUpPlan: @escaping @Sendable (Project, String, Int) async throws -> FollowUpPlan = { _, _, _ in throw Unset() },
@@ -124,6 +130,7 @@ struct GoalActions: Sendable {
         (self.grantCandidates, self.grant) = (grantCandidates, grant)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
         (self.shipPreview, self.ship) = (shipPreview, ship)
+        (self.pullRequestStatus, self.mergePullRequest) = (pullRequestStatus, mergePullRequest)
         (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
         (self.followUpPlan, self.startFollowUp) = (followUpPlan, startFollowUp)
     }
@@ -240,6 +247,13 @@ struct GoalActions: Sendable {
         },
         shipPreview: { project, thread in try await ShipPreview.fetch(project: project, thread: thread) },
         ship: { project, thread, preview in try await ShipPreview.publish(preview, project: project, thread: thread) },
+        pullRequestStatus: { project, thread in
+            try await ThreadService(project: project, git: try GitRunner.discover()).prStatus(id: thread, gh: pullRequestGH())
+        },
+        mergePullRequest: { project, thread, head in
+            try await ThreadService(project: project, git: try GitRunner.discover())
+                .mergePR(id: thread, gh: pullRequestGH(), head: head)
+        },
         prReview: { project, thread in
             let config = try Config.load(from: project.configURL)
             let service = ThreadService(project: project, git: try GitRunner.discover())
@@ -275,6 +289,13 @@ struct GoalActions: Sendable {
                     .startFollowUp(parent: thread, findings: findings, reviewRound: round, config: config)
             } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") }
         })
+
+    /// The `gh` that reads and merges the shipped pull request: `WORKBENCH_APP_GH` when the launch sets it (`scripts/verify-app.sh`
+    /// sets a stand-in, so a fixture project never asks GitHub), else `gh` on PATH. None found is nil, which core reports.
+    static func pullRequestGH(environment: [String: String] = ProcessInfo.processInfo.environment) -> GitRunner? {
+        if let stub = environment["WORKBENCH_APP_GH"], !stub.isEmpty { return try? GitRunner.discover(tool: stub, from: environment) }
+        return try? GitRunner.discover(tool: "gh", from: environment)
+    }
 
     /// The `herdr` to run: the project's config key, else the global one, else the usual places. A config file that is there and
     /// does not load is an error, not "names none": the key it may hold could name a stand-in, and guessing would run the real one.

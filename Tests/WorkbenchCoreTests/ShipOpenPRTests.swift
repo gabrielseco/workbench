@@ -34,6 +34,14 @@ struct FakeGH {
               if grep -q '"fail"' "$f"; then exit 1; fi
               exit 0 ;;
             "pr list") if [ -f "$d/list" ]; then cat "$d/list"; else echo '[]'; fi; exit 0 ;;
+            "pr view")
+              if [ -f "$d/view_fail" ]; then echo "view boom" >&2; exit 1; fi
+              if [ -f "$d/view" ]; then cat "$d/view"; exit 0; fi
+              exit 2 ;;
+            "pr merge")
+              if [ -f "$d/merge_fail" ]; then cat "$d/merge_fail" >&2; exit 1; fi
+              if [ -f "$d/view_after_merge" ]; then cp "$d/view_after_merge" "$d/view"; fi
+              exit 0 ;;
             "pr edit")
               prev=""
               for a in "$@"; do

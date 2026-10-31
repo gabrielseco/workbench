@@ -31,6 +31,8 @@
 #   - the build has a bundle id of its own, new for each start (dev.rogal.workbench.verify-<number>), and the app is opened on a
 #     fixture project (Fixtures/app/<scenario>/): it reads and writes none of a person's settings or projects
 #   - the app is launched with the Dock's environment, not this terminal's: a bare PATH, the home, user, shell and temp folder
+#   - a shipped pull request's CI is read, and Merge goes, through a stand-in `gh` (`WORKBENCH_APP_GH`), never GitHub: its checks go
+#     from running to green over five reads, and its merge only writes down that it was asked (`$dir/gh-calls.txt`)
 #   - the window is found by pid, never by name, and only that pid is ever ended
 #   - `press` refuses the buttons that open a panel or another app (`Choose project`, `Event log`, `Open the event log`), by the label
 #     it resolves to, here and again in scripts/ax.swift; a scenario cannot widen the list
@@ -226,6 +228,29 @@ STUB
       "$fixture/config.toml" >"$dir/project/.workbench/config.toml"
   fi
 
+  # `gh-stub` is the `gh` the window reads a shipped pull request's CI and merges with (`WORKBENCH_APP_GH`), so a fixture never asks
+  # GitHub. Its checks move on with each read: two running, then one passed, then all green; Merge only writes down that it was asked.
+  mkdir -p "$dir/bin"
+  cat >"$dir/bin/gh-stub" <<'STUB'
+#!/bin/sh
+d="@DIR@"
+echo "$@" >>"$d/gh-calls.txt"
+case "$1 $2" in
+  "pr view")
+    state=OPEN; [ -f "$d/gh-merged" ] && state=MERGED
+    echo "{\"state\":\"$state\",\"headRefOid\":\"0123456789abcdef0123456789abcdef01234567\"}" ;;
+  "pr checks")
+    n=$(cat "$d/gh-checks-n" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$d/gh-checks-n"
+    if [ "$n" -le 2 ]; then echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pending"},{"name":"lint","bucket":"pending"}]'; exit 8
+    elif [ "$n" -le 4 ]; then echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pending"},{"name":"lint","bucket":"pass"}]'; exit 8
+    else echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'; fi ;;
+  "pr merge") touch "$d/gh-merged" ;;
+  *) echo "gh-stub: $1 $2 is not stubbed" >&2; exit 1 ;;
+esac
+STUB
+  sed -i '' "s|@DIR@|$dir|g" "$dir/bin/gh-stub"
+  chmod +x "$dir/bin/gh-stub"
+
   # The build: bundle-app.sh, to a path and a bundle id of its own.
   WORKBENCH_APP="$dir/Workbench.app" WORKBENCH_BUNDLE_ID="$id" "$ROOT/scripts/bundle-app.sh" >&2 || fail "the build failed"
 
@@ -234,6 +259,7 @@ STUB
   # either, as for a person: that is how a missing `codex` stayed hidden when it was launched with the terminal's own.
   env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" \
     LANG="${LANG:-en_US.UTF-8}" PATH="/usr/bin:/bin:/usr/sbin:/sbin" WORKBENCH_APP_PROJECT="$dir/project" \
+    WORKBENCH_APP_GH="$dir/bin/gh-stub" \
     ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
     "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
   # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).

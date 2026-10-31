@@ -27,7 +27,8 @@ struct RecentProject: Equatable, Identifiable {
 /// no thread state outside the log and the chosen repo path, and it reads the log off the main actor, only when `stat`
 /// says it changed.
 @MainActor @Observable final class ProjectStore {
-    private(set) var screen: ProjectScreen
+    /// Set by the store and its extensions only (`applyPullRequestCI` adds what GitHub said to the thread on screen).
+    var screen: ProjectScreen
     private(set) var project: Project?
     private(set) var doctor: DoctorChip = .notRun
     /// The goal of the thread on screen, read with the config; nil without a thread.
@@ -51,7 +52,7 @@ struct RecentProject: Equatable, Identifiable {
     /// The project and thread the busy text is about: `busy` shows only while they are the ones on screen.
     private var busyScope: String?
     /// The project and thread on screen, as one value to compare.
-    private var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
+    var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
     /// A run was started and the log does not show a newer turn than this one yet (the worktree is being cut, setup is installing),
     /// in the thread that scope names: the text stays up until it does, or the run ends or fails.
     @ObservationIgnored private var awaitingAfterTurn: Int?
@@ -93,6 +94,13 @@ struct RecentProject: Equatable, Identifiable {
     var followUpError: String?
     /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
     @ObservationIgnored var followUpRequest = 0
+    /// The shipped pull request's CI as last read, for the project and thread `prCIScope` names; the snapshot shows it only there.
+    @ObservationIgnored var prCI: PullRequestCI?
+    @ObservationIgnored var prCIScope: String?
+    @ObservationIgnored var prCIReadAt: ContinuousClock.Instant?
+    @ObservationIgnored var readingPRCI = false
+    /// How often CI is read again: while checks run, and once they settled or could not be read.
+    @ObservationIgnored let ciIntervals: (pending: Duration, settled: Duration)
     var deciding = false
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
@@ -127,6 +135,7 @@ struct RecentProject: Equatable, Identifiable {
     init(
         preferences: Preferences, screen: ProjectScreen = .noProject, project: Project? = nil,
         intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2)),
+        ciIntervals: (pending: Duration, settled: Duration) = (.seconds(10), .seconds(60)),
         loader: @escaping @Sendable (Project) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0) },
         doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
             await ProjectStore.runCoreDoctor($0, base: $1)
@@ -143,6 +152,7 @@ struct RecentProject: Equatable, Identifiable {
         self.screen = screen
         self.project = project
         self.intervals = intervals
+        self.ciIntervals = ciIntervals
         self.loader = loader
         self.doctorRunner = doctorRunner
     }
@@ -194,6 +204,7 @@ struct RecentProject: Equatable, Identifiable {
         cancelSendBack()
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil
+        (prCI, prCIScope, prCIReadAt) = (nil, nil, nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
@@ -233,6 +244,7 @@ struct RecentProject: Equatable, Identifiable {
         }
         (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
         applyOwnership()
+        applyPullRequestCI()
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
         if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
@@ -418,6 +430,8 @@ struct RecentProject: Equatable, Identifiable {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh()
+                // On its own task: a slow `gh` must not hold up following the log.
+                if self.pullRequestCIIsDue { Task { await self.refreshPullRequestCI() } }
                 let working = self.isWorking
                 try? await Task.sleep(for: working ? self.intervals.working : self.intervals.idle)
             }

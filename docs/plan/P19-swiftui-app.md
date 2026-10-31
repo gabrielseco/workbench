@@ -250,7 +250,15 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   `pr_review.started/finished`, `review_stage.started/finished`, `worktree.removed`, `branch.removed`.
 - **Does:** `ship` (with a confirmation, because it publishes), `prReview` / `reviewStage` (`Run round 2`), `ReviewLoop.startFollowUp`
   for **Fix findings** (the findings quoted, as core already does), `cleanMerged` for `Clean thread` (dry run first, shown, then
-  confirmed). Never merge, never post review comments (posting is the user's call, as in `pr-review`).
+  confirmed). Never post review comments (posting is the user's call, as in `pr-review`), and never merge on its own: see Merge below.
+- **CI and Merge (done).** While the shipped pull request is open the banner reads `ThreadService.prStatus` (`gh pr view` for its
+  state and head, `gh pr checks` for its CI) every 10 s while checks run and every 60 s otherwise, on its own task, and stops once it
+  is merged or closed. It shows `CI running/green/failed` with counts and a row per check, or `CI status unavailable: …` when either
+  read fails (never the last good answer). The spine's Ship, PR review and Clean steps are derived with what GitHub said; the log
+  records nothing new. `Merge…` is shown while the pull request is open and enabled only when it is open and every check passed (not
+  while running, failed, with no checks or unknown); after a confirm, `ThreadService.mergePR` reads the status again, runs
+  `gh pr merge --squash --match-head-commit <the head that was green>` and reads the state after: only GitHub saying `merged` is shown
+  as merged, a refusal is shown as the error. Nothing merges because CI turned green.
 - **Findings are text in v1.** The mockup's per-finding `Fixed / Rejected / Open`, `Verify` and `Reject with note` need a
   per-finding state the core does not have (a round is a markdown file and a `clean`/`fix` verdict). The screen shows the round's
   findings and verdict and offers Fix findings and Run round; per-finding triage is in [Out of scope](#out-of-scope).

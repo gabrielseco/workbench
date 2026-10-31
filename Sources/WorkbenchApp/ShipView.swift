@@ -25,7 +25,7 @@ struct ShipSheet: View {
                 if let note = preview.note { Text(note).font(.callout).foregroundStyle(Theme.amber) }
                 Text(
                     "It also puts the turn's screenshots in the pull request and removes the worktree "
-                        + "when nothing could be lost. Workbench never merges for you."
+                        + "when nothing could be lost. It is merged only when you press Merge once CI is green."
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
