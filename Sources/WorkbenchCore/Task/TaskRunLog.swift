@@ -5,6 +5,9 @@ extension EventKind {
     public static let taskApproved: EventKind = "task.approved"
     /// A run is about to begin: `trigger` (`tick` or `manual`). On record before anything is spent.
     public static let taskRunStarted: EventKind = "task.run.started"
+    /// The run created its thread: `thread`, `units`. Written before the turn starts, so a run that dies after the pull request is
+    /// open but before its end is written still says which units that thread was for.
+    public static let taskRunThread: EventKind = "task.run.thread"
     /// The run ended, whatever came of it; exactly one per `task.run.started`: `outcome`, `reason`, `units`, `thread`.
     public static let taskRunEnded: EventKind = "task.run.ended"
 }
@@ -45,13 +48,21 @@ public struct TaskHistory: Sendable, Equatable {
 
     /// Units a run opened a pull request for, with the thread that did: they are not offered again unless that pull
     /// request was closed unmerged (see `PendingUnits`). A report run does the work of no unit.
+    ///
+    /// A run that died (`interrupted`) counts as well: it may have died after the pull request was open. GitHub then says whether one
+    /// exists (`PendingUnits.select`).
     public var unitsWithThreads: [String: String] {
         var result: [String: String] = [:]
         for run in runs {
-            guard let thread = run.thread, run.outcome == .prOpened else { continue }
+            guard let thread = run.thread, run.outcome == .prOpened || run.outcome == .interrupted else { continue }
             for unit in run.units { result[unit] = thread }
         }
         return result
+    }
+
+    /// Units a run recorded as having a pull request.
+    public var openedUnits: Set<String> {
+        Set(runs.filter { $0.outcome == .prOpened }.flatMap(\.units))
     }
 
     /// When the schedule counts from: the last run's start, or the approval when there was none.
@@ -68,12 +79,18 @@ public struct TaskHistory: Sendable, Equatable {
                     Run(
                         started: event.date, trigger: event.data["trigger"]?.stringValue ?? "manual", outcome: nil,
                         reason: nil, units: [], thread: nil))
+            case .taskRunThread:
+                guard !runs.isEmpty, runs[runs.count - 1].outcome == nil else { continue }
+                runs[runs.count - 1].thread = event.data["thread"]?.stringValue
+                runs[runs.count - 1].units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
             case .taskRunEnded:
                 guard !runs.isEmpty, runs[runs.count - 1].outcome == nil else { continue }
                 runs[runs.count - 1].outcome = event.data["outcome"]?.stringValue.flatMap(TaskOutcome.init(rawValue:)) ?? .failed
                 runs[runs.count - 1].reason = event.data["reason"]?.stringValue
-                runs[runs.count - 1].units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
-                runs[runs.count - 1].thread = event.data["thread"]?.stringValue
+                // What the thread event said stays when the end has nothing to add (a run closed as interrupted).
+                let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
+                if !units.isEmpty { runs[runs.count - 1].units = units }
+                if let thread = event.data["thread"]?.stringValue { runs[runs.count - 1].thread = thread }
             default:
                 break
             }

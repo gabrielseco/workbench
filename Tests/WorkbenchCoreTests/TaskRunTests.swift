@@ -178,6 +178,52 @@ private struct Run {
         #expect(run.gh.count("pr create") == 0)
     }
 
+    @Test func aRunThatDiedAfterOpeningItsPullRequestDoesNotOpenAnotherForTheSameUnits() async throws {
+        let run = try await Run()
+        _ = try await addOrigin(run.fx)
+        // Dies after the pull request is open and before the end is written: only the thread event is on record.
+        let dead = try await run.task.log.openWriter()
+        try await dead.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await dead.append(.taskRunThread, data: ["thread": "g-1-bump-ROU-TUR", "units": ["ROU", "TUR"]])
+        await dead.close()
+        try run.gh.put("list", #"[{"state":"OPEN"}]"#)
+        let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened && result.units == ["PAN"])
+        let history = try run.task.log.history()
+        #expect(history.runs.first?.outcome == .interrupted && history.runs.first?.units == ["ROU", "TUR"])
+    }
+
+    @Test func aRunThatDiedBeforeAnyPullRequestExistedOffersItsUnitsAgain() async throws {
+        let run = try await Run()
+        _ = try await addOrigin(run.fx)
+        let dead = try await run.task.log.openWriter()
+        try await dead.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await dead.append(.taskRunThread, data: ["thread": "g-1-bump-ROU-TUR", "units": ["ROU", "TUR"]])
+        await dead.close()
+        // GitHub answers, and has no pull request for that branch.
+        let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened && result.units == ["ROU", "TUR"])
+    }
+
+    @Test func theThreadIsOnRecordBeforeTheTurnStarts() async throws {
+        let run = try await Run(extraConfig: #"check_command = "false""#)
+        let result = await run.runner("write=a.txt").run("bump", trigger: .manual)
+        let kinds = try EventLogReader.read(at: run.task.log.url).events.map(\.kind.rawValue)
+        #expect(kinds == ["task.approved", "task.run.started", "task.run.thread", "task.run.ended"])
+        #expect(try run.task.log.history().runs.first?.thread == result.thread)
+    }
+
+    @Test func aTaskThatChangesNothingIsNothingToDoAndLeavesNoThreadBehind() async throws {
+        let run = try await Run(front: "fix: pr")
+        try await run.task.library.approve("bump")
+        // No `write=`: the agent finds nothing to change, the check passes, and there is nothing to accept.
+        let result = await run.runner().run("bump", trigger: .tick)
+        #expect(result.outcome == .nothingToDo && result.isDone && result.thread != nil)
+        #expect(ThreadStore(project: run.fx.project).activeThreadID() == nil)
+        let again = await run.runner().run("bump", trigger: .tick)
+        #expect(again.outcome != .skippedProjectBusy)
+    }
+
     @Test func aRunLeftOpenByADeadProcessIsClosedByTheNextRun() async throws {
         let run = try await Run(front: "fix: report")
         let dead = try await run.task.log.openWriter()

@@ -33,6 +33,8 @@ public enum UnitPullRequest: Sendable, Equatable {
     case merged
     /// Closed without merging: the work was not taken, so the unit is offered again.
     case closed
+    /// GitHub answered and the branch has no pull request at all.
+    case absent
 }
 
 public enum PendingUnits {
@@ -101,6 +103,7 @@ public enum PendingUnits {
             switch pullRequests[unit.id] {
             case .open, .merged: false
             case .closed: true
+            case .absent: !history.openedUnits.contains(unit.id)
             case nil: recorded[unit.id] == nil
             }
         }

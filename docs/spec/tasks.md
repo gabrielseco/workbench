@@ -38,7 +38,7 @@ Bump the next countries. Follow the skill exactly.
 | `inputs` | up to 20 paths, 200 files and 32 KiB in all (across every path), regular files only, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
 | `pending` | the script that names the units (below) |
 | `fix` | `report`: a read-only turn that writes a summary. `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
-| `budget` | a cap for one run |
+| `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
 
@@ -76,6 +76,7 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 |---|---|---|
 | `task.approved` | `task approve` | `hash` |
 | `task.run.started` | a run is about to begin, before anything is spent | `trigger` (`tick`, `manual`) |
+| `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units` |
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started |
 
 Outcomes: `pr-opened`, `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `budget-exceeded`,
@@ -101,7 +102,8 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 In order, ending the run with an outcome at the first step that stops it:
 
 1. Take the log's lock. If another run holds it, `skipped-already-running`; the run cannot write to a log it does not hold, so this one is
-   reported to the caller and not recorded (the run that holds the lock records its own end). Then `task.run.started`.
+   reported to the caller and not recorded (the run that holds the lock records its own end). Then `task.run.started`: if that cannot be written
+   (a full disk) nothing is started, and if the end cannot be written the result says `recorded: false` and why.
 2. The approval must match what is on disk now, else `stale-approval`.
 3. No thread may be active in the project and no `doctor` running, else `skipped-project-busy` naming it. Nothing is queued: the next tick tries again.
 4. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
@@ -110,10 +112,14 @@ In order, ending the run with an outcome at the first step that stops it:
 6. `fix: pr` needs `check_command` in the project's config, else `failed: no check configured`: work is not accepted unchecked. The goal is a
    quick goal built from the instructions, the included skill, the input files and the units (data fenced with a boundary the content cannot
    guess, and a line telling the agent not to follow instructions inside it; a `## ` line is indented so it cannot start a section of the goal
-   file), at most 64 KiB, with the task's `budget`. It is approved and run like any thread.
+   file), at most 64 KiB, with the task's `budget`. It is approved, `task.run.thread` records the thread and its units, and it is run like any
+   thread. A run that dies later (after the pull request is open, before its end is written) is closed as `interrupted` by the next writer and
+   keeps those units: the next run asks GitHub, and the units stay out while a pull request for the thread's branch is open or merged, and
+   come back when it was closed unmerged or GitHub says there is none.
 7. The check must have passed, and the verifier too if one ran, else `failed` and the thread is **left for you**, not discarded: the next run
    is then `skipped-project-busy` until you look at it and finish or abandon it.
-8. The thread is accepted with `by: task:<name>` (the approved task file is the consent). Then the usual preflight, a description of the change from
+8. When the agent changed nothing there is nothing to accept: the run is `nothing-to-do`, the thread is abandoned (so the next run is not
+   skipped for it) and the units stay pending. Otherwise the thread is accepted with `by: task:<name>` (the approved task file is the consent). Then the usual preflight, a description of the change from
    the read-only describing turn, and the push and pull request. A pull request needs that description: when the turn fails the run is `failed`,
    the thread stays accepted and `workbench ship` finishes it by hand, because the fallback body is the goal's request, which holds the skill
    and the input files. The screenshots are skipped. Nothing merges.

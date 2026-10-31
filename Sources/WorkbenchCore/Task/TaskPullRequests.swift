@@ -24,6 +24,8 @@ enum TaskPullRequests {
                 byThread[thread] = .merged
             } else if states.contains("CLOSED") {
                 byThread[thread] = .closed
+            } else if items.isEmpty {
+                byThread[thread] = .absent
             }
         }
         return units.compactMapValues { byThread[$0] }

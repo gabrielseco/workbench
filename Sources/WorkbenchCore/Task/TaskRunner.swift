@@ -82,15 +82,23 @@ public struct TaskRunner: Sendable {
             await writer.close()
             return TaskRunResult(outcome: .failed, reason: "the run log is damaged: \(error)", recorded: false)
         }
-        _ = try? await writer.append(.taskRunStarted, data: ["trigger": .string(trigger.rawValue)])
-        let result = await execute(name, history: history)
+        // Without a durable start nothing is spent: a run that cannot say it began could not say how it ended.
+        do { try await writer.append(.taskRunStarted, data: ["trigger": .string(trigger.rawValue)]) } catch {
+            await writer.close()
+            return TaskRunResult(
+                outcome: .failed, reason: "the run could not be recorded, so nothing was started: \(error)", recorded: false)
+        }
+        var result = await execute(name, history: history, writer: writer)
         var data: [String: JSONValue] = [
             "outcome": .string(result.outcome.rawValue), "units": .array(result.units.map { .string($0) }),
         ]
         if let reason = result.reason { data["reason"] = .string(reason) }
         if let thread = result.thread { data["thread"] = .string(thread) }
         if let url = result.pullRequest { data["pr"] = .string(url) }
-        _ = try? await writer.append(.taskRunEnded, data: .object(data))
+        do { try await writer.append(.taskRunEnded, data: .object(data)) } catch {
+            result.recorded = false
+            result.reason = (result.reason.map { $0 + "; " } ?? "") + "the end of the run could not be recorded: \(error)"
+        }
         await writer.close()
         return result
     }
@@ -99,7 +107,7 @@ public struct TaskRunner: Sendable {
         TaskRunResult(outcome: .failed, reason: reason, units: units, thread: thread)
     }
 
-    private func execute(_ name: String, history: TaskHistory) async -> TaskRunResult {
+    private func execute(_ name: String, history: TaskHistory, writer: EventLogWriter) async -> TaskRunResult {
         let library = TaskLibrary(project: project)
         let loaded: LoadedTask
         do { loaded = try library.load(name) } catch { return fail("\(error)") }
@@ -136,7 +144,7 @@ public struct TaskRunner: Sendable {
             let list = ids.isEmpty ? "run once" : "would take " + ids.joined(separator: ", ")
             return TaskRunResult(outcome: .reported, reason: list, units: ids)
         }
-        return await runThread(name: name, loaded: loaded, units: units)
+        return await runThread(name: name, loaded: loaded, units: units, writer: writer)
     }
 
     private func busy(_ what: String) -> TaskRunResult {
@@ -146,7 +154,7 @@ public struct TaskRunner: Sendable {
 
     // MARK: fix: pr
 
-    private func runThread(name: String, loaded: LoadedTask, units: [TaskUnit]) async -> TaskRunResult {
+    private func runThread(name: String, loaded: LoadedTask, units: [TaskUnit], writer: EventLogWriter) async -> TaskRunResult {
         let task = loaded.definition
         let ids = units.map(\.id)
         let config: Config
@@ -185,6 +193,14 @@ public struct TaskRunner: Sendable {
             return fail("the task's goal could not be approved: \(error)", units: ids)
         }
 
+        // Before any work: which units this thread is for, so a run that dies later is still known to have had them.
+        do {
+            try await writer.append(
+                .taskRunThread, data: ["thread": .string(id), "units": .array(ids.map { .string($0) })])
+        } catch {
+            _ = try? await service.abandon(id: id)
+            return fail("the run could not be recorded, so nothing was started: \(error)", units: ids)
+        }
         // From here the thread is real: when something goes wrong it is left as it is, for a person to look at.
         let runner = ThreadRunner(project: project, threadID: id, git: git) { _ in }
         await stop.attach(runner)
@@ -213,7 +229,13 @@ public struct TaskRunner: Sendable {
     private func acceptAndShip(
         name: String, id: String, config: Config, service: ThreadService, units: [String]
     ) async -> TaskRunResult {
-        do { _ = try await service.accept(id: id, by: "task:\(name)") } catch {
+        do { _ = try await service.accept(id: id, by: "task:\(name)") } catch ThreadServiceError.nothingToAccept {
+            // An expected result, most often for a task that checks something and finds it fine: not a failure, and not a thread
+            // to leave behind, since the next run would be skipped for it.
+            _ = try? await service.abandon(id: id)
+            return TaskRunResult(
+                outcome: .nothingToDo, reason: "the agent changed nothing, so there is nothing to ship", units: units, thread: id)
+        } catch {
             return fail("the work could not be accepted: \(error); thread \(id) is left for you", units: units, thread: id)
         }
         let stranded = "thread \(id) is accepted but not shipped: workbench ship"
