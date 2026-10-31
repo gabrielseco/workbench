@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why a `herdr` call did not give an answer: its own error (a code and a sentence), or one of ours.
+/// Why a `herdr-app` call did not give an answer: its own error (a sentence), or one of ours.
 public struct HerdrFailure: Error, Equatable, Sendable, CustomStringConvertible {
     public var code: String?
     public var message: String
@@ -11,12 +11,13 @@ public struct HerdrFailure: Error, Equatable, Sendable, CustomStringConvertible 
         self.message = message
     }
 
-    /// The server is not up; nothing else.
-    public var serverDown: Bool { code == "server_not_running" }
+    /// Herdr's window is not open (its socket is not there); nothing else.
+    public var windowDown: Bool { code == "no_window" }
 }
 
-/// One `herdr` command at a time, through core's process layer: bounded time, bounded output, its group swept on a timeout. Herdr
-/// answers each command with one JSON line (`{"result": …}`) or exits 1 with `{"error": {"code", "message"}}` on stderr.
+/// One `herdr-app` command at a time, through core's process layer: bounded time, bounded output, its group swept on a timeout. The
+/// app answers each command with a JSON document on stdout (pretty-printed, several lines), or exits 1 with `{"error": "<sentence>"}`
+/// there; with no window open it exits 2 and says "no Herdr window" on stderr.
 public struct HerdrClient: Sendable {
     public var executable: URL
     public var environment: [String: String]
@@ -28,13 +29,13 @@ public struct HerdrClient: Sendable {
         self.timeout = timeout
     }
 
-    /// What `herdr` needs from the window's environment to find its session, and nothing else.
+    /// What `herdr-app` needs from the window's environment to find its window (`HERDR_APP_HOME` moves it), and nothing else.
     public static func environment(from parent: [String: String]) -> [String: String] {
-        let names: Set<String> = ["HOME", "USER", "LOGNAME", "PATH", "TMPDIR", "LANG", "SHELL"]
+        let names: Set<String> = ["HOME", "USER", "LOGNAME", "PATH", "TMPDIR", "LANG", "SHELL", "HERDR_APP_HOME"]
         return parent.filter { names.contains($0.key) || $0.key.hasPrefix("LC_") || $0.key.hasPrefix("XDG_") }
     }
 
-    /// The `result` of one command. Throws `HerdrFailure` for an error answer, a hang, or an answer that is not JSON.
+    /// The answer of one command. Throws `HerdrFailure` for an error answer, a hang, or an answer that is not JSON.
     public func call(_ arguments: [String]) async throws -> JSONValue {
         var request = SpawnRequest(
             executable: executable, arguments: arguments, environment: environment,
@@ -50,57 +51,59 @@ public struct HerdrClient: Sendable {
         var exit: ProcessExit?
         for await event in run.events {
             switch event {
-            case .line(let line): if lines.count < 20 { lines.append(line) }
+            case .line(let line): if lines.count < 2000 { lines.append(line) }
             case .exited(let ended): exit = ended
             default: break
             }
         }
         guard let exit else { throw HerdrFailure(code: "no_exit", message: "herdr ended without saying how") }
         if exit.cause == .timedOut {
-            throw HerdrFailure(code: "timeout", message: "herdr did not answer within \(Int(timeout)) seconds and was stopped")
+            throw HerdrFailure(
+                code: "timeout", message: "herdr-app did not answer within \(Int(timeout)) seconds and was stopped")
         }
         if case .exited(0) = exit.termination {
-            for line in lines.reversed() {
-                if let json = Self.parse(line), let result = json["result"] { return result }
+            guard let answer = Self.parse(lines.joined(separator: "\n")) else {
+                throw HerdrFailure(code: "bad_answer", message: "herdr-app answered with something that is not JSON")
             }
-            throw HerdrFailure(code: "bad_answer", message: "herdr answered with something that is not JSON")
+            return answer
         }
         throw Self.failure(stderr: exit.stderrTail, stdout: lines)
     }
 
-    /// The error answer in what the command wrote, else its last printable line.
+    /// The `{"error": "<sentence>"}` the command wrote, "no Herdr window" from stderr, else the last printable line.
     static func failure(stderr: String, stdout: [String]) -> HerdrFailure {
-        let all = (stderr.split(whereSeparator: \.isNewline).map(String.init) + stdout).reversed()
-        for line in all {
-            if let error = parse(line)?["error"] {
-                let code = error["code"]?.stringValue
-                let message = error["message"]?.stringValue ?? "herdr refused it"
-                return HerdrFailure(code: code, message: ThreadState.safeLine(message, limit: 200))
-            }
+        if let message = parse(stdout.joined(separator: "\n"))?["error"]?.stringValue {
+            return HerdrFailure(code: "refused", message: ThreadState.safeLine(message, limit: 200))
         }
-        let last = all.first { !$0.allSatisfy(\.isWhitespace) }.map { ThreadState.safeLine($0, limit: 200) }
-        return HerdrFailure(code: "failed", message: last ?? "herdr failed without a message")
+        let errLines = stderr.split(whereSeparator: \.isNewline).map(String.init)
+        if errLines.contains(where: { $0.contains("no Herdr window") }) {
+            return HerdrFailure(code: "no_window", message: "Herdr's window is not open")
+        }
+        let last = (errLines + stdout).reversed().first { !$0.allSatisfy(\.isWhitespace) }
+        return HerdrFailure(
+            code: "failed", message: last.map { ThreadState.safeLine($0, limit: 200) } ?? "herdr-app failed without a message")
     }
 
-    static func parse(_ line: String) -> JSONValue? {
-        try? JSONDecoder().decode(JSONValue.self, from: Data(line.utf8))
+    static func parse(_ text: String) -> JSONValue? {
+        try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
     }
 }
 
 /// What opening a folder in Herdr did.
-public enum HerdrOpened: Equatable, Sendable {
-    /// Herdr opened it as a git worktree workspace (or already had it open).
-    case worktree(workspace: String, alreadyOpen: Bool)
-    /// Herdr would not open it as a worktree: the plain folder is a workspace now (or already was).
-    case folder(workspace: String, alreadyOpen: Bool)
+public struct HerdrOpened: Equatable, Sendable {
+    /// The space Herdr shows the folder in.
+    public var space: String
+    /// The folder already had a space: it was brought forward, not made.
+    public var alreadyOpen: Bool
 }
 
-/// "Open in Herdr": starts the Herdr app when its server is down, then opens the thread's worktree and brings it forward.
+/// "Open in Herdr": starts the Herdr app when its window is not open, then gives the thread's worktree a space (or selects the one it
+/// has) and brings the app forward. The app's own server comes up with its window, so there is nothing else to start.
 public struct HerdrOpener: Sendable {
     public var client: HerdrClient
-    /// Starts the Herdr app; the window's launcher, not a process of core's.
+    /// Starts the Herdr app, or brings a running one forward; the window's launcher, not a process of core's.
     public var launchApp: @Sendable () async throws -> Void
-    /// How long to wait for the server after starting the app, and how often to ask.
+    /// How long to wait for the window after starting the app, and how often to ask.
     public var startupWait: TimeInterval = 20
     public var pollInterval: TimeInterval = 0.5
 
@@ -109,61 +112,54 @@ public struct HerdrOpener: Sendable {
         self.launchApp = launchApp
     }
 
-    /// The one error code Herdr gives for a folder that is not a worktree it can open (seen in `worktree open --path <plain folder>`).
-    static let notAWorktree = "worktree_not_found"
-
-    /// Never passes `--trust-repository`: that is for a person who has verified the repository.
-    public func open(project: URL, folder: URL, label: String) async throws -> HerdrOpened {
-        if try await serverIsDown() {
+    public func open(folder: URL, label: String) async throws -> HerdrOpened {
+        var spaces: [JSONValue]
+        let wasDown: Bool
+        do {
+            spaces = try await listSpaces()
+            wasDown = false
+        } catch let failure as HerdrFailure where failure.windowDown {
             try await launchApp()
-            try await waitForServer()
+            spaces = try await waitForWindow()
+            wasDown = true
         }
-        do {
-            let result = try await client.call(
-                ["worktree", "open", "--cwd", project.path, "--path", folder.path, "--focus"])
-            return .worktree(
-                workspace: result["workspace"]?["workspace_id"]?.stringValue ?? "", alreadyOpen: result["already_open"] == true)
-        } catch let refusal as HerdrFailure {
-            // Only Herdr saying the folder is not a worktree it can open sends us to the plain folder; any other answer (a hang, the
-            // server gone, an error of its own) is shown as it is, never worked around by starting another workspace.
-            if refusal.code != Self.notAWorktree { throw refusal }
+        let opened: HerdrOpened
+        if let existing = space(showing: folder, in: spaces) {
+            _ = try await client.call(["do", "space.select", "--id", existing])
+            opened = HerdrOpened(space: existing, alreadyOpen: true)
+        } else {
+            let made = try await client.call(["do", "space.new", "--name", label, "--folder", folder.path])
+            opened = HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false)
         }
-        if let existing = try await workspace(showing: folder) {
-            _ = try await client.call(["workspace", "focus", existing])
-            return .folder(workspace: existing, alreadyOpen: true)
-        }
-        let made = try await client.call(["workspace", "create", "--cwd", folder.path, "--label", label, "--focus"])
-        return .folder(workspace: made["workspace"]?["workspace_id"]?.stringValue ?? "", alreadyOpen: false)
+        // A running app does not come forward by itself when a space is added; a launch already did. Best effort: the space is open.
+        if !wasDown { try? await launchApp() }
+        return opened
     }
 
-    /// Down only when the server says it is not running. Any other failure (a hang, an error of its own) is thrown as it is: starting
-    /// another command on top of it would lose what Herdr said and wait twice.
-    func serverIsDown() async throws -> Bool {
-        do {
-            _ = try await client.call(["workspace", "list"])
-            return false
-        } catch let failure as HerdrFailure where failure.serverDown { return true }
+    /// Down only when the app says it has no window. Any other failure (a hang, an error of its own) is thrown as it is: starting
+    /// the app on top of it would lose what Herdr said and wait twice.
+    func listSpaces() async throws -> [JSONValue] {
+        let result = try await client.call(["ls"])
+        guard case .array(let spaces)? = result["spaces"] else { return [] }
+        return spaces
     }
 
-    func waitForServer() async throws {
+    func waitForWindow() async throws -> [JSONValue] {
         let deadline = Date().addingTimeInterval(startupWait)
         while Date() < deadline {
-            if try await !serverIsDown() { return }
+            do { return try await listSpaces() } catch let failure as HerdrFailure where failure.windowDown {}
             try await Task.sleep(for: .seconds(pollInterval))
         }
         throw HerdrFailure(
-            code: "server_not_running",
-            message: "Herdr was started but its server did not come up within \(Int(startupWait)) seconds")
+            code: "no_window", message: "Herdr was started but its window did not come up within \(Int(startupWait)) seconds")
     }
 
-    /// The workspace whose pane is in `folder`, from the panes of every workspace.
-    func workspace(showing folder: URL) async throws -> String? {
-        let result = try await client.call(["pane", "list"])
-        guard case .array(let panes)? = result["panes"] else { return nil }
+    /// The space whose folder is `folder`.
+    func space(showing folder: URL, in spaces: [JSONValue]) -> String? {
         let wanted = folder.resolvingSymlinksInPath().path
-        return panes.first { pane in
-            guard let cwd = pane["cwd"]?.stringValue else { return false }
-            return URL(fileURLWithPath: cwd).resolvingSymlinksInPath().path == wanted
-        }?["workspace_id"]?.stringValue
+        return spaces.first { space in
+            guard let path = space["folder"]?.stringValue else { return false }
+            return URL(fileURLWithPath: path).resolvingSymlinksInPath().path == wanted
+        }?["id"]?.stringValue
     }
 }

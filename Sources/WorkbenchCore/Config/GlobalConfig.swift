@@ -15,7 +15,7 @@ public struct GlobalConfig: Sendable, Equatable {
     public var model: String?
     /// What `workbench open` starts when neither `--editor` nor the project names one.
     public var editor: String?
-    /// The `herdr` executable the window's "Open in Herdr" runs when the project names none.
+    /// The `herdr-app` executable the window's "Open in Herdr" runs when the project names none.
     public var herdr: String?
 
     public init(

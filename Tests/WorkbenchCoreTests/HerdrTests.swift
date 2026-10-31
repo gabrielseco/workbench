@@ -3,11 +3,12 @@ import Testing
 
 @testable import WorkbenchCore
 
-/// A `herdr` that is a shell script: it writes down every call, and its answers come from files in one folder, so a test can take the
-/// server down, refuse a worktree, show panes, or hang.
+/// A `herdr-app` that is a shell script: it writes down every call, and its answers come from files in one folder, so a test can close
+/// the window, show spaces, refuse a command, or hang. It answers the way the real one does: pretty-printed JSON on stdout, `{"error":
+/// "<sentence>"}` and exit 1 for a refusal, exit 2 and "no Herdr window" on stderr when no window is open.
 private final class FakeHerdr: @unchecked Sendable {
     let dir: URL
-    var executable: URL { dir.appendingPathComponent("herdr") }
+    var executable: URL { dir.appendingPathComponent("herdr-app") }
     private let lock = NSLock()
     private var launched = 0
 
@@ -17,31 +18,21 @@ private final class FakeHerdr: @unchecked Sendable {
         let script = """
             #!/bin/sh
             echo "$@" >> "$FAKE_HERDR_DIR/calls"
-            err() { printf '{"id":"x","error":{"code":"%s","message":"%s"}}\\n' "$1" "$2" >&2; exit 1; }
-            if [ -f "$FAKE_HERDR_DIR/down" ]; then err server_not_running "no herdr server is running"; fi
+            refuse() { printf '{\\n  "error": "%s"\\n}\\n' "$1"; exit 1; }
+            if [ -f "$FAKE_HERDR_DIR/down" ]; then echo "herdr-app: no Herdr window at /x/sock" >&2; exit 2; fi
             case "$1 $2" in
-              "workspace list")
-                if [ -f "$FAKE_HERDR_DIR/listfail" ]; then err internal_error "herdr is unwell"; fi
-                echo '{"id":"x","result":{"type":"workspace_list","workspaces":[]}}' ;;
-              "worktree open")
+              "ls ")
+                if [ -f "$FAKE_HERDR_DIR/lsfail" ]; then refuse "herdr is unwell"; fi
+                if [ -f "$FAKE_HERDR_DIR/spaces" ]; then cat "$FAKE_HERDR_DIR/spaces"
+                else printf '{\\n  "spaces": [],\\n  "recent": []\\n}\\n'; fi ;;
+              "do space.new")
                 if [ -f "$FAKE_HERDR_DIR/hang" ]; then
                   echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30 & echo $! > "$FAKE_HERDR_DIR/childpid"; wait
                 fi
-                if [ -f "$FAKE_HERDR_DIR/refuse" ]; then err worktree_not_found "worktree path not found"; fi
-                if [ -f "$FAKE_HERDR_DIR/broken" ]; then err internal_error "herdr is unwell"; fi
-                if [ -f "$FAKE_HERDR_DIR/open" ]; then
-                  echo '{"id":"x","result":{"already_open":true,"workspace":{"workspace_id":"w1"},"type":"worktree_opened"}}'
-                else
-                  echo '{"id":"x","result":{"workspace":{"workspace_id":"w1"},"type":"worktree_opened"}}'
-                fi ;;
-              "pane list")
-                if [ -f "$FAKE_HERDR_DIR/panes" ]; then cat "$FAKE_HERDR_DIR/panes"
-                else echo '{"id":"x","result":{"panes":[]}}'; fi ;;
-              "workspace create")
-                if [ -f "$FAKE_HERDR_DIR/nocreate" ]; then err cannot_create "line one\\nline two"; fi
-                echo '{"id":"x","result":{"workspace":{"workspace_id":"w9"},"type":"workspace_created"}}' ;;
-              "workspace focus") echo '{"id":"x","result":{"type":"ok"}}' ;;
-              *) err unknown "unexpected: $*" ;;
+                if [ -f "$FAKE_HERDR_DIR/nocreate" ]; then refuse "cannot start a terminal: line one"; fi
+                printf '{\\n  "space": "sp9",\\n  "tab": "tb9",\\n  "terminal": "t9"\\n}\\n' ;;
+              "do space.select") printf '{\\n  "ok": true\\n}\\n' ;;
+              *) refuse "unexpected: $*" ;;
             esac
             """
         try script.write(to: executable, atomically: true, encoding: .utf8)
@@ -75,7 +66,6 @@ private final class FakeHerdr: @unchecked Sendable {
     }
 }
 
-private let project = URL(fileURLWithPath: "/work/project")
 private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
 
 @Suite struct HerdrLocatorTests {
@@ -97,12 +87,12 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
             HerdrLocator.find(configured: nil, searchPath: bin.path, home: home.path, extraDirectories: places)
         }
         #expect(find() == nil)
-        try place("herdr", in: bin)
+        try place("herdr-app", in: bin)
         let found = find()
-        #expect(found?.path == bin.appendingPathComponent("herdr").path)
+        #expect(found?.path == bin.appendingPathComponent("herdr-app").path)
         // A Dock-launched app has a bare PATH: the usual install place is looked in.
         try FileManager.default.removeItem(at: bin)
-        try place("herdr", in: home.appendingPathComponent(".local/bin"))
+        try place("herdr-app", in: home.appendingPathComponent(".local/bin"))
         let bare = HerdrLocator.find(configured: nil, searchPath: "/nowhere", home: home.path, extraDirectories: places)
         #expect(bare != nil)
     }
@@ -110,7 +100,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     @Test func aConfiguredStandInIsNeverSkippedForARealOne() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("locator-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        try place("herdr", in: root.appendingPathComponent("bin"))
+        try place("herdr-app", in: root.appendingPathComponent("bin"))
         try place("stand-in", in: root.appendingPathComponent("stub"))
         let stand = root.appendingPathComponent("stub/stand-in").path
         let search = root.appendingPathComponent("bin").path
@@ -131,100 +121,71 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
 }
 
 @Suite struct HerdrOpenTests {
-    @Test func startsTheAppOnlyWhenTheServerIsDown() async throws {
+    @Test func startsTheAppOnlyWhenItsWindowIsNotOpen() async throws {
         let up = try FakeHerdr()
-        _ = try await up.opener().open(project: project, folder: folder, label: "t1")
-        #expect(up.launches == 0)
+        _ = try await up.opener().open(folder: folder, label: "t1")
+        // Open already: it is only brought forward, once, after the space exists.
+        #expect(up.launches == 1 && up.calls.last == "do space.new --name t1 --folder /work/project-wt/t1")
 
         let down = try FakeHerdr()
         try down.set("down")
-        _ = try await down.opener().open(project: project, folder: folder, label: "t1")
+        _ = try await down.opener().open(folder: folder, label: "t1")
+        // Started once, asked until the window answered, and only then given a space.
         #expect(down.launches == 1)
-        // It asked until the server answered, and only then opened.
-        let calls = down.calls
-        #expect(calls.first == "workspace list" && calls.last?.hasPrefix("worktree open") == true)
+        #expect(down.calls.first == "ls" && down.calls.last == "do space.new --name t1 --folder /work/project-wt/t1")
     }
 
     @Test func aProbeThatFailsForAnotherReasonIsThrownAndNothingElseIsStarted() async throws {
         let fake = try FakeHerdr()
-        try fake.set("listfail")
+        try fake.set("lsfail")
         do {
-            _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
+            _ = try await fake.opener().open(folder: folder, label: "t1")
             Issue.record("a herdr that was unwell was asked to open something")
         } catch let failure as HerdrFailure {
-            #expect(failure.code == "internal_error" && failure.message == "herdr is unwell")
+            #expect(failure.code == "refused" && failure.message == "herdr is unwell")
         }
-        #expect(fake.calls == ["workspace list"] && fake.launches == 0)
+        #expect(fake.calls == ["ls"] && fake.launches == 0)
     }
 
-    @Test func waitsABoundedTimeForTheServerAfterStartingTheApp() async throws {
+    @Test func waitsABoundedTimeForTheWindowAfterStartingTheApp() async throws {
         let never = try FakeHerdr()
         try never.set("down")
         var opener = never.opener(startupWait: 0.3)
-        opener.launchApp = { [never] in _ = never }  // starts, but the server never comes up
-        await #expect(throws: HerdrFailure.self) { _ = try await opener.open(project: project, folder: folder, label: "t1") }
-        #expect(never.calls.allSatisfy { $0 == "workspace list" })
-    }
-
-    @Test func opensTheWorktreeAndFallsBackToTheFolder() async throws {
-        let fake = try FakeHerdr()
-        let first = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        #expect(first == .worktree(workspace: "w1", alreadyOpen: false))
-        #expect(fake.calls.contains("worktree open --cwd /work/project --path /work/project-wt/t1 --focus"))
-
-        try fake.set("refuse")
-        let second = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        #expect(second == .folder(workspace: "w9", alreadyOpen: false))
-        #expect(fake.calls.contains("workspace create --cwd /work/project-wt/t1 --label t1 --focus"))
-    }
-
-    @Test func onlyANotAWorktreeAnswerSendsItToThePlainFolder() async throws {
-        let fake = try FakeHerdr()
-        try fake.set("broken")
+        opener.launchApp = { [never] in _ = never }  // starts, but the window never comes up
         do {
-            _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
-            Issue.record("an error of Herdr's own was worked around")
+            _ = try await opener.open(folder: folder, label: "t1")
+            Issue.record("a window that never came up was opened into")
         } catch let failure as HerdrFailure {
-            #expect(failure.code == "internal_error" && failure.message == "herdr is unwell")
+            #expect(failure.windowDown)
+            #expect(failure.message.hasPrefix("Herdr was started but its window did not come up"))
         }
-        // Nothing was started on top of it: no pane list, no workspace made.
-        #expect(fake.calls.count == 2 && fake.calls.last?.hasPrefix("worktree open") == true)
+        #expect(never.calls.allSatisfy { $0 == "ls" })
     }
 
-    @Test func aSecondClickFocusesInsteadOfCreating() async throws {
+    @Test func makesASpaceForTheFolderAndSelectsTheOneItHas() async throws {
         let fake = try FakeHerdr()
-        // Worktree: Herdr itself says it was already open.
-        try fake.set("open")
-        let again = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        #expect(again == .worktree(workspace: "w1", alreadyOpen: true))
-        // Plain folder: a pane of another workspace is already in it.
-        try fake.set("refuse")
+        let first = try await fake.opener().open(folder: folder, label: "t1")
+        #expect(first == HerdrOpened(space: "sp9", alreadyOpen: false))
+        #expect(fake.calls.contains("do space.new --name t1 --folder /work/project-wt/t1"))
+
         try fake.set(
-            "panes",
-            text: #"{"id":"x","result":{"panes":[{"cwd":"/elsewhere","workspace_id":"w1"},"#
-                + #"{"cwd":"/work/project-wt/t1","workspace_id":"w3"}]}}"#)
-        let opened = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        #expect(opened == .folder(workspace: "w3", alreadyOpen: true))
-        #expect(fake.calls.contains("workspace focus w3") && !fake.calls.contains { $0.hasPrefix("workspace create") })
+            "spaces",
+            text: #"{"spaces":[{"id":"sp1","folder":"/elsewhere"},{"id":"sp3","folder":"/work/project-wt/t1"}],"recent":[]}"#)
+        let again = try await fake.opener().open(folder: folder, label: "t1")
+        #expect(again == HerdrOpened(space: "sp3", alreadyOpen: true))
+        #expect(fake.calls.contains("do space.select --id sp3"))
+        #expect(fake.calls.filter { $0.hasPrefix("do space.new") }.count == 1)
     }
 
-    @Test func neverTrustsARepository() async throws {
+    @Test func anErrorShowsOneLineAndTheAppIsNotWorkedAround() async throws {
         let fake = try FakeHerdr()
-        _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        try fake.set("refuse")
-        _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
-        #expect(!fake.calls.isEmpty && fake.calls.allSatisfy { !$0.contains("trust") })
-    }
-
-    @Test func anErrorShowsOneLineAndNothingElseIsStarted() async throws {
-        let fake = try FakeHerdr()
-        try fake.set("refuse")
         try fake.set("nocreate")
         do {
-            _ = try await fake.opener().open(project: project, folder: folder, label: "t1")
-            Issue.record("two refusals opened something")
+            _ = try await fake.opener().open(folder: folder, label: "t1")
+            Issue.record("a refused space opened something")
         } catch let failure as HerdrFailure {
-            #expect(failure.code == "cannot_create" && !failure.message.contains("\n"))
+            #expect(failure.code == "refused" && !failure.message.contains("\n"))
+            #expect(failure.message == "cannot start a terminal: line one")
         }
         #expect(fake.launches == 0)
     }
@@ -235,8 +196,8 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         let started = Date()
         // Long enough that a busy machine has started the script and it has written its pids before the stop comes.
         do {
-            _ = try await fake.opener(timeout: 3).open(project: project, folder: folder, label: "t1")
-            Issue.record("a hung herdr was waited for")
+            _ = try await fake.opener(timeout: 3).open(folder: folder, label: "t1")
+            Issue.record("a hung herdr-app was waited for")
         } catch let failure as HerdrFailure {
             #expect(failure.code == "timeout" && failure.message.contains("did not answer within 3 seconds"))
         }
@@ -246,7 +207,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         let child = try #require(Int32((try? String(contentsOf: fake.dir.appendingPathComponent("childpid"), encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
         for _ in 0..<50 where kill(pid, 0) == 0 || kill(child, 0) == 0 { try await Task.sleep(for: .milliseconds(100)) }
-        #expect(kill(pid, 0) != 0, "the hung herdr is still running")
-        #expect(kill(child, 0) != 0, "what the hung herdr started is still running")
+        #expect(kill(pid, 0) != 0, "the hung herdr-app is still running")
+        #expect(kill(child, 0) != 0, "what the hung herdr-app started is still running")
     }
 }
