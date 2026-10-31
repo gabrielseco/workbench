@@ -30,39 +30,30 @@ extension ProjectStore {
 
     func closePRReview() {
         followUpRequest += 1
-        (prReviewShown, pendingFollowUp, followUpError) = (nil, nil, nil)
+        (prReviewShown, followUpError) = (nil, nil)
     }
 
-    /// Reads what a fix round would start, to show it before anything is made.
-    func prepareFollowUp() async {
-        guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix else { return }
+    /// "Fix these findings": the click is the yes. Starts core's follow-up from the round shown, then shows it and runs its first
+    /// turn. A refusal (no rounds left, no pull request on record) stays in the sheet and starts nothing; closing the sheet while
+    /// the plan is read starts nothing either.
+    func fixFindings() async {
+        guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix, !starting else { return }
         followUpError = nil
         let mine = generation
         followUpRequest += 1
         let request = followUpRequest
-        do {
-            let plan = try await actions.followUpPlan(project, thread, shown.pr)
-            if mine == generation, request == followUpRequest { pendingFollowUp = plan }
-        } catch { if mine == generation, request == followUpRequest { followUpError = "\(error)" } }
-    }
-
-    func cancelFollowUp() {
-        followUpRequest += 1
-        (pendingFollowUp, followUpError) = (nil, nil)
-    }
-
-    /// Starts core's follow-up from the round shown, then shows it and runs its first turn. A refusal stays in the sheet and
-    /// starts nothing.
-    func confirmFollowUp() async {
-        guard let project, let thread = currentThread, let shown = prReviewShown, shown.canFix,
-            let plan = pendingFollowUp, plan.refusal == nil, !starting
-        else { return }
-        followUpError = nil
-        let mine = generation
         var made: String?
         await working("Starting the fix round…") {
-            do { made = try await actions.startFollowUp(project, thread, shown.findings ?? "", shown.round, plan.budget) } catch {
-                if mine == generation { followUpError = "\(error)" }
+            do {
+                let plan = try await actions.followUpPlan(project, thread, shown.pr)
+                guard mine == generation, request == followUpRequest else { return }
+                if let refusal = plan.refusal {
+                    followUpError = refusal
+                    return
+                }
+                made = try await actions.startFollowUp(project, thread, shown.findings ?? "", shown.round, plan.budget)
+            } catch {
+                if mine == generation, request == followUpRequest { followUpError = "\(error)" }
             }
         }
         guard let id = made, mine == generation else { return }
@@ -73,7 +64,7 @@ extension ProjectStore {
         startRun(project, id, generation: mine)
     }
 
-    /// The rest of a fix round once its turn has ended, as `ship --review-loop --yes` does it: the confirm in the findings sheet
+    /// The rest of a fix round once its turn has ended, as `ship --review-loop --yes` does it: the click in the findings sheet
     /// was the yes, so the work is accepted, pushed to the same pull request and reviewed again without another click. Stops, and
     /// leaves the thread for the person, on a turn that did not succeed, a check that did not pass or a step that was refused.
     func continueFixRound(runFailed: Bool) async {

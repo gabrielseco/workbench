@@ -61,25 +61,15 @@ struct PRReviewShown: Equatable, Sendable {
     }
 }
 
-/// What "Fix these findings" would start, shown before it does: core's follow-up thread on the pull request's branch.
+/// What "Fix these findings" starts, read just before it does: core's follow-up thread on the pull request's branch.
 struct FollowUpPlan: Equatable, Sendable {
     var pr: Int
     /// Which follow-up of this pull request it would be, and how many `[pr_review] max_rounds` allows.
     var round: Int
     var allowed: Int
-    /// The most its turn can cost, nil when the project sets no dollar cap (`default_budget_usd`): the turn is then limited by its
-    /// timeout only, as every new goal of such a project is.
+    /// The most its turn can cost, nil when the project sets no dollar cap (`default_budget_usd`); passed back so core refuses a
+    /// start whose budget changed in between.
     var budget: Decimal?
-    /// Core's reason there can be none (no rounds left); the confirm says it and offers no start.
+    /// Core's reason there can be none (no rounds left); the sheet says it and nothing starts.
     var refusal: String?
-
-    var text: String {
-        let cost =
-            budget.map { "up to $\(String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue))" }
-            ?? "with no dollar cap (this project sets none, so only its timeout limits the turn)"
-        return "Starts follow-up \(round) of at most \(allowed) on pull request #\(pr): a new thread on the same branch, "
-            + "whose goal is these findings, and runs its first turn, \(cost). "
-            + "When the turn succeeds and the check passes, it is accepted, pushed to the pull request and reviewed again "
-            + "without asking; otherwise it waits for you as any thread. Nothing is merged."
-    }
 }

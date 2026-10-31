@@ -22,37 +22,21 @@ struct PRReviewSheet: View {
                 )
                     .font(.callout).foregroundStyle(.secondary)
             }
-            fixRound
+            if let error = store.followUpError { Text(error).font(.callout).foregroundStyle(Theme.red) }
             HStack {
+                // The sheet covers the window's own busy line, so a click on "Fix these findings" shows here that it was taken.
+                if let busy = store.busy {
+                    ProgressView().controlSize(.small)
+                    Text(busy).font(.callout).foregroundStyle(.secondary)
+                }
                 Spacer()
-                if let shown = store.prReviewShown, shown.canFix, store.pendingFollowUp == nil {
-                    Button("Fix these findings…") { Task { await store.prepareFollowUp() } }.disabled(store.busy != nil)
+                if let shown = store.prReviewShown, shown.canFix {
+                    Button("Fix these findings") { Task { await store.fixFindings() } }.disabled(store.busy != nil)
                 }
                 Button("Close") { store.closePRReview() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20).frame(width: 680)
-    }
-
-    /// The confirm before a fix round, and why one was refused.
-    @ViewBuilder private var fixRound: some View {
-        if let plan = store.pendingFollowUp {
-            VStack(alignment: .leading, spacing: 6) {
-                if let refusal = plan.refusal {
-                    Text(refusal).font(.callout).foregroundStyle(Theme.amber)
-                } else {
-                    Text(plan.text).font(.callout)
-                }
-                HStack {
-                    Button("Not now") { store.cancelFollowUp() }
-                    if plan.refusal == nil {
-                        Button("Start the fix round") { Task { await store.confirmFollowUp() } }
-                            .buttonStyle(.borderedProminent).disabled(store.busy != nil)
-                    }
-                }
-            }
-        }
-        if let error = store.followUpError { Text(error).font(.callout).foregroundStyle(Theme.red) }
     }
 
     private func icon(_ shown: PRReviewShown) -> String {
