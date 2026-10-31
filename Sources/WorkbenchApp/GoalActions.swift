@@ -280,6 +280,13 @@ struct GoalActions: Sendable {
     /// does not load is an error, not "names none": the key it may hold could name a stand-in, and guessing would run the real one.
     static func herdrExecutable(_ project: Project) throws -> URL? {
         let environment = ProcessInfo.processInfo.environment
+        return HerdrLocator.find(
+            configured: try herdrConfigured(project), searchPath: environment["PATH"], home: NSHomeDirectory())
+    }
+
+    /// What the `herdr` key names, in the project's config or the global one; nil when neither sets it.
+    static func herdrConfigured(_ project: Project) throws -> String? {
+        let environment = ProcessInfo.processInfo.environment
         var configured: String?
         do {
             if FileManager.default.fileExists(atPath: project.configURL.path) {
@@ -291,7 +298,7 @@ struct GoalActions: Sendable {
         } catch {
             throw RefusalText("A config does not load, so it is not guessed which herdr-app to run: \(error)")
         }
-        return HerdrLocator.find(configured: configured, searchPath: environment["PATH"], home: NSHomeDirectory())
+        return configured
     }
 
     /// Opens the thread's worktree in Herdr, starting the Herdr app first when its window is not open.
@@ -302,13 +309,16 @@ struct GoalActions: Sendable {
         let folder = try Editor.worktree(project: project, threadID: thread)
         let client = HerdrClient(
             executable: executable, environment: HerdrClient.environment(from: ProcessInfo.processInfo.environment))
-        let opener = HerdrOpener(client: client) {
+        var opener = HerdrOpener(client: client) {
             let found = await MainActor.run { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.herdr.app") }
             guard let app = found else {
                 throw RefusalText("Herdr's window is not open and Herdr.app was not found to start it.")
             }
             _ = try await NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
         }
+        // A `herdr` key names a stand-in as often as the real one (verify-app's fixture does): it must not bring a person's own
+        // Herdr.app forward. Only the unconfigured, real `herdr-app` does.
+        if try herdrConfigured(project) != nil { opener.bringForward = {} }
         return try await opener.open(folder: folder, label: thread)
     }
 

@@ -135,6 +135,14 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(down.calls.first == "ls" && down.calls.last == "do space.new --name t1 --folder /work/project-wt/t1")
     }
 
+    @Test func aRunningAppIsBroughtForwardByTheLauncherYouGaveIt() async throws {
+        let fake = try FakeHerdr()
+        var opener = fake.opener()
+        opener.bringForward = {}  // a stand-in's: the real launcher must not run
+        _ = try await opener.open(folder: folder, label: "t1")
+        #expect(fake.launches == 0)
+    }
+
     @Test func aProbeThatFailsForAnotherReasonIsThrownAndNothingElseIsStarted() async throws {
         let fake = try FakeHerdr()
         try fake.set("lsfail")
