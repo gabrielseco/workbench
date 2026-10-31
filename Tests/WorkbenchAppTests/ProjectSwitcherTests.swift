@@ -129,6 +129,61 @@ import Testing
         #expect(now.id == "second")
     }
 
+    @Test func switchRecentProject() async throws {
+        let (a, b) = (try await project("a"), try await project("b"))
+        let store = store()
+        #expect(await store.open(b.root))
+        #expect(await store.open(a.root))
+        store.pickingProject = true
+        await store.pickRecent(b.project.root.path)
+        #expect(store.project == b.project && !store.pickingProject)
+        #expect(store.recentProjects().first { $0.isCurrent }?.path == b.project.root.path)
+        #expect(store.recentProjects().filter(\.isCurrent).count == 1)
+        guard case .thread(let now) = store.screen else {
+            Issue.record("no thread")
+            return
+        }
+        #expect(now.id == "b")
+        store.pickingProject = true
+        await store.pickRecent(b.project.root.path)
+        #expect(store.project == b.project && !store.pickingProject, "the open project only closes the card")
+        let gone = "/tmp/gone-\(UUID().uuidString)"
+        store.remember(gone)
+        store.pickingProject = true
+        await store.pickRecent(gone)
+        #expect(store.project == b.project && store.pickingProject && store.actionError != nil, "a refusal stays in the card")
+    }
+
+    @Test func chooseFolder() async throws {
+        let (a, b) = (try await project("a"), try await project("b"))
+        var answer: URL?
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)), folderChooser: { answer })
+        #expect(await store.open(a.root))
+        store.pickingProject = true
+        await store.chooseFolder()
+        #expect(store.project == a.project && !store.pickingProject && store.recentPaths == [a.project.root.path])
+        guard case .thread(let kept) = store.screen else {
+            Issue.record("cancelling closed the project")
+            return
+        }
+        #expect(kept.id == "a")
+        answer = b.root
+        await store.chooseFolder()
+        #expect(store.project == b.project && store.recentProjects().first { $0.isCurrent }?.path == b.project.root.path)
+        #expect(store.recentPaths == [b.project.root.path, a.project.root.path])
+    }
+
+    @Test func theSearchFieldMatchesANameOrAPath() {
+        let entries = ["/tmp/code/triage", "/tmp/code/expenses-backend", "/tmp/work/expense-tracker"].map {
+            RecentProject(path: $0, name: URL(fileURLWithPath: $0).lastPathComponent, isCurrent: false, isRunning: false)
+        }
+        #expect(ProjectStore.filter(entries, "  ").map(\.name) == ["triage", "expenses-backend", "expense-tracker"])
+        #expect(ProjectStore.filter(entries, "EXPENSE").map(\.name) == ["expenses-backend", "expense-tracker"])
+        #expect(ProjectStore.filter(entries, "work/").map(\.name) == ["expense-tracker"])
+        #expect(ProjectStore.filter(entries, "nothing").isEmpty)
+    }
+
     @Test func anUnavailableProjectCanBeRemovedFromTheList() {
         let store = store()
         store.remember("/tmp/gone-for-good")

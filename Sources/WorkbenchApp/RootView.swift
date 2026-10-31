@@ -18,8 +18,9 @@ struct RootView: View {
             FooterBar(store: store)
         }
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
-        .disabled(store.namingGoal || store.sendingBack)
+        .disabled(store.namingGoal || store.sendingBack || store.pickingProject)
         .frame(minWidth: 900, minHeight: 600)
+        .overlay(alignment: .topLeading) { ProjectPickerLayer(store: store) }
         .overlay { OverlayLayer(shown: store.namingGoal) { NewGoalPopover(store: store) } }
         .overlay { OverlayLayer(shown: store.sendingBack) { SendBackPopover(store: store) } }
     }
@@ -29,40 +30,15 @@ struct RootView: View {
 struct ToolbarBar: View {
     var store: ProjectStore
 
-    /// What the project pill is called to assistive technology, and so to scripts/verify-app.sh: it opens a file panel, and its
-    /// refusal list matches this label's start, which the folder's name alone would not.
+    /// What the project pill is called to assistive technology, and so to scripts/verify-app.sh: it opens the project card, not a
+    /// panel, so the script may press it; the card's "Choose folder…" is the one it refuses.
     static func projectButtonLabel(_ project: Project?) -> String {
-        "Choose project" + (project.map { ", now \($0.root.lastPathComponent)" } ?? "")
+        "Projects" + (project.map { ", now \($0.root.lastPathComponent)" } ?? "")
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            Menu {
-                ForEach(store.recentProjects()) { entry in
-                    Button {
-                        Task { await store.switchTo(entry.path) }
-                    } label: {
-                        let flag = entry.unavailable == nil ? "" : " · unavailable"
-                        Label(
-                            entry.name + (entry.isRunning ? " · running" : "") + flag,
-                            systemImage: entry.isCurrent ? "checkmark" : "folder")
-                    }
-                    .disabled(entry.unavailable != nil)
-                    .help(entry.unavailable ?? entry.path)
-                }
-                ForEach(store.recentProjects().filter { $0.unavailable != nil }) { entry in
-                    Button("Remove \(entry.name) from the list") { store.forget(entry.path) }
-                }
-                Divider()
-                Button("Choose folder…") { Picker.chooseProject(store) }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(store.project?.root.lastPathComponent ?? "Choose project")
-                    Image(systemName: "chevron.down").font(.caption2)
-                }
-            }
-            .menuStyle(.borderlessButton).fixedSize()
-            .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
+            ProjectPill(store: store)
             if case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
@@ -73,6 +49,31 @@ struct ToolbarBar: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+}
+
+/// The open project's name with a folder and a chevron; it opens the project card.
+struct ProjectPill: View {
+    var store: ProjectStore
+    @State private var hovered = false
+
+    var body: some View {
+        Button {
+            store.pickingProject.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill").foregroundStyle(Theme.blue)
+                Text(store.project?.root.lastPathComponent ?? "Choose project").font(.body.weight(.semibold))
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Theme.grey.opacity(store.pickingProject ? 0.2 : hovered ? 0.14 : 0.08), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain).fixedSize()
+        .onHover { hovered = $0 }
+        .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
+        .help(store.project?.root.path ?? "Choose a project")
     }
 }
 
@@ -269,7 +270,7 @@ struct EmptyState: View {
             Text(title).font(.title2.weight(.semibold))
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             HStack {
-                Button("Choose project…") { Picker.chooseProject(store) }
+                Button("Choose project…") { Task { await store.chooseFolder() } }
                 if store.screen == .noThread { Button("New goal…") { store.namingGoal = true } }
             }
             .padding(.top, 6)
@@ -303,18 +304,5 @@ struct FooterBar: View {
     private var label: String {
         if case .thread(let snapshot) = store.screen { return "Event log \(snapshot.lastSeq)" }
         return "Open the event log"
-    }
-}
-
-enum Picker {
-    @MainActor static func chooseProject(_ store: ProjectStore) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        panel.message = "Choose the folder of a git repository"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await store.open(url) }
     }
 }
