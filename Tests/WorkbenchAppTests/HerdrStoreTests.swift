@@ -60,7 +60,8 @@ import Testing
 
         let answer = try await GoalActions.openInHerdr(fixture.project, "t1", opener: try standIn(in: herdrDir))
 
-        #expect(answer == GoalActions.HerdrOpenAnswer(opened: HerdrOpened(space: "sp9", alreadyOpen: false), projectInstead: true))
+        let expected = GoalActions.HerdrOpenAnswer(opened: HerdrOpened(space: "sp9", alreadyOpen: false), projectInstead: true)
+        #expect(answer == expected)
         let folder = try String(contentsOf: herdrDir.appendingPathComponent("folder"), encoding: .utf8)
         #expect(URL(fileURLWithPath: folder).resolvingSymlinksInPath().path == fixture.root.resolvingSymlinksInPath().path)
         // A plain space: no `--argv`, so nothing is typed or started in it.
