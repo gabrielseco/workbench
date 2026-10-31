@@ -56,6 +56,8 @@ struct GoalActions: Sendable {
     var herdrFound: @Sendable (Project) -> Bool
     /// Starts the Herdr app when its window is not open, then opens the thread's worktree there and brings it forward.
     var openInHerdr: @Sendable (Project, String) async throws -> HerdrOpened
+    /// Approves the goal, cuts the thread's worktree when it has none, and has Herdr open it and start a Claude session on the goal.
+    var runGoalInHerdr: @Sendable (Project, String) async throws -> HerdrHandoff
     /// The changed files' diffs in the editor: all of them, or the one at the path. Says what it left out, nil when nothing.
     var openDiff: @Sendable (Project, String, String?) async throws -> String?
     var loadReview: @Sendable (Project, String) async -> ReviewReport?
@@ -99,6 +101,7 @@ struct GoalActions: Sendable {
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         herdrFound: @escaping @Sendable (Project) -> Bool = { _ in false },
         openInHerdr: @escaping @Sendable (Project, String) async throws -> HerdrOpened = { _, _ in throw Unset() },
+        runGoalInHerdr: @escaping @Sendable (Project, String) async throws -> HerdrHandoff = { _, _ in throw Unset() },
         openDiff: @escaping @Sendable (Project, String, String?) async throws -> String? = { _, _, _ in nil },
         loadReview: @escaping @Sendable (Project, String) async -> ReviewReport? = { _, _ in nil },
         grantCandidates: @escaping @Sendable (Project, String) async throws -> [GrantCandidate] = { _, _ in [] },
@@ -125,7 +128,7 @@ struct GoalActions: Sendable {
         self.editGoal = editGoal
         self.enableGoalAgent = enableGoalAgent
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
-        (self.herdrFound, self.openInHerdr) = (herdrFound, openInHerdr)
+        (self.herdrFound, self.openInHerdr, self.runGoalInHerdr) = (herdrFound, openInHerdr, runGoalInHerdr)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
         (self.grantCandidates, self.grant) = (grantCandidates, grant)
         (self.discardPlan, self.discard, self.patch) = (discardPlan, discard, patch)
@@ -209,6 +212,7 @@ struct GoalActions: Sendable {
             do { return try herdrExecutable(project) != nil } catch { return false }
         },
         openInHerdr: { project, thread in try await openInHerdr(project, thread) },
+        runGoalInHerdr: { project, thread in try await runGoalInHerdr(project, thread) },
         openDiff: { project, thread, path in try await openDiffInEditor(project, thread, path: path) },
         loadReview: { project, thread in
             guard let git = try? GitRunner.discover() else { return nil }
@@ -319,20 +323,47 @@ struct GoalActions: Sendable {
 
     /// Opens the thread's worktree in Herdr, starting the Herdr app first when its window is not open.
     static func openInHerdr(_ project: Project, _ thread: String) async throws -> HerdrOpened {
-        guard let executable = try herdrExecutable(project) else {
-            throw RefusalText("Herdr was not found: install it, or name it in the config's `herdr` key.")
+        let opener = try herdrOpener(project)
+        return try await opener.open(folder: try Editor.worktree(project: project, threadID: thread), label: thread)
+    }
+
+    static func runGoalInHerdr(_ project: Project, _ thread: String) async throws -> HerdrHandoff {
+        try await runGoalInHerdr(project, thread, opener: try herdrOpener(project))
+    }
+
+    /// Herdr is found and its window brought up before anything is approved or cut, so a machine without it changes nothing.
+    static func runGoalInHerdr(_ project: Project, _ thread: String, opener: HerdrOpener) async throws -> HerdrHandoff {
+        try await opener.ensureWindow()
+        let service = ThreadService(project: project, git: try GitRunner.discover())
+        let prepared: PreparedHandoff
+        do { prepared = try await service.prepareHandoff(id: thread) } catch let refusal as ThreadServiceError {
+            throw RefusalText("\(refusal)")
         }
         let folder = try Editor.worktree(project: project, threadID: thread)
+        return try await opener.handOff(
+            folder: folder, label: thread, command: HerdrOpener.claudeCommand(turnTimeoutMin: prepared.turnTimeoutMin),
+            pending: service.handoffPendingURL(id: thread))
+    }
+
+    static func herdrOpener(_ project: Project) throws -> HerdrOpener {
+        guard let executable = try herdrExecutable(project) else { throw HerdrNotFound() }
         let client = HerdrClient(
             executable: executable, environment: HerdrClient.environment(from: ProcessInfo.processInfo.environment))
-        let opener = HerdrOpener(client: client) {
+        return HerdrOpener(client: client) {
             let found = await MainActor.run { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.herdr.app") }
-            guard let app = found else {
-                throw RefusalText("Herdr's window is not open and Herdr.app was not found to start it.")
-            }
+            guard let app = found else { throw HerdrNotFound(appMissing: true) }
             _ = try await NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
         }
-        return try await opener.open(folder: folder, label: thread)
+    }
+
+    /// No `herdr-app` to run, or no Herdr.app to start when its window is closed: Herdr is unavailable, not failing.
+    struct HerdrNotFound: Error, CustomStringConvertible {
+        var appMissing = false
+        var description: String {
+            appMissing
+                ? "Herdr's window is not open and Herdr.app was not found to start it."
+                : "Herdr was not found: install it, or name it in the config's `herdr` key."
+        }
     }
 
     /// The editor to open a goal file in: the project's `editor`, else the one in `~/.workbench/config.toml`. A config that does not

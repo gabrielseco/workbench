@@ -24,9 +24,11 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case abandonNotSaved(String)
     case budgetNeedsCap(provider: String)
     case goalEditRefused(String)
+    case goalNotCopied(String)
 
     public var description: String {
         switch self {
+        case .goalNotCopied(let why): "the goal was not copied into the worktree, so there is nothing to hand over: \(why)"
         case .copySourceMissing(let path): "no goal file to copy at \(path)"
         case .copySourceTooLarge(let path): "\(path) is too large to be a goal file"
         case .copyValueInvalid(let problem): "the goal file to copy has a bad value: \(problem); nothing was created"
