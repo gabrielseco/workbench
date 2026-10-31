@@ -21,6 +21,7 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
 /// Reads the files a task points at. Every path is resolved against the project root and must still be inside it
 /// after links are followed: a task file is data from a repository and must not reach the rest of the disk.
 struct TaskFiles {
+    static let maxTaskFileBytes = 64 << 10
     static let maxScriptBytes = 256 << 10
     static let maxInputBytes = 1 << 20
     static let maxInputFiles = 200
@@ -75,16 +76,26 @@ extension TaskFiles {
             var files: [URL] = [url]
             if isDirectory.boolValue {
                 let keys: [URLResourceKey] = [.isRegularFileKey]
-                let walker = FileManager.default.enumerator(
-                    at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants])
+                // A directory that cannot be listed is refused: a partial input would be taken for the whole.
+                nonisolated(unsafe) var unlistable = false
+                guard
+                    let walker = FileManager.default.enumerator(
+                        at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                        errorHandler: { _, _ in
+                            unlistable = true
+                            return false
+                        })
+                else { throw TaskFileError.unreadable(relative) }
                 files = []
-                while let next = walker?.nextObject() as? URL {
+                defer { if unlistable { files = [] } }
+                while let next = walker.nextObject() as? URL {
                     guard (try? next.resourceValues(forKeys: Set(keys)).isRegularFile) == true else { continue }
                     files.append(next)
                     if count + files.count > Self.maxInputFiles {
                         throw TaskFileError.tooMany(relative, limit: Self.maxInputFiles)
                     }
                 }
+                if unlistable { throw TaskFileError.unreadable(relative) }
                 files.sort { $0.path < $1.path }
             }
             count += files.count

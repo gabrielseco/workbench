@@ -65,6 +65,17 @@ struct TaskInputsTests {
         #expect(throws: TaskFileError.unreadable("pipe")) { try files.read("pipe", limit: 100) }
     }
 
+    @Test(.enabled(if: geteuid() != 0, "root reads a directory with no permissions"))
+    func aDirectoryThatCannotBeListedIsRefusedNotShortened() throws {
+        let fx = try TaskFixture()
+        try fx.write("d/ok.txt", "y")
+        try fx.write("d/locked/secret.txt", "z")
+        let locked = fx.project.root.appendingPathComponent("d/locked").path
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked) }
+        #expect(throws: TaskFileError.unreadable("d")) { try TaskFiles(project: fx.project).inputs(["d"]) }
+    }
+
     @Test func hiddenFilesInADirectoryAreSkipped() throws {
         let fx = try TaskFixture()
         try fx.write("d/.secret", "x")

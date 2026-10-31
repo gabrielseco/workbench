@@ -41,9 +41,12 @@ public struct TaskLibrary: Sendable {
         guard SafeNames.isThreadID(name), FileManager.default.fileExists(atPath: project.taskFileURL(name).path) else {
             throw TaskFileError.notFound(".workbench/tasks/\(name)/task.md")
         }
-        let text = try String(contentsOf: project.taskFileURL(name), encoding: .utf8)
-        let definition = try TaskDefinition.parse(text, name: name)
         let files = TaskFiles(project: project)
+        let data = try files.read(".workbench/tasks/\(name)/task.md", limit: TaskFiles.maxTaskFileBytes)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw TaskFileError.unreadable(".workbench/tasks/\(name)/task.md")
+        }
+        let definition = try TaskDefinition.parse(text, name: name)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
         let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
         return LoadedTask(
@@ -68,7 +71,14 @@ public struct TaskLibrary: Sendable {
     }
 
     public func summary(_ name: String, now: Date = Date(), calendar: Calendar = .current) -> TaskSummary {
-        let history = (try? TaskRunLog(project: project, name: name).history()) ?? TaskHistory(events: [])
+        let history: TaskHistory
+        do {
+            history = try TaskRunLog(project: project, name: name).history()
+        } catch {
+            return TaskSummary(
+                name: name, problem: "the run log is damaged: \(error)", schedule: nil, fix: nil, approval: .never,
+                nextDue: nil, lastOutcome: nil, lastRun: nil)
+        }
         do {
             let loaded = try load(name)
             let base = history.scheduleBase

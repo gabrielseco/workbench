@@ -78,6 +78,28 @@ struct TaskApprovalTests {
         #expect(try fx.log.history().approvedHash == nil)
     }
 
+    @Test(.timeLimit(.minutes(1))) func aTaskFileThatIsHugeOrAPipeIsRefusedNotRead() async throws {
+        let big = try TaskFixture(body: String(repeating: "x", count: TaskFiles.maxTaskFileBytes + 1))
+        #expect(throws: TaskFileError.self) { try big.library.load(big.name) }
+        let fx = try TaskFixture()
+        let path = fx.project.taskFileURL(fx.name).path
+        try FileManager.default.removeItem(atPath: path)
+        try #require(mkfifo(path, 0o600) == 0)
+        #expect(throws: TaskFileError.unreadable(".workbench/tasks/bump/task.md")) { try fx.library.load(fx.name) }
+    }
+
+    @Test func aDamagedRunLogIsShownAsAProblemNotAFreshTask() async throws {
+        let fx = try TaskFixture()
+        try await fx.library.approve(fx.name)
+        let gap = "{\"v\":1,\"seq\":9,\"ts\":\"2026-01-01T00:00:00.000Z\",\"turn\":0,\"kind\":\"task.approved\",\"data\":{}}\n"
+        let handle = try FileHandle(forWritingTo: fx.log.url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(gap.utf8))
+        try handle.close()
+        let summary = fx.library.summary(fx.name)
+        #expect(summary.problem?.contains("run log is damaged") == true)
+    }
+
     @Test func aMissingPendingScriptIsRefusedAtApproval() async throws {
         let fx = try TaskFixture(front: "fix: pr\npending: missing.sh")
         await #expect(throws: TaskFileError.self) { try await fx.library.approve(fx.name) }
