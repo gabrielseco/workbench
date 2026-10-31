@@ -103,7 +103,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: worktree.path), "a worktree was cut")
     }
 
-    @Test func herdrAppMissingApprovesAndCutsNothing() async throws {
+    @Test func unavailableHerdr() async throws {
         let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-down-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: herdrDir) }
@@ -143,6 +143,30 @@ import Testing
         #expect(calls.split(separator: "\n") == ["ls"], "Herdr was asked for more than whether its window is open")
     }
 
+    @Test func aLiveSessionHoldsTheThreadAgainstARunButNotAgainstAnotherHandoff() async throws {
+        let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-held-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: herdrDir) }
+        let (fixture, _) = try await handoffStore(opener: try standIn(in: herdrDir))
+        let project = fixture.project
+        let service = ThreadService(project: project, git: try GitRunner.discover())
+        let me = try #require(ProcessTree.member(for: getpid()))
+        try FileManager.default.createDirectory(at: project.threadDirectory("t1"), withIntermediateDirectories: true)
+        try #"{"pid":\#(getpid()),"session":"herdr","started_seconds":\#(me.startSeconds)}"#
+            .write(to: project.runnerURL("t1"), atomically: true, encoding: .utf8)
+
+        // Everything that asks who holds the thread sees the session: a run, a discard, the orphan sweep.
+        #expect(service.runnerPID(id: "t1") == getpid())
+        await #expect(throws: ThreadServiceError.self) { try await service.abandon(id: "t1") }
+        // Pressing "Run in Herdr" again is not refused for it: the worktree is brought forward.
+        _ = try await service.prepareHandoff(id: "t1")
+
+        // Any other holder still refuses a handoff.
+        try #"{"pid":\#(getpid()),"started_seconds":\#(me.startSeconds),"started_micros":\#(me.startMicros)}"#
+            .write(to: project.runnerURL("t1"), atomically: true, encoding: .utf8)
+        await #expect(throws: ThreadServiceError.self) { try await service.prepareHandoff(id: "t1") }
+    }
+
     @Test func runGoalInHerdr() async throws {
         let herdrDir = FileManager.default.temporaryDirectory.appendingPathComponent("herdr-run-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: herdrDir, withIntermediateDirectories: true)
@@ -174,7 +198,8 @@ import Testing
         let last = try String(contentsOf: herdrDir.appendingPathComponent("last"), encoding: .utf8)
         let encoder = JSONEncoder()
         encoder.outputFormatting = .withoutEscapingSlashes
-        let argv = String(data: try encoder.encode(HerdrOpener.claudeArguments(turnTimeoutMin: 30)), encoding: .utf8)
+        let claude = HerdrOpener.claudeArguments(turnTimeoutMin: 30, marker: project.runnerURL("t1"))
+        let argv = String(data: try encoder.encode(claude), encoding: .utf8)
         #expect(last.hasSuffix(" --argv \(try #require(argv))"))
     }
 

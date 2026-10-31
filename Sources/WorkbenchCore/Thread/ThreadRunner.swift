@@ -140,10 +140,7 @@ public actor ThreadRunner {
                 ? RunnerError.claudeNotFound(name) : RunnerError.agentNotFound(provider: "\(agent.provider)", name: name)
         }
 
-        let log: EventLogWriter
-        do { log = try EventLogWriter.open(at: project.eventsURL(threadID)) } catch EventLogError.alreadyOpen {
-            throw RunnerError.alreadyRunning
-        }
+        let log = try openLog()
         try writeRunnerInfo()
         defer {
             try? FileManager.default.removeItem(at: project.runnerURL(threadID))

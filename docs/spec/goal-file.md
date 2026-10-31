@@ -563,14 +563,19 @@ Notes:
   cuts the thread's worktree as a run would when it has none (recorded with `worktree.created`, so a later run, review or accept
   uses the same base), copies the approved goal and its screenshots in (`.workbench/goal-copy/`; refused when the goal cannot be
   copied), and opens the worktree in Herdr as above. In a space it made it starts
-  `/usr/bin/perl -MPOSIX=WNOHANG -e '<supervisor>' <turn_timeout_min × 60> 10 claude '<fixed prompt naming .workbench/goal-copy/goal.md>'`
+  `/usr/bin/perl -MPOSIX=WNOHANG -e '<supervisor>' <turn_timeout_min × 60> 10 <runner.json> claude '<fixed prompt naming .workbench/goal-copy/goal.md>'`
   as that space's first terminal, in the same call (`herdr-app do space.new --name <thread> --folder <worktree> --argv '[...]'`), as an
-  argument list: no shell reads it. The supervisor runs
-  claude as its child in the terminal's foreground (it ignores Ctrl-C, which is claude's) and at the approved timeout stops
-  claude and everything it started: SIGTERM to each descendant and to the process groups they are in, 10 seconds' grace, then
-  SIGKILL to what is left, also a tool child that ignored SIGTERM or was orphaned when claude died. It then exits 124; a
-  session that ends by itself keeps claude's exit status. Nothing from the goal reaches a shell. A space the worktree already
-  had is only brought forward and is not sent the goal again.
+  argument list: no shell reads it. A refused call leaves no space, so pressing the button again starts the session. The supervisor
+  runs claude as its child in the terminal's foreground (it ignores Ctrl-C, which is claude's). Every second it records the tree
+  below it (pid and process group). At the approved timeout, on a SIGTERM (the app's Stop), and when claude ends by itself it
+  stops what it recorded: SIGTERM to each and to the process groups they are in, 10 seconds' grace, then SIGKILL to what is left,
+  also claude itself and a tool child that ignored SIGTERM or whose parent had already ended. It exits 124 at the timeout and 143
+  on a stop; when claude ends by itself it keeps claude's exit status. A tool that started and lost its parent within one second
+  is not found. Nothing from the goal reaches a shell. While it runs the supervisor holds the thread: it writes the thread's
+  `runner.json` with its pid, `"session": "herdr"` and its start time in whole seconds (the pid counts only while that process
+  started within 2 s before that time), and removes it when it ends; it starts nothing, and exits 1, when a `workbench run` already holds the thread. So `workbench run` (`herdrSessionRunning`), discard, abandon
+  and the like refuse as they do for a run, and "Run in Herdr" is not refused: it brings the space forward. A space the worktree
+  already had is only brought forward and is not sent the goal again.
   The goal screen shows the outcome: sent, already open,
   Herdr unavailable, or the refusal or failure in Herdr's or core's words. No event records the handoff itself.
   `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the

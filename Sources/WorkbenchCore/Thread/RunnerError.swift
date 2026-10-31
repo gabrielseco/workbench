@@ -14,6 +14,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     /// `read_also` names a folder a run cannot be given (missing, not a checkout, the project itself); the text says which.
     case invalidReadAlso(String)
     case alreadyRunning
+    /// A Claude session handed to Herdr is working in this thread's worktree.
+    case herdrSessionRunning
     case claudeNotFound(String)
     /// The configured coding provider's executable is not there (`claude` has its own case and wording).
     case agentNotFound(provider: String, name: String)
@@ -47,6 +49,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidBudget(let why): "the budget is not usable: \(why)"
         case .invalidReadAlso(let why): "\(why). Fix read_also in .workbench/config.toml, or remove it."
         case .alreadyRunning: "another `workbench run` holds this thread's log."
+        case .herdrSessionRunning:
+            "a Claude session handed to Herdr is working in this thread's worktree. Stop it (or let it end) before running."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."
         case .agentNotFound(let provider, let name):
             "cannot find `\(name)` on PATH. Install \(provider) or set [providers.\(provider)] executable "
