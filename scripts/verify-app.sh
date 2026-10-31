@@ -22,8 +22,6 @@
 #   scripts/verify-app.sh calls <pid>          what the scenario's stand-in editor was asked to open (one `cwd=` and `arg=` line per
 #                                              argument, per call); empty when it was not started. Only a scenario that sets
 #                                              `editor = "@EDITOR_STUB@"` in its config.toml has one.
-#   scripts/verify-app.sh herdr-calls <pid>    what the scenario's stand-in `herdr-app` was asked (one line per call, its arguments); empty when
-#                                              it was not started. Only a scenario whose config.toml sets `herdr = "@HERDR_STUB@"` has one.
 #   scripts/verify-app.sh scenarios            the scenario names
 # Every command after `start` takes the pid `start` printed and refuses any other: a pid it did not start, an installed Workbench, or a
 # process that has since been replaced, so the window, the button and the process are always this build's.
@@ -209,20 +207,7 @@ SWIFT
     mkdir -p "$dir/bin"
     printf '#!/bin/sh\n{ echo "cwd=$(pwd)"; for a in "$@"; do echo "arg=$a"; done; } >>"%s/editor-calls.txt"\n' "$dir" >"$dir/bin/editor-stub"
     chmod +x "$dir/bin/editor-stub"
-    # `@HERDR_STUB@` is a `herdr-app` that writes down its arguments and answers the way the real one does (JSON on stdout), so "Open in
-    # Herdr" can be pressed without touching a person's Herdr.
-    cat >"$dir/bin/herdr-stub" <<'STUB'
-#!/bin/sh
-echo "$@" >>"@DIR@/herdr-calls.txt"
-case "$1 $2" in
-  "ls ") echo '{"spaces":[],"recent":[]}' ;;
-  "do space.new") echo '{"space":"sp1","tab":"tb1","terminal":"t1"}' ;;
-  *) echo '{"ok":true}' ;;
-esac
-STUB
-    sed -i '' "s|@DIR@|$dir|g" "$dir/bin/herdr-stub"
-    chmod +x "$dir/bin/herdr-stub"
-    sed -e "s|@EDITOR_STUB@|$dir/bin/editor-stub|g" -e "s|@HERDR_STUB@|$dir/bin/herdr-stub|g" \
+    sed -e "s|@EDITOR_STUB@|$dir/bin/editor-stub|g" \
       "$fixture/config.toml" >"$dir/project/.workbench/config.toml"
   fi
 
@@ -344,11 +329,6 @@ case "$command" in
     [[ $# -eq 1 ]] || usage
     dir="$(build_dir "$1")"
     cat "$dir/editor-calls.txt" 2>/dev/null || true
-    ;;
-  herdr-calls)
-    [[ $# -eq 1 ]] || usage
-    dir="$(build_dir "$1")"
-    cat "$dir/herdr-calls.txt" 2>/dev/null || true
     ;;
   stop)
     [[ $# -eq 1 ]] || usage

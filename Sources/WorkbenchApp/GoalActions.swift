@@ -302,15 +302,13 @@ struct GoalActions: Sendable {
         let folder = try Editor.worktree(project: project, threadID: thread)
         let client = HerdrClient(
             executable: executable, environment: HerdrClient.environment(from: ProcessInfo.processInfo.environment))
-        var opener = HerdrOpener(client: client) {
+        let opener = HerdrOpener(client: client) {
             let found = await MainActor.run { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.herdr.app") }
             guard let app = found else {
                 throw RefusalText("Herdr's window is not open and Herdr.app was not found to start it.")
             }
             _ = try await NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
         }
-        // A fixture launch (verify-app) has a stand-in `herdr-app`: it must not bring a person's own Herdr.app forward.
-        if LaunchOptions.from(environment: ProcessInfo.processInfo.environment).project != nil { opener.bringForward = {} }
         return try await opener.open(folder: folder, label: thread)
     }
 

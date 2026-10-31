@@ -552,7 +552,7 @@ Notes:
   Herdr says it has no window it starts Herdr.app (bundle id `dev.herdr.app`; its server comes up with its window) and asks again for
   about 20 s. It then selects the space whose folder is the worktree (`herdr-app do space.select --id <space>`) or makes one
   (`herdr-app do space.new --name <thread> --folder <worktree>`), and brings the app forward. Any other answer, a hang or a missing
-  window after the wait is shown as it is and nothing else is started. An app started on a fixture project (`verify-app.sh`) never brings Herdr.app forward. A call that does not answer in 10 s is stopped with its process group.
+  window after the wait is shown as it is and nothing else is started. A call that does not answer in 10 s is stopped with its process group.
   No command reads the key and a run never does.
   `--diff` opens a folder of its own instead (`.workbench/threads/<id>/review-workspace/`, rebuilt each time): a clone of the
   repository (`clone --shared`, so nothing is registered in it and no remote is left) at the thread's recorded base, with

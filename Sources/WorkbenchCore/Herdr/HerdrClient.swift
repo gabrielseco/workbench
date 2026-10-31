@@ -103,8 +103,6 @@ public struct HerdrOpener: Sendable {
     public var client: HerdrClient
     /// Starts the Herdr app, or brings a running one forward; the window's launcher, not a process of core's.
     public var launchApp: @Sendable () async throws -> Void
-    /// What brings an already running app forward after its space is open; `launchApp` when nil. Best effort: its failure is not shown.
-    public var bringForward: (@Sendable () async throws -> Void)?
     /// How long to wait for the window after starting the app, and how often to ask.
     public var startupWait: TimeInterval = 20
     public var pollInterval: TimeInterval = 0.5
@@ -134,7 +132,7 @@ public struct HerdrOpener: Sendable {
             opened = HerdrOpened(space: made["space"]?.stringValue ?? "", alreadyOpen: false)
         }
         // A running app does not come forward by itself when a space is added; a launch already did. Best effort: the space is open.
-        if !wasDown { try? await (bringForward ?? launchApp)() }
+        if !wasDown { try? await launchApp() }
         return opened
     }
 
