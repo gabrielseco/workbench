@@ -156,18 +156,20 @@ public struct HerdrOpener: Sendable {
     }
 
     /// What is started in the space's terminal: `claude` with a fixed prompt that points at the goal copy, so nothing from the goal
-    /// itself reaches a shell, stopped with everything it started after the goal's `turn_timeout_min`.
-    public static func claudeArguments(turnTimeoutMin: Int) -> [String] {
-        claudeArguments(timeoutSeconds: max(1, turnTimeoutMin) * 60)
+    /// itself reaches a shell, stopped with everything it started after the goal's `turn_timeout_min`. `marker` is the thread's
+    /// `runner.json`: the session holds the thread while it runs, so a run, a discard or the orphan sweep leaves it alone.
+    public static func claudeArguments(turnTimeoutMin: Int, marker: URL) -> [String] {
+        claudeArguments(timeoutSeconds: max(1, turnTimeoutMin) * 60, marker: marker)
     }
 
-    /// A Perl supervisor runs claude as its child, in the shell's foreground group so it keeps the terminal. At the timeout it
-    /// sends SIGTERM to every descendant and to the process groups they lead or joined, waits `graceSeconds`, then SIGKILLs what
-    /// it saw (a pid only while it is still in the group it was seen in, so a reused pid is spared) and what is there now. The
-    /// tree is taken before anything is signalled: a tool child whose parent dies is reparented and would not be found after.
-    static func claudeArguments(timeoutSeconds: Int, graceSeconds: Int = 10) -> [String] {
+    /// A Perl supervisor runs claude as its child, in the shell's foreground group so it keeps the terminal. It writes the marker,
+    /// then every second records the tree below it (pid and group). At the timeout, on a SIGTERM, and when claude ends by itself, it
+    /// sends SIGTERM to what it recorded and to the process groups they led or joined, waits `graceSeconds`, then SIGKILLs what it
+    /// recorded (a pid only while it is still in the group it was seen in, so a reused pid is spared) and what is there now. A tool
+    /// child whose parent died before the next look is not found; one that was seen once is.
+    static func claudeArguments(timeoutSeconds: Int, graceSeconds: Int = 10, marker: URL) -> [String] {
         [
-            "/usr/bin/perl", "-MPOSIX=WNOHANG", "-e", supervisor, String(timeoutSeconds), String(graceSeconds),
+            "/usr/bin/perl", "-MPOSIX=WNOHANG", "-e", supervisor, String(timeoutSeconds), String(graceSeconds), marker.path,
             "claude",
             "Read \(WorktreeManager.goalCopyPath): it is the approved goal for this worktree. "
                 + "Work on it here until every criterion holds, and commit your work.",
@@ -175,27 +177,45 @@ public struct HerdrOpener: Sendable {
     }
 
     private static let supervisor = [
-        #"my ($t, $w) = splice @ARGV, 0, 2;"#,
+        #"my ($t, $w, $m) = splice @ARGV, 0, 3; my $me = $$; my $at = time;"#,
+        // A `workbench run` that took the thread first keeps it: nothing is started beside it. The marker's start time is read after
+        // the process began; `runnerPID` accepts it within a couple of seconds.
+        #"my $owned; if (open my $o, "<", $m) { local $/; my $x = <$o>; close $o; "#
+            + #"my ($p) = $x =~ /"pid":(\d+)/; if ($p && $p != $me && $x =~ /started_micros/ && kill 0, $p) "#
+            + #"{ print STDERR "claude: a workbench run holds this thread", "\n"; exit 1 } }"#,
+        #"open my $f, ">", $m or die "claude: cannot write $m: $!$/"; "#
+            + #"print $f qq({"pid":$me,"session":"herdr","started_seconds":$at}); close $f; $owned = 1;"#,
+        #"END { unlink $m if $owned && $$ == $me }"#,
         #"defined(my $c = fork) or die "claude: $!$/";"#,
         #"unless ($c) { exec @ARGV or die "claude: $!$/" }"#,
         // Ctrl-C reaches the whole foreground group; it is claude's to handle, and must not take the supervisor away.
         #"$SIG{$_} = "IGNORE" for qw(INT QUIT);"#,
         #"sub table { my %g; my %k; for (`/bin/ps -A -o pid= -o ppid= -o pgid=`) { my ($p, $q, $r) = split; "#
             + #"next unless defined $r; $g{$p} = $r; push @{$k{$q}}, $p } return (\%g, \%k) }"#,
-        #"sub tree { my ($g, $k) = table(); my @todo = ($$); my @found; "#
+        // %seen: pid => its group at the last look; %groups: the groups of what was seen, never the shell's own.
+        #"my (%seen, %groups);"#,
+        #"sub look { my ($g, $k) = table(); my @todo = ($$); my @found; "#
             + #"while (@todo) { for (@{$k->{shift @todo} || []}) { push @found, $_; push @todo, $_ } } "#,
         #"my %skip = (getpgrp() => 1, ($g->{getppid()} // 0) => 1, 0 => 1, 1 => 1); "#
-            + #"my %groups = map { $g->{$_} => 1 } grep { !$skip{$g->{$_}} } @found; "#
-            + #"return ({ map { $_ => $g->{$_} } @found }, [keys %groups]) }"#,
+            + #"for (@found) { $seen{$_} = $g->{$_}; $groups{$g->{$_}} = 1 unless $skip{$g->{$_}} } return $g }"#,
         #"sub hit { my ($s, $pids, $groups) = @_; kill $s, @$pids if @$pids; kill $s, map { -$_ } @$groups if @$groups }"#,
-        #"sub stop { my ($seen, $groups) = tree(); hit("TERM", [keys %$seen], $groups); "#
-            + #"for (1 .. $w * 10) { waitpid $c, WNOHANG; last unless kill 0, keys %$seen; select undef, undef, undef, 0.1 } "#,
-        #"my ($now) = table(); my @left = grep { ($now->{$_} // -1) == $seen->{$_} } keys %$seen; "#
-            + #"my ($more, $late) = tree(); hit("KILL", [@left, keys %$more], [@$groups, @$late]); "#
-            + #"waitpid $c, 0; exit 124 }"#,
-        #"$SIG{ALRM} = sub { print STDERR $/, "claude: stopped after $t seconds, the goal turn_timeout_min", $/; stop() };"#,
-        #"alarm $t; waitpid $c, 0; alarm 0;"#,
-        #"exit($? & 127 ? 128 + ($? & 127) : $? >> 8);"#,
+        // What was seen and is gone, or whose pid now has another group, may be someone else's by now: only what is still there is signalled.
+        #"sub clean { look(); my ($n) = table(); delete @seen{grep { ($n->{$_} // -1) != $seen{$_} } keys %seen}; "#
+            + #"my %live = map { $_ => 1 } values %seen; delete @groups{grep { !$live{$_} } keys %groups}; "#
+            + #"my %was = %seen; hit("TERM", [keys %was], [keys %groups]); "#
+            + #"for (1 .. $w * 10) { waitpid $c, WNOHANG; last unless kill 0, keys %was; select undef, undef, undef, 0.1 } "#,
+        #"my ($now) = table(); my @left = grep { ($now->{$_} // -1) == $was{$_} } keys %was; "#
+            + #"look(); hit("KILL", [@left, grep { !exists $was{$_} } keys %seen], [keys %groups]) }"#,
+        // A request to stop (the app's Stop sends SIGTERM to the pid in the marker) stops claude and what it started, not only this.
+        #"$SIG{TERM} = sub { $SIG{TERM} = "IGNORE"; print STDERR $/, "claude: stopped on request", $/; "#
+            + #"clean(); waitpid $c, 0; exit 143 };"#,
+        #"my $end = $at + $t; my $r;"#,
+        #"until (($r = waitpid $c, WNOHANG) == $c) { look(); "#
+            + #"if (time >= $end) { last if waitpid($c, WNOHANG) == $c; "#
+            + #"print STDERR $/, "claude: stopped after $t seconds, the goal turn_timeout_min", $/; "#
+            + #"clean(); waitpid $c, 0; exit 124 } select undef, undef, undef, 1 }"#,
+        #"my $status = $?; clean();"#,
+        #"exit($status & 127 ? 128 + ($status & 127) : $status >> 8);"#,
     ].joined(separator: " ")
 
     /// The space showing `folder`, selected or made; the terminal Herdr names for a space it made; and whether the app was started.

@@ -5,6 +5,8 @@ public struct PreparedHandoff: Equatable, Sendable {
     public var worktree: URL
     /// The approved goal's `turn_timeout_min`: the session is stopped after it.
     public var turnTimeoutMin: Int
+    /// The thread's `runner.json`, which the session's supervisor writes while it runs.
+    public var marker: URL
 }
 
 extension ThreadService {
@@ -14,7 +16,10 @@ extension ThreadService {
     /// cap is refused before anything is approved or cut: an interactive session cannot enforce one.
     public func prepareHandoff(id: String) async throws -> PreparedHandoff {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
-        if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
+        // A session an earlier handoff started is no reason to refuse: the space is only brought forward.
+        if let pid = runnerPID(id: id), !ThreadStore(project: project).holdsHerdrSession(id: id) {
+            throw ThreadServiceError.running(pid: pid)
+        }
         let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8)
         if let text, (try? GoalFile.parse(text))?.goal.budgetUSD != nil {
             throw ThreadServiceError.budgetNeedsCap(provider: Self.handoffAgent)
@@ -39,7 +44,8 @@ extension ThreadService {
             throw ThreadServiceError.goalNotCopied(why)
         }
         _ = await manager.writeAttachmentCopies(GoalAttachments.stored(in: project.threadDirectory(id)), for: id)
-        return PreparedHandoff(worktree: manager.path(for: id), turnTimeoutMin: file.goal.turnTimeoutMin)
+        return PreparedHandoff(worktree: manager.path(for: id), turnTimeoutMin: file.goal.turnTimeoutMin,
+            marker: project.runnerURL(id))
     }
 
     static let handoffAgent = "An interactive Claude session in Herdr"

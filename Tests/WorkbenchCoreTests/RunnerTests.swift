@@ -246,6 +246,18 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         await holder.close()
     }
 
+    @Test func aRunBesideALiveHerdrSessionIsRefused() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let me = try #require(ProcessTree.member(for: getpid()))
+        let marker = #"{"pid":\#(getpid()),"session":"herdr","started_seconds":\#(me.startSeconds)}"#
+        try marker.write(to: fx.project.runnerURL(id), atomically: true, encoding: .utf8)
+        await #expect(throws: RunnerError.herdrSessionRunning) { _ = try await fx.runner(id).run(fx.options()) }
+        // The session's own marker is left as it was, and no turn started.
+        #expect(try String(contentsOf: fx.project.runnerURL(id), encoding: .utf8) == marker)
+        #expect(try fx.events(id).allSatisfy { $0.kind != .turnStarted })
+    }
+
     // MARK: the failure matrix, at the runner level
 
     @Test(arguments: [

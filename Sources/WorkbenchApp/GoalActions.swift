@@ -345,7 +345,8 @@ struct GoalActions: Sendable {
         }
         let folder = try Editor.worktree(project: project, threadID: thread)
         return try await opener.handOff(
-            folder: folder, label: thread, argv: HerdrOpener.claudeArguments(turnTimeoutMin: prepared.turnTimeoutMin))
+            folder: folder, label: thread,
+            argv: HerdrOpener.claudeArguments(turnTimeoutMin: prepared.turnTimeoutMin, marker: prepared.marker))
     }
 
     static func herdrOpener(_ project: Project) throws -> HerdrOpener {

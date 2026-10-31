@@ -120,8 +120,8 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     }
 }
 
-@Suite struct HerdrHandOffTests {
-    private let argv = HerdrOpener.claudeArguments(turnTimeoutMin: 30)
+@Suite struct HerdrClientTests {
+    private let argv = HerdrOpener.claudeArguments(turnTimeoutMin: 30, marker: URL(fileURLWithPath: "/work/runner.json"))
 
     private func handOff(_ fake: FakeHerdr) async throws -> HerdrHandoff {
         try await fake.opener().handOff(folder: folder, label: "t1", argv: argv)
@@ -159,6 +159,21 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         }
     }
 
+    /// The goal is sent in the call that makes the space, so a refusal leaves no space behind and pressing the button again starts it.
+    @Test func retryFailedSend() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("nocreate")
+        await #expect(throws: HerdrFailure.self) { try await handOff(fake) }
+        try fake.set("nocreate", false)
+        let retried = try await handOff(fake)
+        #expect(retried == HerdrHandoff(space: "sp9", alreadyOpen: false))
+        #expect(fake.calls.filter { $0.hasPrefix("do space.new") }.count == 2)
+        // Started once: a third try only brings it forward.
+        try fake.set("spaces", text: #"{"spaces":[{"id":"sp9","folder":"/work/project-wt/t1"}],"recent":[]}"#)
+        #expect(try await handOff(fake) == HerdrHandoff(space: "sp9", alreadyOpen: true))
+        #expect(fake.calls.filter { $0.hasPrefix("do space.new") }.count == 2)
+    }
+
     @Test func ensureWindowStartsTheAppOnlyWhenItIsDown() async throws {
         let fake = try FakeHerdr()
         #expect(try await fake.opener().ensureWindow() == false)
@@ -168,12 +183,15 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(!fake.calls.contains { $0.hasPrefix("do ") }, "probing the window changed something in Herdr")
     }
 
-    /// Runs the command Herdr starts, with `claude` the stand-in `script`, until it ends; the supervisor's own timeout is 3 s.
-    private func runTimed(_ script: String, in dir: URL) async throws -> ProcessExit {
+    /// Runs the command Herdr starts, with `claude` the stand-in `script`, until it ends; the supervisor's own timeout is `seconds`.
+    private func runTimed(
+        _ script: String, in dir: URL, marker: URL? = nil, seconds: Int = 3, during: (@Sendable () async throws -> Void)? = nil
+    ) async throws -> ProcessExit {
         let claude = dir.appendingPathComponent("claude")
         try ("#!/bin/sh\n" + script).write(to: claude, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
-        let stand = HerdrOpener.claudeArguments(timeoutSeconds: 3, graceSeconds: 1)
+        let held = marker ?? dir.appendingPathComponent("runner.json")
+        let stand = HerdrOpener.claudeArguments(timeoutSeconds: seconds, graceSeconds: 1, marker: held)
         var request = SpawnRequest(
             executable: URL(fileURLWithPath: stand[0]), arguments: Array(stand.dropFirst()),
             environment: ["PATH": "\(dir.path):/usr/bin:/bin"], workingDirectory: dir, timeout: 30)
@@ -184,14 +202,17 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         while true {
             attempts += 1
             let run = try ProcessRunner.start(request)
+            let side = during.map { action in Task { try await action() } }
             var exit: ProcessExit?
             for await event in run.events { if case .exited(let ended) = event { exit = ended } }
             let ended = try #require(exit)
             if ended.stderrTail.contains("Text file busy"), attempts < 10 {
+                side?.cancel()
                 try await Task.sleep(nanoseconds: 50_000_000)
                 continue
             }
             #expect(ended.cause != .timedOut, "the supervisor did not stop the session")
+            try await side?.value
             return ended
         }
     }
@@ -203,7 +224,7 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     }
 
     /// The typed command, run by a shell with a stand-in `claude` that never ends: it is stopped at the goal's timeout.
-    @Test func theSessionIsStoppedAtTheTimeout() async throws {
+    @Test func executionLimits() async throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let argsFile = dir.appendingPathComponent("args")
@@ -232,15 +253,141 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(kill(pid, 0) != 0, "the tool child outlived the session's timeout")
     }
 
+    /// Shell that starts, in the background, a tool in a group of its own that ignores SIGTERM and writes its pid to `pidFile`. It is
+    /// inline, not a file of its own: a script written and run at once can meet "text file busy" while other tests spawn.
+    private func orphanTool(pidFile: URL) -> String {
+        """
+        perl - '\(pidFile.path)' <<'PERL' &
+        setpgrp(0, 0); $SIG{TERM} = "IGNORE"; open my $f, ">", shift; print $f $$; close $f; sleep 300
+        PERL
+
+        """
+    }
+
+    private func expectGone(_ pidFile: URL) async throws {
+        let text = try String(contentsOf: pidFile, encoding: .utf8)
+        let pid = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { kill(pid, SIGKILL) }
+        let deadline = Date().addingTimeInterval(5)
+        while kill(pid, 0) == 0, Date() < deadline { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(kill(pid, 0) != 0, "the tool child outlived the session")
+    }
+
+    /// The tool's parent ends before the timeout, so at the timeout the tool is nobody's descendant: only a look taken earlier finds it.
+    @Test func aToolChildOrphanedBeforeTheTimeoutIsStillStopped() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pidFile = dir.appendingPathComponent("tool.pid")
+        let script = "(\n" + orphanTool(pidFile: pidFile) + "sleep 1.6\n) &\nexec sleep 60\n"
+        let ended = try await runTimed(script, in: dir)
+        #expect(ended.termination == .exited(124), "\(ended.termination): \(ended.stderrTail)")
+        try await expectGone(pidFile)
+    }
+
+    @Test func aToolChildLeftWhenClaudeEndsByItselfIsStopped() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pidFile = dir.appendingPathComponent("tool.pid")
+        let ended = try await runTimed(orphanTool(pidFile: pidFile) + "sleep 1.6\nexit 0\n", in: dir, seconds: 10)
+        #expect(ended.termination == .exited(0), "\(ended.termination): \(ended.stderrTail)")
+        try await expectGone(pidFile)
+    }
+
+    /// Claude itself ignores SIGTERM and shares the supervisor's group, which is never signalled as a group: only SIGKILL ends it.
+    @Test func aClaudeThatIgnoresTermInTheSupervisorsGroupIsKilled() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let ended = try await runTimed("trap '' TERM\nwhile :; do sleep 1; done\n", in: dir)
+        #expect(ended.termination == .exited(124), "\(ended.termination): \(ended.stderrTail)")
+    }
+
+    /// The app's Stop sends SIGTERM to the pid in `runner.json`, which is the supervisor: claude and its tools go with it.
+    @Test func aStopRequestStopsTheSessionAndWhatItStarted() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = dir.appendingPathComponent("runner.json")
+        let pidFile = dir.appendingPathComponent("tool.pid")
+        let ended = try await runTimed(
+            orphanTool(pidFile: pidFile) + "exec sleep 60\n", in: dir, marker: marker, seconds: 60,
+            during: {
+                // The session is up once the tool has written its pid.
+                let deadline = Date().addingTimeInterval(10)
+                while !FileManager.default.fileExists(atPath: pidFile.path), Date() < deadline {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                try await Task.sleep(for: .milliseconds(200))
+                let data = try Data(contentsOf: marker)
+                let info = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+                kill(try #require((info["pid"] as? NSNumber)?.int32Value), SIGTERM)
+            })
+        #expect(ended.termination == .exited(143), "\(ended.termination): \(ended.stderrTail)")
+        try await expectGone(pidFile)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    /// A `workbench run` took the thread between the handoff's preparation and the supervisor's start: no second Claude is started.
+    @Test func aSessionIsNotStartedBesideARunThatHoldsTheThread() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = dir.appendingPathComponent("runner.json")
+        let me = try #require(ProcessTree.member(for: getpid()))
+        let held = #"{"pid":\#(getpid()),"started_micros":\#(me.startMicros),"started_seconds":\#(me.startSeconds)}"#
+        try held.write(to: marker, atomically: true, encoding: .utf8)
+        let started = dir.appendingPathComponent("started")
+        let ended = try await runTimed("touch '\(started.path)'\nexit 0\n", in: dir, marker: marker, seconds: 20)
+        #expect(ended.termination == .exited(1), "\(ended.termination): \(ended.stderrTail)")
+        #expect(!FileManager.default.fileExists(atPath: started.path), "claude was started beside the run")
+        #expect(try String(contentsOf: marker, encoding: .utf8) == held, "the run's marker was replaced or removed")
+    }
+
+    @Test func theSessionHoldsTheThreadWhileItRunsAndLetsGoAfter() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = dir.appendingPathComponent("runner.json")
+        let seen = dir.appendingPathComponent("seen")
+        let ended = try await runTimed("cp '\(marker.path)' '\(seen.path)'\nexit 0\n", in: dir, marker: marker, seconds: 20)
+        #expect(ended.termination == .exited(0), "\(ended.termination): \(ended.stderrTail)")
+        let info = try #require(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: seen)) as? [String: Any], "no marker while it ran")
+        #expect(info["session"] as? String == "herdr" && (info["pid"] as? NSNumber) != nil)
+        #expect(!FileManager.default.fileExists(atPath: marker.path), "the hold outlived the session")
+    }
+
+    @Test func aMarkerIsAHolderOnlyForTheProcessThatWroteItAndOnlyWhileItLives() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let project = Project(root: dir)
+        let store = ThreadStore(project: project)
+        try FileManager.default.createDirectory(at: project.threadDirectory("t1"), withIntermediateDirectories: true)
+        let me = try #require(ProcessTree.member(for: getpid()))
+        func write(pid: pid_t, seconds: UInt64, session: String = "herdr") throws {
+            let text = #"{"pid":\#(pid),"session":"\#(session)","started_seconds":\#(seconds)}"#
+            try text.write(to: project.runnerURL("t1"), atomically: true, encoding: .utf8)
+        }
+        try write(pid: getpid(), seconds: me.startSeconds + 1)
+        #expect(store.runnerPID(id: "t1") == getpid() && store.holdsHerdrSession(id: "t1"))
+        // A process that reused the pid started after the marker was written.
+        try write(pid: getpid(), seconds: me.startSeconds - 5)
+        #expect(store.runnerPID(id: "t1") == nil)
+        // No start time at all is only for a session marker.
+        try write(pid: getpid(), seconds: me.startSeconds, session: "other")
+        #expect(store.runnerPID(id: "t1") == nil)
+        try write(pid: 2_000_000_000, seconds: me.startSeconds)
+        #expect(store.runnerPID(id: "t1") == nil)
+    }
+
     @Test func aSessionThatEndsByItselfKeepsItsExitStatus() async throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let ended = try await runTimed("exit 3\n", in: dir)
+        let ended = try await runTimed("exit 3\n", in: dir, seconds: 20)
         #expect(ended.termination == .exited(3), "\(ended.termination): \(ended.stderrTail)")
     }
 
     @Test func theTimeoutIsTheGoalsInSeconds() {
-        #expect(HerdrOpener.claudeArguments(turnTimeoutMin: 30) == HerdrOpener.claudeArguments(timeoutSeconds: 1800))
+        let marker = URL(fileURLWithPath: "/work/it's here/runner.json")
+        #expect(
+            HerdrOpener.claudeArguments(turnTimeoutMin: 30, marker: marker)
+                == HerdrOpener.claudeArguments(timeoutSeconds: 1800, marker: marker))
     }
 }
 

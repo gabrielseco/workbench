@@ -1,6 +1,15 @@
 import Foundation
 
 extension ThreadRunner {
+    /// The thread's log, opened for this run. A Claude session handed to Herdr works in this worktree without holding the log: it
+    /// is a run already, so this one is refused.
+    func openLog() throws -> EventLogWriter {
+        if ThreadStore(project: project).holdsHerdrSession(id: threadID) { throw RunnerError.herdrSessionRunning }
+        do { return try EventLogWriter.open(at: project.eventsURL(threadID)) } catch EventLogError.alreadyOpen {
+            throw RunnerError.alreadyRunning
+        }
+    }
+
     /// What the user has allowed for the turn that starts next, read from the log.
     func grantsForNextTurn(config: Config) -> [String] {
         let events = (try? EventLogReader.read(at: project.eventsURL(threadID)).events) ?? []
