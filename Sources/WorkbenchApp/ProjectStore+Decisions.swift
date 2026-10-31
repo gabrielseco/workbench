@@ -1,33 +1,27 @@
 import Foundation
 import WorkbenchCore
 
-/// Accept and Discard: what core says each would do is fetched and shown first, and only what was shown is done.
+/// Accept runs on the click, with the default commit message. Discard fetches what core says it would remove and shows it first,
+/// and only what was shown is done.
 extension ProjectStore {
-    func prepareAccept() async {
-        guard let project, let thread = currentThread, !deciding else { return }
+    /// Reads core's plan and accepts it at once: core refuses it when the work changed in between, and nothing is committed then.
+    func accept() async {
+        guard let project, let thread = currentThread, !deciding, busy == nil else { return }
+        // Set before the first await, so a second click while this one is going starts nothing.
+        deciding = true
+        defer { deciding = false }
         actionError = nil
         notice = nil
         let mine = generation
         await working("Checking what Accept would do…") {
             do {
                 let plan = try await actions.acceptPlan(project, thread)
-                if mine == generation { pendingAccept = plan }
+                guard mine == generation else { return }
+                nowWorking("Accepting: committing the work…")
+                let result = try await actions.accept(project, thread, plan, nil)
+                if mine == generation { notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)" }
             } catch { if mine == generation { actionError = "\(error)" } }
-        }
-    }
-
-    /// Accepts what was shown: core refuses it when the work changed since, and nothing is committed then.
-    func confirmAccept(message: String?) async {
-        guard let project, let thread = currentThread, let plan = pendingAccept, !deciding else { return }
-        deciding = true
-        defer { deciding = false }
-        pendingAccept = nil
-        await working("Accepting: committing the work…") {
-            do {
-                let result = try await actions.accept(project, thread, plan, message)
-                notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)"
-            } catch { actionError = "\(error)" }
-            await reload()
+            if mine == generation { await reload() }
         }
     }
 
@@ -39,8 +33,6 @@ extension ProjectStore {
         guard mine == generation, review != nil else { return }
         review = report.map(ReviewModel.derive)
     }
-
-    func cancelAccept() { pendingAccept = nil }
 
     func prepareDiscard() async {
         guard let project, let thread = currentThread, !deciding else { return }

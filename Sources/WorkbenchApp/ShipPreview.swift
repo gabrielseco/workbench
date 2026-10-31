@@ -1,7 +1,7 @@
 import Foundation
 import WorkbenchCore
 
-/// What a ship would do, fetched and shown before anything is pushed. `plan` and `description` go back to core exactly as shown,
+/// What a ship would do, fetched before anything is pushed. `plan` and `description` go back to core exactly as read,
 /// and core refuses them when the branch or the target moved since.
 struct ShipPreview: Equatable, Sendable {
     var plan: ShipPlan
@@ -34,9 +34,9 @@ struct ShipPreview: Equatable, Sendable {
         return ShipPreview(plan: plan, description: description, title: body.title, body: body.body, note: note)
     }
 
-    /// Pushes and opens what `preview` showed, as `workbench ship` does after its confirmation. Core builds the pull request text
-    /// again at publish time, from the goal and the log, so it is compared with what was shown first: a sheet can stay open for
-    /// minutes, and text nobody confirmed is not published.
+    /// Pushes and opens what `preview` read, as `workbench ship` does after its confirmation. Core builds the pull request text
+    /// again at publish time, from the goal and the log, so it is compared with the preview's first: the describing turn takes
+    /// a while, and text changed by an edit meanwhile is not published.
     static func publish(_ preview: ShipPreview, project: Project, thread: String) async throws -> ShipOutcome {
         let service = ThreadService(project: project, git: try GitRunner.discover())
         let gh = try? GitRunner.discover(tool: "gh")
@@ -53,25 +53,12 @@ struct ShipPreview: Equatable, Sendable {
     struct TextChanged: Error, CustomStringConvertible {
         var description: String {
             "the pull request text changed since it was shown (the goal or the log was edited); nothing was pushed. "
-                + "Open Ship… again."
+                + "Press Ship again."
         }
     }
 
     /// Refuses a publish whose title or body is not the one that was shown.
     static func checkUnchanged(shown: (title: String, body: String), now: (title: String, body: String)) throws {
         guard shown == now else { throw TextChanged() }
-    }
-
-    /// The lines that say what will be pushed, in the words `workbench ship` prints them.
-    var pushLines: [String] {
-        var lines = ["thread:  \(plan.id)", "branch:  \(plan.branch)  (\(plan.head.prefix(12)))"]
-        lines.append(plan.updatesExistingBranch ? "updates: \(plan.remoteBranch) on origin" : "base:    \(plan.base)")
-        lines.append("origin:  \(plan.origin)")
-        switch plan.remote {
-        case .absent: lines.append("push:    new branch on origin")
-        case .upToDate: lines.append("push:    nothing, origin already has this commit")
-        case .behind(let sha): lines.append("push:    fast-forward from \(sha.prefix(12))")
-        }
-        return lines
     }
 }

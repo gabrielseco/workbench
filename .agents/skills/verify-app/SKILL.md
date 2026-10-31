@@ -25,7 +25,7 @@ are for a person's checkout. You have `Read` and `scripts/verify-app.sh`, nothin
    release bundle). Keep the pid; every other command needs it. If the state a criterion needs is in no scenario, say so in the report;
    do not use a real project.
 3. **Drive it** as in section 3, except: never `start draft-goal` (it spends Codex usage), never press `Run` or `Run again` on `running`
-   (it starts a real turn), and do not try `Ship…` beyond seeing the refusal it shows on the fixture, and never press `Open in Herdr` (it adds a space to a person's own Herdr). `press`, `type`, `focus`, `typekeys`,
+   (it starts a real turn), and do not try `Ship` beyond seeing the refusal it shows on the fixture, and never press `Open in Herdr` (it adds a space to a person's own Herdr). `press`, `type`, `focus`, `typekeys`,
    `key`, `click`, `hover` and `scroll` are all yours; `click`, `hover`, `key`, `typekeys` and `scroll` take over the machine while
    they run, which is expected here.
 4. **Capture.** `scripts/verify-app.sh shot <pid> <name>` writes `$WORKBENCH_PROOF_DIR/<name>.png`; `Read` it and look. If it does not
@@ -57,7 +57,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `review-changes` | `needs-you` with a real worktree on a base commit and three changed files (two edited, one new), so the Review screen lists them, shows a `Still due` section (the judge, and the `design` stage its config declares for `Sources/**`) and `Open diff` is enabled. Its config names a stand-in editor, so pressing `Open diff` is safe: it only writes down what it was asked to open (`scripts/verify-app.sh calls <pid>` prints it). `Open in Herdr` is not stubbed: it calls the real `herdr-app`, which opens Herdr.app if needed and adds a space for the fixture's worktree to a person's own Herdr; close it afterwards (`herdr-app ls`, then `herdr-app do space.close --id <space> --confirmed true`) |
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Review screen: criteria with core's labels, a denied call, `Accept work` disabled because the fixture has no worktree (diff unavailable) |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet. Its CI comes from a stand-in `gh` (every scenario has one, so none asks GitHub): `CI running` with a row per check, one passed and two running, then green after about 40 s, when `Merge…` is enabled. Pressing `Merge…` then `Merge` is safe: the stand-in only notes it and then says merged |
-| `accepted` | accepted, no pull request: the finished banner with `Ship…` and `New goal…`; `Ship…` runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
+| `accepted` | accepted, no pull request: the finished banner with `Ship` and `New goal…`; `Ship` starts at once, with no confirmation, and runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
 | `cleaned` | merged and cleaned, a turn that reported no cost (`unknown`, never `$0.00`) |
 | `discarded` | a Codex turn that ended and was discarded: the finished banner with `New goal…`, `ran 4m12s`, `Files changed: unknown`, no "Review comes next" |
 | `corrupt` | a log nothing can be read from: the corrupt-log screen |

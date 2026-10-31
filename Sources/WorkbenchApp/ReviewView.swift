@@ -35,9 +35,6 @@ struct ReviewView: View {
         .sheet(item: Binding(get: { diffPath.map(DiffTarget.init) }, set: { diffPath = $0?.path })) { target in
             DiffSheet(store: store, path: target.path)
         }
-        .sheet(isPresented: Binding(get: { store.pendingAccept != nil }, set: { if !$0 { store.cancelAccept() } })) {
-            AcceptSheet(store: store, undecided: review.undecided)
-        }
         .sheet(isPresented: Binding(get: { store.pendingDiscard != nil }, set: { if !$0 { store.cancelDiscard() } })) {
             DiscardSheet(store: store)
         }
@@ -150,7 +147,7 @@ struct ReviewView: View {
                     .help("Read the worktree again after editing it")
                 Spacer()
                 Button("Send back…") { (store.actionError, store.sendingBack) = (nil, true) }.disabled(store.busy != nil)
-                Button("Accept work") { Task { await store.prepareAccept() } }
+                Button("Accept work") { Task { await store.accept() } }
                     .buttonStyle(.borderedProminent)
                     .disabled(!review.canDecide || store.deciding || store.busy != nil)
             }
@@ -205,44 +202,6 @@ struct DiffSheet: View {
         }
         .padding(20).frame(width: 760, height: 520)
         .task { text = await store.patchText(path) }
-    }
-}
-
-struct AcceptSheet: View {
-    var store: ProjectStore
-    var undecided: Int
-    @State private var message = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Accept work").font(.headline)
-            if let plan = store.pendingAccept {
-                ScrollView {
-                    Text(plan.render().joined(separator: "\n")).font(.system(.callout, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 200)
-                if plan.checkFailed {
-                    Label("The check did not pass, or a turn was cut off.", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.amber).font(.callout)
-                }
-                if undecided > 0 {
-                    let verb = undecided == 1 ? "criterion is" : "criteria are"
-                    Text("\(undecided) \(verb) for you to check.").font(.callout).foregroundStyle(.secondary)
-                }
-                TextField("Commit message", text: $message, prompt: Text(plan.defaultMessage)).textFieldStyle(.roundedBorder)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { store.cancelAccept() }
-                Button("Accept") {
-                    let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
-                    Task { await store.confirmAccept(message: text.isEmpty ? nil : text) }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(20).frame(width: 560)
     }
 }
 

@@ -193,20 +193,19 @@ import Testing
 
     @Test func switchingShowsTheOtherProjectsThreadAndDropsTheFirstsConfirmations() async throws {
         let (a, b) = (try await project("first"), try await project("second"))
-        let shown = AcceptPlan(
-            id: "first", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/first", diff: .unavailable(reason: "x"),
-            hasPendingChanges: false, commits: [], check: nil, openWork: false, snapshot: "s", defaultMessage: "m")
+        let shown = DiscardPlan(
+            id: "first", worktree: nil, branch: "workbench/first", diff: .unavailable(reason: "x"), commits: [])
         try a.turn("first", 1)
-        let store = store(actions: GoalActions(acceptPlan: { _, _ in shown }))
+        let store = store(actions: GoalActions(discardPlan: { _, _ in shown }))
         #expect(await store.open(a.root))
-        await store.prepareAccept()
-        #expect(store.pendingAccept != nil)
+        await store.prepareDiscard()
+        #expect(store.pendingDiscard != nil)
         await store.switchTo(b.project.root.path)
         guard case .thread(let now) = store.screen else {
             Issue.record("no thread")
             return
         }
-        #expect(now.id == "second" && store.pendingAccept == nil && store.review == nil && store.project == b.project)
+        #expect(now.id == "second" && store.pendingDiscard == nil && store.review == nil && store.project == b.project)
     }
 
     @Test func aRunStartedInOneProjectKeepsGoingWhenYouSwitchAndIsMarkedRunning() async throws {

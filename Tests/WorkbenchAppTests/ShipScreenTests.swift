@@ -68,54 +68,76 @@ private actor Gate {
         return store
     }
 
-    @Test func preparingShowsWhatWouldBePublishedAndPublishesNothing() async throws {
+    /// One click publishes what the preview read, with no confirmation in between, and says where.
+    @Test func shipImmediately() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
-        await store.prepareShip()
-        #expect(store.pendingShip == Self.preview)
-        #expect(recorder.log == ["preview"])
-    }
-
-    @Test func confirmingPublishesExactlyWhatWasShownAndSaysWhere() async throws {
-        let recorder = Recorder()
-        let store = try await store(recorder)
-        await store.prepareShip()
-        await store.confirmShip()
+        await store.ship()
         #expect(recorder.log == ["preview", "ship true"])
-        #expect(store.pendingShip == nil && store.actionError == nil)
+        #expect(store.actionError == nil && store.busy == nil && !store.deciding)
         #expect(store.notice == "Shipped as PR #7: https://example.test/pull/7")
     }
 
-    @Test func cancellingPublishesNothing() async throws {
-        let recorder = Recorder()
-        let store = try await store(recorder)
-        await store.prepareShip()
-        store.cancelShip()
-        await store.confirmShip()
-        #expect(store.pendingShip == nil && recorder.log == ["preview"])
+    @Test func aPreviewNoteIsShownWithTheShip() async throws {
+        let fixture = try await accepted()
+        var noted = Self.preview
+        noted.note = "Could not describe the change."
+        let shown = noted
+        let actions = GoalActions(
+            shipPreview: { _, _ in shown },
+            ship: { _, _, preview in
+                ShipOutcome(
+                    push: ShipPushResult(plan: preview.plan, outcome: .pushed, ahead: nil),
+                    pr: ShipPRResult(plan: preview.plan, url: "https://example.test/pull/7", number: 7, outcome: .created))
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        await store.ship()
+        #expect(store.notice == "Shipped as PR #7: https://example.test/pull/7 Could not describe the change.")
     }
 
-    @Test func aShipCoreRefusesIsShownAndLeavesNothingPending() async throws {
+    @Test func aShipCoreRefusesIsShownAndPublishesNothing() async throws {
         let recorder = Recorder()
         let store = try await store(recorder, previewError: ShipError.notAccepted("nope"))
-        await store.prepareShip()
-        #expect(store.pendingShip == nil && store.actionError != nil)
-        await store.confirmShip()
+        await store.ship()
+        #expect(store.actionError != nil && store.notice == nil && store.busy == nil)
         #expect(recorder.log == ["preview"])
     }
 
-    @Test func aPushThatFailsAfterConfirmingSaysSoAndSetsNoNotice() async throws {
+    @Test func aPushThatFailsSaysSoAndSetsNoNotice() async throws {
         let store = try await store(Recorder(), shipError: ShipError.notAccepted("rejected"))
-        await store.prepareShip()
-        await store.confirmShip()
-        #expect(store.actionError != nil && store.notice == nil && store.pendingShip == nil)
+        await store.ship()
+        #expect(store.actionError != nil && store.notice == nil && !store.deciding)
     }
 
     @Test func aFailedTextRefreshIsAWarningOnAShipThatHappened() async throws {
         let store = try await store(Recorder(), refreshFailure: .notAccepted("gh said no"))
-        await store.prepareShip()
-        await store.confirmShip()
+        await store.ship()
         #expect(store.notice != nil && store.actionError != nil)
+    }
+
+    @Test func aShipThatEndsAfterLeavingTheProjectDuringThePreviewPublishesNothing() async throws {
+        let (gate, recorder) = (Gate(), Recorder())
+        let fixture = try await accepted()
+        let actions = GoalActions(
+            shipPreview: { _, _ in
+                await gate.wait()
+                return Self.preview
+            },
+            ship: { _, _, _ in
+                recorder.add("ship")
+                throw ShipError.notAccepted("not reached")
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        let shipping = Task { await store.ship() }
+        try await Task.sleep(for: .milliseconds(100))
+        let other = try await AppFixture()
+        keptFixtures.append(other)
+        #expect(await store.open(other.root))
+        await gate.open()
+        await shipping.value
+        #expect(recorder.log.isEmpty && store.notice == nil && store.actionError == nil)
     }
 
     @Test func onlyAnAcceptedThreadWithoutAPullRequestCanBeShipped() async throws {
@@ -328,8 +350,7 @@ private actor Gate {
             })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
-        await store.prepareShip()
-        let shipping = Task { await store.confirmShip() }
+        let shipping = Task { await store.ship() }
         try await Task.sleep(for: .milliseconds(100))
         let other = try await AppFixture()
         keptFixtures.append(other)

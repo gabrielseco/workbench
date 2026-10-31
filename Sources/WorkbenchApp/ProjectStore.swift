@@ -84,11 +84,8 @@ struct RecentProject: Equatable, Identifiable {
     private(set) var stopping = false
     /// The latest turn's review while it awaits one; nil otherwise.
     var review: ReviewModel?
-    /// What core says Accept or Discard would do, shown for confirmation and passed back as `shown:` exactly as shown.
-    var pendingAccept: AcceptPlan?
+    /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
     var pendingDiscard: DiscardPlan?
-    /// What Ship would push and open, shown for confirmation and passed back as shown.
-    var pendingShip: ShipPreview?
     /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
     var prReviewShown: PRReviewShown?
     /// The confirm in the findings sheet for a fix round, and why a start was refused (the sheet covers the window's own error line).
@@ -193,7 +190,7 @@ struct RecentProject: Equatable, Identifiable {
             (namingGoal, pickingProject) = (false, false)
             cancelSendBack()
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
-            (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
+            (review, pendingDiscard) = (nil, nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
@@ -203,7 +200,7 @@ struct RecentProject: Equatable, Identifiable {
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         (namingGoal, pickingProject) = (false, false)
         cancelSendBack()
-        (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
+        (pendingDiscard, notice) = (nil, nil)
         prReviewShown = nil
         project = located
         herdrFound = actions.herdrFound(located)
@@ -270,6 +267,11 @@ struct RecentProject: Equatable, Identifiable {
         setBusy(text)
         defer { if !awaitingRun { setBusy(nil) } }
         await body()
+    }
+
+    /// Says what a `working` body moved on to, such as from reading a plan to doing it; nothing when no work is going on.
+    func nowWorking(_ text: String) {
+        if busyText != nil { busyText = text }
     }
 
     // MARK: Goal actions
