@@ -2,12 +2,13 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended.
-    static func task(_ args: [String]) async throws {
+    private static let taskUsage = "usage: workbench task list | task approve <name> | task run <name> | task tick"
+
+    /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
+    /// one now; `task tick` runs the ones that are due, one after the other.
+    static func task(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
-        guard let verb = a.positional() else {
-            throw CLIError.usage("usage: workbench task list | task approve <name>")
-        }
+        guard let verb = a.positional() else { throw CLIError.usage(taskUsage) }
         switch verb {
         case "list":
             try a.requireEmpty()
@@ -16,9 +17,76 @@ extension Commands {
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench task approve <name>") }
             try a.requireEmpty()
             try await taskApprove(name)
+        case "run":
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench task run <name>") }
+            try a.requireEmpty()
+            return try await taskRun(name)
+        case "tick":
+            try a.requireEmpty()
+            return try await taskTick()
         default:
-            throw CLIError.usage("unknown task command '\(verb)'. usage: workbench task list | task approve <name>")
+            throw CLIError.usage("unknown task command '\(verb)'. \(taskUsage)")
         }
+        return 0
+    }
+
+    private static func taskRunner(_ ctx: Context) -> TaskRunner {
+        var runner = TaskRunner(project: ctx.project, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+        runner.notice = { out("  \($0)") }
+        return runner
+    }
+
+    /// Says how a run ended and returns the exit code for it: 0 when it did its work or found none, 6 when it was
+    /// refused or skipped (nothing was changed), 5 over budget, 1 when it failed.
+    private static func report(_ name: String, _ result: TaskRunResult) -> Int32 {
+        out("\(name): \(result.outcome.rawValue)" + (result.reason.map { "  \($0)" } ?? ""))
+        if !result.units.isEmpty { out("  units:  \(result.units.joined(separator: ", "))") }
+        if let thread = result.thread { out("  thread: \(thread)") }
+        if let url = result.pullRequest { out("  pull request: \(url)") }
+        if !result.recorded { out("  not recorded in the task's run log") }
+        switch result.outcome {
+        case .prOpened, .reported, .nothingPending, .nothingToDo: return 0
+        case .skippedProjectBusy, .skippedAlreadyRunning, .staleApproval: return 6
+        case .budgetExceeded: return 5
+        case .failed, .interrupted: return 1
+        }
+    }
+
+    private static func taskRun(_ name: String) async throws -> Int32 {
+        let ctx = try await Context.load()
+        guard TaskLibrary(project: ctx.project).names().contains(name) else {
+            throw CLIError.notFound("no task '\(name)' (.workbench/tasks/\(name)/task.md)")
+        }
+        let runner = taskRunner(ctx)
+        let signals = installStopHandlers(what: "the run") { await runner.stop.stop() }
+        defer { signals.forEach { $0.cancel() } }
+        return report(name, await runner.run(name, trigger: .manual))
+    }
+
+    private static func taskTick() async throws -> Int32 {
+        let ctx = try await Context.load()
+        let plan = TaskTick.plan(project: ctx.project)
+        // A task that cannot be loaded is said out loud and fails the tick: a timer that hears nothing assumes all is well.
+        for broken in plan.broken {
+            out("\(broken.name): PROBLEM  \(broken.reason.split(whereSeparator: \.isNewline).joined(separator: "; "))")
+        }
+        let names = plan.due
+        guard !names.isEmpty else {
+            if plan.broken.isEmpty { out("no task is due") }
+            return plan.broken.isEmpty ? 0 : 1
+        }
+        let runner = taskRunner(ctx)
+        let signals = installStopHandlers(what: "the run") { await runner.stop.stop() }
+        defer { signals.forEach { $0.cancel() } }
+        var code: Int32 = plan.broken.isEmpty ? 0 : 1
+        for name in names {
+            // One after the other: a project has one active thread.
+            let result = await runner.run(name, trigger: .tick)
+            _ = report(name, result)
+            // A timer cares about runs that went wrong. A skip is a note, not a failure: the next tick tries again.
+            if [.failed, .budgetExceeded, .interrupted].contains(result.outcome) { code = 1 }
+        }
+        return code
     }
 
     private static func taskList() async throws {

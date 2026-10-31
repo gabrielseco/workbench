@@ -48,7 +48,7 @@ public struct TaskLibrary: Sendable {
         }
         let definition = try TaskDefinition.parse(text, name: name)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
-        let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
+        let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxIncludeBytes) }
         return LoadedTask(
             definition: definition, pendingScript: script, includeText: include,
             hash: TaskApproval.hash(task: definition, pendingScript: script, include: include))

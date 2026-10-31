@@ -49,6 +49,40 @@ struct TaskPendingTests {
         #expect(PendingUnits.select(units: units, history: try await history(), pullRequests: all, batch: 2).isEmpty)
     }
 
+    @Test func aUnitGitHubSaysHasNoPullRequestIsOfferedAgainUnlessARunRecordedOne() async throws {
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        // ROU: a run that died with a thread and no end. TUR: a run that recorded its pull request.
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunThread, data: ["thread": "g-1", "units": ["ROU"]])
+        await writer.close()
+        let again = try await fx.log.openWriter()
+        try await again.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await again.append(.taskRunEnded, data: ["outcome": "pr-opened", "units": ["TUR"], "thread": "g-2"])
+        await again.close()
+        let history = try fx.log.history()
+        #expect(history.unitsWithThreads == ["ROU": "g-1", "TUR": "g-2"])
+        let picked = PendingUnits.select(
+            units: units, history: history, pullRequests: ["ROU": .absent, "TUR": .absent], batch: 4)
+        #expect(picked.map(\.id) == ["ROU", "PAN", "PRI"])
+        // GitHub unreachable: neither is touched.
+        #expect(PendingUnits.select(units: units, history: history, pullRequests: [:], batch: 4).map(\.id) == ["PAN", "PRI"])
+        // The dead run's pull request is open: it stays out too.
+        let open = PendingUnits.select(units: units, history: history, pullRequests: ["ROU": .open], batch: 4)
+        #expect(open.map(\.id) == ["PAN", "PRI"])
+    }
+
+    @Test func aFailedRunsThreadHoldsItsUnitsButAnAbandonedOneDoesNot() async throws {
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "failed", "units": ["ROU"], "thread": "g-1"])
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "nothing-to-do", "units": ["TUR"], "thread": "g-2"])
+        await writer.close()
+        #expect(try fx.log.history().unitsWithThreads == ["ROU": "g-1"])
+    }
+
     @Test func aReportRunDoesTheWorkOfNoUnit() async throws {
         let fx = try TaskFixture()
         let writer = try await fx.log.openWriter()
