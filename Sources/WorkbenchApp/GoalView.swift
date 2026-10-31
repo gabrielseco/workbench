@@ -318,6 +318,11 @@ struct GoalView: View {
             HStack {
                 Button("Open in editor") { Task { await store.openGoalFile() } }
                 Button("New goal…") { store.namingGoal = true }
+                // Opens only, nothing approved or started: the project's checkout until the thread has a worktree.
+                if store.herdrFound {
+                    Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
+                        .help("Herdr opens this thread's worktree, or the project when it has none, without starting anything")
+                }
                 Spacer()
                 if goal.pill != .approved || snapshot.state.lastTurn == 0, snapshot.state.decision == nil {
                     // Shown with no Herdr found too: pressing it then says Herdr is unavailable rather than hiding why it is missing.
@@ -338,6 +343,7 @@ struct GoalView: View {
                 Text(handoff.text).font(.callout).foregroundStyle(handoff.isProblem ? Theme.red : Theme.green)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
         }
         .padding(.top, 6)
     }

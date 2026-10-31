@@ -183,6 +183,7 @@ struct RunView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
         }
     }
 
