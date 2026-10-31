@@ -1,5 +1,4 @@
 editor = "@EDITOR_STUB@"
-herdr = "@HERDR_STUB@"
 
 [tools]
 available = ["Read"]

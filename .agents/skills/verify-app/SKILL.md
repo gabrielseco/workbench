@@ -10,9 +10,32 @@ The core and the CLI have tests and `verify-cli`; nothing else looks at the Swif
 on a **fixture project** (never a person's own), looks at it, and says whether it matches what the PR claims. Everything that keeps this
 safe is in `scripts/verify-app.sh`; do not call `open`, `kill`, `pkill`, `screencapture` or `scripts/bundle-app.sh` yourself.
 
-Workbench's own verifier turn does not run this skill: it looks for `.claude/skills/verify/SKILL.md`, and this one is named `verify-app`
-so that no paid turn is added to every run in this repository. To let a thread's verifier use it, set `[verifier] skill` and its `tools`
-in `.workbench/config.toml` on purpose; that costs a turn per run.
+Workbench's verifier turn runs this skill on a thread's worktree: `[verifier] skill` in `.workbench/config.toml` names this file by its
+real path (a symlink is refused), after a turn whose check passed. That costs a turn per run; `enabled = false` turns it off.
+
+## Under Workbench
+
+If `WORKBENCH_PROOF_DIR` is set, Workbench started you (`workbench verifier`) and only this section applies; sections 1, 5 and 6
+are for a person's checkout. You have `Read` and `scripts/verify-app.sh`, nothing else: no `gh`, no `git`, no `open`, `kill` or
+`scripts/bundle-app.sh`. There is no pull request: the change is in your worktree and the goal is the claim.
+
+1. **What to show.** Read `$WORKBENCH_GOAL`: each criterion and its `proof:`. A `proof: screenshot: <name>` line names `<name>.png`,
+   which you leave in `$WORKBENCH_PROOF_DIR`. `Read` the files the criteria name when you need to know what should be on screen.
+2. **Pick the scenario** from the table in section 2 and `scripts/verify-app.sh start <scenario>` (the build takes minutes: it is a
+   release bundle). Keep the pid; every other command needs it. If the state a criterion needs is in no scenario, say so in the report;
+   do not use a real project.
+3. **Drive it** as in section 3, except: never `start draft-goal` (it spends Codex usage), never press `Run` or `Run again` on `running`
+   (it starts a real turn), and do not try `Ship…` beyond seeing the refusal it shows on the fixture, and never press `Open in Herdr` (it adds a space to a person's own Herdr). `press`, `type`, `focus`, `typekeys`,
+   `key`, `click`, `hover` and `scroll` are all yours; `click`, `hover`, `key`, `typekeys` and `scroll` take over the machine while
+   they run, which is expected here.
+4. **Capture.** `scripts/verify-app.sh shot <pid> <name>` writes `$WORKBENCH_PROOF_DIR/<name>.png`; `Read` it and look. If it does not
+   show the state, press again and shoot again under the same name. A criterion that names several screenshots (before and after a
+   press, a second window size with `VERIFY_WINDOW_SIZE=900x600`) gets one `shot` each, in the order the goal names them. A design
+   change is captured at 900×600 and at a roomy size.
+5. **Stop it, always,** with `scripts/verify-app.sh stop <pid>`, also when a step failed.
+6. **Report.** One line per criterion: its id, `holds` or `does not hold`, what you saw (quote the `list` line) and the file. Say plainly
+   what you could not reach or may not press. Workbench shows this as a note beside the screenshots; it decides nothing, a person
+   looks at them.
 
 ## 1. What should be visible
 
@@ -31,7 +54,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `goal-long-request` | an approved goal with a request long enough to be folded ("Show more"), `command:` and `test:` proofs |
 | `goal-approved` | an approved goal, nothing run yet: `Approved` pill, a `Run` button |
 | `running` | a turn is open in the log with activity rows, and no live runner (a fixture cannot have one): Run is current, attention is `working`, the Run screen says the runner is gone and offers Run again. Never press Run again here: it starts a real turn |
-| `review-changes` | `needs-you` with a real worktree on a base commit and three changed files (two edited, one new), so the Review screen lists them, shows a `Still due` section (the judge, and the `design` stage its config declares for `Sources/**`) and `Open diff` is enabled. Its config names a stand-in editor, so pressing `Open diff` is safe: it only writes down what it was asked to open (`scripts/verify-app.sh calls <pid>` prints it) |
+| `review-changes` | `needs-you` with a real worktree on a base commit and three changed files (two edited, one new), so the Review screen lists them, shows a `Still due` section (the judge, and the `design` stage its config declares for `Sources/**`) and `Open diff` is enabled. Its config names a stand-in editor, so pressing `Open diff` is safe: it only writes down what it was asked to open (`scripts/verify-app.sh calls <pid>` prints it). `Open in Herdr` is not stubbed: it calls the real `herdr-app`, which opens Herdr.app if needed and adds a space for the fixture's worktree to a person's own Herdr; close it afterwards (`herdr-app ls`, then `herdr-app do space.close --id <space> --confirmed true`) |
 | `needs-you` | a turn ended, no decision: Review is amber, `$1.88 of $5.00`, the Review screen: criteria with core's labels, a denied call, `Accept work` disabled because the fixture has no worktree (diff unavailable) |
 | `pr-open` | accepted and shipped, PR #482 open, no review yet. Its CI comes from a stand-in `gh` (every scenario has one, so none asks GitHub): `CI running` with a row per check, one passed and two running, then green after about 40 s, when `Merge…` is enabled. Pressing `Merge…` then `Merge` is safe: the stand-in only notes it and then says merged |
 | `accepted` | accepted, no pull request: the finished banner with `Ship…` and `New goal…`; `Ship…` runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
@@ -78,8 +101,9 @@ scripts/verify-app.sh stop <pid>          # always, also after a failure
 - A `start` that fails or is interrupted (SIGTERM, SIGHUP, Ctrl-C, a window that never appears) leaves nothing (Ctrl-C has the same handler
   as the others; no test sends it): it ends the app it launched and
   removes the build, the fixture copy and the settings. So if `start` printed no `pid=`, nothing is running and there is nothing to `stop`.
-- Every command refuses a pid that `start` did not print. `press` refuses `Choose project…` (the project pill), `Event log` and
-  `Open the event log`: they open a file panel or another app. A claim about those buttons is checked by seeing that they are listed.
+- Every command refuses a pid that `start` did not print. `press` refuses `Choose project…` (the empty screen's button),
+  `Choose folder…` (in the project card), `Event log` and `Open the event log`: they open a file panel or another app. A claim about those
+  buttons is checked by seeing that they are listed. The project pill (`Projects, now …`) can be pressed: it opens the project card.
   `Doctor` can be pressed: it runs in the fixture project and reads `Problem` there (no config), which is the expected answer.
 - If a screenshot shows only a wallpaper, Screen Recording is missing for this terminal; `start` says so before it builds.
 - The app is launched with the Dock's environment (a bare `PATH`, nothing of the terminal's profile), and like a person's launch it asks the

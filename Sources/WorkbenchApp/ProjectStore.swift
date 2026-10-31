@@ -63,6 +63,8 @@ struct RecentProject: Equatable, Identifiable {
     /// The goal agent is drafting a goal from a request.
     /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
     var namingGoal = false
+    /// Whether the project card under the project pill is up.
+    var pickingProject = false
     /// Whether the Send back card is up; the Review screen's button sets it, `sendBack` clears it once a turn has started.
     var sendingBack = false
     /// What is written in the Send back card. It lives here, not in the card, so a send that the run refuses to start does not
@@ -125,6 +127,8 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
     @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
     @ObservationIgnored let actions: GoalActions
+    /// Asks for a folder (the file panel in the app); nil when the person cancels.
+    @ObservationIgnored let folderChooser: @MainActor () -> URL?
 
     /// `screen` is for previews and tests that show a fixed state without a project on disk.
     init(
@@ -138,8 +142,10 @@ struct RecentProject: Equatable, Identifiable {
         goalLoader: @escaping @Sendable (Project, String) async -> GoalModel = {
             await GoalModel.load(project: $0, thread: $1, verifierSkill: GoalModel.coreVerifierSkill(project: $0))
         },
-        actions: GoalActions = .core
+        actions: GoalActions = .core,
+        folderChooser: @escaping @MainActor () -> URL? = ProjectPickerCard.folderPanel
     ) {
+        self.folderChooser = folderChooser
         self.goalLoader = goalLoader
         self.actions = actions
         self.preferences = preferences
@@ -184,7 +190,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            namingGoal = false
+            (namingGoal, pickingProject) = (false, false)
             cancelSendBack()
             (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
             (review, pendingAccept, pendingDiscard, pendingShip) = (nil, nil, nil, nil)
@@ -195,7 +201,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        namingGoal = false
+        (namingGoal, pickingProject) = (false, false)
         cancelSendBack()
         (pendingAccept, pendingDiscard, pendingShip, notice) = (nil, nil, nil, nil)
         prReviewShown = nil

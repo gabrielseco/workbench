@@ -1,6 +1,6 @@
 import Foundation
 
-/// Finds the `herdr` executable for the window. A Dock-launched app has a bare `PATH`, so the usual install places are looked in too.
+/// Finds the `herdr-app` executable (Herdr's app command, which drives its open window) for the window. A Dock-launched app has a bare `PATH`, so the usual install places are looked in too.
 public enum HerdrLocator {
     public static func extraDirectories(home: String) -> [String] {
         ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
@@ -17,7 +17,7 @@ public enum HerdrLocator {
         return nil
     }
 
-    /// The configured executable when one is named (and only that one: a stand-in must not be skipped for a real one), else `herdr` on
+    /// The configured executable when one is named (and only that one: a stand-in must not be skipped for a real one), else `herdr-app` on
     /// `PATH`'s absolute entries and then the usual install places. nil when there is none.
     public static func find(
         configured: String?, searchPath: String?, home: String, extraDirectories extra: [String]? = nil
@@ -25,7 +25,7 @@ public enum HerdrLocator {
         let absolute = (searchPath ?? "").split(separator: ":").filter { $0.hasPrefix("/") }.map(String.init)
         if let configured { return ExecutableResolver.resolve(configured, searchPath: absolute.joined(separator: ":")) }
         let places = extra ?? extraDirectories(home: home)
-        return ExecutableResolver.resolve("herdr", searchPath: (absolute + places).joined(separator: ":"))
+        return ExecutableResolver.resolve("herdr-app", searchPath: (absolute + places).joined(separator: ":"))
     }
 }
 

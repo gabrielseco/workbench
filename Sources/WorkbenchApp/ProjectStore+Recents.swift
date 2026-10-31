@@ -1,7 +1,7 @@
 import Foundation
 import WorkbenchCore
 
-/// The projects the app has opened: the menu behind the project pill. An app preference, never a file in a project.
+/// The projects the app has opened: the card behind the project pill. An app preference, never a file in a project.
 extension ProjectStore {
     nonisolated static let recentLimit = 10
 
@@ -61,5 +61,31 @@ extension ProjectStore {
             return
         }
         await open(URL(fileURLWithPath: path))
+    }
+
+    /// A row of the project card: the open project only closes the card, another is switched to; a refusal keeps the card up to say why.
+    func pickRecent(_ path: String) async {
+        guard path != project?.root.path else {
+            pickingProject = false
+            return
+        }
+        await switchTo(path)
+    }
+
+    /// "Choose folder…": the panel, then the folder it gave. Cancelling it changes nothing.
+    func chooseFolder() async {
+        pickingProject = false
+        guard let url = folderChooser() else { return }
+        actionError = nil
+        await open(url)
+    }
+
+    /// The card's rows for what is typed in its search field: a name or a path that contains it, in the list's order.
+    nonisolated static func filter(_ entries: [RecentProject], _ query: String) -> [RecentProject] {
+        let needle = query.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return entries }
+        return entries.filter {
+            $0.name.localizedCaseInsensitiveContains(needle) || $0.path.localizedCaseInsensitiveContains(needle)
+        }
     }
 }

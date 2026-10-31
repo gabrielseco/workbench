@@ -111,10 +111,10 @@ Clickable, private to the owner, HTML and Tailwind; the SwiftUI versions should 
 
 ## Also queued (separate from this phase)
 
-- **Project picker:** a searchable card under the project pill, with live state per project (running, needs you, done), the
-  projects found under `projects_dir` in `~/.workbench/config.toml` as well as the recent ones, ↑↓ and ↵, "Choose folder…" at the
-  bottom. Reading each project's state means reading its event log: do it when the card opens and while it stays open, not by
-  polling every project. HTML mock first, then SwiftUI.
+- **Project picker:** the card under the project pill is in (`ProjectPickerCard`: the recent projects with the open one marked,
+  search, ↑↓ and ↵, "Choose folder…" at the bottom). Still to do: live state per project (needs you, done; only "running" for
+  this app's own run is shown) and the projects found under `projects_dir` in `~/.workbench/config.toml`. Reading each project's
+  state means reading its event log: do it when the card opens and while it stays open, not by polling every project.
 - **Owner's side:** grant Screen Recording to the rebuilt Workbench.app and run a Triage goal with a `screenshot:` criterion, to
   see the verifier, the `[run]` block, the stable signing and `[review] auto` work together for real (nothing has run that path
   end to end). Try "Open diff" once in the real editor. `docs/friction-p19-runs` (PR #263, closed unmerged) and the worktrees

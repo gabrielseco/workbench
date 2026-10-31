@@ -6,9 +6,9 @@ import WorkbenchCore
 
 @MainActor @Suite struct ToolbarLabelTests {
     @Test func theProjectPillIsNamedForWhatItDoes() {
-        #expect(ToolbarBar.projectButtonLabel(nil) == "Choose project")
+        #expect(ToolbarBar.projectButtonLabel(nil) == "Projects")
         let named = ToolbarBar.projectButtonLabel(Project(root: URL(fileURLWithPath: "/Users/you/code/remote-flows")))
-        #expect(named == "Choose project, now remote-flows")
+        #expect(named == "Projects, now remote-flows")
     }
 
     @Test func theVerifyScriptRefusesEveryLabelThatOpensAPanel() throws {
@@ -19,12 +19,15 @@ import WorkbenchCore
                     .deletingLastPathComponent().appendingPathComponent("scripts/verify-app.sh"), encoding: .utf8
             ).split(separator: "\n").first { $0.hasPrefix("REFUSED=") })
         let pattern = String(refused.dropFirst("REFUSED='".count).dropLast())
-        for label in [
-            ToolbarBar.projectButtonLabel(nil), ToolbarBar.projectButtonLabel(Project(root: URL(fileURLWithPath: "/x/project"))),
-            "Choose project…", "Event log 4", "Open the event log",
-        ] {
+        for label in ["Choose project…", "Choose folder…", "Event log 4", "Open the event log"] {
             #expect(label.range(of: pattern, options: .regularExpression) != nil, "\(label) would not be refused")
         }
-        #expect("Doctor, Not run".range(of: pattern, options: .regularExpression) == nil)
+        // The pill opens the project card, which a scenario has to be able to show.
+        for label in [
+            "Doctor, Not run", ToolbarBar.projectButtonLabel(nil),
+            ToolbarBar.projectButtonLabel(Project(root: URL(fileURLWithPath: "/x/project"))),
+        ] {
+            #expect(label.range(of: pattern, options: .regularExpression) == nil, "\(label) would be refused")
+        }
     }
 }
