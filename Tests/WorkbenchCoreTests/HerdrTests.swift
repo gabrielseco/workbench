@@ -30,12 +30,8 @@ private final class FakeHerdr: @unchecked Sendable {
                   echo $$ > "$FAKE_HERDR_DIR/pid"; sleep 30 & echo $! > "$FAKE_HERDR_DIR/childpid"; wait
                 fi
                 if [ -f "$FAKE_HERDR_DIR/nocreate" ]; then refuse "cannot start a terminal: line one"; fi
-                if [ -f "$FAKE_HERDR_DIR/noterminal" ]; then printf '{\\n  "space": "sp9"\\n}\\n'; exit 0; fi
                 printf '{\\n  "space": "sp9",\\n  "tab": "tb9",\\n  "terminal": "t9"\\n}\\n' ;;
               "do space.select") printf '{\\n  "ok": true\\n}\\n' ;;
-              "do terminal.send")
-                if [ -f "$FAKE_HERDR_DIR/nosend" ]; then refuse "terminal t9 is gone"; fi
-                printf '{\\n  "ok": true\\n}\\n' ;;
               *) refuse "unexpected: $*" ;;
             esac
             """
@@ -125,22 +121,23 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
 }
 
 @Suite struct HerdrClientTests {
-    private let command = HerdrOpener.claudeCommand(turnTimeoutMin: 30, marker: URL(fileURLWithPath: "/work/runner.json"))
-    private var send: String { "do terminal.send --id t9 --text \(command)" }
+    private let argv = HerdrOpener.claudeArguments(turnTimeoutMin: 30, marker: URL(fileURLWithPath: "/work/runner.json"))
 
     private func handOff(_ fake: FakeHerdr) async throws -> HerdrHandoff {
-        try await fake.opener().handOff(
-            folder: folder, label: "t1", command: command, pending: fake.dir.appendingPathComponent("thread/herdr-pending.json"))
+        try await fake.opener().handOff(folder: folder, label: "t1", argv: argv)
     }
 
-    @Test func typesClaudeIntoTheTerminalOfTheSpaceItMade() async throws {
+    @Test func startsClaudeAsTheFirstTerminalOfTheSpaceItMade() async throws {
         let fake = try FakeHerdr()
         try fake.set("down")
         let handoff = try await handOff(fake)
         #expect(handoff == HerdrHandoff(space: "sp9", alreadyOpen: false))
         #expect(fake.launches == 1)
-        // The space first, then the command into the terminal Herdr named for it, and nothing after.
-        #expect(fake.calls.suffix(2) == ["do space.new --name t1 --folder /work/project-wt/t1", send])
+        // One call makes the space and starts the command in it, as a JSON list, and nothing is typed afterwards.
+        // (the stand-in's `echo` rewrites backslashes, so the list itself is checked in the app's store test)
+        let made = #"do space.new --name t1 --folder /work/project-wt/t1 --argv ["/usr/bin/perl""#
+        #expect(fake.calls.last?.hasPrefix(made) == true)
+        #expect(!fake.calls.contains { $0.contains("terminal.send") })
     }
 
     @Test func aSpaceTheWorktreeHadIsBroughtForwardAndNotSentTheGoalAgain() async throws {
@@ -151,53 +148,30 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(fake.calls == ["ls", "do space.select --id sp3"])
     }
 
-    @Test func retryFailedSend() async throws {
-        let fake = try FakeHerdr()
-        try fake.set("nosend")
-        await #expect(throws: HerdrFailure.self) { try await handOff(fake) }
-        // Herdr kept the space it made; the terminal is back.
-        try fake.set("spaces", text: #"{"spaces":[{"id":"sp9","folder":"/work/project-wt/t1"}],"recent":[]}"#)
-        try fake.set("nosend", false)
-        let retried = try await handOff(fake)
-        #expect(retried == HerdrHandoff(space: "sp9", alreadyOpen: false))
-        #expect(fake.calls.suffix(3) == ["ls", "do space.select --id sp9", send])
-        // Sent once: a third try only brings it forward.
-        let again = try await handOff(fake)
-        #expect(again == HerdrHandoff(space: "sp9", alreadyOpen: true))
-        #expect(fake.calls.filter { $0.hasPrefix("do terminal.send") }.count == 2)
-        #expect(fake.calls.last == "do space.select --id sp9")
-    }
-
-    @Test func aPendingSendForAnotherSpaceIsNotTypedIntoThisOne() async throws {
-        let fake = try FakeHerdr()
-        try fake.set("nosend")
-        await #expect(throws: HerdrFailure.self) { try await handOff(fake) }
-        // That space was closed, and the worktree now shows in one made elsewhere.
-        try fake.set("spaces", text: #"{"spaces":[{"id":"sp3","folder":"/work/project-wt/t1"}],"recent":[]}"#)
-        try fake.set("nosend", false)
-        #expect(try await handOff(fake) == HerdrHandoff(space: "sp3", alreadyOpen: true))
-        #expect(fake.calls.suffix(2) == ["ls", "do space.select --id sp3"])
-    }
-
-    @Test func aSpaceWithNoTerminalNamedOrASendRefusedIsAFailure() async throws {
-        let unnamed = try FakeHerdr()
-        try unnamed.set("noterminal")
-        do {
-            _ = try await handOff(unnamed)
-            Issue.record("a space with no terminal was reported as handed over")
-        } catch let failure as HerdrFailure {
-            #expect(failure.code == "bad_answer" && !failure.windowDown)
-        }
-        #expect(!unnamed.calls.contains { $0.hasPrefix("do terminal.send") })
-
+    @Test func aSpaceHerdrRefusesToMakeIsAFailure() async throws {
         let refused = try FakeHerdr()
-        try refused.set("nosend")
+        try refused.set("nocreate")
         do {
             _ = try await handOff(refused)
-            Issue.record("a refused send was reported as handed over")
+            Issue.record("a refused space was reported as handed over")
         } catch let failure as HerdrFailure {
-            #expect(failure.code == "refused" && failure.message == "terminal t9 is gone")
+            #expect(failure.code == "refused" && failure.message == "cannot start a terminal: line one")
         }
+    }
+
+    /// The goal is sent in the call that makes the space, so a refusal leaves no space behind and pressing the button again starts it.
+    @Test func retryFailedSend() async throws {
+        let fake = try FakeHerdr()
+        try fake.set("nocreate")
+        await #expect(throws: HerdrFailure.self) { try await handOff(fake) }
+        try fake.set("nocreate", false)
+        let retried = try await handOff(fake)
+        #expect(retried == HerdrHandoff(space: "sp9", alreadyOpen: false))
+        #expect(fake.calls.filter { $0.hasPrefix("do space.new") }.count == 2)
+        // Started once: a third try only brings it forward.
+        try fake.set("spaces", text: #"{"spaces":[{"id":"sp9","folder":"/work/project-wt/t1"}],"recent":[]}"#)
+        #expect(try await handOff(fake) == HerdrHandoff(space: "sp9", alreadyOpen: true))
+        #expect(fake.calls.filter { $0.hasPrefix("do space.new") }.count == 2)
     }
 
     @Test func ensureWindowStartsTheAppOnlyWhenItIsDown() async throws {
@@ -209,22 +183,27 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         #expect(!fake.calls.contains { $0.hasPrefix("do ") }, "probing the window changed something in Herdr")
     }
 
-    /// Runs the typed command in a shell, with `claude` the stand-in `script`, until it ends; the supervisor's own timeout is `seconds`.
-    private func runTimed(_ script: String, in dir: URL, marker: URL? = nil, seconds: Int = 3) async throws -> ProcessExit {
+    /// Runs the command Herdr starts, with `claude` the stand-in `script`, until it ends; the supervisor's own timeout is `seconds`.
+    private func runTimed(
+        _ script: String, in dir: URL, marker: URL? = nil, seconds: Int = 3, during: (@Sendable () async throws -> Void)? = nil
+    ) async throws -> ProcessExit {
         let claude = dir.appendingPathComponent("claude")
         try ("#!/bin/sh\n" + script).write(to: claude, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         let held = marker ?? dir.appendingPathComponent("runner.json")
+        let stand = HerdrOpener.claudeArguments(timeoutSeconds: seconds, graceSeconds: 1, marker: held)
         var request = SpawnRequest(
-            executable: URL(fileURLWithPath: "/bin/sh"),
-            arguments: ["-c", HerdrOpener.claudeCommand(timeoutSeconds: seconds, graceSeconds: 1, marker: held)],
+            executable: URL(fileURLWithPath: stand[0]), arguments: Array(stand.dropFirst()),
             environment: ["PATH": "\(dir.path):/usr/bin:/bin"], workingDirectory: dir, timeout: 30)
         request.killGrace = 1
         let run = try ProcessRunner.start(request)
+        let side = during.map { action in Task { try await action() } }
+        defer { side?.cancel() }
         var exit: ProcessExit?
         for await event in run.events { if case .exited(let ended) = event { exit = ended } }
         let ended = try #require(exit)
         #expect(ended.cause != .timedOut, "the supervisor did not stop the session")
+        try await side?.value
         return ended
     }
 
@@ -304,6 +283,38 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
         try await expectGone(pidFile)
     }
 
+    /// Claude itself ignores SIGTERM and shares the supervisor's group, which is never signalled as a group: only SIGKILL ends it.
+    @Test func aClaudeThatIgnoresTermInTheSupervisorsGroupIsKilled() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let ended = try await runTimed("trap '' TERM\nwhile :; do sleep 1; done\n", in: dir)
+        #expect(ended.termination == .exited(124), "\(ended.termination): \(ended.stderrTail)")
+    }
+
+    /// The app's Stop sends SIGTERM to the pid in `runner.json`, which is the supervisor: claude and its tools go with it.
+    @Test func aStopRequestStopsTheSessionAndWhatItStarted() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = dir.appendingPathComponent("runner.json")
+        let pidFile = dir.appendingPathComponent("tool.pid")
+        let ended = try await runTimed(
+            orphanTool(pidFile: pidFile) + "exec sleep 60\n", in: dir, marker: marker, seconds: 60,
+            during: {
+                // The session is up once the tool has written its pid.
+                let deadline = Date().addingTimeInterval(10)
+                while !FileManager.default.fileExists(atPath: pidFile.path), Date() < deadline {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                try await Task.sleep(for: .milliseconds(200))
+                let data = try Data(contentsOf: marker)
+                let info = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+                kill(try #require((info["pid"] as? NSNumber)?.int32Value), SIGTERM)
+            })
+        #expect(ended.termination == .exited(143), "\(ended.termination): \(ended.stderrTail)")
+        try await expectGone(pidFile)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
     @Test func theSessionHoldsTheThreadWhileItRunsAndLetsGoAfter() async throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -350,9 +361,8 @@ private let folder = URL(fileURLWithPath: "/work/project-wt/t1")
     @Test func theTimeoutIsTheGoalsInSeconds() {
         let marker = URL(fileURLWithPath: "/work/it's here/runner.json")
         #expect(
-            HerdrOpener.claudeCommand(turnTimeoutMin: 30, marker: marker)
-                == HerdrOpener.claudeCommand(timeoutSeconds: 1800, marker: marker))
-        #expect(!HerdrOpener.claudeCommand(turnTimeoutMin: 30, marker: marker).contains { $0.isNewline })
+            HerdrOpener.claudeArguments(turnTimeoutMin: 30, marker: marker)
+                == HerdrOpener.claudeArguments(timeoutSeconds: 1800, marker: marker))
     }
 }
 

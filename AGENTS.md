@@ -123,6 +123,15 @@ The author of a change should not be its only reviewer. After the PR is open:
    report a review that did not happen.
 5. Codex only reports. Posting comments to the PR is the user's call (the `pr-review` skill asks first).
 
+### When you work by hand (a Herdr session or any Claude you start yourself)
+
+A session started outside a Workbench run (the goal screen's "Run in Herdr", or `claude` in a worktree) is told only to read the goal
+and commit. The task is not done at the commit: it is done when the PR is open and checked, so after the criteria hold run the
+`deliver` skill to the end. In order, with the step numbers of "Shipping a change" above: the changed-files check (2), the verify-cli
+scenario if a command changed (3), push and open the PR, `scripts/codex-review.sh <pr> <goal>` and fix what holds up (6), the
+verify-app screenshots posted with `pr-shots` if the app changed (7), then stop with CI green. Do not merge. Say in the PR which of these did
+not run and why.
+
 ## Conventions
 
 These came from what went wrong when this was first built inside Triage. The full list with reasons is

@@ -48,10 +48,5 @@ extension ThreadService {
             marker: project.runnerURL(id))
     }
 
-    /// Where a handoff whose space was made but whose command was not typed is remembered, so trying again sends it.
-    public func handoffPendingURL(id: String) -> URL {
-        project.threadDirectory(id).appendingPathComponent("herdr-pending.json")
-    }
-
     static let handoffAgent = "An interactive Claude session in Herdr"
 }

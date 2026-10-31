@@ -140,12 +140,7 @@ public actor ThreadRunner {
                 ? RunnerError.claudeNotFound(name) : RunnerError.agentNotFound(provider: "\(agent.provider)", name: name)
         }
 
-        // A Claude session handed to Herdr works in this worktree without holding the log: it is a run already.
-        if store.holdsHerdrSession(id: threadID) { throw RunnerError.herdrSessionRunning }
-        let log: EventLogWriter
-        do { log = try EventLogWriter.open(at: project.eventsURL(threadID)) } catch EventLogError.alreadyOpen {
-            throw RunnerError.alreadyRunning
-        }
+        let log = try openLog()
         try writeRunnerInfo()
         defer {
             try? FileManager.default.removeItem(at: project.runnerURL(threadID))
