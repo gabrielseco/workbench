@@ -11,8 +11,8 @@
 # the task file is edited it must exit 6 as stale-approval and start nothing; `task tick` must find nothing due. Exit 0 only
 # when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gh say every pull request it opened was closed unmerged, so the units come back:
-# "the second run takes only the last country" and "the third run finds nothing pending" must FAIL. The frame is in lib.sh.
-# Run by hand, not by CI.
+# "the second run takes only the last country", "the third run finds nothing pending", "the third run started no thread" and
+# "the log holds one approval and three run ends" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
