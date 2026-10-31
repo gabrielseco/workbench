@@ -69,6 +69,45 @@ extension ProjectStore {
         closePRReview()
         await reload()
         guard mine == generation else { return }
+        fixRoundToShip = FixRound(thread: id, reviewRound: shown.round, generation: mine)
         startRun(project, id, generation: mine)
     }
+
+    /// The rest of a fix round once its turn has ended, as `ship --review-loop --yes` does it: the confirm in the findings sheet
+    /// was the yes, so the work is accepted, pushed to the same pull request and reviewed again without another click. Stops, and
+    /// leaves the thread for the person, on a turn that did not succeed, a check that did not pass or a step that was refused.
+    func continueFixRound() async {
+        guard let round = fixRoundToShip else { return }
+        // Held until the round is done, so a reader can tell the window is still on it.
+        defer { fixRoundToShip = nil }
+        guard let project, round.generation == generation, currentThread == round.thread, actionError == nil,
+            case .thread(let shown) = screen
+        else { return }
+        let review = shown.state.review
+        guard review.status == .awaitingReview, review.turnResult == RunResult.succeeded.rawValue else {
+            notice = "The fix round's turn did not succeed (\(review.turnResult ?? "no result")), so nothing was pushed."
+            return
+        }
+        let checkCommand = await Task.detached { (try? Config.load(from: project.configURL))?.checkCommand }.value
+        guard round.generation == generation else { return }
+        if checkCommand != nil || review.check != nil {
+            let check = review.check.flatMap { $0.turn == shown.state.lastTurn ? $0.result : nil }
+            guard check == "passed" else {
+                notice = "The check did not pass after the fix round (\(check ?? "it did not run")), so nothing was pushed."
+                return
+            }
+        }
+        guard await accept(message: "fix: address review round \(round.reviewRound)"), round.generation == generation,
+            currentThread == round.thread
+        else { return }
+        guard await ship(), round.generation == generation, currentThread == round.thread else { return }
+        await reviewPullRequest()
+    }
+}
+
+/// The fix round the app started from the findings sheet, and the review round whose findings it fixes.
+struct FixRound: Equatable {
+    var thread: String
+    var reviewRound: Int
+    var generation: Int
 }

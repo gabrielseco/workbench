@@ -256,7 +256,9 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   and `ReviewReport.prReviewIsStale`; events `pr.described`, `pr.opened`, `pr.refreshed`, `proof.published`, `branch.ahead`,
   `pr_review.started/finished`, `review_stage.started/finished`, `worktree.removed`, `branch.removed`.
 - **Does:** `ship` (on the click, without a confirmation), `prReview` / `reviewStage` (`Run round 2`), `ReviewLoop.startFollowUp`
-  for **Fix findings** (the findings quoted, as core already does), `cleanMerged` for `Clean thread` (dry run first, shown, then
+  for **Fix findings** (the findings quoted, as core already does; the confirm is the yes `ship --review-loop` asks for, so when the
+  follow-up's turn succeeds and its check passes it is accepted with `fix: address review round <n>`, shipped to the same pull request
+  and reviewed again without another click, and otherwise left waiting with the reason), `cleanMerged` for `Clean thread` (dry run first, shown, then
   confirmed). Never post review comments (posting is the user's call, as in `pr-review`), and never merge on its own: see Merge below.
 - **CI and Merge (done).** While the shipped pull request is open the banner reads `ThreadService.prStatus` (`gh pr view` for its
   state and head, `gh pr checks` for its CI) every 10 s while checks run and every 60 s otherwise, on its own task, and stops once it

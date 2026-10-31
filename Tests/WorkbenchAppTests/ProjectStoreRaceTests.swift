@@ -221,7 +221,7 @@ import Testing
         #expect(calls.log == ["plan"], "the clicks while Accept is going started nothing")
         #expect(store.deciding && store.busy != nil)
         await reading.open()
-        await accepting.value
+        _ = await accepting.value
         #expect(calls.log == ["plan", "accept"] && store.actionError == "refused" && !store.deciding)
 
         try fixture.decide("t1", "accepted")
@@ -233,7 +233,7 @@ import Testing
         await store.accept()
         #expect(calls.log == ["plan", "accept", "preview"], "the clicks while Ship is going started nothing")
         await reading.open()
-        await shipping.value
+        _ = await shipping.value
         #expect(calls.log == ["plan", "accept", "preview", "ship"] && store.actionError == "refused")
         #expect(store.notice == nil && store.busy == nil && !store.deciding)
 

@@ -5,24 +5,28 @@ import WorkbenchCore
 /// and only what was shown is done.
 extension ProjectStore {
     /// Reads core's plan and accepts it at once: core refuses it when the work changed in between, and nothing is committed then.
-    func accept() async {
-        guard let project, let thread = currentThread, !deciding, busy == nil else { return }
+    /// `message` is the commit message, nil for core's default. True when the work was committed.
+    @discardableResult func accept(message: String? = nil) async -> Bool {
+        guard let project, let thread = currentThread, !deciding, busy == nil else { return false }
         // Set before the first await, so a second click while this one is going starts nothing.
         deciding = true
         defer { deciding = false }
         actionError = nil
         notice = nil
         let mine = generation
+        var accepted = false
         await working("Checking what Accept would do…") {
             do {
                 let plan = try await actions.acceptPlan(project, thread)
                 guard mine == generation else { return }
                 nowWorking("Accepting: committing the work…")
-                let result = try await actions.accept(project, thread, plan, nil)
+                let result = try await actions.accept(project, thread, plan, message)
+                accepted = true
                 if mine == generation { notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)" }
             } catch { if mine == generation { actionError = "\(error)" } }
             if mine == generation { await reload() }
         }
+        return accepted
     }
 
     /// Reads the review again: the worktree and the branch are not in the log, so an edit there is seen on activation or here.

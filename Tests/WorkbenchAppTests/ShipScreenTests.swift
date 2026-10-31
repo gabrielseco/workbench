@@ -136,7 +136,7 @@ private actor Gate {
         keptFixtures.append(other)
         #expect(await store.open(other.root))
         await gate.open()
-        await shipping.value
+        _ = await shipping.value
         #expect(recorder.log.isEmpty && store.notice == nil && store.actionError == nil)
     }
 
@@ -356,7 +356,7 @@ private actor Gate {
         keptFixtures.append(other)
         #expect(await store.open(other.root))
         await gate.open()
-        await shipping.value
+        _ = await shipping.value
         #expect(store.notice == nil && store.actionError == nil)
     }
 }

@@ -17,10 +17,17 @@ private final class Calls: @unchecked Sendable {
     var runThreads: [String] { lock.withLock { runs } }
 }
 
+private final class Recorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func add(_ item: String) { lock.withLock { items.append(item) } }
+    var log: [String] { lock.withLock { items } }
+}
+
 @MainActor private var keptFixtures: [AppFixture] = []
 
 @MainActor @Suite struct PRReviewFixTests {
-    private static let plan = FollowUpPlan(pr: 7, round: 1, allowed: 2, budget: 5)
+    private nonisolated static let plan = FollowUpPlan(pr: 7, round: 1, allowed: 2, budget: 5)
 
     private func fixing(
         _ findings: String? = "- a bug", verdict: PRReviewVerdict? = .fix, round: Int = 2
@@ -142,6 +149,109 @@ private final class Calls: @unchecked Sendable {
         await store.prepareFollowUp()
         await store.confirmFollowUp()
         #expect(store.pendingFollowUp?.refusal == "no rounds left" && calls.followUps.isEmpty)
+    }
+
+    // MARK: After the fix round's turn
+
+    private nonisolated static let acceptPlan = AcceptPlan(
+        id: "t2", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1",
+        diff: .unavailable(reason: "x"), hasPendingChanges: true, commits: [], check: nil, openWork: false,
+        snapshot: "s", defaultMessage: "feat: it")
+    private nonisolated static let shipPlan = ShipPlan(
+        id: "t2", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1", remoteBranch: "workbench/t1",
+        base: "origin/main", head: "abcdef1234567890", origin: "git@example.test:me/repo.git", remote: .absent,
+        pullRequest: nil)
+
+    /// A window that confirms a fix round whose turn ends with `result` (and a check with `check`, when given), and records
+    /// what the decisions after it were called with, in order.
+    private func fixRound(
+        result: String = "succeeded", check: String? = nil, acceptError: Error? = nil
+    ) async throws -> (ProjectStore, Recorder) {
+        let recorder = Recorder()
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        try fixture.decide("t1", "accepted")
+        try fixture.ship("t1", number: 7)
+        keptFixtures.append(fixture)
+        let actions = GoalActions(
+            makeRun: { _, thread, _ in
+                RunHandle(
+                    run: {
+                        try await MainActor.run {
+                            try fixture.turn(thread, 1, result: result)
+                            if let check { try fixture.append(thread, .checkRan, turn: 1, data: ["result": .string(check)]) }
+                        }
+                    }, stop: {})
+            },
+            acceptPlan: { _, thread in
+                recorder.add("plan \(thread)")
+                return Self.acceptPlan
+            },
+            accept: { _, thread, _, message in
+                if let acceptError { throw acceptError }
+                recorder.add("accept \(thread): \(message ?? "default")")
+                try await MainActor.run { try fixture.decide(thread, "accepted") }
+                return AcceptResult(branch: "workbench/t1", commit: "c0ffee", committedNow: true)
+            },
+            shipPreview: { _, thread in
+                recorder.add("preview \(thread)")
+                return ShipPreview(plan: Self.shipPlan, description: nil, title: "t", body: "b", note: nil)
+            },
+            ship: { _, thread, shown in
+                recorder.add("ship \(thread)")
+                return ShipOutcome(
+                    push: ShipPushResult(plan: shown.plan, outcome: .pushed, ahead: nil),
+                    pr: ShipPRResult(plan: shown.plan, url: "https://example.test/pull/7", number: 7, outcome: .existing))
+            },
+            prReview: { _, thread in
+                recorder.add("review \(thread)")
+                return PRReviewShown(pr: 7, round: 3, verdict: .clean, failure: nil, findings: "all good")
+            },
+            followUpPlan: { _, _, _ in Self.plan },
+            startFollowUp: { _, _, _, _, _ in
+                try await fixture.addThread("t2", approved: true)
+                return "t2"
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        store.prReviewShown = fixing()
+        await store.prepareFollowUp()
+        await store.confirmFollowUp()
+        // The run ends on its own task: wait, bounded, until what follows it is done.
+        for _ in 0..<500 where store.fixRoundToShip != nil || store.runningHere {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.fixRoundToShip == nil && store.busy == nil)
+        return (store, recorder)
+    }
+
+    @Test func aFixRoundThatSucceedsIsAcceptedShippedAndReviewedWithoutAsking() async throws {
+        let (store, recorder) = try await fixRound(check: "passed")
+        #expect(
+            recorder.log == [
+                "plan t2", "accept t2: fix: address review round 2", "preview t2", "ship t2", "review t2",
+            ])
+        #expect(store.prReviewShown?.round == 3 && store.actionError == nil && store.busy == nil)
+    }
+
+    @Test func aFixRoundWhoseTurnFailedIsLeftForThePerson() async throws {
+        let (store, recorder) = try await fixRound(result: "failed")
+        #expect(recorder.log.isEmpty)
+        #expect(store.currentThread == "t2" && store.notice?.contains("nothing was pushed") == true)
+    }
+
+    @Test func aFixRoundWhoseCheckFailedIsNotPushed() async throws {
+        let (store, recorder) = try await fixRound(check: "failed")
+        #expect(recorder.log.isEmpty)
+        #expect(store.notice?.contains("check did not pass") == true)
+    }
+
+    @Test func aRefusedAcceptStopsTheRoundBeforeShipping() async throws {
+        struct Refused: Error, CustomStringConvertible { var description = "the work changed" }
+        let (store, recorder) = try await fixRound(acceptError: Refused())
+        #expect(recorder.log == ["plan t2"])
+        #expect(store.actionError == "the work changed" && store.prReviewShown == nil)
     }
 
     // MARK: Core itself

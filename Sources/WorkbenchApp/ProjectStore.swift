@@ -95,6 +95,8 @@ struct RecentProject: Equatable, Identifiable {
     var followUpError: String?
     /// Bumped when the sheet closes or the confirm is cancelled: a plan still being read for the earlier one is dropped.
     @ObservationIgnored var followUpRequest = 0
+    /// A fix round confirmed in the findings sheet: when its run ends well it is accepted, shipped and reviewed without asking again.
+    @ObservationIgnored var fixRoundToShip: FixRound?
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false
@@ -357,6 +359,7 @@ struct RecentProject: Equatable, Identifiable {
         if case .thread(let shown) = screen, shown.run?.phase == .orphaned, actionError == nil {
             actionError = "The run ended without recording how the turn ended. Run again records it as interrupted."
         }
+        await continueFixRound()
     }
 
     /// The next turn after one that did not finish. A turn that succeeded goes to Review and `send-back`, which is not this.
