@@ -228,11 +228,20 @@ public struct TaskRunner: Sendable {
         let service = ThreadService(project: project, git: git)
         // A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
         if let base = task.base, base.hasPrefix("origin/") {
-            let branch = String(base.dropFirst("origin/".count))
-            let fetched = try? await git.run(["fetch", "origin", "--", branch], in: project.root)
-            guard let fetched, fetched.succeeded else {
-                let why = fetched?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? "git did not run"
-                return fail("could not fetch \(base), so nothing was started: \(why)", units: ids)
+            // The explicit refspec updates refs/remotes/origin/<branch> whatever the remote's fetch mapping says.
+            do {
+                _ = try await WorktreeManager(repoRoot: project.root, git: git)
+                    .fetchRemoteBranch(String(base.dropFirst("origin/".count)))
+            } catch {
+                return fail("could not fetch \(base), so nothing was started: \(error)", units: ids)
+            }
+            // git reads `origin/main` as a tag or a local branch of that name before the remote-tracking branch.
+            for (ref, kind) in [("refs/tags/\(base)", "tag"), ("refs/heads/\(base)", "branch")] {
+                if let found = try? await git.run(["show-ref", "--verify", "--quiet", ref], in: project.root), found.succeeded {
+                    return fail(
+                        "a local \(kind) named \(base) would be used instead of the branch just fetched; rename or delete it",
+                        units: ids)
+                }
             }
         }
         let id: String

@@ -158,6 +158,41 @@ private struct Safe {
         #expect(try stale.baseCommit(of: try #require(other.thread)) == behind.old)
     }
 
+    @Test func aRestrictedFetchMappingDoesNotLeaveTheBaseStale() async throws {
+        let safe = try await Safe(
+            front: "fix: pr\nbatch: 1\nbase: origin/main\npending: pending.sh", extraConfig: #"check_command = "false""#)
+        let heads = try await safe.putOriginAhead()
+        // A plain `git fetch origin main` would not touch origin/main under this mapping; the explicit refspec does.
+        let mapping = "+refs/heads/other:refs/remotes/origin/other"
+        _ = try await safe.fx.git.run(["config", "remote.origin.fetch", mapping], in: safe.fx.repo)
+        let result = try await safe.run("write=a.txt")
+        #expect(try safe.baseCommit(of: try #require(result.thread)) == heads.new)
+    }
+
+    @Test func aLocalBranchOrTagNamedLikeTheBaseIsRefusedNotUsed() async throws {
+        for kind in ["branch", "tag"] {
+            let safe = try await Safe(front: "fix: pr\nbatch: 1\nbase: origin/main\npending: pending.sh")
+            _ = try await safe.putOriginAhead()
+            _ = try await safe.fx.git.run([kind, "origin/main", "HEAD"], in: safe.fx.repo)
+            let result = try await safe.run("write=a.txt")
+            #expect(result.outcome == .failed && result.thread == nil, "\(kind)")
+            #expect(result.reason?.contains("a local \(kind) named origin/main would be used instead") == true, "\(kind)")
+            #expect(safe.threads().isEmpty)
+        }
+    }
+
+    @Test func aRunningDoctorSkipsAThreadTaskButNotADryRun() async throws {
+        let dry = try await Safe(front: "fix: report\nbatch: 1\npending: pending.sh")
+        let held = try ProjectLock.acquire(dry.fx.project)
+        defer { ProjectLock.release(held) }
+        #expect(try await dry.run().outcome == .reported)
+        let pr = try await Safe()
+        let heldAgain = try ProjectLock.acquire(pr.fx.project)
+        defer { ProjectLock.release(heldAgain) }
+        let skipped = try await pr.run()
+        #expect(skipped.outcome == .skippedProjectBusy && skipped.reason?.contains("a doctor run") == true)
+    }
+
     @Test func aBaseThatCannotBeFetchedStopsTheRunInsteadOfUsingAStaleOne() async throws {
         let safe = try await Safe(front: "fix: pr\nbatch: 1\nbase: origin/main\npending: pending.sh")
         _ = try await safe.fx.git.run(["remote", "set-url", "origin", "/nonexistent/origin.git"], in: safe.fx.repo)
