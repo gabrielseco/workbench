@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheduled tasks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.ui{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;color:var(--fg)}
+.ui button{font-family:inherit}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.ic{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tl{width:12px;height:12px;border-radius:50%;display:block}
+.btn{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line);background:var(--raised);color:var(--fg);font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:default}
+.btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn-g{background:transparent}
+.btn-s{height:26px;padding:0 10px;font-size:12px}
+.btn-p{height:34px;padding:0 18px;font-size:13px;font-weight:600;background:var(--inv);color:var(--invfg);border-color:transparent}
+.pill{height:24px;padding:0 10px;border-radius:12px;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.t-green{color:var(--green);background:color-mix(in srgb,var(--green) 16%,transparent)}
+.cap{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.hv{display:flex;gap:12px;padding:10px 4px;border-top:1px solid var(--line);align-items:flex-start}
+.hv .k{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:1px}
+.hv .b{flex:1;min-width:0}
+.hv .h{display:flex;gap:8px;align-items:baseline}
+.hv .n{font-weight:600;font-size:13px}
+.hv .w{font-size:11.5px;color:var(--fg3)}
+.hv .d{font-size:12px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);padding:10px 4px 4px}
+.wn{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;border-top:1px solid color-mix(in srgb,var(--amber) 22%,var(--line))}
+</style>
+</helmet>
+<div class="ui" style="{{rootStyle}}">
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--side)">
+    <div style="display:flex;gap:8px;margin-right:10px"><span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span></div>
+    <button class="btn btn-g" style="height:28px;padding:0 8px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h3A1.5 1.5 0 0 1 12.5 6v4.5A1.5 1.5 0 0 1 11 12H3.5A1.5 1.5 0 0 1 2 10.5z"/></svg>remote-flows<svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 5.5 7 9l3.5-3.5"/></svg></button>
+    <span class="mono" style="font-size:12px;color:var(--fg3)">base: main</span>
+    <span style="flex:1"></span>
+    <span class="mono" style="font-size:12px;color:var(--fg2)" title="Spent by this task today">$2.14</span>
+    <span class="pill t-green">Approved</span>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+    <div style="flex:none;width:288px;height:720px"><dc-import name="Rail" scene="F" theme="{{theme}}" hint-size="288px,720px"></dc-import></div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)">
+      <div style="flex:none;padding:14px 24px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <h1 style="margin:0;font-size:15px;font-weight:600">bump-contract-details</h1>
+          <div style="font-size:12px;color:var(--fg2)">Weekdays 04:00 · opens a PR · 13 runs · next tomorrow 04:00</div>
+          <div class="mono" style="font-size:11px;color:var(--fg3)">Defined in .workbench/tasks/bump-contract-details.md. Edit that file to change it.</div>
+        </div>
+        <button class="btn btn-g" title="Run settings"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h6M10.5 4H12M2 10h1.5M6 10h6"/><circle cx="9.2" cy="4" r="1.3"/><circle cx="4.7" cy="10" r="1.3"/></svg>Run settings</button>
+        <button class="btn btn-p">Run now</button>
+      </div>
+      <div style="flex:none;padding:16px 24px 0">
+        <div style="max-width:680px;margin:0 auto;border:1px solid color-mix(in srgb,var(--amber) 40%,var(--line));background:color-mix(in srgb,var(--amber) 7%,var(--panel));border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 16px">
+            <span role="img" aria-label="Needs you" style="width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px color-mix(in srgb,var(--amber) 24%,transparent);margin:0 4px"></span>
+            <div style="flex:1;min-width:0"><div class="cap">Will it run tonight?</div><div style="font-weight:600">Will run, check the warnings</div></div>
+            <span style="font-size:11.5px;color:var(--fg3)">2 warnings</span>
+            <svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 8.5 7 5l3.5 3.5"/></svg>
+          </div>
+          <div class="wn">
+            <div style="flex:1;min-width:0"><div>The task changed since you approved it.</div><div class="mono" style="font-size:11.5px;color:var(--fg3)">workbench task approve bump-contract-details</div></div>
+            <button class="btn btn-s">Re-approve</button>
+          </div>
+          <div class="wn">
+            <div style="flex:1;min-width:0"><div>An earlier thread is still active, so the next run would skip.</div><div class="mono" style="font-size:11.5px;color:var(--fg3)">g-2026-10-31-bump-contract-details-AUS-42b5</div></div>
+            <button class="btn btn-s">Open thread</button>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:8px 24px 16px">
+        <div style="width:100%;max-width:680px;margin:0 auto;display:flex;flex-direction:column">
+          <div class="day">Yesterday</div>
+          <div class="hv"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--red);stroke-width:2" aria-label="Failed"><circle cx="7" cy="7" r="5.2"/><path d="M5.2 5.2l3.6 3.6M8.8 5.2 5.2 8.8"/></svg></span><div class="b"><div class="h"><span class="n" style="color:var(--red)">Failed</span><span class="w">22:53 · manual · AUS</span></div><div class="d">Setup script was stopped, so no turn started. The worktree is kept.</div></div><button class="btn btn-g btn-s">View log</button></div>
+          <div class="day">Today</div>
+          <div class="hv"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--grey)" aria-label="Skipped"><circle cx="7" cy="7" r="5.2"/><path d="M4.8 7h4.4"/></svg></span><div class="b"><div class="h"><span class="n">Skipped, project busy</span><span class="w">05:38 · manual</span></div><div class="d">g-2026-10-31-bump-contract-details-AUS-42b5 is still active. One thread at a time.</div></div><button class="btn btn-g btn-s">Open thread</button></div>
+          <div class="hv"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--red);stroke-width:2" aria-label="Failed"><circle cx="7" cy="7" r="5.2"/><path d="M5.2 5.2l3.6 3.6M8.8 5.2 5.2 8.8"/></svg></span><div class="b"><div class="h"><span class="n" style="color:var(--red)">Failed</span><span class="w">05:40 · manual · AUS</span></div><div class="d mono" style="font-size:11.5px">setup.sh failed (exit 1). No turn started. Fix it and run again.</div></div><button class="btn btn-g btn-s">View log</button></div>
+          <div class="hv"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--amber);stroke-width:2" aria-label="Needs you"><circle cx="7" cy="7" r="5.2"/><path d="M7 4.3v3.2M7 9.6v.1"/></svg></span><div class="b"><div class="h"><span class="n" style="color:var(--amber)">Stale approval</span><span class="w">05:43 · manual</span></div><div class="d">The task changed since it was approved.</div></div><button class="btn btn-s">Re-approve</button></div>
+          <div class="hv"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--green);stroke-width:2" aria-label="Done"><circle cx="7" cy="7" r="5.2"/><path d="m4.8 7.2 1.6 1.6 3-3.2"/></svg></span><div class="b"><div class="h"><span class="n">PR opened</span><span class="w">05:47 · manual · AUS</span></div><div class="d mono" style="font-size:11.5px">remoteoss/remote-flows/pull/1821</div></div><button class="btn btn-g btn-s">Open thread</button></div>
+          <div class="hv" style="background:color-mix(in srgb,var(--green) 6%,transparent);border-radius:8px"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--green);stroke-width:2" aria-label="Done"><circle cx="7" cy="7" r="5.2"/><path d="m4.8 7.2 1.6 1.6 3-3.2"/></svg></span><div class="b"><div class="h"><span class="n">PR opened</span><span class="w">06:09 · scheduled · NZL, ALB</span></div><div class="d mono" style="font-size:11.5px">remoteoss/remote-flows/pull/1822</div><div style="font-size:11.5px;color:var(--fg3);margin-top:2px">Now a thread in your list: Bump contract details · NZL, ALB</div></div><button class="btn btn-s">Open thread</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:28px;flex:none;border-top:1px solid var(--line);background:var(--side);display:flex;align-items:center;gap:14px;padding:0 12px;font-size:11.5px;color:var(--fg2)">
+    <button class="btn btn-g" style="height:22px;padding:0 8px;font-size:11.5px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 2h5L11 4.5V12H3.5z"/><path d="M8.5 2v2.5H11"/></svg>Event log <span class="mono">81</span></button>
+    <span>Doctor <span style="color:var(--fg3)">not run</span></span>
+    <span style="flex:1"></span>
+    <span class="mono" style="color:var(--fg3)">opus · 30 min per turn</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1240,"height":800}}'>
+const TH = {
+  dark: {'--bg':'#16191e','--side':'#1b1e24','--panel':'#21252d','--raised':'#2a2f39','--line':'#323844','--fg':'#e9ebf0','--fg2':'#b0b7c4','--fg3':'#919aaa','--green':'#4cc38a','--blue':'#5b9dff','--amber':'#f0b04a','--red':'#f2685f','--grey':'#7e8695','--inv':'#eef0f4','--invfg':'#14171c'},
+  light: {'--bg':'#f4f5f8','--side':'#eceef2','--panel':'#ffffff','--raised':'#e1e5ec','--line':'#d3d8e0','--fg':'#1b1f27','--fg2':'#454d5d','--fg3':'#5d667a','--green':'#1b7f4e','--blue':'#1f5fd1','--amber':'#a35f00','--red':'#c8322a','--grey':'#667084','--inv':'#1b1f27','--invfg':'#f4f5f8'}
+};
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme === 'light' ? 'light' : 'dark';
+    const v = TH[theme];
+    const vars = Object.keys(v).map(k => k + ':' + v[k]).join(';');
+    return {
+      theme,
+      rootStyle: 'width:1240px;height:800px;display:flex;flex-direction:column;overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);' + vars
+    };
+  }
+}
+</script>
+</body>
+</html>

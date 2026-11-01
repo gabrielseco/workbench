@@ -1,0 +1,53 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-01T12:00:00Z" },
+  "title": "Workbench Chat Feed",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1240, "h": 800, "title": "A · Brainstorm chat" },
+    "B-Goal.dc.html": { "x": 1320, "y": 0, "w": 1240, "h": 800, "title": "B · Drafted goal, ready to approve" },
+    "C-Run.dc.html": { "x": 0, "y": 920, "w": 1240, "h": 800, "title": "C · Mid-run, live events" },
+    "D-Verify.dc.html": { "x": 1320, "y": 920, "w": 1240, "h": 800, "title": "D · Verify done, one Ship button" },
+    "Main-Light.dc.html": { "x": 2640, "y": 0, "w": 1240, "h": 800, "title": "A · Brainstorm chat (light)" },
+    "B-Goal-Light.dc.html": { "x": 3960, "y": 0, "w": 1240, "h": 800, "title": "B · Drafted goal (light)" },
+    "C-Run-Light.dc.html": { "x": 2640, "y": 920, "w": 1240, "h": 800, "title": "C · Mid-run (light)" },
+    "D-Verify-Light.dc.html": { "x": 3960, "y": 920, "w": 1240, "h": 800, "title": "D · Verify done (light)" },
+    "E-Autopilot.dc.html": { "x": 0, "y": 1840, "w": 1240, "h": 800, "title": "Variant · Autopilot with a review queue" },
+    "E-Autopilot-Light.dc.html": { "x": 1320, "y": 1840, "w": 1240, "h": 800, "title": "Variant · Autopilot (light)" },
+    "F-Tasks.dc.html": { "x": 2640, "y": 1840, "w": 1240, "h": 800, "title": "Scheduled task with run history" },
+    "F-Tasks-Light.dc.html": { "x": 3960, "y": 1840, "w": 1240, "h": 800, "title": "Scheduled task (light)" },
+    "G-NewThread.dc.html": { "x": 0, "y": 2760, "w": 1240, "h": 800, "title": "New thread opens straight into chat" },
+    "G-NewThread-Light.dc.html": { "x": 1320, "y": 2760, "w": 1240, "h": 800, "title": "New thread (light)" },
+    "Rail.dc.html": { "x": -440, "y": 0, "w": 288, "h": 720, "title": "Thread list (shared)" }
+  },
+  "order": [
+    "Main.dc.html",
+    "B-Goal.dc.html",
+    "C-Run.dc.html",
+    "D-Verify.dc.html",
+    "Main-Light.dc.html",
+    "B-Goal-Light.dc.html",
+    "C-Run-Light.dc.html",
+    "D-Verify-Light.dc.html",
+    "E-Autopilot.dc.html",
+    "E-Autopilot-Light.dc.html",
+    "F-Tasks.dc.html",
+    "F-Tasks-Light.dc.html",
+    "G-NewThread.dc.html",
+    "G-NewThread-Light.dc.html",
+    "Rail.dc.html"
+  ],
+  "notes": {
+    "t1": { "x": 0, "y": -300, "kind": "title1", "text": "Workbench as a chat feed · dark", "maxW": 2560 },
+    "t2": { "x": 2640, "y": -300, "kind": "title1", "text": "Light variant", "maxW": 2560 },
+    "t3": { "x": 0, "y": 1540, "kind": "title1", "text": "Second variant · Autopilot", "maxW": 2560 },
+    "t4": { "x": 2640, "y": 1540, "kind": "title1", "text": "Scheduled tasks", "maxW": 2560 },
+    "t5": { "x": 0, "y": 2460, "kind": "title1", "text": "New thread, no popup", "maxW": 2560 },
+    "colors": {
+      "x": -440, "y": 800, "w": 288, "size": "s", "fill": "gray",
+      "text": "Five colours, one meaning each.\nGreen: done\nBlue: working\nAmber: needs you\nRed: broken\nGrey: idle\n\nThe primary button is neutral so it never competes with these."
+    }
+  },
+  "designSystems": []
+}

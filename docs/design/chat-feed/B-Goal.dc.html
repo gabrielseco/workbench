@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drafted goal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.ui{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;color:var(--fg)}
+.ui button{font-family:inherit}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.ic{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tl{width:12px;height:12px;border-radius:50%;display:block}
+.btn{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line);background:var(--raised);color:var(--fg);font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:default}
+.btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn-g{background:transparent}
+.btn-p{height:34px;padding:0 16px;font-size:13px;font-weight:600;background:var(--inv);color:var(--invfg);border-color:transparent}
+.pill{height:24px;padding:0 10px;border-radius:12px;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.t-amber{color:var(--amber);background:color-mix(in srgb,var(--amber) 16%,transparent)}
+.cap{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.ph{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pt)}
+.ph::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--pf);box-shadow:inset 0 0 0 1.5px var(--pc)}
+.av{width:22px;height:22px;border-radius:50%;background:var(--raised);border:1px solid var(--line);display:grid;place-items:center;flex:none;color:var(--fg2);margin-top:1px}
+.sec{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.field{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;line-height:1.5}
+.crit{display:flex;align-items:flex-start;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px;line-height:1.45}
+.ring{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--grey);flex:none;margin-top:3px;display:block}
+.chip{height:22px;padding:0 9px;border-radius:11px;background:var(--raised);color:var(--fg2);font-size:11.5px;display:inline-flex;align-items:center}
+.tg{width:30px;height:18px;border-radius:9px;background:var(--line);position:relative;flex:none;display:block}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--fg2)}
+.tg.on{background:var(--inv)}
+.tg.on::after{left:14px;background:var(--invfg)}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+</style>
+</helmet>
+<div class="ui" style="{{rootStyle}}">
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--side)">
+    <div style="display:flex;gap:8px;margin-right:10px"><span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span></div>
+    <button class="btn btn-g" style="height:28px;padding:0 8px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h3A1.5 1.5 0 0 1 12.5 6v4.5A1.5 1.5 0 0 1 11 12H3.5A1.5 1.5 0 0 1 2 10.5z"/></svg>workbench<svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 5.5 7 9l3.5-3.5"/></svg></button>
+    <span class="mono" style="font-size:12px;color:var(--fg3)">base: main</span>
+    <span style="flex:1"></span>
+    <span class="mono" style="font-size:12px;color:var(--fg2)" title="Spent on this thread">$0.00</span>
+    <span class="pill t-amber">Waiting</span>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+    <div style="flex:none;width:288px;height:720px"><dc-import name="Rail" scene="B" theme="{{theme}}" hint-size="288px,720px"></dc-import></div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)">
+      <div style="flex:none;padding:12px 24px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:12px;min-height:30px">
+          <h1 style="margin:0;font-size:15px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Improve the Workbench flow</h1>
+          <button class="btn" title="Run settings" style="background:var(--raised)"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h6M10.5 4H12M2 10h1.5M6 10h6"/><circle cx="9.2" cy="4" r="1.3"/><circle cx="4.7" cy="10" r="1.3"/></svg>Run settings</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <sc-for list="{{phases}}" as="p" hint-placeholder-count="7"><span class="ph" style="{{p.vars}}">{{p.label}}</span></sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:16px 24px 12px">
+        <div style="width:100%;max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+          <button class="btn btn-g" style="align-self:flex-start;height:26px;font-size:12px;color:var(--fg2)"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3.5 8.5 7 5 10.5"/></svg>Brainstorm · 4 messages</button>
+          <div style="display:flex;gap:12px">
+            <div class="av"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2v3.5M7 8.5V12M2 7h3.5M8.5 7H12"/></svg></div>
+            <div style="flex:1;min-width:0;font-size:13.5px;line-height:1.55">I drafted a goal from this chat. Edit anything below, then approve. Nothing runs until you do.</div>
+          </div>
+          <div style="border:1px solid var(--line);background:var(--panel);border-radius:12px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;padding:11px 16px">
+              <span class="cap">Draft goal</span>
+              <span class="pill t-amber" style="height:20px;font-size:11px">Needs approval</span>
+              <span style="flex:1"></span>
+              <span style="font-size:11.5px;color:var(--fg3)">Every field is editable</span>
+            </div>
+            <div class="sec">
+              <div class="cap">Request</div>
+              <div class="field">Replace the step rail and per-step forms with a chat-shaped feed. Threads become rows in a list. Run, judge and verify show up as events in the feed and advance on their own.</div>
+            </div>
+            <div class="sec">
+              <div class="cap">Criteria · 5</div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div class="crit"><span class="ring"></span>Each thread is a row marked working, needs you, done or idle.</div>
+                <div class="crit"><span class="ring"></span>A chat opens with no run, worktree or cost.</div>
+                <div class="crit"><span class="ring"></span>Run, judge and verify advance without a Continue button.</div>
+                <div class="crit"><span class="ring"></span>The feed stops only on a failed check, a judge disagreement or going over budget.</div>
+                <div class="crit"><span class="ring"></span>Verify screenshots appear inline in the feed.</div>
+              </div>
+            </div>
+            <div class="sec" style="flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="cap" style="margin-right:4px">Out of scope</span>
+              <span class="chip">Light theme polish</span><span class="chip">iPad layout</span><span class="chip">Herdr internals</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:none;padding:0 24px 16px">
+        <div style="max-width:680px;margin:0 auto;display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:var(--fg3);flex:1;min-width:0">Starts a worktree from <span class="mono">main</span> with Verifier and Judge on.</span>
+          <button class="btn btn-g">Back to chat</button>
+          <button class="btn btn-p">Approve goal</button>
+        </div>
+      </div>
+    </div>
+    <div style="flex:none;width:300px;border-left:1px solid var(--line);background:var(--side);display:flex;flex-direction:column;overflow:hidden">
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px">
+        <span style="font-size:13px;font-weight:600">Run settings</span>
+        <button class="btn btn-g" aria-label="Close inspector" style="width:26px;height:26px;padding:0;justify-content:center"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></button>
+      </div>
+      <div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="cap">After the turn</div>
+          <div style="display:flex;gap:10px;align-items:flex-start"><span class="tg on" style="margin-top:2px"></span><div><div style="font-weight:500">Verifier</div><div style="font-size:11.5px;color:var(--fg3)">Drives the app from the request and posts screenshots.</div></div></div>
+          <div style="display:flex;gap:10px;align-items:flex-start"><span class="tg on" style="margin-top:2px"></span><div><div style="font-weight:500">Judge</div><div style="font-size:11.5px;color:var(--fg3)">Checks the work against your criteria. Needs at least one.</div></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="cap">Limits</div>
+          <div class="kv"><span style="color:var(--fg2)">Model</span><span class="mono">opus</span></div>
+          <div class="kv"><span style="color:var(--fg2)">Budget</span><span class="mono">no dollar cap</span></div>
+          <div class="kv"><span style="color:var(--fg2)">Timeout</span><span class="mono">30 min per turn</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="cap">Allowed tools · 15</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="chip mono">Read</span><span class="chip mono">Grep</span><span class="chip mono">Glob</span><span class="chip mono">Edit</span><span class="chip mono">Write</span><span class="chip mono">git status</span><span class="chip mono">git diff</span><span class="chip mono">swift build</span><span class="chip mono">swift test</span><span class="chip mono">swiftlint</span><span class="chip">+5 more</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="cap">Open</div>
+          <button class="btn" style="justify-content:flex-start">Open in editor</button>
+          <button class="btn" style="justify-content:flex-start">Open in Herdr</button>
+          <button class="btn" style="justify-content:flex-start">Run in Herdr instead</button>
+        </div>
+        <div class="mono" style="font-size:10.5px;color:var(--fg3);word-break:break-all">Saved to .workbench/threads/g-2026-11-01-improve/goal.md</div>
+      </div>
+    </div>
+  </div>
+  <div style="height:28px;flex:none;border-top:1px solid var(--line);background:var(--side);display:flex;align-items:center;gap:14px;padding:0 12px;font-size:11.5px;color:var(--fg2)">
+    <button class="btn btn-g" style="height:22px;padding:0 8px;font-size:11.5px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 2h5L11 4.5V12H3.5z"/><path d="M8.5 2v2.5H11"/></svg>Event log <span class="mono">5</span></button>
+    <span>Doctor <span style="color:var(--fg3)">not run</span></span>
+    <span style="flex:1"></span>
+    <span class="mono" style="color:var(--fg3)">opus · 30 min per turn</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1240,"height":800}}'>
+const TH = {
+  dark: {'--bg':'#16191e','--side':'#1b1e24','--panel':'#21252d','--raised':'#2a2f39','--line':'#323844','--fg':'#e9ebf0','--fg2':'#b0b7c4','--fg3':'#919aaa','--green':'#4cc38a','--blue':'#5b9dff','--amber':'#f0b04a','--red':'#f2685f','--grey':'#7e8695','--inv':'#eef0f4','--invfg':'#14171c'},
+  light: {'--bg':'#f4f5f8','--side':'#eceef2','--panel':'#ffffff','--raised':'#e1e5ec','--line':'#d3d8e0','--fg':'#1b1f27','--fg2':'#454d5d','--fg3':'#5d667a','--green':'#1b7f4e','--blue':'#1f5fd1','--amber':'#a35f00','--red':'#c8322a','--grey':'#667084','--inv':'#1b1f27','--invfg':'#f4f5f8'}
+};
+const PH = ['Chat','Goal','Run','Review','Ship','PR review','Clean'];
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme === 'light' ? 'light' : 'dark';
+    const v = TH[theme];
+    const vars = Object.keys(v).map(k => k + ':' + v[k]).join(';');
+    const now = 1, color = 'var(--amber)';
+    const phases = PH.map((label, i) => ({
+      label,
+      vars: i < now ? '--pf:var(--green);--pc:var(--green);--pt:var(--fg2)'
+        : i === now ? '--pf:' + color + ';--pc:' + color + ';--pt:var(--fg)'
+        : '--pf:transparent;--pc:var(--grey);--pt:var(--fg3)'
+    }));
+    return {
+      theme, phases,
+      rootStyle: 'width:1240px;height:800px;display:flex;flex-direction:column;overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);' + vars
+    };
+  }
+}
+</script>
+</body>
+</html>

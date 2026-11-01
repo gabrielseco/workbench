@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thread list</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.ui{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;color:var(--fg)}
+.ui button{font-family:inherit}
+.ic{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.btn{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line);background:var(--raised);color:var(--fg);font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:default}
+.btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn-g{background:transparent}
+.cap{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.trow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:var(--rowbg)}
+.mk{width:16px;height:16px;flex:none;display:grid;place-items:center}
+.ttl{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:11.5px;color:var(--subc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+</style>
+</helmet>
+<div class="ui" style="{{rootStyle}}">
+  <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 12px 8px 18px">
+    <span class="cap">Threads</span>
+    <button class="btn btn-g" aria-label="New thread" title="New thread" style="width:28px;height:28px;padding:0;justify-content:center"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3 7h8"/></svg></button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:2px;padding:0 8px">
+    <sc-for list="{{items}}" as="t" hint-placeholder-count="4">
+      <div style="{{t.vars}}">
+        <sc-if value="{{t.hdr}}" hint-placeholder-val="{{ false }}">
+          <div class="cap" style="padding:12px 10px 4px">{{t.title}}</div>
+        </sc-if>
+        <sc-if value="{{t.row}}" hint-placeholder-val="{{ true }}">
+          <div class="trow">
+            <div class="mk">
+              <sc-if value="{{t.working}}" hint-placeholder-val="{{ false }}"><svg class="ic spin" viewBox="0 0 16 16" style="width:16px;height:16px;stroke-width:2" aria-label="Working"><circle cx="8" cy="8" r="6" style="stroke:var(--blue);opacity:.25"/><path d="M8 2a6 6 0 0 1 6 6" style="stroke:var(--blue)"/></svg></sc-if>
+              <sc-if value="{{t.needs}}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="Needs you" style="width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px color-mix(in srgb,var(--amber) 24%,transparent)"></span></sc-if>
+              <sc-if value="{{t.done}}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--green);stroke-width:2" aria-label="Done"><path d="m3 7.5 2.7 2.7L11 4.5"/></svg></sc-if>
+              <sc-if value="{{t.idle}}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="Idle" style="width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--grey)"></span></sc-if>
+            </div>
+            <div style="min-width:0;flex:1"><div class="ttl">{{t.title}}</div><div class="sub">{{t.sub}}</div></div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"scene":{"editor":"enum","options":["A","B","C","D","E"],"default":"A"},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":288,"height":720}}'>
+const TH = {
+  dark: {'--bg':'#16191e','--side':'#1b1e24','--panel':'#21252d','--raised':'#2a2f39','--line':'#323844','--fg':'#e9ebf0','--fg2':'#b0b7c4','--fg3':'#919aaa','--green':'#4cc38a','--blue':'#5b9dff','--amber':'#f0b04a','--red':'#f2685f','--grey':'#7e8695'},
+  light: {'--bg':'#f4f5f8','--side':'#eceef2','--panel':'#ffffff','--raised':'#e1e5ec','--line':'#d3d8e0','--fg':'#1b1f27','--fg2':'#454d5d','--fg3':'#5d667a','--green':'#1b7f4e','--blue':'#1f5fd1','--amber':'#a35f00','--red':'#c8322a','--grey':'#667084'}
+};
+const R = (title, state, sub, sel, subc) => ({ row: true, hdr: false, title, sub, working: state === 'working', needs: state === 'needs', done: state === 'done', idle: state === 'idle', vars: '--rowbg:' + (sel ? 'var(--raised)' : 'transparent') + ';--subc:' + (subc || 'var(--fg3)') });
+const H = (title) => ({ row: false, hdr: true, title, sub: '', working: false, needs: false, done: false, idle: false, vars: '' });
+const T1 = 'Improve the Workbench flow', T2 = 'Fix judge timeout on retry', T3 = 'Herdr reconnect after sleep', T4 = 'Review keyboard shortcuts';
+const BLUE = 'var(--blue)', AMB = 'var(--amber)', RED = 'var(--red)', GRN = 'var(--green)';
+const SCENES = {
+  A: [R(T1,'idle','Chat · 4 messages',true), R(T2,'working','Running · task 2 of 4',false,BLUE), R(T3,'done','Shipped · PR #479'), R(T4,'needs','Needs you · over budget',false,AMB)],
+  B: [R(T1,'needs','Needs you · approve goal',true,AMB), R(T2,'working','Running · task 2 of 4',false,BLUE), R(T3,'done','Shipped · PR #479'), R(T4,'idle','Chat · 3 messages')],
+  C: [R(T1,'working','Running · task 3 of 5',true,BLUE), R(T2,'needs','Check failed · needs you',false,RED), R(T3,'done','Shipped · PR #479'), R(T4,'idle','Chat · 3 messages')],
+  D: [R(T1,'needs','Needs you · ready to ship',true,AMB), R(T2,'working','Running · task 2 of 4',false,BLUE), R(T3,'done','Shipped · PR #479'), R(T4,'idle','Chat · 3 messages')],
+  E: [H('Needs you · 1'), R(T2,'needs','Check failed · swift test',false,RED), H('Working · 1'), R(T4,'working','Running · task 1 of 3',false,BLUE), H('Done · 2'), R(T1,'done','Draft PR #482 open',true,GRN), R(T3,'done','Shipped · PR #479'), H('Idle · 1'), R('Sidebar search','idle','Chat · 3 messages')]
+};
+SCENES.G = [R('New thread','idle','Type to start · free',true), R(T1,'working','Running · task 3 of 5',false,BLUE), R(T2,'needs','Check failed · needs you',false,RED), R(T3,'done','Shipped · PR #479')];
+const SCHED = [R('bump-contract-details','done','Weekdays 04:00 · PR opened'), R('fix-flaky-tests','idle','Mon 10:00 · nothing pending'), R('sync-contract-versions','idle','Fri 11:00 · never run')];
+const SCHED_F = [R('bump-contract-details','needs','Weekdays 04:00 · 2 warnings',true,AMB), SCHED[1], SCHED[2]];
+SCENES.F = [R(T1,'needs','Needs you · ready to ship'), R('Bump contract details · NZL, ALB','done','From schedule · PR #1822',false,GRN), R(T2,'working','Running · task 2 of 4',false,BLUE), R(T4,'idle','Chat · 3 messages')];
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme === 'light' ? 'light' : 'dark';
+    const v = TH[theme];
+    const vars = Object.keys(v).map(k => k + ':' + v[k]).join(';');
+    return {
+      items: (SCENES[this.props.scene] || SCENES.A).concat([H('Scheduled · 3')], this.props.scene === 'F' ? SCHED_F : SCHED),
+      rootStyle: 'width:288px;height:720px;display:flex;flex-direction:column;overflow:hidden;background:var(--side);border-right:1px solid var(--line);color:var(--fg);' + vars
+    };
+  }
+}
+</script>
+</body>
+</html>

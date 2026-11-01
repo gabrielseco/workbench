@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mid-run feed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.ui{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;color:var(--fg)}
+.ui button{font-family:inherit}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.ic{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tl{width:12px;height:12px;border-radius:50%;display:block}
+.btn{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line);background:var(--raised);color:var(--fg);font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:default}
+.btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn-g{background:transparent}
+.pill{height:24px;padding:0 10px;border-radius:12px;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.t-blue{color:var(--blue);background:color-mix(in srgb,var(--blue) 16%,transparent)}
+.cap{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.ph{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pt)}
+.ph::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--pf);box-shadow:inset 0 0 0 1.5px var(--pc)}
+.ev{display:flex;align-items:center;gap:12px;min-height:36px;padding:0 4px}
+.ev .k{width:18px;height:18px;flex:none;display:grid;place-items:center}
+.ev .t{font-size:13px;font-weight:500}
+.ev .m{margin-left:auto;font-size:11.5px;color:var(--fg3)}
+.ring{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--grey);display:block;flex:none}
+.task{display:flex;align-items:center;gap:10px;font-size:12.5px;min-height:24px}
+.log{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:11.5px;line-height:1.6;color:var(--fg2);display:flex;flex-direction:column}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}
+@keyframes blink{50%{opacity:0}}
+.caret{display:inline-block;width:6px;height:12px;background:var(--fg2);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}.caret{animation:none}}
+</style>
+</helmet>
+<div class="ui" style="{{rootStyle}}">
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--side)">
+    <div style="display:flex;gap:8px;margin-right:10px"><span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span></div>
+    <button class="btn btn-g" style="height:28px;padding:0 8px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h3A1.5 1.5 0 0 1 12.5 6v4.5A1.5 1.5 0 0 1 11 12H3.5A1.5 1.5 0 0 1 2 10.5z"/></svg>workbench<svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 5.5 7 9l3.5-3.5"/></svg></button>
+    <span class="mono" style="font-size:12px;color:var(--fg3)">base: main</span>
+    <span style="flex:1"></span>
+    <span class="mono" style="font-size:12px;color:var(--fg2)" title="Spent on this thread">$0.31</span>
+    <span class="pill t-blue">Running</span>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+    <div style="flex:none;width:288px;height:720px"><dc-import name="Rail" scene="C" theme="{{theme}}" hint-size="288px,720px"></dc-import></div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)">
+      <div style="flex:none;padding:12px 24px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:12px;min-height:30px">
+          <h1 style="margin:0;font-size:15px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Improve the Workbench flow</h1>
+          <button class="btn btn-g" title="Run settings"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h6M10.5 4H12M2 10h1.5M6 10h6"/><circle cx="9.2" cy="4" r="1.3"/><circle cx="4.7" cy="10" r="1.3"/></svg>Run settings</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <sc-for list="{{phases}}" as="p" hint-placeholder-count="7"><span class="ph" style="{{p.vars}}">{{p.label}}</span></sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:16px 24px 12px">
+        <div style="width:100%;max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:6px">
+          <div class="ev"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--green);stroke-width:2" aria-label="Done"><path d="m3 7.5 2.7 2.7L11 4.5"/></svg></span><span class="t">Goal approved</span><span class="m">14:02 · 5 criteria</span></div>
+          <div class="ev"><span class="k"><svg class="ic" viewBox="0 0 14 14" style="width:15px;height:15px;color:var(--green);stroke-width:2" aria-label="Done"><path d="m3 7.5 2.7 2.7L11 4.5"/></svg></span><span class="t">Worktree ready</span><span class="mono" style="font-size:11.5px;color:var(--fg3)">wb/g-2026-11-01-improve</span><span class="m">0:02</span></div>
+          <div style="border:1px solid var(--line);background:var(--panel);border-radius:12px;overflow:hidden;margin:4px 0">
+            <div style="display:flex;align-items:center;gap:12px;padding:11px 16px">
+              <span class="k" style="width:18px;height:18px;display:grid;place-items:center"><svg class="ic spin" viewBox="0 0 16 16" style="width:16px;height:16px;stroke-width:2" aria-label="Working"><circle cx="8" cy="8" r="6" style="stroke:var(--blue);opacity:.25"/><path d="M8 2a6 6 0 0 1 6 6" style="stroke:var(--blue)"/></svg></span>
+              <span style="font-weight:600">Claude is working</span>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--fg3)" class="mono">3:41 of 30:00</span>
+            </div>
+            <div style="height:3px;background:var(--line)"><div style="width:12%;height:100%;background:var(--blue)"></div></div>
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:2px">
+              <div class="cap" style="margin-bottom:4px">Tasks · 3 of 5</div>
+              <div class="task"><svg class="ic" viewBox="0 0 14 14" style="color:var(--green);stroke-width:2" aria-hidden="true"><path d="m3 7.5 2.7 2.7L11 4.5"/></svg><span style="color:var(--fg2)">Add thread row states to the list</span></div>
+              <div class="task"><svg class="ic" viewBox="0 0 14 14" style="color:var(--green);stroke-width:2" aria-hidden="true"><path d="m3 7.5 2.7 2.7L11 4.5"/></svg><span style="color:var(--fg2)">Chat-first thread view with no run</span></div>
+              <div class="task"><svg class="ic spin" viewBox="0 0 16 16" style="width:14px;height:14px;stroke-width:2.2" aria-hidden="true"><circle cx="8" cy="8" r="6" style="stroke:var(--blue);opacity:.25"/><path d="M8 2a6 6 0 0 1 6 6" style="stroke:var(--blue)"/></svg><span style="font-weight:500">Advance run, judge and verify automatically</span></div>
+              <div class="task"><span class="ring"></span><span style="color:var(--fg3)">Inline screenshots in the feed</span></div>
+              <div class="task"><span class="ring"></span><span style="color:var(--fg3)">One decision button at the foot</span></div>
+            </div>
+            <div style="padding:0 16px 14px">
+              <div class="log mono">
+                <span><span style="color:var(--fg3)">Edit </span>Sources/Thread/AutoAdvance.swift <span style="color:var(--green)">+64</span> <span style="color:var(--red)">−9</span></span>
+                <span><span style="color:var(--fg3)">Read </span>Sources/Thread/FeedView.swift</span>
+                <span><span style="color:var(--fg3)">Bash </span>swift build <span style="color:var(--blue)">building…</span> <span class="caret"></span></span>
+              </div>
+            </div>
+          </div>
+          <div class="ev"><span class="k"><span class="ring"></span></span><span class="t" style="color:var(--fg2)">Judge</span><span class="m">starts when the run ends · 5 criteria</span></div>
+          <div class="ev"><span class="k"><span class="ring"></span></span><span class="t" style="color:var(--fg2)">Verify</span><span class="m">drives the app, posts screenshots here</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 4px 0;font-size:12px;color:var(--fg3)"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.2"/><path d="M7 6.3v3.2M7 4.4v.1"/></svg>Auto-advance is on. This feed stops only for a failed check, a judge disagreement or going over budget.</div>
+        </div>
+      </div>
+      <div style="flex:none;padding:0 24px 16px">
+        <div style="max-width:680px;margin:0 auto;display:flex;align-items:center;gap:10px">
+          <div style="flex:1;min-width:0;display:flex;align-items:center;min-height:40px;padding:0 14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);color:var(--fg3);font-size:13px">Steer this run… Sent when the current tool call ends.</div>
+          <button class="btn" style="height:40px;padding:0 16px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/></svg>Stop run</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:28px;flex:none;border-top:1px solid var(--line);background:var(--side);display:flex;align-items:center;gap:14px;padding:0 12px;font-size:11.5px;color:var(--fg2)">
+    <button class="btn btn-g" style="height:22px;padding:0 8px;font-size:11.5px"><svg class="ic" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 2h5L11 4.5V12H3.5z"/><path d="M8.5 2v2.5H11"/></svg>Event log <span class="mono">11</span></button>
+    <span>Doctor <span style="color:var(--fg3)">not run</span></span>
+    <span style="flex:1"></span>
+    <span class="mono" style="color:var(--fg3)">opus · 30 min per turn</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1240,"height":800}}'>
+const TH = {
+  dark: {'--bg':'#16191e','--side':'#1b1e24','--panel':'#21252d','--raised':'#2a2f39','--line':'#323844','--fg':'#e9ebf0','--fg2':'#b0b7c4','--fg3':'#919aaa','--green':'#4cc38a','--blue':'#5b9dff','--amber':'#f0b04a','--red':'#f2685f','--grey':'#7e8695','--inv':'#eef0f4','--invfg':'#14171c'},
+  light: {'--bg':'#f4f5f8','--side':'#eceef2','--panel':'#ffffff','--raised':'#e1e5ec','--line':'#d3d8e0','--fg':'#1b1f27','--fg2':'#454d5d','--fg3':'#5d667a','--green':'#1b7f4e','--blue':'#1f5fd1','--amber':'#a35f00','--red':'#c8322a','--grey':'#667084','--inv':'#1b1f27','--invfg':'#f4f5f8'}
+};
+const PH = ['Chat','Goal','Run','Review','Ship','PR review','Clean'];
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme === 'light' ? 'light' : 'dark';
+    const v = TH[theme];
+    const vars = Object.keys(v).map(k => k + ':' + v[k]).join(';');
+    const now = 2, color = 'var(--blue)';
+    const phases = PH.map((label, i) => ({
+      label,
+      vars: i < now ? '--pf:var(--green);--pc:var(--green);--pt:var(--fg2)'
+        : i === now ? '--pf:' + color + ';--pc:' + color + ';--pt:var(--fg)'
+        : '--pf:transparent;--pc:var(--grey);--pt:var(--fg3)'
+    }));
+    return {
+      theme, phases,
+      rootStyle: 'width:1240px;height:800px;display:flex;flex-direction:column;overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);' + vars
+    };
+  }
+}
+</script>
+</body>
+</html>
