@@ -34,6 +34,8 @@ struct RecentProject: Equatable, Identifiable {
     var mode: WindowMode = .thread
     /// The Tasks screen's data, read from the core while that screen is shown.
     let tasks = TasksModel()
+    /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
+    let attention: AttentionCenter
     private(set) var doctor: DoctorChip = .notRun
     /// The goal of the thread on screen, read with the config; nil without a thread.
     private(set) var goal: GoalModel?
@@ -167,8 +169,10 @@ struct RecentProject: Equatable, Identifiable {
             await GoalModel.load(project: $0, thread: $1, verifierSkill: GoalModel.coreVerifierSkill(project: $0))
         },
         actions: GoalActions = .core,
-        folderChooser: @escaping @MainActor () -> URL? = ProjectPickerCard.folderPanel
+        folderChooser: @escaping @MainActor () -> URL? = ProjectPickerCard.folderPanel,
+        notifier: Notifier = NullNotifier()
     ) {
+        self.attention = AttentionCenter(preferences: preferences, notifier: notifier)
         self.folderChooser = folderChooser
         self.goalLoader = goalLoader
         self.actions = actions
@@ -269,6 +273,7 @@ struct RecentProject: Equatable, Identifiable {
         (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
         applyOwnership()
         applyPullRequestCI()
+        await observeAttention(readTasks: false)
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
         if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
@@ -435,15 +440,6 @@ struct RecentProject: Equatable, Identifiable {
         }
     }
 
-    /// The diffs against the base in the editor: every changed file, or the one at `path`.
-    func openDiff(path: String? = nil) async {
-        guard let project, let thread = currentThread else { return }
-        (actionError, actionNote) = (nil, nil)
-        await working("Opening the diff…") {
-            do { actionNote = try await actions.openDiff(project, thread, path) } catch { actionError = "\(error)" }
-        }
-    }
-
     /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only
     /// place the person hears of it. An answer for another project is dropped.
     private func runFailed(_ error: Error, generation mine: Int) {
@@ -451,12 +447,6 @@ struct RecentProject: Equatable, Identifiable {
         endRunStart()
         actionError = "The run did not start: \(error)"
         reopenSendBack()
-    }
-
-    func openGoalFile() async {
-        guard let project, let thread = currentThread else { return }
-        actionError = nil
-        do { try await actions.openGoal(project, thread) } catch { actionError = "\(error)" }
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.

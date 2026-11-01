@@ -5,7 +5,8 @@ import WorkbenchCore
 
 @main struct WorkbenchApp: App {
     private static let options = LaunchOptions.from(environment: ProcessInfo.processInfo.environment)
-    @State private var store = options.makeStore(preferences: UserDefaultsPreferences())
+    private static let notifier = SystemNotifier()
+    @State private var store = options.makeStore(preferences: UserDefaultsPreferences(), notifier: notifier)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
@@ -15,8 +16,13 @@ import WorkbenchCore
                 .task {
                     delegate.drafting = { store.drafting }
                     delegate.stopDrafting = { await store.stopDraftingAndWait() }
+                    Self.notifier.onRoute = { route, project in
+                        store.show(route, project: project)
+                        Self.showWindow()
+                    }
                     await Self.options.start(store)
                     store.startPolling()
+                    store.startAttentionPolling()
                 }
         }
         .commands {
@@ -26,6 +32,16 @@ import WorkbenchCore
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(store.project == nil || store.namingGoal)
             }
+        }
+    }
+}
+
+extension WorkbenchApp {
+    /// Brings the window forward for a notification's click; a window that was closed is shown again.
+    @MainActor static func showWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        for window in NSApplication.shared.windows where window.title == "Workbench" {
+            window.makeKeyAndOrderFront(nil)
         }
     }
 }

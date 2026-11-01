@@ -18,8 +18,10 @@ struct LaunchOptions: Equatable {
     }
 
     /// The store for these options: the real preferences normally, a throwaway set when a project was named.
-    @MainActor func makeStore(preferences: Preferences) -> ProjectStore {
-        ProjectStore(preferences: project == nil ? preferences : MemoryPreferences())
+    @MainActor func makeStore(preferences: Preferences, notifier: Notifier = NullNotifier()) -> ProjectStore {
+        // A fixture launch (a project named) posts nothing and asks for no permission.
+        project == nil
+            ? ProjectStore(preferences: preferences, notifier: notifier) : ProjectStore(preferences: MemoryPreferences())
     }
 
     /// What the window does when it appears: open the named project, else restore the remembered one. The `PATH` comes first, so
