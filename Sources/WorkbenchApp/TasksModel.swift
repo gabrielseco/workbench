@@ -203,14 +203,15 @@ struct TasksReader: Sendable {
     var runningTask: String?
     var runSaid: String?
     /// How the last run started here ended, shown under that task's header until another starts.
-    var lastResult: (task: String, result: TaskRunResult)?
+    var lastResult: RunOutcome?
+    var runningProject: String?
     /// Why a button did nothing (another run going, the task did not load).
     var actionNote: String?
     @ObservationIgnored var stopSwitch: TaskStopSwitch?
     @ObservationIgnored let actions: TaskActions
     @ObservationIgnored private var lastRead: Date?
     /// The project of the newest read asked for; an answer for another one is dropped.
-    @ObservationIgnored private var latestPath: String?
+    @ObservationIgnored var latestPath: String?
     @ObservationIgnored private let reader: TasksReader
     @ObservationIgnored private let clock: @Sendable () -> Date
 
@@ -303,4 +304,11 @@ enum TasksText {
     static func reason(_ run: TaskHistory.Run) -> String? {
         run.reason.map { TaskExplanation.clean($0, limit: TaskExplanation.maxReason) }.flatMap { $0.isEmpty ? nil : $0 }
     }
+}
+
+/// How the last run started from the window ended, and whose it was: a task of the same name in another project is not it.
+struct RunOutcome {
+    var project: String
+    var task: String
+    var result: TaskRunResult
 }

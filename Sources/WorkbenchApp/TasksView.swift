@@ -231,7 +231,7 @@ struct Timeline: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if let said = store.tasks.runSaid { BusyBar(text: said) }
+                if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(entry.summary.name).font(.title2.weight(.semibold)).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 8)
@@ -240,7 +240,7 @@ struct Timeline: View {
                 if let note = store.tasks.actionNote {
                     Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
-                if let last = store.tasks.lastResult, last.task == entry.id { ResultLine(result: last.result) }
+                if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
                 Text(
                     "\(entry.summary.schedule ?? "manual") · \(entry.summary.fix.map { "fix: \($0.rawValue)" } ?? "—") · "
                         + "\(entry.runs.count) run\(entry.runs.count == 1 ? "" : "s")"
@@ -330,7 +330,7 @@ struct TaskButtons: View {
         let needsApproval = entry.summary.problem == nil && entry.summary.approval != .approved
         let off = tasks.runUnavailable(entry, threadRunGoing: store.runningProjectPath != nil)
         HStack(spacing: 8) {
-            if tasks.runningTask == entry.id {
+            if tasks.isRunning(entry.id, in: store.project) {
                 Button("Stop") { Task { await tasks.stopRun() } }
                     .help("Ends the agent's turn; the run records how it ended")
             } else {

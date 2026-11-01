@@ -24,6 +24,17 @@ extension TasksModel {
 
     var isRunning: Bool { runningTask != nil }
 
+    /// Whether the run started here is for this project's task `name` (a task of the same name in another project is not it).
+    func isRunning(_ name: String, in project: Project?) -> Bool {
+        runningTask == name && runningProject == project?.root.path
+    }
+
+    /// How the last run started here ended, when it was this project's task `name`.
+    func result(of name: String, in project: Project?) -> TaskRunResult? {
+        guard let last = lastResult, last.project == project?.root.path, last.task == name else { return nil }
+        return last.result
+    }
+
     // MARK: approve
 
     /// Opens the approve card with what is on disk now (so what is approved is what is shown).
@@ -42,7 +53,7 @@ extension TasksModel {
     func confirmApprove(_ project: Project?) async {
         guard let project, let card = approving else { return }
         do {
-            try await actions.approve(project, card.name)
+            try await actions.approve(project, card.name, card.hash)
             (approving, approveError, actionNote) = (nil, nil, nil)
             await refresh(project)
         } catch {
@@ -60,13 +71,17 @@ extension TasksModel {
             return
         }
         actionNote = nil
-        guard entry.summary.fix == .pr else {
+        // What the task is now, not what the list last read: a report task changed to `fix: pr` still asks first.
+        let card: TaskCardInfo
+        do { card = try actions.inspect(project, entry.id) } catch {
+            actionNote = "\(entry.id) cannot run: \(error)"
+            return
+        }
+        guard card.fix == .pr else {
             await startRun(project, entry.id)
             return
         }
-        do { confirmingRun = try actions.inspect(project, entry.id) } catch {
-            actionNote = "\(entry.id) cannot run: \(error)"
-        }
+        confirmingRun = card
     }
 
     func cancelRun() { confirmingRun = nil }
@@ -74,6 +89,12 @@ extension TasksModel {
     func confirmRun(_ project: Project?) async {
         guard let project, let card = confirmingRun else { return }
         confirmingRun = nil
+        // The card named a cost: run only the version it was for.
+        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash else {
+            actionNote = "\(card.name) was edited after the card was shown: look at it again."
+            await refresh(project)
+            return
+        }
         await startRun(project, card.name)
     }
 
@@ -84,13 +105,16 @@ extension TasksModel {
         }
         let stop = TaskStopSwitch()
         stopSwitch = stop
+        runningProject = project.root.path
         (runningTask, runSaid, lastResult, actionNote) = (name, "Starting \(name)…", nil, nil)
         let actions = self.actions
         // The run says what it is doing as it goes; the screen shows the last line.
         let said = SaidBox { [weak self] line in Task { @MainActor in self?.runSaid = line } }
         let result = await actions.run(project, name, stop) { said.say($0) }
-        (runningTask, runSaid, stopSwitch, lastResult) = (nil, nil, nil, (name, result))
-        await refresh(project)
+        (runningTask, runSaid, stopSwitch, runningProject) = (nil, nil, nil, nil)
+        lastResult = RunOutcome(project: project.root.path, task: name, result: result)
+        // Another project may be on screen by now: its tasks are not replaced by this one's.
+        if latestPath == nil || latestPath == project.root.path { await refresh(project) }
     }
 
     /// Ends the turn the way Ctrl-C does on `workbench task run`; the run still records how it ended.

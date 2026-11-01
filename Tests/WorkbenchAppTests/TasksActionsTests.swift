@@ -118,6 +118,88 @@ import WorkbenchCore
         #expect(tasks.approving == nil && tasks.approveError == nil)
     }
 
+    /// Rewrites a task's file, as an editor would, and approves it again as the CLI would.
+    private func edit(_ project: Project, _ name: String, _ text: String, approve: Bool = false) async throws {
+        try text.write(to: project.taskFileURL(name), atomically: true, encoding: .utf8)
+        if approve { try await TaskLibrary(project: project).approve(name) }
+    }
+
+    @Test func whatIsApprovedIsWhatWasShown() async throws {
+        let (fixture, env) = try await scenario()
+        let tasks = model(env)
+        await tasks.refresh(fixture.project)
+        tasks.beginApprove(fixture.project, "cleanup-branches")
+        let shown = try #require(tasks.approving)
+        // Edited in an editor while the card is open: the new text must not be approved unseen.
+        try await edit(fixture.project, "cleanup-branches", "---\nat: 05:00\nfix: pr\nbudget: 9.00\n---\nDo something else.\n")
+        await tasks.confirmApprove(fixture.project)
+        #expect(tasks.approving != nil)
+        #expect(tasks.approveError?.contains("edited after it was shown") == true)
+        let history = try TaskRunLog(project: fixture.project, name: "cleanup-branches").history()
+        #expect(history.approvedHash == nil)
+        // Looking again shows the new version, and that one can be approved.
+        tasks.cancelApprove()
+        tasks.beginApprove(fixture.project, "cleanup-branches")
+        #expect(tasks.approving?.hash != shown.hash)
+        await tasks.confirmApprove(fixture.project)
+        #expect(tasks.approving == nil)
+    }
+
+    @Test func aTaskChangedToPrAsksEvenIfTheListIsOld() async throws {
+        let (fixture, env) = try await scenario()
+        let run = FakeRun()
+        let tasks = model(env, actions: fake(run))
+        await tasks.refresh(fixture.project)
+        let old = try entry(tasks, "weekly-report")
+        #expect(old.summary.fix == .report)
+        try await edit(
+            fixture.project, "weekly-report", "---\nevery: 30d\nfix: pr\nbudget: 4.00\n---\nNow it opens pull requests.\n",
+            approve: true)
+        await tasks.beginRun(fixture.project, old, threadRunGoing: false)
+        #expect(run.calls.isEmpty)
+        #expect(tasks.confirmingRun?.cost == "up to $4.00 for the work and $0.50 to describe it: at most $4.50")
+    }
+
+    @Test func aRunStartsOnlyTheVersionTheCardNamed() async throws {
+        let (fixture, env) = try await scenario()
+        let run = FakeRun()
+        let tasks = model(env, actions: fake(run))
+        await tasks.refresh(fixture.project)
+        await tasks.beginRun(fixture.project, try entry(tasks, "sync-fixtures"), threadRunGoing: false)
+        #expect(tasks.confirmingRun?.cost.contains("$2.00") == true)
+        // The budget is raised and approved again while the card is open.
+        try await edit(
+            fixture.project, "sync-fixtures", "---\nevery: 7d\nfix: pr\nbudget: 20.00\ntimeout: 20\n---\nRefresh the fixtures.\n",
+            approve: true)
+        await tasks.confirmRun(fixture.project)
+        #expect(run.calls.isEmpty)
+        #expect(tasks.actionNote?.contains("edited after the card was shown") == true)
+    }
+
+    @Test func aRunBelongsToItsProject() async throws {
+        let (first, env) = try await scenario()
+        let (second, _) = try await scenario()
+        let run = FakeRun()
+        run.holds = true
+        let tasks = model(env, actions: fake(run))
+        await tasks.refresh(first.project)
+        let report = try entry(tasks, "weekly-report")
+        let started = Task { await tasks.beginRun(first.project, report, threadRunGoing: false) }
+        while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(30))
+        // The other project has a task of the same name: it is not the one running, and has no result.
+        #expect(tasks.isRunning("weekly-report", in: first.project))
+        #expect(!tasks.isRunning("weekly-report", in: second.project))
+        await tasks.refresh(second.project)
+        run.release()
+        await started.value
+        #expect(tasks.result(of: "weekly-report", in: first.project)?.outcome == .reported)
+        #expect(tasks.result(of: "weekly-report", in: second.project) == nil)
+        // Finishing did not put the first project's tasks over the one on screen.
+        #expect(tasks.snapshot(for: second.project) != nil)
+        #expect(tasks.snapshot(for: first.project) == nil)
+    }
+
     @Test func runNowAvailability() async throws {
         let (fixture, env) = try await scenario()
         let tasks = model(env)

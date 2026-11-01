@@ -8,6 +8,8 @@ struct TaskCardInfo: Equatable {
         var value: String
     }
     var name: String
+    /// What approval binds to for this version of the task: approving or running confirms only this one.
+    var hash: String
     var settings: [Line]
     var instructions: String
     var fix: TaskFix
@@ -37,7 +39,7 @@ struct TaskCardInfo: Equatable {
         }
         if !task.inputs.isEmpty { lines.append(Line(label: "inputs", value: task.inputs.joined(separator: ", "))) }
         return TaskCardInfo(
-            name: name, settings: lines, instructions: task.instructions, fix: task.fix, cost: cost(task))
+            name: name, hash: loaded.hash, settings: lines, instructions: task.instructions, fix: task.fix, cost: cost(task))
     }
 
     /// The most a `fix: pr` run may spend: the coding turns' budget and the read-only turn that describes the change.
@@ -57,15 +59,17 @@ struct TaskCardInfo: Equatable {
 struct TaskActions: Sendable {
     /// What approval would bind to, read from disk now. Throws the core's message for a task that does not load.
     var inspect: @Sendable (Project, String) throws -> TaskCardInfo
-    /// `TaskLibrary.approve`: records the approval, or throws the core's refusal.
-    var approve: @Sendable (Project, String) async throws -> Void
+    /// `TaskLibrary.approve` for the version shown (its hash): records the approval, or throws the core's refusal.
+    var approve: @Sendable (Project, String, String) async throws -> Void
     /// `TaskRunner.run(name, trigger: .manual)`. The stop switch ends the turn; `notice` is what the run says as it goes.
     var run: @Sendable (Project, String, TaskStopSwitch, @escaping @Sendable (String) -> Void) async -> TaskRunResult
 
     static let core = TaskActions(
         inspect: { project, name in TaskCardInfo.make(try TaskLibrary(project: project).load(name), name: name) },
-        approve: { project, name in
-            do { try await TaskLibrary(project: project).approve(name) } catch { throw GoalActions.RefusalText("\(error)") }
+        approve: { project, name, hash in
+            do {
+                try await TaskLibrary(project: project).approve(name, expecting: hash)
+            } catch { throw GoalActions.RefusalText("\(error)") }
         },
         run: { project, name, stop, notice in
             guard let git = try? GitRunner.discover() else {
