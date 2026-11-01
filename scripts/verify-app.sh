@@ -202,7 +202,7 @@ SWIFT
   if [[ -d "$fixture/tasks" || "$scenario" == tasks-* ]]; then
     [[ ! -d "$fixture/tasks" ]] || cp -R "$fixture/tasks" "$dir/project/.workbench/tasks"
     local root hash slug
-    root="$(cd "$dir/project" && pwd -P)"
+    root="$dir/project"
     hash="$(printf '%s' "$root" | shasum -a 256 | cut -c1-8)"
     slug="$(basename "$root" | tr 'A-Z' 'a-z')-$hash"
     mkdir -p "$dir/home/Library/LaunchAgents" "$dir/home/Library/Logs/Workbench" "$dir/probes" "$dir/bin"

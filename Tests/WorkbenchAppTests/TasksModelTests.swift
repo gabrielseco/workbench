@@ -117,6 +117,8 @@ import WorkbenchCore
         #expect(TimerCard.lines([TimerStatusLine(level: .ok, text: "a")]).headline == "Ready for tonight")
         let mixed = [TimerStatusLine(level: .ok, text: "a"), TimerStatusLine(level: .fail, text: "b")]
         #expect(TimerCard.lines(mixed).worst == .fail)
+        #expect(TimerCard.lines(mixed).counts == "1 problem")
+        #expect(TimerCard.unknown("x").counts == nil)
     }
 
     @Test func timerUnreadableIsUnknown() async throws {

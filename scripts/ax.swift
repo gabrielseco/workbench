@@ -46,7 +46,7 @@ struct Found {
     let role: String
     let label: String
 }
-let pressable: Set<String> = ["AXButton", "AXMenuButton", "AXPopUpButton", "AXLink", "AXCheckBox"]
+let pressable: Set<String> = ["AXButton", "AXMenuButton", "AXPopUpButton", "AXLink", "AXCheckBox", "AXRadioButton"]
 /// What a person reads: listed, never pressed. Groups are walked into and never listed: a group carries its children's text.
 let readable: Set<String> = ["AXStaticText", "AXTextField", "AXTextArea", "AXImage"]
 func walk(_ element: AXUIElement, into found: inout [Found]) {

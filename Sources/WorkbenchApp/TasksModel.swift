@@ -93,11 +93,22 @@ enum TimerCard: Equatable {
         return .ok
     }
 
+    /// "2 problems · 3 warnings": what is behind the headline, so a closed card still says how much is wrong.
+    var counts: String? {
+        guard case .lines(let lines) = self else { return nil }
+        let fails = lines.filter { $0.level == .fail }.count
+        let warns = lines.filter { $0.level == .warn }.count
+        let problems = fails > 0 ? "\(fails) problem\(fails == 1 ? "" : "s")" : nil
+        let warnings = warns > 0 ? "\(warns) warning\(warns == 1 ? "" : "s")" : nil
+        let parts = [problems, warnings].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var headline: String {
         switch worst {
         case .ok?: "Ready for tonight"
         case .warn?: "Will run, check the warnings"
-        case .fail?: "Will not run as it is"
+        case .fail?: "Fix before tonight"
         case nil: "unknown"
         }
     }

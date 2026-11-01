@@ -113,7 +113,7 @@ struct TimerCardView: View {
     var card: TimerCard
     @State private var expanded: Bool?
 
-    private var open: Bool { expanded ?? (card.worst != .ok) }
+    private var open: Bool { expanded ?? false }
 
     var body: some View {
         let tone: TaskTone = card.worst.map(TaskOutcomeStyle.tone) ?? .idle
@@ -127,6 +127,9 @@ struct TimerCardView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Will it run tonight?").font(.caption).foregroundStyle(.secondary)
                         Text(card.headline).font(.callout.weight(.semibold))
+                        if let counts = card.counts {
+                            Text(counts).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
                     Image(systemName: open ? "chevron.up" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
