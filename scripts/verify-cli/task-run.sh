@@ -117,8 +117,11 @@ check "the thread was accepted by the task and its branch is on origin" "thread 
     bash -c 'grep -q "\"by\":\"task:bump\"" "$1/.workbench/threads/$2/events.jsonl" && git -C "$3" rev-parse -q --verify "refs/heads/workbench/$2" >/dev/null' _ "$P" "$THREAD" "$ORIGIN"
 check "exactly one pull request was opened" "gh calls: $(grep -c 'pr create' "$GHDIR/calls")" test "$(grep -c 'pr create' "$GHDIR/calls")" = 1
 
-[ "$SABOTAGE" = 1 ] && rm -f "$P/.workbench/threads/$THREAD/events.jsonl"
+# Sabotage hides the thread's log for this one call only, so nothing after it is affected.
+EVENTS="$P/.workbench/threads/$THREAD/events.jsonl"
+[ "$SABOTAGE" = 1 ] && mv "$EVENTS" "$EVENTS.hidden"
 wbp "$SCRATCH/log1.out" task log bump; shown "$SCRATCH/log1.out" 12
+[ "$SABOTAGE" = 1 ] && mv "$EVENTS.hidden" "$EVENTS"
 check "task log tells the run from its thread: the pull request, the check and the agent's last message" "exit $RC: $(head -c 500 "$SCRATCH/log1.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "^outcome:  pr-opened" "$2" && grep -q "^pull request: https://github.com/o/r/pull/1" "$2" && grep -q "^check:    passed" "$2" && grep -q "^agent:    fake claude:" "$2"' _ "$RC" "$SCRATCH/log1.out"
 
