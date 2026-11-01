@@ -114,6 +114,48 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(notifier.posted.count == 1)
     }
 
+    @Test func aReasonAnnouncedBeforeIsNotAnnouncedAgainAfterARelaunch() async throws {
+        let prefs = MemoryPreferences()
+        let notifier = RecordingNotifier()
+        let first = AttentionCenter(preferences: prefs, notifier: notifier)
+        let failing = AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "abc")
+        let green = ThreadAttention(id: "t1", title: "Paginate", attention: .none)
+        await look(first, "proj", thread: green, tasks: [])
+        await look(first, "proj", thread: failing, tasks: [])
+        #expect(notifier.posted.count == 1)
+        #expect(prefs.announcedAttention == ["/work/proj|thread:t1:20:abc"])
+        // CI goes green, the app is relaunched (a new centre, the same preferences), and the same commit fails again.
+        let second = AttentionCenter(preferences: prefs, notifier: notifier)
+        await look(second, "proj", thread: green, tasks: [])
+        await look(second, "proj", thread: failing, tasks: [])
+        #expect(notifier.posted.count == 1, "one notification per reason per commit, past a relaunch")
+        // Another commit is another reason.
+        await look(second, "proj", thread: AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "def"), tasks: [])
+        #expect(notifier.posted.count == 2)
+    }
+
+    @Test func theAnnouncedMemoryIsPerProjectAndBounded() async throws {
+        let prefs = MemoryPreferences()
+        let notifier = RecordingNotifier()
+        let center = AttentionCenter(preferences: prefs, notifier: notifier)
+        let a = try await failed("alpha", at: 100)
+        await look(center, "one", tasks: [])
+        await look(center, "one", tasks: [a])
+        // The same task and run in another project is its own reason.
+        await look(center, "two", tasks: [])
+        await look(center, "two", tasks: [a])
+        #expect(notifier.posted.count == 2)
+        #expect(Set(prefs.announcedAttention) == ["/work/one|task:alpha:100", "/work/two|task:alpha:100"])
+        prefs.announcedAttention = (0..<300).map { "p|task:t:\($0)" }
+        let (_, entries) = try await AttentionItemsTests.entries()
+        var next = try #require(entries.first { $0.id == "weekly-report" })
+        next = AttentionItemsTests.task(next, runs: [AttentionItemsTests.run(.failed, at: 500)])
+        next.summary.name = "beta"
+        await look(center, "two", tasks: [a, next])
+        #expect(prefs.announcedAttention.count == AttentionCenter.seenLimit)
+        #expect(prefs.announcedAttention.last == "/work/two|task:beta:500")
+    }
+
     @Test func seenBelongsToItsProject() async throws {
         let r = rig()
         let (center, prefs) = (r.center, r.prefs)

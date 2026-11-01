@@ -104,13 +104,20 @@ import WorkbenchCore
         }
         // Until the thread's CI has been read, nothing from the thread is announced: its failure may be an old one.
         guard threadBaselined else { return }
-        for item in all where !baseline.contains(item.id) && !announced.contains(item.id) {
+        let before = Set(preferences.announcedAttention)
+        for item in all where !baseline.contains(item.id) && !announced.contains(item.id) && !before.contains(seenKey(item.id)) {
             announced.insert(item.id)
+            remember(announced: item.id)
             guard !paused else { continue }
             let notice = Notice(id: item.id, title: projectName, body: Self.body(item), route: item.route, project: path)
             posts += 1
             if await notifier.post(notice) == .denied { notificationsDenied = true }
         }
+    }
+
+    /// Keeps that this was announced, past a relaunch: the latest `seenLimit` of them.
+    private func remember(announced id: String) {
+        preferences.announcedAttention = Array((preferences.announcedAttention + [seenKey(id)]).suffix(Self.seenLimit))
     }
 
     /// "Review · turn 2 done" or "bump-contract-details failed: the check failed…".
