@@ -19,6 +19,8 @@ public struct TimerPaths: Sendable, Equatable {
 
     public var launcherDirectory: URL { home.appendingPathComponent(".workbench/timers/\(slug)", isDirectory: true) }
     public var launcher: URL { launcherDirectory.appendingPathComponent("tick.sh") }
+    /// The copy of the `workbench` binary the launcher runs, so a rebuild of the one it was installed from changes nothing.
+    public var binary: URL { launcherDirectory.appendingPathComponent("workbench") }
     public var plist: URL { home.appendingPathComponent("Library/LaunchAgents/\(label).plist") }
     public var log: URL { home.appendingPathComponent("Library/Logs/Workbench/task-tick-\(slug).log") }
 }

@@ -39,6 +39,13 @@ struct TaskTimerFilesTests {
         #expect(dict["StandardOutPath"] as? String == paths.log.path)
     }
 
+    @Test func launcherRunsTheCopy() {
+        let paths = TimerPaths(project: project("p"), home: URL(fileURLWithPath: "/home/u"))
+        #expect(paths.binary.path == "\(paths.launcherDirectory.path)/workbench")
+        let text = TimerFiles.launcher(project: project("p"), workbench: paths.binary, label: "l", pullMain: false)
+        #expect(text.contains("exec /usr/bin/caffeinate -i '\(paths.binary.path)' task tick"))
+    }
+
     @Test func theLauncherQuotesTheProjectAndTheBinary() {
         let project = project("it's here")
         let binary = URL(fileURLWithPath: "/opt/it's/wb")

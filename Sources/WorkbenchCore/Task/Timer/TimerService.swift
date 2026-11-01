@@ -113,7 +113,9 @@ public struct TimerService: Sendable {
                 paths.launcherDirectory, paths.plist.deletingLastPathComponent(), paths.log.deletingLastPathComponent(),
             ]
             for directory in directories { try fm.createDirectory(at: directory, withIntermediateDirectories: true) }
-            try TimerFiles.launcher(project: project, workbench: workbench, label: paths.label, pullMain: pullMain)
+            // First, and before anything else is written: a binary that cannot be copied leaves the old launcher and agent as they were.
+            try Self.copyBinary(from: workbench, to: paths.binary)
+            try TimerFiles.launcher(project: project, workbench: paths.binary, label: paths.label, pullMain: pullMain)
                 .write(to: paths.launcher, atomically: true, encoding: .utf8)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.launcher.path)
             try TimerFiles.plist(paths: paths, project: project, interval: interval)
@@ -132,12 +134,9 @@ public struct TimerService: Sendable {
             "installed \(paths.label)",
             "  ticks every \(interval / 60) minutes; the tasks' own schedules say what is due",
             "  launcher: \(paths.launcher.path)",
+            "  binary:   \(paths.binary.path) (a copy of \(workbench.path); a rebuild leaves it, install again to update it)",
             "  log:      \(paths.log.path)",
         ]
-        // The path is the binary's real one (`.build/arm64-apple-macosx/debug/...`), not the `debug` link a build leaves.
-        if workbench.path.contains("/.build/"), workbench.path.contains("/debug/") {
-            lines.append("note: it runs \(workbench.path); a rebuild replaces that file, so rebuild when no tick is running")
-        }
         switch TimerWake.plan(for: tasks()) {
         case .wake(let time, let days):
             let plan = TimerWake.Plan.wake(time: time, days: days)
@@ -149,6 +148,34 @@ public struct TimerService: Sendable {
         lines.append("also: keep the Mac plugged in and logged in (a restart with FileVault waits for your password)")
         lines.append("check it any time with: workbench task timer status")
         return lines
+    }
+
+    /// Copies `source` over `destination` so that nothing ever sees half of it: into a temporary file in the same folder, then a rename.
+    /// A failure removes the temporary file and leaves what was there. Installing from the copy itself is a no-op.
+    static func copyBinary(from source: URL, to destination: URL) throws {
+        let fm = FileManager.default
+        let from = source.resolvingSymlinksInPath()
+        guard from != destination.resolvingSymlinksInPath() else { return }
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: from.path, isDirectory: &isDirectory), !isDirectory.boolValue,
+            fm.isReadableFile(atPath: from.path)
+        else { throw TimerError.cannotWrite("the binary \(source.path) cannot be read, so it cannot be copied for the timer") }
+        let folder = destination.deletingLastPathComponent()
+        // A copy that was cut short by a killed installer: nothing else makes these, and the next install is the first chance to clean up.
+        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasPrefix(".workbench-copy-") {
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+        }
+        let temporary = folder.appendingPathComponent(".workbench-copy-\(UUID().uuidString)")
+        do {
+            try fm.copyItem(at: from, to: temporary)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+            guard rename(temporary.path, destination.path) == 0 else {
+                throw TimerError.cannotWrite("\(String(cString: strerror(errno))) renaming the copy to \(destination.path)")
+            }
+        } catch {
+            try? fm.removeItem(at: temporary)
+            throw error
+        }
     }
 
     // MARK: remove
@@ -235,6 +262,7 @@ public struct TimerService: Sendable {
         } else {
             add(.fail, "agent: installed but not loaded: workbench task timer install (it loads it again)")
         }
+        if installed, launchctl != nil { out.append(binaryStatus()) }
         if let modified = (try? FileManager.default.attributesOfItem(atPath: paths.log.path))?[.modificationDate] as? Date {
             let format = DateFormatter()
             format.locale = Locale(identifier: "en_US_POSIX")
@@ -287,6 +315,32 @@ public struct TimerService: Sendable {
             add(.warn, "FileVault: could not be read (fdesetup status); if it is on, a restart waits for your login")
         }
         return out
+    }
+
+    /// The copy of the binary the launcher runs: there, executable, and not older than the `workbench` being run now (when this is one:
+    /// the app's own binary is not the command line tool, so it is not compared).
+    private func binaryStatus() -> TimerStatusLine {
+        let fm = FileManager.default
+        let fix = "workbench task timer install"
+        guard fm.isExecutableFile(atPath: paths.binary.path) else {
+            return TimerStatusLine(level: .fail, text: "binary: the copy the launcher runs is missing: \(fix)")
+        }
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.dateFormat = "yyyy-MM-dd HH:mm"
+        func modified(_ url: URL) -> Date? { (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date }
+        guard let copy = modified(paths.binary) else {
+            return TimerStatusLine(level: .warn, text: "binary: the copy's age could not be read (\(paths.binary.path))")
+        }
+        let running = workbench.resolvingSymlinksInPath()
+        if running.lastPathComponent == paths.binary.lastPathComponent, running != paths.binary.resolvingSymlinksInPath(),
+            let built = modified(running), built.timeIntervalSince(copy) > 1 {
+            return TimerStatusLine(
+                level: .warn,
+                text: "binary: the copy the launcher runs is from \(format.string(from: copy)), older than this workbench "
+                    + "(\(format.string(from: built))): \(fix)")
+        }
+        return TimerStatusLine(level: .ok, text: "binary: \(paths.binary.path) (\(format.string(from: copy)))")
     }
 
     /// Whether the machine's repeating wake is what the tasks need: the same time, and the same days read as a set, never "close enough".

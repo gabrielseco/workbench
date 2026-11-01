@@ -11,10 +11,12 @@
 # files; a bad interval is exit 2; an agent that is not loaded is a FAIL with exit 1; `remove` must unload it, delete both files and name
 # `sudo pmset repeat cancel`; when launchctl refuses to unload, `remove` must fail (exit 1), delete nothing and say so. Each of
 # `help task timer install|status|remove` must answer. launchctl must be the only program run: its calls are bootout, bootstrap and print and nothing else.
+# `install` also copies the running binary next to the launcher (`~/.workbench/timers/<slug>/workbench`): the launcher must run that copy, the
+# copy must run, and it must go on running after the binary it was installed from is overwritten (a rebuild); `status` must say `ok   binary:`.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
 # "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
-# task approved" and "a second install replaces the files" must FAIL. The frame is in lib.sh. Run by
+# task approved", "a second install replaces the files" and "the copy keeps running after the source is overwritten" must FAIL. The frame is in lib.sh. Run by
 # hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -81,6 +83,16 @@ check "install prints the wake line and says it does not run sudo" "got: $(head 
     bash -c 'grep -q "^  sudo pmset repeat wakeorpoweron MTWRF 03:55:00" "$1" && grep -q "Workbench does not run sudo" "$1" && grep -q "plugged in and logged in" "$1"' _ "$SCRATCH/install1.out"
 check "the launcher runs from the project with caffeinate" "launcher: $(grep -c caffeinate "$LAUNCHER" 2>&1)" \
     bash -c 'grep -q "^cd .*project.* || exit 1" "$1" && grep -q "/usr/bin/caffeinate -i .* task tick" "$1"' _ "$LAUNCHER"
+COPY=$(ls "$HOME_T"/.workbench/timers/*/workbench 2>/dev/null | head -1)
+check "the launcher runs the copy of the binary, not the build" "launcher: $(grep -c caffeinate "$LAUNCHER" 2>&1); copy: ${COPY:-none}" \
+    bash -c '[ -x "$1" ] && grep -q "caffeinate -i .$1. task tick" "$2" && ! grep -q "$3" "$2"' _ "$COPY" "$LAUNCHER" "$WB"
+# A rebuild replaces the file the person ran install from: install from a throwaway copy of the binary, then overwrite that copy.
+cp "$WB" "$SCRATCH/wb-run" || die "could not copy the binary"
+( cd "$P" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" with_timeout "$T_WB" "$SCRATCH/wb-run" task timer install >"$SCRATCH/install-copy.out" 2>&1 ); RC=$?
+printf '#!/bin/sh\necho rebuilt-and-broken\n' >"$SCRATCH/wb-run"
+( cd "$P" && "$COPY" version >"$SCRATCH/copy-version.out" 2>&1 ); COPY_RC=$?
+check "the copy keeps running after the source is overwritten" "install exit $RC, copy exit $COPY_RC: $(head -c 200 "$SCRATCH/copy-version.out")" \
+    bash -c '[ "$1" = 0 ] && [ "$2" = 0 ] && ! grep -q rebuilt-and-broken "$3"' _ "$RC" "$COPY_RC" "$SCRATCH/copy-version.out"
 wbp "$SCRATCH/approve2.out" task approve nightly
 check "once the timer is installed the hint is gone" "got: $(head -c 300 "$SCRATCH/approve2.out")" \
     bash -c '! grep -q "no timer is installed" "$1"' _ "$SCRATCH/approve2.out"
@@ -91,11 +103,14 @@ wbp "$SCRATCH/status1.out" task timer status; shown "$SCRATCH/status1.out" 10
 check "status says the agent is loaded and the task approved, with a wake line" "exit $RC: $(head -c 400 "$SCRATCH/status1.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "^ok   agent: loaded" "$2" && grep -q "^ok   task nightly: approved, weekdays 04:00" "$2" && grep -q "wake:" "$2"' _ "$RC" "$SCRATCH/status1.out"
 
+check "status says which binary the launcher runs" "got: $(head -c 400 "$SCRATCH/status1.out")" \
+    grep -q "^ok   binary: " "$SCRATCH/status1.out"
+
 # --- 4. install again ----------------------------------------------------------------------------------------
 
 wbp "$SCRATCH/install2.out" task timer install --every 5m --pull-main
 check "a second install replaces the files" "exit $RC: $(head -c 300 "$SCRATCH/install2.out")" \
-    bash -c '[ "$1" = 0 ] && grep -q "git pull --ff-only" "$2" && grep -q "<integer>300</integer>" "$3" && [ "$(grep -c "^bootstrap" "$4/calls")" = 2 ]' _ "$RC" "$LAUNCHER" "$PLIST" "$LC"
+    bash -c '[ "$1" = 0 ] && grep -q "git pull --ff-only" "$2" && grep -q "<integer>300</integer>" "$3" && [ "$(grep -c "^bootstrap" "$4/calls")" = 3 ]' _ "$RC" "$LAUNCHER" "$PLIST" "$LC"
 wbp "$SCRATCH/bad.out" task timer install --every 2h
 check "a bad interval is a usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/bad.out")" test "$RC" = 2
 
