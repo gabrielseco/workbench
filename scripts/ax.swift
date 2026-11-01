@@ -335,6 +335,41 @@ case "list":
     for item in found {
         print("\(item.role)\t\(item.label.replacingOccurrences(of: "\n", with: " ").prefix(120))")
     }
+case "status":
+    // The app's own status item (the menu bar's extras menu of this pid only): a press opens or closes its popover.
+    guard window != nil else {
+        print("status (fixture)")
+        exit(0)
+    }
+    let app = AXUIElementCreateApplication(targetPID)
+    guard let bar = attribute(app, "AXExtrasMenuBar"), let item = children(bar as! AXUIElement).first
+    else { fail("This app has no status item") }
+    guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { fail("pressing the status item failed") }
+    print("pressed status item: \(text(item))")
+case "popover", "popover-press":
+    // What the status item's popover shows: every window of this pid that is not the main one.
+    guard window != nil else { fail("a fixture has no popover") }
+    let app = AXUIElementCreateApplication(targetPID)
+    let others = (attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []).filter {
+        attribute($0, kAXTitleAttribute) as? String != "Workbench"
+    }
+    var popover: [Found] = []
+    for other in others { walk(other, into: &popover) }
+    if args[0] == "popover" {
+        guard !others.isEmpty else { fail("The popover is not open: press the status item first") }
+        for item in popover { print("\(item.role)\t\(item.label.replacingOccurrences(of: "\n", with: " ").prefix(120))") }
+        exit(0)
+    }
+    guard args.count == 2, !args[1].isEmpty else { fail("usage: popover-press <label>", code: 2) }
+    let buttons = popover.filter { pressable.contains($0.role) }
+    guard let hit = buttons.first(where: { $0.label == args[1] }) ?? buttons.first(where: { $0.label.hasPrefix(args[1]) })
+    else { fail("Nothing pressable in the popover is labelled \"\(args[1])\"") }
+    if let refuse = ProcessInfo.processInfo.environment["WORKBENCH_REFUSE"], hit.label.range(of: refuse, options: .regularExpression) != nil {
+        fail("Refused: \"\(args[1])\" is \"\(hit.label)\"")
+    }
+    guard let element = hit.element, AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+    else { fail("failed on \(hit.label)") }
+    print("pressed \(hit.role) \(hit.label)")
 default:
     fail(
         "usage: ax.swift list | press <label> | type <text> | focus <field> | click <label> | hover <label> | typekeys <text>"

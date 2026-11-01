@@ -1,6 +1,6 @@
 # P19: SwiftUI app
 
-Status: plan, nothing built. Written 2026-10-27. Starts only after [P9](P9-agent-providers.md)'s acceptance gate passes (task 5
+Status: built (the window, its five screens, the Tasks screen and the menu bar item with its notifications; the 20-real-tasks gate below is still open). Written 2026-10-27. Starts only after [P9](P9-agent-providers.md)'s acceptance gate passes (task 5
 is open). Refines [P3](P3-app.md): the layout, the screens and the menu bar come from the mockups in
 [`../mac-app/`](../mac-app/) (1 Goal, 2 Run, 3 Review, 4 Ship + PR review, 5 Menu bar), which replace P3's single column.
 P3's acceptance criteria that still hold are carried over below. This document describes future behaviour; `docs/spec/`
@@ -278,6 +278,8 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   Fix findings starts the follow-up thread (its lineage shows), merge on GitHub, `Clean thread` removes the branch.
 
 ### Task 5: Menu bar (mockup 5)
+
+**Built** (#339 the attention centre and notifications, then the status item and popover): `AttentionItems`, `AttentionCenter`, `Notifier`, `MenuBarLabel`, `MenuBarPopover`. It counts the open project's thread and its scheduled tasks (a task run that broke, or an approval gone stale), not only the thread, and `Quit` with a live run (ask, stop, wait 6 s) is not done.
 
 - **Shows:** a status item with a count only while `Attention` is `needsYou`; the popover: project, `Needs you` pill, title,
   `Review · turn 2 done 4 min ago · $3.42 of $8.00`, the `Criteria assessed 1 of 4` row, the open-hands row (`C3 by hand · Open`),

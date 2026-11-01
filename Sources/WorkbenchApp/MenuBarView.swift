@@ -66,9 +66,15 @@ struct MenuBarPopover: View {
     @ViewBuilder private func content(_ model: MenuBarPopoverModel) -> some View {
         switch model.status {
         case .needsYou:
-            ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
-                RowCard(store: store, row: row, first: index == 0, open: open)
+            // Many items scroll rather than grow the popover off the screen.
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
+                        RowCard(store: store, row: row, first: index == 0, open: open)
+                    }
+                }
             }
+            .frame(maxHeight: 380).fixedSize(horizontal: false, vertical: true)
         case .noProject:
             Text("No project open").font(.headline)
             Text("Open Workbench and choose a project.").font(.callout).foregroundStyle(.secondary)
