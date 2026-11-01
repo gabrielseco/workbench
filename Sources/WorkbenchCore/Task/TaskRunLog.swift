@@ -19,6 +19,8 @@ public enum TaskOutcome: String, Sendable, Equatable {
     case nothingToDo = "nothing-to-do"
     case skippedProjectBusy = "skipped-project-busy"
     case skippedAlreadyRunning = "skipped-already-running"
+    /// The task already has as many pull requests open as `max_open` allows: it waits for review.
+    case skippedTooManyOpen = "skipped-too-many-open"
     case budgetExceeded = "budget-exceeded"
     case failed
     case staleApproval = "stale-approval"
@@ -67,6 +69,18 @@ public struct TaskHistory: Sendable, Equatable {
     /// Units a run recorded as having a pull request.
     public var openedUnits: Set<String> {
         Set(runs.filter { $0.outcome == .prOpened }.flatMap(\.units))
+    }
+
+    /// How many times each unit was tried and ended without a pull request (failed, nothing to do, over budget, interrupted). A dry
+    /// run, a skip and a stale approval are not tries.
+    public var failedTries: [String: Int] {
+        let tries: Set<TaskOutcome> = [.failed, .nothingToDo, .budgetExceeded, .interrupted]
+        var result: [String: Int] = [:]
+        for run in runs {
+            guard let outcome = run.outcome, tries.contains(outcome) else { continue }
+            for unit in run.units { result[unit, default: 0] += 1 }
+        }
+        return result
     }
 
     /// When the schedule counts from: the last run's start, or the approval when there was none.

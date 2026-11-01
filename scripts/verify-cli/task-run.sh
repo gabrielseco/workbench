@@ -16,6 +16,10 @@
 # "the log holds one approval and three run ends" must FAIL, and so must "task log --all lists every run in one line" (the
 # sabotaged runs differ) and "task log tells the run from its thread" (the sabotage hides the first thread's log for that call). `task log` must show the pull request, the check and the agent's last message of a run,
 # `task log --all` one line per run, `task list` the reason under a run that stopped, and an unknown task must be exit 7.
+# With two of its pull requests open and `max_open: 2` the task must wait for review (exit 6, skipped-too-many-open, both addresses in the
+# reason): under the sabotage the pull requests read as closed, so "the task waits for review at max_open" must FAIL too. A task whose
+# setup fails before any turn must be failed (exit 1) with its thread discarded, and the next run must fail the same way and not be
+# skipped for a dead thread: the sabotage leaves a thread active, so "the next run is not skipped for a dead thread" must FAIL.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -102,7 +106,7 @@ sed 's/.*/{"id":"&","title":"bump &"}/' countries.txt | paste -sd, -
 printf ']\n'
 SH
 chmod +x "$TASK/pending.sh"
-printf -- '---\nbatch: 2\nfix: pr\ninputs: countries.txt\npending: .workbench/tasks/bump/pending.sh\n---\nBump the next countries.\n' >"$TASK/task.md"
+printf -- '---\nbatch: 2\nfix: pr\nmax_open: 5\ninputs: countries.txt\npending: .workbench/tasks/bump/pending.sh\n---\nBump the next countries.\n' >"$TASK/task.md"
 
 # --- 1. approve and run ------------------------------------------------------------------------------------
 
@@ -143,6 +147,33 @@ check "the log holds one approval and three run ends with their outcomes" "log: 
 wbp "$SCRATCH/logall.out" task log bump --all; shown "$SCRATCH/logall.out" 6
 check "task log --all lists every run in one line" "got: $(cat "$SCRATCH/logall.out" | head -c 400)" \
     bash -c '[ "$(grep -c "" "$1")" = 3 ] && sed -n 3p "$1" | grep -q "nothing-pending"' _ "$SCRATCH/logall.out"
+
+# --- 2b. waiting for review ---------------------------------------------------------------------------------
+
+sed -i.bak 's/^max_open: 5$/max_open: 2/' "$TASK/task.md" && rm -f "$TASK/task.md.bak"
+wbp "$SCRATCH/approve2.out" task approve bump
+wbp "$SCRATCH/waits.out" task run bump; shown "$SCRATCH/waits.out" 5
+check "the task waits for review at max_open (exit 6, both pull requests named)" "exit $RC: $(head -c 400 "$SCRATCH/waits.out")" \
+    bash -c '[ "$1" = 6 ] && grep -q "^bump: skipped-too-many-open" "$2" && grep -q "2 of the task.s pull requests are still open (max_open 2)" "$2" && grep -q "pull/1" "$2" && grep -q "pull/2" "$2"' _ "$RC" "$SCRATCH/waits.out"
+sed -i.bak 's/^max_open: 2$/max_open: 5/' "$TASK/task.md" && rm -f "$TASK/task.md.bak"
+wbp "$SCRATCH/approve3.out" task approve bump
+
+# --- 2c. a setup that fails before any turn -------------------------------------------------------------------
+
+mkdir -p "$P/.workbench/tasks/setup"
+printf -- '---\nfix: pr\nmax_open: 5\n---\nDo the thing.\n' >"$P/.workbench/tasks/setup/task.md"
+{ printf 'setup_command = "false"\n'; cat "$P/.workbench/config.toml"; } >"$SCRATCH/config.new" && cp "$SCRATCH/config.new" "$P/.workbench/config.toml"
+wbp "$SCRATCH/approve4.out" task approve setup
+wbp "$SCRATCH/setup1.out" task run setup; shown "$SCRATCH/setup1.out" 4
+check "a failed setup is a failed run with its thread discarded" "exit $RC: $(head -c 400 "$SCRATCH/setup1.out")" \
+    bash -c '[ "$1" = 1 ] && grep -q "^setup: failed" "$2" && grep -q "the thread was discarded" "$2"' _ "$RC" "$SCRATCH/setup1.out"
+if [ "$SABOTAGE" = 1 ]; then wbp "$SCRATCH/blocker2.out" goal new blocker2; fi
+wbp "$SCRATCH/setup2.out" task run setup
+check "the next run is not skipped for a dead thread" "exit $RC: $(head -c 300 "$SCRATCH/setup2.out")" \
+    bash -c '[ "$1" = 1 ] && grep -q "^setup: failed" "$2" && ! grep -q "skipped-project-busy" "$2"' _ "$RC" "$SCRATCH/setup2.out"
+if [ "$SABOTAGE" = 1 ]; then wbp "$SCRATCH/abandon2.out" abandon; fi
+sed -i.bak '1d' "$P/.workbench/config.toml" && rm -f "$P/.workbench/config.toml.bak"
+rm -rf "$P/.workbench/tasks/setup"
 
 # --- 3. what stops a run -----------------------------------------------------------------------------------
 

@@ -128,6 +128,9 @@ public struct TaskRunner: Sendable {
         if let active = store.activeThreadID() { return busy(active) }
         if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
 
+        // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
+        if let skip = await tooManyOpen(task, history: history) { return skip }
+
         var units: [TaskUnit] = []
         if let script = task.pending {
             let all: [TaskUnit]
@@ -147,6 +150,30 @@ public struct TaskRunner: Sendable {
             return TaskRunResult(outcome: .reported, reason: list, units: ids)
         }
         return await runThread(name: name, loaded: loaded, units: units, writer: writer)
+    }
+
+    /// A skip when this task's own pull requests are at the limit, or when GitHub cannot say whether they are: never a run on a guess.
+    private func tooManyOpen(_ task: TaskDefinition, history: TaskHistory) async -> TaskRunResult? {
+        guard let limit = task.openLimit else { return nil }
+        // Only runs that opened a pull request have one to count.
+        let opened = history.runs.filter { $0.outcome == .prOpened && $0.thread != nil }
+        guard !opened.isEmpty else { return nil }
+        let threads = Set(opened.compactMap(\.thread))
+        let states = await TaskPullRequests.threadStates(threads: threads, gh: gh, project: project)
+        if let unknown = threads.first(where: { states[$0] == nil }) {
+            let why = gh == nil ? "GitHub is not reachable" : "GitHub did not answer for \(unknown)"
+            return TaskRunResult(
+                outcome: .skippedTooManyOpen,
+                reason: "cannot tell whether the task's earlier pull requests are still open (\(why)); not starting on a guess")
+        }
+        let open = threads.filter { states[$0] == .open }
+        guard open.count >= limit else { return nil }
+        let urls = opened.filter { open.contains($0.thread ?? "") }.compactMap(\.pullRequest)
+        return TaskRunResult(
+            outcome: .skippedTooManyOpen,
+            reason: "\(open.count) of the task's pull requests are still open (max_open \(limit)): "
+                + (urls.isEmpty ? open.sorted().joined(separator: ", ") : urls.joined(separator: ", "))
+                + "; merge or close one")
     }
 
     private func busy(_ what: String) -> TaskRunResult {
@@ -209,6 +236,15 @@ public struct TaskRunner: Sendable {
         await stop.attach(runner)
         let report: TurnReport
         do { report = try await runner.run(runOptions) } catch {
+            // No turn started (setup failed, the runner could not begin): the thread holds nothing worth keeping and, left active,
+            // would skip every later run. One that ran a turn is left for a person.
+            let events = (try? EventLogReader.read(at: project.eventsURL(id)).events) ?? []
+            let started = events.isEmpty || events.contains { $0.kind == .turnStarted }
+            if !started {
+                _ = try? await service.abandon(id: id)
+                return fail(
+                    "the turn could not run: \(error); no turn had started, so the thread was discarded", units: ids, thread: id)
+            }
             return fail("the turn could not run: \(error)", units: ids, thread: id)
         }
         notice("turn \(report.turn) ended: \(report.result.rawValue)")

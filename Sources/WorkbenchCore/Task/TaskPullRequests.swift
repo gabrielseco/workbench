@@ -3,13 +3,12 @@ import Foundation
 /// What became of the pull requests earlier runs opened, as GitHub says. A unit whose state cannot be found out stays out of the
 /// way (`PendingUnits.select`): the answer is nil, never a guess.
 enum TaskPullRequests {
-    /// `gh pr list --head workbench/<thread> --state all`: the branch a thread ships to is the one name Workbench is sure of.
-    static func states(
-        units: [String: String], gh: GitRunner?, project: Project
-    ) async -> [String: UnitPullRequest] {
+    /// What became of the pull request of each thread, by `gh pr list --head workbench/<thread> --state all`: the branch a thread ships
+    /// to is the one name Workbench is sure of. A thread GitHub could not be asked about has no entry.
+    static func threadStates(threads: Set<String>, gh: GitRunner?, project: Project) async -> [String: UnitPullRequest] {
         guard let gh else { return [:] }
         var byThread: [String: UnitPullRequest] = [:]
-        for thread in Set(units.values) where SafeNames.isThreadID(thread) {
+        for thread in threads where SafeNames.isThreadID(thread) {
             let result = try? await gh.run(
                 ["pr", "list", "--head", "workbench/\(thread)", "--state", "all", "--json", "state", "--limit", "5"],
                 in: project.root)
@@ -28,6 +27,12 @@ enum TaskPullRequests {
                 byThread[thread] = .absent
             }
         }
+        return byThread
+    }
+
+    /// The same, for the units a past run made a thread for.
+    static func states(units: [String: String], gh: GitRunner?, project: Project) async -> [String: UnitPullRequest] {
+        let byThread = await threadStates(threads: Set(units.values), gh: gh, project: project)
         return units.compactMapValues { byThread[$0] }
     }
 }

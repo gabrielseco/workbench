@@ -23,6 +23,8 @@ public enum TaskApproval {
         if let include {
             fields.append("include_sha256=" + SHA256.hash(data: include).map { String(format: "%02x", $0) }.joined())
         }
+        // Only when the task sets it, so a task that does not keeps the approval it has.
+        if let maxOpen = task.maxOpen { fields.append("max_open=\(maxOpen)") }
         fields += ["---", GoalHash.canonicalBody(task.instructions)]
         return SHA256.hash(data: Data(fields.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
     }

@@ -107,6 +107,12 @@ public enum PendingUnits {
             case nil: recorded[unit.id] == nil
             }
         }
-        return Array(pending.prefix(batch))
+        // The units that keep failing go after the ones that have not been tried, so one stuck unit cannot hold the queue.
+        let tries = history.failedTries
+        let ordered = pending.enumerated().sorted { a, b in
+            let (ta, tb) = (tries[a.element.id] ?? 0, tries[b.element.id] ?? 0)
+            return ta != tb ? ta < tb : a.offset < b.offset
+        }.map(\.element)
+        return Array(ordered.prefix(batch))
     }
 }
