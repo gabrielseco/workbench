@@ -6,7 +6,7 @@ extension TaskRunner {
     /// The most of a report kept in a file; the agent's answer is cut there.
     public static let maxReportBytes = 256 << 10
     /// Minutes a report turn may take when the task does not say.
-    static let defaultReportTimeoutMin = 30
+    public static let defaultReportTimeoutMinutes = 30
 
     func runReport(name: String, loaded: LoadedTask, units: [TaskUnit]) async -> TaskRunResult {
         let task = loaded.definition
@@ -42,7 +42,7 @@ extension TaskRunner {
         let scratch = TurnScratch(url: FileManager.default.temporaryDirectory.appendingPathComponent("workbench-report-\(key)"))
         let request = ReadOnlyRequest(
             prompt: prompt, workingDirectory: checkout, model: agent.model, budget: budget,
-            timeout: TimeInterval((task.timeoutMin ?? Self.defaultReportTimeoutMin) * 60),
+            timeout: TimeInterval((task.timeoutMin ?? Self.defaultReportTimeoutMinutes) * 60),
             reasoningEffort: agent.reasoningEffort, tools: .read, scratch: scratch, turn: "report")
         let chosen: any ReadOnlyAgent
         if let given = readOnlyAgent {
@@ -86,14 +86,18 @@ extension TaskRunner {
         let saved = file.path.replacingOccurrences(of: project.root.path + "/", with: "")
         var reason = (first.isEmpty ? "report written" : first) + " (\(saved))"
         if body.cut { reason += "; the answer was cut at \(Self.maxReportBytes / 1024) KiB" }
+        if !cleaned { reason += "; the report's checkout could not be removed, the next run clears it" }
         return TaskRunResult(outcome: .reported, reason: reason, units: ids)
     }
 
     /// The answer as kept: bounded, with no NUL.
     static func report(_ text: String) -> (text: String, cut: Bool) {
         let clean = text.replacingOccurrences(of: "\0", with: "")
-        guard clean.utf8.count > maxReportBytes else { return (clean, false) }
-        return (String(decoding: clean.utf8.prefix(maxReportBytes), as: UTF8.self), true)
+        // One byte short of the limit leaves room for the newline the file ends with; a character cut in half is dropped.
+        guard clean.utf8.count > maxReportBytes - 1 else { return (clean, false) }
+        var cut = String(decoding: clean.utf8.prefix(maxReportBytes - 1), as: UTF8.self)
+        while cut.hasSuffix("\u{FFFD}") { cut.removeLast() }
+        return (cut, true)
     }
 
     /// A Markdown heading mark in front of the first line is not part of what it says.

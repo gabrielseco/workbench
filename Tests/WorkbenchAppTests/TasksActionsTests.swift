@@ -96,8 +96,18 @@ import WorkbenchCore
         // A `fix: pr` task states its most it may cost.
         let sync = try TaskActions.core.inspect(fixture.project, "sync-fixtures")
         #expect(sync.cost == "up to $2.00 for the work and $0.50 to describe it: at most $2.50")
+        // A task that sets no budget runs under the project's default, which is named when the config can be read; else unknown.
         let none = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
         #expect(none.cost.hasPrefix("unknown"))
+        try "default_budget_usd = 3\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        let named = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
+        #expect(named.cost == "up to $3.00 for the report (the project's default budget)")
+        // Codex reports no dollars: no cap in money is promised.
+        try "default_budget_usd = 3\n\n[tools]\navailable = [\"Read\"]\n\n[agents.plan]\nprovider = \"codex\"\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        let codex = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
+        #expect(codex.cost.hasPrefix("no dollar cap: the report agent is Codex"))
     }
 
     @Test func approveRefusalStaysOpen() async throws {

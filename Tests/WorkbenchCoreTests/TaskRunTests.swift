@@ -73,8 +73,8 @@ private struct Run {
         #expect(result.reason?.hasPrefix("Three pages are stale (.workbench/tasks/bump/reports/") == true)
         let request = try #require(agent.requests.first)
         #expect(request.tools == .read && request.budget == 0.75 && request.timeout == 720 && request.turn == "report")
-        #expect(request.prompt.contains("You may only read") && request.prompt.contains("Romania"))
-        #expect(!request.prompt.contains("Leave your changes in the working tree"))
+        // The units reach the agent as data, in the prompt.
+        #expect(request.prompt.contains("Romania") && request.prompt.contains("Turkey") && !request.prompt.contains("Panama"))
         #expect(agent.sawCommitted == true && agent.sawUntracked == false)
         #expect(!FileManager.default.fileExists(atPath: request.workingDirectory.path), "the checkout is removed after")
         let files = run.reportFiles()
@@ -98,6 +98,25 @@ private struct Run {
         #expect(missing.outcome == .failed && missing.reason == "claude is not installed")
     }
 
+    @Test func aReportWhoseCheckoutCannotBeRemovedSaysSoEvenWhenItSucceeded() async throws {
+        let run = try await Run(front: "fix: report")
+        // The agent leaves a folder it cannot be removed from in the checkout: removal fails, the report still stands.
+        let agent = ReportAgent(answer: "# Done", beforeAnswer: { dir in
+            let locked = dir.appendingPathComponent("locked", isDirectory: true)
+            try? FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try? "x".write(to: locked.appendingPathComponent("f"), atomically: true, encoding: .utf8)
+            chmod(locked.path, 0o500)
+        })
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        defer {
+            let checkout = run.fx.project.taskDirectory("bump").appendingPathComponent("report/checkout/locked")
+            chmod(checkout.path, 0o700)
+        }
+        #expect(result.outcome == .reported)
+        let left = run.fx.project.taskDirectory("bump").appendingPathComponent("report/checkout")
+        if FileManager.default.fileExists(atPath: left.path) { #expect(result.reason?.contains("could not be removed") == true) }
+    }
+
     @Test func aHugeAnswerIsCutAndSaid() async throws {
         let run = try await Run(front: "fix: report")
         let huge = "# Big\n" + String(repeating: "x", count: TaskRunner.maxReportBytes + 5000)
@@ -106,7 +125,7 @@ private struct Run {
         let name = try #require(run.reportFiles().first)
         let attributes = try FileManager.default.attributesOfItem(atPath: run.reports.appendingPathComponent(name).path)
         let size = try #require(attributes[.size] as? Int)
-        #expect(size <= TaskRunner.maxReportBytes + 1)
+        #expect(size <= TaskRunner.maxReportBytes)
     }
 
     @Test func aReportIsNotSkippedForAnActiveThread() async throws {
@@ -334,8 +353,12 @@ private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
     let failure: String?
     let notAvailable: String?
 
-    init(answer: String?, failure: String? = nil, unavailable: String? = nil) {
-        (self.answer, self.failure, notAvailable) = (answer, failure, unavailable)
+    let beforeAnswer: (@Sendable (URL) -> Void)?
+
+    init(
+        answer: String?, failure: String? = nil, unavailable: String? = nil, beforeAnswer: (@Sendable (URL) -> Void)? = nil
+    ) {
+        (self.answer, self.failure, notAvailable, self.beforeAnswer) = (answer, failure, unavailable, beforeAnswer)
     }
 
     var requests: [ReadOnlyRequest] { lock.withLock { asked } }
@@ -348,6 +371,7 @@ private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
             let stray = request.workingDirectory.appendingPathComponent("untracked.txt")
             sawUntracked = FileManager.default.fileExists(atPath: stray.path)
         }
+        beforeAnswer?(request.workingDirectory)
         return ReadOnlyAnswer(text: answer, costUSD: nil, failure: failure)
     }
 }
