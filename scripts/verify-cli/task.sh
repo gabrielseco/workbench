@@ -52,6 +52,8 @@ check "init writes a config in the clone" "workbench init exited $RC" test "$RC"
 # --- 1. list before any approval ---------------------------------------------------------------------------
 
 wbp "$SCRATCH/list1.out" task list; shown "$SCRATCH/list1.out"
+check "a plain list runs no pending script and prints no pending count" "got: $(grep '^bump' "$SCRATCH/list1.out")" \
+    bash -c '! grep -q "pending:" "$1"' _ "$SCRATCH/list1.out"
 check "list: a valid task is shown with its schedule, fix level and as not approved" "got: $(grep '^bump' "$SCRATCH/list1.out")" \
     bash -c 'grep -E "^bump +weekdays 04:00 +fix: pr +not approved" "$1" >/dev/null' _ "$SCRATCH/list1.out"
 check "list: a broken task is a PROBLEM naming the line and the key" "got: $(grep '^broken' "$SCRATCH/list1.out")" \
