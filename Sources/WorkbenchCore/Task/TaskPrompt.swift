@@ -7,8 +7,12 @@ public enum TaskPrompt {
     /// The goal file keeps this as the request; the run's whole prompt is this and the project instructions.
     public static let maxBytes = 64 << 10
 
+    /// What the agent is asked to leave: its changes in the tree (a `fix: pr` run), or a report as its answer (a `fix: report` run).
+    public enum Deliverable: Sendable { case changes, report }
+
     public static func build(
-        task: LoadedTask, inputs: [TaskInput], units: [TaskUnit], boundary: String = UUID().uuidString.lowercased()
+        task: LoadedTask, inputs: [TaskInput], units: [TaskUnit], boundary: String = UUID().uuidString.lowercased(),
+        deliverable: Deliverable = .changes
     ) throws -> String {
         let fence = "=====\(boundary.prefix(12))====="
         var parts = [task.definition.instructions]
@@ -28,9 +32,16 @@ public enum TaskPrompt {
             let list = units.map { "- \($0.id): \($0.title)" }.joined(separator: "\n")
             parts.append("The work for this run, in this order:\n\(fence) units\n\(list)\n\(fence) end units")
         }
-        parts.append(
-            "Leave your changes in the working tree. Workbench commits them, runs the project's check and opens the "
-                + "pull request itself: do not push, merge or open one.")
+        switch deliverable {
+        case .changes:
+            parts.append(
+                "Leave your changes in the working tree. Workbench commits them, runs the project's check and opens the "
+                    + "pull request itself: do not push, merge or open one.")
+        case .report:
+            parts.append(
+                "You may only read: change nothing and run nothing. Your whole answer is the report, in Markdown. Its first "
+                    + "line is a one-line summary of what you found; Workbench keeps the answer as a file and shows that line.")
+        }
         let text = neutralised(parts.joined(separator: "\n\n"))
         guard text.utf8.count <= maxBytes, !text.contains("\0") else {
             throw TaskRunError.promptTooLarge(bytes: text.utf8.count, limit: maxBytes)

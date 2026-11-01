@@ -37,8 +37,8 @@ Bump the next countries. Follow the skill exactly.
 | `include` | one file, up to 16 KiB, whose text is added to the prompt |
 | `inputs` | up to 20 paths, 200 files and 32 KiB in all (across every path), regular files only, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
 | `pending` | the script that names the units (below) |
-| `fix` | `report`: a read-only turn that writes a summary. `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
-| `max_open` | 1 to 50, default 2 for `fix: pr` (a dry run is not limited): the task starts no run while this many of its own pull requests are open, because the pull requests of one task tend to touch the same files and pile up. The run ends `skipped-too-many-open` with the addresses; merged and closed ones do not count. It is part of the approval only when the file sets it |
+| `fix` | `report`: one read-only turn, in a checkout of the base as committed (the agent of `[agents.plan]`, with Read, Glob and Grep, never the working tree), whose answer is kept as `.workbench/tasks/<name>/reports/<time>.md` (cut at 256 KiB) and whose first line is the run's reason. It starts no thread, changes and opens nothing, and costs at most the task's `budget` (the project's default budget when it sets none). `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
+| `max_open` | 1 to 50, default 2 for `fix: pr` (a `fix: report` run is not limited): the task starts no run while this many of its own pull requests are open, because the pull requests of one task tend to touch the same files and pile up. The run ends `skipped-too-many-open` with the addresses; merged and closed ones do not count. It is part of the approval only when the file sets it |
 | `timeout` | minutes the agent's turn may run, 5 to 240. Without it the goal's default of 30 stands. Part of the approval only when the file sets it |
 | `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
@@ -72,7 +72,7 @@ The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the sa
 timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
 shown. Reading writes nothing. Two buttons write, only through core: `Approve…` (a card shows the settings, the instructions and the
 files the approval binds to, then `TaskLibrary.approve`) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
-a window, with a `Stop`; a `fix: pr` run asks first and names the most it may cost). Quitting the app mid-run ends the run as `interrupted`,
+a window, with a `Stop`; every run asks first and names the most it may cost, since either kind starts an agent). Quitting the app mid-run ends the run as `interrupted`,
 like a killed `task run`.
 
 The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
@@ -135,7 +135,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   that does not load is a PROBLEM line with the line and key.
 - `workbench task approve <name>`: records the approval. Exit 6 for a task that does not parse, 7 for no such task.
 
-- `workbench task run <name>`: runs the task now (below). Exit 0 when it did its work or found none (`pr-opened`, `reported`,
+- `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `reported`,
   `nothing-pending`, `nothing-to-do`), 6 when it was skipped or refused (`skipped-project-busy`, `skipped-already-running`,
   `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
 - `workbench task tick`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
@@ -154,15 +154,14 @@ In order, ending the run with an outcome at the first step that stops it:
    (a full disk) nothing is started, and if the end cannot be written the result says `recorded: false` and why.
 2. The approval must match what is on disk now, else `stale-approval`.
 3. No thread may be active in the project and no `doctor` running, else `skipped-project-busy` naming it. Nothing is queued: the next tick tries again.
-   (Only a task that starts a thread needs the project free: a `fix: report` dry run starts none, so an active thread does not skip it.)
+   (Only a task that starts a thread needs the project free: a `fix: report` run starts none, so an active thread does not skip it.)
 4. A `fix: pr` task with `max_open` of its own pull requests still open waits (`skipped-too-many-open`, the addresses in the reason), before
    the pending script or any thread. Every earlier run that made a thread counts (one that died after publishing, and one a person shipped by hand, as well as those that
    ended `pr-opened`), however old: GitHub is asked once for all the repository's open pull requests (`gh pr list --state open`, up to 500) and
    the task's branches are looked up in that list. When it cannot answer, or the list is as long as the limit and may be cut, the run is
    skipped saying so, never started on a guess.
 5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
-6. `fix: report` stops here: it records `reported` with the units it would take and starts no thread. (A read-only agent turn for `report` is a
-   later change; it needs an agent role in the config.)
+6. `fix: report` stops here: it asks the read-only agent (above), saves the answer under `reports/` and records `reported` with the first line of the report and where it is, or `failed` with why (no config, the agent is not installed or ran out of budget, an empty answer). `task run <name> --dry` instead lists the units it would take and starts no agent: `reported` with `dry run: would take ...`.
 7. `fix: pr` needs `check_command` in the project's config, else `failed: no check configured`: work is not accepted unchecked. The goal is a
    quick goal built from the instructions, the included skill, the input files and the units (data fenced with a boundary the content cannot
    guess, and a line telling the agent not to follow instructions inside it; a `## ` line is indented so it cannot start a section of the goal

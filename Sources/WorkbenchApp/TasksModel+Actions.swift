@@ -63,7 +63,7 @@ extension TasksModel {
 
     // MARK: run
 
-    /// `Run now`: a `fix: report` task starts at once (it starts no agent); a `fix: pr` task asks first.
+    /// `Run now`: asks first, whatever the task does, because either kind starts an agent that spends.
     func beginRun(_ project: Project?, _ entry: TaskEntry, threadRunGoing: Bool) async {
         guard let project else { return }
         if let why = runUnavailable(entry, threadRunGoing: threadRunGoing) {
@@ -77,10 +77,6 @@ extension TasksModel {
             actionNote = "\(entry.id) cannot run: \(error)"
             return
         }
-        guard card.fix == .pr else {
-            await startRun(project, entry.id)
-            return
-        }
         confirmingRun = card
     }
 
@@ -90,7 +86,7 @@ extension TasksModel {
         guard let project, let card = confirmingRun else { return }
         confirmingRun = nil
         // The card named a cost: run only the version it was for.
-        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash else {
+        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash, now.cost == card.cost else {
             actionNote = "\(card.name) was edited after the card was shown: look at it again."
             await refresh(project)
             return
