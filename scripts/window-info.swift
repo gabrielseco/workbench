@@ -9,9 +9,18 @@ guard let pid = CommandLine.arguments.dropFirst().first.flatMap({ Int($0) }) els
     exit(2)
 }
 let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-let info = (windows as? [[String: Any]] ?? []).first { window in
-    window[kCGWindowOwnerPID as String] as? Int == pid && window[kCGWindowLayer as String] as? Int == 0
+// `popover` as the second argument picks the status item's popover instead: this pid's largest window above the normal layer
+// (the status item itself is a sliver of the menu bar).
+let wantsPopover = CommandLine.arguments.dropFirst(2).first == "popover"
+let ours = (windows as? [[String: Any]] ?? []).filter { $0[kCGWindowOwnerPID as String] as? Int == pid }
+func area(_ window: [String: Any]) -> Double {
+    let b = window[kCGWindowBounds as String] as? [String: Double] ?? [:]
+    return (b["Width"] ?? 0) * (b["Height"] ?? 0)
 }
+let info =
+    wantsPopover
+    ? ours.filter { ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 && area($0) > 5000 }.max { area($0) < area($1) }
+    : ours.first { $0[kCGWindowLayer as String] as? Int == 0 }
 guard let info, let id = info[kCGWindowNumber as String] as? Int,
     let bounds = info[kCGWindowBounds as String] as? [String: Double]
 else { exit(1) }

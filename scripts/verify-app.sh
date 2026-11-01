@@ -17,6 +17,10 @@
 #   scripts/verify-app.sh scroll <pid> <steps>  scroll the window's content down by 1 to 30 steps of 40 points (negative: up)
 #   scripts/verify-app.sh paste <pid> [image]  paste a picture (a generated one, or an image file of at most 5 MiB) with Cmd-V sent to that
 #                                              pid only; the clipboard is put back as it was
+#   scripts/verify-app.sh status <pid>         press this app's own status item (opens or closes its popover); nothing else in the menu bar
+#   scripts/verify-app.sh popover <pid>        what the open popover shows: role <tab> label
+#   scripts/verify-app.sh popover-press <pid> "<label>"  press a button in the popover (the same refusals as `press`)
+#   scripts/verify-app.sh popover-shot <pid> <name>  screenshot the popover into $WORKBENCH_PROOF_DIR (default .build/verify)/<name>.png
 #   scripts/verify-app.sh shot <pid> <name>    screenshot the window into $WORKBENCH_PROOF_DIR (default .build/verify)/<name>.png
 #   scripts/verify-app.sh stop <pid>           end that build and remove the bundle, the fixture copy and every setting it left
 #   scripts/verify-app.sh calls <pid>          what the scenario's stand-in editor was asked to open (one `cwd=` and `arg=` line per
@@ -366,6 +370,35 @@ case "$command" in
     out="${WORKBENCH_PROOF_DIR:-$ROOT/.build/verify}"
     mkdir -p "$out"
     info="$(swift "$ROOT/scripts/window-info.swift" "$1")" || fail "pid $1 has no window on screen"
+    read -r wid _ <<<"$info"
+    screencapture -x -o -l "$wid" "$out/$2.png"
+    [[ -s "$out/$2.png" ]] || fail "screencapture wrote nothing"
+    echo "$out/$2.png"
+    ;;
+  status)
+    [[ $# -eq 1 ]] || usage
+    build_dir "$1" >/dev/null
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" status
+    ;;
+  popover)
+    [[ $# -eq 1 ]] || usage
+    build_dir "$1" >/dev/null
+    WORKBENCH_PID="$1" swift "$ROOT/scripts/ax.swift" popover
+    ;;
+  popover-press)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ -n "$2" ]] || fail "popover-press needs a label"
+    [[ "$2" =~ $REFUSED ]] && fail "refused: \"$2\" opens a panel or another app"
+    WORKBENCH_PID="$1" WORKBENCH_REFUSE="$REFUSED" swift "$ROOT/scripts/ax.swift" popover-press "$2"
+    ;;
+  popover-shot)
+    [[ $# -eq 2 ]] || usage
+    build_dir "$1" >/dev/null
+    [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "not a screenshot name: $2"
+    out="${WORKBENCH_PROOF_DIR:-$ROOT/.build/verify}"
+    mkdir -p "$out"
+    info="$(swift "$ROOT/scripts/window-info.swift" "$1" popover)" || fail "pid $1 has no popover on screen: press the status item first"
     read -r wid _ <<<"$info"
     screencapture -x -o -l "$wid" "$out/$2.png"
     [[ -s "$out/$2.png" ]] || fail "screencapture wrote nothing"

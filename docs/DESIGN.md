@@ -82,6 +82,18 @@ design: .serif)`) that the Goal mockup sets apart.
 
 At most three sizes in one component; hierarchy comes from weight and `.secondary` before size.
 
+## Status item
+
+A `MenuBarExtra` (the wrench and screwdriver) is always in the menu bar while the app runs, so closing the window does not end a run
+or the watching. It shows a count only while something needs you (a thread to review, a task that broke or went stale) and says it to
+VoiceOver (`Workbench, 2 things need you`); the system draws the item as a template, so the count and the label carry the meaning and
+the colour (amber, red when something broke) is a bonus. Its popover (320 wide, the window style) follows mockup 5: the project in
+capitals and one pill (`Needs you` amber, `Broken` red, `Working` blue, `Quiet` grey), a card per item (amber or red mark, title,
+the one-line reason, and for a thread in review the criteria row), then `Event log`, `Quit` and `Pause notifications`. A card's first
+`Open review` or `Open task` is the one prominent button; `Send back…` opens the window with the card that decides it. The popover
+decides nothing and writes nothing. Quiet says `Nothing needs you` with the project's own one-line state; a log that cannot be read
+is red with the core's words; many items scroll in the popover. When the system will not let the app notify, the popover says so once.
+
 ## States
 
 Every screen answers four questions without a click, and a change that touches a screen shows each of the ones it can reach:

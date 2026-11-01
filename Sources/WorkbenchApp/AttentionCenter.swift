@@ -30,6 +30,8 @@ import WorkbenchCore
     @ObservationIgnored private var lastThread: ThreadAttention?
     /// The project's tasks have been read once: until then the baseline is only what the thread said, and the first read of the
     /// tasks completes it (it is not news that yesterday's run failed).
+    /// Why the last read of the tasks failed, nil when it worked: the popover says the tasks could not be checked.
+    private(set) var taskReadError: String?
     @ObservationIgnored private var tasksBaselined = false
     /// The thread's CI has been read once, for the same reason.
     @ObservationIgnored private var threadBaselined = true
@@ -37,11 +39,12 @@ import WorkbenchCore
     init(preferences: Preferences, notifier: Notifier = NullNotifier()) {
         self.preferences = preferences
         self.notifier = notifier
+        self.paused = preferences.notificationsPaused
     }
 
+    /// Notifications are paused (the count still shows). Kept here so a toggle in the popover redraws, and in the preferences so it stays.
     var paused: Bool {
-        get { preferences.notificationsPaused }
-        set { preferences.notificationsPaused = newValue }
+        didSet { preferences.notificationsPaused = paused }
     }
 
     @ObservationIgnored private var polling: Task<Void, Never>?
@@ -75,7 +78,9 @@ import WorkbenchCore
     func sayDeniedOnce() { deniedWasShown = true }
 
     /// Takes one look: the project path, the thread on screen, and the tasks (nil when they could not be read: the last good ones stay).
-    func observe(project path: String?, projectName: String, thread: ThreadAttention?, tasks: [TaskEntry]?) async {
+    func observe(
+        project path: String?, projectName: String, thread: ThreadAttention?, tasks: [TaskEntry]?, taskReadError: String? = nil
+    ) async {
         guard let path else {
             (project, baseline, announced, items, lastTasks, lastThread) = (nil, [], [], [], [], nil)
             tasksBaselined = false
@@ -84,6 +89,7 @@ import WorkbenchCore
         let first = path != project
         if first { (project, baseline, announced, lastTasks, tasksBaselined, threadBaselined) = (path, [], [], [], false, false) }
         if let tasks { lastTasks = tasks }
+        if tasks != nil { self.taskReadError = nil } else if let taskReadError { self.taskReadError = taskReadError }
         lastThread = thread
         let seen = Set(preferences.seenAttention)
         let all = AttentionItems.derive(thread: thread, tasks: lastTasks).filter { !seen.contains(seenKey($0.id)) }
@@ -115,9 +121,11 @@ import WorkbenchCore
         }
     }
 
-    /// The person looked at this task: its current items stop counting. A newer failure is a new identity and counts again.
-    func markSeen(task name: String) {
-        let ids = items.filter { $0.route == .task(name) }.map(\.id)
+    /// The person is looking at this task as the screen shows it: the items that follow from what is shown stop counting. A failure the
+    /// watcher found that the screen has not read yet is not seen, and counts until it is.
+    func markSeen(shown entry: TaskEntry) {
+        let shownIds = Set(AttentionItems.derive(thread: nil, tasks: [entry]).map(\.id))
+        let ids = items.filter { $0.route == .task(entry.id) && shownIds.contains($0.id) }.map(\.id)
         guard !ids.isEmpty else { return }
         markSeen(ids)
     }

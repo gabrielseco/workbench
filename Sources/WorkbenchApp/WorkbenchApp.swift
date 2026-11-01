@@ -33,6 +33,14 @@ import WorkbenchCore
                     .disabled(store.project == nil || store.namingGoal)
             }
         }
+
+        // The app stays resident when the window is closed, and this says when it needs you.
+        MenuBarExtra {
+            MenuBarPopover(store: store)
+        } label: {
+            MenuBarLabel(store: store)
+        }
+        .menuBarExtraStyle(.window)
     }
 }
 
@@ -52,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// outlive the window, so a quit waits for it (the store gives up after a deadline).
     var drafting: @MainActor () -> Bool = { false }
     var stopDrafting: (@MainActor () async -> Void)?
+
+    /// A closed window does not end the app: a run goes on, and the status item keeps watching.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard drafting(), let stop = stopDrafting else { return .terminateNow }

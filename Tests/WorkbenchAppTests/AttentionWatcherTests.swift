@@ -29,7 +29,7 @@ import WorkbenchCore
             return found
         }
         let before = bytes()
-        center.markSeen(task: "alpha")
+        center.markSeen(shown: a)
         #expect(center.items.isEmpty)
         #expect(prefs.seenAttention.count == 1 && prefs.seenAttention[0].hasPrefix("/p|task:alpha:"))
         #expect(bytes() == before, "nothing is written to a task's log")
@@ -42,12 +42,29 @@ import WorkbenchCore
     @Test func aNewFailureIsNew() async throws {
         let prefs = MemoryPreferences()
         let center = AttentionCenter(preferences: prefs)
-        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [try await failed("alpha", at: 100)])
-        center.markSeen(task: "alpha")
+        let a = try await failed("alpha", at: 100)
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [a])
+        center.markSeen(shown: a)
         await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [try await failed("alpha", at: 100)])
         #expect(center.items.isEmpty)
         await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [try await failed("alpha", at: 900)])
         #expect(center.items.count == 1, "the same task failing again is a new reason")
+    }
+
+    @Test func onlyWhatIsShownIsSeen() async throws {
+        // The watcher found a newer failure, but the screen still shows the older, good run: looking at it sees nothing.
+        let center = AttentionCenter(preferences: MemoryPreferences())
+        let (_, entries) = try await AttentionItemsTests.entries()
+        let base = try #require(entries.first { $0.id == "weekly-report" })
+        let good = AttentionItemsTests.task(base, runs: [AttentionItemsTests.run(.reported, at: 100)])
+        let broken = AttentionItemsTests.task(base, runs: [AttentionItemsTests.run(.failed, at: 900)])
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [good])
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [broken])
+        #expect(center.items.count == 1)
+        center.markSeen(shown: good)
+        #expect(center.items.count == 1, "the failure the screen has not shown is not seen")
+        center.markSeen(shown: broken)
+        #expect(center.items.isEmpty)
     }
 
     @Test func seenIsBounded() {
@@ -108,7 +125,11 @@ import WorkbenchCore
         #expect(before > 0)
         store.show(.task("sync-fixtures"))
         #expect(store.mode == .tasks && store.tasks.selection == "sync-fixtures")
-        #expect(store.attention.items.count == before - 1, "opening a task from a notification marks it seen")
+        #expect(store.attention.items.count == before, "it is seen when the screen shows it, not when it is routed to")
+        // Looking at the task as the screen shows it is what marks it seen.
+        let shown = try #require(entries.first { $0.id == "sync-fixtures" })
+        store.attention.markSeen(shown: shown)
+        #expect(store.attention.items.count == before - 1)
         store.show(.thread("invoice-pagination"))
         #expect(store.mode == .thread)
     }

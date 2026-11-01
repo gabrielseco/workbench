@@ -84,6 +84,8 @@ scripts/verify-app.sh key <pid> tab       # one of return, tab, escape, up, down
 scripts/verify-app.sh click <pid> "label" # a real left click in the middle of that label; hover <pid> "label" moves the pointer there
 scripts/verify-app.sh scroll <pid> 5      # scroll the content down 5 steps of 40 points (negative: up); it settles for a second or two
 scripts/verify-app.sh paste <pid> [image]  # Cmd-V to that pid only, with a generated picture or an image file; the clipboard is restored
+scripts/verify-app.sh status <pid>         # press this app's own status item (it toggles; check with `popover`, press again if it is not open)
+scripts/verify-app.sh popover <pid>        # what the open popover shows; popover-press <pid> "<label>"; popover-shot <pid> <name>
 scripts/verify-app.sh shot <pid> <name>   # writes <name>.png into $WORKBENCH_PROOF_DIR (default .build/verify); Read it
 scripts/verify-app.sh calls <pid>         # what the scenario's stand-in editor was asked to open (review-changes only)
 scripts/verify-app.sh stop <pid>          # always, also after a failure
