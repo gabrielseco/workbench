@@ -24,6 +24,7 @@
 # active thread" must FAIL), and a task with `base: origin/main` must cut its thread from the freshly fetched tip of origin's main, which
 # moved after the clone (the sabotage points origin nowhere, so "a base on origin starts the thread from the freshly fetched origin
 # branch" must FAIL).
+# `task run` prints what the run is doing as it goes (the turn starting, a tool call at most every 2 s, the check). Not named in the sabotage.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -125,6 +126,8 @@ check "approve records the task" "exit $RC: $(head -c 200 "$SCRATCH/approve.out"
 wbp "$SCRATCH/run1.out" task run bump; shown "$SCRATCH/run1.out"
 check "the first run opens a pull request for the first two countries" "exit $RC: $(head -c 400 "$SCRATCH/run1.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "^bump: pr-opened" "$2" && grep -q "units:  ROU, TUR" "$2" && grep -q "pull request: https://github.com/o/r/pull/1" "$2"' _ "$RC" "$SCRATCH/run1.out"
+check "the run says what it is doing while it goes (the turn starting, the check)" "got: $(head -c 400 "$SCRATCH/run1.out")" \
+    bash -c 'grep -q "^  turn 1 started" "$1" && grep -q "^  check started" "$1"' _ "$SCRATCH/run1.out"
 THREAD=$(sed -n 's/^  thread: //p' "$SCRATCH/run1.out" | head -1)
 check "the thread was accepted by the task and its branch is on origin" "thread '$THREAD'" \
     bash -c 'grep -q "\"by\":\"task:bump\"" "$1/.workbench/threads/$2/events.jsonl" && git -C "$3" rev-parse -q --verify "refs/heads/workbench/$2" >/dev/null' _ "$P" "$THREAD" "$ORIGIN"

@@ -306,7 +306,8 @@ public struct TaskRunner: Sendable {
                 units: ids)
         }
         // From here the thread is real: when something goes wrong it is left as it is, for a person to look at.
-        let runner = ThreadRunner(project: project, threadID: id, git: git) { _ in }
+        let progress = TaskProgress(now: now, say: notice)
+        let runner = ThreadRunner(project: project, threadID: id, git: git) { progress.notice($0) }
         await stop.attach(runner)
         let report: TurnReport
         do { report = try await runner.run(runOptions) } catch {
