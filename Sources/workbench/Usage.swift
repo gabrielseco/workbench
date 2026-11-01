@@ -120,6 +120,14 @@ let workbenchUsage = """
                                  exit 6 when skipped (a thread is active, the approval is stale, or max_open of its
                                  pull requests are still open), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
+      task timer install [--every <5m..1h>] [--pull-main] | status | remove
+                                 make the machine run the tasks: install writes and loads the launchd agent that runs `task tick`
+                                 for this project (every 15 minutes by default) and prints the one `sudo pmset repeat` wake line
+                                 computed from the tasks' times, which you run yourself (Workbench never runs sudo); status says
+                                 whether it will run tonight (agent loaded, last tick, wake schedule, power, FileVault, stale
+                                 tasks);
+                                 remove unloads it and deletes its files. --pull-main fast-forwards a clean main before each tick.
+                                 macOS; elsewhere it prints the crontab line. exit 1 from status when something is broken
       task log <name> [--all]    what the task's last run did: outcome, the full reason, setup, check and its output, the
                                  agent's last message; --all lists every run in one line. exit 7 for no such task
       task new <name> [--include <file>] [--input <path>]...
