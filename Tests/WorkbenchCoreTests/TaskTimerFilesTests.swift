@@ -91,6 +91,43 @@ struct TaskTimerFilesTests {
 }
 
 @Suite(.processGate) struct TaskTimerLauncherSyntaxTests {
+    private struct Ran {
+        var out: String
+        var seconds: Double
+    }
+
+    private func shell(_ script: String) async throws -> Ran {
+        let runner = GitRunner(executable: URL(fileURLWithPath: "/bin/sh"), environment: ["PATH": "/usr/bin:/bin"], timeout: 60)
+        let start = Date()
+        let result = try await runner.run(["-c", script], in: URL(fileURLWithPath: "/"))
+        return Ran(out: result.stdout, seconds: Date().timeIntervalSince(start))
+    }
+
+    @Test func aStepThatNeverEndsIsEndedAtItsDeadline() async throws {
+        let ran = try await shell(TimerFiles.deadlineFunction + "\nrun_for 1 sleep 30\necho \"code=$?\"")
+        // Ended at about a second plus the grace period, and said it was ended; nowhere near the thirty it asked for.
+        #expect(ran.seconds < 15, "took \(ran.seconds)s")
+        #expect(!ran.out.contains("code=0"))
+    }
+
+    @Test func aStepThatFinishesKeepsItsOutputAndItsExitCodeAndDoesNotWaitForTheDeadline() async throws {
+        let fine = try await shell(TimerFiles.deadlineFunction + "\nP=$(run_for 30 echo hello)\necho \"[$P] $?\"")
+        #expect(fine.out.trimmingCharacters(in: .whitespacesAndNewlines) == "[hello] 0", "\(fine.out)")
+        #expect(fine.seconds < 10, "took \(fine.seconds)s")
+        let bad = try await shell(TimerFiles.deadlineFunction + "\nrun_for 30 sh -c 'exit 7'\necho \"code=$?\"")
+        #expect(bad.out.contains("code=7") && bad.seconds < 10)
+    }
+
+    @Test func theLauncherPutsADeadlineOnTheLoginShellAndOnThePull() {
+        let text = TimerFiles.launcher(
+            project: Project(root: URL(fileURLWithPath: "/tmp/p")), workbench: URL(fileURLWithPath: "/opt/wb/workbench"),
+            label: "l", pullMain: true)
+        #expect(text.contains("run_for() {"))
+        #expect(text.contains("P=$(run_for 20 /bin/zsh -lic"))
+        #expect(text.contains("run_for 120 git pull --ff-only"))
+        #expect(!text.contains("P=$(/bin/zsh"))
+    }
+
     @Test func theLauncherIsValidShellWhateverThePathIs() async throws {
         let root = try Scratch.directory("timer-launcher").appendingPathComponent("it's a \"dir\" $x `y`")
         let project = Project(root: root)

@@ -39,8 +39,25 @@ public enum TimerFiles {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
+    /// `run_for <seconds> <command...>`: runs the command and ends it if it is not done by then (terminate, then kill). The steps before
+    /// `workbench task tick` start a login shell and may talk to a network; a job that never ends is never started again by launchd, so
+    /// each of them has a deadline. The watcher keeps no pipe open, so a command substitution does not wait for it.
+    public static let deadlineFunction = """
+        run_for() {
+            secs=$1; shift
+            "$@" &
+            pid=$!
+            ( sleep "$secs"; kill "$pid" 2>/dev/null; sleep 2; kill -9 "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+            watcher=$!
+            wait "$pid"
+            code=$?
+            kill "$watcher" 2>/dev/null
+            return $code
+        }
+        """
+
     /// launchd has no shell setup, so the launcher borrows the PATH of a login shell: the same node, python3, pnpm, gh, git and claude as a
-    /// terminal. It falls back to a plain PATH when that fails.
+    /// terminal. It falls back to a plain PATH when that fails or takes too long.
     public static func launcher(
         project: Project, workbench: URL, label: String, pullMain: Bool
     ) -> String {
@@ -48,7 +65,8 @@ public enum TimerFiles {
             "#!/bin/sh",
             "# Written by `workbench task timer install` for \(xmlSafeComment(project.root.path)). Run by launchd as \(label).",
             "# Remove it with `workbench task timer remove`.",
-            "P=$(/bin/zsh -lic 'printf %s \"$PATH\"' 2>/dev/null | tail -1)",
+            deadlineFunction,
+            "P=$(run_for 20 /bin/zsh -lic 'printf %s \"$PATH\"' 2>/dev/null | tail -1)",
             "if [ -n \"$P\" ]; then PATH=$P; else PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin\"; fi",
             "export PATH",
             "cd \(shellQuote(project.root.path)) || exit 1",
@@ -58,7 +76,8 @@ public enum TimerFiles {
             lines += [
                 "# A run branches from local main, so keep it current, but only when that is safe: on main and clean.",
                 "if [ \"$(git rev-parse --abbrev-ref HEAD)\" = main ] && [ -z \"$(git status --porcelain)\" ]; then",
-                "    GIT_TERMINAL_PROMPT=0 git pull --ff-only -q origin main || echo \"note: could not fast-forward main\"",
+                "    GIT_TERMINAL_PROMPT=0 run_for 120 git pull --ff-only -q origin main \\",
+                "        || echo \"note: could not fast-forward main\"",
                 "else",
                 "    echo \"note: not on main or not clean; main left alone\"",
                 "fi",

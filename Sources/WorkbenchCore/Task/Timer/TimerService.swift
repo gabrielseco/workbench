@@ -167,17 +167,17 @@ public struct TimerService: Sendable {
                     "this system has no launchd: Workbench installed nothing here; remove the crontab line you added (crontab -e)"
                 ], ok: true)
         }
-        if let result = try? await launchctl.run(["bootout", target], in: paths.home) {
-            if result.succeeded {
-                lines.append("unloaded \(paths.label)")
-            } else if !Self.notLoaded(result) {
-                // The agent is still there: keep its files, so what runs and what is on disk agree.
-                let why = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                return RemoveResult(
-                    lines: [
-                        "could not unload \(paths.label): \(why)", "nothing was deleted; try: launchctl bootout \(target)",
-                    ], ok: false)
-            }
+        let unloaded: GitResult
+        do {
+            unloaded = try await launchctl.run(["bootout", target], in: paths.home)
+        } catch {
+            // launchctl did not run or did not answer: the agent may still be loaded, so nothing is deleted.
+            return notUnloaded("\(error)")
+        }
+        if unloaded.succeeded {
+            lines.append("unloaded \(paths.label)")
+        } else if !Self.notLoaded(unloaded) {
+            return notUnloaded(unloaded.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         for file in [paths.plist, paths.launcher] where fm.fileExists(atPath: file.path) {
             do {
@@ -193,6 +193,13 @@ public struct TimerService: Sendable {
         lines.append("the log is left at \(paths.log.path)")
         lines.append("if you set a wake schedule for it: sudo pmset repeat cancel")
         return RemoveResult(lines: lines, ok: ok)
+    }
+
+    /// The agent is still there: its files stay, so what runs and what is on disk agree.
+    private func notUnloaded(_ why: String) -> RemoveResult {
+        RemoveResult(
+            lines: ["could not unload \(paths.label): \(why)", "nothing was deleted; try: launchctl bootout \(target)"],
+            ok: false)
     }
 
     /// `launchctl bootout` of an agent that is not loaded: not a failure, there was nothing to unload.
@@ -267,10 +274,11 @@ public struct TimerService: Sendable {
             add(.warn, "power: could not be read (pmset -g ps); plug the Mac in")
         }
         if let vault = await probes.fileVault() {
+            // The agent is a user agent: after a restart it starts when that user logs in, with FileVault on or off.
             if vault.contains("FileVault is On") {
-                add(.warn, "FileVault is on: after a restart nothing runs until you log in")
+                add(.warn, "FileVault is on: after a restart the Mac waits for your password; the timer starts at login")
             } else {
-                add(.ok, "FileVault is off: the timer survives a restart")
+                add(.ok, "FileVault is off: after a restart the timer starts when you log in (automatic login does that for you)")
             }
         } else if canProbe {
             add(.warn, "FileVault: could not be read (fdesetup status); if it is on, a restart waits for your login")

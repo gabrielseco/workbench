@@ -169,14 +169,16 @@ did by hand:
   not collide. The agent runs the launcher every 15 minutes by default (`--every 5m` to `1h`); each task's own `at`/`days`/`every` decides what
   is due, and a run missed while the Mac slept happens once on wake. The launcher borrows the PATH of a login shell (launchd has none of your
   shell setup, so `node`, `python3`, `pnpm`, `gh`, `git` and `claude` are the ones a terminal finds), goes to the project and runs
-  `caffeinate -i workbench task tick`. `--pull-main` also fast-forwards `main` before each tick, but only when it is checked out and clean.
+  `caffeinate -i workbench task tick`. The steps before the tick that could stall have deadlines (20 s for the login shell, 120 s for the
+  pull; the command is ended, then killed), because launchd never starts a second copy of a job that is still running. `--pull-main` also fast-forwards `main` before each tick, but only when it is checked out and clean.
 - It prints the wake line, because a sleeping Mac runs nothing: `sudo pmset repeat wakeorpoweron MTWRF 03:55:00`, from the tasks' own times
   (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
   `every:` get no wake line and a sentence saying why). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
   The only program it runs is `launchctl`.
 - `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, each task approved
   and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
-  days that cannot be read are a warning, not a pass), battery or power, and FileVault (after a restart nothing runs until the person logs in).
+  days that cannot be read are a warning, not a pass), battery or power, and FileVault (the timer is a user agent: after a restart it starts when that user logs in, which FileVault delays until the disk password
+  and automatic login would do for you).
   A probe that cannot be read is a warning saying so. Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something
   is a FAIL. Where there is no launchd, `status` gives the crontab line.
 - `remove` unloads the agent, deletes the launcher and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names

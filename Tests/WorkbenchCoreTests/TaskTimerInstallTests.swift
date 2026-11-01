@@ -171,6 +171,20 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(fm.fileExists(atPath: env.paths.plist.path) && fm.fileExists(atPath: env.paths.launcher.path))
     }
 
+    @Test func aLaunchctlThatCannotBeRunLeavesTheFilesAndFails() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        // launchctl does not start (or does not answer): the agent may still be loaded, so nothing is deleted.
+        let missing = GitRunner(executable: URL(fileURLWithPath: "/nonexistent/launchctl"), environment: [:], timeout: 5)
+        let service = TimerService(
+            project: env.task.project, home: env.home, workbench: env.workbench, launchctl: missing, uid: 501,
+            probes: TimerProbes(sched: { nil }, power: { nil }, fileVault: { nil }))
+        let result = await service.remove()
+        #expect(!result.ok && result.lines.first?.hasPrefix("could not unload \(env.paths.label)") == true)
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: env.paths.plist.path) && fm.fileExists(atPath: env.paths.launcher.path))
+    }
+
     @Test func anAgentThatIsNotLoadedIsNotAFailureToRemove() async throws {
         let env = try Env()
         _ = try await env.service().install()
@@ -229,7 +243,10 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(text.contains("ok: agent: loaded, every 15 min, ran 3 time(s), last exit code 0"))
         #expect(text.contains("ok: task bump: approved, weekdays 04:00"))
         #expect(text.contains("ok: wake: 03:55 weekdays only"))
-        #expect(text.contains("ok: power: plugged in") && text.contains("ok: FileVault is off: the timer survives a restart"))
+        #expect(text.contains("ok: power: plugged in"))
+        // The timer is a user agent: with FileVault off it still starts at login, so that is what is said.
+        let off = "ok: FileVault is off: after a restart the timer starts when you log in (automatic login does that for you)"
+        #expect(text.contains(off))
         #expect(status.allSatisfy { $0.level != .fail })
     }
 
@@ -273,7 +290,8 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         _ = try await env.service().install()
         let text = lines(await env.service(power: "Now drawing from 'Battery Power'", vault: "FileVault is On.").status())
         #expect(text.contains("warn: power: on battery; plug in so a run is not cut short"))
-        #expect(text.contains("warn: FileVault is on: after a restart nothing runs until you log in"))
+        let on = "warn: FileVault is on: after a restart the Mac waits for your password; the timer starts at login"
+        #expect(text.contains(on))
     }
 
     @Test func staleAndBrokenTasksAreNamed() async throws {
