@@ -76,6 +76,9 @@ enum TaskOutcomeStyle {
 struct TaskEntry: Equatable, Identifiable {
     var summary: TaskSummary
     var runs: [TaskHistory.Run]
+    /// When the approval now in force was recorded: a STALE state is told apart by it, so a task edited again after a fresh approval
+    /// is a new reason.
+    var approvedAt: Date?
     var id: String { summary.name }
     var isRunning: Bool { runs.first?.outcome == nil && !runs.isEmpty }
 }
@@ -129,20 +132,26 @@ struct TasksReader: Sendable {
     /// `WORKBENCH_APP_PROBES`, which `scripts/verify-app.sh` sets so a fixture never asks the machine's launchd).
     static func core(environment: [String: String] = ProcessInfo.processInfo.environment) -> TasksReader {
         TasksReader { project, now in
-            let library = TaskLibrary(project: project)
-            // An unreadable folder is a failed read, not "no tasks": the last good data stays on screen.
-            do { _ = try FileManager.default.contentsOfDirectory(atPath: project.tasksDirectory.path) } catch {
-                let missing = (error as NSError).code == NSFileReadNoSuchFileError
-                if !missing { throw error }
-            }
-            let entries = library.names().map { name -> TaskEntry in
-                let history = try? TaskRunLog(project: project, name: name).history()
-                return TaskEntry(
-                    summary: library.summary(name, now: now), runs: Array((history?.runs ?? []).reversed()))
-            }
+            let entries = try entries(project, now: now)
             let service = timerService(project: project, environment: environment)
             return TasksSnapshot(
                 projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now)
+        }
+    }
+
+    /// The project's tasks and their runs, without the timer's probes: what the menu bar watches. A folder that cannot be read is a
+    /// failed read, not "no tasks", so the last good data stays.
+    static func entries(_ project: Project, now: Date) throws -> [TaskEntry] {
+        let library = TaskLibrary(project: project)
+        do { _ = try FileManager.default.contentsOfDirectory(atPath: project.tasksDirectory.path) } catch {
+            let missing = (error as NSError).code == NSFileReadNoSuchFileError
+            if !missing { throw error }
+        }
+        return library.names().map { name -> TaskEntry in
+            let history = try? TaskRunLog(project: project, name: name).history()
+            return TaskEntry(
+                summary: library.summary(name, now: now), runs: Array((history?.runs ?? []).reversed()),
+                approvedAt: history?.approvedAt)
         }
     }
 

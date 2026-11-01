@@ -7,6 +7,8 @@ public struct AttentionReason: Sendable, Equatable {
     public var since: Int
     /// The pull request's head commit for the two reasons GitHub changes without writing an event (CI), else nil.
     public var commit: String?
+
+    public init(text: String, since: Int, commit: String? = nil) { (self.text, self.since, self.commit) = (text, since, commit) }
 }
 
 /// Amber means one thing: the thread cannot go on until you decide, and you can decide now.

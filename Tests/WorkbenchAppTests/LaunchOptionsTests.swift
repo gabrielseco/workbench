@@ -12,6 +12,28 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 
     init(_ stored: String? = nil) { self.stored = stored }
 
+    var notificationsPaused: Bool {
+        get {
+            reads += 1
+            return false
+        }
+        set {
+            writes += 1
+            _ = newValue
+        }
+    }
+
+    var seenAttention: [String] {
+        get {
+            reads += 1
+            return []
+        }
+        set {
+            writes += 1
+            _ = newValue
+        }
+    }
+
     var recentProjects: [String] {
         get {
             reads += 1

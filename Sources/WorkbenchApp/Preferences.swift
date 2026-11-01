@@ -6,12 +6,18 @@ protocol Preferences: AnyObject, Sendable {
     var projectPath: String? { get set }
     /// Every project opened, most recent first.
     var recentProjects: [String] { get set }
+    /// Notifications are paused: nothing is posted, and the count still shows. An app preference, never workbench state.
+    var notificationsPaused: Bool { get set }
+    /// The identities of attention items the person has seen (a failed task they looked at); the latest 200.
+    var seenAttention: [String] { get set }
 }
 
 final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     private let defaults: UserDefaults
     private let key = "projectPath"
     private let recentKey = "recentProjects"
+    private let pausedKey = "notificationsPaused"
+    private let seenKey = "seenAttention"
 
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -24,11 +30,23 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
         get { defaults.stringArray(forKey: recentKey) ?? [] }
         set { defaults.set(newValue, forKey: recentKey) }
     }
+
+    var notificationsPaused: Bool {
+        get { defaults.bool(forKey: pausedKey) }
+        set { defaults.set(newValue, forKey: pausedKey) }
+    }
+
+    var seenAttention: [String] {
+        get { defaults.stringArray(forKey: seenKey) ?? [] }
+        set { defaults.set(newValue, forKey: seenKey) }
+    }
 }
 
 final class MemoryPreferences: Preferences, @unchecked Sendable {
     var projectPath: String?
     var recentProjects: [String]
+    var notificationsPaused = false
+    var seenAttention: [String] = []
     init(projectPath: String? = nil, recentProjects: [String] = []) {
         self.projectPath = projectPath
         self.recentProjects = recentProjects

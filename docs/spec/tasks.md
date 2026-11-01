@@ -75,6 +75,13 @@ files the approval binds to, then `TaskLibrary.approve`) and `Run now` (`TaskRun
 a window, with a `Stop`; a `fix: pr` run asks first and names the most it may cost). Quitting the app mid-run ends the run as `interrupted`,
 like a killed `task run`.
 
+The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
+project's tasks (their runs, without the timer's probes) and tells you, once, when a task breaks or goes stale: a run that ended
+`failed`, `budget-exceeded` or `interrupted` (until a later run ends well), or an approval that is STALE now (until it is approved
+again). A skip, `pr-opened` and `reported` never do. What is already there when the app or the project is opened is counted and
+never announced; looking at the task on the Tasks screen marks its current items seen (an app preference: nothing is written to the
+run log), and a newer failure of the same task is a new reason. `Pause notifications` is an app preference too.
+
 ## Approval
 
 `workbench task approve <name>` records `task.approved` with a hash of what runs unattended: the settings, the instructions (whitespace
