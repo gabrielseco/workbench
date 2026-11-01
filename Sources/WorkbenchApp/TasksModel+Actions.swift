@@ -106,7 +106,8 @@ extension TasksModel {
         let stop = TaskStopSwitch()
         stopSwitch = stop
         runningProject = project.root.path
-        (runningTask, runSaid, lastResult, actionNote) = (name, "Running \(name), started \(startedAt()). The agent's turn can take a while; the task's row follows the log. Stop ends it.", nil, nil)
+        (runningTask, lastResult, actionNote) = (name, nil, nil)
+        runSaid = "Running \(name), started \(startedAt()). The turn says nothing until it ends. Stop ends it."
         let actions = self.actions
         // The run says what it is doing as it goes; the screen shows the last line.
         let said = SaidBox { [weak self] line in Task { @MainActor in self?.runSaid = line } }
@@ -118,7 +119,7 @@ extension TasksModel {
     }
 
     /// When the run began, as the busy line says it: the runner only reports as each step ends, so a long turn is silent until then.
-    private func startedAt() -> String { clock().formatted(.dateTime.hour().minute()) }
+    private func startedAt() -> String { Date().formatted(.dateTime.hour().minute()) }
 
     /// Ends the turn the way Ctrl-C does on `workbench task run`; the run still records how it ended.
     func stopRun() async {
