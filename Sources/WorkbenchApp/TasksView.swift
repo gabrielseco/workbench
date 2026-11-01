@@ -124,7 +124,7 @@ struct TimerCardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: card.worst.map(TaskOutcomeStyle.symbol) ?? "questionmark.circle")
                         .foregroundStyle(Theme.color(for: tone))
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("Will it run tonight?").font(.caption).foregroundStyle(.secondary)
                         Text(card.headline).font(.callout.weight(.semibold))
                         if let counts = card.counts {

@@ -39,7 +39,8 @@ struct ToolbarBar: View {
     var body: some View {
         HStack(spacing: 12) {
             ProjectPill(store: store)
-            if case .thread(let snapshot) = store.screen {
+            // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
+            if store.mode == .thread, case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
                 Text(snapshot.spendText).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
