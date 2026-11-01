@@ -60,6 +60,17 @@ struct TaskTimerWakeTests {
         #expect(TimerWake.parseRepeating("") == nil)
     }
 
+    @Test func theDaysAWakeNamesAreReadAsASet() {
+        #expect(TimerWake.parseDays("weekdays only") == Set(2...6))
+        #expect(TimerWake.parseDays("weekends only") == [1, 7])
+        #expect(TimerWake.parseDays("every day") == Set(1...7))
+        #expect(TimerWake.parseDays("Tue") == [3] && TimerWake.parseDays("Tuesday") == [3])
+        #expect(TimerWake.parseDays("Mon Wed") == [2, 4])
+        #expect(TimerWake.parseDays("Mon, Wed and Fri only") == [2, 4, 6])
+        // What cannot be read is nil, never a guess.
+        for strange in ["", "whenever", "Mon someday", "12"] { #expect(TimerWake.parseDays(strange) == nil, "\(strange)") }
+    }
+
     @Test func pmsetsWordsForTheDaySetsItNames() {
         #expect(TimerWake.pmsetWording(Set(2...6)) == "weekdays only")
         #expect(TimerWake.pmsetWording(Set(1...7)) == "every day")

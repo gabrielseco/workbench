@@ -111,9 +111,15 @@ public enum TimerFiles {
         """
     }
 
-    /// The line for a system with no launchd: a crontab entry that does the same.
-    public static func cronLine(project: Project, workbench: URL, interval: Int) -> String {
+    /// The crontab line for a system with no launchd, and a note when cron cannot do what was asked. Cron runs at fixed minutes, so only an
+    /// interval that divides the hour is exact; any other is rounded down to one that does. A `%` means a newline in a crontab and is escaped.
+    public static func cron(project: Project, workbench: URL, interval: Int) -> (line: String, note: String?) {
         let minutes = max(1, interval / 60)
-        return "*/\(minutes) * * * * cd \(shellQuote(project.root.path)) && \(shellQuote(workbench.path)) task tick"
+        let exact = [5, 6, 10, 12, 15, 20, 30, 60]
+        let used = exact.last { $0 <= minutes } ?? 5
+        let note = used == minutes ? nil : "cron cannot run every \(minutes) minutes; this runs every \(used)"
+        let when = used == 60 ? "0 * * * *" : "*/\(used) * * * *"
+        let command = "cd \(shellQuote(project.root.path)) && \(shellQuote(workbench.path)) task tick"
+        return ("\(when) " + command.replacingOccurrences(of: "%", with: "\\%"), note)
     }
 }

@@ -56,9 +56,28 @@ struct TaskTimerFilesTests {
         #expect(text.contains("git pull --ff-only"))
     }
 
-    @Test func aSystemWithNoLaunchdGetsACronLine() {
-        let line = TimerFiles.cronLine(project: project("my proj"), workbench: workbench, interval: 900)
-        #expect(line == "*/15 * * * * cd '/tmp/wb-timer-tests/my proj' && '/opt/wb/workbench' task tick")
+    @Test func aSystemWithNoLaunchdGetsACronLineThatMeansWhatWasAsked() {
+        let cron = TimerFiles.cron(project: project("my proj"), workbench: workbench, interval: 900)
+        #expect(cron.line == "*/15 * * * * cd '/tmp/wb-timer-tests/my proj' && '/opt/wb/workbench' task tick" && cron.note == nil)
+        for (seconds, expected) in [(300, "*/5"), (600, "*/10"), (1200, "*/20"), (1800, "*/30")] {
+            let line = TimerFiles.cron(project: project("p"), workbench: workbench, interval: seconds).line
+            #expect(line.hasPrefix("\(expected) * * * * "))
+        }
+        #expect(TimerFiles.cron(project: project("p"), workbench: workbench, interval: 3600).line.hasPrefix("0 * * * * "))
+    }
+
+    @Test func cronCannotRunEveryFortyFiveMinutesSoItSaysWhatItDoesInstead() {
+        let cron = TimerFiles.cron(project: project("p"), workbench: workbench, interval: 2700)
+        #expect(cron.line.hasPrefix("*/30 * * * * "))
+        #expect(cron.note == "cron cannot run every 45 minutes; this runs every 30")
+        let seven = TimerFiles.cron(project: project("p"), workbench: workbench, interval: 420)
+        // Seven rounds down to six, the largest interval below it that divides the hour.
+        #expect(seven.line.hasPrefix("*/6 * * * * ") && seven.note == "cron cannot run every 7 minutes; this runs every 6")
+    }
+
+    @Test func aPercentSignInAPathIsEscapedForCron() {
+        let cron = TimerFiles.cron(project: project("100% sure"), workbench: workbench, interval: 900)
+        #expect(cron.line.contains("100\\% sure") && !cron.line.replacingOccurrences(of: "\\%", with: "").contains("%"))
     }
 
     @Test func anIntervalIsFiveMinutesToAnHour() throws {

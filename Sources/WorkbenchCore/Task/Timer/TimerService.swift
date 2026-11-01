@@ -2,15 +2,16 @@ import Foundation
 
 public enum TimerError: Error, Equatable, Sendable, CustomStringConvertible {
     /// No launchd on this system: the line to put in a crontab instead.
-    case noLaunchd(cron: String)
+    case noLaunchd(cron: String, note: String?)
     case badInterval(String)
     case launchctlFailed(String, String)
     case cannotWrite(String)
 
     public var description: String {
         switch self {
-        case .noLaunchd(let cron):
+        case .noLaunchd(let cron, let note):
             "this system has no launchd; add this line to your crontab instead (crontab -e): \(cron)"
+                + (note.map { " (\($0))" } ?? "")
         case .badInterval(let value): "'\(value)' is not an interval from 5m to 1h"
         case .launchctlFailed(let what, let why): "launchctl \(what) failed: \(why)"
         case .cannotWrite(let why): "the timer could not be written: \(why)"
@@ -101,7 +102,8 @@ public struct TimerService: Sendable {
     /// Writes the launcher and the agent, loads it, and returns what to tell the person. Safe to run again: it replaces what it wrote.
     public func install(interval: Int = TimerFiles.defaultInterval, pullMain: Bool = false) async throws -> [String] {
         guard let launchctl else {
-            throw TimerError.noLaunchd(cron: TimerFiles.cronLine(project: project, workbench: workbench, interval: interval))
+            let cron = TimerFiles.cron(project: project, workbench: workbench, interval: interval)
+            throw TimerError.noLaunchd(cron: cron.line, note: cron.note)
         }
         let fm = FileManager.default
         do {
@@ -148,21 +150,55 @@ public struct TimerService: Sendable {
 
     // MARK: remove
 
-    public func remove() async -> [String] {
+    /// What `remove` did, and whether it did all of it: an agent that could not be unloaded, or a file that could not be deleted, is not
+    /// "removed".
+    public struct RemoveResult: Sendable, Equatable {
+        public var lines: [String]
+        public var ok: Bool
+    }
+
+    public func remove() async -> RemoveResult {
         let fm = FileManager.default
         var lines: [String] = []
-        if let launchctl, let result = try? await launchctl.run(["bootout", target], in: paths.home), result.succeeded {
-            lines.append("unloaded \(paths.label)")
+        var ok = true
+        guard let launchctl else {
+            return RemoveResult(
+                lines: [
+                    "this system has no launchd: Workbench installed nothing here; remove the crontab line you added (crontab -e)"
+                ], ok: true)
+        }
+        if let result = try? await launchctl.run(["bootout", target], in: paths.home) {
+            if result.succeeded {
+                lines.append("unloaded \(paths.label)")
+            } else if !Self.notLoaded(result) {
+                // The agent is still there: keep its files, so what runs and what is on disk agree.
+                let why = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                return RemoveResult(
+                    lines: [
+                        "could not unload \(paths.label): \(why)", "nothing was deleted; try: launchctl bootout \(target)",
+                    ], ok: false)
+            }
         }
         for file in [paths.plist, paths.launcher] where fm.fileExists(atPath: file.path) {
-            try? fm.removeItem(at: file)
-            lines.append("removed \(file.path)")
+            do {
+                try fm.removeItem(at: file)
+                lines.append("removed \(file.path)")
+            } catch {
+                ok = false
+                lines.append("could not delete \(file.path): \(error.localizedDescription)")
+            }
         }
-        try? fm.removeItem(at: paths.launcherDirectory)
+        if ok { try? fm.removeItem(at: paths.launcherDirectory) }
         if lines.isEmpty { lines.append("no timer was installed for this project") }
         lines.append("the log is left at \(paths.log.path)")
         lines.append("if you set a wake schedule for it: sudo pmset repeat cancel")
-        return lines
+        return RemoveResult(lines: lines, ok: ok)
+    }
+
+    /// `launchctl bootout` of an agent that is not loaded: not a failure, there was nothing to unload.
+    static func notLoaded(_ result: GitResult) -> Bool {
+        result.status == 3 || result.status == 113 || result.stderr.contains("No such process")
+            || result.stderr.contains("Could not find service") || result.stderr.contains("no such service")
     }
 
     // MARK: status
@@ -173,7 +209,10 @@ public struct TimerService: Sendable {
 
         // The agent.
         let installed = FileManager.default.fileExists(atPath: paths.plist.path)
-        if !installed {
+        if launchctl == nil {
+            let cron = TimerFiles.cron(project: project, workbench: workbench, interval: TimerFiles.defaultInterval)
+            add(.warn, "agent: this system has no launchd, so the timer is a crontab line you add yourself: \(cron.line)")
+        } else if !installed {
             add(.fail, "agent: not installed: workbench task timer install")
         } else if let launchctl, let printed = try? await launchctl.run(["print", target], in: paths.home), printed.succeeded {
             let text = printed.stdout
@@ -215,27 +254,17 @@ public struct TimerService: Sendable {
 
         // The machine.
         let plan = TimerWake.plan(for: defined.compactMap(\.1))
-        let actual = await probes.sched().flatMap(TimerWake.parseRepeating)
-        switch (plan, actual) {
-        case (.none(let reason), _): add(.ok, "wake: not needed (\(reason))")
-        case (.wake, nil): add(.warn, "wake: no repeating wake is set; run: \(plan.command ?? "")")
-        case (.wake(let time, let days), let set?):
-            let fix = "run: \(plan.command ?? "")"
-            if set.time != time {
-                add(.warn, "wake: set for \(set.time.text), the tasks need \(time.text); \(fix)")
-            } else if let wording = TimerWake.pmsetWording(days),
-                !set.days.hasPrefix(wording.replacingOccurrences(of: " only", with: "")) {
-                add(.warn, "wake: set for \(set.days), the tasks need \(wording); \(fix)")
-            } else {
-                add(.ok, "wake: \(time.text) \(set.days)")
-            }
-        }
+        let rawSched = await probes.sched()
+        let canProbe = launchctl != nil
+        out.append(wakeStatus(plan: plan, rawSched: rawSched, canProbe: canProbe))
         if let power = await probes.power() {
             if power.contains("Battery") {
                 add(.warn, "power: on battery; plug in so a run is not cut short")
             } else {
                 add(.ok, "power: \(power.contains("AC") ? "plugged in" : power)")
             }
+        } else if canProbe {
+            add(.warn, "power: could not be read (pmset -g ps); plug the Mac in")
         }
         if let vault = await probes.fileVault() {
             if vault.contains("FileVault is On") {
@@ -243,7 +272,37 @@ public struct TimerService: Sendable {
             } else {
                 add(.ok, "FileVault is off: the timer survives a restart")
             }
+        } else if canProbe {
+            add(.warn, "FileVault: could not be read (fdesetup status); if it is on, a restart waits for your login")
         }
         return out
+    }
+
+    /// Whether the machine's repeating wake is what the tasks need: the same time, and the same days read as a set, never "close enough".
+    private func wakeStatus(plan: TimerWake.Plan, rawSched: String?, canProbe: Bool) -> TimerStatusLine {
+        func line(_ level: TimerStatusLine.Level, _ text: String) -> TimerStatusLine { TimerStatusLine(level: level, text: text) }
+        guard case .wake(let time, let days) = plan else {
+            if case .none(let reason) = plan { return line(.ok, "wake: not needed (\(reason))") }
+            return line(.ok, "wake: not needed")
+        }
+        let fix = "run: \(plan.command ?? "")"
+        if rawSched == nil, canProbe {
+            return line(.warn, "wake: could not read the wake schedule (pmset -g sched); expected: \(plan.command ?? "")")
+        }
+        guard let set = rawSched.flatMap(TimerWake.parseRepeating) else {
+            return line(.warn, "wake: no repeating wake is set; \(fix)")
+        }
+        if set.time != time {
+            return line(.warn, "wake: set for \(set.time.text), the tasks need \(time.text); \(fix)")
+        }
+        guard let setDays = TimerWake.parseDays(set.days) else {
+            let need = TimerWake.letters(days)
+            return line(.warn, "wake: the days \"\(set.days)\" could not be read; the tasks need \(need); \(fix)")
+        }
+        guard setDays == days else {
+            let need = TimerWake.pmsetWording(days) ?? TimerWake.letters(days)
+            return line(.warn, "wake: set for \(set.days), the tasks need \(need); \(fix)")
+        }
+        return line(.ok, "wake: \(time.text) \(set.days)")
     }
 }

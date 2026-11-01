@@ -175,11 +175,16 @@ did by hand:
   `every:` get no wake line and a sentence saying why). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
   The only program it runs is `launchctl`.
 - `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, each task approved
-  and scheduled, whether the machine's repeating wake matches (`pmset -g sched`), battery or power, and FileVault (after a restart nothing runs
-  until the person logs in). Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something is a FAIL.
+  and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
+  days that cannot be read are a warning, not a pass), battery or power, and FileVault (after a restart nothing runs until the person logs in).
+  A probe that cannot be read is a warning saying so. Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something
+  is a FAIL. Where there is no launchd, `status` gives the crontab line.
 - `remove` unloads the agent, deletes the launcher and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names
-  `sudo pmset repeat cancel`.
+  `sudo pmset repeat cancel`. An agent that is not loaded is nothing to unload; one that launchctl refuses to unload leaves its files where
+  they are and exits 1, and a file that cannot be deleted exits 1 and is not reported as removed.
 - `task approve` on a task with a schedule, when no timer is installed, prints a hint line naming `task timer install`.
-- Where there is no launchd, `install` refuses and prints the crontab line that does the same.
+- Where there is no launchd, `install` refuses and prints the crontab line that does the same. Cron runs at fixed minutes, so only an interval
+  that divides the hour is exact (5, 6, 10, 12, 15, 20, 30, 60); any other is rounded down to one and the line says so. A `%` in a path is
+  escaped, since cron reads it as a newline.
 
 `WORKBENCH_LAUNCHCTL` names another `launchctl`; the tests and `scripts/verify-cli/task-timer.sh` use a stand-in, so nothing real is loaded.

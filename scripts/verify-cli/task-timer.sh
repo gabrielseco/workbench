@@ -9,7 +9,8 @@
 # bootstrap) and print the `sudo pmset repeat wakeorpoweron MTWRF 03:55:00` line for the person to run, saying Workbench does not run sudo.
 # `status` must say the agent is loaded and the task approved, with a wake line; a second `install --every 5m --pull-main` must replace the
 # files; a bad interval is exit 2; an agent that is not loaded is a FAIL with exit 1; `remove` must unload it, delete both files and name
-# `sudo pmset repeat cancel`. launchctl must be the only program run: its calls are bootout, bootstrap and print and nothing else.
+# `sudo pmset repeat cancel`; when launchctl refuses to unload, `remove` must fail (exit 1), delete nothing and say so. Each of
+# `help task timer install|status|remove` must answer. launchctl must be the only program run: its calls are bootout, bootstrap and print and nothing else.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
 # "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
@@ -34,7 +35,9 @@ cat >"$LC/launchctl" <<STUB
 #!/bin/sh
 echo "\$@" >>"$LC/calls"
 case "\$1" in
-bootout) if [ -f "$LC/loaded" ]; then rm "$LC/loaded"; exit 0; fi; echo "no such service" >&2; exit 3 ;;
+bootout)
+    if [ -f "$LC/fail_bootout" ]; then echo "Boot-out failed: 5: Input/output error" >&2; exit 5; fi
+    if [ -f "$LC/loaded" ]; then rm "$LC/loaded"; exit 0; fi; echo "no such service" >&2; exit 3 ;;
 bootstrap) if [ -f "$LC/refuse" ]; then echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi; touch "$LC/loaded"; exit 0 ;;
 print)
     if [ -f "$LC/loaded" ]; then printf '\tstate = not running\n\truns = 0\n\tlast exit code = 0\n\trun interval = 900 seconds\n'; exit 0; fi
@@ -103,6 +106,14 @@ wbp "$SCRATCH/status2.out" task timer status
 check "an agent that is not loaded is a FAIL (exit 1)" "exit $RC: $(head -c 300 "$SCRATCH/status2.out")" \
     bash -c '[ "$1" = 1 ] && grep -q "^FAIL agent: installed but not loaded" "$2"' _ "$RC" "$SCRATCH/status2.out"
 
+# --- 5b. a remove that cannot unload ---------------------------------------------------------------------------
+
+: >"$LC/fail_bootout"
+wbp "$SCRATCH/stuck.out" task timer remove; shown "$SCRATCH/stuck.out" 4
+check "a remove that cannot unload fails (exit 1) and deletes nothing" "exit $RC: $(head -c 300 "$SCRATCH/stuck.out")" \
+    bash -c '[ "$1" = 1 ] && grep -q "^could not unload" "$2" && grep -q "nothing was deleted" "$2" && [ -f "$3" ] && [ -f "$4" ]' _ "$RC" "$SCRATCH/stuck.out" "$LAUNCHER" "$PLIST"
+rm -f "$LC/fail_bootout"
+
 # --- 6. remove -----------------------------------------------------------------------------------------------
 
 wbp "$SCRATCH/remove.out" task timer remove; shown "$SCRATCH/remove.out" 8
@@ -111,6 +122,15 @@ check "remove deletes both files and names the sudo line to cancel the wake" "ex
 wbp "$SCRATCH/status3.out" task timer status
 check "after remove status says it is not installed (exit 1)" "exit $RC: $(head -c 200 "$SCRATCH/status3.out")" \
     bash -c '[ "$1" = 1 ] && grep -q "^FAIL agent: not installed" "$2"' _ "$RC" "$SCRATCH/status3.out"
+
+# --- 6b. each form has its own help --------------------------------------------------------------------------
+
+bad_help=""
+for form in install status remove; do
+    wbp "$SCRATCH/help-$form.out" help task timer "$form"
+    { [ "$RC" = 0 ] && grep -q "^workbench task timer $form" "$SCRATCH/help-$form.out"; } || bad_help="$bad_help $form"
+done
+check "help answers for task timer install, status and remove" "failed for:$bad_help" test -z "$bad_help"
 
 # --- 7. launchctl is the only program run -----------------------------------------------------------------------
 

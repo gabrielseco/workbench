@@ -16,7 +16,9 @@ private struct FakeLaunchctl {
             d="$FAKE_DIR"
             echo "$@" >> "$d/calls"
             case "$1" in
-            bootout) if [ -f "$d/loaded" ]; then rm "$d/loaded"; exit 0; fi; echo "no such service" >&2; exit 3 ;;
+            bootout)
+              if [ -f "$d/fail_bootout" ]; then echo "Boot-out failed: 5: Input/output error" >&2; exit 5; fi
+              if [ -f "$d/loaded" ]; then rm "$d/loaded"; exit 0; fi; echo "no such service" >&2; exit 3 ;;
             bootstrap)
               if [ -f "$d/fail_bootstrap" ]; then echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi
               touch "$d/loaded"; exit 0 ;;
@@ -125,8 +127,8 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         do {
             _ = try await env.service(launchd: false).install()
         } catch let error as TimerError {
-            guard case .noLaunchd(let cron) = error else { Issue.record("wrong error \(error)"); return }
-            #expect(cron.hasPrefix("*/15 * * * * cd '") && cron.hasSuffix("task tick"))
+            guard case .noLaunchd(let cron, let note) = error else { Issue.record("wrong error \(error)"); return }
+            #expect(cron.hasPrefix("*/15 * * * * cd '") && cron.hasSuffix("task tick") && note == nil)
         }
         #expect(!FileManager.default.fileExists(atPath: env.home.appendingPathComponent(".workbench").path))
         #expect(env.launchctl.calls.isEmpty)
@@ -145,14 +147,58 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         _ = try await env.service().install()
         try FileManager.default.createDirectory(at: env.paths.log.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "--- tick\n".write(to: env.paths.log, atomically: true, encoding: .utf8)
-        let lines = await env.service().remove()
-        #expect(!env.launchctl.loaded)
+        let removed = await env.service().remove()
+        let lines = removed.lines
+        #expect(removed.ok && !env.launchctl.loaded)
         #expect(!FileManager.default.fileExists(atPath: env.paths.plist.path))
         #expect(!FileManager.default.fileExists(atPath: env.paths.launcherDirectory.path))
         #expect(FileManager.default.fileExists(atPath: env.paths.log.path))
         #expect(lines.contains("unloaded \(env.paths.label)"))
         #expect(lines.contains("if you set a wake schedule for it: sudo pmset repeat cancel"))
-        #expect(await env.service().remove().first == "no timer was installed for this project")
+        #expect(await env.service().remove().lines.first == "no timer was installed for this project")
+    }
+
+    @Test func aRemoveThatCannotUnloadKeepsTheFilesAndFails() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try env.launchctl.put("fail_bootout")
+        let result = await env.service().remove()
+        #expect(!result.ok)
+        #expect(result.lines.first?.hasPrefix("could not unload \(env.paths.label)") == true)
+        #expect(result.lines.contains { $0.hasPrefix("nothing was deleted; try: launchctl bootout") })
+        // What is on disk and what runs still agree.
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: env.paths.plist.path) && fm.fileExists(atPath: env.paths.launcher.path))
+    }
+
+    @Test func anAgentThatIsNotLoadedIsNotAFailureToRemove() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try FileManager.default.removeItem(at: env.launchctl.dir.appendingPathComponent("loaded"))
+        let result = await env.service().remove()
+        #expect(result.ok && !FileManager.default.fileExists(atPath: env.paths.plist.path))
+    }
+
+    @Test(.enabled(if: geteuid() != 0, "root can delete a file in a folder with no write permission"))
+    func aFileThatCannotBeDeletedIsReportedNotClaimed() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: env.paths.launcherDirectory.path)
+        let folder = env.paths.launcherDirectory.path
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder) }
+        let result = await env.service().remove()
+        #expect(!result.ok)
+        #expect(result.lines.contains { $0.hasPrefix("could not delete \(env.paths.launcher.path)") })
+        #expect(!result.lines.contains("removed \(env.paths.launcher.path)"))
+        #expect(FileManager.default.fileExists(atPath: env.paths.launcher.path))
+    }
+
+    @Test func removeOnASystemWithNoLaunchdSaysNothingWasInstalled() async throws {
+        let env = try Env()
+        let result = await env.service(launchd: false).remove()
+        #expect(result.ok)
+        #expect(result.lines.first?.hasPrefix("this system has no launchd: Workbench installed nothing here") == true)
+        #expect(env.launchctl.calls.isEmpty)
     }
 
     @Test func noProgramButLaunchctlIsEverRun() async throws {
@@ -239,6 +285,41 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(lines(await env.service().status()).contains("warn: task bump: STALE: workbench task approve bump"))
         try FileManager.default.removeItem(at: env.task.project.root.appendingPathComponent("pending.sh"))
         #expect(lines(await env.service().status()).contains { $0.hasPrefix("fail: task bump: cannot be loaded") })
+    }
+
+    @Test func aWakeOnTheWrongDaysIsCaughtWhateverWordsPmsetUses() async throws {
+        let env = try Env(front: "at: 04:00\ndays: mon,wed\nfix: pr")
+        _ = try await env.service().install()
+        func wake(_ days: String) async -> [String] {
+            lines(await env.service(sched: "Repeating power events:\n  wakepoweron at 3:55AM \(days)\n").status())
+        }
+        let tuesday = await wake("Tue")
+        let fixLine = "run: sudo pmset repeat wakeorpoweron MW 03:55:00"
+        #expect(tuesday.contains("warn: wake: set for Tue, the tasks need MW; \(fixLine)"))
+        #expect(await wake("Mon Wed").contains("ok: wake: 03:55 Mon Wed"))
+        #expect(await wake("Monday, Wednesday").contains { $0.hasPrefix("ok: wake: 03:55") })
+        let everyDay = await wake("every day")
+        #expect(everyDay.contains { $0.hasPrefix("warn: wake: set for every day, the tasks need MW") })
+        let strange = await wake("whenever")
+        #expect(strange.contains { $0.hasPrefix("warn: wake: the days \"whenever\" could not be read; the tasks need MW") })
+    }
+
+    @Test func probesThatFailAreSaidNotSkipped() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let text = lines(await env.service(sched: nil, power: nil, vault: nil).status())
+        #expect(text.contains { $0.hasPrefix("warn: wake: could not read the wake schedule (pmset -g sched)") })
+        #expect(text.contains("warn: power: could not be read (pmset -g ps); plug the Mac in"))
+        #expect(text.contains { $0.hasPrefix("warn: FileVault: could not be read (fdesetup status)") })
+    }
+
+    @Test func statusOnASystemWithNoLaunchdGivesTheCronLine() async throws {
+        let env = try Env()
+        let text = lines(await env.service(launchd: false).status())
+        let prefix = "warn: agent: this system has no launchd, so the timer is a crontab line you add yourself: */15 * * * * cd '"
+        #expect(text.contains { $0.hasPrefix(prefix) })
+        // No launchd also means no pmset to read: no complaints about probes it cannot run.
+        #expect(!text.contains { $0.contains("could not be read") })
     }
 
     @Test func aTaskWithNoScheduleIsFlaggedBecauseATickNeverRunsIt() async throws {

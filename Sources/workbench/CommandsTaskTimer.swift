@@ -32,8 +32,9 @@ extension Commands {
             return status.contains { $0.level == .fail } ? 1 : 0
         case "remove":
             try a.requireEmpty()
-            for line in await (try await timerService()).remove() { out(line) }
-            return 0
+            let result = await (try await timerService()).remove()
+            for line in result.lines { out(line) }
+            return result.ok ? 0 : 1
         default:
             throw CLIError.usage("unknown timer command '\(verb)'. \(usage)")
         }

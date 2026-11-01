@@ -76,6 +76,23 @@ public enum TimerWake {
         return nil
     }
 
+    /// The weekdays (1 = Sunday) a wake's days text names: pmset's `weekdays only`, `weekends only`, `every day`, or day names (`Tue`,
+    /// `Tuesday`, `Mon Wed`). Nil when it cannot be read, which is not the same as "all of them".
+    public static func parseDays(_ text: String) -> Set<Int>? {
+        let lowered = text.lowercased().trimmingCharacters(in: .whitespaces)
+        if lowered.hasPrefix("every day") || lowered.hasPrefix("daily") { return Set(1...7) }
+        if lowered.hasPrefix("weekdays") { return Set(2...6) }
+        if lowered.hasPrefix("weekends") { return [1, 7] }
+        let words = lowered.split { !$0.isLetter }.map(String.init).filter { $0 != "only" && $0 != "and" }
+        guard !words.isEmpty else { return nil }
+        var days = Set<Int>()
+        for word in words {
+            guard let day = TaskSchedule.weekdayNames[String(word.prefix(3))], word.count >= 3 else { return nil }
+            days.insert(day)
+        }
+        return days
+    }
+
     /// pmset's own wording for a day set, where it is known: `weekdays only`, `weekends only`, `every day`. Nil for any other set.
     public static func pmsetWording(_ days: Set<Int>) -> String? {
         if days == Set(1...7) { return "every day" }
