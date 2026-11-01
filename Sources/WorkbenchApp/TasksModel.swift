@@ -192,15 +192,34 @@ struct TasksReader: Sendable {
     private(set) var error: String?
     var selection: String?
     private(set) var reads = 0
+
+    // What the two buttons are doing. Only they write, and only through `TaskActions` (core).
+    /// The approve card: what would run, and why the last try was refused.
+    var approving: TaskCardInfo?
+    var approveError: String?
+    /// The run card (`fix: pr` only): what it may cost and what it does.
+    var confirmingRun: TaskCardInfo?
+    /// The task a run started here is going for, and what it last said.
+    var runningTask: String?
+    var runSaid: String?
+    /// How the last run started here ended, shown under that task's header until another starts.
+    var lastResult: (task: String, result: TaskRunResult)?
+    /// Why a button did nothing (another run going, the task did not load).
+    var actionNote: String?
+    @ObservationIgnored var stopSwitch: TaskStopSwitch?
+    @ObservationIgnored let actions: TaskActions
     @ObservationIgnored private var lastRead: Date?
     /// The project of the newest read asked for; an answer for another one is dropped.
     @ObservationIgnored private var latestPath: String?
     @ObservationIgnored private let reader: TasksReader
     @ObservationIgnored private let clock: @Sendable () -> Date
 
-    init(reader: TasksReader = .core(), clock: @escaping @Sendable () -> Date = { Date() }) {
+    init(
+        reader: TasksReader = .core(), clock: @escaping @Sendable () -> Date = { Date() }, actions: TaskActions = .core
+    ) {
         self.reader = reader
         self.clock = clock
+        self.actions = actions
     }
 
     /// The snapshot, only when it is of this project: another project's tasks are never shown under this one.
@@ -221,7 +240,8 @@ struct TasksReader: Sendable {
     func isDue(visible: Bool) -> Bool {
         guard visible else { return false }
         guard let lastRead else { return true }
-        return clock().timeIntervalSince(lastRead) >= Self.interval
+        // A run started here is watched more closely: its row says `running` and then how it ended.
+        return clock().timeIntervalSince(lastRead) >= (runningTask == nil ? Self.interval : 3)
     }
 
     /// Reads now. A failed read leaves the last good snapshot and says why.
