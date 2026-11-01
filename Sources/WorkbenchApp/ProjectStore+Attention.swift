@@ -5,7 +5,9 @@ extension ProjectStore {
     /// The thread's own attention, as the screen shows it, for the attention centre.
     private var threadAttention: ThreadAttention? {
         guard case .thread(let shown) = screen else { return nil }
-        return ThreadAttention(id: shown.id, title: shown.title, attention: shown.attention)
+        // With a pull request open its CI arrives a moment after the thread: until it does, a CI failure cannot be told from none.
+        let waitingForCI = shown.state.pullRequest != nil && shown.state.decision == "accepted" && shown.ci == nil
+        return ThreadAttention(id: shown.id, title: shown.title, attention: shown.attention, ciLoaded: !waitingForCI)
     }
 
     /// Gives the attention centre one look at the project. The tasks are read (off the main actor, without the timer's probes) only when

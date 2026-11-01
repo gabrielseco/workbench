@@ -83,6 +83,19 @@ import WorkbenchCore
         #expect(store.tasks.selected(in: shown)?.id == "update-docs")
     }
 
+    @Test func aSelectionForThisProjectSurvivesTheSwitchFromAnother() async throws {
+        let (first, _) = try await AttentionItemsTests.entries(git: true)
+        let (second, _) = try await AttentionItemsTests.entries(git: true)
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(await store.open(first.project.root))
+        await store.tasks.refresh(first.project)
+        #expect(await store.open(second.project.root))
+        store.show(.task("update-docs"), project: second.project.root.path)
+        await store.tasks.refresh(second.project)
+        let shown = try #require(store.tasks.snapshot(for: second.project))
+        #expect(store.tasks.selected(in: shown)?.id == "update-docs")
+    }
+
     @Test func clickRoutes() async throws {
         #expect(AttentionRoute(encoded: AttentionRoute.thread("t1").encoded) == .thread("t1"))
         #expect(AttentionRoute(encoded: AttentionRoute.task("bump").encoded) == .task("bump"))

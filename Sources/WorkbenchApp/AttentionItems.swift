@@ -39,6 +39,9 @@ struct ThreadAttention: Equatable {
     var id: String
     var title: String?
     var attention: Attention
+    /// The pull request's CI has been asked for (or there is no pull request). Until then a CI failure cannot be seen, so a look
+    /// without it is not yet the thread's baseline.
+    var ciLoaded = true
 }
 
 /// Which things need a person, from the thread's `Attention` and the project's tasks. Pure: the same inputs give the same list, so a

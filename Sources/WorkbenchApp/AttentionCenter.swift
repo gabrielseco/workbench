@@ -31,6 +31,8 @@ import WorkbenchCore
     /// The project's tasks have been read once: until then the baseline is only what the thread said, and the first read of the
     /// tasks completes it (it is not news that yesterday's run failed).
     @ObservationIgnored private var tasksBaselined = false
+    /// The thread's CI has been read once, for the same reason.
+    @ObservationIgnored private var threadBaselined = true
 
     init(preferences: Preferences, notifier: Notifier = NullNotifier()) {
         self.preferences = preferences
@@ -80,18 +82,22 @@ import WorkbenchCore
             return
         }
         let first = path != project
-        if first { (project, baseline, announced, lastTasks, tasksBaselined) = (path, [], [], [], false) }
+        if first { (project, baseline, announced, lastTasks, tasksBaselined, threadBaselined) = (path, [], [], [], false, false) }
         if let tasks { lastTasks = tasks }
         lastThread = thread
         let seen = Set(preferences.seenAttention)
         let all = AttentionItems.derive(thread: thread, tasks: lastTasks).filter { !seen.contains(seenKey($0.id)) }
         items = all
         // The first look at a project, and the first look that has its tasks, are baselines: what is there is counted, not announced.
-        if first || (!tasksBaselined && tasks != nil) {
+        let ciReady = thread?.ciLoaded ?? true
+        if first || (!tasksBaselined && tasks != nil) || (!threadBaselined && ciReady) {
             if tasks != nil { tasksBaselined = true }
+            if ciReady { threadBaselined = true }
             baseline.formUnion(all.map(\.id))
             return
         }
+        // Until the thread's CI has been read, nothing from the thread is announced: its failure may be an old one.
+        guard threadBaselined else { return }
         for item in all where !baseline.contains(item.id) && !announced.contains(item.id) {
             announced.insert(item.id)
             guard !paused else { continue }

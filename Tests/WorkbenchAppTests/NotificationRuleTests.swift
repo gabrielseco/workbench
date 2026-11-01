@@ -97,6 +97,23 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(notifier.posted[0].project == "/work/proj")
     }
 
+    @Test func aCIFailureThatArrivesAfterTheThreadIsStillThePastWhenTheAppOpened() async throws {
+        let r = rig()
+        let (center, notifier) = (r.center, r.notifier)
+        let waiting = ThreadAttention(id: "t1", title: "Paginate", attention: .none, ciLoaded: false)
+        await look(center, "proj", thread: waiting, tasks: [])
+        // GitHub answers: the pull request's CI was already failing when the app opened.
+        var failing = AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "abc")
+        failing.ciLoaded = true
+        await look(center, "proj", thread: failing, tasks: [])
+        #expect(center.items.count == 1 && notifier.posted.isEmpty)
+        // A new commit failing is news.
+        var next = AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "def")
+        next.ciLoaded = true
+        await look(center, "proj", thread: next, tasks: [])
+        #expect(notifier.posted.count == 1)
+    }
+
     @Test func seenBelongsToItsProject() async throws {
         let r = rig()
         let (center, prefs) = (r.center, r.prefs)
