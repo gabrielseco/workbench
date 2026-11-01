@@ -67,6 +67,18 @@ struct TaskFileTests {
         }
     }
 
+    @Test func maxOpenIsOptionalBoundedAndOnlyLimitsATaskThatOpensPullRequests() throws {
+        let plain = try TaskDefinition.parse(Self.task("fix: pr"), name: "bump")
+        #expect(plain.maxOpen == nil && plain.openLimit == TaskDefinition.defaultMaxOpen)
+        let set = try TaskDefinition.parse(Self.task("fix: pr\nmax_open: 5"), name: "bump")
+        #expect(set.maxOpen == 5 && set.openLimit == 5)
+        let report = try TaskDefinition.parse(Self.task("fix: report\nmax_open: 5"), name: "bump")
+        #expect(report.openLimit == nil)
+        for bad in ["0", "51", "-1", "two", "1.5"] {
+            #expect(problems(Self.task("fix: pr\nmax_open: \(bad)")).contains { $0.contains("'max_open'") }, "max_open: \(bad)")
+        }
+    }
+
     @Test func atAndEveryTogetherAreRefused() {
         let found = problems(Self.task("at: 04:00\nevery: 1h"))
         #expect(found.contains { $0.contains("either 'at' or 'every'") })

@@ -117,7 +117,8 @@ let workbenchUsage = """
                                  the next due time and how the last run ended
       task run <name>            run the task now: take its next units, do the work in a thread, and with fix: pr accept
                                  it when the check passed and open the pull request; fix: report only lists the units;
-                                 exit 6 when skipped (a thread is active, the approval is stale), 1 failed, 5 over budget
+                                 exit 6 when skipped (a thread is active, the approval is stale, or max_open of its
+                                 pull requests are still open), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
       task log <name> [--all]    what the task's last run did: outcome, the full reason, setup, check and its output, the
                                  agent's last message; --all lists every run in one line. exit 7 for no such task

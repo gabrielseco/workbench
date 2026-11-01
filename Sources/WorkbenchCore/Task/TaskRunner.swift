@@ -128,6 +128,9 @@ public struct TaskRunner: Sendable {
         if let active = store.activeThreadID() { return busy(active) }
         if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
 
+        // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
+        if let skip = await tooManyOpen(task, history: history) { return skip }
+
         var units: [TaskUnit] = []
         if let script = task.pending {
             let all: [TaskUnit]
@@ -147,6 +150,50 @@ public struct TaskRunner: Sendable {
             return TaskRunResult(outcome: .reported, reason: list, units: ids)
         }
         return await runThread(name: name, loaded: loaded, units: units, writer: writer)
+    }
+
+    /// A skip when this task's own pull requests are at the limit, or when GitHub cannot say whether they are: never a run on a guess.
+    private func tooManyOpen(_ task: TaskDefinition, history: TaskHistory) async -> TaskRunResult? {
+        guard let limit = task.openLimit else { return nil }
+        // A run that opened a pull request, one that died after publishing it, and one whose thread a person shipped by hand all have
+        // one to count. Every earlier thread counts, however old: GitHub is asked once for all open pull requests, not about each thread.
+        let tried = history.runs.filter {
+            $0.thread != nil && $0.outcome != .nothingToDo && $0.outcome != .reported
+        }
+        guard !tried.isEmpty else { return nil }
+        let threads = Set(tried.compactMap(\.thread))
+        guard let openBranches = await TaskPullRequests.openBranches(gh: gh, project: project) else {
+            let why = gh == nil ? "GitHub is not reachable" : "its list of open pull requests could not be read in full"
+            return TaskRunResult(
+                outcome: .skippedTooManyOpen,
+                reason: "cannot tell whether the task's earlier pull requests are still open (\(why)); not starting on a guess")
+        }
+        let open = threads.filter { openBranches.contains("workbench/\($0)") }
+        guard open.count >= limit else { return nil }
+        // The address where the run recorded one, otherwise the branch (a run that died before it wrote its end).
+        let address = open.sorted().map { thread in
+            tried.last(where: { $0.thread == thread })?.pullRequest ?? "branch workbench/\(thread)"
+        }
+        return TaskRunResult(
+            outcome: .skippedTooManyOpen,
+            reason: "\(open.count) of the task's pull requests are still open (max_open \(limit)): "
+                + address.joined(separator: ", ") + "; merge or close one")
+    }
+
+    /// Removes a thread the run has no use for. False when that failed (an oversized change it refuses to save, a lock): the thread is
+    /// then still active, and the caller says so instead of claiming it is gone.
+    func discard(_ id: String, service: ThreadService) async -> Bool {
+        do {
+            _ = try await service.abandon(id: id)
+            return true
+        } catch {
+            notice("could not discard thread \(id): \(error)")
+            return false
+        }
+    }
+
+    static func notDiscarded(_ id: String) -> String {
+        "thread \(id) could not be removed and is left for you (workbench abandon)"
     }
 
     private func busy(_ what: String) -> TaskRunResult {
@@ -191,8 +238,9 @@ public struct TaskRunner: Sendable {
         } catch { return fail("the thread could not be created: \(error)", units: ids) }
 
         do { _ = try await service.approve(id: id, config: config) } catch {
-            _ = try? await service.abandon(id: id)
-            return fail("the task's goal could not be approved: \(error)", units: ids)
+            let gone = await discard(id, service: service)
+            return fail(
+                "the task's goal could not be approved: \(error)" + (gone ? "" : "; " + Self.notDiscarded(id)), units: ids)
         }
 
         // Before any work: which units this thread is for, so a run that dies later is still known to have had them.
@@ -201,14 +249,26 @@ public struct TaskRunner: Sendable {
                 .taskRunThread,
                 data: ["thread": .string(id), "units": .array(ids.map { .string($0) }), "hash": .string(loaded.hash)])
         } catch {
-            _ = try? await service.abandon(id: id)
-            return fail("the run could not be recorded, so nothing was started: \(error)", units: ids)
+            let gone = await discard(id, service: service)
+            return fail(
+                "the run could not be recorded, so nothing was started: \(error)" + (gone ? "" : "; " + Self.notDiscarded(id)),
+                units: ids)
         }
         // From here the thread is real: when something goes wrong it is left as it is, for a person to look at.
         let runner = ThreadRunner(project: project, threadID: id, git: git) { _ in }
         await stop.attach(runner)
         let report: TurnReport
         do { report = try await runner.run(runOptions) } catch {
+            // No turn started (setup failed, the runner could not begin): the thread holds nothing worth keeping and, left active,
+            // would skip every later run. One that ran a turn is left for a person.
+            let events = (try? EventLogReader.read(at: project.eventsURL(id)).events) ?? []
+            let started = events.isEmpty || events.contains { $0.kind == .turnStarted }
+            if !started {
+                let gone = await discard(id, service: service)
+                let note = gone ? "no turn had started, so the thread was discarded" : "no turn had started, but "
+                    + Self.notDiscarded(id)
+                return fail("the turn could not run: \(error); \(note)", units: ids, thread: id)
+            }
             return fail("the turn could not run: \(error)", units: ids, thread: id)
         }
         notice("turn \(report.turn) ended: \(report.result.rawValue)")
@@ -261,10 +321,9 @@ public struct TaskRunner: Sendable {
         do { _ = try await service.accept(id: id, by: "task:\(name)") } catch ThreadServiceError.nothingToAccept {
             // An expected result, most often for a task that checks something and finds it fine: not a failure, and not a thread
             // to leave behind, since the next run would be skipped for it.
-            _ = try? await service.abandon(id: id)
-            return TaskRunResult(
-                outcome: .nothingToDo, reason: explanation.reason("the agent changed nothing, so there is nothing to ship"),
-                units: units, thread: id)
+            let gone = await discard(id, service: service)
+            let base = "the agent changed nothing, so there is nothing to ship" + (gone ? "" : "; " + Self.notDiscarded(id))
+            return TaskRunResult(outcome: .nothingToDo, reason: explanation.reason(base), units: units, thread: id)
         } catch {
             return fail(
                 explanation.reason("the work could not be accepted: \(error); thread \(id) is left for you"),

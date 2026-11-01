@@ -61,7 +61,7 @@ extension Commands {
         if !result.recorded { out("  not recorded in the task's run log") }
         switch result.outcome {
         case .prOpened, .reported, .nothingPending, .nothingToDo: return 0
-        case .skippedProjectBusy, .skippedAlreadyRunning, .staleApproval: return 6
+        case .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen, .staleApproval: return 6
         case .budgetExceeded: return 5
         case .failed, .interrupted: return 1
         }

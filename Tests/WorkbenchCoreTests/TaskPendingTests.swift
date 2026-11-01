@@ -64,7 +64,8 @@ struct TaskPendingTests {
         #expect(history.unitsWithThreads == ["ROU": "g-1", "TUR": "g-2"])
         let picked = PendingUnits.select(
             units: units, history: history, pullRequests: ["ROU": .absent, "TUR": .absent], batch: 4)
-        #expect(picked.map(\.id) == ["ROU", "PAN", "PRI"])
+        // ROU is offered again, but after the units not tried yet: its dead run counts as a try.
+        #expect(picked.map(\.id) == ["PAN", "PRI", "ROU"])
         // GitHub unreachable: neither is touched.
         #expect(PendingUnits.select(units: units, history: history, pullRequests: [:], batch: 4).map(\.id) == ["PAN", "PRI"])
         // The dead run's pull request is open: it stays out too.
@@ -81,6 +82,36 @@ struct TaskPendingTests {
         try await writer.append(.taskRunEnded, data: ["outcome": "nothing-to-do", "units": ["TUR"], "thread": "g-2"])
         await writer.close()
         #expect(try fx.log.history().unitsWithThreads == ["ROU": "g-1"])
+    }
+
+    @Test func unitsThatKeepFailingGoAfterTheOnesNotTriedYet() async throws {
+        let all = ["A", "B", "C", "D", "E"].map { TaskUnit(id: $0, title: $0) }
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        func run(_ outcome: String, _ units: [String]) async throws {
+            try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+            try await writer.append(
+                .taskRunEnded, data: ["outcome": .string(outcome), "units": .array(units.map { .string($0) })])
+        }
+        try await run("failed", ["A"])
+        try await run("failed", ["A"])
+        try await run("nothing-to-do", ["B"])
+        // Not tries: a dry run, a skip and a stale approval.
+        try await run("reported", ["C"])
+        try await run("skipped-project-busy", ["D"])
+        try await run("stale-approval", ["E"])
+        await writer.close()
+        let history = try fx.log.history()
+        #expect(history.failedTries == ["A": 2, "B": 1])
+        let order = PendingUnits.select(units: all, history: history, pullRequests: [:], batch: 5).map(\.id)
+        #expect(order == ["C", "D", "E", "B", "A"])
+        #expect(PendingUnits.select(units: all, history: history, pullRequests: [:], batch: 2).map(\.id) == ["C", "D"])
+    }
+
+    @Test func withNothingTriedTheScriptsOrderStands() async throws {
+        let all = ["Z", "A", "M"].map { TaskUnit(id: $0, title: $0) }
+        let history = try await history()
+        #expect(PendingUnits.select(units: all, history: history, pullRequests: [:], batch: 3).map(\.id) == ["Z", "A", "M"])
     }
 
     @Test func aReportRunDoesTheWorkOfNoUnit() async throws {

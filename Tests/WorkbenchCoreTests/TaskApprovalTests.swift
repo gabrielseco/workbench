@@ -100,6 +100,18 @@ struct TaskApprovalTests {
         #expect(summary.problem?.contains("run log is damaged") == true)
     }
 
+    @Test func aTaskThatDoesNotSetMaxOpenKeepsTheApprovalItHad() throws {
+        // The hash of this task as it was before max_open existed: an approval already given must not go stale.
+        let plain = try TaskDefinition.parse("---\nfix: report\n---\nDo it.\n", name: "bump")
+        let before = "9bacf49b550487ed3675f3339586d0da47f309e3c438fe8533b0dac4fe640566"
+        #expect(TaskApproval.hash(task: plain, pendingScript: nil) == before)
+        // Setting it is a change of what runs unattended, so it asks for a new approval.
+        let limited = try TaskDefinition.parse("---\nfix: report\nmax_open: 3\n---\nDo it.\n", name: "bump")
+        #expect(TaskApproval.hash(task: limited, pendingScript: nil) != before)
+        let other = try TaskDefinition.parse("---\nfix: report\nmax_open: 4\n---\nDo it.\n", name: "bump")
+        #expect(TaskApproval.hash(task: limited, pendingScript: nil) != TaskApproval.hash(task: other, pendingScript: nil))
+    }
+
     @Test func aMissingPendingScriptIsRefusedAtApproval() async throws {
         let fx = try TaskFixture(front: "fix: pr\npending: missing.sh")
         await #expect(throws: TaskFileError.self) { try await fx.library.approve(fx.name) }

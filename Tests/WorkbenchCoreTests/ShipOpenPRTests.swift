@@ -33,7 +33,10 @@ struct FakeGH {
               if grep -q pending "$f"; then exit 8; fi
               if grep -q '"fail"' "$f"; then exit 1; fi
               exit 0 ;;
-            "pr list") if [ -f "$d/list" ]; then cat "$d/list"; else echo '[]'; fi; exit 0 ;;
+            "pr list")
+              f="$d/list"
+              case "$*" in *"--json headRefName --limit"*) f="$d/list_open" ;; esac
+              if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi; exit 0 ;;
             "pr view")
               if [ -f "$d/view_fail" ]; then echo "view boom" >&2; exit 1; fi
               if [ -f "$d/view" ]; then cat "$d/view"; exit 0; fi

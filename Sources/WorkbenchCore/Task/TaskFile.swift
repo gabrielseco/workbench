@@ -27,8 +27,11 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 /// `task.md`: front matter the engine reads, a body Claude reads (docs/spec/tasks.md).
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
-        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget",
+        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open",
     ]
+    /// How many of its own pull requests a `fix: pr` task leaves open before it waits for review.
+    public static let defaultMaxOpen = 2
+    public static let maxMaxOpen = 50
     public static let maxBatch = 20
     public static let maxInputs = 20
 
@@ -42,6 +45,8 @@ public struct TaskDefinition: Sendable, Equatable {
     public var pending: String?
     public var fix: TaskFix
     public var budgetUSD: Decimal?
+    /// Set in the file, nil when it is not (the default applies, and the approval does not mention it).
+    public var maxOpen: Int?
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -55,6 +60,9 @@ public struct TaskDefinition: Sendable, Equatable {
         return !path.split(separator: "/", omittingEmptySubsequences: false).dropLast(path.hasSuffix("/") ? 1 : 0)
             .contains { $0.isEmpty || $0 == ".." }
     }
+
+    /// The limit on open pull requests that applies: only a task that opens them has one.
+    public var openLimit: Int? { fix == .pr ? (maxOpen ?? Self.defaultMaxOpen) : nil }
 
     public static func parse(_ rawText: String, name: String) throws -> TaskDefinition {
         var problems: [TaskProblem] = []
@@ -80,7 +88,7 @@ public struct TaskDefinition: Sendable, Equatable {
 
         var definition = TaskDefinition(
             name: name, schedule: nil, batch: 1, include: nil, inputs: [], pending: nil, fix: .report,
-            budgetUSD: nil, instructions: instructions, text: text)
+            budgetUSD: nil, maxOpen: nil, instructions: instructions, text: text)
         definition.schedule = schedule(entry("at"), entry("days"), entry("every"), add: add)
 
         if let e = entry("batch") {
@@ -95,6 +103,13 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.fix = fix
             } else {
                 add(e.lineNumber, "'fix' must be 'report' or 'pr', found '\(e.value)'")
+            }
+        }
+        if let e = entry("max_open") {
+            if let n = Int(e.value), (1...maxMaxOpen).contains(n) {
+                definition.maxOpen = n
+            } else {
+                add(e.lineNumber, "'max_open' must be a whole number from 1 to \(maxMaxOpen), found '\(e.value)'")
             }
         }
         if let e = entry("budget") {

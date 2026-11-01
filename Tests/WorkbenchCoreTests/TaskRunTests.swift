@@ -146,7 +146,8 @@ private struct Run {
     }
 
     @Test func unitsAreWorkedThroughAcrossRunsAndAClosedPullRequestBringsThemBack() async throws {
-        let run = try await Run()
+        // This is about running out of units, not about waiting for review: the limit is out of the way.
+        let run = try await Run(front: "fix: pr\nbatch: 2\nmax_open: 10\npending: pending.sh")
         _ = try await addOrigin(run.fx)
         let directives = try run.shippable().joined(separator: ",")
         let first = await run.runner(directives).run("bump", trigger: .tick)
@@ -200,9 +201,9 @@ private struct Run {
         try await dead.append(.taskRunStarted, data: ["trigger": "tick"])
         try await dead.append(.taskRunThread, data: ["thread": "g-1-bump-ROU-TUR", "units": ["ROU", "TUR"]])
         await dead.close()
-        // GitHub answers, and has no pull request for that branch.
+        // GitHub answers, and has no pull request for that branch: the units are offered again, after the one not tried yet.
         let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
-        #expect(result.outcome == .prOpened && result.units == ["ROU", "TUR"])
+        #expect(result.outcome == .prOpened && result.units == ["PAN", "ROU"])
     }
 
     @Test func theThreadIsOnRecordBeforeTheTurnStarts() async throws {

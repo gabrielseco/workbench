@@ -125,6 +125,7 @@ public enum TaskScaffold {
             pending: \(script)
             fix: report             # report: only lists what it would take. pr: does the work and opens the pull request
             # budget: 3.00          # USD for the coding turns of one run
+            # max_open: 2           # a pr task waits for review once this many of its pull requests are open (default 2)
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.
             Delete this line when you have.
