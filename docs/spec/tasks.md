@@ -141,12 +141,15 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 - `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `reported`,
   `nothing-pending`, `nothing-to-do`), 6 when it was skipped or refused (`skipped-project-busy`, `skipped-already-running`,
   `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
-- `workbench task tick`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
+- `workbench task tick [--all]`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
   task with no approval and no run has nothing to count from and never fires; one whose approval went stale is due, so its run can record
   `stale-approval`. A task that was approved once and can no longer be loaded (its script deleted, its skill grown past the limit) has no
   schedule to read: the tick prints `<name>: PROBLEM <why>` and exits 1, so a timer does not take its silence for "all is well". Exit 1
   also when a run failed or went over budget; a skip is a note. This is what a timer calls; the app will call the same
   code for each project it has open.
+  `--all` does that for every project that has a timer installed, one after the other: the folders are those the agents in
+  `~/Library/LaunchAgents/com.workbench.task-tick.*.plist` run in (there is no other list of projects). A folder that is gone or is no longer
+  a repository (even when a parent folder is one: that is not ticked in its place) is printed as `PROBLEM` and fails the pass; the first Ctrl-C ends the run in progress and starts no later project.
 
 ## A run
 

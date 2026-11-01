@@ -121,7 +121,8 @@ let workbenchUsage = """
                                  its answer under the task's reports/ (--dry only lists the units, no agent);
                                  exit 6 when skipped (a thread is active, the approval is stale, or max_open of its
                                  pull requests are still open), 1 failed, 5 over budget
-      task tick                  run the tasks whose time has come, one after the other; what a timer calls
+      task tick [--all]          run the tasks whose time has come, one after the other; what a timer calls; --all does it
+                                 for every project that has a timer installed (a missing project is said and fails it)
       task timer install [--every <5m..1h>] [--pull-main]
                                  make the machine run the tasks: copy this binary beside a launcher (a rebuild leaves the copy;
                                  install again to update it), write and load the launchd agent that runs `task tick` for this
