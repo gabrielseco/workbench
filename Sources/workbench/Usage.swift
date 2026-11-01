@@ -119,6 +119,8 @@ let workbenchUsage = """
                                  it when the check passed and open the pull request; fix: report only lists the units;
                                  exit 6 when skipped (a thread is active, the approval is stale), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
+      task log <name> [--all]    what the task's last run did: outcome, the full reason, setup, check and its output, the
+                                 agent's last message; --all lists every run in one line. exit 7 for no such task
       task new <name> [--include <file>] [--input <path>]...
                                  start a task: .workbench/tasks/<name>/task.md with every setting explained and fix: report, and
                                  a pending.sh that lists nothing; no agent runs. approve refuses it until its instructions
