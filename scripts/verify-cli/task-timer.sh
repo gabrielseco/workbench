@@ -110,7 +110,7 @@ check "status says which binary the launcher runs" "got: $(head -c 400 "$SCRATCH
 
 wbp "$SCRATCH/install2.out" task timer install --every 5m --pull-main
 check "a second install replaces the files" "exit $RC: $(head -c 300 "$SCRATCH/install2.out")" \
-    bash -c '[ "$1" = 0 ] && grep -q "git pull --ff-only" "$2" && grep -q "<integer>300</integer>" "$3" && [ "$(grep -c "^bootstrap" "$4/calls")" = 2 ]' _ "$RC" "$LAUNCHER" "$PLIST" "$LC"
+    bash -c '[ "$1" = 0 ] && grep -q "git pull --ff-only" "$2" && grep -q "<integer>300</integer>" "$3" && [ "$(grep -c "^bootstrap" "$4/calls")" = 3 ]' _ "$RC" "$LAUNCHER" "$PLIST" "$LC"
 wbp "$SCRATCH/bad.out" task timer install --every 2h
 check "a bad interval is a usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/bad.out")" test "$RC" = 2
 
