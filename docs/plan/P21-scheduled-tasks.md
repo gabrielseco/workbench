@@ -19,7 +19,7 @@ committed tasks location shared by a team, unattended credentials (signing, 1Pas
 1. **The task as data** (done): `task.md` parsing and validation, schedules, approval, inputs, the pending script and unit selection, the run
    log, `task list` and `task approve`, the verify-cli scenario `task.sh`.
 2. **Running it** (done): `task run` and `task tick` over the existing goal, run, check, accept and ship path; the run outcomes; recovery of a run
-   whose process died; the scenario `task-run.sh` with the fake claude and a stand-in `gh`. `fix: report` is a dry run; the read-only agent turn,
+   whose process died; the scenario `task-run.sh` with the fake claude and a stand-in `gh`. `fix: report` was a dry run; its read-only agent turn is built now (`TaskReport`, `task run --dry` for the old behaviour);
    `task list`'s pending count and ticking every project (`--all`) are left for later.
 
 ## After the two pull requests

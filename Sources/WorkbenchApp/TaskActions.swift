@@ -22,7 +22,8 @@ struct TaskCardInfo: Equatable {
             Line(label: "when", value: task.schedule?.summary ?? "by hand only"),
             Line(
                 label: "fix",
-                value: task.fix == .pr ? "pr: does the work, opens a pull request, merges nothing" : "report: a dry run"),
+                value: task.fix == .pr ? "pr: does the work, opens a pull request, merges nothing"
+                    : "report: a read-only agent writes a report; nothing is changed or opened"),
             Line(label: "batch", value: "\(task.batch) unit\(task.batch == 1 ? "" : "s") a run"),
             Line(label: "budget", value: task.budgetUSD.map { "$\(money($0)) a run" } ?? "none set"),
         ]
@@ -45,6 +46,8 @@ struct TaskCardInfo: Equatable {
     /// The most a `fix: pr` run may spend: the coding turns' budget and the read-only turn that describes the change.
     static func cost(_ task: TaskDefinition) -> String {
         guard let budget = task.budgetUSD else { return "unknown: the task sets no budget" }
+        // A report is one read-only turn: no coding turns and no pull request to describe.
+        if task.fix == .report { return "up to $\(money(budget)) for the report" }
         let describing = PRDescriber.budgetUSD
         let most = money(budget + describing)
         return "up to $\(money(budget)) for the work and $\(money(describing)) to describe it: at most $\(most)"

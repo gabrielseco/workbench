@@ -63,7 +63,7 @@ extension TasksModel {
 
     // MARK: run
 
-    /// `Run now`: a `fix: report` task starts at once (it starts no agent); a `fix: pr` task asks first.
+    /// `Run now`: asks first, whatever the task does, because either kind starts an agent that spends.
     func beginRun(_ project: Project?, _ entry: TaskEntry, threadRunGoing: Bool) async {
         guard let project else { return }
         if let why = runUnavailable(entry, threadRunGoing: threadRunGoing) {
@@ -75,10 +75,6 @@ extension TasksModel {
         let card: TaskCardInfo
         do { card = try actions.inspect(project, entry.id) } catch {
             actionNote = "\(entry.id) cannot run: \(error)"
-            return
-        }
-        guard card.fix == .pr else {
-            await startRun(project, entry.id)
             return
         }
         confirmingRun = card
