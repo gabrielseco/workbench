@@ -45,7 +45,7 @@ import WorkbenchCore
     }
 
     @ObservationIgnored private var polling: Task<Void, Never>?
-    @ObservationIgnored private var activation: Task<Void, Never>?
+    @ObservationIgnored private var activation: NSObjectProtocol?
 
     /// Calls `look` now and then every `interval` for as long as the app runs, whatever screen or window is up.
     func startPolling(_ look: @escaping @MainActor () async -> Void) {
@@ -58,17 +58,17 @@ import WorkbenchCore
             }
         }
         // The app coming to the front is a look too: a task that broke in the background is shown at once.
-        activation = Task {
-            for await _ in NotificationCenter.default.notifications(named: NSApplication.didBecomeActiveNotification) {
-                await look()
-            }
+        activation = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in await look() }
         }
     }
 
     func stopPolling() {
         polling?.cancel()
         polling = nil
-        activation?.cancel()
+        if let activation { NotificationCenter.default.removeObserver(activation) }
         activation = nil
     }
 
