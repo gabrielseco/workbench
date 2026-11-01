@@ -173,7 +173,7 @@ In order, ending the run with an outcome at the first step that stops it:
 A schedule does nothing until something calls `workbench task tick`. `task timer` sets that up for a project, in the way the first real use
 did by hand:
 
-- `install` writes a launcher, `~/.workbench/timers/<slug>/tick.sh`, and a launchd agent,
+- `install` writes a launcher, `~/.workbench/timers/<slug>/tick.sh`, a **copy of the `workbench` binary** beside it (`~/.workbench/timers/<slug>/workbench`, made through a temporary file and a rename, so a failed copy leaves the old one; the launcher runs the copy, so a rebuild of the checkout it was installed from changes nothing until you run `install` again), and a launchd agent,
   `~/Library/LaunchAgents/com.workbench.task-tick.<slug>.plist`, and loads it with `launchctl bootstrap gui/<uid>` (an old copy is unloaded
   first, so installing again replaces it). `<slug>` is the project's folder and a short hash of its path, so two projects with one name do
   not collide. The agent runs the launcher every 15 minutes by default (`--every 5m` to `1h`); each task's own `at`/`days`/`every` decides what
@@ -185,13 +185,13 @@ did by hand:
   (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
   `every:` get no wake line and a sentence saying why). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
   The only program it runs is `launchctl`.
-- `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, each task approved
+- `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, the binary copy the launcher runs (missing is a FAIL; older than the `workbench` being run is a warning with the fix, compared only when the running program is `workbench`), each task approved
   and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
   days that cannot be read are a warning, not a pass), battery or power, and FileVault. The timer is a user agent, so after a restart it starts when that user logs in, with FileVault on or off:
   FileVault makes the Mac wait for the disk password first, and automatic login would do the rest for you.
   A probe that cannot be read is a warning saying so. Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something
   is a FAIL. Where there is no launchd, `status` gives the crontab line.
-- `remove` unloads the agent, deletes the launcher and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names
+- `remove` unloads the agent, deletes the launcher, the binary copy and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names
   `sudo pmset repeat cancel`. An agent that is not loaded is nothing to unload; one that launchctl refuses to unload leaves its files where
   they are and exits 1, and a file that cannot be deleted exits 1 and is not reported as removed.
 - `task approve` on a task with a schedule, when no timer is installed, prints a hint line naming `task timer install`.

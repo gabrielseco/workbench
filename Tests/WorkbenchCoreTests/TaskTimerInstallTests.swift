@@ -52,12 +52,17 @@ private struct Env {
     let task: TaskFixture
     let home: URL
     let launchctl: FakeLaunchctl
-    let workbench = URL(fileURLWithPath: "/opt/wb/workbench")
+    /// A real file: install copies it. Its text is what the copy must have.
+    let workbench: URL
 
     init(front: String = "at: 04:00\ndays: weekdays\nfix: pr") throws {
         task = try TaskFixture(front: front)
         home = try Scratch.directory("home")
         launchctl = try FakeLaunchctl()
+        let bin = try Scratch.directory("build")
+        workbench = bin.appendingPathComponent("workbench")
+        try "#!/bin/sh\necho v1\n".write(to: workbench, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: workbench.path)
     }
 
     func service(
@@ -81,7 +86,8 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         let paths = env.paths
         #expect(FileManager.default.isExecutableFile(atPath: paths.launcher.path))
         let launcher = try String(contentsOf: paths.launcher, encoding: .utf8)
-        #expect(launcher.contains("task tick") && launcher.contains("'/opt/wb/workbench'"))
+        #expect(launcher.contains("task tick") && launcher.contains("'\(paths.binary.path)'"))
+        #expect(!launcher.contains(env.workbench.path))
         let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: paths.plist), format: nil)
         #expect((plist as? [String: Any])?["Label"] as? String == paths.label)
         // The only program run is launchctl: unload any old copy, then load this one.
@@ -113,15 +119,71 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(!lines.contains { $0.contains("pmset repeat") })
     }
 
-    @Test func aBuildInTheDebugFolderIsNotedBecauseARebuildReplacesIt() async throws {
+    private func text(_ url: URL) -> String? { try? String(contentsOf: url, encoding: .utf8) }
+
+    @Test func installCopiesTheBinary() async throws {
         let env = try Env()
-        let lines = try await env.service(workbench: URL(fileURLWithPath: "/code/wb/.build/debug/workbench")).install()
-        #expect(lines.contains { $0.hasPrefix("note: it runs /code/wb/.build/debug/workbench; a rebuild replaces that file") })
-        // The path a build really has: `debug` is a link to a folder named for the platform.
-        let real = URL(fileURLWithPath: "/code/wb/.build/arm64-apple-macosx/debug/workbench")
-        #expect(try await env.service(workbench: real).install().contains { $0.hasPrefix("note: it runs /code/wb/.build/arm64") })
-        let plain = try await env.service().install()
-        #expect(!plain.contains { $0.hasPrefix("note: it runs") })
+        _ = try await env.service().install()
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+        #expect(FileManager.default.isExecutableFile(atPath: env.paths.binary.path))
+        // A rebuild of the source changes nothing the launcher runs.
+        try "#!/bin/sh\necho v2\n".write(to: env.workbench, atomically: true, encoding: .utf8)
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+    }
+
+    @Test func installAgainRefreshesTheCopy() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try "#!/bin/sh\necho v2\n".write(to: env.workbench, atomically: true, encoding: .utf8)
+        _ = try await env.service().install()
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v2\n")
+    }
+
+    @Test func installFromTheCopyKeepsIt() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        _ = try await env.service(workbench: env.paths.binary).install()
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+        #expect(FileManager.default.isExecutableFile(atPath: env.paths.binary.path))
+    }
+
+    @Test func aFailedCopyKeepsTheOldBinary() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let launcher = text(env.paths.launcher)
+        let gone = env.workbench.deletingLastPathComponent().appendingPathComponent("not-built")
+        await #expect(throws: TimerError.self) { _ = try await env.service(workbench: gone).install() }
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+        #expect(text(env.paths.launcher) == launcher)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: env.paths.launcherDirectory.path)
+        #expect(leftovers.sorted() == ["tick.sh", "workbench"])
+        // A source that is a folder is not a binary either.
+        let folder = env.workbench.deletingLastPathComponent()
+        await #expect(throws: TimerError.self) { _ = try await env.service(workbench: folder).install() }
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+    }
+
+    @Test func noCopyNoInstall() async throws {
+        let env = try Env()
+        let gone = env.workbench.deletingLastPathComponent().appendingPathComponent("not-built")
+        await #expect(throws: TimerError.self) { _ = try await env.service(workbench: gone).install() }
+        #expect(!FileManager.default.fileExists(atPath: env.paths.launcher.path))
+        #expect(!FileManager.default.fileExists(atPath: env.paths.plist.path))
+        #expect(env.launchctl.calls.isEmpty)
+    }
+
+    @Test func installSaysWhereTheCopyIsAndHasNoRebuildNote() async throws {
+        let env = try Env()
+        let lines = try await env.service().install()
+        #expect(lines.contains { $0.hasPrefix("  binary:   \(env.paths.binary.path) (a copy of \(env.workbench.path)") })
+        #expect(!lines.contains { $0.contains("a rebuild replaces that file") })
+    }
+
+    @Test func removeDeletesTheCopy() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        _ = await env.service().remove()
+        #expect(!FileManager.default.fileExists(atPath: env.paths.binary.path))
     }
 
     @Test func aSystemWithNoLaunchdWritesNothingAndGivesTheCronLine() async throws {
@@ -251,6 +313,29 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         let off = "ok: FileVault is off: after a restart the timer starts when you log in (automatic login does that for you)"
         #expect(text.contains(off))
         #expect(status.allSatisfy { $0.level != .fail })
+    }
+
+    @Test func theCopyIsReportedAndAnOlderOneWarnsAndAMissingOneFails() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let text = lines(await env.service().status())
+        #expect(text.contains { $0.hasPrefix("ok: binary: \(env.paths.binary.path)") })
+        // Rebuilt after the copy was made: the timer would run an old version.
+        let later = Date().addingTimeInterval(120)
+        try FileManager.default.setAttributes([.modificationDate: later], ofItemAtPath: env.workbench.path)
+        let stale = lines(await env.service().status())
+        let warned = stale.contains {
+            $0.hasPrefix("warn: binary: the copy the launcher runs is from") && $0.hasSuffix("workbench task timer install")
+        }
+        #expect(warned)
+        // A program that is not named workbench (the app's own binary) is not compared.
+        let app = env.workbench.deletingLastPathComponent().appendingPathComponent("WorkbenchApp")
+        try FileManager.default.copyItem(at: env.workbench, to: app)
+        let notCli = lines(await env.service(workbench: app).status())
+        #expect(notCli.contains { $0.hasPrefix("ok: binary:") })
+        try FileManager.default.removeItem(at: env.paths.binary)
+        let missing = lines(await env.service().status())
+        #expect(missing.contains("fail: binary: the copy the launcher runs is missing: workbench task timer install"))
     }
 
     @Test func installedButNotLoadedIsAFailure() async throws {

@@ -113,7 +113,7 @@ enum Help {
             changes:
                 "task new: creates .workbench/tasks/<name>/ with task.md and pending.sh; task list and task log: nothing; "
                 + "read-only; task approve: appends task.approved to the task's own run log "
-                + "(.workbench/tasks/<name>/runs.jsonl); task timer: install writes the launcher under "
+                + "(.workbench/tasks/<name>/runs.jsonl); task timer: install writes the launcher and a copy of the binary under "
                 + "~/.workbench/timers/ and the agent in ~/Library/LaunchAgents and loads it with launchctl, remove undoes "
                 + "that, status reads; task run and task tick: append task.run.started and task.run.ended there and, with "
                 + "fix: pr, create a thread, run Claude and the check in its worktree, accept it and push its branch to "

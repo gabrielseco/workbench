@@ -121,7 +121,8 @@ let workbenchUsage = """
                                  pull requests are still open), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
       task timer install [--every <5m..1h>] [--pull-main]
-                                 make the machine run the tasks: write and load the launchd agent that runs `task tick` for this
+                                 make the machine run the tasks: copy this binary beside a launcher (a rebuild leaves the copy;
+                                 install again to update it), write and load the launchd agent that runs `task tick` for this
                                  project (every 15 minutes by default) and print the one `sudo pmset repeat` wake line computed
                                  from the tasks' times, which you run yourself (Workbench never runs sudo). --pull-main
                                  fast-forwards a clean main before each tick. macOS; elsewhere it prints the crontab line
