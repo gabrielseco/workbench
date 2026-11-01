@@ -30,6 +30,10 @@ struct RecentProject: Equatable, Identifiable {
     /// Set by the store and its extensions only (`applyPullRequestCI` adds what GitHub said to the thread on screen).
     var screen: ProjectScreen
     private(set) var project: Project?
+    /// The thread screens or the tasks: the rail's switch. The tasks are the project's, so the thread on screen is not changed by it.
+    var mode: WindowMode = .thread
+    /// The Tasks screen's data, read from the core while that screen is shown.
+    let tasks = TasksModel()
     private(set) var doctor: DoctorChip = .notRun
     /// The goal of the thread on screen, read with the config; nil without a thread.
     private(set) var goal: GoalModel?

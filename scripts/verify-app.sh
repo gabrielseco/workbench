@@ -196,6 +196,25 @@ SWIFT
   else
     mkdir -p "$dir/project/.workbench/threads"
   fi
+  # A scenario with `tasks/` (or a `tasks-*` one) shows the Tasks screen. The timer card reads the machine's launchd, so it gets stand-ins: a home of its own with
+  # the agent's plist and log, a `launchctl` that prints a loaded agent, and canned answers for `pmset` and `fdesetup`. Nothing real is asked.
+  local timer_env=()
+  if [[ -d "$fixture/tasks" || "$scenario" == tasks-* ]]; then
+    [[ ! -d "$fixture/tasks" ]] || cp -R "$fixture/tasks" "$dir/project/.workbench/tasks"
+    local root hash slug
+    root="$dir/project"
+    hash="$(printf '%s' "$root" | shasum -a 256 | cut -c1-8)"
+    slug="$(basename "$root" | tr 'A-Z' 'a-z')-$hash"
+    mkdir -p "$dir/home/Library/LaunchAgents" "$dir/home/Library/Logs/Workbench" "$dir/probes" "$dir/bin"
+    : >"$dir/home/Library/LaunchAgents/com.workbench.task-tick.$slug.plist"
+    echo "tick" >"$dir/home/Library/Logs/Workbench/task-tick-$slug.log"
+    printf '#!/bin/sh\ncase "$1" in print) printf "state = running\\nruns = 14\\nlast exit code = 0\\nrun interval = 900 seconds\\n" ;; *) exit 0 ;; esac\n' >"$dir/bin/launchctl-stub"
+    chmod +x "$dir/bin/launchctl-stub"
+    printf 'Repeating power events:\n' >"$dir/probes/sched"
+    printf "Now drawing from 'AC Power'\n" >"$dir/probes/power"
+    printf 'FileVault is On.\n' >"$dir/probes/filevault"
+    timer_env=(WORKBENCH_APP_HOME="$dir/home" WORKBENCH_APP_LAUNCHCTL="$dir/bin/launchctl-stub" WORKBENCH_APP_PROBES="$dir/probes")
+  fi
   if [[ -n "$base" && -d "$fixture/worktree" ]]; then
     thread="$(ls "$dir/project/.workbench/threads" | head -1)"
     worktree="$dir/project/.workbench/worktrees/$thread"
@@ -245,6 +264,7 @@ STUB
   env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" \
     LANG="${LANG:-en_US.UTF-8}" PATH="/usr/bin:/bin:/usr/sbin:/sbin" WORKBENCH_APP_PROJECT="$dir/project" \
     WORKBENCH_APP_GH="$dir/bin/gh-stub" \
+    ${timer_env[@]+"${timer_env[@]}"} \
     ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
     "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
   # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).

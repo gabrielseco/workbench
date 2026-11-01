@@ -23,6 +23,8 @@ enum AppScenario: String, CaseIterable {
     case corrupt
     case noThread = "no-thread"
     case draftGoal = "draft-goal"
+    case tasks
+    case tasksEmpty = "tasks-empty"
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -179,9 +181,111 @@ enum AppScenario: String, CaseIterable {
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
-        case .noThread, .draftGoal:
+        case .noThread, .draftGoal, .tasksEmpty:
             break
+        case .tasks:
+            // The thread a task's run made, so that run's link can be pressed; the tasks themselves are written by `buildTasks`.
+            try await fixture.addThread(id, approved: true, title: Self.title)
+            try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
+            try fixture.append(id, .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-29T04:09:12.000Z")
+            try await buildTasks(in: fixture)
         }
+    }
+
+    private static func parse(_ iso: String) -> Date {
+        let format = ISO8601DateFormatter()
+        format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return format.date(from: iso) ?? Date(timeIntervalSince1970: 0)
+    }
+
+    /// Seven tasks in the states the Tasks screen tells apart. Timestamps are fixed, so the committed files do not move.
+    @MainActor private func buildTasks(in fixture: AppFixture) async throws {
+        let project = fixture.project
+        let files = FileManager.default
+        func write(_ name: String, _ text: String) throws {
+            let folder = project.taskFileURL(name).deletingLastPathComponent()
+            try files.createDirectory(at: folder, withIntermediateDirectories: true)
+            try text.write(to: project.taskFileURL(name), atomically: true, encoding: .utf8)
+        }
+        let box = ClockBox()
+        let library = TaskLibrary(project: project)
+        func at(_ iso: String) { box.date = Self.parse(iso) }
+        func run(
+            _ name: String, _ start: String, outcome: TaskOutcome?, minutes: Int = 6, trigger: String = "tick",
+            units: [String] = [],
+            thread: String? = nil, reason: String? = nil, pr: String? = nil
+        ) async throws {
+            let writer = try await TaskRunLog(project: project, name: name).openWriter(now: { box.date })
+            at(start)
+            try await writer.append(.taskRunStarted, data: ["trigger": .string(trigger)])
+            if let thread {
+                try await writer.append(
+                    .taskRunThread, data: ["thread": .string(thread), "units": .array(units.map { .string($0) }), "hash": "h"])
+            }
+            if let outcome {
+                box.date = box.date.addingTimeInterval(TimeInterval(minutes * 60))
+                var data: [String: JSONValue] = ["outcome": .string(outcome.rawValue), "units": .array(units.map { .string($0) })]
+                if let reason { data["reason"] = .string(reason) }
+                if let thread { data["thread"] = .string(thread) }
+                if let pr { data["pr"] = .string(pr) }
+                try await writer.append(.taskRunEnded, data: .object(data))
+            }
+            await writer.close()
+        }
+        func approve(_ name: String, _ start: String) async throws {
+            at(start)
+            try await library.approve(name, now: { box.date })
+        }
+
+        try write(
+            "bump-contract-details",
+            "---\nat: 04:00\ndays: weekdays\nbatch: 3\nfix: pr\nmax_open: 3\nbudget: 3.00\n---\nBump the next contracts.\n")
+        try await approve("bump-contract-details", "2026-10-26T09:00:00.000Z")
+        try await run(
+            "bump-contract-details", "2026-10-28T04:00:02.000Z", outcome: .prOpened, minutes: 14, units: ["ROU", "TUR", "CZE"],
+            thread: "invoice-pagination", pr: "https://github.com/example/remote-flows/pull/412")
+        try await run(
+            "bump-contract-details", "2026-10-29T04:00:03.000Z", outcome: .prOpened, minutes: 11, units: ["POL", "ESP"],
+            thread: "bump-pol-esp", pr: "https://github.com/example/remote-flows/pull/415")
+        try await run(
+            "bump-contract-details", "2026-10-30T04:00:01.000Z", outcome: .skippedTooManyOpen, minutes: 0,
+            reason: "3 of its own pull requests are open (max_open 3): #412, #415, #409")
+
+        try write("sync-fixtures", "---\nevery: 7d\nfix: pr\nbudget: 2.00\ntimeout: 20\n---\nRefresh the fixtures.\n")
+        try await approve("sync-fixtures", "2026-10-20T09:00:00.000Z")
+        try await run("sync-fixtures", "2026-10-21T09:15:00.000Z", outcome: .nothingPending, minutes: 0)
+        try await run(
+            "sync-fixtures", "2026-10-28T09:15:00.000Z", outcome: .failed, minutes: 22, units: ["fixtures"],
+            thread: "sync-fixtures-1",
+            reason: "the check failed; the agent said: I regenerated the fixtures but two snapshots still differ; denied: "
+                + "node -e require('./scripts/seed') | rm -rf build; check output: 2 failing / FAIL fixtures/countries.spec.ts / "
+                + "expected 41 entries, got 40 (thread left for you: workbench ship or abandon)")
+
+        try write("update-docs", "---\nat: 07:30\ndays: mon,thu\nfix: report\n---\nCheck the docs for stale pages.\n")
+        try await approve("update-docs", "2026-10-22T09:00:00.000Z")
+        try write(
+            "update-docs",
+            "---\nat: 07:30\ndays: mon,thu\nfix: report\nbudget: 1.00\n---\nCheck the docs for stale pages.\n")
+        try await run(
+            "update-docs", "2026-10-30T07:30:04.000Z", outcome: .staleApproval, minutes: 0,
+            reason: "the task was edited after it was approved: workbench task approve update-docs")
+
+        try write("weekly-report", "---\nevery: 30d\nfix: report\nbudget: 1.00\n---\nSummarise the week.\n")
+        try await approve("weekly-report", "2026-10-02T09:00:00.000Z")
+        try await run(
+            "weekly-report", "2026-10-03T09:00:00.000Z", outcome: .budgetExceeded, minutes: 9, units: ["report"],
+            reason: "the turn went over its budget of $1.00; the agent said: still reading the metrics")
+        try await run(
+            "weekly-report", "2026-10-26T09:10:00.000Z", outcome: .reported, minutes: 3, trigger: "manual", units: ["report"],
+            reason: "would take 1 unit: report")
+
+        try write("nightly-lint", "---\nat: 02:00\nfix: pr\nbudget: 1.50\n---\nFix lint warnings in one folder.\n")
+        try await approve("nightly-lint", "2026-10-30T09:00:00.000Z")
+        try await run("nightly-lint", "2026-10-31T02:00:05.000Z", outcome: .interrupted, minutes: 0, reason: "the process died")
+        try await run("nightly-lint", "2026-11-01T02:00:02.000Z", outcome: nil, units: ["lint-3"], thread: "nightly-lint-3")
+
+        try write("cleanup-branches", "---\nat: 05:00\nfix: report\n---\nList merged branches.\n")
+        try write("broken-task", "---\nat: 06:00\ncolour: red\n---\nThis one does not load.\n")
     }
 
     /// Writes every scenario under `directory/<name>/`: its threads folder, or a `.gitkeep` for the one with none.
@@ -203,6 +307,10 @@ enum AppScenario: String, CaseIterable {
                     try content.write(to: url, atomically: true, encoding: .utf8)
                 }
             }
+            let tasks = fixture.project.tasksDirectory
+            if (try? files.contentsOfDirectory(atPath: tasks.path))?.isEmpty == false {
+                try files.copyItem(at: tasks, to: target.appendingPathComponent("tasks"))
+            }
             let threads = fixture.project.threadsDirectory
             if (try? files.contentsOfDirectory(atPath: threads.path))?.isEmpty == false {
                 try files.copyItem(at: threads, to: target.appendingPathComponent("threads"))
@@ -210,5 +318,15 @@ enum AppScenario: String, CaseIterable {
                 try Data().write(to: target.appendingPathComponent(".gitkeep"))
             }
         }
+    }
+}
+
+/// A clock a fixture moves by hand while it writes run logs.
+private final class ClockBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = Date(timeIntervalSince1970: 0)
+    var date: Date {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
     }
 }

@@ -1,0 +1,3 @@
+{"v":1,"seq":1,"ts":"2026-10-22T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"174b3d88cd40ab6e2b2f3d22863f1f941fadcb5837fdf86f6ff29eb84cadc34a"}}
+{"v":1,"seq":2,"ts":"2026-10-30T07:30:04.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-30T07:30:04.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"stale-approval","reason":"the task was edited after it was approved: workbench task approve update-docs","units":[]}}

@@ -65,6 +65,13 @@ pull request, failed with its thread left for `workbench ship`, or died), as `gh
 is missing or unreachable) the unit stays out: work done twice costs more than waiting a day. Only units a past run recorded are checked; a pull
 request opened by hand for a unit is not seen. A `report` run does the work of no unit.
 
+## In the app
+
+The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the same data and no other: a task's `task list` line
+(`TaskLibrary.summary`), its runs and their reasons (`TaskRunLog`'s history, the reason cleaned as `task log` cleans it) and the
+timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
+shown, and writes nothing. Approving and running from the app are a later change.
+
 ## Approval
 
 `workbench task approve <name>` records `task.approved` with a hash of what runs unattended: the settings, the instructions (whitespace

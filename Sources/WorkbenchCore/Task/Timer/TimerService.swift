@@ -53,6 +53,8 @@ public struct TimerStatusLine: Sendable, Equatable {
     public enum Level: String, Sendable { case ok, warn, fail }
     public var level: Level
     public var text: String
+
+    public init(level: Level, text: String) { (self.level, self.text) = (level, text) }
 }
 
 /// `workbench task timer`: the launchd agent that ticks a project's tasks, the launcher it runs and what the machine needs besides.
