@@ -14,8 +14,6 @@ import WorkbenchCore
         Window("Workbench", id: "main") {
             RootView(store: store)
                 .task {
-                    delegate.drafting = { store.drafting }
-                    delegate.stopDrafting = { await store.stopDraftingAndWait() }
                     delegate.liveWork = { store.liveWork }
                     delegate.stopWork = { await store.stopWorkAndWait() }
                     Self.notifier.onRoute = { route, project in
@@ -71,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let work = liveWork()
-        guard work != nil || drafting() else { return .terminateNow }
+        guard work != nil else { return .terminateNow }
         if let work {
             let alert = NSAlert()
             alert.messageText = "Quit Workbench?"
@@ -80,9 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
         }
-        let (stopDrafting, stopWork) = (self.stopDrafting, self.stopWork)
+        let stopWork = self.stopWork
         Task { @MainActor in
-            if drafting() { await stopDrafting?() }
             await stopWork?()
             sender.reply(toApplicationShouldTerminate: true)
         }
