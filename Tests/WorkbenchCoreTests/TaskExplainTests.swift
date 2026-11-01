@@ -75,6 +75,18 @@ private struct Env {
         #expect(result.reason?.contains("the agent said: fake claude:") == true, "\(result.outcome) \(result.reason ?? "")")
     }
 
+    @Test func aCrashedTurnFollowedByAFailingCheckKeepsBothAccounts() async throws {
+        let script = Scratch.url("check", ext: "sh")
+        try "#!/bin/sh\necho 'FAIL: 2 tests broke'\nexit 1\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let env = try await Env(extraConfig: "check_command = \"\(script.path)\"")
+        // The turn exits non-zero; the check still runs on what it left, and fails.
+        let result = await env.run("write=a.txt", "exit=1")
+        let reason = try #require(result.reason)
+        #expect(result.outcome == .failed && reason.contains("the turn ended"), "\(result.outcome) \(reason)")
+        #expect(reason.contains("the check failed") && reason.contains("FAIL: 2 tests broke"), "\(reason)")
+    }
+
     @Test func aFailureAfterTheTurnKeepsTheExplanation() async throws {
         let env = try await Env()
         // The work is done and the check passes; there is no origin, so the ship step fails after the agent's turn.
@@ -160,6 +172,38 @@ private struct Env {
         await writer.close()
         let line = try #require(try TaskLogReport.lines(project: fx.project, name: fx.name).first { $0.hasPrefix("reason:") })
         #expect(!line.contains("\u{1B}") && !line.contains("\n") && line.count <= TaskExplanation.maxReason + 20)
+    }
+
+    @Test func theTurnsOwnSummaryBeatsAStaleStreamedMessage() async throws {
+        let project = Project(root: try Scratch.directory("summary"))
+        let log = try EventLogWriter.open(at: project.eventsURL("g-x"))
+        try await log.append(.turnStarted, turn: 1, data: ["pid": 1])
+        // The stream stopped being recorded at its cap, so the last streamed text is not the last thing said.
+        try await log.append(.agentActivity, turn: 1, data: ["type": "text", "text": "an early remark"])
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded", "summary": "the final answer"])
+        await log.close()
+        #expect(TaskLogReport.threadLines(project: project, thread: "g-x").contains("agent:    the final answer"))
+        #expect(TaskLogReport.lastAgentText(project: project, thread: "g-x", events: nil) == "the final answer")
+    }
+
+    @Test func theTranscriptStandsInWhenThereIsNoSummary() async throws {
+        let project = Project(root: try Scratch.directory("transcript"))
+        let log = try EventLogWriter.open(at: project.eventsURL("g-x"))
+        try await log.append(.turnStarted, turn: 1, data: ["pid": 1])
+        try await log.append(.agentActivity, turn: 1, data: ["type": "text", "text": "an early remark"])
+        try await log.append(.turnEnded, turn: 1, data: ["result": "failed"])
+        await log.close()
+        let file = TranscriptFile.url(in: project.threadDirectory("g-x"), turn: 1)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // A transcript line is the stream line wrapped as {"ts": ..., "data": <the line>}.
+        func line(_ text: String) -> String {
+            let said = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"\#(text)"}]}}"#
+            return #"{"ts":"2026-11-01T05:00:00.000Z","data":\#(said)}"#
+        }
+        let reply = line("the last thing said")
+        let other = line("an early remark")
+        try (other + "\n" + reply + "\n").write(to: file, atomically: true, encoding: .utf8)
+        #expect(TaskLogReport.lastAgentText(project: project, thread: "g-x", events: nil) == "the last thing said")
     }
 
     @Test func denialsAreCountedFromTheTurnsOwnRecord() async throws {

@@ -74,21 +74,32 @@ public enum TaskLogReport {
         let streamed = events.filter { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "permission_denied" }.count
         let denied = max(recorded, streamed)
         if denied > 0 { out.append("denied:   \(denied) tool call(s): `workbench grant \(thread)` lists them") }
-        if let text = lastAgentText(events: events) {
+        if let text = lastAgentText(project: project, thread: thread, events: events) {
             out.append("agent:    \(TaskExplanation.clean(text, limit: TaskExplanation.maxMessage))")
         }
         return out
     }
 
-    /// What the agent said last in the thread's stream, for a turn that has no terminal result to take it from.
-    static func lastAgentText(project: Project, thread: String) -> String? {
-        guard SafeNames.isThreadID(thread), let events = try? EventLogReader.read(at: project.eventsURL(thread)).events else {
-            return nil
+    /// What the agent said last. The turn's own summary is the final answer; failing that the transcript, which keeps every line;
+    /// failing that the streamed events, which stop at 1000 per turn and can end before the last thing said.
+    static func lastAgentText(project: Project, thread: String, events given: [Event]?) -> String? {
+        guard SafeNames.isThreadID(thread) else { return nil }
+        guard let events = given ?? (try? EventLogReader.read(at: project.eventsURL(thread)).events) else { return nil }
+        if let summary = events.last(where: { $0.kind == .turnEnded && $0.data["summary"]?.stringValue != nil })?
+            .data["summary"]?.stringValue, !summary.isEmpty {
+            return summary
         }
-        return lastAgentText(events: events)
-    }
-
-    static func lastAgentText(events: [Event]) -> String? {
-        events.last(where: { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "text" })?.data["text"]?.stringValue
+        if let turn = events.last(where: { $0.kind == .turnStarted })?.turn, turn > 0 {
+            let lines = TranscriptFile.lines(at: TranscriptFile.url(in: project.threadDirectory(thread), turn: turn))
+            for line in lines.reversed() where line["type"]?.stringValue == "assistant" {
+                guard case .array(let parts)? = line["message"]?["content"] else { continue }
+                if let text = parts.reversed().first(where: { $0["type"]?.stringValue == "text" })?["text"]?.stringValue,
+                    !text.isEmpty {
+                    return text
+                }
+            }
+        }
+        return events.last(where: { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "text" })?
+            .data["text"]?.stringValue
     }
 }

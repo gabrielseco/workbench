@@ -167,6 +167,9 @@ check "task tick finds nothing due (the task has no schedule)" "exit $RC: $(head
 
 rm "$TASK/pending.sh"
 wbp "$SCRATCH/broken.out" task tick
+wbp "$SCRATCH/listbroken.out" task list
+check "task list shows the last run's reason even for a task that cannot be loaded now" "got: $(head -c 400 "$SCRATCH/listbroken.out")" \
+    bash -c 'grep -q "^bump  PROBLEM" "$1" && grep -q "^    why: the task changed since it was approved" "$1"' _ "$SCRATCH/listbroken.out"
 check "task tick says out loud that an approved task can no longer be loaded (exit 1)" "exit $RC: $(head -c 300 "$SCRATCH/broken.out")" \
     bash -c '[ "$1" = 1 ] && grep -q "^bump: PROBLEM" "$2"' _ "$RC" "$SCRATCH/broken.out"
 

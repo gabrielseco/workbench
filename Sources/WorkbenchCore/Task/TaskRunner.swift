@@ -215,8 +215,12 @@ public struct TaskRunner: Sendable {
         let why = explanation(report, id: id, service: service)
         guard report.result == .succeeded else {
             let outcome: TaskOutcome = report.result == .budgetExceeded ? .budgetExceeded : .failed
+            // The check runs after a crashed, timed-out or over-budget turn too: if it failed, its output belongs here.
+            let checkNote = report.check.flatMap { $0.result == .passed ? nil : "the check \($0.result.rawValue)" }
+            let base = "the turn ended \(report.result.rawValue)" + (checkNote.map { "; \($0)" } ?? "")
             return TaskRunResult(
-                outcome: outcome, reason: why.reason("the turn ended \(report.result.rawValue); thread \(id) is left for you"),
+                outcome: outcome,
+                reason: why.reason(base + "; thread \(id) is left for you", includeCheck: checkNote != nil),
                 units: ids, thread: id)
         }
         guard let check = report.check, check.result == .passed else {
@@ -247,7 +251,7 @@ public struct TaskRunner: Sendable {
             }
         }
         // A turn that crashed, timed out or ran out of budget has no terminal result: what it said last is in its stream.
-        let message = report.summary ?? TaskLogReport.lastAgentText(project: project, thread: id)
+        let message = report.summary ?? TaskLogReport.lastAgentText(project: project, thread: id, events: nil)
         return TaskExplanation(message: message, denied: denied, checkTail: tail)
     }
 

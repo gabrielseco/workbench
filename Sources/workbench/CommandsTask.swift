@@ -118,6 +118,7 @@ extension Commands {
             let summary = library.summary(name)
             if let problem = summary.problem {
                 out("\(name)  PROBLEM  \(problem.split(whereSeparator: \.isNewline).joined(separator: "; "))")
+                printWhy(summary)
                 continue
             }
             let approval: String
@@ -132,11 +133,15 @@ extension Commands {
             out(
                 "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
                     + "next: \(due)  last: \(last)")
-            // Why the last run did not end well, so it need not be dug out of a thread.
-            let fine: Set<TaskOutcome> = [.prOpened, .reported, .nothingPending]
-            if let outcome = summary.lastOutcome, !fine.contains(outcome), let reason = summary.lastReason {
-                out("    why: " + TaskExplanation.clean(reason, limit: 240))
-            }
+            printWhy(summary)
+        }
+    }
+
+    /// Why the last run did not end well, so it need not be dug out of a thread. Also for a task that cannot be loaded now.
+    private static func printWhy(_ summary: TaskSummary) {
+        let fine: Set<TaskOutcome> = [.prOpened, .reported, .nothingPending]
+        if let outcome = summary.lastOutcome, !fine.contains(outcome), let reason = summary.lastReason {
+            out("    why: " + TaskExplanation.clean(reason, limit: 240))
         }
     }
 

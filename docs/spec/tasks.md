@@ -82,7 +82,7 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 
 A run that stops without a pull request says why in `reason`, in one bounded line: what stopped it, then what the agent said last (600
 characters), the commands the turn was denied (up to three, 120 characters each) and, for a failed check, the last eight lines of its output.
-A turn that crashed, timed out or ran out of budget has no terminal result, so the last text it streamed stands in for the message, and the
+A turn that crashed, timed out or ran out of budget has no terminal result: the transcript's last assistant message stands in for it (the streamed events stop at 1000 per turn, so they come last), a failed check's output is kept after such a turn too, and the
 explanation is kept for a failure after the turn too (accept, preflight, description, push). Whatever wrote a reason, it is made one line
 without control characters and cut at 2000 characters before it is recorded or shown, because all of it is text from a model or a project's
 script; `task log` cleans a stored reason again on the way out.
