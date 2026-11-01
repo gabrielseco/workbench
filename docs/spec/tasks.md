@@ -177,8 +177,8 @@ did by hand:
   The only program it runs is `launchctl`.
 - `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, each task approved
   and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
-  days that cannot be read are a warning, not a pass), battery or power, and FileVault (the timer is a user agent: after a restart it starts when that user logs in, which FileVault delays until the disk password
-  and automatic login would do for you).
+  days that cannot be read are a warning, not a pass), battery or power, and FileVault. The timer is a user agent, so after a restart it starts when that user logs in, with FileVault on or off:
+  FileVault makes the Mac wait for the disk password first, and automatic login would do the rest for you.
   A probe that cannot be read is a warning saying so. Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something
   is a FAIL. Where there is no launchd, `status` gives the crontab line.
 - `remove` unloads the agent, deletes the launcher and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names
