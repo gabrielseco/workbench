@@ -107,17 +107,19 @@ import WorkbenchCore
         let before = Set(preferences.announcedAttention)
         for item in all where !baseline.contains(item.id) && !announced.contains(item.id) && !before.contains(seenKey(item.id)) {
             announced.insert(item.id)
-            remember(announced: item.id)
+            remember(announced: item.id, in: path)
             guard !paused else { continue }
             let notice = Notice(id: item.id, title: projectName, body: Self.body(item), route: item.route, project: path)
             posts += 1
             if await notifier.post(notice) == .denied { notificationsDenied = true }
+            // The project may have been switched while the system asked for permission: this pass is for the one left behind.
+            if project != path { break }
         }
     }
 
     /// Keeps that this was announced, past a relaunch: the latest `seenLimit` of them.
-    private func remember(announced id: String) {
-        preferences.announcedAttention = Array((preferences.announcedAttention + [seenKey(id)]).suffix(Self.seenLimit))
+    private func remember(announced id: String, in path: String) {
+        preferences.announcedAttention = Array((preferences.announcedAttention + ["\(path)|\(id)"]).suffix(Self.seenLimit))
     }
 
     /// "Review · turn 2 done" or "bump-contract-details failed: the check failed…".

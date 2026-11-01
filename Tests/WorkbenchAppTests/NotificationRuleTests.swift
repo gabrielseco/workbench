@@ -156,6 +156,23 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(prefs.announcedAttention.last == "/work/two|task:beta:500")
     }
 
+    @Test func aSwitchWhileThePermissionIsAskedDoesNotFileTheRestUnderTheNewProject() async throws {
+        let prefs = MemoryPreferences()
+        let slow = SlowNotifier()
+        let center = AttentionCenter(preferences: prefs, notifier: slow)
+        let (a, b) = (try await failed("alpha", at: 100), try await failed("beta", at: 200))
+        await look(center, "one", tasks: [])
+        let looking = Task { await look(center, "one", tasks: [a, b]) }
+        while slow.waiting == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        // The system is still asking: the person opens another project.
+        await look(center, "two", tasks: [])
+        slow.release()
+        await looking.value
+        // What was announced is filed under the project it was about, and the rest of that pass is dropped, not filed under "two".
+        #expect(prefs.announcedAttention.allSatisfy { $0.hasPrefix("/work/one|") })
+        #expect(slow.posted.count == 1)
+    }
+
     @Test func seenBelongsToItsProject() async throws {
         let r = rig()
         let (center, prefs) = (r.center, r.prefs)
@@ -222,5 +239,33 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(!SystemNotifier.hasBundle)
         let result = await SystemNotifier().post(Notice(id: "x", title: "t", body: "b", route: .task("x"), project: "/p"))
         #expect(result == .denied)
+    }
+}
+
+/// A notifier whose post waits until the test lets it go (a permission prompt that is still open).
+private final class SlowNotifier: Notifier, @unchecked Sendable {
+    private let lock = NSLock()
+    private var notices: [Notice] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var held = false
+    var posted: [Notice] { lock.withLock { notices } }
+    var waiting: Int { lock.withLock { held ? 1 : 0 } }
+
+    func post(_ notice: Notice) async -> PostResult {
+        lock.withLock { notices.append(notice) }
+        let first = lock.withLock { () -> Bool in
+            defer { held = true }
+            return !held
+        }
+        if first { await withCheckedContinuation { c in lock.withLock { continuation = c } } }
+        return .posted
+    }
+
+    func release() {
+        let waiting = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        waiting?.resume()
     }
 }
