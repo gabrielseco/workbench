@@ -350,7 +350,7 @@ struct TaskButtons: View {
     }
 }
 
-private struct PrimaryWhen: ViewModifier {
+struct PrimaryWhen: ViewModifier {
     var primary: Bool
     init(_ primary: Bool) { self.primary = primary }
 

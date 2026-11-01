@@ -37,11 +37,12 @@ import WorkbenchCore
     init(preferences: Preferences, notifier: Notifier = NullNotifier()) {
         self.preferences = preferences
         self.notifier = notifier
+        self.paused = preferences.notificationsPaused
     }
 
+    /// Notifications are paused (the count still shows). Kept here so a toggle in the popover redraws, and in the preferences so it stays.
     var paused: Bool {
-        get { preferences.notificationsPaused }
-        set { preferences.notificationsPaused = newValue }
+        didSet { preferences.notificationsPaused = paused }
     }
 
     @ObservationIgnored private var polling: Task<Void, Never>?
