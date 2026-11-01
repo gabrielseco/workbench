@@ -160,7 +160,12 @@ public struct TimerService: Sendable {
         guard fm.fileExists(atPath: from.path, isDirectory: &isDirectory), !isDirectory.boolValue,
             fm.isReadableFile(atPath: from.path)
         else { throw TimerError.cannotWrite("the binary \(source.path) cannot be read, so it cannot be copied for the timer") }
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".workbench-copy-\(UUID().uuidString)")
+        let folder = destination.deletingLastPathComponent()
+        // A copy that was cut short by a killed installer: nothing else makes these, and the next install is the first chance to clean up.
+        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasPrefix(".workbench-copy-") {
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+        }
+        let temporary = folder.appendingPathComponent(".workbench-copy-\(UUID().uuidString)")
         do {
             try fm.copyItem(at: from, to: temporary)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)

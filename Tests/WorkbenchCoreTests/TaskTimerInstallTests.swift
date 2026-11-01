@@ -163,6 +163,16 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
     }
 
+    @Test func aCopyCutShortByAKilledInstallerIsSweptByTheNextInstall() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let stale = env.paths.launcherDirectory.appendingPathComponent(".workbench-copy-DEAD")
+        try "half".write(to: stale, atomically: true, encoding: .utf8)
+        _ = try await env.service().install()
+        #expect(!FileManager.default.fileExists(atPath: stale.path))
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+    }
+
     @Test func noCopyNoInstall() async throws {
         let env = try Env()
         let gone = env.workbench.deletingLastPathComponent().appendingPathComponent("not-built")
@@ -333,6 +343,9 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         try FileManager.default.copyItem(at: env.workbench, to: app)
         let notCli = lines(await env.service(workbench: app).status())
         #expect(notCli.contains { $0.hasPrefix("ok: binary:") })
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: env.paths.binary.path)
+        let notExecutable = lines(await env.service().status())
+        #expect(notExecutable.contains { $0.hasPrefix("fail: binary: the copy the launcher runs is missing") })
         try FileManager.default.removeItem(at: env.paths.binary)
         let missing = lines(await env.service().status())
         #expect(missing.contains("fail: binary: the copy the launcher runs is missing: workbench task timer install"))
