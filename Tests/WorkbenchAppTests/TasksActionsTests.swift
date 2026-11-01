@@ -213,6 +213,25 @@ import WorkbenchCore
         #expect(tasks.snapshot(for: first.project) == nil)
     }
 
+    @Test func aChangedSpendingLimitIsNotRunUnderTheCardThatShowedAnother() async throws {
+        let (fixture, env) = try await scenario()
+        let run = FakeRun()
+        let tasks = model(env, actions: fake(run))
+        // cleanup-branches sets no budget, so its cap is the project's default.
+        let front = "---\nat: 05:00\nfix: report\n---\nList merged branches.\n"
+        try await edit(fixture.project, "cleanup-branches", front, approve: true)
+        try "default_budget_usd = 1\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        await tasks.refresh(fixture.project)
+        await tasks.beginRun(fixture.project, try entry(tasks, "cleanup-branches"), threadRunGoing: false)
+        #expect(tasks.confirmingRun?.cost == "up to $1.00 for the report (the project's default budget)")
+        try "default_budget_usd = 20\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        await tasks.confirmRun(fixture.project)
+        #expect(run.calls.isEmpty)
+        #expect(tasks.actionNote?.contains("edited after the card was shown") == true)
+    }
+
     @Test func runNowAvailability() async throws {
         let (fixture, env) = try await scenario()
         let tasks = model(env)

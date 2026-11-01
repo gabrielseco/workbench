@@ -86,7 +86,7 @@ extension TasksModel {
         guard let project, let card = confirmingRun else { return }
         confirmingRun = nil
         // The card named a cost: run only the version it was for.
-        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash else {
+        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash, now.cost == card.cost else {
             actionNote = "\(card.name) was edited after the card was shown: look at it again."
             await refresh(project)
             return
