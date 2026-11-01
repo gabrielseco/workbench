@@ -80,12 +80,21 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 | `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units`, `hash` (the approval the run ran under) |
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started |
 
+A run that stops without a pull request says why in `reason`, in one bounded line: what stopped it, then what the agent said last (600
+characters), the commands the turn was denied (up to three, 120 characters each) and, for a failed check, the last eight lines of its output.
+Control characters are removed and the whole reason is cut at 2000 characters, because all of it is text from a model or a project's script.
+`workbench task list` shows it under the task (`why: ...`) when the last run did not end well.
+
 Outcomes: `pr-opened`, `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `budget-exceeded`,
 `failed`, `stale-approval`, `interrupted` (a run whose process died; the next writer closes it). Holding the log's lock is what makes a task
 run once at a time: a second run finds it taken and ends as `skipped-already-running`.
 
 ## Commands
 
+- `workbench task log <name> [--all]`: what the task's last run did, told from its own log and the thread it started: when it began and ended,
+  the outcome, the full reason, the units, the thread and pull request, then from the thread the setup result, the check result with the last
+  lines of its output when it failed, how many tool calls were denied, and the agent's last message. `--all` is one line per run. A task that
+  never ran says so; exit 7 for no such task. Read only.
 - `workbench task new <name> [--include <file>] [--input <path>]...`: starts a task. It writes `.workbench/tasks/<name>/task.md` with every
   setting present and explained (the schedule keys commented out, `fix: report`, `batch: 1`, `pending` pointing at the stub) and an executable
   `pending.sh` that prints `[]`, and runs no agent. `--include` and `--input` fill those lines; a path that does not exist yet is a note.

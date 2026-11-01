@@ -210,32 +210,53 @@ public struct TaskRunner: Sendable {
             return fail("the turn could not run: \(error)", units: ids, thread: id)
         }
         notice("turn \(report.turn) ended: \(report.result.rawValue)")
+        let why = explanation(report, id: id, service: service)
         guard report.result == .succeeded else {
             let outcome: TaskOutcome = report.result == .budgetExceeded ? .budgetExceeded : .failed
             return TaskRunResult(
-                outcome: outcome, reason: "the turn ended \(report.result.rawValue); thread \(id) is left for you",
+                outcome: outcome, reason: why.reason("the turn ended \(report.result.rawValue); thread \(id) is left for you"),
                 units: ids, thread: id)
         }
         guard let check = report.check, check.result == .passed else {
-            let why = report.check.map { "the check \($0.result.rawValue)" } ?? "the check did not run"
-            return fail("\(why); thread \(id) is left for you", units: ids, thread: id)
+            let what = report.check.map { "the check \($0.result.rawValue)" } ?? "the check did not run"
+            return fail(why.reason("\(what); thread \(id) is left for you", includeCheck: true), units: ids, thread: id)
         }
         if let verifier = report.verifier, !verifier.ok {
-            let why = verifier.reason ?? "no reason"
-            return fail("the verifier did not pass (\(why)); thread \(id) is left for you", units: ids, thread: id)
+            let what = verifier.reason ?? "no reason"
+            return fail(
+                why.reason("the verifier did not pass (\(what)); thread \(id) is left for you"), units: ids, thread: id)
         }
-        return await acceptAndShip(name: name, id: id, config: config, service: service, units: ids)
+        return await acceptAndShip(name: name, id: id, config: config, service: service, units: ids, explanation: why)
+    }
+
+    /// The agent's last message, the commands the turn was denied and, for a failed check, the end of its output.
+    private func explanation(_ report: TurnReport, id: String, service: ThreadService) -> TaskExplanation {
+        var denied: [String] = []
+        if report.permissionDenials > 0, let candidates = try? service.grantCandidates(id: id) {
+            denied = candidates.compactMap(\.input)
+        }
+        var tail: [String] = []
+        if let check = report.check, check.result != .passed {
+            let url = project.threadDirectory(id).appendingPathComponent(check.outputRef)
+            if let data = try? Data(contentsOf: url) {
+                let text = String(decoding: data.suffix(8 << 10), as: UTF8.self)
+                tail = text.split(separator: "\n", omittingEmptySubsequences: true).suffix(TaskExplanation.maxCheckLines)
+                    .map(String.init)
+            }
+        }
+        return TaskExplanation(message: report.summary, denied: denied, checkTail: tail)
     }
 
     private func acceptAndShip(
-        name: String, id: String, config: Config, service: ThreadService, units: [String]
+        name: String, id: String, config: Config, service: ThreadService, units: [String], explanation: TaskExplanation
     ) async -> TaskRunResult {
         do { _ = try await service.accept(id: id, by: "task:\(name)") } catch ThreadServiceError.nothingToAccept {
             // An expected result, most often for a task that checks something and finds it fine: not a failure, and not a thread
             // to leave behind, since the next run would be skipped for it.
             _ = try? await service.abandon(id: id)
             return TaskRunResult(
-                outcome: .nothingToDo, reason: "the agent changed nothing, so there is nothing to ship", units: units, thread: id)
+                outcome: .nothingToDo, reason: explanation.reason("the agent changed nothing, so there is nothing to ship"),
+                units: units, thread: id)
         } catch {
             return fail("the work could not be accepted: \(error); thread \(id) is left for you", units: units, thread: id)
         }

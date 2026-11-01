@@ -21,6 +21,8 @@ public struct TaskSummary: Sendable, Equatable {
     public var nextDue: Date?
     public var lastOutcome: TaskOutcome?
     public var lastRun: Date?
+    /// Why the last run ended as it did, when it did not end well.
+    public var lastReason: String?
 }
 
 /// The tasks of one project.
@@ -79,7 +81,7 @@ public struct TaskLibrary: Sendable {
         } catch {
             return TaskSummary(
                 name: name, problem: "the run log is damaged: \(error)", schedule: nil, fix: nil, approval: .never,
-                nextDue: nil, lastOutcome: nil, lastRun: nil)
+                nextDue: nil, lastOutcome: nil, lastRun: nil, lastReason: nil)
         }
         do {
             let loaded = try load(name)
@@ -88,11 +90,13 @@ public struct TaskLibrary: Sendable {
                 name: name, problem: nil, schedule: loaded.definition.schedule?.summary, fix: loaded.definition.fix,
                 approval: TaskApproval.state(approvedHash: history.approvedHash, currentHash: loaded.hash),
                 nextDue: base.flatMap { loaded.definition.schedule?.nextDue(since: $0, calendar: calendar) },
-                lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started)
+                lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
+                lastReason: history.lastRun?.reason)
         } catch {
             return TaskSummary(
                 name: name, problem: "\(error)", schedule: nil, fix: nil, approval: .never, nextDue: nil,
-                lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started)
+                lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
+                lastReason: history.lastRun?.reason)
         }
     }
 }

@@ -13,7 +13,10 @@
 # when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gh say every pull request it opened was closed unmerged, so the units come back:
 # "the second run takes only the last country", "the third run finds nothing pending", "the third run started no thread" and
-# "the log holds one approval and three run ends" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# "the log holds one approval and three run ends" must FAIL, and so must "task log tells the run from its thread", because the
+# sabotage removes the first thread's log. `task log` must show the pull request, the check and the agent's last message of a run,
+# `task log --all` one line per run, `task list` the reason under a run that stopped, and an unknown task must be exit 7.
+# The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -114,6 +117,11 @@ check "the thread was accepted by the task and its branch is on origin" "thread 
     bash -c 'grep -q "\"by\":\"task:bump\"" "$1/.workbench/threads/$2/events.jsonl" && git -C "$3" rev-parse -q --verify "refs/heads/workbench/$2" >/dev/null' _ "$P" "$THREAD" "$ORIGIN"
 check "exactly one pull request was opened" "gh calls: $(grep -c 'pr create' "$GHDIR/calls")" test "$(grep -c 'pr create' "$GHDIR/calls")" = 1
 
+[ "$SABOTAGE" = 1 ] && rm -f "$P/.workbench/threads/$THREAD/events.jsonl"
+wbp "$SCRATCH/log1.out" task log bump; shown "$SCRATCH/log1.out" 12
+check "task log tells the run from its thread: the pull request, the check and the agent's last message" "exit $RC: $(head -c 500 "$SCRATCH/log1.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^outcome:  pr-opened" "$2" && grep -q "^pull request: https://github.com/o/r/pull/1" "$2" && grep -q "^check:    passed" "$2" && grep -q "^agent:    fake claude:" "$2"' _ "$RC" "$SCRATCH/log1.out"
+
 wbp "$SCRATCH/run2.out" task run bump; shown "$SCRATCH/run2.out"
 check "the second run takes only the last country" "exit $RC: $(head -c 300 "$SCRATCH/run2.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "^bump: pr-opened" "$2" && grep -q "units:  PAN$" "$2"' _ "$RC" "$SCRATCH/run2.out"
@@ -129,6 +137,10 @@ LOG="$TASK/runs.jsonl"
 check "the log holds one approval and three run ends with their outcomes" "log: $(grep -o '"kind":"[a-z.]*"\|"outcome":"[a-z-]*"' "$LOG" 2>&1 | tr '\n' ' ')" \
     bash -c '[ "$(grep -c "\"kind\":\"task.approved\"" "$1")" = 1 ] && [ "$(grep -c "\"kind\":\"task.run.started\"" "$1")" = 3 ] && [ "$(grep -o "\"outcome\":\"[a-z-]*\"" "$1" | tr "\n" " ")" = "\"outcome\":\"pr-opened\" \"outcome\":\"pr-opened\" \"outcome\":\"nothing-pending\" " ]' _ "$LOG"
 
+wbp "$SCRATCH/logall.out" task log bump --all; shown "$SCRATCH/logall.out" 6
+check "task log --all lists every run in one line" "got: $(cat "$SCRATCH/logall.out" | head -c 400)" \
+    bash -c '[ "$(grep -c "" "$1")" = 3 ] && sed -n 3p "$1" | grep -q "nothing-pending"' _ "$SCRATCH/logall.out"
+
 # --- 3. what stops a run -----------------------------------------------------------------------------------
 
 wbp "$SCRATCH/blocker.out" goal new blocker
@@ -141,6 +153,11 @@ BEFORE=$(threads)
 wbp "$SCRATCH/stale.out" task run bump
 check "after the task file is edited the run is refused (exit 6) and starts nothing" "exit $RC: $(head -c 300 "$SCRATCH/stale.out")" \
     bash -c '[ "$1" = 6 ] && grep -q "stale-approval" "$2" && [ "$3" = "$4" ]' _ "$RC" "$SCRATCH/stale.out" "$(threads)" "$BEFORE"
+wbp "$SCRATCH/liststale.out" task list
+check "task list says why the last run stopped" "got: $(cat "$SCRATCH/liststale.out" | head -c 400)" \
+    bash -c 'grep -q "^    why: the task changed since it was approved" "$1"' _ "$SCRATCH/liststale.out"
+wbp "$SCRATCH/lognone.out" task log nope
+check "task log of an unknown task is exit 7" "exit $RC" test "$RC" = 7
 wbp "$SCRATCH/tick.out" task tick
 check "task tick finds nothing due (the task has no schedule)" "exit $RC: $(head -c 200 "$SCRATCH/tick.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "no task is due" "$2"' _ "$RC" "$SCRATCH/tick.out"

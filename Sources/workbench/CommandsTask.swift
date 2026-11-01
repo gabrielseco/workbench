@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     private static let taskUsage =
-        "usage: workbench task list | task new <name> | task approve <name> | task run <name> | task tick"
+        "usage: workbench task list | task log <name> | task new <name> | task approve <name> | task run <name> | task tick"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
     /// one now; `task tick` runs the ones that are due, one after the other.
@@ -23,6 +23,11 @@ extension Commands {
             }
             try a.requireEmpty()
             try await taskNew(name, include: include, inputs: inputs)
+        case "log":
+            let all = a.flag("--all")
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench task log <name> [--all]") }
+            try a.requireEmpty()
+            try await taskLog(name, all: all)
         case "approve":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench task approve <name>") }
             try a.requireEmpty()
@@ -127,6 +132,23 @@ extension Commands {
             out(
                 "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
                     + "next: \(due)  last: \(last)")
+            // Why the last run did not end well, so it need not be dug out of a thread.
+            let fine: Set<TaskOutcome> = [.prOpened, .reported, .nothingPending]
+            if let outcome = summary.lastOutcome, !fine.contains(outcome), let reason = summary.lastReason {
+                out("    why: " + TaskExplanation.clean(reason, limit: 240))
+            }
+        }
+    }
+
+    private static func taskLog(_ name: String, all: Bool) async throws {
+        let ctx = try await Context.load()
+        guard TaskLibrary(project: ctx.project).names().contains(name) else {
+            throw CLIError.notFound("no task '\(name)' (.workbench/tasks/\(name)/task.md)")
+        }
+        do {
+            for line in try TaskLogReport.lines(project: ctx.project, name: name, all: all) { out(line) }
+        } catch let error as EventLogError {
+            throw CLIError.refused("the task's run log is damaged: \(error)")
         }
     }
 

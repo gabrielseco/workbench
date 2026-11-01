@@ -30,6 +30,8 @@ public enum TaskOutcome: String, Sendable, Equatable {
 public struct TaskHistory: Sendable, Equatable {
     public struct Run: Sendable, Equatable {
         public var started: Date
+        public var ended: Date?
+        public var pullRequest: String?
         public var trigger: String
         public var outcome: TaskOutcome?
         public var reason: String?
@@ -79,8 +81,9 @@ public struct TaskHistory: Sendable, Equatable {
             case .taskRunStarted:
                 runs.append(
                     Run(
-                        started: event.date, trigger: event.data["trigger"]?.stringValue ?? "manual", outcome: nil,
-                        reason: nil, units: [], thread: nil))
+                        started: event.date, ended: nil, pullRequest: nil,
+                        trigger: event.data["trigger"]?.stringValue ?? "manual", outcome: nil, reason: nil, units: [],
+                        thread: nil))
             case .taskRunThread:
                 guard !runs.isEmpty, runs[runs.count - 1].outcome == nil else { continue }
                 runs[runs.count - 1].thread = event.data["thread"]?.stringValue
@@ -89,6 +92,8 @@ public struct TaskHistory: Sendable, Equatable {
                 guard !runs.isEmpty, runs[runs.count - 1].outcome == nil else { continue }
                 runs[runs.count - 1].outcome = event.data["outcome"]?.stringValue.flatMap(TaskOutcome.init(rawValue:)) ?? .failed
                 runs[runs.count - 1].reason = event.data["reason"]?.stringValue
+                runs[runs.count - 1].ended = event.date
+                runs[runs.count - 1].pullRequest = event.data["pr"]?.stringValue
                 // What the thread event said stays when the end has nothing to add (a run closed as interrupted).
                 let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
                 if !units.isEmpty { runs[runs.count - 1].units = units }
