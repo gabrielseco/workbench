@@ -14,8 +14,8 @@ import WorkbenchCore
         Window("Workbench", id: "main") {
             RootView(store: store)
                 .task {
-                    delegate.drafting = { store.drafting }
-                    delegate.stopDrafting = { await store.stopDraftingAndWait() }
+                    delegate.liveWork = { store.liveWork }
+                    delegate.stopWork = { await store.stopWorkAndWait() }
                     Self.notifier.onRoute = { route, project in
                         store.show(route, project: project)
                         Self.showWindow()
@@ -60,14 +60,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// outlive the window, so a quit waits for it (the store gives up after a deadline).
     var drafting: @MainActor () -> Bool = { false }
     var stopDrafting: (@MainActor () async -> Void)?
+    /// What a quit would end (a thread's run, a task's run), as a line, and a way to end it and wait.
+    var liveWork: @MainActor () -> String? = { nil }
+    var stopWork: (@MainActor () async -> Void)?
 
     /// A closed window does not end the app: a run goes on, and the status item keeps watching.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard drafting(), let stop = stopDrafting else { return .terminateNow }
+        let work = liveWork()
+        guard work != nil else { return .terminateNow }
+        if let work {
+            let alert = NSAlert()
+            alert.messageText = "Quit Workbench?"
+            alert.informativeText = work + " " + QuitPrompt.detail
+            alert.addButton(withTitle: "Stop and quit")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
+        }
+        let stopWork = self.stopWork
         Task { @MainActor in
-            await stop()
+            await stopWork?()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

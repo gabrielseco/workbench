@@ -93,6 +93,13 @@ the one-line reason, and for a thread in review the criteria row), then `Event l
 decides nothing and writes nothing. Quiet says `Nothing needs you` with the project's own one-line state; a log that cannot be read
 is red with the core's words; many items scroll in the popover. When the system will not let the app notify, the popover says so once.
 
+## Quitting
+
+Quitting with work of the app's still going (a thread's run, a task started from the window, a goal draft) asks first, in a system alert
+that says what would end and that it ends as `stopped` and can be run again: `Stop and quit` or `Cancel` (which keeps the app open).
+Nothing going means no alert. After `Stop and quit` the app waits up to 6 seconds for the turn to end, then quits whether it has or not
+(a turn left open is recorded as `interrupted` by the next start).
+
 ## States
 
 Every screen answers four questions without a click, and a change that touches a screen shows each of the ones it can reach:
