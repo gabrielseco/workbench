@@ -128,7 +128,7 @@ check "after remove status says it is not installed (exit 1)" "exit $RC: $(head 
 bad_help=""
 for form in install status remove; do
     wbp "$SCRATCH/help-$form.out" help task timer "$form"
-    { [ "$RC" = 0 ] && grep -q "^workbench task timer $form" "$SCRATCH/help-$form.out"; } || bad_help="$bad_help $form"
+    { [ "$RC" = 0 ] && grep -q "^task timer $form" "$SCRATCH/help-$form.out"; } || bad_help="$bad_help $form"
 done
 check "help answers for task timer install, status and remove" "failed for:$bad_help" test -z "$bad_help"
 
