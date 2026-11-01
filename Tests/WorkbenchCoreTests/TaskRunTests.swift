@@ -62,6 +62,23 @@ private struct Run {
         #expect(ended.count == 1 && ended[0].data["outcome"]?.stringValue == "reported")
     }
 
+    @Test func aRunSaysWhatItIsDoingWhileItGoes() async throws {
+        let run = try await Run()
+        _ = try await addOrigin(run.fx)
+        let said = SaidLines()
+        var runner = run.runner(try run.shippable().joined(separator: ","))
+        runner.notice = { said.add($0) }
+        let result = await runner.run("bump", trigger: .manual)
+        #expect(result.outcome == .prOpened, "\(result.reason ?? "")")
+        let lines = said.value
+        // In order: the turn starts, the check runs, then the run's own words about how the turn ended.
+        let started = try #require(lines.firstIndex { $0.hasPrefix("turn 1 started") })
+        let check = try #require(lines.firstIndex { $0.hasPrefix("check started") })
+        let ended = try #require(lines.firstIndex { $0 == "turn 1 ended: succeeded" })
+        #expect(started < check && check < ended)
+        #expect(lines.filter { $0.hasPrefix("turn 1 ended") }.count == 1, "the end is said once, by the run")
+    }
+
     @Test func aReportAsksTheReadOnlyAgentAboutTheCommittedProjectAndKeepsTheAnswer() async throws {
         let run = try await Run(front: "fix: report\nbatch: 2\npending: pending.sh\nbudget: 0.75\ntimeout: 12")
         // What is committed is read; what is only on disk (a secret in the working tree) is not there for the agent to see.
@@ -341,6 +358,13 @@ private struct Run {
         let history = try run.task.log.history()
         #expect(history.runs.map(\.outcome) == [.interrupted, .reported] && history.openRun == nil)
     }
+}
+
+private final class SaidLines: @unchecked Sendable {
+    private let lock = NSLock()
+    private var all: [String] = []
+    var value: [String] { lock.withLock { all } }
+    func add(_ line: String) { lock.withLock { all.append(line) } }
 }
 
 /// A read-only agent that answers a report turn from a stub, and writes down what it was asked and what it could see.

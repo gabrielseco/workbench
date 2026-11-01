@@ -147,6 +147,10 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 
 ## A run
 
+While a run goes it says what it is doing, as short lines: the turn starting, the agent's tool calls (at most one every 2 s, each one
+line without control characters, 240 characters at most), the setup, the check and the verifier. `task run` prints them indented; the app
+shows the last one. The run's own words about how the turn ended come once, with its explanation.
+
 In order, ending the run with an outcome at the first step that stops it:
 
 1. Take the log's lock. If another run holds it, `skipped-already-running`; the run cannot write to a log it does not hold, so this one is
