@@ -68,7 +68,10 @@ struct TaskRunCard: View {
             Text("Run now".uppercased()).font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
             Text(card.name).font(.title2.weight(.semibold)).padding(.top, 8)
             VStack(alignment: .leading, spacing: 6) {
-                Text("It starts a coding turn, and when the check passes it opens a pull request. Nothing merges.")
+                Text(
+                    card.fix == .pr
+                        ? "It starts a coding turn, and when the check passes it opens a pull request. Nothing merges."
+                        : "It asks a read-only agent about the project and keeps its answer as a report. Nothing is opened.")
                 Text("It may cost \(card.cost).").monospacedDigit()
                 Text("Quitting the app while it runs ends the run as interrupted. Stop ends the turn and records how.")
                     .foregroundStyle(.secondary)

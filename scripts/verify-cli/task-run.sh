@@ -207,12 +207,12 @@ wbp "$SCRATCH/blocker.out" goal new blocker
 wbp "$SCRATCH/busy.out" task run bump
 check "a run while a thread is active is skipped (exit 6) and records why" "exit $RC: $(head -c 300 "$SCRATCH/busy.out")" \
     bash -c '[ "$1" = 6 ] && grep -q "skipped-project-busy" "$2"' _ "$RC" "$SCRATCH/busy.out"
-# A dry run starts no thread, so the active one does not stop it. (The sabotage makes the dry task a pr task, which the thread does stop.)
+# A dry run (`task run --dry`, no agent) starts no thread, so the active one does not stop it. (The sabotage makes the dry task a pr task, which the thread does stop.)
 mkdir -p "$P/.workbench/tasks/dry"
 FIX=report; [ "$SABOTAGE" = 1 ] && FIX=pr
 printf -- '---\nfix: %s\nmax_open: 5\n---\nList what you would do.\n' "$FIX" >"$P/.workbench/tasks/dry/task.md"
 wbp "$SCRATCH/approve-dry.out" task approve dry
-wbp "$SCRATCH/dry.out" task run dry; shown "$SCRATCH/dry.out" 3
+wbp "$SCRATCH/dry.out" task run dry --dry; shown "$SCRATCH/dry.out" 3
 check "a dry run is not skipped for an active thread" "exit $RC: $(head -c 300 "$SCRATCH/dry.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "^dry: reported" "$2"' _ "$RC" "$SCRATCH/dry.out"
 wbp "$SCRATCH/abandon.out" abandon

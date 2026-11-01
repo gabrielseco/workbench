@@ -58,8 +58,7 @@ task list) and the selected task's run timeline on the right. It is read only: i
 - **Two buttons write, and only through core.** The selected task's header has one primary action for its state: `Approve…` while it
   is not approved or stale, `Run now` once it is, and `Stop` (bordered) while a run started here goes. `Approve…` opens a card
   (`OverlayCard`: Esc and Cancel close it, ⌘Return confirms) that shows what would run unattended (the settings, the instructions,
-  the script and skill with their sizes); a refusal stays in the card in the core's words. `Run now` on a `fix: pr` task asks first on
-  a card that names the most it may cost and that it opens a pull request; a `fix: report` run starts at once. A run started here
+  the script and skill with their sizes); a refusal stays in the card in the core's words. `Run now` asks first on a card that names the most it may cost and what it does (a `fix: pr` run opens a pull request, a `fix: report` run asks a read-only agent and keeps a report), because either starts an agent that spends. A run started here
   shows its last line in the busy bar, and how it ended in a result line under the header: green for `pr-opened` and `reported`, grey
   for a skip, amber for `stale-approval`, red only for `failed`, `budget-exceeded` and `interrupted`. A disabled `Run now` says why in
   its `.help`.
