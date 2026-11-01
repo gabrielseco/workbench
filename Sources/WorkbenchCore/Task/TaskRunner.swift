@@ -124,9 +124,12 @@ public struct TaskRunner: Sendable {
             return TaskRunResult(
                 outcome: .staleApproval, reason: "the task changed since it was approved: workbench task approve \(name)")
         }
-        let store = ThreadStore(project: project)
-        if let active = store.activeThreadID() { return busy(active) }
-        if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
+        // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
+        if task.fix == .pr {
+            let store = ThreadStore(project: project)
+            if let active = store.activeThreadID() { return busy(active) }
+            if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
+        }
 
         // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
         if let skip = await tooManyOpen(task, history: history) { return skip }
@@ -223,12 +226,31 @@ public struct TaskRunner: Sendable {
         } catch { return fail("\(error)", units: ids) }
 
         let service = ThreadService(project: project, git: git)
+        // A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
+        if let base = task.base, base.hasPrefix("origin/") {
+            // The explicit refspec updates refs/remotes/origin/<branch> whatever the remote's fetch mapping says.
+            do {
+                _ = try await WorktreeManager(repoRoot: project.root, git: git)
+                    .fetchRemoteBranch(String(base.dropFirst("origin/".count)))
+            } catch {
+                return fail("could not fetch \(base), so nothing was started: \(error)", units: ids)
+            }
+            // git reads `origin/main` as a tag or a local branch of that name before the remote-tracking branch.
+            for (ref, kind) in [("refs/tags/\(base)", "tag"), ("refs/heads/\(base)", "branch")] {
+                if let found = try? await git.run(["show-ref", "--verify", "--quiet", ref], in: project.root), found.succeeded {
+                    return fail(
+                        "a local \(kind) named \(base) would be used instead of the branch just fetched; rename or delete it",
+                        units: ids)
+                }
+            }
+        }
         let id: String
         do {
             var settings = GoalSettings(quick: true)
             settings.budgetUSD = task.budgetUSD
+            settings.turnTimeoutMin = task.timeoutMin
             id = try await service.newThread(
-                name: TaskPrompt.threadName(task: name, units: units), config: config,
+                name: TaskPrompt.threadName(task: name, units: units), base: task.base, config: config,
                 body: GoalBody(
                     request: prompt, criteria: [],
                     outOfScope: ["Pushing, merging or opening a pull request: Workbench does that after the check passes."]),

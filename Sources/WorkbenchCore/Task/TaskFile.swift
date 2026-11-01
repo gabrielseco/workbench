@@ -27,11 +27,13 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 /// `task.md`: front matter the engine reads, a body Claude reads (docs/spec/tasks.md).
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
-        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open",
+        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base",
     ]
     /// How many of its own pull requests a `fix: pr` task leaves open before it waits for review.
     public static let defaultMaxOpen = 2
     public static let maxMaxOpen = 50
+    /// Minutes one agent turn may run; the goal's own default (30) stands when a task does not say.
+    public static let timeoutRange = 5...240
     public static let maxBatch = 20
     public static let maxInputs = 20
 
@@ -47,6 +49,10 @@ public struct TaskDefinition: Sendable, Equatable {
     public var budgetUSD: Decimal?
     /// Set in the file, nil when it is not (the default applies, and the approval does not mention it).
     public var maxOpen: Int?
+    /// Minutes the agent's turn may run, nil for the goal's default.
+    public var timeoutMin: Int?
+    /// The branch the thread is cut from. `origin/<branch>` is fetched first; nil for the project's default base.
+    public var base: String?
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -88,7 +94,7 @@ public struct TaskDefinition: Sendable, Equatable {
 
         var definition = TaskDefinition(
             name: name, schedule: nil, batch: 1, include: nil, inputs: [], pending: nil, fix: .report,
-            budgetUSD: nil, maxOpen: nil, instructions: instructions, text: text)
+            budgetUSD: nil, maxOpen: nil, timeoutMin: nil, base: nil, instructions: instructions, text: text)
         definition.schedule = schedule(entry("at"), entry("days"), entry("every"), add: add)
 
         if let e = entry("batch") {
@@ -110,6 +116,21 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.maxOpen = n
             } else {
                 add(e.lineNumber, "'max_open' must be a whole number from 1 to \(maxMaxOpen), found '\(e.value)'")
+            }
+        }
+        if let e = entry("timeout") {
+            if let n = Int(e.value), timeoutRange.contains(n) {
+                definition.timeoutMin = n
+            } else {
+                let range = "\(timeoutRange.lowerBound) to \(timeoutRange.upperBound)"
+                add(e.lineNumber, "'timeout' must be a whole number of minutes from \(range), found '\(e.value)'")
+            }
+        }
+        if let e = entry("base") {
+            if SafeNames.isBranchName(e.value), !e.value.hasSuffix("/") {
+                definition.base = e.value
+            } else {
+                add(e.lineNumber, "'base' must be a branch name such as main or origin/main, found '\(e.value)'")
             }
         }
         if let e = entry("budget") {

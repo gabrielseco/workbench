@@ -132,7 +132,8 @@ public struct TimerService: Sendable {
             "  launcher: \(paths.launcher.path)",
             "  log:      \(paths.log.path)",
         ]
-        if workbench.path.contains("/.build/debug/") {
+        // The path is the binary's real one (`.build/arm64-apple-macosx/debug/...`), not the `debug` link a build leaves.
+        if workbench.path.contains("/.build/"), workbench.path.contains("/debug/") {
             lines.append("note: it runs \(workbench.path); a rebuild replaces that file, so rebuild when no tick is running")
         }
         switch TimerWake.plan(for: tasks()) {

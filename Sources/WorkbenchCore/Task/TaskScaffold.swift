@@ -126,6 +126,8 @@ public enum TaskScaffold {
             fix: report             # report: only lists what it would take. pr: does the work and opens the pull request
             # budget: 3.00          # USD for the coding turns of one run
             # max_open: 2           # a pr task waits for review once this many of its pull requests are open (default 2)
+            # timeout: 30           # minutes the agent's turn may run, 5 to 240 (default 30)
+            # base: origin/main     # cut the thread from a freshly fetched origin/main, not from a local main that may be behind
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.
             Delete this line when you have.

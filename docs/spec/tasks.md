@@ -39,6 +39,8 @@ Bump the next countries. Follow the skill exactly.
 | `pending` | the script that names the units (below) |
 | `fix` | `report`: a read-only turn that writes a summary. `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
 | `max_open` | 1 to 50, default 2 for `fix: pr` (a dry run is not limited): the task starts no run while this many of its own pull requests are open, because the pull requests of one task tend to touch the same files and pile up. The run ends `skipped-too-many-open` with the addresses; merged and closed ones do not count. It is part of the approval only when the file sets it |
+| `timeout` | minutes the agent's turn may run, 5 to 240. Without it the goal's default of 30 stands. Part of the approval only when the file sets it |
+| `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
@@ -135,6 +137,7 @@ In order, ending the run with an outcome at the first step that stops it:
    (a full disk) nothing is started, and if the end cannot be written the result says `recorded: false` and why.
 2. The approval must match what is on disk now, else `stale-approval`.
 3. No thread may be active in the project and no `doctor` running, else `skipped-project-busy` naming it. Nothing is queued: the next tick tries again.
+   (Only a task that starts a thread needs the project free: a `fix: report` dry run starts none, so an active thread does not skip it.)
 4. A `fix: pr` task with `max_open` of its own pull requests still open waits (`skipped-too-many-open`, the addresses in the reason), before
    the pending script or any thread. Every earlier run that made a thread counts (one that died after publishing, and one a person shipped by hand, as well as those that
    ended `pr-opened`), however old: GitHub is asked once for all the repository's open pull requests (`gh pr list --state open`, up to 500) and

@@ -20,6 +20,10 @@
 # reason): under the sabotage the pull requests read as closed, so "the task waits for review at max_open" must FAIL too. A task whose
 # setup fails before any turn must be failed (exit 1) with its thread discarded, and the next run must fail the same way and not be
 # skipped for a dead thread: the sabotage leaves a thread active, so "the next run is not skipped for a dead thread" must FAIL.
+# A `fix: report` task must not be skipped for an active thread (the sabotage makes it a pr task, so "a dry run is not skipped for an
+# active thread" must FAIL), and a task with `base: origin/main` must cut its thread from the freshly fetched tip of origin's main, which
+# moved after the clone (the sabotage points origin nowhere, so "a base on origin starts the thread from the freshly fetched origin
+# branch" must FAIL).
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -180,12 +184,37 @@ if [ "$SABOTAGE" = 1 ]; then wbp "$SCRATCH/abandon2.out" abandon; fi
 sed -i.bak '1d' "$P/.workbench/config.toml" && rm -f "$P/.workbench/config.toml.bak"
 rm -rf "$P/.workbench/tasks/setup"
 
+# --- 2d. a base on origin ------------------------------------------------------------------------------------
+
+g clone -q "$ORIGIN" "$SCRATCH/other" || die "git clone (the other person) failed"
+( cd "$SCRATCH/other" && echo ahead >ahead.txt && g add ahead.txt \
+    && g -c user.email=v@example.invalid -c user.name=verify commit -q -m "ahead" && g push -q origin HEAD:main ) || die "could not move origin ahead"
+NEWTIP=$(g -C "$ORIGIN" rev-parse refs/heads/main)
+mkdir -p "$P/.workbench/tasks/based"
+printf -- '---\nfix: pr\nbase: origin/main\nmax_open: 5\n---\nDo the thing.\n' >"$P/.workbench/tasks/based/task.md"
+# The sabotage points origin nowhere, so the fetch fails.
+[ "$SABOTAGE" = 1 ] && g -C "$P" remote set-url origin "$SCRATCH/nowhere.git"
+wbp "$SCRATCH/approve5.out" task approve based
+wbp "$SCRATCH/based.out" task run based; shown "$SCRATCH/based.out" 4
+BTHREAD=$(sed -n 's/^  thread: //p' "$SCRATCH/based.out" | head -1)
+check "a base on origin starts the thread from the freshly fetched origin branch" "exit $RC, thread '$BTHREAD': $(head -c 300 "$SCRATCH/based.out")" \
+    bash -c '[ -n "$3" ] && grep -q "\"base_commit\":\"$1\"" "$2/.workbench/threads/$3/events.jsonl"' _ "$NEWTIP" "$P" "$BTHREAD"
+[ "$SABOTAGE" = 1 ] && g -C "$P" remote set-url origin "$ORIGIN"
+
 # --- 3. what stops a run -----------------------------------------------------------------------------------
 
 wbp "$SCRATCH/blocker.out" goal new blocker
 wbp "$SCRATCH/busy.out" task run bump
 check "a run while a thread is active is skipped (exit 6) and records why" "exit $RC: $(head -c 300 "$SCRATCH/busy.out")" \
     bash -c '[ "$1" = 6 ] && grep -q "skipped-project-busy" "$2"' _ "$RC" "$SCRATCH/busy.out"
+# A dry run starts no thread, so the active one does not stop it. (The sabotage makes the dry task a pr task, which the thread does stop.)
+mkdir -p "$P/.workbench/tasks/dry"
+FIX=report; [ "$SABOTAGE" = 1 ] && FIX=pr
+printf -- '---\nfix: %s\nmax_open: 5\n---\nList what you would do.\n' "$FIX" >"$P/.workbench/tasks/dry/task.md"
+wbp "$SCRATCH/approve-dry.out" task approve dry
+wbp "$SCRATCH/dry.out" task run dry; shown "$SCRATCH/dry.out" 3
+check "a dry run is not skipped for an active thread" "exit $RC: $(head -c 300 "$SCRATCH/dry.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^dry: reported" "$2"' _ "$RC" "$SCRATCH/dry.out"
 wbp "$SCRATCH/abandon.out" abandon
 printf 'Bump the next countries, and merge them.\n' >>"$TASK/task.md"
 BEFORE=$(threads)
