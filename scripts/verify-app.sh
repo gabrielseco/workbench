@@ -196,11 +196,11 @@ SWIFT
   else
     mkdir -p "$dir/project/.workbench/threads"
   fi
-  # A scenario with `tasks/` has scheduled tasks. The timer card reads the machine's launchd, so it gets stand-ins: a home of its own with
+  # A scenario with `tasks/` (or a `tasks-*` one) shows the Tasks screen. The timer card reads the machine's launchd, so it gets stand-ins: a home of its own with
   # the agent's plist and log, a `launchctl` that prints a loaded agent, and canned answers for `pmset` and `fdesetup`. Nothing real is asked.
   local timer_env=()
-  if [[ -d "$fixture/tasks" ]]; then
-    cp -R "$fixture/tasks" "$dir/project/.workbench/tasks"
+  if [[ -d "$fixture/tasks" || "$scenario" == tasks-* ]]; then
+    [[ ! -d "$fixture/tasks" ]] || cp -R "$fixture/tasks" "$dir/project/.workbench/tasks"
     local root hash slug
     root="$(cd "$dir/project" && pwd -P)"
     hash="$(printf '%s' "$root" | shasum -a 256 | cut -c1-8)"

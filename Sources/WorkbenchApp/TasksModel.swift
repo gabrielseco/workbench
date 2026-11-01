@@ -119,6 +119,11 @@ struct TasksReader: Sendable {
     static func core(environment: [String: String] = ProcessInfo.processInfo.environment) -> TasksReader {
         TasksReader { project, now in
             let library = TaskLibrary(project: project)
+            // An unreadable folder is a failed read, not "no tasks": the last good data stays on screen.
+            do { _ = try FileManager.default.contentsOfDirectory(atPath: project.tasksDirectory.path) } catch {
+                let missing = (error as NSError).code == NSFileReadNoSuchFileError
+                if !missing { throw error }
+            }
             let entries = library.names().map { name -> TaskEntry in
                 let history = try? TaskRunLog(project: project, name: name).history()
                 return TaskEntry(
@@ -177,6 +182,8 @@ struct TasksReader: Sendable {
     var selection: String?
     private(set) var reads = 0
     @ObservationIgnored private var lastRead: Date?
+    /// The project of the newest read asked for; an answer for another one is dropped.
+    @ObservationIgnored private var latestPath: String?
     @ObservationIgnored private let reader: TasksReader
     @ObservationIgnored private let clock: @Sendable () -> Date
 
@@ -212,12 +219,16 @@ struct TasksReader: Sendable {
         let now = clock()
         lastRead = now
         reads += 1
+        latestPath = project.root.path
         do {
             let fresh = try await reader.read(project, now)
+            // The project changed while this was reading: its answer is for the one that was left.
+            guard latestPath == fresh.projectPath else { return }
             if snapshot?.projectPath != fresh.projectPath { selection = nil }
             snapshot = fresh
             error = nil
         } catch {
+            guard latestPath == project.root.path else { return }
             self.error = "\(error)"
         }
     }

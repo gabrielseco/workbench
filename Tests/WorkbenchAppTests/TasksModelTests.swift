@@ -194,9 +194,41 @@ import WorkbenchCore
         fail.on = false
         await model.refresh(project)
         #expect(model.error == nil)
+        // An unreadable tasks folder is a failed read, not an empty list.
+        let folder = fixture.project.tasksDirectory
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+        let kept = TasksModel(reader: real)
+        await kept.refresh(project)
+        let before = kept.snapshot(for: project)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: folder.path)
+        await kept.refresh(project)
+        #expect(kept.error != nil)
+        #expect(kept.snapshot(for: project) == before)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
         // Another project's tasks are never shown under this one.
         let other = try await AppFixture(git: false)
         #expect(model.snapshot(for: other.project) == nil)
+    }
+
+    @Test func anAnswerForAProjectLeftBehindIsDropped() async throws {
+        let (first, env) = try await scenario()
+        let second = try await AppFixture(git: false)
+        let real = TasksReader.core(environment: env)
+        let gate = Gate()
+        let slowPath = first.project.root.path
+        let reader = TasksReader { project, now in
+            // The first project's read is slow: it finishes after the second one has been asked for.
+            if project.root.path == slowPath { await gate.wait() }
+            return try await real.read(project, now)
+        }
+        let model = TasksModel(reader: reader)
+        let slow = Task { await model.refresh(first.project) }
+        try await Task.sleep(for: .milliseconds(50))
+        await model.refresh(second.project)
+        await gate.open()
+        await slow.value
+        #expect(model.snapshot(for: second.project) != nil)
+        #expect(model.snapshot(for: first.project) == nil)
     }
 
     @Test func readOnly() async throws {
@@ -248,5 +280,19 @@ private final class ClockHolder: @unchecked Sendable {
     var now: Date {
         get { lock.withLock { value } }
         set { lock.withLock { value = newValue } }
+    }
+}
+
+private actor Gate {
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func open() {
+        opened = true
+        waiting.forEach { $0.resume() }
+        waiting = []
     }
 }
