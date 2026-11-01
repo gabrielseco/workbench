@@ -64,6 +64,7 @@ private struct Run {
         let check = try #require(lines.firstIndex { $0.hasPrefix("check started") })
         let ended = try #require(lines.firstIndex { $0 == "turn 1 ended: succeeded" })
         #expect(started < check && check < ended)
+        #expect(lines.filter { $0.hasPrefix("turn 1 ended") }.count == 1, "the end is said once, by the run")
     }
 
     @Test func anEmptyListIsNothingPendingAndSpendsNothing() async throws {
