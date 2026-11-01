@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import WorkbenchCore
@@ -27,6 +28,9 @@ import WorkbenchCore
     /// The tasks as last read, kept when a read fails so the count does not drop to zero on a hiccup.
     @ObservationIgnored private var lastTasks: [TaskEntry] = []
     @ObservationIgnored private var lastThread: ThreadAttention?
+    /// The project's tasks have been read once: until then the baseline is only what the thread said, and the first read of the
+    /// tasks completes it (it is not news that yesterday's run failed).
+    @ObservationIgnored private var tasksBaselined = false
 
     init(preferences: Preferences, notifier: Notifier = NullNotifier()) {
         self.preferences = preferences
@@ -39,6 +43,7 @@ import WorkbenchCore
     }
 
     @ObservationIgnored private var polling: Task<Void, Never>?
+    @ObservationIgnored private var activation: Task<Void, Never>?
 
     /// Calls `look` now and then every `interval` for as long as the app runs, whatever screen or window is up.
     func startPolling(_ look: @escaping @MainActor () async -> Void) {
@@ -50,11 +55,19 @@ import WorkbenchCore
                 if self == nil { return }
             }
         }
+        // The app coming to the front is a look too: a task that broke in the background is shown at once.
+        activation = Task {
+            for await _ in NotificationCenter.default.notifications(named: NSApplication.didBecomeActiveNotification) {
+                await look()
+            }
+        }
     }
 
     func stopPolling() {
         polling?.cancel()
         polling = nil
+        activation?.cancel()
+        activation = nil
     }
 
     func sayDeniedOnce() { deniedWasShown = true }
@@ -63,23 +76,26 @@ import WorkbenchCore
     func observe(project path: String?, projectName: String, thread: ThreadAttention?, tasks: [TaskEntry]?) async {
         guard let path else {
             (project, baseline, announced, items, lastTasks, lastThread) = (nil, [], [], [], [], nil)
+            tasksBaselined = false
             return
         }
         let first = path != project
-        if first { (project, baseline, announced, lastTasks) = (path, [], [], []) }
+        if first { (project, baseline, announced, lastTasks, tasksBaselined) = (path, [], [], [], false) }
         if let tasks { lastTasks = tasks }
         lastThread = thread
         let seen = Set(preferences.seenAttention)
-        let all = AttentionItems.derive(thread: thread, tasks: lastTasks).filter { !seen.contains($0.id) }
+        let all = AttentionItems.derive(thread: thread, tasks: lastTasks).filter { !seen.contains(seenKey($0.id)) }
         items = all
-        if first {
-            baseline = Set(all.map(\.id))
+        // The first look at a project, and the first look that has its tasks, are baselines: what is there is counted, not announced.
+        if first || (!tasksBaselined && tasks != nil) {
+            if tasks != nil { tasksBaselined = true }
+            baseline.formUnion(all.map(\.id))
             return
         }
         for item in all where !baseline.contains(item.id) && !announced.contains(item.id) {
             announced.insert(item.id)
             guard !paused else { continue }
-            let notice = Notice(id: item.id, title: projectName, body: Self.body(item), route: item.route)
+            let notice = Notice(id: item.id, title: projectName, body: Self.body(item), route: item.route, project: path)
             posts += 1
             if await notifier.post(notice) == .denied { notificationsDenied = true }
         }
@@ -100,9 +116,12 @@ import WorkbenchCore
         markSeen(ids)
     }
 
+    /// A mark belongs to its project: two projects with a task of the same name and the same run are not the same reason.
+    private func seenKey(_ id: String) -> String { "\(project ?? "")|\(id)" }
+
     func markSeen(_ ids: [String]) {
         var seen = preferences.seenAttention
-        for id in ids where !seen.contains(id) { seen.append(id) }
+        for id in ids.map(seenKey) where !seen.contains(id) { seen.append(id) }
         preferences.seenAttention = Array(seen.suffix(Self.seenLimit))
         items.removeAll { ids.contains($0.id) }
     }

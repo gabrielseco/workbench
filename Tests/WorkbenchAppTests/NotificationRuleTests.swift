@@ -81,6 +81,35 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(notifier.posted.count == 4)
     }
 
+    @Test func theFirstReadOfTheTasksIsStillTheBaseline() async throws {
+        // The window opens before the first poll of the tasks: the first look has only the thread, the next has the tasks. What
+        // already failed yesterday is counted and not announced; the next failure is.
+        let r = rig()
+        let (center, notifier) = (r.center, r.notifier)
+        let review = AttentionItemsTests.thread("Review · turn 2 done", since: 7)
+        let yesterday = try await failed("alpha", at: 100)
+        await look(center, "proj", thread: review, tasks: nil)
+        #expect(center.items.count == 1)
+        await look(center, "proj", thread: review, tasks: [yesterday])
+        #expect(center.items.count == 2 && notifier.posted.isEmpty)
+        await look(center, "proj", thread: review, tasks: [yesterday, try await failed("beta", at: 200)])
+        #expect(notifier.posted.count == 1 && notifier.posted[0].route == .task("beta"))
+        #expect(notifier.posted[0].project == "/work/proj")
+    }
+
+    @Test func seenBelongsToItsProject() async throws {
+        let r = rig()
+        let (center, prefs) = (r.center, r.prefs)
+        let a = try await failed("alpha", at: 100)
+        await look(center, "one", tasks: [a])
+        center.markSeen(task: "alpha")
+        #expect(center.items.isEmpty)
+        // Another project with a task of the same name and the same run is another reason.
+        await look(center, "two", tasks: [a])
+        #expect(center.items.count == 1)
+        #expect(prefs.seenAttention.count == 1 && prefs.seenAttention[0].hasPrefix("/work/one|"))
+    }
+
     @Test func switchingProjectIsANewBaseline() async throws {
         let r = rig()
         let (center, notifier) = (r.center, r.notifier)
@@ -131,7 +160,7 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
     @Test func noBundleNoCenter() async {
         // This test process is not an app bundle: the system centre must not be asked for (it ends the process).
         #expect(!SystemNotifier.hasBundle)
-        let result = await SystemNotifier().post(Notice(id: "x", title: "t", body: "b", route: .task("x")))
+        let result = await SystemNotifier().post(Notice(id: "x", title: "t", body: "b", route: .task("x"), project: "/p"))
         #expect(result == .denied)
     }
 }

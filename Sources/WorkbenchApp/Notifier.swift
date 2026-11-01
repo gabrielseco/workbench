@@ -7,6 +7,8 @@ struct Notice: Equatable, Sendable {
     var title: String
     var body: String
     var route: AttentionRoute
+    /// The project it is about, so a click after another project was opened does not act on that one.
+    var project: String
 }
 
 enum PostResult: Equatable, Sendable {
@@ -31,7 +33,7 @@ final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate
     static var hasBundle: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
     /// Called on the main actor with where a clicked notification goes.
-    @MainActor var onRoute: ((AttentionRoute) -> Void)?
+    @MainActor var onRoute: ((AttentionRoute, String) -> Void)?
 
     override init() {
         super.init()
@@ -50,7 +52,7 @@ final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate
         let content = UNMutableNotificationContent()
         content.title = notice.title
         content.body = notice.body
-        content.userInfo = ["route": notice.route.encoded]
+        content.userInfo = ["route": notice.route.encoded, "project": notice.project]
         let request = UNNotificationRequest(identifier: notice.id, content: content, trigger: nil)
         do { try await center.add(request) } catch { return .denied }
         return .posted
@@ -59,10 +61,10 @@ final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate
     func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
-        guard let text = response.notification.request.content.userInfo["route"] as? String,
-            let route = AttentionRoute(encoded: text)
-        else { return }
-        await MainActor.run { onRoute?(route) }
+        let info = response.notification.request.content.userInfo
+        guard let text = info["route"] as? String, let route = AttentionRoute(encoded: text) else { return }
+        let project = info["project"] as? String ?? ""
+        await MainActor.run { onRoute?(route, project) }
     }
 
     func userNotificationCenter(

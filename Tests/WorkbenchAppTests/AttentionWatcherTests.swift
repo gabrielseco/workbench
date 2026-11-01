@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import WorkbenchCore
@@ -30,7 +31,7 @@ import WorkbenchCore
         let before = bytes()
         center.markSeen(task: "alpha")
         #expect(center.items.isEmpty)
-        #expect(prefs.seenAttention.count == 1 && prefs.seenAttention[0].hasPrefix("task:alpha:"))
+        #expect(prefs.seenAttention.count == 1 && prefs.seenAttention[0].hasPrefix("/p|task:alpha:"))
         #expect(bytes() == before, "nothing is written to a task's log")
         // The mark outlives the centre (a relaunch), and a look at the same state stays quiet.
         let again = AttentionCenter(preferences: prefs)
@@ -54,11 +55,34 @@ import WorkbenchCore
         let center = AttentionCenter(preferences: prefs)
         center.markSeen((0..<300).map { "task:t:\($0)" })
         #expect(prefs.seenAttention.count == AttentionCenter.seenLimit)
-        #expect(prefs.seenAttention.last == "task:t:299")
+        #expect(prefs.seenAttention.last == "|task:t:299")
     }
 }
 
 @MainActor @Suite struct NotificationRouteTests {
+    @Test func aNotificationForAnotherProjectIsNotActedOn() async throws {
+        let (fixture, entries) = try await AttentionItemsTests.entries(git: true)
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(await store.open(fixture.project.root))
+        await store.attention.observe(project: fixture.project.root.path, projectName: "p", thread: nil, tasks: entries)
+        let before = store.attention.items.count
+        store.show(.task("sync-fixtures"), project: "/somewhere/else")
+        #expect(store.mode == .thread && store.tasks.selection == nil && store.attention.items.count == before)
+        #expect(store.actionNote?.contains("not the project open now") == true)
+        store.show(.task("sync-fixtures"), project: fixture.project.root.path)
+        #expect(store.mode == .tasks && store.tasks.selection == "sync-fixtures")
+    }
+
+    @Test func aSelectionMadeBeforeTheFirstReadSurvivesIt() async throws {
+        let (fixture, _) = try await AttentionItemsTests.entries(git: true)
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(await store.open(fixture.project.root))
+        store.show(.task("update-docs"))
+        await store.tasks.refresh(fixture.project)
+        let shown = try #require(store.tasks.snapshot)
+        #expect(store.tasks.selected(in: shown)?.id == "update-docs")
+    }
+
     @Test func clickRoutes() async throws {
         #expect(AttentionRoute(encoded: AttentionRoute.thread("t1").encoded) == .thread("t1"))
         #expect(AttentionRoute(encoded: AttentionRoute.task("bump").encoded) == .task("bump"))
@@ -98,8 +122,23 @@ import WorkbenchCore
         await store.observeAttention(readTasks: true)
         #expect(store.attention.items.contains { $0.route == .task("sync-fixtures") })
         #expect(store.tasks.snapshot == nil, "the watcher reads on its own and does not borrow the screen's model")
-        // It is a polling loop that can be started and stopped, so a closed window keeps being watched.
-        store.startAttentionPolling()
-        store.attention.stopPolling()
     }
+
+    @Test func theAppComingToTheFrontIsALook() async throws {
+        let center = AttentionCenter(preferences: MemoryPreferences())
+        let looks = Counter()
+        center.startPolling { looks.increment() }
+        defer { center.stopPolling() }
+        while looks.count < 1 { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(50))
+        let before = looks.count
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+        for _ in 0..<200 where looks.count == before { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(looks.count > before)
+    }
+}
+
+@MainActor private final class Counter {
+    private(set) var count = 0
+    func increment() { count += 1 }
 }

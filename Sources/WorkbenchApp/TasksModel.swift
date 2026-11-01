@@ -265,7 +265,8 @@ struct TasksReader: Sendable {
             let fresh = try await reader.read(project, now)
             // The project changed while this was reading: its answer is for the one that was left.
             guard latestPath == fresh.projectPath else { return }
-            if snapshot?.projectPath != fresh.projectPath { selection = nil }
+            // Another project's task is not this one's: but a selection made before the first read (a notification) stays.
+            if let old = snapshot, old.projectPath != fresh.projectPath { selection = nil }
             snapshot = fresh
             error = nil
         } catch {

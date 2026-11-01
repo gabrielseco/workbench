@@ -16,8 +16,8 @@ import WorkbenchCore
                 .task {
                     delegate.drafting = { store.drafting }
                     delegate.stopDrafting = { await store.stopDraftingAndWait() }
-                    Self.notifier.onRoute = { route in
-                        store.show(route)
+                    Self.notifier.onRoute = { route, project in
+                        store.show(route, project: project)
                         Self.showWindow()
                     }
                     await Self.options.start(store)

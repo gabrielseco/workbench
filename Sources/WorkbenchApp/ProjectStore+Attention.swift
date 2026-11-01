@@ -32,7 +32,12 @@ extension ProjectStore {
     }
 
     /// Where a click on a notification (or an `Open` in the popover) goes. The window is brought forward by the caller.
-    func show(_ route: AttentionRoute) {
+    /// A route for another project than the one open is not acted on: it only brings the window forward.
+    func show(_ route: AttentionRoute, project path: String? = nil) {
+        if let path, path != project?.root.path {
+            actionNote = "That was about \(URL(fileURLWithPath: path).lastPathComponent), which is not the project open now."
+            return
+        }
         switch route {
         case .thread:
             mode = .thread
