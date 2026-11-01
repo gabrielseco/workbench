@@ -34,9 +34,10 @@ extension Commands {
             try a.requireEmpty()
             try await taskApprove(name)
         case "run":
-            guard let name = a.positional() else { throw CLIError.usage("usage: workbench task run <name>") }
+            let dry = a.flag("--dry")
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench task run <name> [--dry]") }
             try a.requireEmpty()
-            return try await taskRun(name)
+            return try await taskRun(name, dry: dry)
         case "tick":
             try a.requireEmpty()
             return try await taskTick()
@@ -70,13 +71,14 @@ extension Commands {
         }
     }
 
-    private static func taskRun(_ name: String) async throws -> Int32 {
+    private static func taskRun(_ name: String, dry: Bool) async throws -> Int32 {
         let ctx = try await Context.load()
         guard TaskLibrary(project: ctx.project).names().contains(name) else {
             throw CLIError.notFound("no task '\(name)' (.workbench/tasks/\(name)/task.md)")
         }
-        let runner = taskRunner(ctx)
-        let signals = installStopHandlers(what: "the run") { await runner.stop.stop() }
+        var runner = taskRunner(ctx)
+        runner.dryRun = dry
+        let signals = installStopHandlers(what: "the run") { [runner] in await runner.stop.stop() }
         defer { signals.forEach { $0.cancel() } }
         return report(name, await runner.run(name, trigger: .manual))
     }

@@ -16,13 +16,14 @@ struct TaskCardInfo: Equatable {
     /// What a `fix: pr` run may cost, in words: the coding turns' cap and the allowance for describing the change.
     var cost: String
 
-    static func make(_ loaded: LoadedTask, name: String) -> TaskCardInfo {
+    static func make(_ loaded: LoadedTask, name: String, config: Config? = nil) -> TaskCardInfo {
         let task = loaded.definition
         var lines = [
             Line(label: "when", value: task.schedule?.summary ?? "by hand only"),
             Line(
                 label: "fix",
-                value: task.fix == .pr ? "pr: does the work, opens a pull request, merges nothing" : "report: a dry run"),
+                value: task.fix == .pr ? "pr: does the work, opens a pull request, merges nothing"
+                    : "report: a read-only agent writes a report; nothing is changed or opened"),
             Line(label: "batch", value: "\(task.batch) unit\(task.batch == 1 ? "" : "s") a run"),
             Line(label: "budget", value: task.budgetUSD.map { "$\(money($0)) a run" } ?? "none set"),
         ]
@@ -39,15 +40,29 @@ struct TaskCardInfo: Equatable {
         }
         if !task.inputs.isEmpty { lines.append(Line(label: "inputs", value: task.inputs.joined(separator: ", "))) }
         return TaskCardInfo(
-            name: name, hash: loaded.hash, settings: lines, instructions: task.instructions, fix: task.fix, cost: cost(task))
+            name: name, hash: loaded.hash, settings: lines, instructions: task.instructions, fix: task.fix,
+            cost: cost(task, config: config))
     }
 
     /// The most a `fix: pr` run may spend: the coding turns' budget and the read-only turn that describes the change.
-    static func cost(_ task: TaskDefinition) -> String {
-        guard let budget = task.budgetUSD else { return "unknown: the task sets no budget" }
+    static func cost(_ task: TaskDefinition, config: Config? = nil) -> String {
+        // A task that sets no budget runs under the project's own default.
+        guard let budget = task.budgetUSD ?? config?.defaultBudgetUSD else {
+            return "unknown: no budget is set and the config cannot be read"
+        }
+        let source = task.budgetUSD == nil ? " (the project's default budget)" : ""
+        // A report is one read-only turn: no coding turns and no pull request to describe.
+        if task.fix == .report {
+            // Codex reports no dollar figure: its turn is held by the time limit alone, so no cap in money can be promised.
+            if config?.resolvedPlanAgent().provider == .codex {
+                let minutes = task.timeoutMin ?? TaskRunner.defaultReportTimeoutMinutes
+                return "no dollar cap: the report agent is Codex, held only by its \(minutes)-minute timeout"
+            }
+            return "up to $\(money(budget)) for the report\(source)"
+        }
         let describing = PRDescriber.budgetUSD
         let most = money(budget + describing)
-        return "up to $\(money(budget)) for the work and $\(money(describing)) to describe it: at most $\(most)"
+        return "up to $\(money(budget)) for the work\(source) and $\(money(describing)) to describe it: at most $\(most)"
     }
 
     static func money(_ value: Decimal) -> String {
@@ -65,7 +80,10 @@ struct TaskActions: Sendable {
     var run: @Sendable (Project, String, TaskStopSwitch, @escaping @Sendable (String) -> Void) async -> TaskRunResult
 
     static let core = TaskActions(
-        inspect: { project, name in TaskCardInfo.make(try TaskLibrary(project: project).load(name), name: name) },
+        inspect: { project, name in
+            let config = try? Config.load(from: project.configURL)
+            return TaskCardInfo.make(try TaskLibrary(project: project).load(name), name: name, config: config)
+        },
         approve: { project, name, hash in
             do {
                 try await TaskLibrary(project: project).approve(name, expecting: hash)

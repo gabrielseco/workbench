@@ -38,9 +38,16 @@ public struct TaskRunResult: Sendable, Equatable {
 public final class TaskStopSwitch: @unchecked Sendable {
     private let lock = NSLock()
     private var runner: ThreadRunner?
+    private var process: ProcessRun?
     private var requested = false
 
     public init() {}
+
+    /// A report turn's process, so a stop reaches it too.
+    func attach(process: ProcessRun) {
+        lock.withLock { self.process = process }
+        if lock.withLock({ requested }) { process.stop() }
+    }
 
     func attach(_ runner: ThreadRunner) async {
         lock.withLock { self.runner = runner }
@@ -51,10 +58,11 @@ public final class TaskStopSwitch: @unchecked Sendable {
     public var isRequested: Bool { lock.withLock { requested } }
 
     public func stop() async {
-        let current = lock.withLock { () -> ThreadRunner? in
+        let (current, turn) = lock.withLock { () -> (ThreadRunner?, ProcessRun?) in
             requested = true
-            return runner
+            return (runner, process)
         }
+        turn?.stop()
         await current?.stop()
     }
 }
@@ -70,6 +78,10 @@ public struct TaskRunner: Sendable {
     public var runOptions = RunOptions()
     public var stop = TaskStopSwitch()
     public var notice: @Sendable (String) -> Void = { _ in }
+    /// `--dry`: a `fix: report` run lists what it would take and starts no agent.
+    public var dryRun = false
+    /// The agent a report turn asks, for a test; nil takes the one `[agents.plan]` names.
+    public var readOnlyAgent: (any ReadOnlyAgent)?
 
     public init(project: Project, git: GitRunner, gh: GitRunner?) {
         self.project = project
@@ -160,8 +172,11 @@ public struct TaskRunner: Sendable {
         let ids = units.map(\.id)
 
         if task.fix == .report {
-            let list = ids.isEmpty ? "run once" : "would take " + ids.joined(separator: ", ")
-            return TaskRunResult(outcome: .reported, reason: list, units: ids)
+            if dryRun {
+                let list = ids.isEmpty ? "run once" : "would take " + ids.joined(separator: ", ")
+                return TaskRunResult(outcome: .reported, reason: "dry run: " + list, units: ids)
+            }
+            return await runReport(name: name, loaded: loaded, units: units)
         }
         return await runThread(name: name, loaded: loaded, units: units, writer: writer)
     }
@@ -215,6 +230,26 @@ public struct TaskRunner: Sendable {
             outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (one thread at a time)")
     }
 
+    /// A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
+    /// Returns why it cannot be used, nil when it can.
+    func freshBase(_ task: TaskDefinition) async -> String? {
+        guard let base = task.base, base.hasPrefix("origin/") else { return nil }
+        // The explicit refspec updates refs/remotes/origin/<branch> whatever the remote's fetch mapping says.
+        do {
+            _ = try await WorktreeManager(repoRoot: project.root, git: git)
+                .fetchRemoteBranch(String(base.dropFirst("origin/".count)))
+        } catch {
+            return "could not fetch \(base), so nothing was started: \(error)"
+        }
+        // git reads `origin/main` as a tag or a local branch of that name before the remote-tracking branch.
+        for (ref, kind) in [("refs/tags/\(base)", "tag"), ("refs/heads/\(base)", "branch")] {
+            if let found = try? await git.run(["show-ref", "--verify", "--quiet", ref], in: project.root), found.succeeded {
+                return "a local \(kind) named \(base) would be used instead of the branch just fetched; rename or delete it"
+            }
+        }
+        return nil
+    }
+
     // MARK: fix: pr
 
     private func runThread(name: String, loaded: LoadedTask, units: [TaskUnit], writer: EventLogWriter) async -> TaskRunResult {
@@ -237,24 +272,7 @@ public struct TaskRunner: Sendable {
         } catch { return fail("\(error)", units: ids) }
 
         let service = ThreadService(project: project, git: git)
-        // A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
-        if let base = task.base, base.hasPrefix("origin/") {
-            // The explicit refspec updates refs/remotes/origin/<branch> whatever the remote's fetch mapping says.
-            do {
-                _ = try await WorktreeManager(repoRoot: project.root, git: git)
-                    .fetchRemoteBranch(String(base.dropFirst("origin/".count)))
-            } catch {
-                return fail("could not fetch \(base), so nothing was started: \(error)", units: ids)
-            }
-            // git reads `origin/main` as a tag or a local branch of that name before the remote-tracking branch.
-            for (ref, kind) in [("refs/tags/\(base)", "tag"), ("refs/heads/\(base)", "branch")] {
-                if let found = try? await git.run(["show-ref", "--verify", "--quiet", ref], in: project.root), found.succeeded {
-                    return fail(
-                        "a local \(kind) named \(base) would be used instead of the branch just fetched; rename or delete it",
-                        units: ids)
-                }
-            }
-        }
+        if let why = await freshBase(task) { return fail(why, units: ids) }
         let id: String
         do {
             var settings = GoalSettings(quick: true)

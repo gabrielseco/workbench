@@ -26,6 +26,14 @@ private struct Run {
         return runner
     }
 
+    /// A runner for a `fix: report` task: `--dry`, or the read-only agent that answers it.
+    func reporter(dry: Bool = false, agent: (any ReadOnlyAgent)? = nil) -> TaskRunner {
+        var runner = runner()
+        runner.dryRun = dry
+        runner.readOnlyAgent = agent
+        return runner
+    }
+
     /// The fake claude's answers: the work (a line added to a.txt) and the description turn's JSON.
     func shippable() throws -> [String] {
         let answer = fx.repo.deletingLastPathComponent().appendingPathComponent("answer-\(UUID().uuidString).txt")
@@ -34,6 +42,8 @@ private struct Run {
         return ["write=a.txt", "answer=\(answer.path)"]
     }
 
+    var reports: URL { fx.project.taskDirectory(task.name).appendingPathComponent("reports") }
+    func reportFiles() -> [String] { ((try? FileManager.default.contentsOfDirectory(atPath: reports.path)) ?? []).sorted() }
     func ends() throws -> [Event] { try EventLogReader.read(at: task.log.url).events.filter { $0.kind == .taskRunEnded } }
     func threads() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: fx.project.threadsDirectory.path)) ?? []).sorted()
@@ -41,10 +51,12 @@ private struct Run {
 }
 
 @Suite(.processGate) struct TaskRunTests {
-    @Test func reportIsADryRunThatStartsNoThread() async throws {
+    @Test func aDryReportStartsNoThreadAndNoAgent() async throws {
         let run = try await Run(front: "fix: report\nbatch: 2\npending: pending.sh")
-        let result = await run.runner().run("bump", trigger: .manual)
+        let agent = ReportAgent(answer: "never asked")
+        let result = await run.reporter(dry: true, agent: agent).run("bump", trigger: .manual)
         #expect(result.outcome == .reported && result.units == ["ROU", "TUR"] && result.thread == nil)
+        #expect(result.reason == "dry run: would take ROU, TUR" && agent.requests.isEmpty)
         #expect(run.threads().isEmpty)
         let ended = try run.ends()
         #expect(ended.count == 1 && ended[0].data["outcome"]?.stringValue == "reported")
@@ -67,6 +79,79 @@ private struct Run {
         #expect(lines.filter { $0.hasPrefix("turn 1 ended") }.count == 1, "the end is said once, by the run")
     }
 
+    @Test func aReportAsksTheReadOnlyAgentAboutTheCommittedProjectAndKeepsTheAnswer() async throws {
+        let run = try await Run(front: "fix: report\nbatch: 2\npending: pending.sh\nbudget: 0.75\ntimeout: 12")
+        // What is committed is read; what is only on disk (a secret in the working tree) is not there for the agent to see.
+        let untracked = run.fx.project.root.appendingPathComponent("untracked.txt")
+        try "secret".write(to: untracked, atomically: true, encoding: .utf8)
+        let agent = ReportAgent(answer: "# Three pages are stale\n\nThe details.")
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported && result.units == ["ROU", "TUR"] && result.thread == nil)
+        #expect(result.reason?.hasPrefix("Three pages are stale (.workbench/tasks/bump/reports/") == true)
+        let request = try #require(agent.requests.first)
+        #expect(request.tools == .read && request.budget == 0.75 && request.timeout == 720 && request.turn == "report")
+        // The units reach the agent as data, in the prompt.
+        #expect(request.prompt.contains("Romania") && request.prompt.contains("Turkey") && !request.prompt.contains("Panama"))
+        #expect(agent.sawCommitted == true && agent.sawUntracked == false)
+        #expect(!FileManager.default.fileExists(atPath: request.workingDirectory.path), "the checkout is removed after")
+        let files = run.reportFiles()
+        #expect(files.count == 1)
+        let kept = try String(contentsOf: run.reports.appendingPathComponent(files[0]), encoding: .utf8)
+        #expect(kept == "# Three pages are stale\n\nThe details.\n")
+        let ended = try run.ends()
+        #expect(run.threads().isEmpty && ended.count == 1)
+    }
+
+    @Test func aReportThatCannotBeAnsweredFailsAndKeepsNothing() async throws {
+        let run = try await Run(front: "fix: report")
+        let agent = ReportAgent(answer: nil, failure: "the budget ran out")
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .failed && result.reason == "the budget ran out")
+        #expect(run.reportFiles().isEmpty)
+        let empty = await run.reporter(agent: ReportAgent(answer: "   \n")).run("bump", trigger: .manual)
+        #expect(empty.outcome == .failed)
+        let gone = ReportAgent(answer: nil, unavailable: "claude is not installed")
+        let missing = await run.reporter(agent: gone).run("bump", trigger: .manual)
+        #expect(missing.outcome == .failed && missing.reason == "claude is not installed")
+    }
+
+    @Test func aReportWhoseCheckoutCannotBeRemovedSaysSoEvenWhenItSucceeded() async throws {
+        let run = try await Run(front: "fix: report")
+        // The agent leaves a folder it cannot be removed from in the checkout: removal fails, the report still stands.
+        let agent = ReportAgent(answer: "# Done", beforeAnswer: { dir in
+            let locked = dir.appendingPathComponent("locked", isDirectory: true)
+            try? FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try? "x".write(to: locked.appendingPathComponent("f"), atomically: true, encoding: .utf8)
+            chmod(locked.path, 0o500)
+        })
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        defer {
+            let checkout = run.fx.project.taskDirectory("bump").appendingPathComponent("report/checkout/locked")
+            chmod(checkout.path, 0o700)
+        }
+        #expect(result.outcome == .reported)
+        let left = run.fx.project.taskDirectory("bump").appendingPathComponent("report/checkout")
+        if FileManager.default.fileExists(atPath: left.path) { #expect(result.reason?.contains("could not be removed") == true) }
+    }
+
+    @Test func aHugeAnswerIsCutAndSaid() async throws {
+        let run = try await Run(front: "fix: report")
+        let huge = "# Big\n" + String(repeating: "x", count: TaskRunner.maxReportBytes + 5000)
+        let result = await run.reporter(agent: ReportAgent(answer: huge)).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported && result.reason?.contains("the answer was cut at 256 KiB") == true)
+        let name = try #require(run.reportFiles().first)
+        let attributes = try FileManager.default.attributesOfItem(atPath: run.reports.appendingPathComponent(name).path)
+        let size = try #require(attributes[.size] as? Int)
+        #expect(size <= TaskRunner.maxReportBytes)
+    }
+
+    @Test func aReportIsNotSkippedForAnActiveThread() async throws {
+        let run = try await Run(front: "fix: report")
+        _ = try await ThreadService(project: run.fx.project, git: run.fx.git).newThread(name: "blocker")
+        let result = await run.reporter(agent: ReportAgent(answer: "# fine")).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported)
+    }
+
     @Test func anEmptyListIsNothingPendingAndSpendsNothing() async throws {
         let run = try await Run()
         try run.task.script("echo '[]'")
@@ -84,7 +169,7 @@ private struct Run {
 
         let other = try TaskFixture(in: run.fx.project, name: "fresh", front: "fix: report")
         _ = other
-        let never = await run.runner().run("fresh", trigger: .manual)
+        let never = await run.reporter(dry: true).run("fresh", trigger: .manual)
         #expect(never.outcome == .staleApproval && never.reason?.contains("never approved") == true)
     }
 
@@ -268,7 +353,7 @@ private struct Run {
         let dead = try await run.task.log.openWriter()
         try await dead.append(.taskRunStarted, data: ["trigger": "tick"])
         await dead.close()
-        let result = await run.runner().run("bump", trigger: .tick)
+        let result = await run.reporter(dry: true).run("bump", trigger: .tick)
         #expect(result.outcome == .reported)
         let history = try run.task.log.history()
         #expect(history.runs.map(\.outcome) == [.interrupted, .reported] && history.openRun == nil)
@@ -280,4 +365,37 @@ private final class SaidLines: @unchecked Sendable {
     private var all: [String] = []
     var value: [String] { lock.withLock { all } }
     func add(_ line: String) { lock.withLock { all.append(line) } }
+}
+
+/// A read-only agent that answers a report turn from a stub, and writes down what it was asked and what it could see.
+private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
+    private let lock = NSLock()
+    private var asked: [ReadOnlyRequest] = []
+    private(set) var sawCommitted: Bool?
+    private(set) var sawUntracked: Bool?
+    let answer: String?
+    let failure: String?
+    let notAvailable: String?
+
+    let beforeAnswer: (@Sendable (URL) -> Void)?
+
+    init(
+        answer: String?, failure: String? = nil, unavailable: String? = nil, beforeAnswer: (@Sendable (URL) -> Void)? = nil
+    ) {
+        (self.answer, self.failure, notAvailable, self.beforeAnswer) = (answer, failure, unavailable, beforeAnswer)
+    }
+
+    var requests: [ReadOnlyRequest] { lock.withLock { asked } }
+    func unavailable() -> String? { notAvailable }
+    func shownArguments(for request: ReadOnlyRequest) -> [String] { ["stub"] }
+    func run(_ request: ReadOnlyRequest, attach: @Sendable (ProcessRun) -> Void) async -> ReadOnlyAnswer {
+        lock.withLock {
+            asked.append(request)
+            sawCommitted = FileManager.default.fileExists(atPath: request.workingDirectory.appendingPathComponent("a.txt").path)
+            let stray = request.workingDirectory.appendingPathComponent("untracked.txt")
+            sawUntracked = FileManager.default.fileExists(atPath: stray.path)
+        }
+        beforeAnswer?(request.workingDirectory)
+        return ReadOnlyAnswer(text: answer, costUSD: nil, failure: failure)
+    }
 }

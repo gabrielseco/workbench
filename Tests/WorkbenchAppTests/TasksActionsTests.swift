@@ -96,8 +96,18 @@ import WorkbenchCore
         // A `fix: pr` task states its most it may cost.
         let sync = try TaskActions.core.inspect(fixture.project, "sync-fixtures")
         #expect(sync.cost == "up to $2.00 for the work and $0.50 to describe it: at most $2.50")
+        // A task that sets no budget runs under the project's default, which is named when the config can be read; else unknown.
         let none = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
         #expect(none.cost.hasPrefix("unknown"))
+        try "default_budget_usd = 3\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        let named = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
+        #expect(named.cost == "up to $3.00 for the report (the project's default budget)")
+        // Codex reports no dollars: no cap in money is promised.
+        try "default_budget_usd = 3\n\n[tools]\navailable = [\"Read\"]\n\n[agents.plan]\nprovider = \"codex\"\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        let codex = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
+        #expect(codex.cost.hasPrefix("no dollar cap: the report agent is Codex"))
     }
 
     @Test func approveRefusalStaysOpen() async throws {
@@ -184,7 +194,10 @@ import WorkbenchCore
         let tasks = model(env, actions: fake(run))
         await tasks.refresh(first.project)
         let report = try entry(tasks, "weekly-report")
-        let started = Task { await tasks.beginRun(first.project, report, threadRunGoing: false) }
+        let started = Task {
+            await tasks.beginRun(first.project, report, threadRunGoing: false)
+            await tasks.confirmRun(first.project)
+        }
         while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         try await Task.sleep(for: .milliseconds(30))
         // The other project has a task of the same name: it is not the one running, and has no result.
@@ -198,6 +211,25 @@ import WorkbenchCore
         // Finishing did not put the first project's tasks over the one on screen.
         #expect(tasks.snapshot(for: second.project) != nil)
         #expect(tasks.snapshot(for: first.project) == nil)
+    }
+
+    @Test func aChangedSpendingLimitIsNotRunUnderTheCardThatShowedAnother() async throws {
+        let (fixture, env) = try await scenario()
+        let run = FakeRun()
+        let tasks = model(env, actions: fake(run))
+        // cleanup-branches sets no budget, so its cap is the project's default.
+        let front = "---\nat: 05:00\nfix: report\n---\nList merged branches.\n"
+        try await edit(fixture.project, "cleanup-branches", front, approve: true)
+        try "default_budget_usd = 1\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        await tasks.refresh(fixture.project)
+        await tasks.beginRun(fixture.project, try entry(tasks, "cleanup-branches"), threadRunGoing: false)
+        #expect(tasks.confirmingRun?.cost == "up to $1.00 for the report (the project's default budget)")
+        try "default_budget_usd = 20\n\n[tools]\navailable = [\"Read\"]\n"
+            .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        await tasks.confirmRun(fixture.project)
+        #expect(run.calls.isEmpty)
+        #expect(tasks.actionNote?.contains("edited after the card was shown") == true)
     }
 
     @Test func runNowAvailability() async throws {
@@ -216,14 +248,20 @@ import WorkbenchCore
         #expect(try reason("nightly-lint")?.contains("already going") == true)
     }
 
-    @Test func reportRunsAtOnce() async throws {
+    @Test func aReportAsksFirstToo() async throws {
+        // A report starts a read-only agent that spends: it names its cap, and cancelling starts nothing.
         let (fixture, env) = try await scenario()
         let run = FakeRun()
         let tasks = model(env, actions: fake(run))
         await tasks.refresh(fixture.project)
         await tasks.beginRun(fixture.project, try entry(tasks, "weekly-report"), threadRunGoing: false)
+        #expect(run.calls.isEmpty)
+        #expect(tasks.confirmingRun?.fix == .report && tasks.confirmingRun?.cost == "up to $1.00 for the report")
+        tasks.cancelRun()
+        #expect(run.calls.isEmpty)
+        await tasks.beginRun(fixture.project, try entry(tasks, "weekly-report"), threadRunGoing: false)
+        await tasks.confirmRun(fixture.project)
         #expect(run.calls == ["weekly-report"])
-        #expect(tasks.confirmingRun == nil)
     }
 
     @Test func prRunAsksFirst() async throws {
@@ -250,7 +288,10 @@ import WorkbenchCore
         await tasks.refresh(fixture.project)
         let reads = tasks.reads
         let report = try entry(tasks, "weekly-report")
-        let started = Task { await tasks.beginRun(fixture.project, report, threadRunGoing: false) }
+        let started = Task {
+            await tasks.beginRun(fixture.project, report, threadRunGoing: false)
+            await tasks.confirmRun(fixture.project)
+        }
         while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         try await Task.sleep(for: .milliseconds(30))
         #expect(tasks.runningTask == "weekly-report")
@@ -270,7 +311,10 @@ import WorkbenchCore
         let tasks = model(env, actions: fake(run))
         await tasks.refresh(fixture.project)
         let report = try entry(tasks, "weekly-report")
-        let started = Task { await tasks.beginRun(fixture.project, report, threadRunGoing: false) }
+        let started = Task {
+            await tasks.beginRun(fixture.project, report, threadRunGoing: false)
+            await tasks.confirmRun(fixture.project)
+        }
         while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         try await Task.sleep(for: .milliseconds(30))
         #expect(run.stop?.isRequested == false)
@@ -289,7 +333,10 @@ import WorkbenchCore
         let tasks = model(env, actions: fake(run))
         await tasks.refresh(fixture.project)
         let report = try entry(tasks, "weekly-report")
-        let started = Task { await tasks.beginRun(fixture.project, report, threadRunGoing: false) }
+        let started = Task {
+            await tasks.beginRun(fixture.project, report, threadRunGoing: false)
+            await tasks.confirmRun(fixture.project)
+        }
         while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         try await Task.sleep(for: .milliseconds(30))
         let other = try entry(tasks, "bump-contract-details")

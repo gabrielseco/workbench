@@ -115,8 +115,9 @@ let workbenchUsage = """
       task list                  the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
                                  report or pr), whether its approval still matches the file and its pending script,
                                  the next due time and how the last run ended
-      task run <name>            run the task now: take its next units, do the work in a thread, and with fix: pr accept
-                                 it when the check passed and open the pull request; fix: report only lists the units;
+      task run <name> [--dry]    run the task now: take its next units; fix: pr does the work in a thread, accepts it when
+                                 the check passed and opens the pull request; fix: report asks a read-only agent and keeps
+                                 its answer under the task's reports/ (--dry only lists the units, no agent);
                                  exit 6 when skipped (a thread is active, the approval is stale, or max_open of its
                                  pull requests are still open), 1 failed, 5 over budget
       task tick                  run the tasks whose time has come, one after the other; what a timer calls
