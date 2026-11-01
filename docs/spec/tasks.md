@@ -135,8 +135,10 @@ In order, ending the run with an outcome at the first step that stops it:
 2. The approval must match what is on disk now, else `stale-approval`.
 3. No thread may be active in the project and no `doctor` running, else `skipped-project-busy` naming it. Nothing is queued: the next tick tries again.
 4. A `fix: pr` task with `max_open` of its own pull requests still open waits (`skipped-too-many-open`, the addresses in the reason), before
-   the pending script or any thread. GitHub is asked about the branch of each earlier run that made a thread (a run that died after publishing counts, as does one a person
-   shipped by hand; the newest 30 threads); when it cannot answer the run is skipped saying so, never started on a guess.
+   the pending script or any thread. Every earlier run that made a thread counts (one that died after publishing, and one a person shipped by hand, as well as those that
+   ended `pr-opened`), however old: GitHub is asked once for all the repository's open pull requests (`gh pr list --state open`, up to 500) and
+   the task's branches are looked up in that list. When it cannot answer, or the list is as long as the limit and may be cut, the run is
+   skipped saying so, never started on a guess.
 5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
 6. `fix: report` stops here: it records `reported` with the units it would take and starts no thread. (A read-only agent turn for `report` is a
    later change; it needs an agent role in the config.)

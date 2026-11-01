@@ -152,29 +152,23 @@ public struct TaskRunner: Sendable {
         return await runThread(name: name, loaded: loaded, units: units, writer: writer)
     }
 
-    /// How many earlier threads GitHub is asked about when checking `max_open`.
-    static let openCheckThreads = 30
-
     /// A skip when this task's own pull requests are at the limit, or when GitHub cannot say whether they are: never a run on a guess.
     private func tooManyOpen(_ task: TaskDefinition, history: TaskHistory) async -> TaskRunResult? {
         guard let limit = task.openLimit else { return nil }
         // A run that opened a pull request, one that died after publishing it, and one whose thread a person shipped by hand all have
-        // one to count; GitHub says whether it is still open. The newest threads only, so the number of questions stays bounded.
+        // one to count. Every earlier thread counts, however old: GitHub is asked once for all open pull requests, not about each thread.
         let tried = history.runs.filter {
             $0.thread != nil && $0.outcome != .nothingToDo && $0.outcome != .reported
         }
         guard !tried.isEmpty else { return nil }
-        var seen = Set<String>()
-        let newest = tried.reversed().compactMap(\.thread).filter { seen.insert($0).inserted }.prefix(Self.openCheckThreads)
-        let threads = Set(newest)
-        let states = await TaskPullRequests.threadStates(threads: threads, gh: gh, project: project)
-        if let unknown = threads.first(where: { states[$0] == nil }) {
-            let why = gh == nil ? "GitHub is not reachable" : "GitHub did not answer for \(unknown)"
+        let threads = Set(tried.compactMap(\.thread))
+        guard let openBranches = await TaskPullRequests.openBranches(gh: gh, project: project) else {
+            let why = gh == nil ? "GitHub is not reachable" : "its list of open pull requests could not be read in full"
             return TaskRunResult(
                 outcome: .skippedTooManyOpen,
                 reason: "cannot tell whether the task's earlier pull requests are still open (\(why)); not starting on a guess")
         }
-        let open = threads.filter { states[$0] == .open }
+        let open = threads.filter { openBranches.contains("workbench/\($0)") }
         guard open.count >= limit else { return nil }
         // The address where the run recorded one, otherwise the branch (a run that died before it wrote its end).
         let address = open.sorted().map { thread in

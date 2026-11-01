@@ -30,6 +30,22 @@ enum TaskPullRequests {
         return byThread
     }
 
+    /// How many open pull requests one question may return. A repository with more than this cannot be counted from one answer.
+    static let openListLimit = 500
+
+    /// The head branches of every open pull request of the repository, in one question: how a task counts its own, without asking
+    /// about each earlier thread. Nil when it cannot be known (`gh` missing or failing, or the list is as long as the limit and may be cut).
+    static func openBranches(gh: GitRunner?, project: Project) async -> Set<String>? {
+        guard let gh else { return nil }
+        let result = try? await gh.run(
+            ["pr", "list", "--state", "open", "--json", "headRefName", "--limit", "\(openListLimit)"], in: project.root)
+        guard let result, result.succeeded, !result.outputTruncated,
+            let value = try? JSONDecoder().decode(JSONValue.self, from: result.stdoutBytes),
+            let items = value.arrayItems, items.count < openListLimit
+        else { return nil }
+        return Set(items.compactMap { $0["headRefName"]?.stringValue })
+    }
+
     /// The same, for the units a past run made a thread for.
     static func states(units: [String: String], gh: GitRunner?, project: Project) async -> [String: UnitPullRequest] {
         let byThread = await threadStates(threads: Set(units.values), gh: gh, project: project)

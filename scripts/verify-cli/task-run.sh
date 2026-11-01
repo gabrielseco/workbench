@@ -57,7 +57,12 @@ for a in "\$@"; do [ "\$prev" = "--head" ] && head=\$a; prev=\$a; done
 case "\$1 \$2" in
 "auth status") exit 0 ;;
 "pr list")
-    if [ -n "\$head" ] && grep -qx "\$head" "$GHDIR/heads" 2>/dev/null; then echo '[{"state":"$STATE"}]'; else echo '[]'; fi
+    if [ -z "\$head" ]; then
+        # No --head: the question about every open pull request (the task counts its own against max_open).
+        if [ "$STATE" = OPEN ]; then
+            printf '['; sed 's/.*/{"headRefName":"&"}/' "$GHDIR/heads" 2>/dev/null | paste -sd, -; printf ']\n'
+        else echo '[]'; fi
+    elif grep -qx "\$head" "$GHDIR/heads" 2>/dev/null; then echo '[{"state":"$STATE"}]'; else echo '[]'; fi
     exit 0 ;;
 "pr create")
     echo "\$head" >>"$GHDIR/heads"

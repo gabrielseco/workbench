@@ -41,6 +41,13 @@ private struct Safe {
         return "write=a.txt,answer=\(answer.path)"
     }
 
+    /// What `gh pr list --state open` says when these runs' branches are open.
+    func openList(_ results: [TaskRunResult], extra: Int = 0) throws {
+        let branches = results.compactMap(\.thread).map { "workbench/\($0)" } + (0..<extra).map { "other/branch-\($0)" }
+        let items = branches.map { "{\"headRefName\":\"\($0)\"}" }.joined(separator: ",")
+        try gh.put("list_open", "[\(items)]")
+    }
+
     func threads() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: fx.project.threadsDirectory.path)) ?? []).sorted()
     }
@@ -53,6 +60,7 @@ private struct Safe {
         let first = try await safe.run(work)
         try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
         let second = try await safe.run(work)
+        try safe.openList([first, second])
         #expect(first.outcome == .prOpened && second.outcome == .prOpened)
         let (threadsBefore, scriptBefore) = (safe.threads().count, safe.scriptRuns)
 
@@ -73,12 +81,13 @@ private struct Safe {
         try await dead.append(.taskRunThread, data: ["thread": "g-1-bump-ROU", "units": ["ROU"]])
         await dead.close()
         try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
+        try safe.gh.put("list_open", #"[{"headRefName":"workbench/g-1-bump-ROU"}]"#)
         let result = try await safe.run(try safe.shippable())
         #expect(result.outcome == .skippedTooManyOpen)
         #expect(result.reason?.contains("branch workbench/g-1-bump-ROU") == true)
         #expect(try safe.task.log.history().runs.first?.outcome == .interrupted)
         // GitHub says that branch has no pull request after all: the run goes ahead.
-        try safe.gh.put("list", "[]")
+        try safe.gh.put("list_open", "[]")
         #expect(try await safe.run(try safe.shippable()).outcome == .prOpened)
     }
 
@@ -95,6 +104,41 @@ private struct Safe {
         #expect(await runner.discard(id, service: service) == false)
     }
 
+    @Test func theLimitHoldsHoweverLongTheHistoryIs() async throws {
+        // 40 earlier pull requests, 35 of them still open, and a limit above any fixed window of recent threads.
+        let safe = try await Safe(front: "fix: pr\nbatch: 1\nmax_open: 31\npending: pending.sh")
+        let writer = try await safe.task.log.openWriter()
+        var open: [String] = []
+        for index in 0..<40 {
+            let thread = "g-1-bump-\(index)"
+            try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+            try await writer.append(.taskRunThread, data: ["thread": .string(thread), "units": ["ROU"]])
+            try await writer.append(
+                .taskRunEnded,
+                data: [
+                    "outcome": "pr-opened", "thread": .string(thread), "units": ["ROU"],
+                    "pr": .string("https://github.com/o/r/pull/\(index)"),
+                ])
+            if index < 35 { open.append("{\"headRefName\":\"workbench/\(thread)\"}") }
+        }
+        await writer.close()
+        try safe.gh.put("list_open", "[\(open.joined(separator: ","))]")
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome == .skippedTooManyOpen)
+        #expect(result.reason?.contains("35 of the task's pull requests are still open (max_open 31)") == true)
+    }
+
+    @Test func anOpenListTooLongToBeCompleteIsNotTrusted() async throws {
+        let safe = try await Safe()
+        let first = try await safe.run(try safe.shippable())
+        #expect(first.outcome == .prOpened)
+        // As many open pull requests as the question allows: the answer may be cut, so the count cannot be known.
+        try safe.openList([], extra: TaskPullRequests.openListLimit)
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome == .skippedTooManyOpen)
+        #expect(result.reason?.contains("could not be read in full") == true)
+    }
+
     @Test func aMergedOrClosedPullRequestNoLongerCounts() async throws {
         for state in ["MERGED", "CLOSED"] {
             let safe = try await Safe()
@@ -103,6 +147,7 @@ private struct Safe {
             try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
             _ = try await safe.run(work)
             try safe.gh.put("list", "[{\"state\":\"\(state)\"}]")
+            try safe.openList([])
             let next = try await safe.run(work)
             #expect(next.outcome != .skippedTooManyOpen, "\(state): \(next.reason ?? "")")
         }
@@ -111,18 +156,23 @@ private struct Safe {
     @Test func theLimitIsTheTasksOwnToSet() async throws {
         let safe = try await Safe(front: "fix: pr\nbatch: 1\nmax_open: 3\npending: pending.sh")
         let work = try safe.shippable()
-        _ = try await safe.run(work)
+        let first = try await safe.run(work)
         try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
-        let outcomes = [try await safe.run(work), try await safe.run(work), try await safe.run(work)].map(\.outcome)
-        #expect(outcomes == [.prOpened, .prOpened, .skippedTooManyOpen])
+        var results = [first]
+        for _ in 0..<3 {
+            try safe.openList(results)
+            results.append(try await safe.run(work))
+        }
+        #expect(results.map(\.outcome) == [.prOpened, .prOpened, .prOpened, .skippedTooManyOpen])
     }
 
     @Test func whenGitHubCannotBeAskedTheRunIsSkippedNotGuessed() async throws {
         let safe = try await Safe()
         let work = try safe.shippable()
-        _ = try await safe.run(work)
+        let first = try await safe.run(work)
         try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
-        _ = try await safe.run(work)
+        let second = try await safe.run(work)
+        try safe.openList([first, second])
         let blind = try await safe.run(work, gh: .some(nil))
         #expect(blind.outcome == .skippedTooManyOpen)
         #expect(blind.reason?.contains("cannot tell whether the task's earlier pull requests are still open") == true)
