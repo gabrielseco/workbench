@@ -44,6 +44,22 @@ struct TimerRegistryTests {
         #expect(TimerRegistry.projects(home: try Scratch.directory("empty-home")).isEmpty, "no agents folder at all")
     }
 
+    @Test func aParentRepositoryIsNotTheProjectATimerWasInstalledFor() throws {
+        let home = try Scratch.directory("home")
+        let outer = try Scratch.directory("outer")
+        let inner = outer.appendingPathComponent("child", isDirectory: true)
+        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+        try install(Project(root: inner), in: home)
+        let entry = try #require(TimerRegistry.projects(home: home).first)
+        #expect(entry.isTheProject(Project(root: inner)))
+        // The child lost its repository: searching upward finds the parent, which is another project.
+        #expect(!entry.isTheProject(Project(root: outer)))
+        // The same folder by another spelling (a link, a trailing slash) is the same project.
+        let link = try Scratch.directory("links").appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: inner)
+        #expect(entry.isTheProject(Project(root: link)))
+    }
+
     @Test func twoAgentsForOneFolderAreOneEntry() throws {
         let home = try Scratch.directory("home")
         let project = Project(root: try Scratch.directory("one"))

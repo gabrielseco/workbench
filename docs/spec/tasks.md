@@ -146,7 +146,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   code for each project it has open.
   `--all` does that for every project that has a timer installed, one after the other: the folders are those the agents in
   `~/Library/LaunchAgents/com.workbench.task-tick.*.plist` run in (there is no other list of projects). A folder that is gone or is no longer
-  a repository is printed as `PROBLEM` and fails the pass; the first Ctrl-C ends the run in progress and starts no later project.
+  a repository (even when a parent folder is one: that is not ticked in its place) is printed as `PROBLEM` and fails the pass; the first Ctrl-C ends the run in progress and starts no later project.
 
 ## A run
 

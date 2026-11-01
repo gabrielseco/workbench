@@ -41,7 +41,11 @@ extension Commands {
         case "tick":
             let all = a.flag("--all")
             try a.requireEmpty()
-            return all ? try await taskTickAll() : try await taskTick(Context.load(), stopped: StopFlag())
+            if all { return try await taskTickAll() }
+            let stopped = StopFlag()
+            let signals = installStopHandlers(what: "the run") { await stopped.raise() }
+            defer { signals.forEach { $0.cancel() } }
+            return try await taskTick(Context.load(), stopped: stopped)
         case "timer":
             return try await taskTimer(&a)
         default:
@@ -113,8 +117,6 @@ extension Commands {
         }
         let runner = taskRunner(ctx)
         stopped.use(runner.stop)
-        let signals = installStopHandlers(what: "the run") { await stopped.raise() }
-        defer { signals.forEach { $0.cancel() } }
         var code: Int32 = plan.broken.isEmpty ? 0 : 1
         for name in names {
             if stopped.isSet { break }
@@ -137,13 +139,16 @@ extension Commands {
             out("no project has a timer installed (workbench task timer install, in the project)")
             return 0
         }
+        // One set of handlers for the whole pass, so a Ctrl-C between two projects is not lost.
         let stopped = StopFlag()
+        let signals = installStopHandlers(what: "the run") { await stopped.raise() }
+        defer { signals.forEach { $0.cancel() } }
         var code: Int32 = 0
         for entry in entries {
             if stopped.isSet { break }
             out("== \(entry.root.lastPathComponent)  (\(entry.root.path))")
             let loaded = FileManager.default.fileExists(atPath: entry.root.path) ? try? await Context.load(at: entry.root) : nil
-            guard let ctx = loaded else {
+            guard let ctx = loaded, entry.isTheProject(ctx.project) else {
                 out("PROBLEM  \(entry.root.path) is gone or is not a repository: workbench task timer remove, in that project")
                 code = 1
                 continue

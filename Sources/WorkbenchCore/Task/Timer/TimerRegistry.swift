@@ -9,6 +9,13 @@ public enum TimerRegistry {
         public var label: String
         /// The project folder the agent runs in.
         public var root: URL
+
+        /// Whether `project` is the very folder this timer was installed for. A folder that is no longer a repository is found by
+        /// searching upward, so it can come back as a parent repository: that one must not be ticked in its place.
+        public func isTheProject(_ project: Project) -> Bool {
+            func real(_ url: URL) -> String { url.resolvingSymlinksInPath().standardizedFileURL.path }
+            return real(root) == real(project.root)
+        }
     }
 
     static let prefix = "com.workbench.task-tick."
