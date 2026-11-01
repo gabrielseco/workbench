@@ -18,14 +18,17 @@ extension ProjectStore {
             return
         }
         var entries: [TaskEntry]?
+        var failure: String?
         if readTasks {
-            entries = try? await Task.detached { try TasksReader.entries(project, now: Date()) }.value
+            do {
+                entries = try await Task.detached { try TasksReader.entries(project, now: Date()) }.value
+            } catch { failure = "\(error)" }
         }
         // The project may have changed while the tasks were read: that answer is for the one left behind.
         guard project == self.project else { return }
         await attention.observe(
             project: project.root.path, projectName: project.root.lastPathComponent, thread: threadAttention,
-            tasks: readTasks ? entries : nil)
+            tasks: readTasks ? entries : nil, taskReadError: failure)
     }
 
     /// Reads the project's tasks every 30 s for as long as the app runs, whatever screen or window is up.
@@ -34,6 +37,13 @@ extension ProjectStore {
     }
 
     /// Where a click on a notification (or an `Open` in the popover) goes. The window is brought forward by the caller.
+    /// What `Open` and `Send back…` in the popover do before the window is brought forward: show the place, and for a send back open
+    /// the existing card (the popover itself decides nothing).
+    func openFromPopover(_ route: AttentionRoute, sendBack: Bool) {
+        show(route, project: project?.root.path)
+        if sendBack && route.isThread && review != nil { (actionError, sendingBack) = (nil, true) }
+    }
+
     /// A route for another project than the one open is not acted on: it only brings the window forward.
     func show(_ route: AttentionRoute, project path: String? = nil) {
         if let path, path != project?.root.path {
@@ -46,7 +56,6 @@ extension ProjectStore {
         case .task(let name):
             mode = .tasks
             tasks.selection = name
-            attention.markSeen(task: name)
         }
     }
 }

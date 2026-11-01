@@ -28,10 +28,15 @@ struct MenuBarPopover: View {
     var body: some View {
         let model = MenuBarPopoverModel.make(
             project: store.project, screen: store.screen, items: store.attention.items, review: store.review,
-            denied: store.attention.notificationsDenied, deniedShown: store.attention.deniedWasShown)
+            denied: store.attention.notificationsDenied, deniedShown: store.attention.deniedWasShown,
+            taskReadError: store.attention.taskReadError)
         VStack(alignment: .leading, spacing: 10) {
             header(model)
             content(model)
+            if let note = model.tasksNote {
+                Label(note, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(Theme.amber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let note = model.deniedNote {
                 Label(note, systemImage: "bell.slash").font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -110,8 +115,7 @@ struct MenuBarPopover: View {
     }
 
     private func open(_ route: AttentionRoute, sendBack: Bool) {
-        store.show(route, project: store.project?.root.path)
-        if sendBack { (store.actionError, store.sendingBack) = (nil, true) }
+        store.openFromPopover(route, sendBack: sendBack)
         openWindow(id: "main")
         WorkbenchApp.showWindow()
     }

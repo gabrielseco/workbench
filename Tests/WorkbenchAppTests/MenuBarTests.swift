@@ -99,6 +99,24 @@ import WorkbenchCore
         #expect(kept.status == .needsYou(1))
     }
 
+    @Test func aFailedTaskReadIsSaid() async throws {
+        let (thread, screen) = try await thread(from: .needsYou)
+        let shown = MenuBarPopoverModel.make(
+            project: nil, screen: screen, items: [thread], review: nil, denied: false, deniedShown: false,
+            taskReadError: "the folder cannot be read")
+        #expect(shown.tasksNote?.contains("could not be read") == true && shown.status == .needsYou(1))
+        let fine = MenuBarPopoverModel.make(
+            project: nil, screen: screen, items: [thread], review: nil, denied: false, deniedShown: false)
+        #expect(fine.tasksNote == nil)
+        // The centre remembers a failed read until the next good one.
+        let center = AttentionCenter(preferences: MemoryPreferences())
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [], taskReadError: nil)
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: nil, taskReadError: "no access")
+        #expect(center.taskReadError == "no access")
+        await center.observe(project: "/p", projectName: "p", thread: nil, tasks: [])
+        #expect(center.taskReadError == nil)
+    }
+
     @Test func deniedIsSaidOnce() async throws {
         let first = try await model(.accepted, denied: true, shown: false)
         #expect(first.deniedNote?.contains("System Settings") == true)
@@ -115,9 +133,14 @@ import WorkbenchCore
         try await AppScenario.needsYou.build(in: fixture)
         let store = ProjectStore(preferences: MemoryPreferences())
         #expect(await store.open(fixture.project.root))
-        store.show(.thread("invoice-pagination"), project: fixture.project.root.path)
-        (store.actionError, store.sendingBack) = (nil, true)
-        #expect(store.mode == .thread && store.sendingBack)
+        // Open review brings the thread screen and opens no card; Send back… opens the existing one, only for a thread in review.
+        store.mode = .tasks
+        store.openFromPopover(.thread("invoice-pagination"), sendBack: false)
+        #expect(store.mode == .thread && !store.sendingBack)
+        store.openFromPopover(.task("bump"), sendBack: true)
+        #expect(!store.sendingBack, "a task has nothing to send back")
+        store.openFromPopover(.thread("invoice-pagination"), sendBack: true)
+        #expect(store.sendingBack == (store.review != nil))
     }
 
     @Test func pausingIsAPreferenceTheToggleRedraws() {

@@ -119,7 +119,7 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         let (center, prefs) = (r.center, r.prefs)
         let a = try await failed("alpha", at: 100)
         await look(center, "one", tasks: [a])
-        center.markSeen(task: "alpha")
+        center.markSeen(shown: a)
         #expect(center.items.isEmpty)
         // Another project with a task of the same name and the same run is another reason.
         await look(center, "two", tasks: [a])
@@ -153,7 +153,8 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         await look(center, "proj", tasks: [a])
         #expect(notifier.posted.isEmpty && center.items.count == 1, "the count shows, nothing is posted")
         // Unpausing does not announce what happened while paused.
-        prefs.notificationsPaused = false
+        center.paused = false
+        _ = prefs
         await look(center, "proj", tasks: [a])
         #expect(notifier.posted.isEmpty)
         let b = try await failed("beta", at: 200)

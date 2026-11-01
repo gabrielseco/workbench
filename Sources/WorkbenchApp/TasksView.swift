@@ -271,7 +271,7 @@ struct Timeline: View {
             .padding(20).frame(maxWidth: .infinity, alignment: .leading)
         }
         // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
-        .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(task: entry.id) }
+        .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
     }
 }
 

@@ -45,10 +45,12 @@ struct MenuBarPopoverModel: Equatable {
     var rows: [PopoverRow]
     /// Said once, when notifications are not allowed.
     var deniedNote: String?
+    /// The tasks could not be read: what is listed is the last good read.
+    var tasksNote: String?
 
     static func make(
         project: Project?, screen: ProjectScreen, items: [AttentionItem], review: ReviewModel?, denied: Bool, deniedShown: Bool,
-        now: Date = Date()
+        taskReadError: String? = nil, now: Date = Date()
     ) -> MenuBarPopoverModel {
         let name = project?.root.lastPathComponent
         let note = denied && !deniedShown
@@ -60,6 +62,9 @@ struct MenuBarPopoverModel: Equatable {
                 var detail = item.reason
                 var criteria: String?
                 if case .thread(let shown) = screen {
+                    if let ended = shown.run?.endedAt {
+                        detail += " " + RelativeDateTimeFormatter().localizedString(for: ended, relativeTo: now)
+                    }
                     detail += " · " + shown.spendText
                     if shown.state.lastTurnEndedSeq != nil, let review { criteria = "Criteria " + review.assessed }
                 }
@@ -88,6 +93,9 @@ struct MenuBarPopoverModel: Equatable {
                 status = .nothing(screen.message?.title ?? "")
             }
         }
-        return MenuBarPopoverModel(project: name, status: status, rows: rows, deniedNote: note)
+        let tasksNote = taskReadError.map {
+            "The tasks could not be read, so this may be out of date: \(TaskExplanation.clean($0, limit: 160))"
+        }
+        return MenuBarPopoverModel(project: name, status: status, rows: rows, deniedNote: note, tasksNote: tasksNote)
     }
 }
