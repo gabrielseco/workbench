@@ -415,6 +415,9 @@ struct RecentProject: Equatable, Identifiable {
     /// The project this app has a run going in, if any.
     var runningProjectPath: String? { ownedRun?.project.root.path }
 
+    /// Asks the run this app holds, in whichever thread, to end (a quit): it still ends with a recorded `stopped`.
+    func stopOwnedRun() async { await ownedRun?.handle.stop() }
+
     /// Whether this window's thread is the one the app is running.
     var runningHere: Bool { ownedRun.map { $0.project == project && $0.thread == currentThread } ?? false }
 
