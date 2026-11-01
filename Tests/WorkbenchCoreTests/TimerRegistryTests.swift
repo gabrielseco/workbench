@@ -10,6 +10,10 @@ struct TimerRegistryTests {
         return folder
     }
 
+    private func plist(_ values: [String: Any]) throws -> Data {
+        try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0)
+    }
+
     private func install(_ project: Project, in home: URL) throws {
         let paths = TimerPaths(project: project, home: home)
         try FileManager.default.createDirectory(at: paths.plist.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -37,9 +41,9 @@ struct TimerRegistryTests {
         try "not a plist".write(to: broken, atomically: true, encoding: .utf8)
         try "<plist/>".write(to: folder.appendingPathComponent("com.someone.else.plist"), atomically: true, encoding: .utf8)
         let relative = ["Label": "x", "WorkingDirectory": "relative/path"] as [String: Any]
-        try (relative as NSDictionary).write(to: folder.appendingPathComponent("com.workbench.task-tick.relative.plist"))
+        try plist(relative).write(to: folder.appendingPathComponent("com.workbench.task-tick.relative.plist"))
         let missing = ["Label": "y"] as [String: Any]
-        try (missing as NSDictionary).write(to: folder.appendingPathComponent("com.workbench.task-tick.nodir.plist"))
+        try plist(missing).write(to: folder.appendingPathComponent("com.workbench.task-tick.nodir.plist"))
         #expect(TimerRegistry.projects(home: home).isEmpty)
         #expect(TimerRegistry.projects(home: try Scratch.directory("empty-home")).isEmpty, "no agents folder at all")
     }
