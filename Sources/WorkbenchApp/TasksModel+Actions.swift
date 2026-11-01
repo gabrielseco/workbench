@@ -107,7 +107,7 @@ extension TasksModel {
         stopSwitch = stop
         runningProject = project.root.path
         (runningTask, lastResult, actionNote) = (name, nil, nil)
-        runSaid = "Running \(name), started \(startedAt()). The turn says nothing until it ends. Stop ends it."
+        runSaid = "Running \(name), started \(startedAt()). Stop ends it."
         let actions = self.actions
         // The run says what it is doing as it goes; the screen shows the last line.
         let said = SaidBox { [weak self] line in Task { @MainActor in self?.runSaid = line } }
