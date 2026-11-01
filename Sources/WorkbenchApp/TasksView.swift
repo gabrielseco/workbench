@@ -254,13 +254,9 @@ struct Timeline: View {
                         "Edited since it was approved: it will not run until approved again.",
                         systemImage: "exclamationmark.circle.fill")
                         .font(.callout).foregroundStyle(Theme.amber)
-                    Text("workbench task approve \(entry.summary.name)")
-                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 } else if entry.summary.approval == .never {
                     Label("Not approved: nothing runs unapproved.", systemImage: "exclamationmark.circle.fill")
                         .font(.callout).foregroundStyle(Theme.amber)
-                    Text("workbench task approve \(entry.summary.name)")
-                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }
                 Divider()
                 if entry.runs.isEmpty {
