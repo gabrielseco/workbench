@@ -14,6 +14,7 @@
 # `install` also copies the running binary next to the launcher (`~/.workbench/timers/<slug>/workbench`): the launcher must run that copy, the
 # copy must run, and it must go on running after the binary it was installed from is overwritten (a rebuild); `status` must say `ok   binary:`.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
+# `task tick --all` must tick the project of every installed timer (its agent's folder) and, with that folder gone, say so and exit 1.
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
 # "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
 # task approved", "a second install replaces the files" and "the copy keeps running after the source is overwritten" must FAIL. The frame is in lib.sh. Run by
@@ -93,6 +94,15 @@ printf '#!/bin/sh\necho rebuilt-and-broken\n' >"$SCRATCH/wb-run"
 ( cd "$P" && "$COPY" version >"$SCRATCH/copy-version.out" 2>&1 ); COPY_RC=$?
 check "the copy keeps running after the source is overwritten" "install exit $RC, copy exit $COPY_RC: $(head -c 200 "$SCRATCH/copy-version.out")" \
     bash -c '[ "$1" = 0 ] && [ "$2" = 0 ] && ! grep -q rebuilt-and-broken "$3"' _ "$RC" "$COPY_RC" "$SCRATCH/copy-version.out"
+wbp "$SCRATCH/tickall.out" task tick --all; shown "$SCRATCH/tickall.out" 4
+check "tick --all ticks the project whose timer is installed" "exit $RC: $(head -c 300 "$SCRATCH/tickall.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^== project " "$2" && grep -q "no task is due" "$2"' _ "$RC" "$SCRATCH/tickall.out"
+mv "$P" "$P.gone"
+wbp_nocd() { ( cd "$SCRATCH" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" with_timeout "$T_WB" "$WB" "$@" >"$SCRATCH/gone.out" 2>&1 ); RC=$?; }
+wbp_nocd task tick --all
+mv "$P.gone" "$P"
+check "tick --all says out loud that a timer's project is gone and fails (exit 1)" "exit $RC: $(head -c 300 "$SCRATCH/gone.out")" \
+    bash -c '[ "$1" = 1 ] && grep -q "PROBLEM .* is gone or is not a repository" "$2"' _ "$RC" "$SCRATCH/gone.out"
 wbp "$SCRATCH/approve2.out" task approve nightly
 check "once the timer is installed the hint is gone" "got: $(head -c 300 "$SCRATCH/approve2.out")" \
     bash -c '! grep -q "no timer is installed" "$1"' _ "$SCRATCH/approve2.out"

@@ -8,9 +8,9 @@ struct Context {
     let store: ThreadStore
     let service: ThreadService
 
-    static func load() async throws -> Context {
+    static func load(at directory: URL? = nil) async throws -> Context {
         let git = try GitRunner.discover()
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let cwd = directory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let project = try await Project.locate(from: cwd, git: git)
         return Context(
             project: project, git: git, store: ThreadStore(project: project),

@@ -39,8 +39,9 @@ extension Commands {
             try a.requireEmpty()
             return try await taskRun(name, dry: dry)
         case "tick":
+            let all = a.flag("--all")
             try a.requireEmpty()
-            return try await taskTick()
+            return all ? try await taskTickAll() : try await taskTick(Context.load(), stopped: StopFlag())
         case "timer":
             return try await taskTimer(&a)
         default:
@@ -83,8 +84,23 @@ extension Commands {
         return report(name, await runner.run(name, trigger: .manual))
     }
 
-    private static func taskTick() async throws -> Int32 {
-        let ctx = try await Context.load()
+    /// Set by the first Ctrl-C or SIGTERM: the project being ticked ends its run cleanly and no later project starts.
+    final class StopFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var set = false
+        private var current: TaskStopSwitch?
+        var isSet: Bool { lock.withLock { set } }
+        func use(_ stop: TaskStopSwitch) { lock.withLock { current = stop } }
+        func raise() async {
+            let stop = lock.withLock { () -> TaskStopSwitch? in
+                set = true
+                return current
+            }
+            await stop?.stop()
+        }
+    }
+
+    private static func taskTick(_ ctx: Context, stopped: StopFlag) async throws -> Int32 {
         let plan = TaskTick.plan(project: ctx.project)
         // A task that cannot be loaded is said out loud and fails the tick: a timer that hears nothing assumes all is well.
         for broken in plan.broken {
@@ -96,15 +112,43 @@ extension Commands {
             return plan.broken.isEmpty ? 0 : 1
         }
         let runner = taskRunner(ctx)
-        let signals = installStopHandlers(what: "the run") { await runner.stop.stop() }
+        stopped.use(runner.stop)
+        let signals = installStopHandlers(what: "the run") { await stopped.raise() }
         defer { signals.forEach { $0.cancel() } }
         var code: Int32 = plan.broken.isEmpty ? 0 : 1
         for name in names {
+            if stopped.isSet { break }
             // One after the other: a project has one active thread.
             let result = await runner.run(name, trigger: .tick)
             _ = report(name, result)
             // A timer cares about runs that went wrong. A skip is a note, not a failure: the next tick tries again.
             if [.failed, .budgetExceeded, .interrupted].contains(result.outcome) { code = 1 }
+        }
+        return code
+    }
+
+    /// `task tick --all`: the tick of every project that has a timer installed (their agents' folders), one after the other. A folder
+    /// that is gone or is no longer a repository is said out loud and fails the pass, like a task that cannot be loaded: a timer that
+    /// hears nothing assumes all is well.
+    private static func taskTickAll() async throws -> Int32 {
+        let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory(), isDirectory: true)
+        let entries = TimerRegistry.projects(home: home)
+        guard !entries.isEmpty else {
+            out("no project has a timer installed (workbench task timer install, in the project)")
+            return 0
+        }
+        let stopped = StopFlag()
+        var code: Int32 = 0
+        for entry in entries {
+            if stopped.isSet { break }
+            out("== \(entry.root.lastPathComponent)  (\(entry.root.path))")
+            let loaded = FileManager.default.fileExists(atPath: entry.root.path) ? try? await Context.load(at: entry.root) : nil
+            guard let ctx = loaded else {
+                out("PROBLEM  \(entry.root.path) is gone or is not a repository: workbench task timer remove, in that project")
+                code = 1
+                continue
+            }
+            if (try await taskTick(ctx, stopped: stopped)) != 0 { code = 1 }
         }
         return code
     }
