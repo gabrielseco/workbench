@@ -101,6 +101,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 
 ## Commands
 
+- `workbench task timer install [--every <5m..1h>] [--pull-main] | status | remove`: makes the machine run the tasks (below). macOS.
 - `workbench task log <name> [--all]`: what the task's last run did, told from its own log and the thread it started: when it began and ended,
   the outcome, the full reason, the units, the thread and pull request, then from the thread the setup result, the check result with the last
   lines of its output when it failed, how many tool calls were denied, and the agent's last message. `--all` is one line per run. A task that
@@ -156,3 +157,36 @@ In order, ending the run with an outcome at the first step that stops it:
    the read-only describing turn, and the push and pull request. A pull request needs that description: when the turn fails the run is `failed`,
    the thread stays accepted and `workbench ship` finishes it by hand, because the fallback body is the goal's request, which holds the skill
    and the input files. The screenshots are skipped. Nothing merges.
+
+## The timer
+
+A schedule does nothing until something calls `workbench task tick`. `task timer` sets that up for a project, in the way the first real use
+did by hand:
+
+- `install` writes a launcher, `~/.workbench/timers/<slug>/tick.sh`, and a launchd agent,
+  `~/Library/LaunchAgents/com.workbench.task-tick.<slug>.plist`, and loads it with `launchctl bootstrap gui/<uid>` (an old copy is unloaded
+  first, so installing again replaces it). `<slug>` is the project's folder and a short hash of its path, so two projects with one name do
+  not collide. The agent runs the launcher every 15 minutes by default (`--every 5m` to `1h`); each task's own `at`/`days`/`every` decides what
+  is due, and a run missed while the Mac slept happens once on wake. The launcher borrows the PATH of a login shell (launchd has none of your
+  shell setup, so `node`, `python3`, `pnpm`, `gh`, `git` and `claude` are the ones a terminal finds), goes to the project and runs
+  `caffeinate -i workbench task tick`. The steps before the tick that could stall have deadlines (20 s for the login shell, 120 s for the
+  pull; the command is ended, then killed), because launchd never starts a second copy of a job that is still running. `--pull-main` also fast-forwards `main` before each tick, but only when it is checked out and clean.
+- It prints the wake line, because a sleeping Mac runs nothing: `sudo pmset repeat wakeorpoweron MTWRF 03:55:00`, from the tasks' own times
+  (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
+  `every:` get no wake line and a sentence saying why). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
+  The only program it runs is `launchctl`.
+- `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, each task approved
+  and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
+  days that cannot be read are a warning, not a pass), battery or power, and FileVault. The timer is a user agent, so after a restart it starts when that user logs in, with FileVault on or off:
+  FileVault makes the Mac wait for the disk password first, and automatic login would do the rest for you.
+  A probe that cannot be read is a warning saying so. Each line is `ok`, `warn` or `FAIL`, with what to do; the exit code is 1 when something
+  is a FAIL. Where there is no launchd, `status` gives the crontab line.
+- `remove` unloads the agent, deletes the launcher and the agent file, leaves the log (`~/Library/Logs/Workbench/task-tick-<slug>.log`) and names
+  `sudo pmset repeat cancel`. An agent that is not loaded is nothing to unload; one that launchctl refuses to unload leaves its files where
+  they are and exits 1, and a file that cannot be deleted exits 1 and is not reported as removed.
+- `task approve` on a task with a schedule, when no timer is installed, prints a hint line naming `task timer install`.
+- Where there is no launchd, `install` refuses and prints the crontab line that does the same. Cron runs at fixed minutes, so only an interval
+  that divides the hour is exact (5, 6, 10, 12, 15, 20, 30, 60); any other is rounded down to one and the line says so. A `%` in a path is
+  escaped, since cron reads it as a newline.
+
+`WORKBENCH_LAUNCHCTL` names another `launchctl`; the tests and `scripts/verify-cli/task-timer.sh` use a stand-in, so nothing real is loaded.

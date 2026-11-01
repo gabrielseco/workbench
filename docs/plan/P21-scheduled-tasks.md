@@ -24,5 +24,6 @@ committed tasks location shared by a team, unattended credentials (signing, 1Pas
 
 ## After the two pull requests
 
+- **`task timer`** (done): `install`, `status`, `remove` and the approve hint; the machine part of "run it at 4:00", without `sudo`.
 - **`task new`** (done): the scaffold, free and without an agent. A `task draft` that has an agent write `task.md` and the pending script from a
   pasted request needs the agent role in the config that `fix: report`'s read-only turn needs too, so the two come together.

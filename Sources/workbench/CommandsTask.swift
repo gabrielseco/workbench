@@ -4,6 +4,7 @@ import WorkbenchCore
 extension Commands {
     private static let taskUsage =
         "usage: workbench task list | task log <name> | task new <name> | task approve <name> | task run <name> | task tick"
+        + " | task timer install|status|remove"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
     /// one now; `task tick` runs the ones that are due, one after the other.
@@ -39,6 +40,8 @@ extension Commands {
         case "tick":
             try a.requireEmpty()
             return try await taskTick()
+        case "timer":
+            return try await taskTimer(&a)
         default:
             throw CLIError.usage("unknown task command '\(verb)'. \(taskUsage)")
         }
@@ -211,6 +214,11 @@ extension Commands {
         }
         out("approved \(name) (\(hash.prefix(12)))")
         if let schedule = loaded.definition.schedule { out("it is due \(schedule.summary)") }
+        // A schedule nobody ticks does nothing: say how to make the machine do it.
+        if let schedule = loaded.definition.schedule, let service = try? await timerService(),
+            !FileManager.default.fileExists(atPath: service.paths.plist.path) {
+            out("hint: it runs \(schedule.summary), but no timer is installed: workbench task timer install")
+        }
         if loaded.definition.fix == .pr {
             out(
                 "fix: pr: when its check and verifier pass, the task accepts its own work and opens the pull request. "
