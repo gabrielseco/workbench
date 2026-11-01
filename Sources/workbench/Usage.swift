@@ -112,9 +112,10 @@ let workbenchUsage = """
                              are saved as abandon.patch in the thread folder first, the branch is kept
 
     scheduled tasks
-      task list                  the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
+      task list [--pending]      the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
                                  report or pr), whether its approval still matches the file and its pending script,
-                                 the next due time and how the last run ended
+                                 the next due time and how the last run ended; --pending also runs each approved
+                                 task's pending script and says how many units are left (an edited one is not run)
       task run <name> [--dry]    run the task now: take its next units; fix: pr does the work in a thread, accepts it when
                                  the check passed and opens the pull request; fix: report asks a read-only agent and keeps
                                  its answer under the task's reports/ (--dry only lists the units, no agent);

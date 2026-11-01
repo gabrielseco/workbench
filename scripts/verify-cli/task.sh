@@ -1,5 +1,5 @@
 #!/bin/bash
-# verify-cli scenario for scheduled tasks (`task list`, `task approve`), on a clone of this repository in the temp folder, so
+# verify-cli scenario for scheduled tasks (`task list`, `task list --pending`, `task approve`), on a clone of this repository in the temp folder, so
 # nothing real is contacted. No turn is run, so it costs nothing.
 #   bash scripts/verify-cli/task.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/task.sh   (the same, on a branch that contains origin/main)
@@ -70,6 +70,10 @@ wbp "$SCRATCH/list2.out" task list
 check "list: approved after approve" "got: $(grep '^bump' "$SCRATCH/list2.out")" \
     bash -c 'grep -E "^bump .* approved .*next: [0-9]{4}-" "$1" >/dev/null' _ "$SCRATCH/list2.out"
 
+wbp "$SCRATCH/pending1.out" task list --pending
+check "list --pending counts an approved task's pending units" "got: $(grep '^bump' "$SCRATCH/pending1.out")" \
+    bash -c 'grep -E "^bump .* approved .*pending: 0 of 0" "$1" >/dev/null' _ "$SCRATCH/pending1.out"
+
 # --- 3. what revokes the approval and what does not --------------------------------------------------------
 
 printf '\n\n' >>"$TASKS/bump/task.md"; echo "ROU\nTUR\nPAN" >"$P/countries.txt"
@@ -87,6 +91,10 @@ if [ "$SABOTAGE" = 1 ]; then printf '\n' >>"$TASKS/bump/pending.sh"; else printf
 wbp "$SCRATCH/list5.out" task list
 check "editing the pending script says STALE" "got: $(grep '^bump' "$SCRATCH/list5.out")" \
     bash -c 'grep -E "^bump .*STALE" "$1" >/dev/null' _ "$SCRATCH/list5.out"
+
+wbp "$SCRATCH/pending2.out" task list --pending
+check "list --pending does not run the script of an edited task" "got: $(grep '^bump' "$SCRATCH/pending2.out")" \
+    bash -c 'grep -E "^bump .*STALE.*pending: not checked .edited since it was approved" "$1" >/dev/null' _ "$SCRATCH/pending2.out"
 
 # --- 4. refusals --------------------------------------------------------------------------------------------
 
