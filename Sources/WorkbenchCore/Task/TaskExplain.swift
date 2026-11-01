@@ -40,7 +40,6 @@ public struct TaskExplanation: Sendable, Equatable {
         if let message { parts.append("the agent said: \(message)") }
         if !denied.isEmpty { parts.append("denied: " + denied.joined(separator: " | ")) }
         if includeCheck, !checkTail.isEmpty { parts.append("check output: " + checkTail.joined(separator: " / ")) }
-        let joined = parts.joined(separator: "; ")
-        return joined.count > Self.maxReason ? String(joined.prefix(Self.maxReason - 1)) + "…" : joined
+        return Self.clean(parts.joined(separator: "; "), limit: Self.maxReason)
     }
 }

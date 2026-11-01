@@ -47,11 +47,13 @@ private struct Env {
         try await task.library.approve(task.name)
     }
 
-    func run(_ directives: String...) async -> TaskRunResult {
+    func run(_ directives: String...) async -> TaskRunResult { await run(task.name, directives) }
+
+    func run(_ name: String, _ directives: [String]) async -> TaskRunResult {
         var runner = TaskRunner(project: fx.project, git: fx.git, gh: nil)
         runner.runOptions = fx.options(directives.joined(separator: ","))
         runner.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
-        return await runner.run(task.name, trigger: .manual)
+        return await runner.run(name, trigger: .manual)
     }
 }
 
@@ -63,6 +65,39 @@ private struct Env {
         let reason = try #require(result.reason)
         #expect(reason.hasPrefix("the agent changed nothing, so there is nothing to ship; the agent said: fake claude:"))
         #expect(reason.count <= TaskExplanation.maxReason && !reason.contains("\n"))
+    }
+
+    @Test func aTurnThatEndedWithoutAResultStillSaysWhatTheAgentSaid() async throws {
+        let env = try await Env()
+        // The stream has the agent's text but no terminal result, as a crash or a timeout leaves it.
+        let result = await env.run("no-result")
+        #expect(result.outcome != .prOpened && result.thread != nil)
+        #expect(result.reason?.contains("the agent said: fake claude:") == true, "\(result.outcome) \(result.reason ?? "")")
+    }
+
+    @Test func aFailureAfterTheTurnKeepsTheExplanation() async throws {
+        let env = try await Env()
+        // The work is done and the check passes; there is no origin, so the ship step fails after the agent's turn.
+        let result = await env.run("write=a.txt", "deny=pnpm run schema-snapshot")
+        #expect(result.outcome == .failed)
+        let reason = try #require(result.reason)
+        #expect(reason.contains("not shipped") && reason.contains("the agent said: fake claude:"))
+        #expect(reason.contains("denied: pnpm run schema-snapshot"))
+    }
+
+    @Test func aReasonFromAnyPathIsOneCleanLine() async throws {
+        let env = try await Env()
+        let noisy = try TaskFixture(in: env.fx.project, name: "noisy", front: "fix: report\npending: noisy.sh")
+        try noisy.script("printf 'boom\\033[31m red\\nsecond line\\n' >&2; exit 3", as: "noisy.sh")
+        try await noisy.library.approve("noisy")
+        let result = await env.run("noisy", [])
+        #expect(result.outcome == .failed)
+        let reason = try #require(result.reason)
+        #expect(reason.contains("exited with 3") && reason.contains("boom"))
+        #expect(!reason.contains("\u{1B}") && !reason.contains("\n") && reason.count <= TaskExplanation.maxReason)
+        let recorded = try #require(
+            try EventLogReader.read(at: noisy.log.url).events.last { $0.kind == .taskRunEnded }?.data["reason"]?.stringValue)
+        #expect(recorded == reason)
     }
 
     @Test func theCommandsTheTurnWasDeniedAreInTheReason() async throws {
@@ -99,17 +134,44 @@ private struct Env {
     }
 
     @Test func theLastRunIsToldWithItsThreadsSetupCheckAndLastMessage() async throws {
-        let env = try await Env(extraConfig: #"check_command = "false""#)
+        let env = try await Env(extraConfig: "check_command = \"false\"\nsetup_command = \"true\"")
         let result = await env.run("write=a.txt")
         let lines = try report(env)
         #expect(lines.first == "bump  run 1 of 1")
         #expect(lines.contains("outcome:  failed"))
         #expect(lines.contains { $0.hasPrefix("reason:   the check failed") })
         #expect(lines.contains("thread:   \(try #require(result.thread))"))
-        #expect(lines.contains { $0.hasPrefix("setup:") } == false || lines.contains { $0.hasPrefix("setup:    passed") })
+        #expect(lines.contains { $0.hasPrefix("setup:    passed") })
         #expect(lines.contains { $0.hasPrefix("check:    failed") })
         #expect(lines.contains { $0.hasPrefix("agent:    fake claude:") })
         #expect(lines.contains { $0.hasPrefix("started:  ") && $0.hasSuffix("(manual)") })
+    }
+
+    @Test func aStoredReasonIsCleanedOnTheWayOut() async throws {
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(
+            .taskRunEnded,
+            data: [
+                "outcome": "failed",
+                "reason": .string("boom\u{1B}[31m red\nsecond line " + String(repeating: "x", count: 5_000)),
+            ])
+        await writer.close()
+        let line = try #require(try TaskLogReport.lines(project: fx.project, name: fx.name).first { $0.hasPrefix("reason:") })
+        #expect(!line.contains("\u{1B}") && !line.contains("\n") && line.count <= TaskExplanation.maxReason + 20)
+    }
+
+    @Test func denialsAreCountedFromTheTurnsOwnRecord() async throws {
+        let project = Project(root: try Scratch.directory("denials"))
+        let log = try EventLogWriter.open(at: project.eventsURL("g-x"))
+        let call: JSONValue = .object(["tool_name": .string("Bash"), "tool_input": .object(["command": .string("pnpm run x")])])
+        try await log.append(.turnStarted, turn: 1, data: ["pid": 1])
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded", "denials": .array([call, call])])
+        await log.close()
+        // The stream had no denial events; the turn's own record has two.
+        let lines = TaskLogReport.threadLines(project: project, thread: "g-x")
+        #expect(lines.contains { $0.hasPrefix("denied:   2 tool call(s)") }, "\(lines)")
     }
 
     @Test func aRunWhoseThreadWasRemovedSaysSoInsteadOfFailing() async throws {

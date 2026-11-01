@@ -89,6 +89,8 @@ public struct TaskRunner: Sendable {
                 outcome: .failed, reason: "the run could not be recorded, so nothing was started: \(error)", recorded: false)
         }
         var result = await execute(name, history: history, writer: writer)
+        // Every reason, whatever wrote it (an error message, a script's stderr), is one bounded line before it is recorded or shown.
+        result.reason = result.reason.map { TaskExplanation.clean($0, limit: TaskExplanation.maxReason) }
         var data: [String: JSONValue] = [
             "outcome": .string(result.outcome.rawValue), "units": .array(result.units.map { .string($0) }),
         ]
@@ -244,7 +246,9 @@ public struct TaskRunner: Sendable {
                     .map(String.init)
             }
         }
-        return TaskExplanation(message: report.summary, denied: denied, checkTail: tail)
+        // A turn that crashed, timed out or ran out of budget has no terminal result: what it said last is in its stream.
+        let message = report.summary ?? TaskLogReport.lastAgentText(project: project, thread: id)
+        return TaskExplanation(message: message, denied: denied, checkTail: tail)
     }
 
     private func acceptAndShip(
@@ -258,12 +262,14 @@ public struct TaskRunner: Sendable {
                 outcome: .nothingToDo, reason: explanation.reason("the agent changed nothing, so there is nothing to ship"),
                 units: units, thread: id)
         } catch {
-            return fail("the work could not be accepted: \(error); thread \(id) is left for you", units: units, thread: id)
+            return fail(
+                explanation.reason("the work could not be accepted: \(error); thread \(id) is left for you"),
+                units: units, thread: id)
         }
         let stranded = "thread \(id) is accepted but not shipped: workbench ship"
         let plan: ShipPlan
         do { plan = try await service.shipPreflight(id: id, gh: gh) } catch {
-            return fail("\(error); \(stranded)", units: units, thread: id)
+            return fail(explanation.reason("\(error); \(stranded)"), units: units, thread: id)
         }
         // A description written from the diff, or no pull request: the fallback body is built from the goal's request, which for a task
         // holds its skill and its input files.
@@ -271,11 +277,13 @@ public struct TaskRunner: Sendable {
         do {
             described = try await service.describePR(plan: plan, config: config, environment: runOptions.parentEnvironment)
         } catch {
-            return fail("the change could not be described: \(error); \(stranded)", units: units, thread: id)
+            return fail(
+                explanation.reason("the change could not be described: \(error); \(stranded)"), units: units, thread: id)
         }
         guard let description = described.description else {
             let why = described.fallback ?? "no reason"
-            return fail("the change could not be described (\(why)); \(stranded)", units: units, thread: id)
+            return fail(
+                explanation.reason("the change could not be described (\(why)); \(stranded)"), units: units, thread: id)
         }
         do {
             let outcome = try await service.publishShip(
@@ -283,7 +291,7 @@ public struct TaskRunner: Sendable {
                 options: ShipPublishOptions(keepWorktree: false, skipScreenshots: true))
             return TaskRunResult(outcome: .prOpened, reason: nil, units: units, thread: id, pullRequest: outcome.pr.url)
         } catch {
-            return fail("\(error); \(stranded)", units: units, thread: id)
+            return fail(explanation.reason("\(error); \(stranded)"), units: units, thread: id)
         }
     }
 }

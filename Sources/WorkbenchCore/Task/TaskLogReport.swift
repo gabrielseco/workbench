@@ -32,7 +32,8 @@ public enum TaskLogReport {
         if !run.units.isEmpty { out.append("units:    \(run.units.joined(separator: ", "))") }
         if let thread = run.thread { out.append("thread:   \(thread)") }
         if let url = run.pullRequest { out.append("pull request: \(url)") }
-        if let reason = run.reason { out.append("reason:   \(reason)") }
+        // Stored reasons are cleaned again on the way out: an older record, or one written by something else, is still text from outside.
+        if let reason = run.reason { out.append("reason:   " + TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)) }
         if let thread = run.thread, SafeNames.isThreadID(thread) { out += threadLines(project: project, thread: thread) }
         return out
     }
@@ -65,12 +66,29 @@ public enum TaskLogReport {
                 }
             }
         }
-        let denied = events.filter { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "permission_denied" }.count
+        // The turn's own record of its denials (what `grant` lists), or the streamed events if that is longer.
+        let recorded = events.filter { $0.kind == .turnEnded }.reduce(0) { total, event in
+            if case .array(let calls)? = event.data["denials"] { return total + calls.count }
+            return total
+        }
+        let streamed = events.filter { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "permission_denied" }.count
+        let denied = max(recorded, streamed)
         if denied > 0 { out.append("denied:   \(denied) tool call(s): `workbench grant \(thread)` lists them") }
-        if let said = events.last(where: { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "text" }),
-            let text = said.data["text"]?.stringValue {
+        if let text = lastAgentText(events: events) {
             out.append("agent:    \(TaskExplanation.clean(text, limit: TaskExplanation.maxMessage))")
         }
         return out
+    }
+
+    /// What the agent said last in the thread's stream, for a turn that has no terminal result to take it from.
+    static func lastAgentText(project: Project, thread: String) -> String? {
+        guard SafeNames.isThreadID(thread), let events = try? EventLogReader.read(at: project.eventsURL(thread)).events else {
+            return nil
+        }
+        return lastAgentText(events: events)
+    }
+
+    static func lastAgentText(events: [Event]) -> String? {
+        events.last(where: { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "text" })?.data["text"]?.stringValue
     }
 }
