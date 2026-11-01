@@ -79,6 +79,19 @@ struct TaskFileTests {
         }
     }
 
+    @Test func timeoutAndBaseAreOptionalAndBounded() throws {
+        let plain = try TaskDefinition.parse(Self.task("fix: pr"), name: "bump")
+        #expect(plain.timeoutMin == nil && plain.base == nil)
+        let set = try TaskDefinition.parse(Self.task("fix: pr\ntimeout: 45\nbase: origin/main"), name: "bump")
+        #expect(set.timeoutMin == 45 && set.base == "origin/main")
+        for bad in ["4", "241", "0", "-5", "x", "1.5"] {
+            #expect(problems(Self.task("timeout: \(bad)")).contains { $0.contains("'timeout'") }, "timeout: \(bad)")
+        }
+        for bad in ["-rf", "a b", "../x", "main/", "a..b", "x;y"] {
+            #expect(problems(Self.task("base: \(bad)")).contains { $0.contains("'base'") }, "base: \(bad)")
+        }
+    }
+
     @Test func atAndEveryTogetherAreRefused() {
         let found = problems(Self.task("at: 04:00\nevery: 1h"))
         #expect(found.contains { $0.contains("either 'at' or 'every'") })

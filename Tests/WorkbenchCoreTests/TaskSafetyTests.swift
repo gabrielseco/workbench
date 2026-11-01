@@ -9,6 +9,7 @@ private struct Safe {
     let task: TaskFixture
     let gh: FakeGH
     let marker: URL
+    let origin: URL
 
     init(
         front: String = "fix: pr\nbatch: 1\npending: pending.sh", extraConfig: String = #"check_command = "true""#
@@ -21,7 +22,34 @@ private struct Safe {
         let units = #"[{"id":"ROU"},{"id":"TUR"},{"id":"PAN"},{"id":"PRI"}]"#
         try task.script("echo ran >> pending-ran.txt\necho '\(units)'")
         try await task.library.approve(task.name)
-        _ = try await addOrigin(fx)
+        origin = try await addOrigin(fx)
+    }
+
+    /// Origin gets a commit the local main and its remote-tracking branch do not have: both are put back one commit behind.
+    func putOriginAhead() async throws -> (old: String, new: String) {
+        func git(_ args: [String]) async throws -> String {
+            try await fx.git.run(args, in: fx.repo).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let old = try await git(["rev-parse", "HEAD"])
+        try "ahead\n".write(to: fx.repo.appendingPathComponent("ahead.txt"), atomically: true, encoding: .utf8)
+        _ = try await git(["add", "ahead.txt"])
+        _ = try await git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "ahead"])
+        let new = try await git(["rev-parse", "HEAD"])
+        _ = try await git(["push", "-q", "origin", "main"])
+        _ = try await git(["reset", "-q", "--hard", old])
+        _ = try await git(["update-ref", "refs/remotes/origin/main", old])
+        return (old, new)
+    }
+
+    /// The goal file of the thread a run started.
+    func goal(of result: TaskRunResult) throws -> Goal {
+        let id = try #require(result.thread)
+        return try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8)).goal
+    }
+
+    /// The commit a thread was cut from, as its log says.
+    func baseCommit(of thread: String) throws -> String? {
+        try fx.events(thread).first { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
     }
 
     var scriptRuns: Int { ((try? String(contentsOf: marker, encoding: .utf8)) ?? "").split(separator: "\n").count }
@@ -89,6 +117,54 @@ private struct Safe {
         // GitHub says that branch has no pull request after all: the run goes ahead.
         try safe.gh.put("list_open", "[]")
         #expect(try await safe.run(try safe.shippable()).outcome == .prOpened)
+    }
+
+    @Test func aDryRunIsNotSkippedForAnActiveThread() async throws {
+        let safe = try await Safe(front: "fix: report\nbatch: 1\npending: pending.sh")
+        let active = try await safe.fx.approvedThread()
+        let result = try await safe.run()
+        #expect(result.outcome == .reported && result.units == ["ROU"])
+        // It took nobody's place: the other thread is still the active one.
+        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == active)
+    }
+
+    @Test func aTaskThatStartsAThreadIsStillSkippedForAnActiveOne() async throws {
+        let safe = try await Safe()
+        let active = try await safe.fx.approvedThread()
+        let result = try await safe.run()
+        #expect(result.outcome == .skippedProjectBusy && result.reason?.contains(active) == true)
+    }
+
+    @Test func theTimeoutReachesTheGoalAndTheDefaultStandsWithout() async throws {
+        let fails = #"check_command = "false""#
+        let timed = try await Safe(front: "fix: pr\nbatch: 1\ntimeout: 45\npending: pending.sh", extraConfig: fails)
+        let first = try await timed.run("write=a.txt")
+        #expect(try timed.goal(of: first).turnTimeoutMin == 45)
+        let plain = try await Safe(extraConfig: fails)
+        let second = try await plain.run("write=a.txt")
+        #expect(try plain.goal(of: second).turnTimeoutMin == 30)
+    }
+
+    @Test func aBaseOnOriginIsFetchedFirstSoTheThreadStartsFromTheFreshBranch() async throws {
+        let failing = #"check_command = "false""#
+        let safe = try await Safe(front: "fix: pr\nbatch: 1\nbase: origin/main\npending: pending.sh", extraConfig: failing)
+        let heads = try await safe.putOriginAhead()
+        let result = try await safe.run("write=a.txt")
+        #expect(try safe.baseCommit(of: try #require(result.thread)) == heads.new)
+        // Without the key the thread starts from the local main, which is behind.
+        let stale = try await Safe(extraConfig: failing)
+        let behind = try await stale.putOriginAhead()
+        let other = try await stale.run("write=a.txt")
+        #expect(try stale.baseCommit(of: try #require(other.thread)) == behind.old)
+    }
+
+    @Test func aBaseThatCannotBeFetchedStopsTheRunInsteadOfUsingAStaleOne() async throws {
+        let safe = try await Safe(front: "fix: pr\nbatch: 1\nbase: origin/main\npending: pending.sh")
+        _ = try await safe.fx.git.run(["remote", "set-url", "origin", "/nonexistent/origin.git"], in: safe.fx.repo)
+        let result = try await safe.run("write=a.txt")
+        #expect(result.outcome == .failed && result.thread == nil)
+        #expect(result.reason?.contains("could not fetch origin/main, so nothing was started") == true)
+        #expect(safe.threads().isEmpty)
     }
 
     @Test func aThreadThatCannotBeDiscardedIsSaidNotClaimed() async throws {

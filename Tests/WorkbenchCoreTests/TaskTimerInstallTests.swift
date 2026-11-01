@@ -117,6 +117,9 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         let env = try Env()
         let lines = try await env.service(workbench: URL(fileURLWithPath: "/code/wb/.build/debug/workbench")).install()
         #expect(lines.contains { $0.hasPrefix("note: it runs /code/wb/.build/debug/workbench; a rebuild replaces that file") })
+        // The path a build really has: `debug` is a link to a folder named for the platform.
+        let real = URL(fileURLWithPath: "/code/wb/.build/arm64-apple-macosx/debug/workbench")
+        #expect(try await env.service(workbench: real).install().contains { $0.hasPrefix("note: it runs /code/wb/.build/arm64") })
         let plain = try await env.service().install()
         #expect(!plain.contains { $0.hasPrefix("note: it runs") })
     }

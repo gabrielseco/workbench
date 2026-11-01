@@ -124,9 +124,12 @@ public struct TaskRunner: Sendable {
             return TaskRunResult(
                 outcome: .staleApproval, reason: "the task changed since it was approved: workbench task approve \(name)")
         }
-        let store = ThreadStore(project: project)
-        if let active = store.activeThreadID() { return busy(active) }
-        if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
+        // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
+        if task.fix == .pr {
+            let store = ThreadStore(project: project)
+            if let active = store.activeThreadID() { return busy(active) }
+            if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
+        }
 
         // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
         if let skip = await tooManyOpen(task, history: history) { return skip }
@@ -223,12 +226,22 @@ public struct TaskRunner: Sendable {
         } catch { return fail("\(error)", units: ids) }
 
         let service = ThreadService(project: project, git: git)
+        // A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
+        if let base = task.base, base.hasPrefix("origin/") {
+            let branch = String(base.dropFirst("origin/".count))
+            let fetched = try? await git.run(["fetch", "origin", "--", branch], in: project.root)
+            guard let fetched, fetched.succeeded else {
+                let why = fetched?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? "git did not run"
+                return fail("could not fetch \(base), so nothing was started: \(why)", units: ids)
+            }
+        }
         let id: String
         do {
             var settings = GoalSettings(quick: true)
             settings.budgetUSD = task.budgetUSD
+            settings.turnTimeoutMin = task.timeoutMin
             id = try await service.newThread(
-                name: TaskPrompt.threadName(task: name, units: units), config: config,
+                name: TaskPrompt.threadName(task: name, units: units), base: task.base, config: config,
                 body: GoalBody(
                     request: prompt, criteria: [],
                     outOfScope: ["Pushing, merging or opening a pull request: Workbench does that after the check passes."]),

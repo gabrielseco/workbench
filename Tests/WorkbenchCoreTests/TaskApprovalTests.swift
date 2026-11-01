@@ -108,6 +108,12 @@ struct TaskApprovalTests {
         // Setting it is a change of what runs unattended, so it asks for a new approval.
         let limited = try TaskDefinition.parse("---\nfix: report\nmax_open: 3\n---\nDo it.\n", name: "bump")
         #expect(TaskApproval.hash(task: limited, pendingScript: nil) != before)
+        // The same for the other two optional keys: unset keeps the hash, set changes it.
+        let timed = try TaskDefinition.parse("---\nfix: report\ntimeout: 45\n---\nDo it.\n", name: "bump")
+        let based = try TaskDefinition.parse("---\nfix: report\nbase: origin/main\n---\nDo it.\n", name: "bump")
+        #expect(TaskApproval.hash(task: timed, pendingScript: nil) != before)
+        #expect(TaskApproval.hash(task: based, pendingScript: nil) != before)
+        #expect(TaskApproval.hash(task: timed, pendingScript: nil) != TaskApproval.hash(task: based, pendingScript: nil))
         let other = try TaskDefinition.parse("---\nfix: report\nmax_open: 4\n---\nDo it.\n", name: "bump")
         #expect(TaskApproval.hash(task: limited, pendingScript: nil) != TaskApproval.hash(task: other, pendingScript: nil))
     }

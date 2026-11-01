@@ -25,6 +25,8 @@ public enum TaskApproval {
         }
         // Only when the task sets it, so a task that does not keeps the approval it has.
         if let maxOpen = task.maxOpen { fields.append("max_open=\(maxOpen)") }
+        if let timeout = task.timeoutMin { fields.append("timeout=\(timeout)") }
+        if let base = task.base { fields.append("base=\(base)") }
         fields += ["---", GoalHash.canonicalBody(task.instructions)]
         return SHA256.hash(data: Data(fields.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
     }
