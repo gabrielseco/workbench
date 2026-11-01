@@ -13,8 +13,8 @@
 # when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gh say every pull request it opened was closed unmerged, so the units come back:
 # "the second run takes only the last country", "the third run finds nothing pending", "the third run started no thread" and
-# "the log holds one approval and three run ends" must FAIL, and so must "task log tells the run from its thread", because the
-# sabotage removes the first thread's log. `task log` must show the pull request, the check and the agent's last message of a run,
+# "the log holds one approval and three run ends" must FAIL, and so must "task log --all lists every run in one line" (the
+# sabotaged runs differ) and "task log tells the run from its thread" (the sabotage hides the first thread's log for that call). `task log` must show the pull request, the check and the agent's last message of a run,
 # `task log --all` one line per run, `task list` the reason under a run that stopped, and an unknown task must be exit 7.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
