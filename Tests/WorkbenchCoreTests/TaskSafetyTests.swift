@@ -65,6 +65,36 @@ private struct Safe {
         #expect(try safe.task.log.history().lastRun?.outcome == .skippedTooManyOpen)
     }
 
+    @Test func aRunThatDiedAfterPublishingStillCountsAsAnOpenPullRequest() async throws {
+        let safe = try await Safe(front: "fix: pr\nbatch: 1\nmax_open: 1\npending: pending.sh")
+        // Dies after the pull request is published and before its end is written: only the thread is on record.
+        let dead = try await safe.task.log.openWriter()
+        try await dead.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await dead.append(.taskRunThread, data: ["thread": "g-1-bump-ROU", "units": ["ROU"]])
+        await dead.close()
+        try safe.gh.put("list", #"[{"state":"OPEN"}]"#)
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome == .skippedTooManyOpen)
+        #expect(result.reason?.contains("branch workbench/g-1-bump-ROU") == true)
+        #expect(try safe.task.log.history().runs.first?.outcome == .interrupted)
+        // GitHub says that branch has no pull request after all: the run goes ahead.
+        try safe.gh.put("list", "[]")
+        #expect(try await safe.run(try safe.shippable()).outcome == .prOpened)
+    }
+
+    @Test func aThreadThatCannotBeDiscardedIsSaidNotClaimed() async throws {
+        let safe = try await Safe()
+        var runner = TaskRunner(project: safe.fx.project, git: safe.fx.git, gh: safe.gh.runner)
+        runner.notice = { _ in }
+        let service = ThreadService(project: safe.fx.project, git: safe.fx.git)
+        #expect(TaskRunner.notDiscarded("g-x") == "thread g-x could not be removed and is left for you (workbench abandon)")
+        let id = try await service.newThread(name: "tmp", base: "main")
+        #expect(await runner.discard(id, service: service))
+        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == nil)
+        // The service refuses a thread that has already ended: that is a discard that did not happen, and it says so.
+        #expect(await runner.discard(id, service: service) == false)
+    }
+
     @Test func aMergedOrClosedPullRequestNoLongerCounts() async throws {
         for state in ["MERGED", "CLOSED"] {
             let safe = try await Safe()

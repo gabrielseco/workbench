@@ -92,7 +92,8 @@ script; `task log` cleans a stored reason again on the way out.
 A unit whose earlier runs ended without a pull request (`failed`, `nothing-to-do`, `budget-exceeded`, `interrupted`) goes after the units not tried
 yet, the least tried first and the script's order among equals, so one stuck unit cannot hold the queue; a dry run, a skip and a stale
 approval are not tries. A run whose thread never started a turn (setup failed, the runner could not begin) discards that thread and says so, so
-the next run is not skipped for it; a thread that ran a turn is still left for a person.
+the next run is not skipped for it; a thread that ran a turn is still left for a person. When the discard itself fails the reason says the
+thread is left for you (`workbench abandon`), never that it was removed.
 
 Outcomes: `pr-opened`, `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `skipped-too-many-open`, `budget-exceeded`,
 `failed`, `stale-approval`, `interrupted` (a run whose process died; the next writer closes it). Holding the log's lock is what makes a task
@@ -134,8 +135,8 @@ In order, ending the run with an outcome at the first step that stops it:
 2. The approval must match what is on disk now, else `stale-approval`.
 3. No thread may be active in the project and no `doctor` running, else `skipped-project-busy` naming it. Nothing is queued: the next tick tries again.
 4. A `fix: pr` task with `max_open` of its own pull requests still open waits (`skipped-too-many-open`, the addresses in the reason), before
-   the pending script or any thread. GitHub is asked about each earlier run's branch; when it cannot answer the run is skipped saying so,
-   never started on a guess.
+   the pending script or any thread. GitHub is asked about the branch of each earlier run that made a thread (a run that died after publishing counts, as does one a person
+   shipped by hand; the newest 30 threads); when it cannot answer the run is skipped saying so, never started on a guess.
 5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
 6. `fix: report` stops here: it records `reported` with the units it would take and starts no thread. (A read-only agent turn for `report` is a
    later change; it needs an agent role in the config.)
