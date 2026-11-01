@@ -114,6 +114,65 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(notifier.posted.count == 1)
     }
 
+    @Test func aReasonAnnouncedBeforeIsNotAnnouncedAgainAfterARelaunch() async throws {
+        let prefs = MemoryPreferences()
+        let notifier = RecordingNotifier()
+        let first = AttentionCenter(preferences: prefs, notifier: notifier)
+        let failing = AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "abc")
+        let green = ThreadAttention(id: "t1", title: "Paginate", attention: .none)
+        await look(first, "proj", thread: green, tasks: [])
+        await look(first, "proj", thread: failing, tasks: [])
+        #expect(notifier.posted.count == 1)
+        #expect(prefs.announcedAttention == ["/work/proj|thread:t1:20:abc"])
+        // CI goes green, the app is relaunched (a new centre, the same preferences), and the same commit fails again.
+        let second = AttentionCenter(preferences: prefs, notifier: notifier)
+        await look(second, "proj", thread: green, tasks: [])
+        await look(second, "proj", thread: failing, tasks: [])
+        #expect(notifier.posted.count == 1, "one notification per reason per commit, past a relaunch")
+        // Another commit is another reason.
+        await look(second, "proj", thread: AttentionItemsTests.thread("CI failed: unit", since: 20, commit: "def"), tasks: [])
+        #expect(notifier.posted.count == 2)
+    }
+
+    @Test func theAnnouncedMemoryIsPerProjectAndBounded() async throws {
+        let prefs = MemoryPreferences()
+        let notifier = RecordingNotifier()
+        let center = AttentionCenter(preferences: prefs, notifier: notifier)
+        let a = try await failed("alpha", at: 100)
+        await look(center, "one", tasks: [])
+        await look(center, "one", tasks: [a])
+        // The same task and run in another project is its own reason.
+        await look(center, "two", tasks: [])
+        await look(center, "two", tasks: [a])
+        #expect(notifier.posted.count == 2)
+        #expect(Set(prefs.announcedAttention) == ["/work/one|task:alpha:100", "/work/two|task:alpha:100"])
+        prefs.announcedAttention = (0..<300).map { "p|task:t:\($0)" }
+        let (_, entries) = try await AttentionItemsTests.entries()
+        var next = try #require(entries.first { $0.id == "weekly-report" })
+        next = AttentionItemsTests.task(next, runs: [AttentionItemsTests.run(.failed, at: 500)])
+        next.summary.name = "beta"
+        await look(center, "two", tasks: [a, next])
+        #expect(prefs.announcedAttention.count == AttentionCenter.seenLimit)
+        #expect(prefs.announcedAttention.last == "/work/two|task:beta:500")
+    }
+
+    @Test func aSwitchWhileThePermissionIsAskedDoesNotFileTheRestUnderTheNewProject() async throws {
+        let prefs = MemoryPreferences()
+        let slow = SlowNotifier()
+        let center = AttentionCenter(preferences: prefs, notifier: slow)
+        let (a, b) = (try await failed("alpha", at: 100), try await failed("beta", at: 200))
+        await look(center, "one", tasks: [])
+        let looking = Task { await look(center, "one", tasks: [a, b]) }
+        while slow.waiting == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        // The system is still asking: the person opens another project.
+        await look(center, "two", tasks: [])
+        slow.release()
+        await looking.value
+        // What was announced is filed under the project it was about, and the rest of that pass is dropped, not filed under "two".
+        #expect(prefs.announcedAttention.allSatisfy { $0.hasPrefix("/work/one|") })
+        #expect(slow.posted.count == 1)
+    }
+
     @Test func seenBelongsToItsProject() async throws {
         let r = rig()
         let (center, prefs) = (r.center, r.prefs)
@@ -180,5 +239,33 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         #expect(!SystemNotifier.hasBundle)
         let result = await SystemNotifier().post(Notice(id: "x", title: "t", body: "b", route: .task("x"), project: "/p"))
         #expect(result == .denied)
+    }
+}
+
+/// A notifier whose post waits until the test lets it go (a permission prompt that is still open).
+private final class SlowNotifier: Notifier, @unchecked Sendable {
+    private let lock = NSLock()
+    private var notices: [Notice] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var held = false
+    var posted: [Notice] { lock.withLock { notices } }
+    var waiting: Int { lock.withLock { held ? 1 : 0 } }
+
+    func post(_ notice: Notice) async -> PostResult {
+        lock.withLock { notices.append(notice) }
+        let first = lock.withLock { () -> Bool in
+            defer { held = true }
+            return !held
+        }
+        if first { await withCheckedContinuation { c in lock.withLock { continuation = c } } }
+        return .posted
+    }
+
+    func release() {
+        let waiting = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        waiting?.resume()
     }
 }

@@ -23,6 +23,17 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         }
     }
 
+    var announcedAttention: [String] {
+        get {
+            reads += 1
+            return []
+        }
+        set {
+            writes += 1
+            _ = newValue
+        }
+    }
+
     var seenAttention: [String] {
         get {
             reads += 1

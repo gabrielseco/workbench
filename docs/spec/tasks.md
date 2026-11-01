@@ -79,7 +79,7 @@ The app also watches while it runs, whatever screen or window is up: every 30 s 
 project's tasks (their runs, without the timer's probes) and tells you, once, when a task breaks or goes stale: a run that ended
 `failed`, `budget-exceeded` or `interrupted` (until a later run ends well), or an approval that is STALE now (until it is approved
 again). A skip, `pr-opened` and `reported` never do. What is already there when the app or the project is opened is counted and
-never announced; the menu bar item counts them and its popover opens them; looking at the task on the Tasks screen marks its current items seen (an app preference: nothing is written to the
+never announced, and a reason announced once is not announced again (a CI failure on the same commit that went green and failed again, or the same app relaunched; the latest 200 are kept per app, not per log); the menu bar item counts them and its popover opens them; looking at the task on the Tasks screen marks its current items seen (an app preference: nothing is written to the
 run log), and a newer failure of the same task is a new reason. `Pause notifications` is an app preference too.
 
 ## Approval

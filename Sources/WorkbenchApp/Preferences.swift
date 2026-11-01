@@ -10,6 +10,9 @@ protocol Preferences: AnyObject, Sendable {
     var notificationsPaused: Bool { get set }
     /// The identities of attention items the person has seen (a failed task they looked at); the latest 200.
     var seenAttention: [String] { get set }
+    /// The identities already announced, per project, so a reason that went away and came back (a CI failure on the same commit) is not
+    /// announced twice, and not again after a relaunch. The latest 200.
+    var announcedAttention: [String] { get set }
 }
 
 final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
@@ -18,6 +21,7 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     private let recentKey = "recentProjects"
     private let pausedKey = "notificationsPaused"
     private let seenKey = "seenAttention"
+    private let announcedKey = "announcedAttention"
 
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -40,6 +44,11 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
         get { defaults.stringArray(forKey: seenKey) ?? [] }
         set { defaults.set(newValue, forKey: seenKey) }
     }
+
+    var announcedAttention: [String] {
+        get { defaults.stringArray(forKey: announcedKey) ?? [] }
+        set { defaults.set(newValue, forKey: announcedKey) }
+    }
 }
 
 final class MemoryPreferences: Preferences, @unchecked Sendable {
@@ -47,6 +56,7 @@ final class MemoryPreferences: Preferences, @unchecked Sendable {
     var recentProjects: [String]
     var notificationsPaused = false
     var seenAttention: [String] = []
+    var announcedAttention: [String] = []
     init(projectPath: String? = nil, recentProjects: [String] = []) {
         self.projectPath = projectPath
         self.recentProjects = recentProjects
