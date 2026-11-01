@@ -114,6 +114,14 @@ extension TasksModel {
         if latestPath == nil || latestPath == project.root.path { await refresh(project) }
     }
 
+    /// Stops the run started here and waits until it has ended, at most `timeout` (a quit).
+    func stopAndWait(timeout: Duration = .seconds(6)) async {
+        guard runningTask != nil else { return }
+        let deadline = ContinuousClock.now + timeout
+        await stopRun()
+        while runningTask != nil, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+    }
+
     /// When the run began, as the busy line says it: the runner only reports as each step ends, so a long turn is silent until then.
     private func startedAt() -> String { Date().formatted(.dateTime.hour().minute()) }
 
