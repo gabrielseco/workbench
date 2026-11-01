@@ -11,8 +11,9 @@
 # files; a bad interval is exit 2; an agent that is not loaded is a FAIL with exit 1; `remove` must unload it, delete both files and name
 # `sudo pmset repeat cancel`. launchctl must be the only program run: its calls are bootout, bootstrap and print and nothing else.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it", "status
-# says the agent is loaded and the task approved" and "a second install replaces the files" must FAIL. The frame is in lib.sh. Run by
+# VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
+# "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
+# task approved" and "a second install replaces the files" must FAIL. The frame is in lib.sh. Run by
 # hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
