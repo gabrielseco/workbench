@@ -13,8 +13,9 @@ extension Commands {
         guard let verb = a.positional() else { throw CLIError.usage(taskUsage) }
         switch verb {
         case "list":
+            let pending = a.flag("--pending")
             try a.requireEmpty()
-            try await taskList()
+            try await taskList(pending: pending)
         case "new":
             let include = try a.value("--include")
             var inputs: [String] = []
@@ -109,7 +110,7 @@ extension Commands {
         return code
     }
 
-    private static func taskList() async throws {
+    private static func taskList(pending: Bool) async throws {
         let ctx = try await Context.load()
         let library = TaskLibrary(project: ctx.project)
         let names = library.names()
@@ -119,6 +120,8 @@ extension Commands {
         }
         let format = DateFormatter()
         format.dateFormat = "yyyy-MM-dd HH:mm"
+        // `--pending` runs each approved task's pending script and asks GitHub about the pull requests of its earlier units.
+        let gh = pending ? try? GitRunner.discover(tool: "gh") : nil
         for name in names {
             let summary = library.summary(name)
             if let problem = summary.problem {
@@ -135,9 +138,10 @@ extension Commands {
             let due = summary.nextDue.map { format.string(from: $0) } ?? (summary.schedule == nil ? "manual" : "after approval")
             let last =
                 summary.lastRun.map { "\(summary.lastOutcome?.rawValue ?? "running") \(format.string(from: $0))" } ?? "never run"
+            let waiting = pending ? "  pending: " + (await TaskPending.count(name: name, project: ctx.project, gh: gh)).text : ""
             out(
                 "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
-                    + "next: \(due)  last: \(last)")
+                    + "next: \(due)  last: \(last)\(waiting)")
             printWhy(summary)
         }
     }

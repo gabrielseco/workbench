@@ -279,7 +279,7 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
 
 ### Task 5: Menu bar (mockup 5)
 
-**Built** (#339 the attention centre and notifications, then the status item and popover): `AttentionItems`, `AttentionCenter`, `Notifier`, `MenuBarLabel`, `MenuBarPopover`. It counts the open project's thread and its scheduled tasks (a task run that broke, or an approval gone stale), not only the thread, and `Quit` with a live run (ask, stop, wait 6 s) is not done.
+**Built** (#339 the attention centre and notifications, then the status item and popover): `AttentionItems`, `AttentionCenter`, `Notifier`, `MenuBarLabel`, `MenuBarPopover`. It counts the open project's thread and its scheduled tasks (a task run that broke, or an approval gone stale), not only the thread. `Quit` with a live run is built too: ⌘Q with a run of this app's (a thread's or a task's) going asks (`Stop and quit` / `Cancel`), then stops it and waits up to 6 s for it to end as `stopped`; a drafter is stopped the same way.
 
 - **Shows:** a status item with a count only while `Attention` is `needsYou`; the popover: project, `Needs you` pill, title,
   `Review · turn 2 done 4 min ago · $3.42 of $8.00`, the `Criteria assessed 1 of 4` row, the open-hands row (`C3 by hand · Open`),

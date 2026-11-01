@@ -131,8 +131,11 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   The instructions start with a `TODO(workbench)` line, and `task approve` refuses a task that still has it. A name or path that is not
   safe is a usage error (exit 2); a task that exists is never touched (exit 6). The command notes a project with no `.workbench/config.toml`
   and a repository that does not ignore `.workbench/` (tasks are local).
-- `workbench task list`: one line per task: schedule, fix level, approval (approved, STALE, not approved), next due time, last outcome. A task
+- `workbench task list [--pending]`: one line per task: schedule, fix level, approval (approved, STALE, not approved), next due time, last outcome. A task
   that does not load is a PROBLEM line with the line and key.
+  `--pending` adds `pending: <left> of <listed>` by running the task's pending script (60 s, as a run would) and asking GitHub about the
+  pull requests of units an earlier run took; a task that is not approved, or was edited since, is not run (`not checked (...)`: its script is
+  not what was approved), and a script that fails shows `unknown (why)`.
 - `workbench task approve <name>`: records the approval. Exit 6 for a task that does not parse, 7 for no such task.
 
 - `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `reported`,
