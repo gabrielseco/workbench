@@ -8,6 +8,8 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
     case unreadable(String)
     /// The instructions still hold the scaffold's placeholder.
     case placeholder
+    /// An approval was asked for a version of the task that is no longer the one on disk.
+    case changedSinceShown
 
     public var description: String {
         switch self {
@@ -16,6 +18,7 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
         case .tooLarge(let path, let bytes, let limit): "'\(path)' is \(bytes) bytes; the limit is \(limit)"
         case .tooMany(let path, let limit): "'\(path)' holds more than \(limit) files"
         case .unreadable(let path): "'\(path)' cannot be read"
+        case .changedSinceShown: "the task was edited after it was shown: look at it again before approving"
         case .placeholder: "the instructions still say \(TaskScaffold.placeholder): write what each run should do, then approve"
         }
     }

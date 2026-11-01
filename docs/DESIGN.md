@@ -55,6 +55,14 @@ task list) and the selected task's run timeline on the right. It is read only: i
   (`ok`), amber (`warn`) or red (`FAIL`).
 - **States:** no tasks says where they are made (`workbench task new`); a task that does not load is a red PROBLEM row with the
   core's message; a task never run says so; a timer that cannot be read says `unknown`, never green.
+- **Two buttons write, and only through core.** The selected task's header has one primary action for its state: `Approve…` while it
+  is not approved or stale, `Run now` once it is, and `Stop` (bordered) while a run started here goes. `Approve…` opens a card
+  (`OverlayCard`: Esc and Cancel close it, ⌘Return confirms) that shows what would run unattended (the settings, the instructions,
+  the script and skill with their sizes); a refusal stays in the card in the core's words. `Run now` on a `fix: pr` task asks first on
+  a card that names the most it may cost and that it opens a pull request; a `fix: report` run starts at once. A run started here
+  shows its last line in the busy bar, and how it ended in a result line under the header: green for `pr-opened` and `reported`, grey
+  for a skip, amber for `stale-approval`, red only for `failed`, `budget-exceeded` and `interrupted`. A disabled `Run now` says why in
+  its `.help`.
 - A run's thread opens in Thread view only when it is the thread on screen (the window has one thread per project); any other is
   a selectable id.
 

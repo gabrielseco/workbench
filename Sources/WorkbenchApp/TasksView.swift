@@ -231,7 +231,16 @@ struct Timeline: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text(entry.summary.name).font(.title2.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(entry.summary.name).font(.title2.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    TaskButtons(store: store, entry: entry)
+                }
+                if let note = store.tasks.actionNote {
+                    Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
                 Text(
                     "\(entry.summary.schedule ?? "manual") · \(entry.summary.fix.map { "fix: \($0.rawValue)" } ?? "—") · "
                         + "\(entry.runs.count) run\(entry.runs.count == 1 ? "" : "s")"
@@ -245,13 +254,9 @@ struct Timeline: View {
                         "Edited since it was approved: it will not run until approved again.",
                         systemImage: "exclamationmark.circle.fill")
                         .font(.callout).foregroundStyle(Theme.amber)
-                    Text("workbench task approve \(entry.summary.name)")
-                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 } else if entry.summary.approval == .never {
                     Label("Not approved: nothing runs unapproved.", systemImage: "exclamationmark.circle.fill")
                         .font(.callout).foregroundStyle(Theme.amber)
-                    Text("workbench task approve \(entry.summary.name)")
-                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }
                 Divider()
                 if entry.runs.isEmpty {
@@ -311,5 +316,73 @@ struct RunRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The one primary action for this task's state, and the others quieter: Approve while it is not approved, Run now once it is, Stop
+/// while a run started here goes.
+struct TaskButtons: View {
+    var store: ProjectStore
+    var entry: TaskEntry
+
+    var body: some View {
+        let tasks = store.tasks
+        let needsApproval = entry.summary.problem == nil && entry.summary.approval != .approved
+        let off = tasks.runUnavailable(entry, threadRunGoing: store.runningProjectPath != nil)
+        HStack(spacing: 8) {
+            if tasks.isRunning(entry.id, in: store.project) {
+                Button("Stop") { Task { await tasks.stopRun() } }
+                    .help("Ends the agent's turn; the run records how it ended")
+            } else {
+                if needsApproval {
+                    Button("Approve…") { tasks.beginApprove(store.project, entry.id) }
+                        .buttonStyle(.borderedProminent).disabled(tasks.isRunning)
+                        .help("Shows what would run with nobody watching, then records the approval")
+                }
+                Button("Run now") {
+                    Task { await tasks.beginRun(store.project, entry, threadRunGoing: store.runningProjectPath != nil) }
+                }
+                    .modifier(PrimaryWhen(!needsApproval)).disabled(off != nil).help(off ?? "Runs the task now, as a tick would")
+            }
+        }
+    }
+}
+
+private struct PrimaryWhen: ViewModifier {
+    var primary: Bool
+    init(_ primary: Bool) { self.primary = primary }
+
+    func body(content: Content) -> some View {
+        if primary { content.buttonStyle(.borderedProminent) } else { content.buttonStyle(.bordered) }
+    }
+}
+
+/// How a run started here ended, in the outcome's own colour: a skip is grey or amber, never a failure.
+struct ResultLine: View {
+    var result: TaskRunResult
+
+    var body: some View {
+        let tone = TaskOutcomeStyle.tone(result.outcome)
+        VStack(alignment: .leading, spacing: 3) {
+            Label(TaskOutcomeStyle.word(result.outcome), systemImage: TaskOutcomeStyle.symbol(result.outcome))
+                .font(.callout.weight(.semibold)).foregroundStyle(Theme.color(for: tone))
+            if let reason = result.reason, !reason.isEmpty {
+                Text(TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)).font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if !result.units.isEmpty {
+                Text(result.units.joined(separator: ", "))
+                    .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            if let thread = result.thread {
+                Text("thread \(thread)").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if let pr = result.pullRequest { Text(pr).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+            if !result.recorded { Text("not recorded in the task's run log").font(.caption).foregroundStyle(Theme.amber) }
+        }
+        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.color(for: tone).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
     }
 }

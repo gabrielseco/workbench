@@ -19,6 +19,17 @@ struct TaskApprovalTests {
         #expect(try state(fx) == .approved)
     }
 
+    @Test func approvingWhatWasShownRefusesAnEditMadeAfter() async throws {
+        let fx = try TaskFixture()
+        let shown = try fx.library.load(fx.name).hash
+        try fx.write(task: "---\nat: 04:00\nfix: pr\n---\nSomething else entirely.\n")
+        await #expect(throws: TaskFileError.changedSinceShown) { try await fx.library.approve(fx.name, expecting: shown) }
+        #expect(try state(fx) == .never)
+        // The version on disk now, as shown, is approved; without `expecting` the CLI approves what is there.
+        try await fx.library.approve(fx.name, expecting: fx.library.load(fx.name).hash)
+        #expect(try state(fx) == .approved)
+    }
+
     @Test func editingTheTaskFileRevokesTheApproval() async throws {
         let fx = try TaskFixture()
         try await fx.library.approve(fx.name)

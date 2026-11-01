@@ -17,6 +17,14 @@ public struct TaskRunResult: Sendable, Equatable {
     /// False when the run could not write its record: another run holds the task's log, or the log cannot be opened.
     public var recorded = true
 
+    public init(
+        outcome: TaskOutcome, reason: String? = nil, units: [String] = [], thread: String? = nil, pullRequest: String? = nil,
+        recorded: Bool = true
+    ) {
+        (self.outcome, self.reason, self.units) = (outcome, reason, units)
+        (self.thread, self.pullRequest, self.recorded) = (thread, pullRequest, recorded)
+    }
+
     /// Ended the way a run is meant to: it did what it was asked, or found nothing to do.
     public var isDone: Bool {
         switch outcome {
@@ -38,6 +46,9 @@ public final class TaskStopSwitch: @unchecked Sendable {
         lock.withLock { self.runner = runner }
         if lock.withLock({ requested }) { await runner.stop() }
     }
+
+    /// Whether a stop was asked for (before or after a runner was attached).
+    public var isRequested: Bool { lock.withLock { requested } }
 
     public func stop() async {
         let current = lock.withLock { () -> ThreadRunner? in

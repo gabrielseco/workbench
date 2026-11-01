@@ -58,8 +58,14 @@ public struct TaskLibrary: Sendable {
 
     /// Records that the task, as it is now, may run unattended.
     @discardableResult
-    public func approve(_ name: String, now: @escaping @Sendable () -> Date = { Date() }) async throws -> String {
+    ///
+    /// With `expecting`, only the version whose hash that is: a person who approves what they were shown does not approve an edit made
+    /// after.
+    public func approve(
+        _ name: String, expecting hash: String? = nil, now: @escaping @Sendable () -> Date = { Date() }
+    ) async throws -> String {
         let loaded = try load(name)
+        if let hash, hash != loaded.hash { throw TaskFileError.changedSinceShown }
         // A scaffold waiting to be written is not something to run unattended.
         if loaded.definition.instructions.contains(TaskScaffold.placeholder) { throw TaskFileError.placeholder }
         let log = TaskRunLog(project: project, name: name)

@@ -18,11 +18,25 @@ struct RootView: View {
             FooterBar(store: store)
         }
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
-        .disabled(store.namingGoal || store.sendingBack || store.pickingProject)
+        .disabled(
+            store.namingGoal || store.sendingBack || store.pickingProject || store.tasks.approving != nil
+                || store.tasks.confirmingRun != nil)
         .frame(minWidth: 900, minHeight: 600)
         .overlay(alignment: .topLeading) { ProjectPickerLayer(store: store) }
         .overlay { OverlayLayer(shown: store.namingGoal) { NewGoalPopover(store: store) } }
         .overlay { OverlayLayer(shown: store.sendingBack) { SendBackPopover(store: store) } }
+        .overlay {
+            OverlayLayer(shown: store.tasks.approving != nil) {
+                if let card = store.tasks.approving {
+                    TaskApproveCard(store: store, card: card, stale: store.tasks.selectedIsStale(store.project))
+                }
+            }
+        }
+        .overlay {
+            OverlayLayer(shown: store.tasks.confirmingRun != nil) {
+                if let card = store.tasks.confirmingRun { TaskRunCard(store: store, card: card) }
+            }
+        }
     }
 }
 
