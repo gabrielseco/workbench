@@ -1,0 +1,6 @@
+{"v":1,"seq":1,"ts":"2026-10-20T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"42e98576d4ed36fdc4f681d0453a3e835fe6ddff46820b4d8a0d9e64c9f63094"}}
+{"v":1,"seq":2,"ts":"2026-10-21T09:15:00.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-21T09:15:00.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"nothing-pending","units":[]}}
+{"v":1,"seq":4,"ts":"2026-10-28T09:15:00.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":5,"ts":"2026-10-28T09:15:00.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"sync-fixtures-1","units":["fixtures"]}}
+{"v":1,"seq":6,"ts":"2026-10-28T09:37:00.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"failed","reason":"the check failed; the agent said: I regenerated the fixtures but two snapshots still differ; denied: node -e require('./scripts/seed') | rm -rf build; check output: 2 failing / FAIL fixtures/countries.spec.ts / expected 41 entries, got 40 (thread left for you: workbench ship or abandon)","thread":"sync-fixtures-1","units":["fixtures"]}}

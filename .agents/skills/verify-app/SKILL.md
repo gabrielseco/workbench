@@ -62,6 +62,8 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `discarded` | a Codex turn that ended and was discarded: the finished banner with `New goal…`, `ran 4m12s`, `Files changed: unknown`, no "Review comes next" |
 | `corrupt` | a log nothing can be read from: the corrupt-log screen |
 | `no-thread` | a project with no thread yet |
+| `tasks` | seven scheduled tasks (pr-opened, failed with a long reason, stale approval, budget-exceeded, a run going, never run, one that does not load) and the thread `invoice-pagination`; press `Tasks` in the rail's switch. The timer card reads stand-ins for `launchctl`, `pmset` and `fdesetup` (a loaded agent, no wake schedule, FileVault on), never the machine's |
+| `tasks-empty` | no tasks and no thread: press `Tasks` for the empty state that says where tasks are made |
 
 A state no scenario has is a new scenario: add it to `AppScenario` in `Tests/WorkbenchAppTests/AppScenario.swift`, rewrite the files with
 `WORKBENCH_WRITE_FIXTURES=Fixtures/app swift test --filter FixtureScenarioTests/writeTheScenarios`, and commit them (a test fails when they

@@ -39,6 +39,14 @@ public struct TaskHistory: Sendable, Equatable {
         public var reason: String?
         public var units: [String]
         public var thread: String?
+
+        public init(
+            started: Date, ended: Date?, pullRequest: String?, trigger: String, outcome: TaskOutcome?, reason: String?,
+            units: [String], thread: String?
+        ) {
+            (self.started, self.ended, self.pullRequest, self.trigger) = (started, ended, pullRequest, trigger)
+            (self.outcome, self.reason, self.units, self.thread) = (outcome, reason, units, thread)
+        }
     }
 
     /// The hash the latest `task.approved` carries, and when.

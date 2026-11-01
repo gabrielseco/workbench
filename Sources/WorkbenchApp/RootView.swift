@@ -97,7 +97,14 @@ struct Rail: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            if case .thread(let snapshot) = store.screen {
+            Picker("View", selection: Binding(get: { store.mode }, set: { store.mode = $0 })) {
+                ForEach(WindowMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented).labelsHidden().padding(.bottom, 8)
+            .disabled(store.project == nil)
+            if store.mode == .tasks {
+                TasksRailSummary(store: store)
+            } else if case .thread(let snapshot) = store.screen {
                 SpineRail(snapshot: snapshot)
             } else {
                 Text("THREAD").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -145,7 +152,9 @@ struct Centre: View {
     var store: ProjectStore
 
     var body: some View {
-        if case .thread(let snapshot) = store.screen {
+        if store.mode == .tasks, store.project != nil {
+            TasksView(store: store)
+        } else if case .thread(let snapshot) = store.screen {
             ThreadPane(snapshot: snapshot, goal: store.goal, store: store)
         } else if let message = store.screen.message {
             EmptyState(title: message.title, next: message.next, store: store)

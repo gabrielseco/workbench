@@ -294,6 +294,14 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
   when the turn ends, the popover matches the Review screen, Send back from the popover starts a turn, quit mid-turn stops it
   inside 6 s.
 
+## Scheduled tasks in the app
+
+[P21](P21-scheduled-tasks.md)'s tasks are shown by a second centre screen, switched from the top of the rail (`Thread | Tasks`).
+Slice A (read only): the task list, the selected task's run timeline and the "Will it run tonight?" card, all from `TaskLibrary`,
+`TaskRunLog` and `TimerService.status()`; fixtures `tasks` and `tasks-empty`. Slice B: Approve and Run now. Slice C: the menu bar item
+and notifications for a failed or stale task. The window shows one thread per project, so a run's thread opens only when it is the one
+on screen until the thread list ([later](../later/thread-list.md)) exists.
+
 ## Open decisions
 
 1. **What is "the current thread" after accept?** The spine runs through Ship, PR review and Clean on one thread, but after

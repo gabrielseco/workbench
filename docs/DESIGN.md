@@ -42,6 +42,22 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - One primary action per screen state (`.borderedProminent`); the others are `.bordered`, `.borderless` or `.link`. A second
   prominent button in the same state is a finding.
 
+## Tasks screen
+
+The rail's `Thread | Tasks` switch (a native segmented control) changes the centre between the thread screens and the project's
+scheduled tasks; it changes nothing in the thread. The Tasks screen is a left column (the "Will it run tonight?" card, then the
+task list) and the selected task's run timeline on the right. It is read only: it shows what `TaskLibrary`, `TaskRunLog` and
+`TimerService.status()` say and writes nothing.
+
+- **Marks** reuse the five meanings. A run's outcome: `pr-opened` and `reported` green, a run going blue, `nothing-pending`,
+  `nothing-to-do` and the `skipped-*` outcomes grey, `stale-approval` amber (it waits for your approval), `failed`,
+  `budget-exceeded` and `interrupted` red. Each pairs its colour with a symbol and the outcome's own word. A timer line is green
+  (`ok`), amber (`warn`) or red (`FAIL`).
+- **States:** no tasks says where they are made (`workbench task new`); a task that does not load is a red PROBLEM row with the
+  core's message; a task never run says so; a timer that cannot be read says `unknown`, never green.
+- A run's thread opens in Thread view only when it is the thread on screen (the window has one thread per project); any other is
+  a selectable id.
+
 ## Typography
 
 Text styles, so it scales with the system. A fixed point size is allowed only for the serif goal text (`.system(size: 16–17,
