@@ -57,33 +57,7 @@ struct RecentProject: Equatable, Identifiable {
     /// The project and thread on screen, as one value to compare.
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
     /// What the app is doing for each thread that has something going on; a session leaves when it has nothing left to do.
-    private var sessions: [ThreadSession.Key: ThreadSession] = [:]
-    /// The session of the thread on screen, if it has anything going on.
-    private var currentSession: ThreadSession? {
-        project.flatMap { sessions[ThreadSession.Key(project: $0, thread: currentThread)] }
-    }
-    /// The thread's session, made when its first piece of work starts.
-    private func session(_ project: Project, _ thread: String?) -> ThreadSession {
-        let key = ThreadSession.Key(project: project, thread: thread)
-        if let existing = sessions[key] { return existing }
-        let made = ThreadSession(key: key)
-        sessions[key] = made
-        return made
-    }
-    /// Whether any session is working: one action at a time holds the window.
-    private var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
-    private var ownedRun: ThreadSession.OwnedRun? { sessions.values.lazy.compactMap(\.ownedRun).first }
-
-    private func setBusy(_ text: String?, in session: ThreadSession) {
-        session.busyText = text
-        settled()
-    }
-
-    /// Drops the sessions with nothing going on and wakes whoever waits for the window to be free.
-    private func settled() {
-        if sessions.values.contains(where: \.isIdle) { sessions = sessions.filter { !$0.value.isIdle } }
-        resumeIdleWaiters()
-    }
+    fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -525,5 +499,34 @@ extension ProjectStore {
         } catch {
             return .problem("\(error)")
         }
+    }
+}
+
+private extension ProjectStore {
+    /// The session of the thread on screen, if it has anything going on.
+    var currentSession: ThreadSession? {
+        project.flatMap { sessions[ThreadSession.Key(project: $0, thread: currentThread)] }
+    }
+    /// The thread's session, made when its first piece of work starts.
+    func session(_ project: Project, _ thread: String?) -> ThreadSession {
+        let key = ThreadSession.Key(project: project, thread: thread)
+        if let existing = sessions[key] { return existing }
+        let made = ThreadSession(key: key)
+        sessions[key] = made
+        return made
+    }
+    /// Whether any session is working: one action at a time holds the window.
+    var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
+    var ownedRun: ThreadSession.OwnedRun? { sessions.values.lazy.compactMap(\.ownedRun).first }
+
+    func setBusy(_ text: String?, in session: ThreadSession) {
+        session.busyText = text
+        settled()
+    }
+
+    /// Drops the sessions with nothing going on and wakes whoever waits for the window to be free.
+    func settled() {
+        if sessions.values.contains(where: \.isIdle) { sessions = sessions.filter { !$0.value.isIdle } }
+        resumeIdleWaiters()
     }
 }
