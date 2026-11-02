@@ -204,7 +204,9 @@ import WorkbenchCore
         }
     }
 
-    @Test func aThousandRowsStayLazyAndFitTheMinimumWindow() throws {
+    /// What this proves is that a thousand rows do not hang or break the window. `ImageRenderer` cannot draw a scroll view's content, so
+    /// that the list is lazy, follows the newest row and keeps its place is checked by eye in the live app, not here.
+    @Test func aThousandRowsDoNotBreakTheMinimumWindow() throws {
         let fixtureItems = (0..<1_000).map {
             FeedItem(id: "\($0)", seq: $0, turn: 1, kind: .agentText("step \($0): reading the file"))
         }
@@ -214,7 +216,7 @@ import WorkbenchCore
         preferences.chatFeed = true
         let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
         let store = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
-        // The real, lazy list: a thousand rows must not be built to draw the window.
+        // The real list, not the eager one the other renders use.
         let drawn = try image(RootView(store: store), width: 900, height: 600, dark: false, eager: false)
         #expect(drawn.width == 900 && drawn.height == 600 && distinctColours(drawn) > 8)
         try save(drawn, "feed-1000-rows-900x600")
@@ -238,22 +240,42 @@ import WorkbenchCore
         func next() -> Int { lock.withLock { count += 1; return count } }
     }
 
+    /// Holds a read half way: the test knows when it is in and decides when it goes on.
+    private final class Hold: @unchecked Sendable {
+        private let entered = DispatchSemaphore(value: 0)
+        private let release = DispatchSemaphore(value: 0)
+        func hold() {
+            entered.signal()
+            release.wait()
+        }
+        func untilHeld() async {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().async {
+                    self.entered.wait()
+                    continuation.resume()
+                }
+            }
+        }
+        func letGo() { release.signal() }
+    }
+
     @Test func aReadThatBeganBeforeTheFeedWasTurnedOnDoesNotBlankIt() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
-        let calls = Calls()
+        let (calls, hold) = (Calls(), Hold())
         let store = ProjectStore(
             preferences: MemoryPreferences(),
             loader: { project, feed in
-                // The second read the window makes is a poll that is still going when the preview is turned on: it answers last.
-                if calls.next() == 2 { Thread.sleep(forTimeInterval: 0.4) }
+                // The second read the window makes is a poll begun with the preview off; it is held until the toggle has finished.
+                if calls.next() == 2 { hold.hold() }
                 return ProjectLoader.load(project: project, feed: feed)
             })
         #expect(await store.open(fixture.root))
-        let slow = Task { await store.reload() }
-        try await Task.sleep(for: .milliseconds(100))
+        let stale = Task { await store.reload() }
+        await hold.untilHeld()
         await store.setChatFeed(true)
-        await slow.value
+        hold.letGo()
+        await stale.value
         guard case .thread(let shown) = store.screen else { throw LoadError.notAThread }
         #expect(!shown.feed.isEmpty, "the answer of the read that began with the preview off was dropped")
     }
