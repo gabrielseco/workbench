@@ -11,6 +11,27 @@ extension ProjectStore {
     }
 }
 
+extension ProjectStore {
+    /// Shows or hides the Run settings inspector, and remembers it.
+    func setRunSettings(_ on: Bool) {
+        guard on != runSettingsOn else { return }
+        preferences.runSettings = on
+        runSettingsOn = on
+    }
+}
+
+extension ProjectStore {
+    /// "Run in Herdr" is offered while the goal has not run and nothing has been decided: the Goal screen's own condition.
+    func canRunGoalInHerdr(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
+        (goal.pill != .approved || snapshot.state.lastTurn == 0) && snapshot.state.decision == nil
+    }
+
+    /// Why the run buttons are off: the goal cannot be approved, an approval or a run is going, something else is working, or a turn has run.
+    func goalRunDisabled(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
+        !goal.canApprove || starting || runningHere || busy != nil || snapshot.state.lastTurn > 0
+    }
+}
+
 /// The feed's buttons call the actions the step screens call, and nothing else.
 extension ProjectStore {
     /// What the decision card depends on, read from the store: the same state the step screens' buttons read.

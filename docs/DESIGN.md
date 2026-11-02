@@ -77,6 +77,13 @@ ships, and the mockup gets fixed.
 - **The goal card** lists the criteria with the proof that will check each (six at most, then "and N more in the goal's editor"), a
   proof Workbench cannot check in amber with why, so what Approve and run means is on screen. It has "Edit goal…" while the goal is a draft; it opens the Goal screen over the feed (a sheet with Done), until the
   settings have a place of their own.
+- **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
+  hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
+  project's review stages; a step that cannot run for the goal says why), the limits (model, budget, timeout: read-only, "Change these
+  in the goal file"), the allowed tools (ten, then "and N more", granted ones marked), the reference folders (the config's, and the
+  goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft, and
+  says so. In a window whose centre column is narrower than 880 (a window under about 1100 wide, the 900 minimum included) it opens
+  over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.
 

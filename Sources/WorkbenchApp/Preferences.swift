@@ -15,6 +15,8 @@ protocol Preferences: AnyObject, Sendable {
     var announcedAttention: [String] { get set }
     /// The chat feed (P22) in place of the step screens inside a thread, while it is a preview. Off unless a person turns it on.
     var chatFeed: Bool { get set }
+    /// The feed's Run settings inspector is shown (P22). Off until a person turns it on.
+    var runSettings: Bool { get set }
 }
 
 final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
@@ -25,6 +27,7 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     private let seenKey = "seenAttention"
     private let announcedKey = "announcedAttention"
     private let chatFeedKey = "chatFeedPreview"
+    private let runSettingsKey = "runSettingsShown"
 
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -57,6 +60,11 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
         get { defaults.bool(forKey: chatFeedKey) }
         set { defaults.set(newValue, forKey: chatFeedKey) }
     }
+
+    var runSettings: Bool {
+        get { defaults.bool(forKey: runSettingsKey) }
+        set { defaults.set(newValue, forKey: runSettingsKey) }
+    }
 }
 
 final class MemoryPreferences: Preferences, @unchecked Sendable {
@@ -64,6 +72,7 @@ final class MemoryPreferences: Preferences, @unchecked Sendable {
     var recentProjects: [String]
     var notificationsPaused = false
     var chatFeed = false
+    var runSettings = false
     var seenAttention: [String] = []
     var announcedAttention: [String] = []
     init(projectPath: String? = nil, recentProjects: [String] = []) {

@@ -37,6 +37,9 @@ import WorkbenchCore
                 Toggle(
                     "Chat feed (preview)",
                     isOn: Binding(get: { store.chatFeedOn }, set: { on in Task { await store.setChatFeed(on) } }))
+                Toggle("Run settings", isOn: Binding(get: { store.runSettingsOn }, set: { store.setRunSettings($0) }))
+                    .keyboardShortcut("r", modifiers: [.option, .command])
+                    .disabled(!store.chatFeedOn)
             }
         }
 
