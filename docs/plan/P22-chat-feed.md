@@ -1,6 +1,6 @@
 # P22: The app as a chat feed
 
-Status: planned, nothing built. Written 2026-11-01. Follows [P19](P19-swiftui-app.md) (the window), [P20](P20-goal-editor.md) (the goal
+Status: planned, nothing built (slice 0 done: decisions settled 2026-11-02). Written 2026-11-01. Follows [P19](P19-swiftui-app.md) (the window), [P20](P20-goal-editor.md) (the goal
 editor) and [P21](P21-scheduled-tasks.md) (tasks). This document describes future behaviour; `docs/spec/` and
 [`../DESIGN.md`](../DESIGN.md) still describe what ships.
 
@@ -99,24 +99,25 @@ in the canvas, not worked around in the code.
   auto-advance has been used for real.
 - **The thread name stays derived** from the request's first line (as P20). A chat's name is derived from its first message.
 
-## Open decisions (settle in slice 0, before any code)
+## Decisions settled in slice 0 (2026-11-02)
 
-| # | Question | Leaning |
+| # | Question | Decision |
 |---|---|---|
-| 1 | Where does chat text live: in the event log or in a sidecar like the turn transcripts (`threads/<id>/transcript/`)? | Sidecar, with one `chat.message` event holding path, size and hash, so the log stays small and bounded |
-| 2 | Is a chat turn an agent turn (one `turn.started`/`turn.ended`, bounded, costed) or a lighter thing? | An agent turn on its own role in config, read-only, so every ending rule applies |
-| 3 | Is auto-advance per project, per goal, or both? | A config default plus the P20 `skip:` style override in the goal |
-| 4 | What exactly stops the feed? | A failed check, a judge that disagrees with the criteria, going over budget, and any refused tool call that needs a grant. Everything else goes on |
-| 5 | "Steer this run" (send text that arrives when the current tool call ends)? | Leave out of the first cut: it is a new input to a live turn and touches "a turn always ends" |
-| 6 | Does chat get a CLI (`workbench chat`) for agents and tests, or is it app-only like the P20 editor? | CLI, so it can have a verify-cli scenario and an agent can use it. Decide with #1 |
-| 7 | Does the mockup's inspector ("Run settings") replace the Goal screen's settings, or sit beside it? | Replace: one place for what a run is allowed to do |
+| 1 | Where does chat text live? | A sidecar, like the turn transcripts: `threads/<id>/chat/<n>.md`. The log gets one `chat.message` event per message with `role`, `path`, `size` and `sha256`, so the log stays small and bounded. A message over the size limit is cut and the event says so. Specified in `docs/spec/event-log.md` in slice 6 |
+| 2 | Is a chat turn an agent turn? | Yes: one `turn.started` and `turn.ended`, bounded and costed, on its own `chat` role in config. The role is read-only (no tool that writes, no worktree), so every ending rule applies and nothing new can hang |
+| 3 | Is auto-advance per project, per goal, or both? | Both: `[run] auto_advance` in config (default `false`) and an `auto_advance:` key in the goal's front matter that overrides it for that goal. Slice 4 |
+| 4 | What exactly stops the feed? | A failed check, a judge that disagrees with the criteria, going over budget, a refused tool call that needs a grant, a stale goal (hash changed), and a turn that ended badly (crash, timeout, killed). Everything else goes on. Slice 4 owns the list and tests each stop |
+| 5 | "Steer this run"? | Out of the first cut: it is a new input to a live turn and touches "a turn always ends". Revisit after auto-advance has been used for real |
+| 6 | Does chat get a CLI? | Yes, `workbench chat` (send, show), so agents and tests can use it and it has a verify-cli scenario. Built in slice 6 with the events |
+| 7 | Does the inspector replace the Goal screen's settings? | Replace: one place for what a run is allowed to do. The Goal screen's settings go when the old window does (slice 7); until then both read and write the same goal keys |
 
 ## Slices (one PR each)
 
-### 0. Settle the decisions
+### 0. Settle the decisions (done)
 
-Docs only. Answer the open decisions above in this file, write each slice's goal file (the `goal` skill), and update
-[`../plan/README.md`](README.md)'s scope rule to say what the list and the chat change. Nothing is built.
+Docs only. The decisions above are answered in this file and [`README.md`](README.md)'s scope rule says what the list and the chat
+change. Each later slice's goal file is written when that slice starts (the `goal` skill), so it is judged against the code as it is
+then, not as it was on 2026-11-02. Nothing is built.
 
 ### 1. A per-thread session (refactor, no behaviour change)
 
@@ -154,7 +155,7 @@ this PR (the "Layout" section describes a 220 pt spine rail and per-step screens
 ### 4. Auto-advance (core, then the feed)
 
 `[run] auto_advance` (default `false`) plus a per-goal override. When on, a passing turn goes to check, verify and judge without a
-press, and the thread stops only on the conditions of open decision 4. The CLI honours it too (`workbench run` and `next`), so the
+press, and the thread stops only on the conditions of decision 4. The CLI honours it too (`workbench run` and `next`), so the
 feed does not own a rule the terminal lacks.
 *Tests with the fake claude:* the stops (a failing check, a judge with an unmet criterion, a budget stop, a denied call), and that
 every stop still ends in exactly one `turn.ended` per `turn.started`. A verify-cli scenario, normal and sabotaged, because a command

@@ -53,6 +53,9 @@ At any moment there is **one project** (a git repo you point Workbench at) and *
 - There is no thread list, no project list, no inbox. There is "the current thread" and a short history.
 - Nothing runs concurrently. Not turns, not checks, not two threads.
 
+[P22](P22-chat-feed.md) changes what the app shows, not this rule: it adds a thread list that shows history and the one live thread, and a chat before a goal
+(a thread in state `chat`: read-only turns, no worktree). Lifting the guard is P23, after P22 slice 5.
+
 The on-disk layout is still thread-shaped (a folder per thread id) so that lifting this later is deleting a
 guard, not a migration. But no code is written for the many-thread case now.
 
