@@ -1,5 +1,6 @@
 ---
 at: 05:00
 fix: report
+labels: [seed-preview, bot]
 ---
-List merged branches.
+Delete the merged branches listed in branches.txt.

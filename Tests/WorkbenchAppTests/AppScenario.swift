@@ -284,7 +284,9 @@ enum AppScenario: String, CaseIterable {
         try await run("nightly-lint", "2026-10-31T02:00:05.000Z", outcome: .interrupted, minutes: 0, reason: "the process died")
         try await run("nightly-lint", "2026-11-01T02:00:02.000Z", outcome: nil, units: ["lint-3"], thread: "nightly-lint-3")
 
-        try write("cleanup-branches", "---\nat: 05:00\nfix: report\n---\nList merged branches.\n")
+        try write(
+            "cleanup-branches",
+            "---\nat: 05:00\nfix: report\nlabels: [seed-preview, bot]\n---\nDelete the merged branches listed in branches.txt.\n")
         try write("broken-task", "---\nat: 06:00\ncolour: red\n---\nThis one does not load.\n")
     }
 
