@@ -56,4 +56,8 @@ import WorkbenchCore
     var awaitingRun: Bool { awaitingAfterTurn != nil }
     /// Nothing is going on for the thread: the session can be dropped.
     var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil }
+    /// The thread has said something that is still up (an error, a note, a decision's outcome): going back to it shows it again.
+    var hasMessages: Bool { actionError != nil || actionNote != nil || notice != nil || goalEditError != nil }
+    /// Nothing to remember: not working and nothing to show.
+    var isSpent: Bool { isIdle && !hasMessages }
 }

@@ -49,4 +49,33 @@ import Testing
         await store.reload()
         #expect(store.current === session && store.actionError == "broke")
     }
+
+    @Test func goingBackToAThreadShowsWhatItSaidAgain() async throws {
+        let (store, first) = try await opened()
+        let other = try await AppFixture()
+        keptSessionFixtures.append(other)
+        try await other.addThread("o1")
+        (store.actionError, store.actionNote, store.notice) = ("broke", "left out", "Accepted")
+        store.goalEditError = "refused"
+
+        await store.switchTo(other.project.root.path)
+        #expect(store.actionError == nil, "the other project starts clean")
+        store.actionError = "other broke"
+        await store.switchTo(first.project.root.path)
+        #expect(store.actionError == "broke" && store.actionNote == "left out" && store.notice == "Accepted")
+        #expect(store.goalEditError == "refused")
+        await store.switchTo(other.project.root.path)
+        #expect(store.actionError == "other broke")
+    }
+
+    @Test func aThreadWithNothingToShowIsNotRemembered() async throws {
+        let (store, first) = try await opened()
+        let other = try await AppFixture()
+        keptSessionFixtures.append(other)
+        try await other.addThread("o1")
+        let before = store.current
+        await store.switchTo(other.project.root.path)
+        await store.switchTo(first.project.root.path)
+        #expect(store.current !== before, "a thread that said nothing and does nothing leaves no session behind")
+    }
 }

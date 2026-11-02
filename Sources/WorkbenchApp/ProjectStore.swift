@@ -45,7 +45,7 @@ struct RecentProject: Equatable, Identifiable {
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
     /// The session of the thread on screen: what the window holds for it (goal, review, errors) lives here, not in the store.
     fileprivate(set) var current: ThreadSession
-    /// The other sessions that have work going on, and this one's if it has any; a session leaves when it has nothing left to do.
+    /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
     fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -102,6 +102,8 @@ struct RecentProject: Equatable, Identifiable {
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
+    /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
+    @ObservationIgnored var lastRefusal: String?
     @ObservationIgnored var currentThread: String? { didSet { rebindSession() } }
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
@@ -193,7 +195,7 @@ struct RecentProject: Equatable, Identifiable {
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         (namingGoal, pickingProject) = (false, false)
         cancelSendBack()
-        (current.pendingDiscard, current.notice) = (nil, nil)
+        current.pendingDiscard = nil
         prReviewShown = nil
         project = located
         herdrFound = actions.herdrFound(located)
@@ -492,6 +494,7 @@ private extension ProjectStore {
     func rebindSession() {
         let key = ThreadSession.Key(project: project, thread: currentThread)
         guard key != current.key else { return }
+        if !current.isSpent { sessions[current.key] = current }
         current = sessions[key] ?? ThreadSession(key: key)
         settled()
     }
@@ -513,7 +516,7 @@ private extension ProjectStore {
 
     /// Drops the sessions with nothing going on and wakes whoever waits for the window to be free.
     func settled() {
-        if sessions.values.contains(where: \.isIdle) { sessions = sessions.filter { !$0.value.isIdle } }
+        if sessions.values.contains(where: \.isSpent) { sessions = sessions.filter { !$0.value.isSpent } }
         resumeIdleWaiters()
     }
 }
