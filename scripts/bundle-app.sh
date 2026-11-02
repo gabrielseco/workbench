@@ -75,6 +75,11 @@ step() {  # step "<name>" <command...>: prints PASS or FAIL for it and keeps goi
 
 # --- build ---------------------------------------------------------------------------------------------------------------------
 
+# The Xcode CI builds with (.xcode-version), not whatever the system selects: a newer one has compiler bugs of its own, and this runs
+# unattended from the post-merge hook, where nobody sees a crash.
+# shellcheck source=use-xcode.sh
+. "$ROOT/scripts/use-xcode.sh"
+
 # Low CPU priority: this runs while someone is working.
 nice -n 10 swift build -c release -q --product WorkbenchApp --package-path "$ROOT"
 BIN="$(swift build -c release --product WorkbenchApp --package-path "$ROOT" --show-bin-path)/WorkbenchApp"

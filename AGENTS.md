@@ -29,10 +29,12 @@ scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's a
 
 ## Toolchain
 
-Every macOS CI job builds with the one Xcode named in `.github/actions/xcode/action.yml` (a composite action: change the version there and
-nowhere else). Build and test locally with the same one when you can (`export DEVELOPER_DIR=/Applications/Xcode_<version>.app/Contents/Developer`),
-so a compiler bug shows up on your Mac and in CI alike. A newer Xcode builds too (release builds carry the optimizer workarounds in
-`Package.swift`, see `docs/swift-bugs/`), but CI has not seen it.
+The Xcode to build with is the one version in `.xcode-version`. Every macOS CI job selects it (`.github/actions/xcode`), and so do
+`scripts/bundle-app.sh` (which the post-merge hook and `verify-app.sh` run) and anything that sources `scripts/use-xcode.sh`: it
+finds `Xcode_<v>.app`, `Xcode-<v>.app` or `Xcode-<v>.0.app` in `/Applications` or `~/Applications` and sets `DEVELOPER_DIR`, or says it is
+not installed and uses the system's. For your own `swift build` and `swift test`, `export DEVELOPER_DIR=…/Xcode-<v>.app/Contents/Developer`
+yourself. A newer Xcode builds too (release builds carry the optimizer workarounds in `Package.swift`, see `docs/swift-bugs/`), but CI has
+not seen it. `scripts/test-use-xcode.sh` checks the lookup.
 
 ## Skills
 
