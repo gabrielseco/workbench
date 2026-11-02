@@ -11,7 +11,7 @@ jobs:
   macos-test:
     # A PR event without the label (any other label, any push to an unlabelled PR) skips the job.
     if: contains(github.event.pull_request.labels.*.name, 'macos-test')
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     # On the job, not the workflow: a push to a PR that has the label supersedes the run before it, but a skipped run (no label)
     # never takes the group, so it cannot cancel a labelled one.
@@ -20,6 +20,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/xcode
       - name: Runner hardware
         run: |
           echo "cores: $(sysctl -n hw.ncpu)"

@@ -1,0 +1,14 @@
+name: Select Xcode
+description: The one Xcode every macOS job builds with, named in .xcode-version, so no job compiles with a different Swift than the rest (docs/swift-bugs/).
+runs:
+  using: composite
+  steps:
+    - name: Select the Xcode in .xcode-version
+      # Change the version in .xcode-version and nowhere else (scripts/use-xcode.sh reads it too). It must be one of the Xcodes on the
+      # runner image (macos-26).
+      shell: bash
+      run: |
+        version="$(tr -d '[:space:]' < .xcode-version)"
+        sudo xcode-select -s "/Applications/Xcode_${version}.app"
+        xcodebuild -version
+        swift --version

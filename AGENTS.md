@@ -27,6 +27,15 @@ scripts/render-icon.sh                   # re-renders Resources/AppIcon.png from
 scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's app on a fixture project (Fixtures/app/) and drive it (verify-app skill)
 ```
 
+## Toolchain
+
+The Xcode to build with is the one version in `.xcode-version`. Every macOS CI job selects it (`.github/actions/xcode`), and so do
+`scripts/bundle-app.sh` (which the post-merge hook and `verify-app.sh` run) and anything that sources `scripts/use-xcode.sh`: it
+finds `Xcode_<v>.app`, `Xcode-<v>.app` or `Xcode-<v>.0.app` in `/Applications` or `~/Applications` and sets `DEVELOPER_DIR`, or says it is
+not installed and uses the system's. For your own `swift build` and `swift test`, `export DEVELOPER_DIR=…/Xcode-<v>.app/Contents/Developer`
+yourself. A newer Xcode builds too (release builds carry the optimizer workarounds in `Package.swift`, see `docs/swift-bugs/`), but CI has
+not seen it. `scripts/test-use-xcode.sh` checks the lookup.
+
 ## Skills
 
 Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `verify-app`, `design-review`, `workbench`). Agents that don't read that directory
