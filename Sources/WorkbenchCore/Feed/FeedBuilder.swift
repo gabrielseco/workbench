@@ -15,12 +15,24 @@ extension Feed {
         }
         private var group: ToolGroup?
         private var edited: [Int: Set<String>] = [:]
+        /// The refused calls of each turn as `turn.ended` recorded them, and how many `permission_denied` rows have been seen.
+        private var denials: [Int: [String?]] = [:]
+        private var deniedSeen: [Int: Int] = [:]
+        private var deniedRows: [Int: Int] = [:]
 
         init(contents: EventLogContents, runnerAlive: Bool) { (self.contents, self.runnerAlive) = (contents, runnerAlive) }
 
         mutating func items() -> [FeedItem] {
             var ended: [Int: Event] = [:]
-            for event in contents.events where event.kind == .turnEnded { ended[event.turn] = event }
+            for event in contents.events where event.kind == .turnEnded {
+                ended[event.turn] = event
+                if case .array(let calls)? = event.data["denials"] {
+                    denials[event.turn] = calls.map { $0["input"]?.stringValue.map(short) }
+                }
+            }
+            for event in contents.events where event.kind == .agentActivity {
+                if event.data["type"]?.stringValue == "permission_denied" { deniedRows[event.turn, default: 0] += 1 }
+            }
             for event in contents.events { add(event, ended: ended[event.turn]) }
             flush()
             return Feed.fold(out)
@@ -113,7 +125,13 @@ extension Feed {
             case "tool":
                 tool(event)
             case "permission_denied":
-                push(event, .denied(tool: ThreadState.safeLine(event.data["tool"]?.stringValue ?? "call", limit: 40)))
+                let index = deniedSeen[event.turn, default: 0]
+                deniedSeen[event.turn] = index + 1
+                // The inputs arrive whole on `turn.ended`; they are matched by order, and only when every refusal was recorded as a row.
+                let calls = denials[event.turn]
+                let input = calls?.count == deniedRows[event.turn] ? calls?[index] : nil
+                let tool = ThreadState.safeLine(event.data["tool"]?.stringValue ?? "call", limit: 40)
+                push(event, .denied(tool: tool, input: input))
             case "dropped":
                 push(event, .notice(.activityNotStored(count: event.data["count"]?.intValue ?? 0)))
             default:
@@ -159,9 +177,10 @@ extension Feed {
             let gone = indices.filter { !kept.contains($0) }
             guard let first = gone.first else { continue }
             drop.formUnion(gone)
+            let refused = gone.filter { isDenied(items[$0].kind) }.count
             notices[first] = FeedItem(
                 id: "\(items[first].seq).folded", seq: items[first].seq, turn: turn,
-                kind: .notice(.activityFolded(count: gone.count)))
+                kind: .notice(.activityFolded(count: gone.count, refusals: refused)))
         }
         guard !drop.isEmpty else { return items }
         var out: [FeedItem] = []

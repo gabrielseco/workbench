@@ -59,7 +59,7 @@ import Testing
             ],
             goal: goal, approval: .stale)
         let cards = items.filter { if case .goalCard = $0.kind { true } else { false } }
-        #expect(cards.count == 1 && cards[0].kind == .goalCard(title: "Add retry", approval: .stale, criteria: 2))
+        #expect(cards.count == 1 && cards[0].kind == .goalCard(title: "Add retry", approval: .stale, criteria: 2, hash: "a"))
         let order = items.map(\.id)
         #expect(order.firstIndex(of: "goal")! < order.firstIndex(of: "4")!, "before what happened after it")
         #expect(items.contains { $0.kind == .notice(.goalChangedSinceApproval) })
@@ -89,7 +89,7 @@ import Testing
         #expect(
             Array(body.prefix(4)) == [
                 .agentText("Reading the client."), .toolGroup(count: 2, summaries: ["Read a.swift", "Grep retry"]),
-                .edit(file: "Sources/Client.swift", tool: "Edit"), .denied(tool: "Bash"),
+                .edit(file: "Sources/Client.swift", tool: "Edit"), .denied(tool: "Bash", input: nil),
             ], "the second edit of a file is the same row")
     }
 
@@ -171,7 +171,7 @@ import Testing
         let items = feed(events)
         let turn = items.filter { $0.turn == 1 }
         #expect(turn.count <= 60, "got \(turn.count)")
-        #expect(turn.contains { if case .notice(.activityFolded(let count)) = $0.kind { count > 900 } else { false } })
+        #expect(turn.contains { if case .notice(.activityFolded(let count, _)) = $0.kind { count > 900 } else { false } })
         #expect(items.last.map { if case .next = $0.kind { true } else { false } } == true)
     }
 
@@ -207,7 +207,7 @@ import Testing
         events.append(activity(203, "permission_denied", ["tool": "Bash"]))
         for n in 0..<200 { events.append(activity(204 + n, "text", ["text": .string("u\(n)")])) }
         let items = feed(events)
-        #expect(items.contains { $0.kind == .denied(tool: "Bash") })
+        #expect(items.contains { $0.kind == .denied(tool: "Bash", input: nil) })
     }
 
     // MARK: Damage, untrusted text, old logs
@@ -261,5 +261,70 @@ import Testing
         let items = feed([created, ev(2, 0, "future.kind", ["x": 1]), ev(3, 0, .threadNote, ["text": "hi", "extra": true])])
         #expect(items.count == 2, "the note and the next-step card; the unknown kind is not a row")
         #expect(items.contains { $0.kind == .userNote(text: "hi") })
+    }
+
+    @Test func afterAFailedTurnTheNextStepIsReviewNotTheRunThatFailed() {
+        let items = feed(
+            [created, ev(2, 1, .turnStarted), ev(3, 1, .turnEnded, ["result": "failed"])], approval: .approved)
+        guard case .next(let step, let why)? = items.last?.kind else {
+            Issue.record("no next card")
+            return
+        }
+        #expect(step == .review && !why.isEmpty, "got \(String(describing: step)): \(why)")
+    }
+
+    @Test func twoRefusedCallsWithDifferentInputsAreToldApart() {
+        let denials: JSONValue = [["tool": "Bash", "input": "git push origin main"], ["tool": "Bash", "input": "rm -rf build"]]
+        let items = feed([
+            created, ev(2, 1, .turnStarted), activity(3, "permission_denied", ["tool": "Bash"]),
+            activity(4, "permission_denied", ["tool": "Bash"]), ev(5, 1, .turnEnded, ["result": "succeeded", "denials": denials]),
+        ])
+        let refused = items.compactMap { item -> String? in
+            if case .denied(_, let input) = item.kind { input } else { nil }
+        }
+        #expect(refused == ["git push origin main", "rm -rf build"])
+    }
+
+    @Test func aRefusalWhoseInputWasNotRecordedHasNone() {
+        let items = feed([
+            created, ev(2, 1, .turnStarted), activity(3, "permission_denied", ["tool": "Bash"]),
+            ev(4, 1, .turnEnded, ["result": "succeeded"]),
+        ])
+        #expect(items.contains { $0.kind == .denied(tool: "Bash", input: nil) })
+    }
+
+    @Test func theGoalCardNamesTheApprovedRevision() {
+        let goal = Feed.GoalSummary(title: "t", approval: .approved, criteria: 1)
+        let items = feed(
+            [
+                created, ev(2, 0, .goalSaved, ["hash": "first"]), ev(3, 0, .goalSaved, ["hash": "second"]),
+                ev(4, 0, .goalApproved, ["hash": "approved"]),
+            ],
+            goal: goal, approval: .approved)
+        #expect(items.contains { $0.kind == .goalCard(title: "t", approval: .approved, criteria: 1, hash: "approved") })
+    }
+
+    @Test func aThreadWithOnlyAGoalHasTheGoalCardAndWhatToDoNext() {
+        let goal = Feed.GoalSummary(title: "t", approval: .draft, criteria: 0)
+        let items = feed([created, ev(2, 0, .goalSaved, ["hash": "h"])], goal: goal, approval: .draft)
+        #expect(items.map(\.id) == ["goal", "next"])
+    }
+
+    @Test func refusalsPastTheCapAreCountedNotLost() {
+        var events = [created, ev(2, 1, .turnStarted)]
+        for n in 0..<100 { events.append(activity(3 + n, "permission_denied", ["tool": "Bash"])) }
+        let items = feed(events)
+        let kept = items.filter { if case .denied = $0.kind { true } else { false } }.count
+        #expect(kept == Feed.maxActivityPerTurn - 1)
+        let notice = items.compactMap { item -> Int? in
+            if case .notice(.activityFolded(_, let refusals)) = item.kind { refusals } else { nil }
+        }
+        #expect(notice == [100 - kept], "the rest are said to be refusals, not silently dropped")
+    }
+
+    @Test func controlCharactersInsideTheLimitAreRemoved() {
+        let text = "before\u{1B}[31mred\u{07}after\nnext"
+        let items = feed([created, ev(2, 0, .threadNote, ["text": .string(text)])])
+        #expect(items.contains { $0.kind == .userNote(text: "beforeredafter next") })
     }
 }

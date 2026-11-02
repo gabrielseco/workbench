@@ -59,12 +59,14 @@ public enum Feed {
         let first = events.first { $0.kind == .goalSaved || $0.kind == .goalApproved }
         guard goal != nil || first != nil else { return ([], nil) }
         let seq = first?.seq ?? 0
+        let hash = events.last { $0.kind == .goalApproved && $0.data["hash"]?.stringValue != nil }?.data["hash"]?.stringValue
+            ?? events.last { $0.kind == .goalSaved }?.data["hash"]?.stringValue
         var items = [
             FeedItem(
                 id: "goal", seq: seq, turn: 0,
                 kind: .goalCard(
                     title: goal?.title.map { ThreadState.safeLine($0, limit: summaryLimit) }, approval: goal?.approval,
-                    criteria: goal?.criteria ?? 0))
+                    criteria: goal?.criteria ?? 0, hash: hash.map { ThreadState.safeLine($0, limit: 80) }))
         ]
         if goal?.approval == .stale {
             items.append(FeedItem(id: "goal.stale", seq: seq, turn: 0, kind: .notice(.goalChangedSinceApproval)))
@@ -74,7 +76,9 @@ public enum Feed {
 
     /// The step a person or the run is at, taken from the spine; never a second rule.
     private static func next(spine: ThreadSpine, attention: Attention, lastSeq: Int) -> FeedItem {
-        let open = spine.entries.first { $0.mark == .needsYou || $0.mark == .current || $0.mark == .failed }
+        // What can be done now comes before what already failed: after a failed turn Review is the step, not the Run that failed.
+        let open = [SpineMark.needsYou, .current, .failed].lazy
+            .compactMap { mark in spine.entries.first { $0.mark == mark } }.first
         var why = open?.sublabel ?? ""
         if case .needsYou(let reason) = attention { why = reason.text }
         if why.isEmpty { why = open.map { $0.step.title } ?? "Nothing is left to do." }

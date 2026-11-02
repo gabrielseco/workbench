@@ -15,7 +15,8 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
     public enum Notice: Sendable, Equatable {
         /// Events the log could not keep (`agent.activity` past its cap), or that this feed folded to stay small.
         case activityNotStored(count: Int)
-        case activityFolded(count: Int)
+        /// `refusals` of the folded items were refused calls (kept first, up to the cap; the rest are only counted).
+        case activityFolded(count: Int, refusals: Int)
         /// A line or an ordering that broke the log's rules; what could be read is shown.
         case logDamaged(problems: Int, first: String)
         /// The last line was cut short, as a crash leaves it.
@@ -26,13 +27,15 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
 
     public enum Kind: Sendable, Equatable {
         case userNote(text: String)
-        case goalCard(title: String?, approval: ApprovalState?, criteria: Int)
+        /// `hash` is the latest approved revision the log names, else the latest saved one.
+        case goalCard(title: String?, approval: ApprovalState?, criteria: Int, hash: String?)
         case turn(number: Int, phase: Phase, durationMs: Int?, costUSD: Double?)
         case agentText(String)
         /// Consecutive tool calls other than edits: how many, and the first few summaries.
         case toolGroup(count: Int, summaries: [String])
         case edit(file: String, tool: String)
-        case denied(tool: String)
+        /// A call the run refused, with what it was for when the turn recorded it.
+        case denied(tool: String, input: String?)
         case check(result: String, command: String?, durationMs: Int?)
         case judge(ok: Bool, criteria: Int, unmet: Int, concerns: Int)
         case verify(ok: Bool, reason: String?, proofs: [String])
