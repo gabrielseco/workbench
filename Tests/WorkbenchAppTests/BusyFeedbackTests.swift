@@ -191,9 +191,13 @@ import Testing
         var ran = false
         await store.working("Opening the worktree…") { ran = true }
         #expect(!ran, "one action at a time, whichever thread it is for")
+        var idle = false
+        let waiter = Task { await store.untilIdle(); idle = true }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!idle, "untilIdle waits while the other project's thread still holds the window")
         running.open()
-        try await until("the run ends and the window is free") { store.runningProjectPath == nil }
-        await store.untilIdle()
+        await waiter.value
+        #expect(idle && store.runningProjectPath == nil)
         await store.working("Opening the worktree…") { ran = true }
         #expect(ran)
     }

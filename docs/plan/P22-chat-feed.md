@@ -128,7 +128,8 @@ Split `ProjectStore` in two:
   `busy`, `actionError`, `actionNote`, the goal edit state and the polling for that thread.
 
 The string scopes (`currentScope`, `busyScope`, `awaitingScope`) go away: an answer for an old session lands on an old session.
-`ProjectStore` holds exactly one session for now (the current thread), so the window is unchanged; two sessions at once is P23's
+`ProjectStore` keeps a small map of the sessions that have work going on (the owned run and an action in flight must outlive
+switching the thread on screen) and the window shows the current thread's, so it is unchanged; two sessions at once is P23's
 problem and is no longer a rewrite. Do it in two PRs if one is too big: 1a moves `busy`, the awaiting flag and `ownedRun`; 1b moves
 `screen`, `goal`, `review` and the actions that act on them.
 *Tests:* the existing `WorkbenchAppTests` pass with renames only; one new test per bug the string scopes guarded (a reload that
