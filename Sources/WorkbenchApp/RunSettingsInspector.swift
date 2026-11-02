@@ -29,6 +29,8 @@ struct RunSettingsInspector: View {
     var snapshot: ThreadSnapshot
     var goal: GoalModel?
     var store: ProjectStore
+    /// The sheet has the title already.
+    var showsTitle = true
     @State private var addingFolder = false
     @State private var folderText = ""
     @Environment(\.feedDrawsEagerly) private var drawsEagerly
@@ -39,7 +41,7 @@ struct RunSettingsInspector: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("RUN SETTINGS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            if showsTitle { Text("RUN SETTINGS").font(.caption.weight(.semibold)).foregroundStyle(.secondary) }
             if let goal {
                 if !goal.editable { Text(RunSettingsLayout.readOnlyNote).font(.callout).foregroundStyle(.secondary) }
                 afterTheTurn(goal)
@@ -94,11 +96,22 @@ struct RunSettingsInspector: View {
 
     private func limits(_ goal: GoalModel) -> some View {
         section("LIMITS") {
-            LabeledContent("Model", value: goal.model).font(.callout)
-            LabeledContent("Budget", value: goal.budget).font(.callout)
-            LabeledContent("Timeout", value: goal.turnTimeout).font(.callout)
+            // Labels and values in two columns, so the values start where each other do.
+            Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 4) {
+                limit("Model", goal.model)
+                limit("Budget", goal.budget)
+                limit("Timeout", goal.turnTimeout)
+            }
             Text("Change these in the goal file.").font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private func limit(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary)
+            Text(value).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.callout)
     }
 
     @ViewBuilder private func tools(_ goal: GoalModel) -> some View {
@@ -117,7 +130,8 @@ struct RunSettingsInspector: View {
 
     @ViewBuilder private func folders(_ goal: GoalModel) -> some View {
         if !goal.readAlso.isEmpty || !goal.goalReadAlso.isEmpty || goal.editable {
-            section("REFERENCE FOLDERS · READ-ONLY FOR THE RUN") {
+            section("REFERENCE FOLDERS") {
+                Text("Read-only for the run").font(.caption).foregroundStyle(.secondary)
                 ForEach(goal.readAlso, id: \.self) { folder in
                     folderLine(folder, note: "from project config", removable: false)
                 }
@@ -204,7 +218,7 @@ struct RunSettingsSheet: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             Divider()
-            RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store)
+            RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false)
         }
         .frame(width: 420, height: 560)
     }
