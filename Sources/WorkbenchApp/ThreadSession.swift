@@ -40,7 +40,7 @@ import WorkbenchCore
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String? { didSet { said() } }
     /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
-    var pendingDiscard: DiscardPlan?
+    var pendingDiscard: DiscardPlan? { didSet { said() } }
     /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
     var goalEditError: String? { didSet { said() } }
     /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
@@ -61,7 +61,9 @@ import WorkbenchCore
     /// Nothing is going on for the thread: the session can be dropped.
     var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil }
     /// The thread has said something that is still up (an error, a note, a decision's outcome): going back to it shows it again.
-    var hasMessages: Bool { actionError != nil || actionNote != nil || notice != nil || goalEditError != nil }
+    var hasMessages: Bool {
+        actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil
+    }
     /// Nothing to remember: not working and nothing to show.
     var isSpent: Bool { isIdle && !hasMessages }
 }

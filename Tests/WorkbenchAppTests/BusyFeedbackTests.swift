@@ -177,6 +177,27 @@ import Testing
         running.open()
     }
 
+    @Test func aDiscardPlanThatArrivesAfterLeavingIsWaitingWhenYouComeBack() async throws {
+        let looking = Gate()
+        let actions = GoalActions(discardPlan: { _, _ in
+            await looking.wait()
+            return Self.discardPlan
+        })
+        let (store, first) = try await store(actions)
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+
+        let preparing = Task { await store.prepareDiscard() }
+        try await until("it is looking") { store.busy != nil }
+        await store.switchTo(other.project.root.path)
+        await looking.open()
+        await preparing.value
+        #expect(store.pendingDiscard == nil, "the other project is not asked to confirm the first one's discard")
+        await store.switchTo(first.project.root.path)
+        #expect(store.pendingDiscard != nil)
+    }
+
     @Test func aThreadWaitingForItsRunStillHoldsTheWindowWhileAnotherProjectIsOnScreen() async throws {
         let running = Gate()
         let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })

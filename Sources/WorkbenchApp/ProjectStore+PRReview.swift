@@ -25,8 +25,9 @@ extension ProjectStore {
         let mine = generation
         let load = actions.latestPRReview
         let shown = await Task.detached { await load(project, thread) }.value
-        guard mine == generation else { return }
-        if let shown { prReviewShown = shown } else {
+        if let shown {
+            if mine == generation { prReviewShown = shown }
+        } else {
             session.actionError = "No pull request review has run for this thread yet."
         }
     }

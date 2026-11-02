@@ -84,11 +84,12 @@ extension ProjectStore {
         await working("Merging PR #\(status.number)…") {
             do {
                 let after = try await actions.mergePullRequest(project, thread, status.head)
+                session.notice = "Merged PR #\(after.number)."
+                merged = true
+                // The merge is said on its own thread; the banner is the window's, so only the thread on screen updates it.
                 guard pullRequestScope == scope else { return }
                 (prCI.ci, prCI.readAt) = (.known(after), .now)
                 applyPullRequestCI()
-                session.notice = "Merged PR #\(after.number)."
-                merged = true
             } catch { session.actionError = "\(error)" }
         }
         if !merged, pullRequestScope == scope { await refreshPullRequestCI() }
