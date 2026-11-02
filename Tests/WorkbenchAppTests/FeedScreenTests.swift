@@ -392,6 +392,14 @@ import WorkbenchCore
         #expect(!none.feedEditsGoal(try thread(.needsYou)), "no goal loaded")
     }
 
+    @Test func aGoalThatDoesNotParseSaysWhyApprovalIsBlockedEvenThoughItHasNoEditor() throws {
+        func card(_ problems: [String]) -> some View {
+            FeedRow(item: goalCard(), goal: GoalModel.invalid(path: "/tmp/goal.md", problems: problems)).padding(20)
+        }
+        try differs(card(["goal.md does not parse: line 3 has no key"]), card([]), "the blockers", width: 640, height: 200)
+        #expect(GoalModel.invalid(path: "/tmp/goal.md", problems: ["broken"]).editable == false)
+    }
+
     @Test func aReadOnlyGoalCardKeepsTheRequestAndFoldsALongOne() throws {
         var goal = sampleGoal()
         goal.rows = []

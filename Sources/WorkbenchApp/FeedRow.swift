@@ -146,6 +146,12 @@ struct GoalCardRow: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 6) {
             heading
+            // Why approval is blocked is said whether or not the goal can be edited: a goal that does not parse has no editor.
+            if let blockers = goal?.blockers, !blockers.isEmpty {
+                ForEach(blockers, id: \.self) {
+                    Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).font(.callout)
+                }
+            }
             if let request = goal?.request, !request.isEmpty { requestText(request) }
             if !rows.isEmpty { criteriaList }
         }
