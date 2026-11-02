@@ -83,8 +83,8 @@ Removes the worktree and branch after confirmation. The thread and its log stay 
    a live runner, an empty note. No `$EDITOR`, for the reason given under accept.
 6. **Accept** (done: `ThreadService.accept`, `workbench accept [id] [-m <msg>] [--yes]`). Commits everything
    `review` lists (tracked, staged and untracked; ignored files stay out) on `workbench/<id>`, then records
-   `review.decision: accepted` with the commit. The default message is `chore: <goal title>`, the request and
-   a `Workbench-Thread:` line; `-m` replaces it, and on a terminal a one-line replacement can be typed at the
+   `review.decision: accepted` with the commit. The default message is `chore: <goal title>` and
+   a `Workbench-Thread:` line (not the request: it can be long and is not for a public history); `-m` replaces it, and on a terminal a one-line replacement can be typed at the
    prompt (no `$EDITOR`: children start through `Spawner`, which has no terminal to give an editor). An empty
    message changes nothing. The commit goes through `git commit -m`, so hooks run and the message is never
    parsed by a shell. A failed check is allowed but said out loud: it asks, and with no terminal needs

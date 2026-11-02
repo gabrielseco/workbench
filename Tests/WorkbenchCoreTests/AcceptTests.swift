@@ -75,7 +75,7 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
 
         let message = try await gitOut(["log", "-1", "--format=%B", branch], fx.repo, fx)
         #expect(message.hasPrefix("chore: work"), "\(message)")
-        #expect(message.contains("Add a greeting to a.txt."))
+        #expect(!message.contains("Add a greeting to a.txt."), "the request is not in the default message")
         #expect(message.contains("Workbench-Thread: \(id)"))
 
         let events = try fx.events(id)
@@ -92,6 +92,29 @@ private func dirtyThread(_ fx: RunnerFixture) async throws -> (id: String, workt
         #expect(try await cli(["status", id], in: fx).text.contains("ended: accepted"))
         let next = try await cli(["goal", "new", "next"], in: fx)
         #expect(next.exit?.termination == .exited(0), "the slot is free: \(next.text)")
+    }
+
+    @Test func theDefaultMessageLeavesOutALongRequestAndAcceptStillSucceeds() async throws {
+        let fx = try await RunnerFixture()
+        let (id, _) = try await dirtyThread(fx)
+        let url = fx.project.goalURL(id)
+        let secret = "INTERNAL-PATH-/srv/secret "
+        let big = String(repeating: secret, count: 800)  // about 20 KB
+        let text = try String(contentsOf: url, encoding: .utf8)
+            .replacingOccurrences(of: "Add a greeting to a.txt.", with: big)
+        try text.write(to: url, atomically: true, encoding: .utf8)
+
+        let message = ThreadService.defaultCommitMessage(id: id, goalURL: url)
+        #expect(message.utf8.count < 200, "\(message.utf8.count) bytes")
+        #expect(!message.contains("INTERNAL-PATH"))
+        #expect(message.hasSuffix("\n\nWorkbench-Thread: \(id)"))
+        #expect(message.hasPrefix("chore: work\n\n"), "\(message)")
+
+        let result = try await cli(["accept"], in: fx)
+        #expect(result.exit?.termination == .exited(0), "\(result.text)")
+        let branch = "workbench/\(id)"
+        let committed = try await gitOut(["log", "-1", "--format=%B", branch], fx.repo, fx)
+        #expect(committed.hasSuffix("Workbench-Thread: \(id)") && !committed.contains("INTERNAL-PATH"))
     }
 
     @Test func aGivenMessageIsUsedVerbatimAndNeverReachesAShell() async throws {
