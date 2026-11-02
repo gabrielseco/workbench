@@ -43,11 +43,11 @@ jobs:
         id: packaging
         # The bundle is a second, release-mode compile (about four minutes) whose checks are about the plist, the icon and the
         # signature, so it runs when those can have changed: the resources, the package, the scripts that make the bundle, this
-        # file. A change to the app's Swift alone is compiled and tested by the steps around it, and `release-build` (a label)
-        # covers the optimizer. A manual run always builds it.
+        # file. A change to the app's Swift alone is compiled and tested by the steps around it, and the `release-build` workflow (a
+        # label, and nightly) builds the app in release mode. A manual run always builds it.
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          PACKAGING: '^(Resources/|Package\.swift$|\.xcode-version$|scripts/(bundle-app|render-icon|use-xcode|test-bundle-app-guard)\.sh$|scripts/app-icon\.swift$|\.github/workflows/app\.yml$|\.github/actions/xcode/)'
+          PACKAGING: '^(Resources/|Package\.swift$|scripts/(bundle-app|render-icon)\.sh$|scripts/app-icon\.swift$|\.github/workflows/app\.yml$)'
         run: |
           if [ -z "$BASE" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
