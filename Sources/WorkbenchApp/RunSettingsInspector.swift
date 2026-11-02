@@ -124,9 +124,9 @@ struct RunSettingsInspector: View {
                 Spacer(minLength: 8)
                 Toggle(
                     AutoAdviceSetting.label,
-                    isOn: Binding(get: { advice.on }, set: { _ in Task { await store.editGoal { $0.advice.toggled() } } })
+                    isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
                 )
-                .toggleStyle(.switch).labelsHidden().disabled(!editable || !advice.adjustable)
+                .toggleStyle(.switch).labelsHidden().disabled(!advice.switchEnabled(editable: editable))
             }
             Text(advice.line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text(advice.source).font(.caption).foregroundStyle(.secondary)

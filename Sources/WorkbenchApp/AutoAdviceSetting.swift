@@ -30,6 +30,10 @@ struct AutoAdviceSetting: Equatable {
     /// The switch changes something only while the project has not said which steps itself.
     var adjustable: Bool { projectList.isEmpty }
 
+    /// Whether the switch can be pressed: the settings may be changed now (`ProjectStore.goalEditable`) and the project has not said
+    /// which steps itself.
+    func switchEnabled(editable: Bool) -> Bool { editable && adjustable }
+
     var line: String {
         if !projectList.isEmpty {
             return "The project's [review] auto lists \(projectList.joined(separator: ", ")): the switch adds nothing."

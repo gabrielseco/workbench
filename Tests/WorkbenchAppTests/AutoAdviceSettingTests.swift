@@ -113,7 +113,7 @@ import Testing
         preferences.chatFeed = true
         let store = ProjectStore(preferences: preferences, actions: actions)
         #expect(await store.open(fixture.root))
-        await store.editGoal { $0.advice.toggled() }
+        await store.toggleAdvice()
         return (store, seen.lock.withLock { seen.edits })
     }
 
@@ -122,6 +122,32 @@ import Testing
         #expect(off.goal?.advice.on == false && offEdits == [.setAutoAdvance(true)])
         let (on, onEdits) = try await store("auto_advance = true")
         #expect(on.goal?.advice.steps == ["judge"] && onEdits == [.setAutoAdvance(false)])
+    }
+
+    // MARK: When it can be pressed
+
+    @Test func theSwitchIsEnabledOnlyWhileTheSettingsCanChangeAndTheProjectHasNotListedTheSteps() throws {
+        let open = AutoAdviceSetting.read(goal: try goal(nil), config: try config(""))
+        let listed = AutoAdviceSetting.read(goal: try goal(nil), config: try config("auto = [\"judge\"]"))
+        #expect(open.switchEnabled(editable: true))
+        #expect(!open.switchEnabled(editable: false), "an approved goal, a run, an action going")
+        #expect(!listed.switchEnabled(editable: true), "the project's own auto list decides")
+        #expect(!listed.switchEnabled(editable: false))
+    }
+
+    /// The `editable` the inspector hands the switch is the store's rule, so the states a thread is in decide it.
+    @Test func theStatesAThreadIsInDecideWhetherTheSwitchCanBePressed() async throws {
+        for (approved, turn, enabled) in [(false, false, true), (true, false, false), (false, true, false), (true, true, false)] {
+            let fixture = try await AppFixture()
+            keptAdviceFixtures.append(fixture)
+            try await fixture.addThread("t1", approved: approved)
+            if turn { try fixture.turn("t1", 1) }
+            let store = ProjectStore(preferences: MemoryPreferences())
+            #expect(await store.open(fixture.root))
+            guard case .thread(let shown) = store.screen, let goal = store.goal else { throw Failure.notAThread }
+            let editable = store.goalEditable(shown, goal: goal)
+            #expect(goal.advice.switchEnabled(editable: editable) == enabled, "approved \(approved), a turn run \(turn)")
+        }
     }
 
     // MARK: What it draws
