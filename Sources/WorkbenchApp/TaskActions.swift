@@ -30,6 +30,7 @@ struct TaskCardInfo: Equatable {
         if let maxOpen = task.maxOpen { lines.append(Line(label: "max_open", value: "\(maxOpen)")) }
         if let timeout = task.timeoutMin { lines.append(Line(label: "timeout", value: "\(timeout) min a turn")) }
         if let base = task.base { lines.append(Line(label: "base", value: base)) }
+        if !task.labels.isEmpty { lines.append(Line(label: "labels", value: task.labels.joined(separator: ", "))) }
         if let pending = task.pending {
             let size = loaded.pendingScript?.count ?? 0
             lines.append(Line(label: "pending", value: "\(pending) (\(size) bytes, run with no one watching)"))

@@ -247,6 +247,40 @@ private struct Run {
         #expect(run.gh.count("pr create") == 1)
     }
 
+    @Test func theTasksLabelsGoOnItsPullRequest() async throws {
+        let run = try await Run(front: "fix: pr\nbatch: 2\npending: pending.sh\nlabels: [seed-preview, bot]")
+        _ = try await addOrigin(run.fx)
+        let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened && result.reason == nil)
+        #expect(run.gh.calls.contains("pr edit 12 --add-label=seed-preview"))
+        #expect(run.gh.calls.contains("pr edit 12 --add-label=bot"))
+        #expect(run.gh.calls.contains("label create --force -- bot"))
+    }
+
+    @Test func aLabelThatCannotBeAddedStillEndsPrOpenedAndSaysSoInTheReason() async throws {
+        let run = try await Run(front: "fix: pr\nbatch: 2\npending: pending.sh\nlabels: [seed-preview]")
+        _ = try await addOrigin(run.fx)
+        try run.gh.put("label_fail", "HTTP 403: Resource not accessible by integration\n")
+        let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened && result.isDone)
+        #expect(result.pullRequest == "https://github.com/o/r/pull/12" && result.units == ["ROU", "TUR"])
+        let reason = try #require(result.reason)
+        #expect(reason.contains("label 'seed-preview'") && reason.contains("HTTP 403") && !reason.contains("\n"))
+        // The thread is not abandoned: it is shipped, and the log says the same.
+        let thread = try #require(result.thread)
+        #expect(try run.fx.events(thread).contains { $0.kind == .prOpened })
+        let end = try #require(try run.ends().last)
+        #expect(end.data["outcome"]?.stringValue == "pr-opened" && end.data["reason"]?.stringValue == reason)
+    }
+
+    @Test func aTaskWithoutLabelsMakesNoLabelCall() async throws {
+        let run = try await Run()
+        _ = try await addOrigin(run.fx)
+        let result = await run.runner(try run.shippable().joined(separator: ",")).run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened)
+        #expect(run.gh.calls.allSatisfy { !$0.hasPrefix("label") && !$0.contains("--add-label") })
+    }
+
     @Test func unitsAreWorkedThroughAcrossRunsAndAClosedPullRequestBringsThemBack() async throws {
         // This is about running out of units, not about waiting for review: the limit is out of the way.
         let run = try await Run(front: "fix: pr\nbatch: 2\nmax_open: 10\npending: pending.sh")

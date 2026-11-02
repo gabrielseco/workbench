@@ -27,6 +27,8 @@ public enum TaskApproval {
         if let maxOpen = task.maxOpen { fields.append("max_open=\(maxOpen)") }
         if let timeout = task.timeoutMin { fields.append("timeout=\(timeout)") }
         if let base = task.base { fields.append("base=\(base)") }
+        // Labels change what a pull request opened with nobody watching carries (and may create labels in the repository).
+        if !task.labels.isEmpty { fields.append("labels=\(task.labels.map { $0.lowercased() }.sorted().joined(separator: ","))") }
         fields += ["---", GoalHash.canonicalBody(task.instructions)]
         return SHA256.hash(data: Data(fields.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
     }

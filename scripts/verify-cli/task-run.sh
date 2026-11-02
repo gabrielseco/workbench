@@ -24,6 +24,9 @@
 # active thread" must FAIL), and a task with `base: origin/main` must cut its thread from the freshly fetched tip of origin's main, which
 # moved after the clone (the sabotage points origin nowhere, so "a base on origin starts the thread from the freshly fetched origin
 # branch" must FAIL).
+# A task with `labels: [seed-preview, bot]` must have each label created (`gh label create --force`) and added to its pull request; one whose
+# label cannot be created must still end pr-opened with the failed label named in the reason (the sabotage drops the `labels:` line from the first
+# and the failure from the second, so "the task's labels are created and added to its pull request" and "a label that fails is only noted ..." must FAIL).
 # `task run` prints what the run is doing as it goes (the turn starting, a tool call at most every 2 s, the check). Not named in the sabotage.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -69,6 +72,10 @@ case "\$1 \$2" in
         else echo '[]'; fi
     elif grep -qx "\$head" "$GHDIR/heads" 2>/dev/null; then echo '[{"state":"$STATE"}]'; else echo '[]'; fi
     exit 0 ;;
+"label create")
+    if [ -f "$GHDIR/label_fail" ]; then echo "HTTP 403: Resource not accessible" >&2; exit 1; fi
+    exit 0 ;;
+"pr edit") exit 0 ;;
 "pr create")
     echo "\$head" >>"$GHDIR/heads"
     echo "https://github.com/o/r/pull/\$(wc -l <"$GHDIR/heads" | tr -d ' ')"
@@ -203,6 +210,27 @@ BTHREAD=$(sed -n 's/^  thread: //p' "$SCRATCH/based.out" | head -1)
 check "a base on origin starts the thread from the freshly fetched origin branch" "exit $RC, thread '$BTHREAD': $(head -c 300 "$SCRATCH/based.out")" \
     bash -c '[ -n "$3" ] && grep -q "\"base_commit\":\"$1\"" "$2/.workbench/threads/$3/events.jsonl"' _ "$NEWTIP" "$P" "$BTHREAD"
 [ "$SABOTAGE" = 1 ] && g -C "$P" remote set-url origin "$ORIGIN"
+
+# --- 2e. labels on the pull request -----------------------------------------------------------------------------
+
+LABELS='labels: [seed-preview, bot]'; [ "$SABOTAGE" = 1 ] && LABELS='batch: 1'
+mkdir -p "$P/.workbench/tasks/labelled"
+printf -- '---\nfix: pr\nmax_open: 5\n%s\n---\nDo the thing.\n' "$LABELS" >"$P/.workbench/tasks/labelled/task.md"
+wbp "$SCRATCH/approve6.out" task approve labelled
+wbp "$SCRATCH/labelled.out" task run labelled; shown "$SCRATCH/labelled.out" 6
+check "the task's labels are created and added to its pull request" "exit $RC: $(head -c 300 "$SCRATCH/labelled.out"); gh: $(grep -E 'label|--add-label' "$GHDIR/calls" | tr '\n' ';')" \
+    bash -c '[ "$1" = 0 ] && grep -q "^labelled: pr-opened" "$2" && ! grep -q "label .seed" "$2" && grep -qx "label create --force -- seed-preview" "$3" && grep -qx "label create --force -- bot" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=seed-preview$" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=bot$" "$3"' _ "$RC" "$SCRATCH/labelled.out" "$GHDIR/calls"
+
+mkdir -p "$P/.workbench/tasks/labelfail"
+printf -- '---\nfix: pr\nmax_open: 5\nlabels: [seed-preview]\n---\nDo the other thing.\n' >"$P/.workbench/tasks/labelfail/task.md"
+wbp "$SCRATCH/approve7.out" task approve labelfail
+[ "$SABOTAGE" = 1 ] || echo failing >"$GHDIR/label_fail"
+wbp "$SCRATCH/labelfail.out" task run labelfail; shown "$SCRATCH/labelfail.out" 6
+rm -f "$GHDIR/label_fail"
+check "a label that fails is only noted: the run still ends pr-opened, with a pull request and the label named in the reason" "exit $RC: $(head -c 500 "$SCRATCH/labelfail.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^labelfail: pr-opened" "$2" && grep -q "pull request: https://github.com/o/r/pull/" "$2" && grep -q "label .seed-preview.: HTTP 403" "$2"' _ "$RC" "$SCRATCH/labelfail.out"
+check "that run's log has the same reason and its thread was shipped, not abandoned" "log: $(tail -c 400 "$P/.workbench/tasks/labelfail/runs.jsonl")" \
+    bash -c 'tail -1 "$1" | grep -q "\"outcome\":\"pr-opened\"" && tail -1 "$1" | grep -q "label .seed-preview.: HTTP 403"' _ "$P/.workbench/tasks/labelfail/runs.jsonl"
 
 # --- 3. what stops a run -----------------------------------------------------------------------------------
 

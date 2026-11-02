@@ -79,6 +79,35 @@ struct TaskFileTests {
         }
     }
 
+    @Test func labelsAreOptionalBoundedAndLimitedToSafeCharacters() throws {
+        let plain = try TaskDefinition.parse(Self.task("fix: pr"), name: "bump")
+        #expect(plain.labels.isEmpty)
+        let set = try TaskDefinition.parse(Self.task("fix: pr\nlabels: [seed-preview, a_b.c:d/e, \"quoted\"]"), name: "bump")
+        #expect(set.labels == ["seed-preview", "a_b.c:d/e", "quoted"])
+        let five = try TaskDefinition.parse(Self.task("fix: pr\nlabels: a, b, c, d, e"), name: "bump")
+        #expect(five.labels.count == 5)
+        let longest = String(repeating: "x", count: 50)
+        #expect(try TaskDefinition.parse(Self.task("labels: [\(longest)]"), name: "bump").labels == [longest])
+
+        let bad = [
+            "[]", "[a, b, c, d, e, f]", "[a b]", "[a;b]", "[$(x)]", "[a,,b]", "[é]", "[a#b]", "[\(longest)x]",
+            "[Bug, bug]", "[a, a]",
+        ]
+        for value in bad {
+            let found = try problemLines(Self.task("fix: pr\nlabels: \(value)"))
+            #expect(found.contains { $0.contains("'labels'") }, "labels: \(value) -> \(found)")
+        }
+        // The line is named, like every other bad value.
+        #expect(try problemLines(Self.task("fix: pr\nlabels: [a b]")).contains { $0.hasPrefix("line 3:") })
+    }
+
+    private func problemLines(_ text: String) throws -> [String] {
+        do { _ = try TaskDefinition.parse(text, name: "bump") } catch let error as TaskParseError {
+            return error.problems.map(\.description)
+        }
+        return []
+    }
+
     @Test func timeoutAndBaseAreOptionalAndBounded() throws {
         let plain = try TaskDefinition.parse(Self.task("fix: pr"), name: "bump")
         #expect(plain.timeoutMin == nil && plain.base == nil)

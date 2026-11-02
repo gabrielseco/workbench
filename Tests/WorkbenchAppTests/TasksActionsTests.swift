@@ -103,6 +103,10 @@ import WorkbenchCore
             .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
         let named = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
         #expect(named.cost == "up to $3.00 for the report (the project's default budget)")
+        // The labels the approval binds to are on the card; a task without them has no such line.
+        let labelled = try TaskActions.core.inspect(fixture.project, "cleanup-branches")
+        #expect(labelled.settings.first { $0.label == "labels" }?.value == "seed-preview, bot")
+        #expect(sync.settings.allSatisfy { $0.label != "labels" })
         // Codex reports no dollars: no cap in money is promised.
         try "default_budget_usd = 3\n\n[tools]\navailable = [\"Read\"]\n\n[agents.plan]\nprovider = \"codex\"\n"
             .write(to: fixture.project.configURL, atomically: true, encoding: .utf8)

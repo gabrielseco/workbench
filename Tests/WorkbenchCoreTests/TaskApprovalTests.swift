@@ -129,6 +129,29 @@ struct TaskApprovalTests {
         #expect(TaskApproval.hash(task: limited, pendingScript: nil) != TaskApproval.hash(task: other, pendingScript: nil))
     }
 
+    @Test func labelsAreBoundToTheApprovalAndEditingThemMakesTheTaskStale() async throws {
+        let before = "9bacf49b550487ed3675f3339586d0da47f309e3c438fe8533b0dac4fe640566"
+        let plain = try TaskDefinition.parse("---\nfix: pr\n---\nDo it.\n", name: "bump")
+        let labelled = try TaskDefinition.parse("---\nfix: pr\nlabels: [a, b]\n---\nDo it.\n", name: "bump")
+        let swapped = try TaskDefinition.parse("---\nfix: pr\nlabels: [b, a]\n---\nDo it.\n", name: "bump")
+        let changed = try TaskDefinition.parse("---\nfix: pr\nlabels: [a, c]\n---\nDo it.\n", name: "bump")
+        let hash = { (task: TaskDefinition) in TaskApproval.hash(task: task, pendingScript: nil) }
+        #expect(hash(labelled) != hash(plain) && hash(labelled) != hash(changed))
+        // Order is layout, not meaning.
+        #expect(hash(labelled) == hash(swapped))
+        // A task without the key keeps the approval it had.
+        let reportPlain = try TaskDefinition.parse("---\nfix: report\n---\nDo it.\n", name: "bump")
+        #expect(hash(reportPlain) == before)
+
+        let fx = try TaskFixture(front: "fix: pr\nlabels: [a]")
+        try await fx.library.approve(fx.name)
+        #expect(try state(fx) == .approved)
+        try fx.write(task: "---\nfix: pr\nlabels: [a, b]\n---\nBump the next countries.\n")
+        #expect(try state(fx) == .stale)
+        try await fx.library.approve(fx.name)
+        #expect(try state(fx) == .approved)
+    }
+
     @Test func aMissingPendingScriptIsRefusedAtApproval() async throws {
         let fx = try TaskFixture(front: "fix: pr\npending: missing.sh")
         await #expect(throws: TaskFileError.self) { try await fx.library.approve(fx.name) }
