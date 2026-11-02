@@ -197,12 +197,13 @@ struct RecentProject: Equatable, Identifiable {
         cancelSendBack()
         current.pendingDiscard = nil
         prReviewShown = nil
+        // The thread goes first: the project alone would pair the new project with the old project's thread id.
+        (currentThread, lastWatch) = (nil, nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
-        (current.goal, current.review, current.goalEditError) = (nil, nil, nil)
+        (current.goal, current.review) = (nil, nil)
         screen = .opening(path: located.root.path)
-        (currentThread, lastWatch) = (nil, nil)
         await reload()
         return true
     }

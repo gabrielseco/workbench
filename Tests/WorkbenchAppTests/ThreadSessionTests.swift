@@ -78,4 +78,15 @@ import Testing
         await store.switchTo(first.project.root.path)
         #expect(store.current !== before, "a thread that said nothing and does nothing leaves no session behind")
     }
+
+    @Test func aGoalEditErrorSurvivesLeavingForAProjectWhoseThreadHasTheSameId() async throws {
+        let (store, first) = try await opened()
+        let other = try await AppFixture()
+        keptSessionFixtures.append(other)
+        try await other.addThread("t1")
+        store.goalEditError = "refused"
+        await store.switchTo(other.project.root.path)
+        await store.switchTo(first.project.root.path)
+        #expect(store.goalEditError == "refused")
+    }
 }
