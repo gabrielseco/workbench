@@ -64,6 +64,8 @@ struct GoalModel: Equatable {
     var goalReadAlso: [String] = []
     /// Steps after a turn and whether this goal skips them.
     var steps: [Step] = []
+    /// The advice a run is followed by, and where it comes from.
+    var advice = AutoAdviceSetting.none
     /// `quick: true`: the goal may have no criteria, and with none the request is all there is to check against.
     var quick = false
     /// The goal can be changed here: it is not approved (an approved goal is in another step), no run holds it and it has not ended.
@@ -147,10 +149,12 @@ struct GoalModel: Equatable {
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
             readAlso: config?.readAlso ?? [], goalReadAlso: goal.readAlso, steps: steps(goal: goal, config: config),
-            quick: goal.quick, editable: editable, pill: pill, blockers: blockers, placeholdersRemain: placeholders)
+            advice: AutoAdviceSetting.read(goal: goal, config: config), quick: goal.quick, editable: editable, pill: pill,
+            blockers: blockers, placeholdersRemain: placeholders)
     }
 
-    /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is none of them.
+    /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is
+    /// none of them.
     static func steps(goal: Goal, config: Config?) -> [Step] {
         // Only the built-in steps need criteria: a stage that shares a name with one reviews the diff and is never unavailable.
         var steps: [Step] = []

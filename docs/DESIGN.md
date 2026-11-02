@@ -81,7 +81,10 @@ ships, and the mockup gets fixed.
   their proofs (six at most, then "and N more"), read-only.
 - **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
   hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
-  project's review stages; a step that cannot run for the goal says why), the limits (model, budget, timeout: read-only, "Change these
+  project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by
+  themselves after a passing turn ("Run the judge and review stages by themselves", a line saying what a run will do, "Runs: judge,
+  design" or "Off", and whether that is the goal's own setting or the project's; disabled, with the project's `[review] auto` named, when
+  that list decides), the limits (model, budget, timeout: read-only, "Change these
   in the goal file"), the allowed tools (ten, then "and N more", granted ones marked), the reference folders (the config's, and the
   goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft that no turn has run, and
   while an approval, a run or another action is going; it says why when the reason lasts ("A goal that has run is not edited."). In a window whose centre column is narrower than 880 (a window under about 1100 wide, the 900 minimum included) it opens
