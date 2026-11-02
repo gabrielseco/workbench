@@ -131,7 +131,7 @@ struct RunSettingsInspector: View {
             Text(advice.line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text(advice.source).font(.caption).foregroundStyle(.secondary)
         }
-        .padding(.top, 4)
+        .padding(.top, 10)
         .help("Runs the judge and the review stages after a turn that passed, unasked. Each costs what its agent costs.")
     }
 
