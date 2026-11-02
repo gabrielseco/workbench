@@ -41,6 +41,64 @@ private let autoVerdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": 
         #expect(try j.fx.events(j.id).allSatisfy { $0.kind != .judgeStarted && $0.kind != .judgeRan })
     }
 
+    // MARK: auto_advance
+
+    @Test func theSwitchRunsTheJudgeOnceForTheTurnWithoutListingIt() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        let env = j.environment("answer=\(try j.file("a.json", autoVerdict))")
+        let first = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: env)
+        #expect(first == [AutoAdviceResult(name: "judge", outcome: .ran(summary: "1 of 1 criteria met"))])
+        let again = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: env)
+        guard case .skipped = again.first?.outcome else {
+            Issue.record("expected skipped, got \(again)")
+            return
+        }
+        #expect(try j.fx.events(j.id).filter { $0.kind == .judgeRan }.count == 1, "not run twice for one turn")
+    }
+
+    @Test func aGoalThatSaysFalseRunsNothingEvenWithTheSwitchOn() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        try setAutoAdvance(false, j)
+        let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: j.environment())
+        #expect(results.isEmpty)
+        #expect(j.fx.service.adviceNames(id: j.id, config: j.config).isEmpty)
+        #expect(try j.fx.events(j.id).allSatisfy { $0.kind != .judgeStarted && $0.kind != .judgeRan })
+    }
+
+    @Test func aGoalThatSaysTrueRunsTheJudgeWithTheSwitchOff() async throws {
+        let j = try await judged()
+        try setAutoAdvance(true, j)
+        #expect(j.fx.service.adviceNames(id: j.id, config: j.config) == ["judge"])
+        let env = j.environment("answer=\(try j.file("a.json", autoVerdict))")
+        let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: env)
+        #expect(results == [AutoAdviceResult(name: "judge", outcome: .ran(summary: "1 of 1 criteria met"))])
+    }
+
+    @Test func aStopBeforeAStepStartsMeansNoStepStartsWithTheSwitchToo() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        let stop = AdviceStop()
+        stop.stop()
+        let results = await j.fx.service.runAutoAdvice(id: j.id, config: j.config, environment: j.environment(), stop: stop)
+        #expect(results == [AutoAdviceResult(name: "judge", outcome: .skipped("stopped"))])
+        #expect(try j.fx.events(j.id).allSatisfy { $0.kind != .judgeStarted && $0.kind != .judgeRan })
+    }
+
+    @Test func theSwitchChangesNoTurnsEnding() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        let before = try j.fx.events(j.id).filter { $0.kind == .turnStarted || $0.kind == .turnEnded }.map(\.kind)
+        _ = await j.fx.service.runAutoAdvice(
+            id: j.id, config: j.config, environment: j.environment("answer=\(try j.file("a.json", autoVerdict))"))
+        let after = try j.fx.events(j.id).filter { $0.kind == .turnStarted || $0.kind == .turnEnded }.map(\.kind)
+        #expect(before == after && after.filter { $0 == .turnStarted }.count == after.filter { $0 == .turnEnded }.count)
+    }
+
+    private func setAutoAdvance(_ value: Bool, _ j: Judged) throws {
+        // The thread is accepted, so the service would refuse the edit; the file is what the advice reads.
+        let url = j.fx.project.goalURL(j.id)
+        let edited = try GoalEditor.apply(.setAutoAdvance(value), to: GoalFile.parse(String(contentsOf: url, encoding: .utf8)))
+        try edited.text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     @Test func aJudgeWithNoAnswerIsALineNotAFailureOfTheThread() async throws {
         let j = try await judged(extraConfig: "[review]\nauto = [\"judge\"]\n")
         let env = j.environment("answer=\(try j.file("bad.json", "not json"))")

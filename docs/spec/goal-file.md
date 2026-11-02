@@ -18,6 +18,7 @@ push_to: feature/x          # optional; continue this branch of origin (base mus
 skip: judge, design         # optional; steps that do not run for this goal only
 read_also: ../backend       # optional; more checkouts a run may read, on top of the config's read_also
 quick: true                 # optional; a quick goal, which may have no criteria (below)
+auto_advance: true          # optional; run the advice (judge, review stages) by itself after a passing turn, for this goal only
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -477,7 +478,12 @@ Notes:
   runner is gone, each entry that `workbench next` lists as due (the judge not yet run for this turn, a stage that applies to the
   change and has no round at this head) runs once, one after the other, through the same code as `workbench judge` and
   `workbench review-stage`: its own event, cost and refusals, and a stage's `max_rounds`. `run` prints one line each, `auto <name>: <a
-  line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. It is advice:
+  line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. **`[review] auto_advance = true`**
+  (default false) is the same without listing the steps: when `auto` lists nothing, the advice is the judge and then every stage in
+  `stages` other than `pr-review`, in that order; a non-boolean is refused when the config loads. A goal's own `auto_advance: true|false`
+  wins over the config for that goal (the approval binds it, as it binds `skip`: setting, changing or clearing it returns an approved
+  goal to draft; a goal without the key keeps the hash it was approved with). An `auto` that lists anything wins over both: the project
+  said which steps, and the switch adds nothing. (`[run]` is the table that starts the verifier's app; the switch is not there.) It is advice:
   a failed or refused step never changes `run`'s exit code, the turn's result or what `accept` and `ship` do. Off by default, since
   each step spends what its agent costs. Nothing runs after a failed turn or check. A stage reads the branch's commits, so while the turn's
   work is uncommitted (a Codex turn leaves it for `accept`) or the branch has no commit past its base, the stage is skipped with that

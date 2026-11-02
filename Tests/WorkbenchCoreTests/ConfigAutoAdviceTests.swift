@@ -48,4 +48,44 @@ import Testing
         let review = "stages = [\"pr-review\"]\nauto = [\"design\"]\n" + Self.designTable
         #expect(problems(review).contains { $0.contains("neither 'judge' nor a stage") }, "\(problems(review))")
     }
+
+    // MARK: auto_advance
+
+    @Test func autoAdvanceIsOffByDefaultAndReadAsABoolean() throws {
+        #expect(try parse("").review.autoAdvance == false)
+        #expect(try parse("auto_advance = true").review.autoAdvance)
+        #expect(try parse("auto_advance = false").review.autoAdvance == false)
+    }
+
+    @Test(arguments: ["auto_advance = \"yes\"", "auto_advance = 1", "auto_advance = [\"judge\"]"])
+    func autoAdvanceThatIsNotABooleanIsRefusedWithTheKeyNamed(review: String) {
+        #expect(problems(review).contains { $0.contains("'auto_advance' must be true or false") }, "\(problems(review))")
+    }
+
+    /// `[run]` is the table that starts the verifier's app: the switch lives under `[review]`, beside `auto`.
+    @Test func aRunTableKeyOfThatNameIsNotTheSwitch() {
+        let text = "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n[run]\nauto_advance = true\n"
+        #expect(throws: ConfigError.self) { try Config.parse(text) }
+    }
+
+    @Test func theAdviceIsAutoWhenItListsAnythingElseTheJudgeAndTheStagesWhenTheSwitchIsOn() throws {
+        let off = try parse(Self.stages + Self.designTable)
+        #expect(off.review.advice(goalAutoAdvance: nil).isEmpty)
+        let on = try parse(Self.stages + "auto_advance = true\n" + Self.designTable)
+        #expect(
+            on.review.advice(goalAutoAdvance: nil) == ["judge", "design"], "pr-review reviews a pushed pull request: never")
+        let onlyTheDefaultStage = try parse("auto_advance = true").review
+        #expect(onlyTheDefaultStage.advice(goalAutoAdvance: nil) == ["judge"], "no stage but the default pr-review")
+        let listed = try parse(Self.stages + "auto = [\"design\"]\nauto_advance = true\n" + Self.designTable)
+        #expect(listed.review.advice(goalAutoAdvance: nil) == ["design"], "an explicit list wins: the switch adds nothing")
+        #expect(listed.review.advice(goalAutoAdvance: false) == ["design"])
+    }
+
+    @Test func aGoalsOwnSwitchBeatsTheConfigs() throws {
+        let on = try parse(Self.stages + "auto_advance = true\n" + Self.designTable).review
+        let off = try parse(Self.stages + Self.designTable).review
+        #expect(on.advice(goalAutoAdvance: false).isEmpty)
+        #expect(off.advice(goalAutoAdvance: true) == ["judge", "design"])
+        #expect(on.advice(goalAutoAdvance: true) == ["judge", "design"] && off.advice(goalAutoAdvance: false).isEmpty)
+    }
 }

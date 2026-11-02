@@ -182,7 +182,7 @@ struct GoalActions: Sendable {
                     // `[review] auto`, as `workbench run` does it once the runner is gone: advice, never the turn's result.
                     let checkFailed = report.check.map { $0.result != .passed } ?? false
                     if report.result == .succeeded, !checkFailed,
-                        let config = try? Config.load(from: project.configURL), !config.review.auto.isEmpty {
+                        let config = try? Config.load(from: project.configURL) {
                         _ = await ThreadService(project: project, git: try GitRunner.discover())
                             .runAutoAdvice(id: thread, config: config, stop: adviceStop)
                     }

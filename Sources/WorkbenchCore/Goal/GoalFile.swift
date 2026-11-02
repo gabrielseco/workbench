@@ -73,6 +73,7 @@ public struct GoalFile: Sendable, Equatable {
         let skip = skipValue(value("skip"), add: add)
         let readAlso = readAlsoValue(value("read_also"), add: add)
         let quick = quickValue(value("quick"), add: add)
+        let autoAdvance = autoAdvanceValue(value("auto_advance"), add: add)
         if let pushTo, let base, let entry = value("base"), base != "origin/\(pushTo)" {
             add(.invalidValue, entry.lineNumber, "'base' must be 'origin/\(pushTo)' when 'push_to' is set, found '\(base)'")
         }
@@ -97,12 +98,12 @@ public struct GoalFile: Sendable, Equatable {
         let goal = Goal(
             id: id, title: title, declaredStatus: declared, base: base, spend: spend,
             turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
-            readAlso: readAlso, quick: quick, approvedAt: value("approved_at")?.value,
+            readAlso: readAlso, quick: quick, autoAdvance: autoAdvance, approvedAt: value("approved_at")?.value,
             approvedHash: value("approved_hash")?.value, request: request, criteria: criteria,
             outOfScope: outOfScope,
             contentHash: GoalHash.hash(
                 base: base, spend: spend, turnTimeoutMin: timeout, model: model, pushTo: pushTo, skip: skip,
-                readAlso: readAlso, quick: quick, body: body))
+                readAlso: readAlso, quick: quick, autoAdvance: autoAdvance, body: body))
         return GoalFile(goal: goal, text: normalized, frontMatter: entries, bodyStartLine: bodyStart)
     }
 
@@ -391,7 +392,7 @@ public struct GoalFile: Sendable, Equatable {
 struct FrontMatterLine: Sendable, Equatable {
     static let knownKeys: Set<String> = [
         "id", "title", "status", "base", "budget_usd", "spend_policy", "turn_timeout_min", "model", "push_to",
-        "skip", "read_also", "quick", "approved_at", "approved_hash",
+        "skip", "read_also", "quick", "auto_advance", "approved_at", "approved_hash",
     ]
 
     var key: String
@@ -487,6 +488,18 @@ extension GoalFile {
         default:
             add(.invalidValue, entry.lineNumber, "'quick' must be 'true' or 'false', found '\(entry.value)'")
             return false
+        }
+    }
+
+    /// `auto_advance: true` or `false`; absent is nil, which follows the config.
+    static func autoAdvanceValue(_ entry: FrontMatterLine?, add: (GoalProblem.Code, Int?, String) -> Void) -> Bool? {
+        guard let entry else { return nil }
+        switch entry.value {
+        case "true": return true
+        case "false": return false
+        default:
+            add(.invalidValue, entry.lineNumber, "'auto_advance' must be 'true' or 'false', found '\(entry.value)'")
+            return nil
         }
     }
 

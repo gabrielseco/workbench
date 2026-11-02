@@ -205,6 +205,45 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
     }
 }
 
+@Suite struct GoalAutoAdvanceTests {
+    @Test func theKeyIsReadAndTheEditorWritesAndClearsIt() throws {
+        #expect(try parsed().goal.autoAdvance == nil, "absent follows the config")
+        let on = try GoalEditor.apply(.setAutoAdvance(true), to: parsed())
+        #expect(on.goal.autoAdvance == true && on.text.contains("auto_advance: true"))
+        let off = try GoalEditor.apply(.setAutoAdvance(false), to: on)
+        #expect(off.goal.autoAdvance == false && off.text.contains("auto_advance: false"))
+        #expect(!off.text.contains("auto_advance: true"))
+        let cleared = try GoalEditor.apply(.setAutoAdvance(nil), to: off)
+        #expect(cleared.goal.autoAdvance == nil && !cleared.text.contains("auto_advance"))
+        #expect(cleared.text == sample)
+    }
+
+    @Test func aBadValueIsAGoalError() {
+        for bad in ["auto_advance: yes", "auto_advance: ", "auto_advance: 1", "auto_advance: True"] {
+            let text = sample.replacingOccurrences(of: "model: opus", with: "model: opus\n\(bad)")
+            #expect(throws: GoalParseError.self, "\(bad)") { try GoalFile.parse(text) }
+        }
+    }
+
+    /// The advice costs what its agents cost, so the person approves it: changing it after approval returns the goal to draft.
+    @Test func changingItAfterApprovalMakesTheApprovalStale() throws {
+        let approved = try parsed().approving()
+        #expect(approved.goal.approval == .approved)
+        #expect(try GoalEditor.apply(.setAutoAdvance(true), to: approved).goal.approval == .stale)
+        let on = try GoalEditor.apply(.setAutoAdvance(true), to: parsed()).approving()
+        #expect(try GoalEditor.apply(.setAutoAdvance(false), to: on).goal.approval == .stale, "true and false differ")
+        #expect(try GoalEditor.apply(.setAutoAdvance(nil), to: on).goal.approval == .stale)
+    }
+
+    @Test func aGoalThatDoesNotSayKeepsTheHashItWasApprovedWith() {
+        let plain = GoalHash.hash(base: "main", spend: .hardCap(5), turnTimeoutMin: 30, body: "b")
+        #expect(plain == GoalHash.hash(base: "main", spend: .hardCap(5), turnTimeoutMin: 30, autoAdvance: nil, body: "b"))
+        let on = GoalHash.hash(base: "main", spend: .hardCap(5), turnTimeoutMin: 30, autoAdvance: true, body: "b")
+        let off = GoalHash.hash(base: "main", spend: .hardCap(5), turnTimeoutMin: 30, autoAdvance: false, body: "b")
+        #expect(Set([plain, on, off]).count == 3)
+    }
+}
+
 @Suite(.processGate) struct GoalEditServiceTests {
     @Test func anEditIsWrittenAndRecordedAndStalesAnApprovedGoal() async throws {
         let fx = try await RunnerFixture()
@@ -214,6 +253,16 @@ private func parsed(_ text: String = sample) throws -> GoalFile { try GoalFile.p
         let onDisk = try GoalFile.parse(String(contentsOf: fx.project.goalURL(id), encoding: .utf8))
         #expect(onDisk.goal.request == "Changed my mind." && onDisk.goal.approval == .stale)
         #expect(try fx.kinds(id).last == "goal.saved")
+    }
+
+    @Test func theAutoAdvanceEditGoesThroughTheServiceLikeTheOthersAndStalesTheApproval() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let edited = try await fx.service.editGoal(id: id, .setAutoAdvance(true))
+        #expect(edited.goal.autoAdvance == true && edited.goal.approval == .stale)
+        #expect(try fx.kinds(id).last == "goal.saved")
+        let cleared = try await fx.service.editGoal(id: id, .setAutoAdvance(nil))
+        #expect(cleared.goal.autoAdvance == nil)
     }
 
     @Test func anEditIsRefusedAndWritesNothingWhenItWouldNotParse() async throws {

@@ -410,7 +410,7 @@ enum Commands {
         // is gone by now, so `judge` and `review-stage` accept the thread; an answer or a failure is a line, never the turn's exit code.
         let checkFailed = report.check.map { $0.result != .passed } ?? false
         if report.result == .succeeded, !checkFailed,
-            let config = try? Config.load(from: ctx.project.configURL), !config.review.auto.isEmpty {
+            let config = try? Config.load(from: ctx.project.configURL), !ctx.service.adviceNames(id: id, config: config).isEmpty {
             out()
             let results = await ctx.service.runAutoAdvice(id: id, config: config, stop: adviceStop) { out("  \($0)") }
             for line in ThreadService.describe(results) { out(line) }
