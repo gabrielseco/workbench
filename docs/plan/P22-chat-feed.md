@@ -142,7 +142,8 @@ started, a tool call with its summary, a file edit with its diff size, a denial)
 screenshots, a decision (the one button and why), a notice. One `FeedItem` kind per row in artboards A to D.
 *Tests:* a fixture log per scenario produces the expected items in order; a damaged log shows what could be read and says so (as
 `ThreadSnapshot.problems` does now); bounded: a turn with 1,000 activity items becomes a bounded feed, grouped, never a thousand rows.
-Whether this lives in `WorkbenchCore` (so `workbench log` and a future web view can share it) or in the app is decided here.
+Decided: it lives in `WorkbenchCore/Feed/` (so `workbench log` and a future web view can share it, and the Linux gate covers it). A turn is at most
+50 activity items (refused calls are kept first, up to 49, and the rest counted) plus its own rows; a whole feed is at most 1,000 items, newest kept. `RunModel` keeps working until slice 7.
 
 ### 3. The feed screen, behind the flag
 
