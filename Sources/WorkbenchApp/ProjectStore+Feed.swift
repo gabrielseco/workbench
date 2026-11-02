@@ -27,6 +27,9 @@ extension ProjectStore {
         goal.editable && snapshot.state.lastTurn == 0 && !starting && !runningHere && busy == nil
     }
 
+    /// The advice switch pressed: the goal's `auto_advance` is set, or cleared when the project already does what is asked.
+    func toggleAdvice() async { await editGoal { $0.advice.toggled() } }
+
     /// Whether the feed's goal card is the editor now: there is a goal and it may be changed.
     func feedEditsGoal(_ snapshot: ThreadSnapshot) -> Bool {
         goal.map { goalEditable(snapshot, goal: $0) } ?? false

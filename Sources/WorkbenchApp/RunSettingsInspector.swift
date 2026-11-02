@@ -108,11 +108,31 @@ struct RunSettingsInspector: View {
                     step.unavailable.map { "Not available: \($0)" }
                         ?? (step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project"))
             }
+            adviceSwitch(goal.advice, editable: editable)
             ForEach(goal.steps.filter { $0.unavailable != nil }, id: \.name) { step in
                 Text("\(step.label) not available: \(step.unavailable ?? "")")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// One switch for the advice: the steps themselves are the switches above, this says whether they run by themselves after a turn.
+    private func adviceSwitch(_ advice: AutoAdviceSetting, editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(AutoAdviceSetting.label).font(.callout).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Toggle(
+                    AutoAdviceSetting.label,
+                    isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
+                )
+                .toggleStyle(.switch).labelsHidden().disabled(!advice.switchEnabled(editable: editable))
+            }
+            Text(advice.line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(advice.source).font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.top, 10)
+        .help("Runs the judge and the review stages after a turn that passed, unasked. Each costs what its agent costs.")
     }
 
     // MARK: Limits and tools
