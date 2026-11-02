@@ -15,7 +15,7 @@
 # with no `-m` must exit 0 and commit exactly the subject and the `Workbench-Thread:` line, with none of the request. Exit 0 only when every step passed, 1 when one failed, 2
 # when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 leaves a file uncommitted in thread A's worktree
 # before `accept`, so accept commits it with the message and the steps "accept -m with nothing pending prints the
-# ignored line" and "the branch tip is unchanged by accept" must FAIL; it also gives thread C's accept the old default (with the request) as `-m`, so the steps "the default message is short", "has no text of the request" and "is the subject and the thread trailer" must FAIL (and accept itself, over 8000 bytes). The frame is in lib.sh. Run by hand, not by CI.
+# ignored line" and "the branch tip is unchanged by accept" must FAIL; it also gives thread C's accept the old default (with the request) as `-m`, so the steps "accept with the default message and a 20 KB request: exit 0" (over 8000 bytes, so accept refuses), "the default message is short" and "the default message is the subject and the thread trailer" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
