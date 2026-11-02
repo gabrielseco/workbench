@@ -7,8 +7,16 @@ import PackageDescription
 // debug build was fine). `docs/swift-bugs/simplify-cfg-async.swift` is a 60-line case, `scripts/swift-bug-repro.sh` tells whether
 // the installed toolchain still has it. Remove this when it prints "fixed". The flag cannot be used by a package that depends on
 // WorkbenchCore (SwiftPM refuses unsafe flags in dependencies): the app (P3) must build it from this package or wait for the fix.
+//
+// Xcode 27.2 (Swift 6.4.2) has a second, different optimizer bug: the release build aborts in the `Simplification` pass with
+// "SIL/BorrowUtils.swift: cannot get borrow introducers for unknown guaranteed value", on `ThreadService.planLocked` (and, when that is
+// cut short, on `plan`). Restructuring the function did not avoid it (docs/swift-bugs/simplification-borrow.md), so that pass is
+// disabled in release builds too. CI's Xcode 26.1 does not have it. Remove `simplification` when a release build of this package
+// with the flag taken out compiles on the newest Xcode.
 let simplifyCFGWorkaround: [SwiftSetting] = [
-    .unsafeFlags(["-Xllvm", "-sil-disable-pass=simplify-cfg"], .when(configuration: .release))
+    .unsafeFlags(
+        ["-Xllvm", "-sil-disable-pass=simplify-cfg", "-Xllvm", "-sil-disable-pass=simplification"],
+        .when(configuration: .release))
 ]
 
 // The app is SwiftUI and AppKit, which only macOS has; Linux builds the library and the CLI only (the PR gate's job).
