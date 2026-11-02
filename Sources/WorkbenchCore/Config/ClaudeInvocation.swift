@@ -89,8 +89,7 @@ extension Config {
         // The CLI turns MCP servers off under `--safe-mode`, even with `--mcp-config`, so a task with `mcp_tools` runs without it.
         // Skills and commands stay off, and `--strict-mcp-config` keeps every server but the task's out.
         if let mcp = turn.mcp {
-            if safeMode { args += ["--disable-slash-commands"] }
-            args += ["--mcp-config", mcp.configFile.path, "--strict-mcp-config"]
+            args += ["--disable-slash-commands", "--mcp-config", mcp.configFile.path, "--strict-mcp-config"]
         } else if safeMode {
             args += ["--safe-mode", "--disable-slash-commands"]
         }

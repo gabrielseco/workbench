@@ -170,6 +170,16 @@ struct McpInvocationTests {
         #expect(args.suffix(2) == ["--", "x"])
     }
 
+    @Test func skillsAndCommandsStayOffForATaskTurnEvenWhenSafeModeIsOff() throws {
+        let cfg = try Config.parse("safe_mode = false\n" + toolsTable + linear)
+        let mcp = try McpAccess.write(
+            tools: ["mcp__linear__get_issue"], servers: cfg.mcpServers, in: try Scratch.directory("mcp"))
+        let args = try cfg.invocation(for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x", mcp: mcp))
+            .arguments
+        #expect(
+            args.contains("--disable-slash-commands") && args.contains("--strict-mcp-config") && !args.contains("--safe-mode"))
+    }
+
     @Test func aTurnWithoutToolsGetsNoMcpFlagAndKeepsSafeMode() throws {
         let args = try config().invocation(
             for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")
@@ -263,6 +273,18 @@ struct McpInvocationTests {
         try Data("{\"tools\":[\"Bash\"]}".utf8).write(to: damaged.mcpToolsURL("t1"))
         let broken = try runner(damaged)
         await #expect(throws: McpError.self) { try await broken.mcpAccess(config: cfg, agent: claude) }
+    }
+
+    @Test func aPipeOrAHugeFileInPlaceOfTheToolsFileIsRefusedWithoutBeingRead() throws {
+        let pipe = try project(tools: nil)
+        #expect(mkfifo(pipe.mcpToolsURL("t1").path, 0o600) == 0)
+        // A pipe nobody writes to would block a read for ever: this returns, and refuses.
+        #expect(throws: McpError.self) { try McpToolsFile.read(project: pipe, thread: "t1") }
+
+        let huge = try project(tools: nil)
+        let padding = String(repeating: " ", count: McpToolsFile.maxFileBytes + 1)
+        try Data("{\"tools\":[\"mcp__linear__get_issue\"]}\(padding)".utf8).write(to: huge.mcpToolsURL("t1"))
+        #expect(throws: McpError.self) { try McpToolsFile.read(project: huge, thread: "t1") }
     }
 }
 

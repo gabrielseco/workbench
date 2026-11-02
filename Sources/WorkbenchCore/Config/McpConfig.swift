@@ -234,6 +234,9 @@ public enum McpError: Error, Equatable, CustomStringConvertible {
 /// `threads/<id>/mcp_tools.json`: the tools a task's thread may call, written by the task run from the approved task file and read by
 /// each turn. Only tool names: the servers come from the config every time. A thread without the file has no MCP tools.
 public enum McpToolsFile {
+    /// Ten tool names of at most 100 characters each fit well inside this.
+    static let maxFileBytes = 4096
+
     public static func write(_ tools: [String], project: Project, thread: String) throws {
         let data = try JSONSerialization.data(withJSONObject: ["tools": tools], options: [.sortedKeys])
         try data.write(to: project.mcpToolsURL(thread), options: .atomic)
@@ -243,8 +246,10 @@ public enum McpToolsFile {
     /// grant is never read as "none" or as a wider one.
     public static func read(project: Project, thread: String) throws -> [String] {
         let url = project.mcpToolsURL(thread)
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        guard let data = try? Data(contentsOf: url),
+        // Looked at before it is opened: a pipe would block the runner and a huge file would be read whole.
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return [] }
+        guard attributes[.type] as? FileAttributeType == .typeRegular, (attributes[.size] as? Int ?? .max) <= maxFileBytes,
+            let data = try? Data(contentsOf: url),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let tools = object["tools"] as? [String], tools.count <= McpTool.maxTools,
             tools.allSatisfy({ McpTool.split($0) != nil })
