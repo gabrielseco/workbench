@@ -233,10 +233,12 @@ private final class SkillProbe: @unchecked Sendable {
 
     @Test func aFailedApproveStartsNoRunAndSaysWhy() async throws {
         let ran = Flag()
-        let (store, _) = try await actionsStore(approve: { _, _ in throw Refused() }, run: { _, _ in ran.set() })
+        // The fixture is kept: a project that vanished would leave no thread on screen, and the error is the thread's.
+        let (store, fixture) = try await actionsStore(approve: { _, _ in throw Refused() }, run: { _, _ in ran.set() })
         await store.approveAndRun()
         try await Task.sleep(for: .milliseconds(100))
         #expect(!ran.value && store.actionError == "refused")
+        withExtendedLifetime(fixture) {}
     }
 
     @Test func aRunThatCannotStartIsReported() async throws {

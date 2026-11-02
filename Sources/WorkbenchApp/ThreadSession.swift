@@ -11,7 +11,7 @@ import WorkbenchCore
         var projectPath: String
         var thread: String
 
-        init(project: Project, thread: String?) { (projectPath, self.thread) = (project.root.path, thread ?? "") }
+        init(project: Project?, thread: String?) { (projectPath, self.thread) = (project?.root.path ?? "", thread ?? "") }
     }
 
     struct OwnedRun {
@@ -28,6 +28,28 @@ import WorkbenchCore
     @ObservationIgnored var awaitingAfterTurn: Int?
     /// The run this app started in the thread and has not seen end.
     @ObservationIgnored var ownedRun: OwnedRun?
+
+    /// The goal of the thread, read with the config; nil without a thread.
+    var goal: GoalModel?
+    /// The latest turn's review while it awaits one; nil otherwise.
+    var review: ReviewModel?
+    /// What the last action said when it did not go through.
+    var actionError: String?
+    /// Something an action did not do that is not a failure, such as files left out of a diff.
+    var actionNote: String?
+    /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
+    var notice: String?
+    /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
+    var pendingDiscard: DiscardPlan?
+    /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
+    var goalEditError: String?
+    /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
+    var goalEditSerial = 0
+    @ObservationIgnored var goalEdits: Task<Void, Never>?
+    /// An approval is going through.
+    var starting = false
+    /// A turn the user is stopping: set from Stop until the log says it ended.
+    var stopping = false
 
     init(key: Key) { self.key = key }
 
