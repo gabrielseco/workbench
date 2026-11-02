@@ -177,6 +177,27 @@ import Testing
         running.open()
     }
 
+    @Test func aThreadWaitingForItsRunStillHoldsTheWindowWhileAnotherProjectIsOnScreen() async throws {
+        let running = Gate()
+        let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
+        let (store, a) = try await store(actions, approved: true, turn: false)
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+
+        await store.approveAndRun()
+        await store.switchTo(other.project.root.path)
+        #expect(store.busy == nil && store.runningProjectPath == a.project.root.path, "the run is not hidden, only its line")
+        var ran = false
+        await store.working("Opening the worktree…") { ran = true }
+        #expect(!ran, "one action at a time, whichever thread it is for")
+        running.open()
+        try await until("the run ends and the window is free") { store.runningProjectPath == nil }
+        await store.untilIdle()
+        await store.working("Opening the worktree…") { ran = true }
+        #expect(ran)
+    }
+
     @Test func anActionThatFailsStopsSayingItIsWorking() async throws {
         struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
         let actions = GoalActions(acceptPlan: { _, _ in throw Refused() }, discardPlan: { _, _ in throw Refused() })

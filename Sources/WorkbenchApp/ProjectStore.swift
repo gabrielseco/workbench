@@ -53,20 +53,35 @@ struct RecentProject: Equatable, Identifiable {
     /// What the app is doing for the person right now, in words ("Discarding: removing the worktree and branch…"); nil when it is
     /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
     /// takes a moment sets it, so a click is never followed by a window that looks asleep.
-    var busy: String? { busyText.flatMap { busyScope == currentScope ? $0 : nil } }
-    private var busyText: String?
-    /// The project and thread the busy text is about: `busy` shows only while they are the ones on screen.
-    private var busyScope: String?
+    var busy: String? { currentSession?.busyText }
     /// The project and thread on screen, as one value to compare.
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
-    /// A run was started and the log does not show a newer turn than this one yet (the worktree is being cut, setup is installing),
-    /// in the thread that scope names: the text stays up until it does, or the run ends or fails.
-    @ObservationIgnored private var awaitingAfterTurn: Int?
-    @ObservationIgnored private var awaitingScope: String?
-    private var awaitingRun: Bool { awaitingAfterTurn != nil }
+    /// What the app is doing for each thread that has something going on; a session leaves when it has nothing left to do.
+    private var sessions: [ThreadSession.Key: ThreadSession] = [:]
+    /// The session of the thread on screen, if it has anything going on.
+    private var currentSession: ThreadSession? {
+        project.flatMap { sessions[ThreadSession.Key(project: $0, thread: currentThread)] }
+    }
+    /// The thread's session, made when its first piece of work starts.
+    private func session(_ project: Project, _ thread: String?) -> ThreadSession {
+        let key = ThreadSession.Key(project: project, thread: thread)
+        if let existing = sessions[key] { return existing }
+        let made = ThreadSession(key: key)
+        sessions[key] = made
+        return made
+    }
+    /// Whether any session is working: one action at a time holds the window.
+    private var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
+    private var ownedRun: ThreadSession.OwnedRun? { sessions.values.lazy.compactMap(\.ownedRun).first }
 
-    private func setBusy(_ text: String?) {
-        (busyText, busyScope) = (text, text == nil ? nil : currentScope)
+    private func setBusy(_ text: String?, in session: ThreadSession) {
+        session.busyText = text
+        settled()
+    }
+
+    /// Drops the sessions with nothing going on and wakes whoever waits for the window to be free.
+    private func settled() {
+        if sessions.values.contains(where: \.isIdle) { sessions = sessions.filter { !$0.value.isIdle } }
         resumeIdleWaiters()
     }
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
@@ -75,13 +90,13 @@ struct RecentProject: Equatable, Identifiable {
     /// Returns once no other action holds the window (an "Open in Herdr" still going, a decision being recorded), so work the
     /// app does on its own is not refused for a click that was already in progress.
     func untilIdle() async {
-        while busyText != nil || deciding {
+        while anyBusy || deciding {
             await withCheckedContinuation { idleWaiters.append($0) }
         }
     }
 
     private func resumeIdleWaiters() {
-        guard busyText == nil, !deciding, !idleWaiters.isEmpty else { return }
+        guard !anyBusy, !deciding, !idleWaiters.isEmpty else { return }
         let waiting = idleWaiters
         idleWaiters = []
         waiting.forEach { $0.resume() }
@@ -127,15 +142,6 @@ struct RecentProject: Equatable, Identifiable {
     var deciding = false { didSet { resumeIdleWaiters() } }
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
     var notice: String?
-    /// The run this app started and has not seen end. At most one: a second start is refused.
-    @ObservationIgnored private var ownedRun: OwnedRun?
-
-    private struct OwnedRun {
-        var handle: RunHandle
-        var project: Project
-        var thread: String
-    }
-
     @ObservationIgnored let preferences: Preferences
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
@@ -276,34 +282,35 @@ struct RecentProject: Equatable, Identifiable {
         await observeAttention(readTasks: false)
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
-        if let after = awaitingAfterTurn, awaitingScope == currentScope, case .thread(let shown) = screen {
+        if let session = currentSession, let after = session.awaitingAfterTurn, case .thread(let shown) = screen {
             if shown.state.lastTurn > after {
                 sendBackNote = ""
-                endRunStart()
+                endRunStart(session)
             }
         }
     }
 
     /// The window is no longer waiting for a run to show up.
-    private func endRunStart() {
-        guard awaitingRun else { return }
-        (awaitingAfterTurn, awaitingScope) = (nil, nil)
-        setBusy(nil)
+    private func endRunStart(_ session: ThreadSession) {
+        guard session.awaitingRun else { return }
+        session.awaitingAfterTurn = nil
+        setBusy(nil, in: session)
     }
 
     /// Runs `body` with `text` shown as what the app is doing, and clears it after, whatever happened.
     /// One at a time: a second click while the first is still working is ignored, so the first one's end cannot take the line
     /// down while the second is still going.
     func working(_ text: String, _ body: () async -> Void) async {
-        guard busyText == nil else { return }
-        setBusy(text)
-        defer { if !awaitingRun { setBusy(nil) } }
+        guard !anyBusy, let project else { return }
+        let mine = session(project, currentThread)
+        setBusy(text, in: mine)
+        defer { if !mine.awaitingRun { setBusy(nil, in: mine) } }
         await body()
     }
 
     /// Says what a `working` body moved on to, such as from reading a plan to doing it; nothing when no work is going on.
     func nowWorking(_ text: String) {
-        if busyText != nil { busyText = text }
+        sessions.values.first { $0.busyText != nil }?.busyText = text
     }
 
     // MARK: Goal actions
@@ -320,11 +327,12 @@ struct RecentProject: Equatable, Identifiable {
         await goalEdits?.value
         let mine = generation
         starting = true
-        setBusy("Approving the goal…")
+        let mineSession = session(project, thread)
+        setBusy("Approving the goal…", in: mineSession)
         actionError = nil
         defer {
             starting = false
-            if !awaitingRun { setBusy(nil) }
+            if !mineSession.awaitingRun { setBusy(nil, in: mineSession) }
         }
         do {
             try await actions.approve(project, thread)
@@ -357,9 +365,10 @@ struct RecentProject: Equatable, Identifiable {
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
         var turnNow = 0
         if case .thread(let shown) = screen { turnNow = shown.state.lastTurn }
-        (awaitingAfterTurn, awaitingScope) = (turnNow, currentScope)
-        setBusy("Starting the run…")
-        ownedRun = OwnedRun(handle: handle, project: project, thread: thread)
+        let started = session(project, thread)
+        started.awaitingAfterTurn = turnNow
+        started.ownedRun = ThreadSession.OwnedRun(handle: handle, project: project, thread: thread)
+        setBusy("Starting the run…", in: started)
         applyOwnership()
         Task { [weak self] in
             var failed = false
@@ -369,9 +378,9 @@ struct RecentProject: Equatable, Identifiable {
                 if self?.sendingBack == false { self?.sendBackNote = "" }
             } catch {
                 failed = true
-                self?.runFailed(error, generation: mine)
+                self?.runFailed(error, in: started, generation: mine)
             }
-            await self?.runEnded(failed: failed)
+            await self?.runEnded(started, failed: failed)
         }
     }
 
@@ -382,10 +391,11 @@ struct RecentProject: Equatable, Identifiable {
         screen = .thread(shown)
     }
 
-    private func runEnded(failed: Bool) async {
-        ownedRun = nil
+    private func runEnded(_ session: ThreadSession, failed: Bool) async {
+        session.ownedRun = nil
         stopping = false
-        endRunStart()
+        endRunStart(session)
+        settled()
         await reload()
         // A run that returns leaves its turn ended in the log; one that does not has died without saying how.
         let orphaned = if case .thread(let shown) = screen { shown.run?.phase == .orphaned } else { false }
@@ -427,7 +437,7 @@ struct RecentProject: Equatable, Identifiable {
         guard let project, let thread = currentThread, !stopping else { return }
         stopping = true
         actionError = nil
-        if let owned = ownedRun, owned.project == project, owned.thread == thread {
+        if let owned = sessions[ThreadSession.Key(project: project, thread: thread)]?.ownedRun {
             await owned.handle.stop()
         } else if await !actions.requestStop(project, thread) {
             stopping = false
@@ -445,9 +455,9 @@ struct RecentProject: Equatable, Identifiable {
 
     /// A run that could not start (no provider executable, a config that does not load) records no turn, so this is the only
     /// place the person hears of it. An answer for another project is dropped.
-    private func runFailed(_ error: Error, generation mine: Int) {
+    private func runFailed(_ error: Error, in session: ThreadSession, generation mine: Int) {
         guard mine == generation else { return }
-        endRunStart()
+        endRunStart(session)
         actionError = "The run did not start: \(error)"
         reopenSendBack()
     }
