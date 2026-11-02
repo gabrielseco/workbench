@@ -85,13 +85,18 @@ struct RunSettingsInspector: View {
         section("AFTER THE TURN") {
             ForEach(goal.steps, id: \.name) { step in
                 let on = !step.skipped && step.unavailable == nil
-                Toggle(
-                    step.label,
-                    isOn: Binding(
-                        get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } })
-                )
-                .toggleStyle(.switch).font(.callout)
-                .disabled(!editable || step.unavailable != nil)
+                // The switches share a column on the right, whatever the labels' widths.
+                HStack {
+                    Text(step.label).font(.callout)
+                    Spacer(minLength: 8)
+                    Toggle(
+                        step.label,
+                        isOn: Binding(
+                            get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } })
+                    )
+                    .toggleStyle(.switch).labelsHidden()
+                    .disabled(!editable || step.unavailable != nil)
+                }
                 .help(
                     step.unavailable.map { "Not available: \($0)" }
                         ?? (step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project"))
