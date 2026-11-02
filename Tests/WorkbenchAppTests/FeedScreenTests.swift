@@ -240,44 +240,33 @@ import WorkbenchCore
         func next() -> Int { lock.withLock { count += 1; return count } }
     }
 
-    /// Holds a read half way: the test knows when it is in and decides when it goes on.
-    private final class Hold: @unchecked Sendable {
-        private let entered = DispatchSemaphore(value: 0)
-        private let release = DispatchSemaphore(value: 0)
-        func hold() {
-            entered.signal()
-            release.wait()
-        }
-        func untilHeld() async {
-            await withCheckedContinuation { continuation in
-                DispatchQueue.global().async {
-                    self.entered.wait()
-                    continuation.resume()
-                }
-            }
-        }
-        func letGo() { release.signal() }
-    }
-
-    @Test func aReadThatBeganBeforeTheFeedWasTurnedOnDoesNotBlankIt() async throws {
+    /// A read that began with the preview off and answers after it was turned on is for the other window, and is dropped. The stale
+    /// read turns the preview on itself, then answers with a screen nothing else could show; nothing here waits on a thread.
+    @Test func aReadThatBeganBeforeTheFeedWasTurnedOnDoesNotReplaceTheScreen() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
-        let (calls, hold) = (Calls(), Hold())
+        let calls = Calls()
+        let box = StoreBox()
         let store = ProjectStore(
             preferences: MemoryPreferences(),
             loader: { project, feed in
-                // The second read the window makes is a poll begun with the preview off; it is held until the toggle has finished.
-                if calls.next() == 2 { hold.hold() }
-                return ProjectLoader.load(project: project, feed: feed)
+                guard calls.next() == 2 else { return ProjectLoader.load(project: project, feed: feed) }
+                DispatchQueue.main.sync { box.store?.chatFeedOn = true }
+                return ProjectLoader.Loaded(screen: .noThread, thread: nil, watch: ProjectLoader.Watch())
             })
+        box.store = store
         #expect(await store.open(fixture.root))
-        let stale = Task { await store.reload() }
-        await hold.untilHeld()
-        await store.setChatFeed(true)
-        hold.letGo()
-        await stale.value
-        guard case .thread(let shown) = store.screen else { throw LoadError.notAThread }
-        #expect(!shown.feed.isEmpty, "the answer of the read that began with the preview off was dropped")
+        guard case .thread = store.screen else { throw LoadError.notAThread }
+        await store.reload()
+        #expect(store.chatFeedOn)
+        guard case .thread = store.screen else {
+            Issue.record("the answer of the read that began with the preview off replaced the screen: \(store.screen)")
+            return
+        }
+    }
+
+    @MainActor private final class StoreBox: @unchecked Sendable {
+        weak var store: ProjectStore?
     }
 
     private func differs(
