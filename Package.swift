@@ -11,12 +11,17 @@ import PackageDescription
 // Xcode 27.2 (Swift 6.4.2) has a second, different optimizer bug: the release build aborts in the `Simplification` pass with
 // "SIL/BorrowUtils.swift: cannot get borrow introducers for unknown guaranteed value", on `ThreadService.planLocked` (and, when that is
 // cut short, on `plan`). Restructuring the function did not avoid it (docs/swift-bugs/simplification-borrow.md), so that pass is
-// disabled in release builds. CI builds with the one Xcode named in .github/actions/xcode. Remove `simplification` when a release
+// disabled in release builds on a 6.4 or newer compiler. CI builds with the one Xcode named in .github/actions/xcode. Remove `simplification` when a release
 // build of this package with the flag taken out compiles on the newest Xcode.
+#if compiler(>=6.4)
+let releaseDisabledPasses = ["-Xllvm", "-sil-disable-pass=simplify-cfg", "-Xllvm", "-sil-disable-pass=simplification"]
+#else
+// Only the compiler that has the bug gets the second flag: on Swift 6.1.2 and 6.3.3 a pipeline without `Simplification` crashes in
+// `CodeSinking` / `StackPromotion` instead.
+let releaseDisabledPasses = ["-Xllvm", "-sil-disable-pass=simplify-cfg"]
+#endif
 let simplifyCFGWorkaround: [SwiftSetting] = [
-    .unsafeFlags(
-        ["-Xllvm", "-sil-disable-pass=simplify-cfg", "-Xllvm", "-sil-disable-pass=simplification"],
-        .when(configuration: .release))
+    .unsafeFlags(releaseDisabledPasses, .when(configuration: .release))
 ]
 
 // The app is SwiftUI and AppKit, which only macOS has; Linux builds the library and the CLI only (the PR gate's job).

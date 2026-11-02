@@ -15,8 +15,9 @@ avoided it: moving the agent turn into its own function, choosing the agent with
 `attach` `@escaping`, `@inline(never)`. Cutting the function short made the crash move to `plan`, which calls it inside the `withLog`
 closure, so no single construct is to blame.
 
-What works: `-Xllvm -sil-disable-pass=simplification`, in `Package.swift` next to the `simplify-cfg` workaround. The core library, the CLI
-and the app then build in release on Xcode 27.2.
+What works: `-Xllvm -sil-disable-pass=simplification`, in `Package.swift` next to the `simplify-cfg` workaround, only for a compiler of
+6.4 or newer: the core library, the CLI and the app then build in release on Xcode 27.2. On Swift 6.1.2 and 6.3.3 the same flag makes
+the optimizer crash in another pass (`CodeSinking`, `StackPromotion`), so it must not be applied there.
 
 To see whether it is still needed: take `-sil-disable-pass=simplification` out of `simplifyCFGWorkaround` and run
 `swift build -c release --target WorkbenchCore` on the newest Xcode. If it compiles, remove the flag for good. A report to Apple
