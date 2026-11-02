@@ -25,11 +25,10 @@ struct DecisionCard: View {
                             .help(action.help ?? "")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Label("More actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .help("More actions")
-                .accessibilityLabel("More actions")
             }
             if let primary = decision.primary {
                 Button(primary.title) { perform(primary) }

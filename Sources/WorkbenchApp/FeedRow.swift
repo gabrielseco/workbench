@@ -104,23 +104,26 @@ struct GoalCardRow: View {
             HStack {
                 Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
+                // Outside the combined text below: a button folded into it would make the whole card one button.
                 if let edit {
                     Button("Edit goal…", action: edit).buttonStyle(.link).font(.callout).help("Opens the goal's editor")
                 }
             }
-            Text(title ?? "Goal").font(.headline).lineLimit(2)
-            HStack(spacing: 10) {
-                Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
-                Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
-                if let hash, !hash.isEmpty {
-                    Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title ?? "Goal").font(.headline).lineLimit(2)
+                HStack(spacing: 10) {
+                    Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
+                    Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
+                    if let hash, !hash.isEmpty {
+                        Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    }
                 }
+                .font(.callout)
             }
-            .font(.callout)
+            .accessibilityElement(children: .combine)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
     }
 
     private var approvalText: String {
