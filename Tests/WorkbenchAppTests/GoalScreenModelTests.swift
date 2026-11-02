@@ -242,11 +242,13 @@ private final class SkillProbe: @unchecked Sendable {
     }
 
     @Test func aRunThatCannotStartIsReported() async throws {
-        let (store, _) = try await actionsStore(approve: { _, _ in }, run: { _, _ in throw Refused() })
+        // Kept: the refusal is said on the thread, and a project that vanished leaves none on screen.
+        let (store, fixture) = try await actionsStore(approve: { _, _ in }, run: { _, _ in throw Refused() })
         await store.approveAndRun()
         // The run starts in a task of its own: wait for what it says, not for a fixed time a loaded runner may overrun.
         for _ in 0..<1000 where store.actionError == nil { try await Task.sleep(for: .milliseconds(5)) }
         #expect(store.actionError == "The run did not start: refused")
+        withExtendedLifetime(fixture) {}
     }
 
     @Test func aGoalCanBeStartedFromAProjectWithNoThread() async throws {
