@@ -39,6 +39,8 @@ struct RunSettingsInspector: View {
     var store: ProjectStore
     /// The sheet has the title already.
     var showsTitle = true
+    /// What an action said, inside the column: in the sheet the feed with its message rows is behind it, out of sight.
+    var showsMessages = false
     @State private var addingFolder = false
     @State private var folderText = ""
     @Environment(\.feedDrawsEagerly) private var drawsEagerly
@@ -61,6 +63,11 @@ struct RunSettingsInspector: View {
                 folders(goal, editable: editable)
                 openers(goal)
                 if let error = store.goalEditError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+                if showsMessages {
+                    MessageRows(
+                        error: store.actionError, note: store.actionNote, notice: store.notice,
+                        handoff: store.herdrHandoffOutcome)
+                }
             } else {
                 Text("There is no goal to show settings for.").font(.callout).foregroundStyle(.secondary)
             }
@@ -234,7 +241,7 @@ struct RunSettingsSheet: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             Divider()
-            RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false)
+            RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
         }
         .frame(width: 420, height: 560)
     }

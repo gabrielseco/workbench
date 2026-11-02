@@ -177,6 +177,21 @@ import Testing
             RunSettingsInspector(snapshot: approvedShown, goal: approved.goal, store: approved), "the read-only note")
     }
 
+    /// In the sheet the feed, where an action's error is a row, is behind it: the column says what the action said.
+    @Test func theSheetShowsWhatAnActionSaidAndTheColumnBesideTheFeedDoesNot() async throws {
+        let (store, _) = try await store()
+        guard case .thread(let shown) = store.screen else { throw Failure.notAThread }
+        func drawn(messages: Bool) throws -> Data? {
+            let view = RunSettingsInspector(snapshot: shown, goal: store.goal, store: store, showsMessages: messages)
+            return try image(view, width: 260, height: 700).dataProvider?.data as Data?
+        }
+        let (sheetQuiet, besideQuiet) = (try drawn(messages: true), try drawn(messages: false))
+        store.actionError = "the editor did not start"
+        let (sheetSaid, besideSaid) = (try drawn(messages: true), try drawn(messages: false))
+        #expect(sheetQuiet != sheetSaid, "the sheet shows the error")
+        #expect(besideQuiet == besideSaid, "beside the feed the message is the feed's row, not drawn twice")
+    }
+
     @Test func aWideWindowDrawsTheInspectorBesideTheFeed() async throws {
         let (store, _) = try await store()
         guard case .thread(let shown) = store.screen else { throw Failure.notAThread }
