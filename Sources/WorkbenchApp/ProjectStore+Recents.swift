@@ -46,18 +46,29 @@ extension ProjectStore {
         return nil
     }
 
+    /// A refusal to open a project is said on the thread on screen; the next try takes it down, and nothing else the thread said.
+    private func refuse(_ text: String) {
+        actionError = text
+        lastRefusal = text
+    }
+
+    private func clearRefusal() {
+        if actionError == lastRefusal { actionError = nil }
+        lastRefusal = nil
+    }
+
     /// Opens a project from the list. One that cannot be opened is refused without touching the one that is open.
     func switchTo(_ path: String) async {
         if let reason = Self.unavailableReason(path) {
-            actionError = "\(URL(fileURLWithPath: path).lastPathComponent): \(reason)"
+            refuse("\(URL(fileURLWithPath: path).lastPathComponent): \(reason)")
             return
         }
-        actionError = nil
+        clearRefusal()
         // Git decides whether it is a repository: a `.git` that points nowhere passes the check above and must not close the
         // project that is open, which `open` does when it fails.
         do { _ = try await Project.locate(from: URL(fileURLWithPath: path), git: try GitRunner.discover()) } catch {
             refusedPaths[path] = "It is not a usable git repository."
-            actionError = "\(URL(fileURLWithPath: path).lastPathComponent): it is not a usable git repository."
+            refuse("\(URL(fileURLWithPath: path).lastPathComponent): it is not a usable git repository.")
             return
         }
         await open(URL(fileURLWithPath: path))
@@ -76,7 +87,7 @@ extension ProjectStore {
     func chooseFolder() async {
         pickingProject = false
         guard let url = folderChooser() else { return }
-        actionError = nil
+        clearRefusal()
         await open(url)
     }
 

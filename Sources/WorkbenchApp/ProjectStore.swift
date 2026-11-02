@@ -29,7 +29,7 @@ struct RecentProject: Equatable, Identifiable {
 @MainActor @Observable final class ProjectStore {
     /// Set by the store and its extensions only (`applyPullRequestCI` adds what GitHub said to the thread on screen).
     var screen: ProjectScreen
-    private(set) var project: Project?
+    private(set) var project: Project? { didSet { rebindSession() } }
     /// The thread screens or the tasks: the rail's switch. The tasks are the project's, so the thread on screen is not changed by it.
     var mode: WindowMode = .thread
     /// The Tasks screen's data, read from the core while that screen is shown.
@@ -37,26 +37,15 @@ struct RecentProject: Equatable, Identifiable {
     /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
     let attention: AttentionCenter
     private(set) var doctor: DoctorChip = .notRun
-    /// The goal of the thread on screen, read with the config; nil without a thread.
-    private(set) var goal: GoalModel?
-    /// What the last Approve, Run or New goal said when it did not go through.
-    /// What the last action said when it did not go through. Set by the store's own extensions too.
-    var actionError: String?
-    /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
-    var goalEditError: String?
-    /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
-    var goalEditSerial = 0
-    @ObservationIgnored var goalEdits: Task<Void, Never>?
-    /// Something an action did not do that is not a failure, such as files left out of a diff.
-    var actionNote: String?
-    private(set) var starting = false
     /// What the app is doing for the person right now, in words ("Discarding: removing the worktree and branch…"); nil when it is
     /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
     /// takes a moment sets it, so a click is never followed by a window that looks asleep.
-    var busy: String? { currentSession?.busyText }
+    var busy: String? { current.busyText }
     /// The project and thread on screen, as one value to compare.
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
-    /// What the app is doing for each thread that has something going on; a session leaves when it has nothing left to do.
+    /// The session of the thread on screen: what the window holds for it (goal, review, errors) lives here, not in the store.
+    fileprivate(set) var current: ThreadSession
+    /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
     fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -97,12 +86,6 @@ struct RecentProject: Equatable, Identifiable {
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false
     @ObservationIgnored var draftStop: DraftStop?
-    /// A turn the user is stopping: set from Stop until the log says it ended.
-    private(set) var stopping = false
-    /// The latest turn's review while it awaits one; nil otherwise.
-    var review: ReviewModel?
-    /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
-    var pendingDiscard: DiscardPlan?
     /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
     var prReviewShown: PRReviewShown?
     /// Why a fix round from the findings sheet was refused (the sheet covers the window's own error line).
@@ -114,14 +97,14 @@ struct RecentProject: Equatable, Identifiable {
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false { didSet { resumeIdleWaiters() } }
-    /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
-    var notice: String?
     @ObservationIgnored let preferences: Preferences
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
-    @ObservationIgnored var currentThread: String?
+    /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
+    @ObservationIgnored var lastRefusal: String?
+    @ObservationIgnored var currentThread: String? { didSet { rebindSession() } }
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private let intervals: (working: Duration, idle: Duration)
@@ -160,6 +143,7 @@ struct RecentProject: Equatable, Identifiable {
         self.recentPaths = Self.merged(preferences.recentProjects, preferences.projectPath)
         self.screen = screen
         self.project = project
+        self.current = ThreadSession(key: ThreadSession.Key(project: project, thread: nil))
         self.intervals = intervals
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
@@ -200,8 +184,8 @@ struct RecentProject: Equatable, Identifiable {
             generation += 1
             (namingGoal, pickingProject) = (false, false)
             cancelSendBack()
-            (project, currentThread, lastWatch, doctor, goal) = (nil, nil, nil, .notRun, nil)
-            (review, pendingDiscard) = (nil, nil)
+            (project, currentThread, lastWatch, doctor) = (nil, nil, nil, .notRun)
+            (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
@@ -211,14 +195,15 @@ struct RecentProject: Equatable, Identifiable {
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         (namingGoal, pickingProject) = (false, false)
         cancelSendBack()
-        (pendingDiscard, notice) = (nil, nil)
+        current.pendingDiscard = nil
         prReviewShown = nil
+        // The thread goes first: the project alone would pair the new project with the old project's thread id.
+        (currentThread, lastWatch) = (nil, nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
-        (goal, review, goalEditError) = (nil, nil, nil)
+        (current.goal, current.review) = (nil, nil)
         screen = .opening(path: located.root.path)
-        (currentThread, lastWatch) = (nil, nil)
         await reload()
         return true
     }
@@ -250,13 +235,15 @@ struct RecentProject: Equatable, Identifiable {
             reviewed = await Task.detached { await load(project, thread) }.value.map(ReviewModel.derive)
             guard mine == generation else { return }
         }
-        (screen, currentThread, lastWatch, goal, review) = (result.screen, result.thread, result.watch, model, reviewed)
+        (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
+        (current.goal, current.review) = (model, reviewed)
         applyOwnership()
         applyPullRequestCI()
         await observeAttention(readTasks: false)
-        if case .thread(let shown) = screen, case .ended? = shown.run?.phase { stopping = false }
+        if case .thread(let shown) = screen, case .ended? = shown.run?.phase { current.stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
-        if let session = currentSession, let after = session.awaitingAfterTurn, case .thread(let shown) = screen {
+        let session = current
+        if let after = session.awaitingAfterTurn, case .thread(let shown) = screen {
             if shown.state.lastTurn > after {
                 sendBackNote = ""
                 endRunStart(session)
@@ -300,12 +287,12 @@ struct RecentProject: Equatable, Identifiable {
         // Changes already made to the goal are written first, so what is approved is what the window shows.
         await goalEdits?.value
         let mine = generation
-        starting = true
         let mineSession = session(project, thread)
+        mineSession.starting = true
         setBusy("Approving the goal…", in: mineSession)
         actionError = nil
         defer {
-            starting = false
+            mineSession.starting = false
             if !mineSession.awaitingRun { setBusy(nil, in: mineSession) }
         }
         do {
@@ -367,7 +354,7 @@ struct RecentProject: Equatable, Identifiable {
 
     private func runEnded(_ session: ThreadSession, failed: Bool) async {
         session.ownedRun = nil
-        stopping = false
+        session.stopping = false
         endRunStart(session)
         settled()
         await reload()
@@ -409,13 +396,14 @@ struct RecentProject: Equatable, Identifiable {
     /// still ends with a recorded `stopped`; this only asks.
     func stopTurn() async {
         guard let project, let thread = currentThread, !stopping else { return }
-        stopping = true
+        let mine = current
+        mine.stopping = true
         actionError = nil
         if let owned = sessions[ThreadSession.Key(project: project, thread: thread)]?.ownedRun {
             await owned.handle.stop()
         } else if await !actions.requestStop(project, thread) {
-            stopping = false
-            actionError = "Nothing is running this thread."
+            mine.stopping = false
+            mine.actionError = "Nothing is running this thread."
         }
     }
 
@@ -503,17 +491,19 @@ extension ProjectStore {
 }
 
 private extension ProjectStore {
-    /// The session of the thread on screen, if it has anything going on.
-    var currentSession: ThreadSession? {
-        project.flatMap { sessions[ThreadSession.Key(project: $0, thread: currentThread)] }
+    /// Follows the window to another project or thread: its session is the one that has work going on for it, else a fresh one.
+    func rebindSession() {
+        let key = ThreadSession.Key(project: project, thread: currentThread)
+        guard key != current.key else { return }
+        if !current.isSpent { sessions[current.key] = current }
+        current = sessions[key] ?? ThreadSession(key: key)
+        settled()
     }
-    /// The thread's session, made when its first piece of work starts.
+    /// The thread's session: the one on screen, the one with work going on for it, or a new one.
     func session(_ project: Project, _ thread: String?) -> ThreadSession {
         let key = ThreadSession.Key(project: project, thread: thread)
-        if let existing = sessions[key] { return existing }
-        let made = ThreadSession(key: key)
-        sessions[key] = made
-        return made
+        if key == current.key { return current }
+        return sessions[key] ?? ThreadSession(key: key)
     }
     /// Whether any session is working: one action at a time holds the window.
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
@@ -521,12 +511,13 @@ private extension ProjectStore {
 
     func setBusy(_ text: String?, in session: ThreadSession) {
         session.busyText = text
+        sessions[session.key] = session
         settled()
     }
 
     /// Drops the sessions with nothing going on and wakes whoever waits for the window to be free.
     func settled() {
-        if sessions.values.contains(where: \.isIdle) { sessions = sessions.filter { !$0.value.isIdle } }
+        if sessions.values.contains(where: \.isSpent) { sessions = sessions.filter { !$0.value.isSpent } }
         resumeIdleWaiters()
     }
 }
