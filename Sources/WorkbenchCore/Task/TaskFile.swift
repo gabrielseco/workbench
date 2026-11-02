@@ -27,7 +27,7 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 /// `task.md`: front matter the engine reads, a body Claude reads (docs/spec/tasks.md).
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
-        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base",
+        "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base", "labels",
     ]
     /// How many of its own pull requests a `fix: pr` task leaves open before it waits for review.
     public static let defaultMaxOpen = 2
@@ -36,6 +36,8 @@ public struct TaskDefinition: Sendable, Equatable {
     public static let timeoutRange = 5...240
     public static let maxBatch = 20
     public static let maxInputs = 20
+    public static let maxLabels = 5
+    public static let maxLabelLength = 50
 
     public let name: String
     public var schedule: TaskSchedule?
@@ -53,6 +55,8 @@ public struct TaskDefinition: Sendable, Equatable {
     public var timeoutMin: Int?
     /// The branch the thread is cut from. `origin/<branch>` is fetched first; nil for the project's default base.
     public var base: String?
+    /// Labels put on the pull request a `fix: pr` run opens. Empty when the file sets none (the approval does not mention it).
+    public var labels: [String] = []
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -65,6 +69,14 @@ public struct TaskDefinition: Sendable, Equatable {
         guard !path.contains("\\"), !path.unicodeScalars.contains(where: { $0.value < 32 }) else { return false }
         return !path.split(separator: "/", omittingEmptySubsequences: false).dropLast(path.hasSuffix("/") ? 1 : 0)
             .contains { $0.isEmpty || $0 == ".." }
+    }
+
+    /// A label name that reaches `gh` as an argument: ASCII letters, digits and `- _ . : /`, 1 to 50 of them.
+    static func isSafeLabel(_ label: String) -> Bool {
+        guard (1...maxLabelLength).contains(label.count) else { return false }
+        return label.unicodeScalars.allSatisfy {
+            ($0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0))) || "-_.:/".unicodeScalars.contains($0)
+        }
     }
 
     /// The limit on open pull requests that applies: only a task that opens them has one.
@@ -131,6 +143,21 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.base = e.value
             } else {
                 add(e.lineNumber, "'base' must be a branch name such as main or origin/main, found '\(e.value)'")
+            }
+        }
+        if let e = entry("labels") {
+            let items = list(e.value)
+            let range = "1 to \(maxLabels)"
+            if items.isEmpty || items.count > maxLabels {
+                add(e.lineNumber, "'labels' must list \(range) names, found '\(e.value)'")
+            } else if let bad = items.first(where: { !isSafeLabel($0) }) {
+                let allowed = "letters, digits and - _ . : / (up to \(maxLabelLength) characters)"
+                add(e.lineNumber, "'labels' has '\(bad)', which is not a usable label name: use \(allowed)")
+            } else if Set(items.map { $0.lowercased() }).count != items.count {
+                // GitHub treats label names as case-insensitive, so 'Bug' and 'bug' are one label.
+                add(e.lineNumber, "'labels' names a label twice, found '\(e.value)'")
+            } else {
+                definition.labels = items
             }
         }
         if let e = entry("budget") {

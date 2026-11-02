@@ -45,7 +45,14 @@ struct FakeGH {
               if [ -f "$d/merge_fail" ]; then cat "$d/merge_fail" >&2; exit 1; fi
               if [ -f "$d/view_after_merge" ]; then cp "$d/view_after_merge" "$d/view"; fi
               exit 0 ;;
+            "label create")
+              if [ -f "$d/label_fail" ]; then cat "$d/label_fail" >&2; exit 1; fi
+              exit 0 ;;
             "pr edit")
+              case "$*" in *--add-label*)
+                if [ -f "$d/addlabel_fail" ]; then cat "$d/addlabel_fail" >&2; exit 1; fi
+                exit 0 ;;
+              esac
               prev=""
               for a in "$@"; do
                 if [ "$prev" = "--body-file" ]; then cp "$a" "$d/edit_body"; fi
@@ -489,5 +496,58 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         _ = try await fx.service.shipOpenPR(id: pushed.id, gh: gh.runner)
         let body = try #require(gh.read("body"))
         #expect(body.contains("### Judge concerns") && body.contains("- No test calls visibleItems with the order."))
+    }
+}
+
+@Suite(.processGate) struct ShipOpenPRLabelTests {
+    @Test func labelsAreCreatedThenAddedToTheNewPullRequestAndNothingElseGetsThem() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await pushedThread(fx, gh.runner).id
+
+        let result = try await fx.service.shipOpenPR(id: id, gh: gh.runner, labels: ["seed-preview", "-odd"])
+        #expect(result.outcome == .created && result.labelNote == nil)
+        let labelCalls = gh.calls.filter { $0.hasPrefix("label ") || ($0.hasPrefix("pr edit") && $0.contains("--add-label")) }
+        #expect(
+            labelCalls == [
+                "label create --force -- seed-preview", "pr edit 12 --add-label=seed-preview",
+                "label create --force -- -odd", "pr edit 12 --add-label=-odd",
+            ], "got: \(labelCalls)")
+        // Created after the pull request, so the PR never waits on them.
+        let created = try #require(gh.calls.firstIndex { $0.hasPrefix("pr create") })
+        let labelled = try #require(gh.calls.firstIndex { $0.hasPrefix("label") })
+        #expect(created < labelled)
+
+        // No labels asked for: no label call. A pull request that already existed is not touched either.
+        let other = try await RunnerFixture()
+        let ghOther = try FakeGH(in: other)
+        let plain = try await pushedThread(other, ghOther.runner).id
+        _ = try await other.service.shipOpenPR(id: plain, gh: ghOther.runner)
+        #expect(ghOther.calls.allSatisfy { !$0.hasPrefix("label") && !$0.contains("--add-label") })
+    }
+
+    @Test func aLabelThatFailsIsNotedAndTheRecordedPullRequestStands() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await pushedThread(fx, gh.runner).id
+        try gh.put("label_fail", "HTTP 403: Resource not accessible\nsecond line\n")
+
+        let result = try await fx.service.shipOpenPR(id: id, gh: gh.runner, labels: ["a", "b"])
+        #expect(result.outcome == .created && result.number == 12)
+        let note = try #require(result.labelNote)
+        #expect(!note.contains("\n") && note.contains("label 'a'") && note.contains("label 'b'") && note.contains("HTTP 403"))
+        #expect(!note.contains("second line") && note.count <= 600, "\(note)")
+        // A failed create stops that label's add, and the next label is still tried.
+        #expect(gh.count("label create") == 2 && gh.calls.allSatisfy { !$0.contains("--add-label") })
+        #expect(try fx.events(id).last?.kind == .prOpened)
+
+        // Adding fails but creating works: the label is still named.
+        let other = try await RunnerFixture()
+        let ghOther = try FakeGH(in: other)
+        let second = try await pushedThread(other, ghOther.runner).id
+        try ghOther.put("addlabel_fail", "label not found\n")
+        let again = try await other.service.shipOpenPR(id: second, gh: ghOther.runner, labels: ["x"])
+        #expect(again.labelNote?.contains("label 'x': label not found") == true)
+        #expect(try other.events(second).last?.kind == .prOpened)
     }
 }

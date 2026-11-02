@@ -6,10 +6,13 @@ public struct ShipPublishOptions: Sendable, Equatable {
     public var keepWorktree = false
     /// Do not put the turn's screenshots in the pull request.
     public var skipScreenshots = false
+    /// Labels for a new pull request. Only a task run sets them; a failure to add one is a note on the result, never an error.
+    public var labels: [String] = []
 
-    public init(keepWorktree: Bool = false, skipScreenshots: Bool = false) {
+    public init(keepWorktree: Bool = false, skipScreenshots: Bool = false, labels: [String] = []) {
         self.keepWorktree = keepWorktree
         self.skipScreenshots = skipScreenshots
+        self.labels = labels
     }
 }
 
@@ -51,7 +54,7 @@ extension ThreadService {
     ) async throws -> ShipOutcome {
         let pushed = try await shipPush(id: id, gh: gh, shown: plan)
         progress(.pushed(pushed))
-        let pr = try await shipOpenPR(id: id, gh: gh, shown: plan, description: description)
+        let pr = try await shipOpenPR(id: id, gh: gh, shown: plan, description: description, labels: options.labels)
         progress(.opened(pr))
         var outcome = ShipOutcome(push: pushed, pr: pr)
 

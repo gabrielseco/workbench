@@ -344,7 +344,8 @@ public struct TaskRunner: Sendable {
             return fail(
                 why.reason("the verifier did not pass (\(what)); thread \(id) is left for you"), units: ids, thread: id)
         }
-        return await acceptAndShip(name: name, id: id, config: config, service: service, units: ids, explanation: why)
+        return await acceptAndShip(
+            name: name, id: id, config: config, service: service, units: ids, explanation: why, labels: task.labels)
     }
 
     /// The agent's last message, the commands the turn was denied and, for a failed check, the end of its output.
@@ -368,7 +369,8 @@ public struct TaskRunner: Sendable {
     }
 
     private func acceptAndShip(
-        name: String, id: String, config: Config, service: ThreadService, units: [String], explanation: TaskExplanation
+        name: String, id: String, config: Config, service: ThreadService, units: [String], explanation: TaskExplanation,
+        labels: [String]
     ) async -> TaskRunResult {
         do { _ = try await service.accept(id: id, by: "task:\(name)") } catch ThreadServiceError.nothingToAccept {
             // An expected result, most often for a task that checks something and finds it fine: not a failure, and not a thread
@@ -403,8 +405,10 @@ public struct TaskRunner: Sendable {
         do {
             let outcome = try await service.publishShip(
                 id: id, gh: gh, plan: plan, description: description,
-                options: ShipPublishOptions(keepWorktree: false, skipScreenshots: true))
-            return TaskRunResult(outcome: .prOpened, reason: nil, units: units, thread: id, pullRequest: outcome.pr.url)
+                options: ShipPublishOptions(keepWorktree: false, skipScreenshots: true, labels: labels))
+            // A label that did not go on is the only thing a pr-opened run has to say.
+            return TaskRunResult(
+                outcome: .prOpened, reason: outcome.pr.labelNote, units: units, thread: id, pullRequest: outcome.pr.url)
         } catch {
             return fail(explanation.reason("\(error); \(stranded)"), units: units, thread: id)
         }

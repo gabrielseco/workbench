@@ -128,6 +128,7 @@ public enum TaskScaffold {
             # max_open: 2           # a pr task waits for review once this many of its pull requests are open (default 2)
             # timeout: 30           # minutes the agent's turn may run, 5 to 240 (default 30)
             # base: origin/main     # cut the thread from a freshly fetched origin/main, not from a local main that may be behind
+            # labels: [bot, bump]   # 1 to 5 labels for the pull request a pr task opens; one that fails is only noted
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.
             Delete this line when you have.

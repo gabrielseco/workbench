@@ -12,6 +12,8 @@ public struct ShipPRResult: Sendable, Equatable {
     public var url: String
     public var number: Int
     public var outcome: Outcome
+    /// One line naming the labels that could not be put on the new pull request and why; nil when all went on (or none were asked for).
+    public var labelNote: String?
 }
 
 extension ThreadService {
@@ -22,7 +24,7 @@ extension ThreadService {
     /// and never duplicated. Writes the event last.
     public func shipOpenPR(
         id: String, gh: GitRunner?, shown: ShipPlan? = nil, description: PRDescription? = nil,
-        timeout: TimeInterval = ThreadService.prTimeout
+        labels: [String] = [], timeout: TimeInterval = ThreadService.prTimeout
     ) async throws -> ShipPRResult {
         let plan = try await shipPreflight(id: id, gh: gh)
         // The branch is on origin by now, so only what was confirmed about the target must still hold.
@@ -43,6 +45,7 @@ extension ThreadService {
         if plan.updatesExistingBranch && found == nil { throw ShipError.noPullRequest(plan.remoteBranch) }
         let outcome: ShipPRResult.Outcome
         let pr: FoundPR
+        var labelNote: String?
         if let found {
             // Recording a head that is not ours would make cleanup refuse this thread for good.
             if plan.updatesExistingBranch, let theirs = found.head, theirs != plan.head {
@@ -53,6 +56,8 @@ extension ThreadService {
         } else {
             outcome = .created
             pr = try await createPR(plan: plan, runner: runner, description: description)
+            // After the pull request exists: a label can never stop it, only be noted. Recorded below like any other open.
+            labelNote = await addLabels(labels, number: pr.number, runner: runner, worktree: plan.worktree)
         }
         let (url, number, base) = (pr.url, pr.number, pr.base ?? plan.prBase)
         let head = pr.head ?? plan.head
@@ -65,7 +70,36 @@ extension ThreadService {
                     "base": .string(base), "head_sha": .string(head),
                 ])
         }
-        return ShipPRResult(plan: plan, url: url, number: number, outcome: outcome)
+        return ShipPRResult(plan: plan, url: url, number: number, outcome: outcome, labelNote: labelNote)
+    }
+
+    /// Makes each label exist, then puts it on the pull request. Never throws: a label that fails is named in the one line
+    /// returned, with the reason `gh` gave, and the next label is still tried.
+    func addLabels(_ labels: [String], number: Int, runner: GitRunner, worktree: URL) async -> String? {
+        var failures: [String] = []
+        for label in labels {
+            // `--` and `=` keep a name that starts with a dash from being read as a flag.
+            let steps = [
+                ["label", "create", "--force", "--", label],
+                ["pr", "edit", String(number), "--add-label=\(label)"],
+            ]
+            for args in steps {
+                let why: String?
+                do {
+                    let result = try await runner.run(args, in: worktree)
+                    why = result.succeeded ? nil : Self.shown(result, environment: runner.environment)
+                } catch GitError.timedOut(_, let seconds) {
+                    why = "`gh \(args.prefix(2).joined(separator: " "))` did not finish in \(Int(seconds))s"
+                } catch { why = "`gh` could not be run" }
+                if let why {
+                    let line = why.split(whereSeparator: \.isNewline).first.map(String.init) ?? why
+                    failures.append("label '\(label)': \(String(line.prefix(120)))")
+                    break
+                }
+            }
+        }
+        guard !failures.isEmpty else { return nil }
+        return String("the pull request is open, but " + failures.joined(separator: "; ").prefix(500))
     }
 
     // MARK: Lookup
