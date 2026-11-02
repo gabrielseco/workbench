@@ -346,9 +346,13 @@ public actor ThreadRunner {
         codingProvider = agent.provider
         let provider: any AgentProvider =
             agent.provider == .codex ? CodexProvider(executable: config.executable(for: .codex)) : ClaudeProvider(config: config)
-        let request = try grantedAgentRequest(
+        var request = try grantedAgentRequest(
             sessionID: sessionID, resume: resume, prompt: prompt, config: config, goal: goal, worktree: worktree,
             outputDirectory: promptURL.deletingLastPathComponent(), options: options)
+        // A task's thread: the file that loads its servers lives for this turn only, whatever way the turn ends.
+        let mcp = try mcpAccess(config: config, agent: agent)
+        defer { mcp?.remove() }
+        request.mcp = mcp
         if let refusal = request.validate(against: provider) { throw refusal }
         let invocation = try provider.invocation(for: request)
 

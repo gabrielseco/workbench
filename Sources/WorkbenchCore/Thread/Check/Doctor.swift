@@ -123,6 +123,8 @@ public struct DoctorReport: Sendable, Equatable {
     public var run: DoctorRun?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []
+    /// Tasks whose `mcp_tools` name a server the config does not define. Warnings: such a task is refused at load, not doctor.
+    public var mcpWarnings: [String] = []
     /// Provider and model per responsibility, goal drafting first. Shown only: no stage reads them yet.
     public var agents: [DoctorAgent] = []
     /// The active thread doctor looked at for the goal checks, nil when there is none or its goal does not parse.
@@ -278,6 +280,7 @@ public final class Doctor: @unchecked Sendable {
             config, searchPath: options.environment["PATH"], goal: goal)
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
+        report.mcpWarnings = TaskLibrary(project: project).mcpProblems(servers: config.mcpServers)
         var global: String?
         if options.editor == nil, config.editor == nil {
             do {

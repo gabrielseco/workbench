@@ -28,6 +28,7 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
         "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base", "labels",
+        "mcp_tools",
     ]
     /// How many of its own pull requests a `fix: pr` task leaves open before it waits for review.
     public static let defaultMaxOpen = 2
@@ -57,6 +58,9 @@ public struct TaskDefinition: Sendable, Equatable {
     public var base: String?
     /// Labels put on the pull request a `fix: pr` run opens. Empty when the file sets none (the approval does not mention it).
     public var labels: [String] = []
+    /// MCP tools (`mcp__<server>__<tool>`) the task's runs may call; their servers come from `[mcp_servers.*]` in the config.
+    /// Empty when the file sets none, and then nothing about the run differs (the approval does not mention it).
+    public var mcpTools: [String] = []
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -158,6 +162,20 @@ public struct TaskDefinition: Sendable, Equatable {
                 add(e.lineNumber, "'labels' names a label twice, found '\(e.value)'")
             } else {
                 definition.labels = items
+            }
+        }
+        if let e = entry("mcp_tools") {
+            let items = list(e.value)
+            if definition.fix != .pr {
+                add(e.lineNumber, "'mcp_tools' needs 'fix: pr': a report turn is read-only and cannot call MCP tools")
+            } else if items.isEmpty || items.count > McpTool.maxTools {
+                add(e.lineNumber, "'mcp_tools' must list 1 to \(McpTool.maxTools) tool names, found '\(e.value)'")
+            } else if let bad = items.first(where: { McpTool.split($0) == nil }) {
+                add(e.lineNumber, "'mcp_tools' has '\(bad)', which is not shaped mcp__<server>__<tool> (exact, no wildcard)")
+            } else if Set(items).count != items.count {
+                add(e.lineNumber, "'mcp_tools' names a tool twice, found '\(e.value)'")
+            } else {
+                definition.mcpTools = items
             }
         }
         if let e = entry("budget") {

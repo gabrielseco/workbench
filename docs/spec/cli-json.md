@@ -90,7 +90,7 @@ codes are the text mode's: 0 when `passed`, 1 when a declared step failed or som
 one printed, with `passed` false), 3 stopped (the usual error object instead), 6 refused. The verifier, `[run]` and editor lines
 of the text mode are not in it.
 
-doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy, agents, problems, setup, check, review_warnings, cleanup_problem
+doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy, agents, problems, setup, check, review_warnings, mcp_warnings, cleanup_problem
 
 - `spend_policy` (doctor and review): `hard_cap` or `timeout_only` for the active (doctor) or reviewed (review) thread's goal; null when there is none or it does not parse. The text modes print `no dollar cap: bounded by N min per turn` for `timeout_only`.
 - `model` (doctor): the `model` in `[agents.run]`, null when it sets none (the provider's default); a goal's own `model` is not

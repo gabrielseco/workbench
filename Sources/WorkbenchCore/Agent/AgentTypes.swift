@@ -156,6 +156,8 @@ public struct AgentRequest: Sendable, Equatable {
     public var outsideRepository = false
     /// Other checkouts a Claude coding turn may read, never write (`ReadAlso`).
     public var readDirectories: [URL] = []
+    /// MCP tools this Claude coding turn may call, with the file that loads their servers; nil for every turn but a task's.
+    public var mcp: McpAccess?
 
     public init(
         provider: AgentProviderID, model: String? = nil, prompt: String, images: [URL] = [],

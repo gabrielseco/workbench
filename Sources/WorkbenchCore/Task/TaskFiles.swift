@@ -10,6 +10,8 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
     case placeholder
     /// An approval was asked for a version of the task that is no longer the one on disk.
     case changedSinceShown
+    /// `mcp_tools` names a server the project's config does not define (or the config cannot say).
+    case mcp(String)
 
     public var description: String {
         switch self {
@@ -18,6 +20,7 @@ public enum TaskFileError: Error, Equatable, Sendable, CustomStringConvertible {
         case .tooLarge(let path, let bytes, let limit): "'\(path)' is \(bytes) bytes; the limit is \(limit)"
         case .tooMany(let path, let limit): "'\(path)' holds more than \(limit) files"
         case .unreadable(let path): "'\(path)' cannot be read"
+        case .mcp(let why): why
         case .changedSinceShown: "the task was edited after it was shown: look at it again before approving"
         case .placeholder: "the instructions still say \(TaskScaffold.placeholder): write what each run should do, then approve"
         }

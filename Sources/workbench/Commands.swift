@@ -454,23 +454,6 @@ enum Commands {
             out("restore them with `git apply` in a checkout of workbench/\(id) at \(saved.head.prefix(12))")
         }
     }
-
-    static func config() async throws {
-        let ctx = try await Context.load()
-        let config = try Config.load(from: ctx.project.configURL)
-        let invocation = try config.previewInvocation()
-        let env = ProcessInfo.processInfo.environment
-        let resolved = ExecutableResolver.resolve(config.claudePath, searchPath: env["PATH"])
-        out("config:   \(ctx.project.configURL.path)")
-        out("claude:   \(resolved?.path ?? "NOT FOUND on PATH (\(config.claudePath))")")
-        out("check:    \(config.checkCommand ?? "(none)")")
-        out("budget:   \(config.defaultBudgetUSD) USD default")
-        out("tools:    \(config.tools.available.joined(separator: ", "))")
-        out("allowed:  \(config.effectiveAllowedTools.joined(separator: ", "))")
-        out("denied:   \(config.tools.denied.joined(separator: ", "))")
-        out("env:      \(config.childEnvironment(from: env).keys.sorted().joined(separator: ", "))")
-        out("command:  \(invocation.displayCommand)")
-    }
 }
 
 // MARK: - Signals

@@ -42,9 +42,42 @@ Bump the next countries. Follow the skill exactly.
 | `timeout` | minutes the agent's turn may run, 5 to 240. Without it the goal's default of 30 stands. Part of the approval only when the file sets it |
 | `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
 | `labels` | 1 to 5 labels put on the pull request a `fix: pr` run opens, `labels: [seed-preview, bot]`. Each name is 1 to 50 of letters, digits and `- _ . : /`, with no duplicates (case is ignored, as GitHub does); anything else is refused at load with the line and key. Part of the approval only when the file sets it, so editing them makes the task STALE. Only a task run adds them; `workbench ship` of an ordinary thread adds none |
+| `mcp_tools` | `fix: pr` only: MCP tools the task's runs may call, `mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue` (1 to 10, each exactly `mcp__<server>__<tool>`: no wildcard, no duplicate; anything else is refused at load with the line and key). The servers are **never** defined here: each name's server must have a `[mcp_servers.<name>]` table in `.workbench/config.toml`, or the task is refused at load (`task list` shows PROBLEM, `workbench doctor` warns). Part of the approval only when the file sets it, so editing the list makes the task STALE. See "MCP tools" below |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
+
+## MCP tools
+
+`mcp_tools` lets one task call named tools of an MCP server (the use case: `update-contract-details-tracker` patches a Linear issue at 21:00) while every other run stays as it is.
+
+```toml
+# .workbench/config.toml
+[mcp_servers.linear]
+type = "http"                        # "http" or "sse" with an https url, or "stdio" with command and args
+url = "https://mcp.linear.app/mcp"   # no secret goes here
+```
+
+```yaml
+# .workbench/tasks/update-contract-details-tracker/task.md
+at: 21:00
+fix: pr
+mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue
+```
+
+For that task's turns only, Workbench writes a temporary file (mode 600) holding just the servers the listed tools belong to, starts `claude` with `--mcp-config <file> --strict-mcp-config`, appends exactly the listed tools to `--allowedTools` (`--disallowedTools` still wins), and deletes the file when the turn ends, however it ends. Goal runs, other tasks, the verifier and the read-only turns (plan, PR description, report) never get a server. A `[mcp_servers.*]` table alone loads nothing.
+
+**What was measured** (claude 2.1.316): `--safe-mode` turns MCP servers off even with `--mcp-config --strict-mcp-config`, so a task with `mcp_tools` runs **without `--safe-mode`**; `--disable-slash-commands` stays, so skills and commands stay off. That means the user's settings and hooks, and the worktree's `CLAUDE.md` and project settings, load for that task's runs. `--allowedTools mcp__linear__get_issue` allowed that tool and refused `save_issue` of the same server.
+
+**Warnings.**
+- Each listed tool is a **write capability for an unattended run**. List only what the task needs; a read tool and a write tool are two entries.
+- A remote server needs the login you did in your own `claude` (`/mcp`). Workbench passes no new variable: the run finds it through `HOME` and `CLAUDE_CONFIG_DIR`, which it already passes. Without it the tools are simply not there and the task says it could not call them.
+- Only Claude as the coding agent: with `[agents.run]` on Codex a task with `mcp_tools` is refused before any turn.
+
+**Why `fix: pr` only.** A `fix: report` turn is `Read`, `Grep` and `Glob` in a checkout of the base, always with `--safe-mode`: it has no Bash and cannot call MCP. `mcp_tools` with `fix: report` is refused at load rather than ignored. A task that only acts through MCP and changes no file runs as `fix: pr` and ends `nothing-to-do` (the thread is discarded, no pull request); it still needs `check_command`, and a worktree. A mode without those (`fix: act`: no worktree changes, no pull request, outcome recorded) is proposed, not built.
+
+`workbench config` lists the servers and each task's tools, `task list` and `task log` show a task's tools, and `task approve` repeats the warning.
+
 
 ## Units of work: the pending script
 

@@ -22,6 +22,8 @@ public struct Project: Sendable, Equatable {
     public func goalURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("goal.md") }
     public func eventsURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("events.jsonl") }
     public func sessionURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("session.json") }
+    /// The MCP tools a task's thread may call (`McpToolsFile`); absent for every other thread.
+    public func mcpToolsURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("mcp_tools.json") }
     public func runnerURL(_ id: String) -> URL { threadDirectory(id).appendingPathComponent("runner.json") }
     public func promptURL(_ id: String, turn: Int) -> URL {
         threadDirectory(id).appendingPathComponent("prompts/turn-\(turn).md")

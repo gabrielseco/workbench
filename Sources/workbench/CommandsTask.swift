@@ -191,6 +191,9 @@ extension Commands {
             out(
                 "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
                     + "next: \(due)  last: \(last)\(waiting)")
+            if !summary.mcpTools.isEmpty {
+                out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a write capability, unattended)")
+            }
             printWhy(summary)
         }
     }
@@ -273,6 +276,11 @@ extension Commands {
         if let schedule = loaded.definition.schedule, let service = try? await timerService(),
             !FileManager.default.fileExists(atPath: service.paths.plist.path) {
             out("hint: it runs \(schedule.summary), but no timer is installed: workbench task timer install")
+        }
+        if !loaded.definition.mcpTools.isEmpty {
+            out(
+                "mcp_tools: every run may call \(loaded.definition.mcpTools.joined(separator: ", ")) with nobody watching, "
+                    + "and runs without --safe-mode (the CLI turns MCP off under it).")
         }
         if loaded.definition.fix == .pr {
             out(
