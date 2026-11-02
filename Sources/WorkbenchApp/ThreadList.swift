@@ -104,10 +104,12 @@ enum ThreadListLoader {
     /// The most of a goal file a row reads: a goal with a huge request is not allocated and parsed on every poll for its title.
     static let goalHeadBytes = 64 * 1024
 
-    static func goalHead(_ url: URL) -> String {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
+    /// The head of a goal file, and whether that was all of it.
+    static func goalHead(_ url: URL) -> (text: String, whole: Bool) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return ("", true) }
         defer { try? handle.close() }
-        return String(decoding: (try? handle.read(upToCount: goalHeadBytes)) ?? Data(), as: UTF8.self)
+        let data = (try? handle.read(upToCount: goalHeadBytes + 1)) ?? Data()
+        return (String(decoding: data.prefix(goalHeadBytes), as: UTF8.self), data.count <= goalHeadBytes)
     }
 
     /// The `title:` of the front matter of a goal too long to parse whole.
@@ -132,11 +134,14 @@ enum ThreadListLoader {
         let state = store.state(from: contents.events, id: id)
         var title: String?
         var approval: ApprovalState?
-        let text = goalHead(project.goalURL(id))
-        if let goal = try? GoalFile.parse(text).goal {
+        let (text, whole) = goalHead(project.goalURL(id))
+        if whole, let goal = try? GoalFile.parse(text).goal {
             (title, approval) = (goal.title, goal.approval)
         } else {
+            // Too long to parse from its head: the title is in the front matter, and the log says whether it was ever approved
+            // (an edit since is not seen here; opening the thread shows it).
             title = frontMatterTitle(text)
+            approval = state.approvedGoalHash != nil ? .approved : .draft
         }
         let spine = ThreadSpine.derive(state: state, approval: approval)
         let attention = Attention.derive(spine: spine, state: state)

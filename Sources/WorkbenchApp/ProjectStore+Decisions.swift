@@ -33,10 +33,11 @@ extension ProjectStore {
     /// Reads the review again: the worktree and the branch are not in the log, so an edit there is seen on activation or here.
     func refreshReview() async {
         guard let project, let thread = currentThread, review != nil else { return }
-        let (mine, load) = (generation, actions.loadReview)
+        let (mine, load, asked) = (generation, actions.loadReview, current)
         let report = await Task.detached { await load(project, thread) }.value
-        guard mine == generation, review != nil else { return }
-        review = report.map(ReviewModel.derive)
+        // Into the session it was read for: another thread may be on screen by now.
+        guard mine == generation, asked.review != nil else { return }
+        asked.review = report.map(ReviewModel.derive)
     }
 
     func prepareDiscard() async {

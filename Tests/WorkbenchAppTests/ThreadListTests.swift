@@ -211,6 +211,51 @@ import WorkbenchCore
         #expect(store.threads.listing.rows.map(\.title) == ["Second"])
     }
 
+    @Test func anApprovalThatFailsAfterAnotherThreadWasPickedSaysSoOnItsOwnThread() async throws {
+        struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
+        let (stream, release) = AsyncStream<Void>.makeStream()
+        let fixture = try await fixture()
+        try await fixture.addThread("b", title: "B")
+        try await fixture.addThread("a", title: "A")
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let store = ProjectStore(
+            preferences: preferences,
+            actions: GoalActions(approve: { _, _ in
+                for await _ in stream { break }
+                throw Refused()
+            }))
+        #expect(await store.open(fixture.root))
+        let starting = Task { await store.approveAndRun() }
+        for _ in 0..<200 where store.busy == nil { try await Task.sleep(for: .milliseconds(10)) }
+        await store.select(thread: "b")
+        release.yield()
+        await starting.value
+        let key = ThreadSession.Key(project: fixture.project, thread: "a")
+        #expect(store.sessions[key]?.actionError == "refused")
+        #expect(store.actionError == nil, "the thread on screen is not told about another's approval")
+    }
+
+    @Test func turningThePreviewOffDropsThePickSoTheWindowFollowsTheActiveThreadAgain() async throws {
+        let fixture = try await fixture()
+        try await fixture.addThread("old", approved: true, title: "Old")
+        try fixture.turn("old", 1)
+        try fixture.decide("old", "accepted")
+        try await fixture.addThread("live", title: "Live")
+        let store = try await open(fixture)
+        await store.select(thread: "old")
+        #expect(store.currentThread == "old")
+        await store.setChatFeed(false)
+        #expect(store.currentThread == "live" && store.selectedThread == nil)
+    }
+
+    @Test func anApprovedGoalTooLongToParseWholeIsStillApprovedInItsRow() async throws {
+        let fixture = try await fixture()
+        try await fixture.addThread("big", approved: true, title: "Big", request: String(repeating: "word ", count: 40_000))
+        let row = rows(fixture).rows.first
+        #expect(row?.title == "Big" && row?.line == "Waiting", "approved, nothing run: not a draft")
+    }
+
     @Test func aGoalTooLongToParseWholeStillGivesItsRowATitleFromItsFirstBytes() async throws {
         let fixture = try await fixture()
         try await fixture.addThread("big", title: "The big one", request: String(repeating: "word ", count: 40_000))

@@ -7,6 +7,8 @@ extension ProjectStore {
         guard on != chatFeedOn else { return }
         preferences.chatFeed = on
         chatFeedOn = on
+        // The pick is made in the list, which only the preview has: without it the window follows the active thread again.
+        if !on { selectedThread = nil }
         await reload()
     }
 }

@@ -319,7 +319,7 @@ struct RecentProject: Equatable, Identifiable {
         do {
             try await actions.approve(project, thread)
         } catch {
-            if mine == generation { actionError = "\(error)" }
+            if mine == generation { mineSession.actionError = "\(error)" }
             await reload()
             return
         }
