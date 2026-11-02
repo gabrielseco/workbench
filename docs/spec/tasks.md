@@ -65,7 +65,7 @@ fix: pr
 mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue
 ```
 
-For that task's turns only, Workbench writes a temporary file (mode 600) holding just the servers the listed tools belong to, starts `claude` with `--mcp-config <file> --strict-mcp-config`, appends exactly the listed tools to `--allowedTools` (`--disallowedTools` still wins), and deletes the file when the turn ends, however it ends. Goal runs, other tasks, the verifier and the read-only turns (plan, PR description, report) never get a server. A `[mcp_servers.*]` table alone loads nothing.
+For that task's turns only, Workbench writes a temporary file (mode 600) holding just the servers the listed tools belong to, starts `claude` with `--mcp-config <file> --strict-mcp-config`, appends exactly the listed tools to `--allowedTools` (`--disallowedTools` still wins); any other `mcp__` entry in `[tools].allowed` or a thread grant (a different tool, or a whole server) is left out of that turn, and deletes the file when the turn ends, however it ends. Goal runs, other tasks, the verifier and the read-only turns (plan, PR description, report) never get a server. A `[mcp_servers.*]` table alone loads nothing.
 
 **What was measured** (claude 2.1.316): `--safe-mode` turns MCP servers off even with `--mcp-config --strict-mcp-config`, so a task with `mcp_tools` runs **without `--safe-mode`**; `--disable-slash-commands` stays, so skills and commands stay off. That means the user's settings and hooks, and the worktree's `CLAUDE.md` and project settings, load for that task's runs. `--allowedTools mcp__linear__get_issue` allowed that tool and refused `save_issue` of the same server.
 

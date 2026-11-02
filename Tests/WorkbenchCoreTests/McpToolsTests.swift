@@ -170,6 +170,23 @@ struct McpInvocationTests {
         #expect(args.suffix(2) == ["--", "x"])
     }
 
+    @Test func anMcpAllowanceForAnotherToolOrAWholeServerIsNotCarriedIntoATaskTurn() throws {
+        let allowed = "allowed = [\"Read\", \"mcp__linear__save_issue\", \"mcp__linear\"]"
+        let cfg = try Config.parse(toolsTable.replacingOccurrences(of: "allowed = [\"Read\"]", with: allowed) + linear)
+        let mcp = try McpAccess.write(
+            tools: ["mcp__linear__get_issue"], servers: cfg.mcpServers, in: try Scratch.directory("mcp"))
+        let turn = TurnRequest(
+            sessionID: session, resume: false, budgetUSD: 1, prompt: "x",
+            extraAllowed: ["mcp__linear__delete_issue", "Bash(ls:*)"],
+            mcp: mcp)
+        let args = try cfg.invocation(for: turn).arguments
+        let at = try #require(args.firstIndex(of: "--allowedTools"))
+        #expect(Array(args[(at + 1)...].prefix { !$0.hasPrefix("--") }) == ["Read", "mcp__linear__get_issue", "Bash(ls:*)"])
+        // A turn with no MCP access keeps the allowances as configured.
+        let plain = try cfg.invocation(for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
+        #expect(plain.contains("mcp__linear__save_issue"))
+    }
+
     @Test func skillsAndCommandsStayOffForATaskTurnEvenWhenSafeModeIsOff() throws {
         let cfg = try Config.parse("safe_mode = false\n" + toolsTable + linear)
         let mcp = try McpAccess.write(

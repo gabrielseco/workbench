@@ -104,10 +104,17 @@ extension Config {
         if !readPaths.isEmpty { args += ["--add-dir"] + readPaths }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools
-        // Exactly the listed tools, never a pattern; `--disallowedTools` still wins over them.
-        for tool in turn.mcp?.tools ?? [] where !allowed.contains(tool) && !tools.denied.contains(tool) { allowed.append(tool) }
+        // Exactly the listed tools, never a pattern; `--disallowedTools` still wins over them. An MCP allowance the config or a grant
+        // holds for some other tool (or a whole server) was inert until this turn loaded the server, so it is left out here.
+        let mcpTools = turn.mcp?.tools
+        let isStrayMcp = { (pattern: String) in
+            mcpTools != nil && pattern.hasPrefix("mcp__") && mcpTools?.contains(pattern) != true
+        }
+        allowed.removeAll(where: isStrayMcp)
+        for tool in mcpTools ?? [] where !allowed.contains(tool) && !tools.denied.contains(tool) { allowed.append(tool) }
         // A grant never repeats a pattern or revives one the project denies; `--disallowedTools` still wins.
-        for pattern in turn.extraAllowed where !allowed.contains(pattern) && !tools.denied.contains(pattern) {
+        for pattern in turn.extraAllowed
+        where !allowed.contains(pattern) && !tools.denied.contains(pattern) && !isStrayMcp(pattern) {
             allowed.append(pattern)
         }
         if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
