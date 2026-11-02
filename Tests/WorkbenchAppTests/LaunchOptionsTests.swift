@@ -23,6 +23,17 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         }
     }
 
+    var chatFeed: Bool {
+        get {
+            reads += 1
+            return false
+        }
+        set {
+            writes += 1
+            _ = newValue
+        }
+    }
+
     var announcedAttention: [String] {
         get {
             reads += 1

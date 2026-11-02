@@ -50,7 +50,8 @@
 # and settings are removed, so no process runs without the caller having its pid. Only a `start` that printed the pid leaves a build.
 # Test seam: WORKBENCH_VERIFY_FAULT=before-launch, after-launch, after-window (fail there) or in-launch-gap (a SIGTERM between the launch and recording its
 # pid) shows the cleanup without a crash. Ctrl-C has the same handler as SIGTERM and SIGHUP; no test sends it (a background job ignores it).
-# Environment: VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
+# Environment: WORKBENCH_CHAT_FEED=1 starts it with the chat feed preview (P22) on, so a scenario can be shot both ways;
+#   VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
 #   VERIFY_SETTLE_SECONDS wait after the window appears (default 2); WORKBENCH_PROOF_DIR where `shot` writes.
 # The terminal running this needs Screen Recording (start, shot) and Accessibility (press, type, paste, list, resize).
 # Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage or not macOS.
@@ -270,6 +271,7 @@ STUB
     WORKBENCH_APP_GH="$dir/bin/gh-stub" \
     ${timer_env[@]+"${timer_env[@]}"} \
     ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
+    ${WORKBENCH_CHAT_FEED:+WORKBENCH_CHAT_FEED="$WORKBENCH_CHAT_FEED"} \
     "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
   # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).
   [[ "${WORKBENCH_VERIFY_FAULT:-}" != in-launch-gap ]] || kill -TERM $$

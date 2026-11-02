@@ -60,6 +60,8 @@ struct ThreadSnapshot: Equatable {
     var run: RunModel?
     /// The shipped pull request and its CI as GitHub said it last; set by the store, never by the loader, and nil before the first read.
     var ci: PullRequestCI?
+    /// The thread as a feed (P22), derived with the snapshot when the preview is on; empty otherwise.
+    var feed: [FeedItem] = []
 
     /// How a decided thread ended, in words; nil while it is still open.
     var finishedText: String? {

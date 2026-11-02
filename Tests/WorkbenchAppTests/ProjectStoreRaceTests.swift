@@ -108,7 +108,7 @@ import Testing
         let once = Once()
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project in
+            loader: { project, _ in
                 // The turn ends right after the log was read: the screen shows the turn still open.
                 ProjectLoader.load(project: project) {
                     guard once.take(), let handle = try? FileHandle(forWritingTo: url) else { return }
@@ -133,7 +133,7 @@ import Testing
         let hold = HoldFlag()
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project in
+            loader: { project, _ in
                 if project.root == firstRoot && hold.isOn {
                     held.enter()
                     held.wait()

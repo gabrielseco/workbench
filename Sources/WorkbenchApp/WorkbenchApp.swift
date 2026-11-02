@@ -32,6 +32,12 @@ import WorkbenchCore
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(store.project == nil || store.namingGoal)
             }
+            // A preview of the P22 feed: off until a person turns it on, and one click puts the step screens back.
+            CommandGroup(after: .toolbar) {
+                Toggle(
+                    "Chat feed (preview)",
+                    isOn: Binding(get: { store.chatFeedOn }, set: { on in Task { await store.setChatFeed(on) } }))
+            }
         }
 
         // The app stays resident when the window is closed, and this says when it needs you.

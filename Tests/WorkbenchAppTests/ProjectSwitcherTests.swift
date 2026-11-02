@@ -111,7 +111,7 @@ import Testing
         let target = b.project.root.path
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project in
+            loader: { project, _ in
                 if project.root.path == target { release.wait() }
                 return ProjectLoader.load(project: project)
             })
