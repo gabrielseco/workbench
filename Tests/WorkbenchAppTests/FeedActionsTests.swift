@@ -90,7 +90,7 @@ import Testing
         let shown = try snapshot(.needsYou)
         let decision = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true }
         #expect(decision.primary?.kind == .accept && decision.primary?.enabled == true)
-        #expect(kinds(decision.more).prefix(3) == [.sendBack, .discard, .openDiff])
+        #expect(kinds(decision.more).prefix(4) == [.reviewDetails, .sendBack, .discard, .openDiff])
         #expect(decision.more.first { $0.kind == .discard }?.destructive == true)
         let open = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = false }
         #expect(open.primary?.enabled == false, "criteria are still open")

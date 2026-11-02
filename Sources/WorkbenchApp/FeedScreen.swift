@@ -15,6 +15,7 @@ struct FeedScreen: View {
     @Environment(\.feedDrawsEagerly) private var drawsEagerly
     @State private var confirmingMerge = false
     @State private var editingGoal = false
+    @State private var reviewingDetails = false
 
     /// The feed's own rows, and the next-step card, which is drawn as the decision card instead.
     private var rows: [FeedItem] {
@@ -43,6 +44,7 @@ struct FeedScreen: View {
         switch action.kind {
         case .merge: confirmingMerge = true
         case .editGoal: editingGoal = true
+        case .reviewDetails: reviewingDetails = true
         default: Task { await store.perform(action.kind) }
         }
     }
@@ -77,13 +79,18 @@ struct FeedScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .sheet(isPresented: Binding(get: { store.pendingDiscard != nil }, set: { if !$0 { store.cancelDiscard() } })) {
+        // The review's own sheet asks for the discard when it is the one open, so two sheets never ask at once.
+        .sheet(
+            isPresented: Binding(
+                get: { store.pendingDiscard != nil && !reviewingDetails }, set: { if !$0 { store.cancelDiscard() } })
+        ) {
             DiscardSheet(store: store)
         }
         .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
             PRReviewSheet(store: store)
         }
         .sheet(isPresented: $editingGoal) { GoalEditorSheet(snapshot: snapshot, store: store) }
+        .sheet(isPresented: $reviewingDetails) { ReviewDetailsSheet(snapshot: snapshot, store: store) }
         .confirmationDialog(mergeTitle, isPresented: $confirmingMerge) {
             Button("Merge") { Task { await store.mergePullRequest() } }
             Button("Cancel", role: .cancel) {}
@@ -147,6 +154,32 @@ struct GoalEditorSheet: View {
                 GoalView(snapshot: snapshot, goal: goal, store: store)
             } else {
                 Text("This thread has no goal to edit.").foregroundStyle(.secondary).padding(20)
+            }
+        }
+        .frame(minWidth: 760, minHeight: 560)
+    }
+}
+
+/// The review of the latest turn over the feed: the Review screen as it is, with every criterion and where it stands, until the review
+/// has a place of its own in the feed.
+struct ReviewDetailsSheet: View {
+    var snapshot: ThreadSnapshot
+    var store: ProjectStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Review").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 12)
+            Divider()
+            if let review = store.review {
+                ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
+            } else {
+                Text("There is nothing to review now.").foregroundStyle(.secondary).padding(20)
             }
         }
         .frame(minWidth: 760, minHeight: 560)

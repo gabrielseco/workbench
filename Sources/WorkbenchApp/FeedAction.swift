@@ -6,7 +6,8 @@ import WorkbenchCore
 struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
-        case discard, sendBack, openDiff, openWorktree, openHerdr, runAgain, refreshReview, editGoal, showFindings, refreshCI
+        case discard, sendBack, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
+        case editGoal, showFindings, refreshCI
     }
 
     var kind: Kind
@@ -73,6 +74,10 @@ enum FeedActions {
             let accept = FeedAction(
                 kind: .accept, title: "Accept work", help: "Commits the work on its branch",
                 enabled: c.reviewCanDecide && !c.deciding && !c.busy)
+            more.append(
+                FeedAction(
+                    kind: .reviewDetails, title: "Review details…",
+                    help: "Each criterion and how it was assessed, the check, the judge and the changed files"))
             more.append(
                 FeedAction(kind: .sendBack, title: "Send back…", help: "Asks for another turn, with a note", enabled: !c.busy))
             more.append(
