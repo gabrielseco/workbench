@@ -126,26 +126,35 @@ import Testing
 
     // MARK: What it draws
 
-    private func image<V: View>(_ view: V) throws -> Data? {
+    private func image<V: View>(_ view: V) throws -> CGImage {
         let framed = view.frame(width: 260, height: 760).background(Color(nsColor: .windowBackgroundColor))
             .environment(\.feedDrawsEagerly, true)
         let renderer = ImageRenderer(content: framed)
         renderer.scale = 1
-        return try #require(renderer.cgImage).dataProvider?.data as Data?
+        return try #require(renderer.cgImage)
     }
 
     @Test func theInspectorDrawsTheSwitchTheLineAndTheSource() async throws {
         let (store, _) = try await store("")
         guard case .thread(let shown) = store.screen, let base = store.goal else { throw Failure.notAThread }
-        func drawn(_ advice: AutoAdviceSetting) throws -> Data? {
+        func drawn(_ advice: AutoAdviceSetting, named name: String? = nil) throws -> Data? {
             var goal = base
             goal.advice = advice
-            return try image(RunSettingsInspector(snapshot: shown, goal: goal, store: store))
+            let drawn = try image(RunSettingsInspector(snapshot: shown, goal: goal, store: store))
+            if let name, let png = NSBitmapImageRep(cgImage: drawn).representation(using: .png, properties: [:]) {
+                let path = ProcessInfo.processInfo.environment["WORKBENCH_RENDER_DIR"] ?? NSTemporaryDirectory()
+                let folder = URL(fileURLWithPath: path).appendingPathComponent("workbench-app-renders")
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try png.write(to: folder.appendingPathComponent("\(name).png"))
+            }
+            return drawn.dataProvider?.data as Data?
         }
-        let off = try drawn(AutoAdviceSetting(goalSays: nil, projectSwitch: false, projectList: [], steps: []))
-        let on = try drawn(AutoAdviceSetting(goalSays: nil, projectSwitch: false, projectList: [], steps: ["judge"]))
-        let own = try drawn(AutoAdviceSetting(goalSays: true, projectSwitch: false, projectList: [], steps: ["judge"]))
-        let listed = try drawn(AutoAdviceSetting(goalSays: nil, projectSwitch: false, projectList: ["judge"], steps: ["judge"]))
+        typealias Advice = AutoAdviceSetting
+        let both = ["judge", "design"]
+        let off = try drawn(Advice(goalSays: nil, projectSwitch: false, projectList: [], steps: []), named: "advice-off")
+        let on = try drawn(Advice(goalSays: nil, projectSwitch: true, projectList: [], steps: both), named: "advice-on")
+        let own = try drawn(Advice(goalSays: true, projectSwitch: false, projectList: [], steps: both), named: "advice-own")
+        let listed = try drawn(Advice(goalSays: nil, projectSwitch: false, projectList: both, steps: both), named: "advice-project-list")
         #expect(off != on, "the switch and the line")
         #expect(on != own, "where it comes from")
         #expect(on != listed, "the project's own list")
