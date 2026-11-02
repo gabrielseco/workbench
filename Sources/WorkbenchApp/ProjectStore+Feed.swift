@@ -27,6 +27,11 @@ extension ProjectStore {
         goal.editable && snapshot.state.lastTurn == 0 && !starting && !runningHere && busy == nil
     }
 
+    /// Whether the feed's goal card is the editor now: there is a goal and it may be changed.
+    func feedEditsGoal(_ snapshot: ThreadSnapshot) -> Bool {
+        goal.map { goalEditable(snapshot, goal: $0) } ?? false
+    }
+
     /// "Run in Herdr" is offered while the goal has not run and nothing has been decided: the Goal screen's own condition.
     func canRunGoalInHerdr(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
         (goal.pill != .approved || snapshot.state.lastTurn == 0) && snapshot.state.decision == nil
@@ -50,8 +55,7 @@ extension ProjectStore {
 
     func feedDecision(for snapshot: ThreadSnapshot) -> FeedDecision { FeedActions.derive(feedContext(for: snapshot)) }
 
-    /// Does what the button says. Merge is confirmed by the view before it gets here; the goal's editor and the review's details are
-    /// the view's to open.
+    /// Does what the button says. Merge is confirmed by the view before it gets here; the review's details are the view's to open.
     func perform(_ kind: FeedAction.Kind) async {
         switch kind {
         case .approveAndRun, .run: await approveAndRun()
@@ -70,7 +74,7 @@ extension ProjectStore {
         case .refreshReview: await refreshReview()
         case .showFindings: await showPRReview()
         case .refreshCI: await refreshPullRequestCI()
-        case .editGoal, .reviewDetails: break
+        case .reviewDetails: break
         }
     }
 }

@@ -81,6 +81,15 @@ import Testing
         #expect(goal.removingReadAlso("../gone") == nil, "the goal no longer has it")
     }
 
+    @Test func theOutOfScopeEditsBuildWhatTheGoalScreenBuilds() {
+        var goal = GoalModel.invalid(path: "/tmp/goal.md", problems: [])
+        goal.outOfScope = ["the timeout", "uploads"]
+        #expect(goal.addingOutOfScope("the UI") == .setOutOfScope(["the timeout", "uploads", "the UI"]))
+        #expect(goal.replacingOutOfScope("uploads", with: "downloads") == .setOutOfScope(["the timeout", "downloads"]))
+        #expect(goal.removingOutOfScope("the timeout") == .setOutOfScope(["uploads"]))
+        #expect(goal.replacingOutOfScope("gone", with: "x") == nil && goal.removingOutOfScope("gone") == nil)
+    }
+
     @Test func aSwitchWritesTheSkipEditThroughTheSameStoreActionAsTheGoalScreen() async throws {
         let (store, edits) = try await store()
         let judge = try #require(store.goal?.steps.first { $0.name == "judge" })
@@ -89,6 +98,23 @@ import Testing
         #expect(edits.seen == [.setSkip(["judge"])])
         await store.editGoal { $0.addingReadAlso("../backend") }
         #expect(edits.seen.last == .setReadAlso(["../backend"]))
+    }
+
+    /// The editor blocks write through the store the way the switches do: each edit reaches the fake action as the Goal screen builds it.
+    @Test func theEditorBlocksWriteTheirEditsThroughTheStore() async throws {
+        let (store, edits) = try await store()
+        await store.editGoal(.setRequest("Retry the client."))
+        await store.editGoal(.addCriterion(text: "It retries", proof: "test: Client/retries"))
+        await store.editGoal(.updateCriterion(id: "c1", text: "It still works", proof: nil))
+        await store.editGoal(.removeCriterion(id: "c1"))
+        let existing = store.goal?.outOfScope ?? []
+        await store.editGoal { $0.addingOutOfScope("the timeout") }
+        if let first = existing.first { await store.editGoal { $0.removingOutOfScope(first) } }
+        #expect(edits.seen.prefix(4) == [
+            .setRequest("Retry the client."), .addCriterion(text: "It retries", proof: "test: Client/retries"),
+            .updateCriterion(id: "c1", text: "It still works", proof: nil), .removeCriterion(id: "c1"),
+        ])
+        #expect(edits.seen[4] == .setOutOfScope(existing + ["the timeout"]))
     }
 
     @Test func onlyADraftGoalCanBeEditedAndAGoalThatHasRunIsReadOnly() async throws {

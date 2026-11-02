@@ -8,6 +8,8 @@ import WorkbenchCore
 /// The chat feed preview (P22 slice 3a): the switch, what the loader derives for it, and that every row and every fixture scenario draws.
 @MainActor private var keptFeedFixtures: [AppFixture] = []
 
+// One suite for the feed's drawing: its helpers (render, compare, save) are shared by every test in it.
+// swiftlint:disable:next type_body_length
 @MainActor @Suite struct FeedScreenTests {
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -351,25 +353,81 @@ import WorkbenchCore
         try save(try image(said, width: 640, height: 140, dark: false), "feed-messages-light")
     }
 
-    @Test func aDraftGoalCardOffersToEditItAndAnApprovedOneDoesNot() throws {
-        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
-        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
-        let editable = FeedRow(item: item, editGoal: {}).padding(20)
-        try differs(editable, FeedRow(item: item).padding(20), "Edit goal…", width: 640, height: 120)
+    private func goalCard(title: String = "Add retry") -> FeedItem {
+        FeedItem(id: "goal", seq: 1, turn: 0, kind: .goalCard(title: title, approval: .draft, criteria: 2, hash: nil))
     }
 
-    @Test func theGoalCardListsTheCriteriaAndTheirProofs() throws {
-        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
-        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
-        let rows = [
+    private func sampleGoal() -> GoalModel {
+        var goal = GoalModel.invalid(path: "/tmp/goal.md", problems: [])
+        goal.rows = [
             GoalModel.Row(id: "c1", text: "Retries on 5xx", proof: "test: SyncClientTests/retries"),
             GoalModel.Row(id: "c2", text: "Never retries on 4xx", proof: "`swift test`", warning: "not in [tools] allowed"),
         ]
-        func card(_ criteria: [GoalModel.Row]) -> some View { FeedRow(item: item, criteria: criteria).padding(20) }
-        try differs(card(rows), card([]), "the criteria", width: 640, height: 220)
-        let plain = [rows[0]]
-        let warned = [GoalModel.Row(id: "c1", text: rows[0].text, proof: rows[0].proof, warning: "cannot be checked")]
-        try differs(card(plain), card(warned), "a proof's warning", width: 640, height: 220)
+        return goal
+    }
+
+    @Test func theGoalCardListsTheCriteriaAndTheirProofsWhileItIsReadOnly() throws {
+        let goal = sampleGoal()
+        func card(_ goal: GoalModel?) -> some View { FeedRow(item: goalCard(), goal: goal).padding(20) }
+        try differs(card(goal), card(nil), "the criteria", width: 640, height: 240)
+        var warned = goal
+        warned.rows[0].warning = "cannot be checked"
+        try differs(card(goal), card(warned), "a proof's warning", width: 640, height: 240)
+    }
+
+    /// A draft goal's card is the editor: the Goal screen's blocks, in place, in place of the summary.
+    /// The screen's choice, through the store, for the states a thread is in: only a draft that nothing has run is edited in the feed.
+    @Test func onlyADraftThatHasNotRunIsEditedInTheFeed() async throws {
+        for (approved, turn, edited) in [(false, false, true), (true, false, false), (true, true, false), (false, true, false)] {
+            let fixture = try await AppFixture()
+            keptFeedFixtures.append(fixture)
+            try await fixture.addThread("t1", approved: approved)
+            if turn { try fixture.turn("t1", 1) }
+            let store = ProjectStore(preferences: MemoryPreferences())
+            #expect(await store.open(fixture.root))
+            guard case .thread(let shown) = store.screen else { throw LoadError.notAThread }
+            #expect(store.feedEditsGoal(shown) == edited, "approved \(approved), a turn run \(turn)")
+        }
+        let none = ProjectStore(preferences: MemoryPreferences())
+        #expect(!none.feedEditsGoal(try thread(.needsYou)), "no goal loaded")
+    }
+
+    @Test func aGoalThatDoesNotParseSaysWhyApprovalIsBlockedEvenThoughItHasNoEditor() throws {
+        func card(_ problems: [String]) -> some View {
+            FeedRow(item: goalCard(), goal: GoalModel.invalid(path: "/tmp/goal.md", problems: problems)).padding(20)
+        }
+        try differs(card(["goal.md does not parse: line 3 has no key"]), card([]), "the blockers", width: 640, height: 200)
+        #expect(GoalModel.invalid(path: "/tmp/goal.md", problems: ["broken"]).editable == false)
+    }
+
+    @Test func aReadOnlyGoalCardKeepsTheRequestAndFoldsALongOne() throws {
+        var goal = sampleGoal()
+        goal.rows = []
+        func card(_ request: String) -> some View {
+            var shown = goal
+            shown.request = request
+            return FeedRow(item: goalCard(), goal: shown).padding(20)
+        }
+        try differs(card("Add retry with backoff."), card(""), "the request", width: 640, height: 260)
+        let long = String(repeating: "A long request line. ", count: 60)
+        try differs(card(long), card("Add retry with backoff."), "the folded long request", width: 640, height: 260)
+    }
+
+    @Test func aDraftGoalsCardIsTheEditorAndAnApprovedOnesIsTheSummary() async throws {
+        let fixture = try await AppFixture()
+        keptFeedFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: false)
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(await store.open(fixture.root))
+        guard case .thread(let shown) = store.screen, let goal = store.goal else { throw LoadError.notAThread }
+        func card(editable: Bool) -> some View {
+            FeedRow(item: goalCard(), goal: goal, store: store, editable: editable).padding(20)
+        }
+        try differs(card(editable: true), card(editable: false), "the editor", width: 700, height: 900)
+        for dark in [false, true] {
+            let drawn = try image(card(editable: true), width: 700, height: 900, dark: dark)
+            try save(drawn, "feed-goal-editor-\(dark ? "dark" : "light")")
+        }
     }
 
     /// The sheet hosts the existing Review screen: this proves it shows that screen when there is a review and says so when there is

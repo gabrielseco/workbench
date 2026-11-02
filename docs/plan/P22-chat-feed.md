@@ -151,8 +151,8 @@ Cut in three PRs: **3a** the preference, the feed derived in the loader and a re
 the footer); **3b** the actions (the decision card with one primary button and a menu, what each action said as rows, Approve and run,
 Stop, Accept, Ship, Review PR, Merge, Send back, Discard; a draft goal's card opens the Goal screen to edit, which is not rebuilt);
 **3c** the Run settings inspector (a column beside the feed, a sheet when the window is narrow; the Goal screen's switches, limits,
-tools, folders and Open, writing the same edits); **3d** the goal's own editor in the feed (request, criteria, out of scope), which must exist
-before slice 7 deletes the Goal screen that "Edit goal…" opens today. Making the model, budget and timeout editable is a core change of its own. The
+tools, folders and Open, writing the same edits); **3d** the goal's own editor in the feed: a draft goal's card is the editor (the Goal screen's request, criteria and out-of-scope blocks,
+extracted as `GoalBlocks`), so slice 7 can delete the Goal screen. Making the model, budget and timeout editable is a core change of its own. The
 composer waits for chat (slice 6): it would be a dead control before then. The feed rules are in [`../DESIGN.md`](../DESIGN.md).
 
 The new thread screen: header with the phase row and the state pill, the feed, the composer, the inspector, the footer as today.
