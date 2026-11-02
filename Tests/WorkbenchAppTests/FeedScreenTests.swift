@@ -312,4 +312,47 @@ import WorkbenchCore
         let without = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
         try differs(RootView(store: withRows), RootView(store: without), "the feed", width: 1100, height: 700)
     }
+
+    // MARK: The decision card and the messages
+
+    private func card(_ decision: FeedDecision) -> some View {
+        DecisionCard(step: .review, why: "Needs you · Review · turn 1 done", decision: decision, perform: { _ in }).padding(20)
+    }
+
+    private func cardsDiffer(_ first: FeedDecision, _ second: FeedDecision, _ what: String) throws {
+        try differs(card(first), card(second), what, width: 760, height: 120)
+    }
+
+    @Test func theDecisionCardDrawsItsPrimaryButtonAndItsMenuInLightAndDark() throws {
+        let primary = FeedAction(kind: .accept, title: "Accept work")
+        let menu = [
+            FeedAction(kind: .sendBack, title: "Send back…"), FeedAction(kind: .discard, title: "Discard…", destructive: true),
+        ]
+        for dark in [false, true] {
+            let full = try image(card(FeedDecision(primary: primary, more: menu)), width: 760, height: 120, dark: dark)
+            #expect(distinctColours(full) > 2)
+            try save(full, "feed-decision-card-\(dark ? "dark" : "light")")
+        }
+        try cardsDiffer(FeedDecision(primary: primary, more: menu), FeedDecision(primary: nil, more: menu), "the primary button")
+        try cardsDiffer(FeedDecision(primary: primary, more: menu), FeedDecision(primary: primary, more: []), "the menu")
+        let disabled = FeedAction(kind: .accept, title: "Accept work", enabled: false)
+        try cardsDiffer(FeedDecision(primary: primary), FeedDecision(primary: disabled), "a disabled button")
+    }
+
+    @Test func whatAnActionSaidIsDrawnAsRows() throws {
+        func rows(_ error: String?, _ note: String?, _ notice: String?) -> some View {
+            MessageRows(error: error, note: note, notice: notice, handoff: nil).padding(20)
+        }
+        let said = rows("the run did not start", "files left out", "Accepted: abc1234")
+        try differs(said, rows(nil, nil, nil), "the messages", width: 640, height: 140)
+        try differs(rows("broke", nil, nil), rows(nil, nil, "done"), "an error against a notice", width: 640, height: 140)
+        try save(try image(said, width: 640, height: 140, dark: false), "feed-messages-light")
+    }
+
+    @Test func aDraftGoalCardOffersToEditItAndAnApprovedOneDoesNot() throws {
+        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
+        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
+        let editable = FeedRow(item: item, editGoal: {}).padding(20)
+        try differs(editable, FeedRow(item: item).padding(20), "Edit goal…", width: 640, height: 120)
+    }
 }

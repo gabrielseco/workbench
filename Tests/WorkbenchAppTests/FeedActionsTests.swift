@@ -1,0 +1,140 @@
+import Foundation
+import Testing
+
+@testable import WorkbenchApp
+@testable import WorkbenchCore
+
+/// The decision card picks the next press from the same rules the step screens read.
+@MainActor @Suite struct FeedActionsTests {
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    private func snapshot(_ scenario: AppScenario) throws -> ThreadSnapshot {
+        let name = "fa-\(scenario.rawValue)-\(UUID().uuidString)"
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".workbench"), withIntermediateDirectories: true)
+        let source = repositoryRoot.appendingPathComponent("Fixtures/app/\(scenario.rawValue)/threads")
+        try FileManager.default.copyItem(at: source, to: root.appendingPathComponent(".workbench/threads"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let screen = ProjectLoader.load(project: Project(root: root)).screen
+        guard case .thread(let shown) = screen else { throw FixtureError.notAThread }
+        return shown
+    }
+
+    private enum FixtureError: Error { case notAThread }
+
+    private func decide(_ snapshot: ThreadSnapshot, _ edit: (inout FeedActionContext) -> Void = { _ in }) -> FeedDecision {
+        var context = FeedActionContext(snapshot: snapshot)
+        edit(&context)
+        return FeedActions.derive(context)
+    }
+
+    private func kinds(_ actions: [FeedAction]) -> [FeedAction.Kind] { actions.map(\.kind) }
+
+    // MARK: The next press, per state
+
+    @Test func aDraftGoalIsApprovedAndRunFromTheCard() throws {
+        let shown = try snapshot(.draft)
+        let decision = decide(shown) { $0.goalPill = .draft; $0.goalCanApprove = true }
+        #expect(decision.primary?.kind == .approveAndRun && decision.primary?.enabled == true)
+        #expect(kinds(decision.more) == [.editGoal, .newGoal])
+        let blocked = decide(shown) { $0.goalPill = .draft; $0.goalCanApprove = false }
+        #expect(blocked.primary?.kind == .approveAndRun)
+        #expect(blocked.primary?.enabled == false, "the goal says it cannot be approved yet")
+    }
+
+    @Test func anApprovedGoalWithNothingRunIsRun() throws {
+        let decision = decide(try snapshot(.goalApproved)) { $0.goalPill = .approved; $0.goalCanApprove = true }
+        #expect(decision.primary?.kind == .run && decision.primary?.enabled == true)
+    }
+
+    @Test func theSameReasonsDisableItAsOnTheGoalScreen() throws {
+        let shown = try snapshot(.goalApproved)
+        for (name, edit) in [
+            ("busy", { (c: inout FeedActionContext) in c.busy = true }),
+            ("starting", { (c: inout FeedActionContext) in c.starting = true }),
+            ("a run already going", { (c: inout FeedActionContext) in c.runningHere = true }),
+        ] {
+            let decision = decide(shown) { c in
+                c.goalPill = .approved
+                c.goalCanApprove = true
+                edit(&c)
+            }
+            #expect(decision.primary?.enabled == false, "\(name) disables Run")
+        }
+    }
+
+    @Test func aTurnThatIsGoingOnIsStoppedFromTheCard() throws {
+        var shown = try snapshot(.running)
+        shown.run?.phase = .working
+        let decision = decide(shown)
+        #expect(decision.primary?.kind == .stopTurn && decision.primary?.title == "Stop turn")
+        #expect(decide(shown) { $0.stopping = true }.primary?.title == "Stopping…")
+        #expect(decide(shown) { $0.stopping = true }.primary?.enabled == false)
+    }
+
+    @Test func aTurnWhoseRunnerIsGoneCanBeRunAgainAndASuccessfulOneCannot() throws {
+        let gone = try snapshot(.running)
+        #expect(gone.run?.phase == .orphaned && decide(gone).primary?.kind == .runAgain)
+        #expect(decide(gone) { $0.runningHere = true }.primary == nil, "this app is running it")
+        let failed = try {
+            var shown = try snapshot(.running)
+            shown.run?.phase = .ended(result: "timed_out", reason: nil)
+            return shown
+        }()
+        #expect(decide(failed).primary?.kind == .runAgain)
+    }
+
+    @Test func aTurnAwaitingReviewIsAcceptedAndTheRestIsInTheMenu() throws {
+        let shown = try snapshot(.needsYou)
+        let decision = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true }
+        #expect(decision.primary?.kind == .accept && decision.primary?.enabled == true)
+        #expect(kinds(decision.more).prefix(3) == [.sendBack, .discard, .openDiff])
+        #expect(decision.more.first { $0.kind == .discard }?.destructive == true)
+        let open = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = false }
+        #expect(open.primary?.enabled == false, "criteria are still open")
+        let deciding = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.deciding = true }
+        #expect(deciding.primary?.enabled == false)
+        let noFiles = decide(shown) { $0.reviewShown = true; $0.reviewHasFiles = false }
+        #expect(noFiles.more.first { $0.kind == .openDiff }?.enabled == false)
+    }
+
+    @Test func anAcceptedThreadIsShippedAndAShippedOneIsReviewedThenMerged() throws {
+        let accepted = try snapshot(.accepted)
+        #expect(decide(accepted).primary?.kind == .ship && decide(accepted) { $0.deciding = true }.primary?.enabled == false)
+
+        var shipped = try snapshot(.prOpen)
+        #expect(shipped.watchesPullRequest)
+        #expect(decide(shipped).primary?.kind == .reviewPR)
+        let merge = decide(shipped).more.first { $0.kind == .merge }
+        #expect(merge?.enabled == false, "no green CI has been read")
+
+        let green = PRStatus(
+            number: 482, state: .open, head: String(repeating: "a", count: 40),
+            checks: PRChecksSummary(checks: [PRCheck(name: "test", bucket: "pass")]), checksError: nil)
+        shipped.ci = .known(green)
+        let ready = decide(shipped)
+        #expect(ready.primary?.kind == .merge && ready.primary?.enabled == true)
+        #expect(ready.more.contains { $0.kind == .reviewPR })
+        #expect(decide(shipped) { $0.busy = true }.primary?.enabled == false)
+    }
+
+    @Test func aFinishedThreadOffersTheNextGoalOnly() throws {
+        for scenario in [AppScenario.cleaned, .discarded] {
+            let decision = decide(try snapshot(scenario))
+            #expect(decision.primary?.kind == .newGoal && decision.more.isEmpty, "\(scenario.rawValue)")
+        }
+    }
+
+    @Test func everyStateHasAtMostOnePrimaryAndNoButtonTwice() throws {
+        for scenario in AppScenario.allCases {
+            guard let shown = try? snapshot(scenario) else { continue }
+            for review in [false, true] {
+                let decision = decide(shown) { $0.reviewShown = review; $0.goalPill = .draft; $0.goalCanApprove = true }
+                let all = (decision.primary.map { [$0] } ?? []) + decision.more
+                #expect(Set(all.map(\.kind)).count == all.count, "\(scenario.rawValue) lists a button twice")
+            }
+        }
+    }
+}

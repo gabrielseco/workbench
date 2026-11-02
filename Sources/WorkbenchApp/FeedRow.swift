@@ -5,12 +5,16 @@ import WorkbenchCore
 /// amber needs you, red broken, grey idle.
 struct FeedRow: View {
     var item: FeedItem
+    /// Opens the goal's editor from the goal card; nil when the goal can no longer be edited.
+    var editGoal: (() -> Void)?
+
+    init(item: FeedItem, editGoal: (() -> Void)? = nil) { (self.item, self.editGoal) = (item, editGoal) }
 
     var body: some View {
         switch item.kind {
         case .userNote(let text): UserNoteRow(text: text)
         case .goalCard(let title, let approval, let criteria, let hash):
-            GoalCardRow(title: title, approval: approval, criteria: criteria, hash: hash)
+            GoalCardRow(title: title, approval: approval, criteria: criteria, hash: hash, edit: editGoal)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -93,10 +97,17 @@ struct GoalCardRow: View {
     var approval: ApprovalState?
     var criteria: Int
     var hash: String?
+    var edit: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            HStack {
+                Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                if let edit {
+                    Button("Edit goal…", action: edit).buttonStyle(.link).font(.callout).help("Opens the goal's editor")
+                }
+            }
             Text(title ?? "Goal").font(.headline).lineLimit(2)
             HStack(spacing: 10) {
                 Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
