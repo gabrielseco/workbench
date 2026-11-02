@@ -239,6 +239,8 @@ struct RecentProject: Equatable, Identifiable {
             reviewed = await Task.detached { await load(project, thread) }.value.map(ReviewModel.derive)
             guard mine == generation else { return }
         }
+        // A read that began before the preview was turned on or off is for the other window: the read `setChatFeed` started is the one that counts.
+        guard feed == chatFeedOn else { return }
         (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
         (current.goal, current.review) = (model, reviewed)
         applyOwnership()

@@ -229,4 +229,76 @@ import WorkbenchCore
     }
 
     private enum LoadError: Error { case notAThread }
+
+    // MARK: A late answer, and content that is really drawn
+
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func next() -> Int { lock.withLock { count += 1; return count } }
+    }
+
+    @Test func aReadThatBeganBeforeTheFeedWasTurnedOnDoesNotBlankIt() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        let calls = Calls()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(),
+            loader: { project, feed in
+                // The second read the window makes is a poll that is still going when the preview is turned on: it answers last.
+                if calls.next() == 2 { Thread.sleep(forTimeInterval: 0.4) }
+                return ProjectLoader.load(project: project, feed: feed)
+            })
+        #expect(await store.open(fixture.root))
+        let slow = Task { await store.reload() }
+        try await Task.sleep(for: .milliseconds(100))
+        await store.setChatFeed(true)
+        await slow.value
+        guard case .thread(let shown) = store.screen else { throw LoadError.notAThread }
+        #expect(!shown.feed.isEmpty, "the answer of the read that began with the preview off was dropped")
+    }
+
+    private func differs(
+        _ first: some View, _ second: some View, _ what: String, width: CGFloat = 700, height: CGFloat = 160
+    ) throws {
+        let x = try image(first, width: width, height: height, dark: false)
+        let y = try image(second, width: width, height: height, dark: false)
+        #expect(x.dataProvider?.data != y.dataProvider?.data, "\(what) is not drawn")
+    }
+
+    private func row(_ kind: FeedItem.Kind) -> some View { FeedRow(item: FeedItem(id: "a", seq: 1, turn: 1, kind: kind)) }
+
+    @Test func rowsDrawTheDetailTheySay() throws {
+        try differs(
+            row(.denied(tool: "Bash", input: "git push origin main")), row(.denied(tool: "Bash", input: nil)),
+            "a refused call's input")
+        try differs(
+            row(.verify(ok: true, reason: nil, proofs: ["list-states.png"])), row(.verify(ok: true, reason: nil, proofs: [])),
+            "the proof names")
+        try differs(
+            row(.check(result: "passed", command: "swift test", durationMs: 1_000)),
+            row(.check(result: "failed", command: "swift test", durationMs: 1_000)), "a check's result")
+        let started = ThreadState.derive(from: [], id: "t")
+        let ended = ThreadState.derive(
+            from: [
+                Event(seq: 1, ts: "2026-11-02T10:00:01.000Z", turn: 0, kind: .threadCreated, data: [:]),
+                Event(seq: 2, ts: "2026-11-02T10:00:02.000Z", turn: 1, kind: .turnStarted, data: [:]),
+                Event(seq: 3, ts: "2026-11-02T10:00:03.000Z", turn: 1, kind: .turnEnded, data: ["result": "succeeded"]),
+            ], id: "t")
+        try differs(
+            PhaseRow(spine: ThreadSpine.derive(state: started)),
+            PhaseRow(spine: ThreadSpine.derive(state: ended, approval: .approved)),
+            "the phase row", width: 800, height: 40)
+    }
+
+    @Test func theWindowDrawsTheFeedNotJustTheToolbarAndTheRail() throws {
+        var snapshot = try thread(.needsYou)
+        let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let withRows = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
+        snapshot.feed = []
+        let without = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
+        try differs(RootView(store: withRows), RootView(store: without), "the feed", width: 1100, height: 700)
+    }
 }
