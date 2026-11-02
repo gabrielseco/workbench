@@ -20,6 +20,10 @@ on:
       - "scripts/window-info.swift"
       - "scripts/app-icon.swift"
       - ".github/workflows/app.yml"
+      - ".xcode-version"
+      - ".github/actions/xcode/**"
+      - "scripts/use-xcode.sh"
+      - "scripts/test-bundle-app-guard.sh"
   workflow_dispatch:
 
 concurrency:
@@ -47,7 +51,7 @@ jobs:
         # label, and nightly) builds the app in release mode. A manual run always builds it.
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          PACKAGING: '^(Resources/|Package\.swift$|scripts/(bundle-app|render-icon)\.sh$|scripts/app-icon\.swift$|\.github/workflows/app\.yml$)'
+          PACKAGING: '^(Resources/|Package\.swift$|\.xcode-version$|scripts/(bundle-app|render-icon|use-xcode|test-bundle-app-guard)\.sh$|scripts/app-icon\.swift$|\.github/workflows/app\.yml$|\.github/actions/xcode/)'
         run: |
           if [ -z "$BASE" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
