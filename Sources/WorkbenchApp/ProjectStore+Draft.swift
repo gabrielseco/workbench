@@ -57,7 +57,8 @@ extension ProjectStore {
             return false
         }
         guard mine == generation else { return false }
-        (currentThread, lastWatch) = (nil, nil)
+        // A new goal is the thread to show, as it always has been, not the old one picked in the list.
+        (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         await reload()
         return true
     }
@@ -91,7 +92,8 @@ extension ProjectStore {
             actionError = goalAgentOff ? nil : "\(error)"
             return false
         }
-        (currentThread, lastWatch) = (nil, nil)
+        // A new goal is the thread to show, as it always has been, not the old one picked in the list.
+        (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         await reload()
         return true
     }

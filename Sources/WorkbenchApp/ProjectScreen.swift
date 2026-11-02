@@ -131,7 +131,10 @@ struct ThreadSnapshot: Equatable {
     }
 
     /// The state pill: one word for where the thread stands for the person.
-    var stateText: String {
+    var stateText: String { Self.stateText(attention: attention, state: state, approval: approval) }
+
+    /// The same words for a thread's row in the list, which has no snapshot.
+    static func stateText(attention: Attention, state: ThreadState, approval: ApprovalState?) -> String {
         if case .needsYou(let reason) = attention { return "Needs you · \(reason.text)" }
         if attention == .working { return "Working" }
         if let decision = state.decision { return decision.capitalized }

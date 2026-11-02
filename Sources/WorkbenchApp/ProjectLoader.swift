@@ -29,7 +29,9 @@ enum ProjectLoader {
     }
 
     /// The thread the app shows: the active one, else the newest that is not cleaned, else the newest.
-    static func currentThread(store: ThreadStore) -> String? {
+    static func currentThread(store: ThreadStore, selected: String? = nil) -> String? {
+        // The person's pick, while the thread is still there.
+        if let selected, store.threadIDs().contains(selected) { return selected }
         if let active = store.activeThreadID() { return active }
         let newestFirst = store.summaries().sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }
         return newestFirst.first { !store.state(of: $0.id).cleaned }?.id ?? newestFirst.first?.id
@@ -46,14 +48,18 @@ enum ProjectLoader {
     /// the snapshot, so the next poll reads again. Taken after, it would describe the new file with the old screen and the
     /// write would be missed for good.
     /// `afterRead` runs right after the log was read: a test writes to the log there, as a runner would in that instant.
-    static func load(project: Project, feed: Bool = false, afterRead: @Sendable () -> Void = {}) -> Loaded {
+    static func load(
+        project: Project, feed: Bool = false, selected: String? = nil, afterRead: @Sendable () -> Void = {}
+    ) -> Loaded {
         let folders = watch(project: project, thread: nil)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: project.workbenchDirectory.path, isDirectory: &isDirectory),
             isDirectory.boolValue
         else { return Loaded(screen: .workbenchMissing(path: project.root.path), thread: nil, watch: folders) }
         let store = ThreadStore(project: project)
-        guard let id = currentThread(store: store) else { return Loaded(screen: .noThread, thread: nil, watch: folders) }
+        guard let id = currentThread(store: store, selected: selected) else {
+            return Loaded(screen: .noThread, thread: nil, watch: folders)
+        }
         var seen = watch(project: project, thread: id)
         seen.threadsDirectory = folders.threadsDirectory
         let screen = snapshot(project: project, store: store, id: id, feed: feed)
