@@ -23,9 +23,7 @@ struct FeedScreen: View {
     }
 
     /// The goal card is the editor while the goal may be changed: a draft, no turn run, nothing going on (the Run settings' rule).
-    private var canEditGoal: Bool {
-        store.goal.map { store.goalEditable(snapshot, goal: $0) } ?? false
-    }
+    private var canEditGoal: Bool { store.feedEditsGoal(snapshot) }
 
     private func row(_ item: FeedItem) -> some View {
         FeedRow(item: item, goal: store.goal, store: store, editable: canEditGoal)

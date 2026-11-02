@@ -376,6 +376,35 @@ import WorkbenchCore
     }
 
     /// A draft goal's card is the editor: the Goal screen's blocks, in place, in place of the summary.
+    /// The screen's choice, through the store, for the states a thread is in: only a draft that nothing has run is edited in the feed.
+    @Test func onlyADraftThatHasNotRunIsEditedInTheFeed() async throws {
+        for (approved, turn, edited) in [(false, false, true), (true, false, false), (true, true, false), (false, true, false)] {
+            let fixture = try await AppFixture()
+            keptFeedFixtures.append(fixture)
+            try await fixture.addThread("t1", approved: approved)
+            if turn { try fixture.turn("t1", 1) }
+            let store = ProjectStore(preferences: MemoryPreferences())
+            #expect(await store.open(fixture.root))
+            guard case .thread(let shown) = store.screen else { throw LoadError.notAThread }
+            #expect(store.feedEditsGoal(shown) == edited, "approved \(approved), a turn run \(turn)")
+        }
+        let none = ProjectStore(preferences: MemoryPreferences())
+        #expect(!none.feedEditsGoal(try thread(.needsYou)), "no goal loaded")
+    }
+
+    @Test func aReadOnlyGoalCardKeepsTheRequestAndFoldsALongOne() throws {
+        var goal = sampleGoal()
+        goal.rows = []
+        func card(_ request: String) -> some View {
+            var shown = goal
+            shown.request = request
+            return FeedRow(item: goalCard(), goal: shown).padding(20)
+        }
+        try differs(card("Add retry with backoff."), card(""), "the request", width: 640, height: 260)
+        let long = String(repeating: "A long request line. ", count: 60)
+        try differs(card(long), card("Add retry with backoff."), "the folded long request", width: 640, height: 260)
+    }
+
     @Test func aDraftGoalsCardIsTheEditorAndAnApprovedOnesIsTheSummary() async throws {
         let fixture = try await AppFixture()
         keptFeedFixtures.append(fixture)

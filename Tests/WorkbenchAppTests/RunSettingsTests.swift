@@ -100,6 +100,23 @@ import Testing
         #expect(edits.seen.last == .setReadAlso(["../backend"]))
     }
 
+    /// The editor blocks write through the store the way the switches do: each edit reaches the fake action as the Goal screen builds it.
+    @Test func theEditorBlocksWriteTheirEditsThroughTheStore() async throws {
+        let (store, edits) = try await store()
+        await store.editGoal(.setRequest("Retry the client."))
+        await store.editGoal(.addCriterion(text: "It retries", proof: "test: Client/retries"))
+        await store.editGoal(.updateCriterion(id: "c1", text: "It still works", proof: nil))
+        await store.editGoal(.removeCriterion(id: "c1"))
+        let existing = store.goal?.outOfScope ?? []
+        await store.editGoal { $0.addingOutOfScope("the timeout") }
+        if let first = existing.first { await store.editGoal { $0.removingOutOfScope(first) } }
+        #expect(edits.seen.prefix(4) == [
+            .setRequest("Retry the client."), .addCriterion(text: "It retries", proof: "test: Client/retries"),
+            .updateCriterion(id: "c1", text: "It still works", proof: nil), .removeCriterion(id: "c1"),
+        ])
+        #expect(edits.seen[4] == .setOutOfScope(existing + ["the timeout"]))
+    }
+
     @Test func onlyADraftGoalCanBeEditedAndAGoalThatHasRunIsReadOnly() async throws {
         let (draft, _) = try await store()
         #expect(draft.goal?.editable == true)

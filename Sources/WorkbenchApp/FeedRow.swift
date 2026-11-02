@@ -106,6 +106,9 @@ struct GoalCardRow: View {
     var goal: GoalModel?
     var store: ProjectStore?
     var editable = false
+    @State private var showAllRequest = false
+    /// A read-only request this long is folded, as on the Goal screen.
+    static let foldedRequest = 500
     /// Criteria shown on the summary; a longer list is the editor's to show whole.
     static let shownCriteria = 6
 
@@ -143,10 +146,25 @@ struct GoalCardRow: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 6) {
             heading
+            if let request = goal?.request, !request.isEmpty { requestText(request) }
             if !rows.isEmpty { criteriaList }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// What was asked, so a goal with no criteria still says what it is for; a long one is folded.
+    private func requestText(_ request: String) -> some View {
+        let long = request.count > Self.foldedRequest
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(request).font(.callout).textSelection(.enabled).lineLimit(long && !showAllRequest ? 6 : nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if long {
+                Button(showAllRequest ? "Show less" : "Show more") { showAllRequest.toggle() }
+                    .buttonStyle(.borderless).font(.callout)
+            }
+        }
+        .padding(.top, 2)
     }
 
     /// What approving means: each criterion and the proof that will check it, and why a proof cannot be checked when it cannot.

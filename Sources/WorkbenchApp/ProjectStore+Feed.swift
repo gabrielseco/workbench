@@ -27,6 +27,11 @@ extension ProjectStore {
         goal.editable && snapshot.state.lastTurn == 0 && !starting && !runningHere && busy == nil
     }
 
+    /// Whether the feed's goal card is the editor now: there is a goal and it may be changed.
+    func feedEditsGoal(_ snapshot: ThreadSnapshot) -> Bool {
+        goal.map { goalEditable(snapshot, goal: $0) } ?? false
+    }
+
     /// "Run in Herdr" is offered while the goal has not run and nothing has been decided: the Goal screen's own condition.
     func canRunGoalInHerdr(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
         (goal.pill != .approved || snapshot.state.lastTurn == 0) && snapshot.state.decision == nil
