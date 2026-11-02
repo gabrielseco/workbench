@@ -11,10 +11,11 @@
 # after a commit added by hand, `ship` must print `note: 1 commit(s) were added after accept: <sha>`, write one
 # `branch.ahead` event with the accepted commit, the new head and that commit, push the head, and `workbench log` must
 # show it. Thread B has no commits and pending work: no `Commits` heading, `accept -m` uses the message and says nothing
-# about ignoring it, and its `ship` writes no `branch.ahead`. Exit 0 only when every step passed, 1 when one failed, 2
+# about ignoring it, and its `ship` writes no `branch.ahead`. Thread C has a 20 KB request and pending work: `accept`
+# with no `-m` must exit 0 and commit exactly the subject and the `Workbench-Thread:` line, with none of the request. Exit 0 only when every step passed, 1 when one failed, 2
 # when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 leaves a file uncommitted in thread A's worktree
 # before `accept`, so accept commits it with the message and the steps "accept -m with nothing pending prints the
-# ignored line" and "the branch tip is unchanged by accept" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# ignored line" and "the branch tip is unchanged by accept" must FAIL; it also gives thread C's accept the old default (with the request) as `-m`, so the steps "the default message is short", "has no text of the request" and "is the subject and the thread trailer" must FAIL (and accept itself, over 8000 bytes). The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -47,7 +48,7 @@ wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 
 new_thread() { # <name>: an approved thread on main with its worktree and worktree.created record; sets TID, WTP
-    cat >"$SCRATCH/$1.md" <<'GOAL'
+    cat >"$SCRATCH/$1.md" <<GOAL
 ---
 title: Commits visible
 budget_usd: 1
@@ -57,6 +58,7 @@ turn_timeout_min: 30
 ## Request
 
 Nothing runs: this thread only checks what accept, ship and review say about commits.
+${EXTRA_REQUEST:-}
 
 ## Criteria
 
@@ -163,4 +165,30 @@ wbp "$SCRATCH/log-b.json" log "$B" --json
 nahead=$(py "print(len([x for x in lines if x['kind']=='branch.ahead']))" <"$SCRATCH/log-b.json" 2>/dev/null)
 check "ship at the accepted commit writes no branch.ahead and no note" "branch.ahead x$nahead or a note line" \
     bash -c '[ "$2" = 0 ] && ! grep -q "^note: " "$1"' _ "$SCRATCH/ship-b.out" "$nahead"
+
+# --- thread C: a long request, accept without -m --------------------------------------------------------------
+
+# The default message used to carry the whole request: a task's request (skill, input files) passes accept's 8000-byte
+# limit, and a public history would hold the prompt. It is now the subject and the trailer only.
+MARKER="INTERNAL-PATH-/srv/secret"
+EXTRA_REQUEST=$(python3 -I -c "import sys; print((sys.argv[1] + ' ') * 800)" "$MARKER")
+new_thread commits-c
+C=$TID
+echo pending >"$WTP/pending.txt"
+if [ "$SABOTAGE" = 1 ]; then
+    echo "    VERIFY_CLI_SABOTAGE=1: accept gets the old default (subject, request, trailer) as -m"
+    wbp "$SCRATCH/accept-c.out" accept "$C" -m "$(printf 'chore: Commits visible\n\n%s\n\nWorkbench-Thread: %s' "$EXTRA_REQUEST" "$C")" --yes
+else
+    wbp "$SCRATCH/accept-c.out" accept "$C" --yes
+fi
+shown "$SCRATCH/accept-c.out" 6
+check "accept with the default message and a 20 KB request: exit 0" "workbench accept exited $RC: $(head -c 300 "$SCRATCH/accept-c.out")" \
+    test "$RC" = 0
+MSG=$(g -C "$P" log -1 --format=%B "workbench/$C")
+check "the default message is short" "the commit message is $(printf '%s' "$MSG" | wc -c | tr -d ' ') bytes" \
+    test "$(printf '%s' "$MSG" | wc -c | tr -d ' ')" -lt 200
+check "the default message has no text of the request" "the commit message holds the request" \
+    bash -c '! printf "%s" "$1" | grep -q "$2"' _ "$MSG" "$MARKER"
+check "the default message is the subject and the thread trailer" "the message is '$MSG'" \
+    test "$MSG" = "$(printf 'chore: Commits visible\n\nWorkbench-Thread: %s' "$C")"
 finish
