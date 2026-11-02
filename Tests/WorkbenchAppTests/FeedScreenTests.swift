@@ -6,6 +6,8 @@ import WorkbenchCore
 @testable import WorkbenchApp
 
 /// The chat feed preview (P22 slice 3a): the switch, what the loader derives for it, and that every row and every fixture scenario draws.
+@MainActor private var keptFeedFixtures: [AppFixture] = []
+
 @MainActor @Suite struct FeedScreenTests {
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -368,5 +370,25 @@ import WorkbenchCore
         let plain = [rows[0]]
         let warned = [GoalModel.Row(id: "c1", text: rows[0].text, proof: rows[0].proof, warning: "cannot be checked")]
         try differs(card(plain), card(warned), "a proof's warning", width: 640, height: 220)
+    }
+
+    /// The sheet hosts the existing Review screen: this proves it shows that screen when there is a review and says so when there is
+    /// none. What the Review screen draws is its own (a scroll view, which `ImageRenderer` cannot draw), seen in the live app.
+    @Test func theReviewDetailsSheetHostsTheReviewAndSaysWhenThereIsNone() async throws {
+        let fixture = try await AppFixture()
+        keptFeedFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let reviewing = ProjectStore(preferences: preferences)
+        #expect(await reviewing.open(fixture.root))
+        guard case .thread(let shown) = reviewing.screen else { throw LoadError.notAThread }
+        #expect(reviewing.review != nil, "a turn that ended awaits a review")
+        let empty = ProjectStore(preferences: preferences, screen: .thread(shown), project: fixture.project)
+        #expect(empty.review == nil)
+        try differs(
+            ReviewDetailsSheet(snapshot: shown, store: reviewing), ReviewDetailsSheet(snapshot: shown, store: empty),
+            "the review in its sheet", width: 760, height: 560)
     }
 }
