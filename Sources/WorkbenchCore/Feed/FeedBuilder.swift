@@ -16,7 +16,7 @@ extension Feed {
         private var group: ToolGroup?
         private var edited: [Int: Set<String>] = [:]
         /// The refused calls of each turn as `turn.ended` recorded them, and how many `permission_denied` rows have been seen.
-        private var denials: [Int: [String?]] = [:]
+        private var denials: [Int: [(tool: String, input: String?)]] = [:]
         private var deniedSeen: [Int: Int] = [:]
         private var deniedRows: [Int: Int] = [:]
 
@@ -27,7 +27,9 @@ extension Feed {
             for event in contents.events where event.kind == .turnEnded {
                 ended[event.turn] = event
                 if case .array(let calls)? = event.data["denials"] {
-                    denials[event.turn] = calls.map { $0["input"]?.stringValue.map(short) }
+                    denials[event.turn] = calls.map {
+                        (ThreadState.safeLine($0["tool"]?.stringValue ?? "call", limit: 40), $0["input"]?.stringValue.map(short))
+                    }
                 }
             }
             for event in contents.events where event.kind == .agentActivity {
@@ -57,6 +59,8 @@ extension Feed {
             case .turnStarted:
                 let how = phase(of: event.turn, ended: ended)
                 push(event, .turn(number: event.turn, phase: how, durationMs: duration(ended), costUSD: cost(ended)))
+            case .turnEnded:
+                refusalsWithoutRows(event)
             case .agentActivity:
                 activity(event)
             case .checkRan:
@@ -127,9 +131,9 @@ extension Feed {
             case "permission_denied":
                 let index = deniedSeen[event.turn, default: 0]
                 deniedSeen[event.turn] = index + 1
-                // The inputs arrive whole on `turn.ended`; they are matched by order, and only when every refusal was recorded as a row.
-                let calls = denials[event.turn]
-                let input = calls?.count == deniedRows[event.turn] ? calls?[index] : nil
+                // The inputs arrive whole on `turn.ended` and are matched by order: the rows are the first refusals of the turn.
+                let calls = denials[event.turn] ?? []
+                let input = index < calls.count ? calls[index].input : nil
                 let tool = ThreadState.safeLine(event.data["tool"]?.stringValue ?? "call", limit: 40)
                 push(event, .denied(tool: tool, input: input))
             case "dropped":
@@ -139,13 +143,25 @@ extension Feed {
             }
         }
 
+        /// Refusals the activity rows did not keep (the turn passed its cap, or the log was compacted) are still on `turn.ended`.
+        private mutating func refusalsWithoutRows(_ event: Event) {
+            let calls = denials[event.turn] ?? []
+            let rows = deniedSeen[event.turn, default: 0]
+            guard calls.count > rows else { return }
+            for (offset, call) in calls[rows...].enumerated() {
+                push(event, .denied(tool: call.tool, input: call.input), suffix: ".\(offset)")
+            }
+        }
+
         private mutating func tool(_ event: Event) {
             let name = ThreadState.safeLine(event.data["name"]?.stringValue ?? "tool", limit: 40)
             let summary = short(event.data["summary"]?.stringValue ?? "")
             if Feed.editTools.contains(name) {
                 // A file edited again in the same turn is the same row: the feed says what changed, not how often.
+                // Two files are the same only when the whole recorded path is, not the part that fits on a row.
+                let whole = ThreadState.safeLine(event.data["summary"]?.stringValue ?? "", limit: 4_096)
                 let file = summary.isEmpty ? "\(event.seq)" : summary
-                guard edited[event.turn, default: []].insert(file).inserted else { return }
+                guard edited[event.turn, default: []].insert(whole.isEmpty ? file : whole).inserted else { return }
                 push(event, .edit(file: file, tool: name))
                 return
             }

@@ -38,7 +38,7 @@ public enum Feed {
         var items = [FeedItem]()
         if let notice = damage(contents) { items.append(notice) }
         items += bounded(body, room: maxItems - items.count - 1)
-        items.append(next(spine: spine, attention: attention, lastSeq: contents.events.last?.seq ?? 0))
+        items.append(next(spine: spine, state: state, attention: attention, lastSeq: contents.events.last?.seq ?? 0))
         return items
     }
 
@@ -75,10 +75,12 @@ public enum Feed {
     }
 
     /// The step a person or the run is at, taken from the spine; never a second rule.
-    private static func next(spine: ThreadSpine, attention: Attention, lastSeq: Int) -> FeedItem {
+    private static func next(spine: ThreadSpine, state: ThreadState, attention: Attention, lastSeq: Int) -> FeedItem {
         // What can be done now comes before what already failed: after a failed turn Review is the step, not the Run that failed.
-        let open = [SpineMark.needsYou, .current, .failed].lazy
-            .compactMap { mark in spine.entries.first { $0.mark == mark } }.first
+        // A thread that was discarded or cleaned has nothing left to do, and a failed run in its past is not a step.
+        let finished = state.decision == "discarded" || state.cleaned
+        let marks: [SpineMark] = finished ? [.needsYou, .current] : [.needsYou, .current, .failed]
+        let open = marks.lazy.compactMap { mark in spine.entries.first { $0.mark == mark } }.first
         var why = open?.sublabel ?? ""
         if case .needsYou(let reason) = attention { why = reason.text }
         if why.isEmpty { why = open.map { $0.step.title } ?? "Nothing is left to do." }

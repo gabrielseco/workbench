@@ -327,4 +327,38 @@ import Testing
         let items = feed([created, ev(2, 0, .threadNote, ["text": .string(text)])])
         #expect(items.contains { $0.kind == .userNote(text: "beforeredafter next") })
     }
+
+    @Test func aDiscardedThreadHasNothingLeftEvenAfterAFailedRun() {
+        let items = feed([
+            created, ev(2, 1, .turnStarted), ev(3, 1, .turnEnded, ["result": "failed"]),
+            ev(4, 1, .reviewDecision, ["decision": "discarded"]),
+        ], approval: .approved)
+        guard case .next(let step, _)? = items.last?.kind else {
+            Issue.record("no next card")
+            return
+        }
+        #expect(step == nil, "got \(String(describing: step))")
+    }
+
+    @Test func twoLongPathsThatShareTheirFirstCharactersAreTwoEdits() {
+        let prefix = String(repeating: "a/", count: 100)
+        let items = feed([
+            created, ev(2, 1, .turnStarted), activity(3, "tool", ["name": "Edit", "summary": .string(prefix + "one.swift")]),
+            activity(4, "tool", ["name": "Edit", "summary": .string(prefix + "two.swift")]),
+        ])
+        let edits = items.filter { if case .edit = $0.kind { true } else { false } }
+        #expect(edits.count == 2)
+    }
+
+    @Test func aRefusalTheActivityRowsDidNotKeepIsStillShown() {
+        let denials: JSONValue = [["tool": "Bash", "input": "git push"], ["tool": "Bash", "input": "rm -rf build"]]
+        let items = feed([
+            created, ev(2, 1, .turnStarted), activity(3, "permission_denied", ["tool": "Bash"]),
+            ev(4, 1, .turnEnded, ["result": "succeeded", "denials": denials]),
+        ])
+        let refused = items.compactMap { item -> String? in
+            if case .denied(_, let input) = item.kind { input } else { nil }
+        }
+        #expect(refused == ["git push", "rm -rf build"], "the second one came from turn.ended; no duplicate of the first")
+    }
 }
