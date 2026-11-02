@@ -33,6 +33,9 @@ jobs:
         # The compiler checks its own intermediate code after each pass and aborts on invalid code: that is how the bug was found, and
         # it catches the next one in any function, with no scenario needed to reach it. About two minutes.
         run: swift build -c release --product workbench -Xswiftc -Xfrontend -Xswiftc -sil-verify-all
+      - name: Release build of the app
+        # The `app` job skips its release bundle when only the app's Swift changed, so the optimized compile of the app is checked here.
+        run: swift build -c release --product WorkbenchApp
       - name: Git identity (the scenarios commit)
         run: |
           git config --global user.name "ci"
