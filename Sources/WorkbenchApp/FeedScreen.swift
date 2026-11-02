@@ -66,6 +66,26 @@ struct FeedScreen: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let beside = store.runSettingsOn && RunSettingsLayout.placement(centreWidth: proxy.size.width) == .beside
+            HStack(spacing: 0) {
+                column
+                if beside {
+                    Divider()
+                    RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store).frame(width: RunSettingsLayout.width)
+                }
+            }
+            // Too narrow for it beside the feed, it opens over it.
+            .sheet(
+                isPresented: Binding(
+                    get: { store.runSettingsOn && !beside }, set: { if !$0 { store.setRunSettings(false) } })
+            ) {
+                RunSettingsSheet(snapshot: snapshot, store: store)
+            }
+        }
+    }
+
+    private var column: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let busy = store.busy { BusyBar(text: busy).padding(.horizontal, 28).padding(.top, 12) }
             header
@@ -103,7 +123,17 @@ struct FeedScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(snapshot.title ?? snapshot.id).font(.title2.weight(.bold)).lineLimit(2)
+            HStack(alignment: .firstTextBaseline) {
+                Text(snapshot.title ?? snapshot.id).font(.title2.weight(.bold)).lineLimit(2)
+                Spacer(minLength: 12)
+                Button {
+                    store.setRunSettings(!store.runSettingsOn)
+                } label: {
+                    Label("Run settings", systemImage: "sidebar.right")
+                }
+                .buttonStyle(.borderless).font(.callout)
+                .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
+            }
             PhaseRow(spine: snapshot.spine)
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)

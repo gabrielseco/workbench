@@ -100,6 +100,8 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored let preferences: Preferences
     /// The chat feed preview is on: the thread screen is the feed, and the loader derives its items. Set by `setChatFeed`.
     var chatFeedOn: Bool
+    /// The Run settings inspector is shown beside the feed (or over it, in a narrow window). Set by `setRunSettings`.
+    var runSettingsOn: Bool
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
@@ -150,6 +152,7 @@ struct RecentProject: Equatable, Identifiable {
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
         self.chatFeedOn = preferences.chatFeed
+        self.runSettingsOn = preferences.runSettings
         self.doctorRunner = doctorRunner
         current.onSaid = { [weak self] in self?.adopt($0) }
     }

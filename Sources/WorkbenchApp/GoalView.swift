@@ -235,12 +235,7 @@ struct GoalView: View {
                                             }
                                         }
                                         Button {
-                                            edit { g in
-                                                guard let at = g.goalReadAlso.firstIndex(of: folder) else { return nil }
-                                                var all = g.goalReadAlso
-                                                all.remove(at: at)
-                                                return .setReadAlso(all)
-                                            }
+                                            edit { $0.removingReadAlso(folder) }
                                         } label: { Image(systemName: "xmark") }
                                             .buttonStyle(.borderless).help("Remove").opacity(hovering ? 1 : 0.3)
                                     } else {
@@ -254,7 +249,7 @@ struct GoalView: View {
                         if editable {
                             if addingFolder {
                                 NewLine(placeholder: "A git checkout: ../backend, ~/shared or an absolute path") { text in
-                                    edit { .setReadAlso($0.goalReadAlso + [text]) }
+                                    edit { $0.addingReadAlso(text) }
                                     addingFolder = false
                                 } cancel: { addingFolder = false }
                             } else {
@@ -274,11 +269,7 @@ struct GoalView: View {
                 ForEach(goal.steps, id: \.name) { step in
                     let on = !step.skipped && step.unavailable == nil
                     Button {
-                        edit { g in
-                            let others = g.steps.filter { $0.skipped && $0.name != step.name }.map(\.name)
-                            let now = g.steps.first { $0.name == step.name }?.skipped ?? false
-                            return .setSkip(now ? others : others + [step.name])
-                        }
+                        edit { $0.togglingSkip(step.name) }
                     } label: {
                         Label(step.label, systemImage: on ? "checkmark.circle.fill" : "circle")
                             .font(.callout)
@@ -310,7 +301,7 @@ struct GoalView: View {
     }
 
     private var runDisabled: Bool {
-        !goal.canApprove || store.starting || store.runningHere || store.busy != nil || snapshot.state.lastTurn > 0
+        store.goalRunDisabled(snapshot, goal: goal)
     }
 
     private var actions: some View {
