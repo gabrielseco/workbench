@@ -66,6 +66,7 @@ struct ThreadRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("\(row.title): \(row.line)")
         .accessibilityLabel("\(row.title), \(row.mark.word), \(row.line)")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -75,7 +76,7 @@ extension ThreadMark {
     /// A symbol and a word beside the tint, so colour is never the only signal.
     var symbol: String {
         switch self {
-        case .working: "circle.dotted"
+        case .working: "circle.inset.filled"
         case .needsYou: "exclamationmark.circle.fill"
         case .done: "checkmark.circle.fill"
         case .idle: "circle"
