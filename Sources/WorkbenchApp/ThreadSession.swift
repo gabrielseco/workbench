@@ -53,6 +53,15 @@ import WorkbenchCore
 
     /// Told when the session has something to show, so a session the window has moved away from is kept for when it comes back.
     @ObservationIgnored var onSaid: (@MainActor (ThreadSession) -> Void)?
+    /// Takes what another session of the same thread said, so a result that lands late on a session the window has since
+    /// replaced still reaches the one on screen.
+    func absorb(_ other: ThreadSession) {
+        if let text = other.actionError { (actionError, other.actionError) = (text, nil) }
+        if let text = other.actionNote { (actionNote, other.actionNote) = (text, nil) }
+        if let text = other.notice { (notice, other.notice) = (text, nil) }
+        if let plan = other.pendingDiscard { (pendingDiscard, other.pendingDiscard) = (plan, nil) }
+    }
+
     private func said() { if hasMessages { onSaid?(self) } }
 
     init(key: Key) { self.key = key }

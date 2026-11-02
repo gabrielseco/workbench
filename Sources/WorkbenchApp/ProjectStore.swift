@@ -513,7 +513,12 @@ private extension ProjectStore {
     }
     /// A session that has something to show is kept while the window is elsewhere.
     func adopt(_ session: ThreadSession) {
-        if session !== current { sessions[session.key] = session }
+        let home = session.key == current.key ? current : sessions[session.key]
+        if let home, home !== session {
+            home.absorb(session)
+        } else if session !== current {
+            sessions[session.key] = session
+        }
     }
     /// Whether any session is working: one action at a time holds the window.
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }

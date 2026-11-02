@@ -89,4 +89,17 @@ import Testing
         await store.switchTo(first.project.root.path)
         #expect(store.goalEditError == "refused")
     }
+
+    @Test func aResultThatLandsOnAReplacedSessionStillReachesTheThreadOnScreen() async throws {
+        let (store, first) = try await opened()
+        let other = try await AppFixture()
+        keptSessionFixtures.append(other)
+        try await other.addThread("o1")
+        let started = store.current
+        await store.switchTo(other.project.root.path)
+        await store.switchTo(first.project.root.path)
+        #expect(store.current !== started, "the thread said nothing, so its session was let go")
+        started.actionError = "late failure"
+        #expect(store.actionError == "late failure")
+    }
 }
