@@ -48,7 +48,9 @@ enum FeedActions {
         guard s.state.decision == nil else { return decided(c) }
         var more: [FeedAction] = []
         func worktree() {
-            more.append(FeedAction(kind: .openWorktree, title: "Open worktree", enabled: !c.busy))
+            more.append(
+                FeedAction(
+                    kind: .openWorktree, title: "Open worktree", help: "Opens the worktree in your editor", enabled: !c.busy))
             if c.herdrFound {
                 more.append(
                     FeedAction(
@@ -60,34 +62,47 @@ enum FeedActions {
             worktree()
             let title = c.stopping ? "Stopping…" : (stoppable == .advice ? "Stop advice" : "Stop turn")
             return FeedDecision(
-                primary: FeedAction(kind: stoppable == .advice ? .stopAdvice : .stopTurn, title: title, enabled: !c.stopping),
+                primary: FeedAction(
+                    kind: stoppable == .advice ? .stopAdvice : .stopTurn, title: title,
+                    help: "Asks it to end; it still ends with a recorded stop", enabled: !c.stopping),
                 more: more)
         }
         if c.reviewShown {
             let accept = FeedAction(
                 kind: .accept, title: "Accept work", help: "Commits the work on its branch",
                 enabled: c.reviewCanDecide && !c.deciding && !c.busy)
-            more.append(FeedAction(kind: .sendBack, title: "Send back…", enabled: !c.busy))
-            more.append(FeedAction(kind: .discard, title: "Discard…", enabled: !c.busy, destructive: true))
+            more.append(
+                FeedAction(kind: .sendBack, title: "Send back…", help: "Asks for another turn, with a note", enabled: !c.busy))
+            more.append(
+                FeedAction(
+                    kind: .discard, title: "Discard…", help: "Shows what would be removed, and asks first", enabled: !c.busy,
+                    destructive: true))
             more.append(
                 FeedAction(
                     kind: .openDiff, title: "Open diff", help: "Each changed file against the base, in your editor",
                     enabled: !c.busy && c.reviewHasFiles))
             worktree()
-            more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Read the worktree again after editing it"))
+            more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
             return FeedDecision(primary: accept, more: more)
         }
         if let run = s.run {
             worktree()
-            let again = canRunAgain(run, runningHere: c.runningHere) ? FeedAction(kind: .runAgain, title: "Run again") : nil
+            let again =
+                canRunAgain(run, runningHere: c.runningHere)
+                ? FeedAction(
+                    kind: .runAgain, title: "Run again", help: "Records the unfinished turn as interrupted and goes on")
+                : nil
             return FeedDecision(primary: again, more: more)
         }
         guard let pill = c.goalPill, pill != .approved || s.state.lastTurn == 0 else { return FeedDecision() }
         let runnable = c.goalCanApprove && !c.starting && !c.runningHere && !c.busy && s.state.lastTurn == 0
         more.append(FeedAction(kind: .editGoal, title: "Edit goal…", help: "Opens the goal's editor"))
-        more.append(FeedAction(kind: .newGoal, title: "New goal…"))
+        more.append(FeedAction(kind: .newGoal, title: "New goal…", help: "Starts another goal"))
         if c.herdrFound {
-            more.append(FeedAction(kind: .openHerdr, title: "Open in Herdr", enabled: !c.busy))
+            more.append(
+                FeedAction(
+                    kind: .openHerdr, title: "Open in Herdr", help: "Opens the project in Herdr, without starting anything",
+                    enabled: !c.busy))
         }
         let primary =
             pill == .approved
@@ -109,8 +124,20 @@ enum FeedActions {
 
     private static func decided(_ c: FeedActionContext) -> FeedDecision {
         let s = c.snapshot
-        let newGoal = FeedAction(kind: .newGoal, title: "New goal…")
+        let newGoal = FeedAction(kind: .newGoal, title: "New goal…", help: "Starts another goal")
         var more: [FeedAction] = []
+        // The worktree is still there until the thread is discarded or cleaned, and a person may want to look at what they are shipping.
+        if s.state.decision != "discarded", !s.state.cleaned {
+            more.append(
+                FeedAction(
+                    kind: .openWorktree, title: "Open worktree", help: "Opens the worktree in your editor", enabled: !c.busy))
+        }
+        if c.herdrFound {
+            more.append(
+                FeedAction(
+                    kind: .openHerdr, title: "Open in Herdr",
+                    help: "Herdr opens this worktree, or the project when it is gone, and brings it forward", enabled: !c.busy))
+        }
         if s.canShip {
             more.append(newGoal)
             return FeedDecision(
@@ -119,7 +146,7 @@ enum FeedActions {
                     enabled: !c.busy && !c.deciding),
                 more: more)
         }
-        guard s.watchesPullRequest else { return FeedDecision(primary: newGoal) }
+        guard s.watchesPullRequest else { return FeedDecision(primary: newGoal, more: more) }
         let review = FeedAction(
             kind: s.state.review.prReview == nil ? .reviewPR : .reviewAgain,
             title: s.state.review.prReview == nil ? "Review PR" : "Review again",
@@ -128,9 +155,12 @@ enum FeedActions {
             kind: .merge, title: "Merge…", help: s.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub",
             enabled: s.canMerge && !c.busy && !c.deciding)
         if s.state.review.prReview != nil {
-            more.append(FeedAction(kind: .showFindings, title: "Show findings"))
+            more.append(FeedAction(kind: .showFindings, title: "Show findings", help: "Opens what the latest round found"))
         }
-        if s.ci != nil { more.append(FeedAction(kind: .refreshCI, title: "Refresh CI")) }
+        if s.ci != nil {
+            more.append(
+                FeedAction(kind: .refreshCI, title: "Refresh CI", help: "Reads the pull request's checks from GitHub again"))
+        }
         more.append(newGoal)
         // Merge is the next press once GitHub says it can go; until then the review is.
         if s.canMerge { return FeedDecision(primary: merge, more: [review] + more) }

@@ -78,6 +78,7 @@ import Testing
                 calls.add("discardPlan")
                 return Self.discardPlan
             },
+            discard: { _, _, _ in calls.add("discard") },
             shipPreview: { _, _ in
                 calls.add("shipPreview")
                 return Self.preview
@@ -103,7 +104,7 @@ import Testing
         let table: [(FeedAction.Kind, [String])] = [
             (.approveAndRun, ["approve", "makeRun"]), (.stopTurn, ["requestStop"]), (.accept, ["acceptPlan", "accept"]),
             (.ship, ["shipPreview", "ship"]), (.reviewPR, ["prReview"]), (.discard, ["discardPlan"]),
-            (.openDiff, ["openDiff"]), (.openWorktree, ["openWorktree"]), (.openHerdr, ["openInHerdr"]),
+            (.openDiff, ["openDiff"]), (.openWorktree, ["openWorktree"]), (.openHerdr, ["openInHerdr"]), (.runAgain, ["makeRun"]),
         ]
         for (kind, expected) in table {
             let calls = Calls()
@@ -129,6 +130,17 @@ import Testing
         let store = try await store(calls)
         await store.perform(.discard)
         #expect(store.pendingDiscard != nil && calls.all == ["discardPlan"], "the plan is shown; discard has not run")
+    }
+
+    @Test func confirmingTheDiscardRunsTheSameDiscardAsTheStepScreen() async throws {
+        let calls = Calls()
+        let store = try await store(calls)
+        await store.perform(.discard)
+        await store.confirmDiscard()
+        #expect(calls.all == ["discardPlan", "discard"] && store.pendingDiscard == nil)
+        await store.perform(.discard)
+        store.cancelDiscard()
+        #expect(calls.all == ["discardPlan", "discard", "discardPlan"], "cancelling removes nothing")
     }
 
     @Test func aSecondPressWhileOneIsGoingOnIsRefusedAsOnTheStepScreen() async throws {

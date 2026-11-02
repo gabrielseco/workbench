@@ -7,14 +7,19 @@ struct FeedRow: View {
     var item: FeedItem
     /// Opens the goal's editor from the goal card; nil when the goal can no longer be edited.
     var editGoal: (() -> Void)?
+    /// The goal's criteria and their proofs, for the goal card: the log keeps only how many there are.
+    var criteria: [GoalModel.Row]
 
-    init(item: FeedItem, editGoal: (() -> Void)? = nil) { (self.item, self.editGoal) = (item, editGoal) }
+    init(item: FeedItem, editGoal: (() -> Void)? = nil, criteria: [GoalModel.Row] = []) {
+        (self.item, self.editGoal, self.criteria) = (item, editGoal, criteria)
+    }
 
     var body: some View {
         switch item.kind {
         case .userNote(let text): UserNoteRow(text: text)
-        case .goalCard(let title, let approval, let criteria, let hash):
-            GoalCardRow(title: title, approval: approval, criteria: criteria, hash: hash, edit: editGoal)
+        case .goalCard(let title, let approval, let count, let hash):
+            GoalCardRow(
+                title: title, approval: approval, criteria: count, hash: hash, edit: editGoal, rows: criteria)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -98,6 +103,9 @@ struct GoalCardRow: View {
     var criteria: Int
     var hash: String?
     var edit: (() -> Void)?
+    var rows: [GoalModel.Row] = []
+    /// Criteria shown on the card; the rest are in the goal's editor.
+    static let shownCriteria = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -121,9 +129,34 @@ struct GoalCardRow: View {
                 .font(.callout)
             }
             .accessibilityElement(children: .combine)
+            if !rows.isEmpty { criteriaList }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// What approving means: each criterion and the proof that will check it, and why a proof cannot be checked when it cannot.
+    private var criteriaList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(rows.prefix(Self.shownCriteria)), id: \.id) { row in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.id).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                        .frame(width: 28, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(row.text).font(.callout).textSelection(.enabled)
+                        Text(row.proof).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                        if let warning = row.warning { Text(warning).font(.caption).foregroundStyle(Theme.amber) }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if rows.count > Self.shownCriteria {
+                Text("and \(rows.count - Self.shownCriteria) more in the goal's editor")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 4)
     }
 
     private var approvalText: String {

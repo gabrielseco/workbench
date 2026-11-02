@@ -68,12 +68,14 @@ ships, and the mockup gets fixed.
   symbol and words, never by colour alone.
 - **The decision card** is the last row: the step and why, from the spine and attention, and **one** prominent button for the next press
   (Approve and run, Run, Stop turn, Accept work, Ship, Review PR, Merge…, New goal…). The other actions of the step (Send back…,
-  Discard…, Open diff, Open worktree, Open in Herdr, Refresh) are in a borderless `…` menu beside it, Discard in red, each disabled for
+  Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
+  step screens) are in a borderless `…` menu beside it, Discard in red, each disabled for
   the same reason as on the step screen. The card decides nothing: `FeedActions.derive` reads `canShip`, `canMerge`, the goal's
   `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation, Send back its popover.
 - **What an action said** (an error in red, a note in grey, a notice in green, a Herdr handoff) is a row above the card, in the words
   the step screens use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
-- **The goal card** has "Edit goal…" while the goal is a draft; it opens the Goal screen over the feed (a sheet with Done), until the
+- **The goal card** lists the criteria with the proof that will check each (six at most, then "and N more in the goal's editor"), a
+  proof Workbench cannot check in amber with why, so what Approve and run means is on screen. It has "Edit goal…" while the goal is a draft; it opens the Goal screen over the feed (a sheet with Done), until the
   settings have a place of their own.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.

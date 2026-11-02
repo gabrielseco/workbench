@@ -22,7 +22,7 @@ struct DecisionCard: View {
                     ForEach(decision.more) { action in
                         Button(role: action.destructive ? .destructive : nil) { perform(action) } label: { Text(action.title) }
                             .disabled(!action.enabled)
-                            .help(action.help ?? "")
+                            .help(action.help ?? action.title)
                     }
                 } label: {
                     Label("More actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
@@ -34,7 +34,7 @@ struct DecisionCard: View {
                 Button(primary.title) { perform(primary) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!primary.enabled)
-                    .help(primary.help ?? "")
+                    .help(primary.help ?? primary.title)
             }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)

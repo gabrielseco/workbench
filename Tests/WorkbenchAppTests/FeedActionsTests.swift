@@ -127,9 +127,37 @@ import Testing
         }
     }
 
+    @Test func anAcceptedThreadKeepsItsWorktreeActionsUntilItIsDiscardedOrCleaned() throws {
+        let accepted = decide(try snapshot(.accepted)) { $0.herdrFound = true }
+        #expect(accepted.primary?.kind == .ship && kinds(accepted.more) == [.openWorktree, .openHerdr, .newGoal])
+        let shipped = decide(try snapshot(.prOpen)) { $0.herdrFound = true }
+        #expect(kinds(shipped.more).contains(.openWorktree) && kinds(shipped.more).contains(.openHerdr))
+        let discarded = decide(try snapshot(.discarded))
+        #expect(!kinds(discarded.more).contains(.openWorktree), "its worktree is gone")
+        let cleaned = decide(try snapshot(.cleaned))
+        #expect(!kinds(cleaned.more).contains(.openWorktree))
+    }
+
+    /// The card puts a button's title in its tooltip when it has no help of its own, so every button says what it does; the ones
+    /// that act on something outside the window say so in their help.
+    @Test func theButtonsThatOpenAnotherAppSayWhatTheyOpen() throws {
+        let shown = try snapshot(.needsYou)
+        let decision = decide(shown) { $0.reviewShown = true; $0.reviewHasFiles = true; $0.herdrFound = true }
+        let help = Dictionary(uniqueKeysWithValues: decision.more.map { ($0.kind, $0.help ?? "") })
+        #expect(help[.openDiff]?.contains("editor") == true)
+        #expect(help[.openWorktree]?.contains("editor") == true)
+        #expect(help[.openHerdr]?.contains("Herdr") == true)
+        #expect(help[.discard]?.isEmpty == false && help[.sendBack]?.isEmpty == false)
+    }
+
     @Test func everyStateHasAtMostOnePrimaryAndNoButtonTwice() throws {
-        for scenario in AppScenario.allCases {
-            guard let shown = try? snapshot(scenario) else { continue }
+        // The scenarios that open to a thread; the others (no project, no thread, a corrupt log) have no card to decide.
+        let threadless: Set<AppScenario> = [.noThread, .corrupt, .tasks, .tasksEmpty, .draftGoal]
+        var checked = 0
+        defer { #expect(checked >= 8, "only \(checked) scenarios were checked") }
+        for scenario in AppScenario.allCases where !threadless.contains(scenario) {
+            let shown = try snapshot(scenario)
+            checked += 1
             for review in [false, true] {
                 let decision = decide(shown) { $0.reviewShown = review; $0.goalPill = .draft; $0.goalCanApprove = true }
                 let all = (decision.primary.map { [$0] } ?? []) + decision.more

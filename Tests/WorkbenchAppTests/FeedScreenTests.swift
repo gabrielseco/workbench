@@ -355,4 +355,18 @@ import WorkbenchCore
         let editable = FeedRow(item: item, editGoal: {}).padding(20)
         try differs(editable, FeedRow(item: item).padding(20), "Edit goal…", width: 640, height: 120)
     }
+
+    @Test func theGoalCardListsTheCriteriaAndTheirProofs() throws {
+        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
+        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
+        let rows = [
+            GoalModel.Row(id: "c1", text: "Retries on 5xx", proof: "test: SyncClientTests/retries"),
+            GoalModel.Row(id: "c2", text: "Never retries on 4xx", proof: "`swift test`", warning: "not in [tools] allowed"),
+        ]
+        func card(_ criteria: [GoalModel.Row]) -> some View { FeedRow(item: item, criteria: criteria).padding(20) }
+        try differs(card(rows), card([]), "the criteria", width: 640, height: 220)
+        let plain = [rows[0]]
+        let warned = [GoalModel.Row(id: "c1", text: rows[0].text, proof: rows[0].proof, warning: "cannot be checked")]
+        try differs(card(plain), card(warned), "a proof's warning", width: 640, height: 220)
+    }
 }

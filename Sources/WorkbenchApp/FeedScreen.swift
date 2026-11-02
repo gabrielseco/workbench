@@ -28,7 +28,7 @@ struct FeedScreen: View {
     }
 
     private func row(_ item: FeedItem) -> some View {
-        FeedRow(item: item, editGoal: canEditGoal ? { editingGoal = true } : nil)
+        FeedRow(item: item, editGoal: canEditGoal ? { editingGoal = true } : nil, criteria: store.goal?.rows ?? [])
     }
 
     @ViewBuilder private var foot: some View {
