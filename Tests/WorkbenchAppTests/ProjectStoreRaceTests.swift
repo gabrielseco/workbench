@@ -207,6 +207,33 @@ import Testing
         #expect(snapshot(store)?.id == "a" && store.currentThread == "a", "the older read's answer is dropped")
     }
 
+    @Test func aClickBackOnTheThreadOnScreenCancelsAPendingClickOnAnother() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("a", title: "A")
+        try await fixture.addThread("b", title: "B")
+        let held = Gate()
+        let hold = HoldFlag()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
+            loader: { project, feed, selected in
+                if selected == "a" && hold.isOn {
+                    held.enter()
+                    held.wait()
+                }
+                return ProjectLoader.load(project: project, feed: feed, selected: selected)
+            })
+        await store.open(fixture.root)
+        #expect(snapshot(store)?.id == "b")
+        hold.isOn = true
+        let toA = Task { await store.select(thread: "a") }
+        await held.waitUntilEntered()
+        hold.isOn = false
+        await store.select(thread: "b")
+        held.release()
+        await toA.value
+        #expect(snapshot(store)?.id == "b" && store.selectedThread == "b", "the last click wins")
+    }
+
     @Test func aDoctorRunThatEndsAfterAnotherThreadWasPickedChangesNoThread() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("a", title: "A")

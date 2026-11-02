@@ -25,6 +25,7 @@ enum AppScenario: String, CaseIterable {
     case draftGoal = "draft-goal"
     case tasks
     case tasksEmpty = "tasks-empty"
+    case threads
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -183,6 +184,24 @@ enum AppScenario: String, CaseIterable {
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
         case .noThread, .draftGoal, .tasksEmpty:
             break
+        case .threads:
+            // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
+            try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
+            try fixture.turn("trim-whitespace", 1, cost: 0.92)
+            try fixture.decide("trim-whitespace", "accepted")
+            try fixture.ship("trim-whitespace", number: 478)
+            try fixture.append("trim-whitespace", .branchRemoved, data: ["reason": "merged"])
+            try await fixture.addThread("retry-uploads", approved: true, title: "Retry failed uploads with backoff")
+            try fixture.turn("retry-uploads", 1, cost: 1.12)
+            try fixture.decide("retry-uploads", "discarded")
+            try await fixture.addThread(id, approved: true, title: Self.title)
+            try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
+            try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
+            try fixture.append(id, .turnEnded, turn: 1, data: ["result": "succeeded", "cost_usd": 1.88])
+            try fixture.append(id, .checkStarted, turn: 1)
+            try fixture.append(
+                id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b"], "tests_failed": []])
+            try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
         case .tasks:
             // The thread a task's run made, so that run's link can be pressed; the tasks themselves are written by `buildTasks`.
             try await fixture.addThread(id, approved: true, title: Self.title)

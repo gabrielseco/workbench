@@ -4,7 +4,8 @@ import Foundation
 extension ProjectStore {
     /// Shows `id`: its session, its feed and its settings. Nothing is started, stopped or abandoned by looking at a thread.
     func select(thread id: String) async {
-        guard project != nil, id != currentThread else { return }
+        // Compared with the pick still loading as well: a click back on the thread on screen cancels a click on another.
+        guard project != nil, id != selectedThread || id != currentThread else { return }
         selectedThread = id
         lastWatch = nil
         await reload()
@@ -13,7 +14,7 @@ extension ProjectStore {
     /// Reads the list again, off the main actor, when the chat feed preview is on and something in it moved (or `force`).
     func refreshThreadList(force: Bool = false) async {
         guard chatFeedOn, let project else {
-            threads.listing = ThreadListing()
+            (threads.listing, threads.signature) = (ThreadListing(), nil)
             return
         }
         let (mine, cache) = (generation, threadRowCache)

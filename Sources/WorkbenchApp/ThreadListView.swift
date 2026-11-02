@@ -4,12 +4,26 @@ import SwiftUI
 struct ThreadListView: View {
     var store: ProjectStore
 
+    /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
+    private var shownThread: String? {
+        if case .thread(let snapshot) = store.screen { return snapshot.id }
+        return nil
+    }
+
+    /// The row above or below the one shown, for the arrow keys; nil at either end or when none is shown.
+    static func neighbour(of shown: String?, in ids: [String], up: Bool) -> String? {
+        guard let at = shown.flatMap({ ids.firstIndex(of: $0) }) else { return nil }
+        let next = up ? at - 1 : at + 1
+        return ids.indices.contains(next) ? ids[next] : nil
+    }
+
     var body: some View {
         let listing = store.threads.listing
+        let shown = shownThread
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
                 ForEach(listing.rows) { row in
-                    ThreadRowView(row: row, selected: row.id == store.currentThread) {
+                    ThreadRowView(row: row, selected: row.id == shown) {
                         Task { await store.select(thread: row.id) }
                     }
                 }
@@ -21,6 +35,13 @@ struct ThreadListView: View {
             }
         }
         .accessibilityLabel("Threads")
+        .focusable()
+        .onMoveCommand { direction in
+            guard direction == .up || direction == .down,
+                let next = ThreadListView.neighbour(of: shown, in: listing.rows.map(\.id), up: direction == .up)
+            else { return }
+            Task { await store.select(thread: next) }
+        }
     }
 }
 
@@ -45,9 +66,8 @@ struct ThreadRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(row.title), \(row.mark.word), \(row.line)")
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

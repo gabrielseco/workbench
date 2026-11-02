@@ -101,6 +101,25 @@ enum ThreadListLoader {
         return ThreadListing(rows: rows, older: max(0, ids.count - shown.count))
     }
 
+    /// The most of a goal file a row reads: a goal with a huge request is not allocated and parsed on every poll for its title.
+    static let goalHeadBytes = 64 * 1024
+
+    static func goalHead(_ url: URL) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
+        defer { try? handle.close() }
+        return String(decoding: (try? handle.read(upToCount: goalHeadBytes)) ?? Data(), as: UTF8.self)
+    }
+
+    /// The `title:` of the front matter of a goal too long to parse whole.
+    static func frontMatterTitle(_ text: String) -> String? {
+        let lines = text.split(separator: "\n", maxSplits: 40, omittingEmptySubsequences: false).prefix(40)
+        if let line = lines.first(where: { $0.hasPrefix("title:") }) {
+            let value = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+            return value.isEmpty ? nil : value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        }
+        return nil
+    }
+
     /// One thread's row: its log replayed once, the way the toolbar's pill is derived.
     static func row(project: Project, store: ThreadStore, id: String) -> ThreadRow {
         let contents: EventLogContents
@@ -113,8 +132,11 @@ enum ThreadListLoader {
         let state = store.state(from: contents.events, id: id)
         var title: String?
         var approval: ApprovalState?
-        if let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8), let goal = try? GoalFile.parse(text).goal {
+        let text = goalHead(project.goalURL(id))
+        if let goal = try? GoalFile.parse(text).goal {
             (title, approval) = (goal.title, goal.approval)
+        } else {
+            title = frontMatterTitle(text)
         }
         let spine = ThreadSpine.derive(state: state, approval: approval)
         let attention = Attention.derive(spine: spine, state: state)
@@ -128,6 +150,8 @@ enum ThreadListLoader {
         if damaged { return .broken }
         if case .needsYou = attention { return .needsYou }
         if attention == .working { return .working }
+        // Green is for work that went somewhere; a thread thrown away is just over.
+        if state.decision == "discarded" { return .idle }
         if state.cleaned || state.pullRequest != nil || state.decision != nil { return .done }
         return .idle
     }

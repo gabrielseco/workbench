@@ -113,7 +113,7 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var selectedThread: String?
     /// The project's threads as the list shows them, kept current while the chat feed preview is on.
     let threads = ThreadListModel()
-    @ObservationIgnored let threadRowCache = ThreadListLoader.Cache()
+    @ObservationIgnored var threadRowCache = ThreadListLoader.Cache()
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private let intervals: (working: Duration, idle: Duration)
@@ -213,6 +213,8 @@ struct RecentProject: Equatable, Identifiable {
         prReviewShown = nil
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
+        // A thread id means another thread in another project: what was read for the old project is not the new one's.
+        (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
@@ -331,21 +333,22 @@ struct RecentProject: Equatable, Identifiable {
     func startRun(
         _ project: Project, _ thread: String, generation mine: Int, options: RunOptions = RunOptions()
     ) {
+        // Said on the thread the run is for: an approval that took a moment may have left another one on screen.
+        let started = session(project, thread)
         guard ownedRun == nil else {
-            actionError = "A run is already going."
-            reopenSendBack()
+            started.actionError = "A run is already going."
+            if started === current { reopenSendBack() }
             return
         }
         let handle: RunHandle
         do { handle = try actions.makeRun(project, thread, options) } catch {
-            actionError = "The run did not start: \(error)"
-            reopenSendBack()
+            started.actionError = "The run did not start: \(error)"
+            if started === current { reopenSendBack() }
             return
         }
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
         var turnNow = 0
-        if case .thread(let shown) = screen { turnNow = shown.state.lastTurn }
-        let started = session(project, thread)
+        if case .thread(let shown) = screen, shown.id == thread { turnNow = shown.state.lastTurn }
         started.awaitingAfterTurn = turnNow
         started.ownedRun = ThreadSession.OwnedRun(handle: handle, project: project, thread: thread)
         setBusy("Starting the run…", in: started)
@@ -439,8 +442,9 @@ struct RecentProject: Equatable, Identifiable {
     private func runFailed(_ error: Error, in session: ThreadSession, generation mine: Int) {
         guard mine == generation else { return }
         endRunStart(session)
-        actionError = "The run did not start: \(error)"
-        reopenSendBack()
+        // On the thread it was started for: the window may be showing another by now.
+        session.actionError = "The run did not start: \(error)"
+        if session === current { reopenSendBack() }
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.

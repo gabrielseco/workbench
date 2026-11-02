@@ -57,7 +57,10 @@ import WorkbenchCore
         try await fixture.addThread("busy", approved: true)
         try fixture.append("busy", .turnStarted, turn: 1, data: ["session_id": "s1"])
         try await fixture.addThread("draft")
+        try await fixture.addThread("thrown", approved: true)
+        try fixture.decide("thrown", "discarded")
         let byID = Dictionary(uniqueKeysWithValues: rows(fixture).rows.map { ($0.id, $0.mark) })
+        #expect(byID["thrown"] == .idle, "discarded work is not green")
         #expect(byID["done"] == .done && byID["busy"] == .working && byID["draft"] != .done)
         let state = ThreadStore(project: fixture.project).state(of: "draft")
         #expect(ThreadListLoader.mark(attention: .working, state: state, damaged: true) == .broken)
@@ -173,6 +176,72 @@ import WorkbenchCore
         let store = ProjectStore(preferences: MemoryPreferences())
         #expect(await store.open(fixture.root))
         #expect(store.threads.listing.rows.isEmpty)
+    }
+
+    @Test func theArrowKeysStepToTheNeighbourAndStopAtTheEnds() {
+        let ids = ["a", "b", "c"]
+        #expect(ThreadListView.neighbour(of: "b", in: ids, up: true) == "a")
+        #expect(ThreadListView.neighbour(of: "b", in: ids, up: false) == "c")
+        #expect(ThreadListView.neighbour(of: "a", in: ids, up: true) == nil)
+        #expect(ThreadListView.neighbour(of: "c", in: ids, up: false) == nil)
+        #expect(ThreadListView.neighbour(of: nil, in: ids, up: false) == nil)
+    }
+
+    @Test func aPreviewRoundTripListsAnUnchangedProjectAgain() async throws {
+        let fixture = try await fixture()
+        try await fixture.addThread("a")
+        let store = try await open(fixture)
+        #expect(store.threads.listing.rows.count == 1)
+        await store.setChatFeed(false)
+        await store.refreshThreadList()
+        #expect(store.threads.listing.rows.isEmpty)
+        await store.setChatFeed(true)
+        await store.refreshThreadList()
+        #expect(store.threads.listing.rows.count == 1, "nothing changed on disk, and the list is back")
+    }
+
+    @Test func whatWasReadForOneProjectIsNotUsedForAnother() async throws {
+        let first = try await fixture()
+        try await first.addThread("fix", title: "First")
+        let second = try await fixture()
+        try await second.addThread("fix", title: "Second")
+        let store = try await open(first)
+        #expect(store.threads.listing.rows.map(\.title) == ["First"])
+        #expect(await store.open(second.root))
+        #expect(store.threads.listing.rows.map(\.title) == ["Second"])
+    }
+
+    @Test func aGoalTooLongToParseWholeStillGivesItsRowATitleFromItsFirstBytes() async throws {
+        let fixture = try await fixture()
+        try await fixture.addThread("big", title: "The big one", request: String(repeating: "word ", count: 40_000))
+        #expect(try Data(contentsOf: fixture.project.goalURL("big")).count > ThreadListLoader.goalHeadBytes)
+        #expect(rows(fixture).rows.first?.title == "The big one")
+    }
+
+    @Test func aRunThatCannotStartSaysSoOnItsOwnThreadEvenIfAnotherIsOnScreenByThen() async throws {
+        struct Cannot: Error, CustomStringConvertible { var description: String { "no claude" } }
+        let (stream, release) = AsyncStream<Void>.makeStream()
+        let fixture = try await fixture()
+        try await fixture.addThread("b", title: "B")
+        try await fixture.addThread("a", approved: false, title: "A")
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let store = ProjectStore(
+            preferences: preferences,
+            actions: GoalActions(
+                approve: { _, _ in for await _ in stream { break } },
+                makeRun: { _, _, _ in throw Cannot() }))
+        #expect(await store.open(fixture.root))
+        #expect(store.currentThread == "a")
+        let starting = Task { await store.approveAndRun() }
+        for _ in 0..<200 where store.busy == nil { try await Task.sleep(for: .milliseconds(10)) }
+        await store.select(thread: "b")
+        release.yield()
+        await starting.value
+        let key = ThreadSession.Key(project: fixture.project, thread: "a")
+        for _ in 0..<200 where store.sessions[key]?.actionError == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.sessions[key]?.actionError == "The run did not start: no claude")
+        #expect(store.actionError == nil, "the thread on screen is not told about another's run")
     }
 
     // MARK: What it draws
