@@ -45,6 +45,8 @@ public struct PRReviewConfig: Sendable, Equatable {
     }
 }
 
+// The `[mcp_servers.*]` field, its parse and its template lines tipped the body over the limit.
+// swiftlint:disable:next type_body_length
 public struct Config: Sendable, Equatable {
     public static let defaultClaudePath = "claude"
     public static let defaultBudgetUSD: Decimal = 5
@@ -91,6 +93,9 @@ public struct Config: Sendable, Equatable {
     /// `resolvedRunAgent`, `resolvedJudgeAgent`, `resolvedReviewAgent`, `resolvedGoalAgent`, `resolvedShipAgent`
     /// and `resolvedPlanAgent`.
     public var agents = AgentsConfig()
+
+    /// `[mcp_servers.<name>]`: servers a task's `mcp_tools` may load. Nothing else ever loads one (docs/spec/tasks.md).
+    public var mcpServers: [String: McpServer] = [:]
 
     /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
     public var editor: String?
@@ -146,7 +151,7 @@ public struct Config: Sendable, Equatable {
         // The review and verifier tables check their own keys (ReviewConfig.parse, VerifierConfig.parse).
         let leftToTheirOwn = { (name: String) in
             ReviewConfig.owns(table: name) || VerifierConfig.owns(table: name) || RunConfig.owns(table: name)
-                || AgentsConfig.owns(table: name)
+                || AgentsConfig.owns(table: name) || McpServer.owns(table: name)
         }
         for (name, table) in document.tables.sorted(by: { $0.key < $1.key }) where !leftToTheirOwn(name) {
             if name != "" && name != "tools" {
@@ -258,6 +263,7 @@ public struct Config: Sendable, Equatable {
         let verifier = VerifierConfig.parse(document, fail: fail)
         let run = RunConfig.parse(document, fail: fail)
         let agents = AgentsConfig.parse(document, fail: fail)
+        let mcpServers = McpServer.parse(document, fail: fail)
         claudePath = agents.claudeExecutable(claudePathLine: document.tables[""]?.entries["claude_path"]?.line, fail: fail)
             ?? claudePath
 
@@ -321,6 +327,7 @@ public struct Config: Sendable, Equatable {
         config.herdr = herdr
         config.readAlso = readAlso
         config.agents = agents
+        config.mcpServers = mcpServers
         config.defaultBudgetConfigured = document.tables[""]?.entries["default_budget_usd"] != nil
         return config
     }
@@ -440,6 +447,12 @@ public struct Config: Sendable, Equatable {
         # [agents.review]                  # also review.stage.<name>: provider, model, allow_unpriced
         # allow_unpriced = true            # the default: codex (no dollar cap) runs on its timeout; false refuses it
         #                                  # (never for [agents.run], whose spending the goal approves)
+
+        # [mcp_servers.linear]             # a server a TASK may use: task.md names its tools in `mcp_tools` (fix: pr only)
+        # type = "http"                    # "http" or "sse" with an https url; or "stdio" with command and args
+        # url = "https://mcp.linear.app/mcp" # the login is the one you did in your own `claude`, nothing is stored here
+        # WARNING: each tool a task lists is a write capability for an unattended run, and a run with mcp_tools does not
+        # use --safe-mode (the CLI turns MCP off under it): your hooks and settings load for that task's runs only.
 
         # [run]                            # how the verifier's app is started: Workbench runs it and stops it
         # command = "npm run dev:mock"     # one plain command, run in the worktree with WORKBENCH_PORT (and PORT) set

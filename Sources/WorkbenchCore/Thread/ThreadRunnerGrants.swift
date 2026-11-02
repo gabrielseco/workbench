@@ -54,6 +54,16 @@ extension ThreadRunner {
         return request
     }
 
+    /// The MCP tools the thread was started with (a task's `mcp_tools`) and the file that loads their servers, nil for any other
+    /// thread. Refused, before any turn starts, when the coding agent is not Claude or a server has no table in the config.
+    func mcpAccess(config: Config, agent: ResolvedAgent) throws -> McpAccess? {
+        let tools = try McpToolsFile.read(project: project, thread: threadID)
+        guard !tools.isEmpty else { return nil }
+        guard agent.provider == .claude else { throw McpError.unsupportedProvider }
+        return try McpAccess.write(
+            tools: tools, servers: config.mcpServers, in: FileManager.default.temporaryDirectory)
+    }
+
     /// Refuses a run whose `read_also` names a folder it cannot be given: the config says it, so it holds or nothing starts.
     func requireReadAlso(_ config: Config, goal: Goal) throws { _ = try readDirectories(config, goal: goal) }
 

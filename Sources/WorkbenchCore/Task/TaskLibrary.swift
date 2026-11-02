@@ -17,6 +17,8 @@ public struct TaskSummary: Sendable, Equatable {
     public var problem: String?
     public var schedule: String?
     public var fix: TaskFix?
+    /// The MCP tools the task may call, empty for most.
+    public var mcpTools: [String] = []
     public var approval: TaskApproval.State
     public var nextDue: Date?
     public var lastOutcome: TaskOutcome?
@@ -49,11 +51,33 @@ public struct TaskLibrary: Sendable {
             throw TaskFileError.unreadable(".workbench/tasks/\(name)/task.md")
         }
         let definition = try TaskDefinition.parse(text, name: name)
+        try Self.requireMcpServers(definition, project: project)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
         let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxIncludeBytes) }
         return LoadedTask(
             definition: definition, pendingScript: script, includeText: include,
             hash: TaskApproval.hash(task: definition, pendingScript: script, include: include))
+    }
+
+    /// A task naming MCP tools is refused when its servers are not defined in the project's config: the task file never defines one.
+    static func requireMcpServers(_ task: TaskDefinition, project: Project) throws {
+        guard !task.mcpTools.isEmpty else { return }
+        let config: Config
+        do { config = try Config.load(from: project.configURL) } catch {
+            throw TaskFileError.mcp("mcp_tools needs [mcp_servers.<name>] in the project config, which cannot be read: \(error)")
+        }
+        if let why = McpAccess.problem(tools: task.mcpTools, servers: config.mcpServers) { throw TaskFileError.mcp(why) }
+    }
+
+    /// What `doctor` says about MCP: for every task, the servers its `mcp_tools` name that `servers` does not define.
+    public func mcpProblems(servers: [String: McpServer]) -> [String] {
+        names().compactMap { name in
+            let path = ".workbench/tasks/\(name)/task.md"
+            guard let data = try? TaskFiles(project: project).read(path, limit: TaskFiles.maxTaskFileBytes),
+                let text = String(data: data, encoding: .utf8), let task = try? TaskDefinition.parse(text, name: name)
+            else { return nil }
+            return McpAccess.problem(tools: task.mcpTools, servers: servers).map { "task \(name): \($0)" }
+        }
     }
 
     /// Records that the task, as it is now, may run unattended.
@@ -94,6 +118,7 @@ public struct TaskLibrary: Sendable {
             let base = history.scheduleBase
             return TaskSummary(
                 name: name, problem: nil, schedule: loaded.definition.schedule?.summary, fix: loaded.definition.fix,
+                mcpTools: loaded.definition.mcpTools,
                 approval: TaskApproval.state(approvedHash: history.approvedHash, currentHash: loaded.hash),
                 nextDue: base.flatMap { loaded.definition.schedule?.nextDue(since: $0, calendar: calendar) },
                 lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,

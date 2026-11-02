@@ -29,6 +29,9 @@ public enum TaskLogReport {
             out.append("ended:    not yet (the run is going, or its process died: the next run closes it)")
         }
         out.append("outcome:  \(run.outcome?.rawValue ?? "running")")
+        if let tools = try? TaskLibrary(project: project).load(name).definition.mcpTools, !tools.isEmpty {
+            out.append("mcp:      may call \(tools.joined(separator: ", ")) (the task file now; runs without --safe-mode)")
+        }
         if !run.units.isEmpty { out.append("units:    \(run.units.joined(separator: ", "))") }
         if let thread = run.thread { out.append("thread:   \(thread)") }
         if let url = run.pullRequest { out.append("pull request: \(url)") }

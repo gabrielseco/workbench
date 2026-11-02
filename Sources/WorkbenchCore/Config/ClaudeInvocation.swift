@@ -17,11 +17,15 @@ public struct TurnRequest: Sendable, Equatable {
     public var extraAllowed: [String]
     /// Other checkouts the turn may read (`ReadAlso.resolve`): added to what the file tools may see, with every write to them denied.
     public var readDirectories: [URL]
+    /// A task's MCP tools: this turn loads their servers from the access file and may call exactly those tools.
+    public var mcp: McpAccess?
 
     public init(
         sessionID: UUID, resume: Bool, budgetUSD: Decimal?, prompt: String, appendSystemPrompt: String? = nil,
-        model: String? = nil, extraAllowed: [String] = [], reasoningEffort: String? = nil, readDirectories: [URL] = []
+        model: String? = nil, extraAllowed: [String] = [], reasoningEffort: String? = nil, readDirectories: [URL] = [],
+        mcp: McpAccess? = nil
     ) {
+        self.mcp = mcp
         self.readDirectories = readDirectories
         self.model = model
         self.reasoningEffort = reasoningEffort
@@ -82,7 +86,13 @@ extension Config {
             "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
             "--permission-prompts", "none", "--restricted",
         ]
-        if safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
+        // The CLI turns MCP servers off under `--safe-mode`, even with `--mcp-config`, so a task with `mcp_tools` runs without it.
+        // Skills and commands stay off, and `--strict-mcp-config` keeps every server but the task's out.
+        if let mcp = turn.mcp {
+            args += ["--disable-slash-commands", "--mcp-config", mcp.configFile.path, "--strict-mcp-config"]
+        } else if safeMode {
+            args += ["--safe-mode", "--disable-slash-commands"]
+        }
         let session = turn.sessionID.uuidString.lowercased()
         args += turn.resume ? ["--resume", session] : ["--session-id", session]
         if let budget = turn.budgetUSD { args += ["--max-budget-usd", NSDecimalNumber(decimal: budget).stringValue] }
@@ -94,8 +104,17 @@ extension Config {
         if !readPaths.isEmpty { args += ["--add-dir"] + readPaths }
         args += ["--tools"] + tools.available
         var allowed = effectiveAllowedTools
+        // Exactly the listed tools, never a pattern; `--disallowedTools` still wins over them. An MCP allowance the config or a grant
+        // holds for some other tool (or a whole server) was inert until this turn loaded the server, so it is left out here.
+        let mcpTools = turn.mcp?.tools
+        let isStrayMcp = { (pattern: String) in
+            mcpTools != nil && pattern.hasPrefix("mcp__") && mcpTools?.contains(pattern) != true
+        }
+        allowed.removeAll(where: isStrayMcp)
+        for tool in mcpTools ?? [] where !allowed.contains(tool) && !tools.denied.contains(tool) { allowed.append(tool) }
         // A grant never repeats a pattern or revives one the project denies; `--disallowedTools` still wins.
-        for pattern in turn.extraAllowed where !allowed.contains(pattern) && !tools.denied.contains(pattern) {
+        for pattern in turn.extraAllowed
+        where !allowed.contains(pattern) && !tools.denied.contains(pattern) && !isStrayMcp(pattern) {
             allowed.append(pattern)
         }
         if !allowed.isEmpty { args += ["--allowedTools"] + allowed }

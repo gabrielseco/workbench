@@ -45,6 +45,7 @@ extension Commands {
                 }),
             "setup": step(report.setup), "check": step(report.check),
             "review_warnings": .array(report.reviewWarnings.map { .string($0) }),
+            "mcp_warnings": .array(report.mcpWarnings.map { .string($0) }),
             "cleanup_problem": report.cleanupProblem.map { .string($0) } ?? .null,
         ]
     }
@@ -91,6 +92,7 @@ extension Commands {
         show("setup:", report.setup, undeclared: "nothing is installed in a new worktree")
         show("check:", report.check, undeclared: "turns will end with no check evidence")
         for warning in report.reviewWarnings { out("review:   warning: \(warning)") }
+        for warning in report.mcpWarnings { out("mcp:      warning: \(warning)") }
         for note in report.copySkipped { out("copy:     not copied: \(note)") }
         if let verifier = report.verifier { printVerifier(verifier, base: report.base) }
         if let run = report.run { printRun(run) }

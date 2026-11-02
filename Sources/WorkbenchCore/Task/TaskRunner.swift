@@ -294,6 +294,16 @@ public struct TaskRunner: Sendable {
                 "the task's goal could not be approved: \(error)" + (gone ? "" : "; " + Self.notDiscarded(id)), units: ids)
         }
 
+        // The tools the task may call, from the approved file, for every turn of this thread; nothing is started without them.
+        if !task.mcpTools.isEmpty {
+            do { try McpToolsFile.write(task.mcpTools, project: project, thread: id) } catch {
+                let gone = await discard(id, service: service)
+                return fail(
+                    "the task's MCP tools could not be recorded for the thread: \(error)"
+                        + (gone ? "" : "; " + Self.notDiscarded(id)), units: ids)
+            }
+        }
+
         // Before any work: which units this thread is for, so a run that dies later is still known to have had them.
         do {
             try await writer.append(
