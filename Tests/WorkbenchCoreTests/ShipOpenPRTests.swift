@@ -526,6 +526,30 @@ private func openRefusal(_ body: () async throws -> ShipPRResult) async -> ShipE
         #expect(ghOther.calls.allSatisfy { !$0.hasPrefix("label") && !$0.contains("--add-label") })
     }
 
+    @Test func everyFailedLabelIsNamedEvenWhenAllFiveAreLongAndTheirErrorsToo() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await pushedThread(fx, gh.runner).id
+        try gh.put("label_fail", String(repeating: "boom ", count: 60) + "\n")
+        let labels = (1...5).map { String(repeating: "\($0)", count: 50) }
+        let note = try #require(
+            try await fx.service.shipOpenPR(id: id, gh: gh.runner, labels: labels).labelNote)
+        for label in labels { #expect(note.contains("label '\(label)'"), "\(note)") }
+        #expect(!note.contains("\n") && note.count < 1_200)
+    }
+
+    @Test func anExistingPullRequestIsNotLabelled() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await pushedThread(fx, gh.runner).id
+        try gh.put(
+            "list",
+            #"[{"number": 7, "url": "https://github.com/o/r/pull/7", "headRefName": "workbench/\#(id)", "baseRefName": "main"}]"#)
+        let result = try await fx.service.shipOpenPR(id: id, gh: gh.runner, labels: ["a"])
+        #expect(result.outcome == .existing && result.labelNote == nil)
+        #expect(gh.calls.allSatisfy { !$0.hasPrefix("label") && !$0.contains("--add-label") })
+    }
+
     @Test func aLabelThatFailsIsNotedAndTheRecordedPullRequestStands() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

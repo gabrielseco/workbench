@@ -93,13 +93,14 @@ extension ThreadService {
                 } catch { why = "`gh` could not be run" }
                 if let why {
                     let line = why.split(whereSeparator: \.isNewline).first.map(String.init) ?? why
-                    failures.append("label '\(label)': \(String(line.prefix(120)))")
+                    failures.append("label '\(label)': \(String(line.prefix(80)))")
                     break
                 }
             }
         }
         guard !failures.isEmpty else { return nil }
-        return String("the pull request is open, but " + failures.joined(separator: "; ").prefix(500))
+        // Each entry is bounded (5 labels x ~150 characters), so every failed label is named; no cut of the whole.
+        return "the pull request is open, but " + failures.joined(separator: "; ")
     }
 
     // MARK: Lookup
