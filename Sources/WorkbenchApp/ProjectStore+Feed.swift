@@ -50,8 +50,7 @@ extension ProjectStore {
 
     func feedDecision(for snapshot: ThreadSnapshot) -> FeedDecision { FeedActions.derive(feedContext(for: snapshot)) }
 
-    /// Does what the button says. Merge is confirmed by the view before it gets here; the goal's editor and the review's details are
-    /// the view's to open.
+    /// Does what the button says. Merge is confirmed by the view before it gets here; the review's details are the view's to open.
     func perform(_ kind: FeedAction.Kind) async {
         switch kind {
         case .approveAndRun, .run: await approveAndRun()
@@ -70,7 +69,7 @@ extension ProjectStore {
         case .refreshReview: await refreshReview()
         case .showFindings: await showPRReview()
         case .refreshCI: await refreshPullRequestCI()
-        case .editGoal, .reviewDetails: break
+        case .reviewDetails: break
         }
     }
 }

@@ -38,7 +38,7 @@ import Testing
         let shown = try snapshot(.draft)
         let decision = decide(shown) { $0.goalPill = .draft; $0.goalCanApprove = true }
         #expect(decision.primary?.kind == .approveAndRun && decision.primary?.enabled == true)
-        #expect(kinds(decision.more) == [.editGoal, .newGoal])
+        #expect(kinds(decision.more) == [.newGoal], "the goal is edited on its own card")
         let blocked = decide(shown) { $0.goalPill = .draft; $0.goalCanApprove = false }
         #expect(blocked.primary?.kind == .approveAndRun)
         #expect(blocked.primary?.enabled == false, "the goal says it cannot be approved yet")

@@ -121,8 +121,8 @@ import Testing
         #expect(store.namingGoal)
         await store.perform(.sendBack)
         #expect(store.sendingBack && store.actionError == nil, "the popover opens; nothing is sent")
-        await store.perform(.editGoal)
-        #expect(calls.all.isEmpty, "the goal's editor is the view's to open")
+        await store.perform(.reviewDetails)
+        #expect(calls.all.isEmpty, "the review's details are the view's to open")
     }
 
     @Test func discardAsksForConfirmationAndRemovesNothingOnTheFirstPress() async throws {

@@ -8,10 +8,7 @@ struct GoalView: View {
     var snapshot: ThreadSnapshot
     var goal: GoalModel
     var store: ProjectStore
-    @State private var addingCriterion = false
-    @State private var addingScope = false
     @State private var addingFolder = false
-    @State private var showAllRequest = false
 
     private var editable: Bool { goal.editable && !store.starting && !store.runningHere && store.busy == nil }
 
@@ -31,14 +28,7 @@ struct GoalView: View {
     var content: some View {
         VStack(alignment: .leading, spacing: 26) {
             header
-            if !goal.blockers.isEmpty { blockers }
-            if goal.placeholdersRemain {
-                Label("Replace every TODO(workbench), then approve.", systemImage: "pencil")
-                    .font(.callout).foregroundStyle(Theme.amber)
-            }
-            request
-            criteria
-            outOfScope
+            GoalBlocks(goal: goal, store: store, editable: editable)
             folders
             afterTheTurn
             if !goal.model.isEmpty { limits }
@@ -69,142 +59,6 @@ struct GoalView: View {
         case .approved: Theme.green
         case .draft: Theme.grey
         case .changedSinceApproval: Theme.amber
-        }
-    }
-
-    private var blockers: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(goal.blockers, id: \.self) {
-                Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).font(.callout)
-            }
-        }
-    }
-
-    private var request: some View {
-        section("Request") {
-            GoalCard {
-                if editable {
-                    CommitEditor(value: goal.request) { edit(.setRequest($0)) }
-                } else {
-                    Text(goal.request).font(.system(size: 16, design: .serif)).lineSpacing(5).textSelection(.enabled)
-                        .lineLimit(longRequest && !showAllRequest ? 6 : nil)
-                    if longRequest {
-                        Button(showAllRequest ? "Show less" : "Show more") { showAllRequest.toggle() }
-                            .buttonStyle(.borderless).font(.callout)
-                    }
-                }
-            }
-        }
-    }
-
-    private var criteria: some View {
-        section(goal.rows.isEmpty && goal.quick ? "Criteria · none, a quick goal" : "Criteria · \(goal.checkableText)") {
-            VStack(alignment: .leading, spacing: 14) {
-                if goal.rows.isEmpty && goal.quick {
-                    Text(
-                        "The request is the goal. With no criteria the judge does not run, the verifier drives the app from the "
-                            + "request, and you check the work against it. Add a criterion to have the judge check it."
-                    )
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(goal.rows, id: \.id) { row in
-                    GoalCard { criterion(row) }
-                }
-                if editable {
-                    if addingCriterion {
-                        NewCriterionCard { text, proof in
-                            edit(.addCriterion(text: text, proof: proof))
-                            addingCriterion = false
-                        } cancel: { addingCriterion = false }
-                    } else {
-                        Button("+ criterion") { addingCriterion = true }.buttonStyle(.borderless)
-                    }
-                }
-            }
-        }
-    }
-
-    private func criterion(_ row: GoalModel.Row) -> some View {
-        HoverRow { hovering in
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(row.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 8) {
-                    if editable {
-                        CommitField(placeholder: "What must hold", value: row.text) {
-                            edit(.updateCriterion(id: row.id, text: $0, proof: nil))
-                        }
-                        HStack(spacing: 8) {
-                            KindChip(kind: row.kind)
-                            CommitField(
-                                placeholder: "How it will be shown", value: row.proof, font: row.isCommand ? mono : .callout
-                            ) { edit(.updateCriterion(id: row.id, text: nil, proof: $0)) }
-                        }
-                    } else {
-                        Text(row.text)
-                        HStack(spacing: 8) {
-                            KindChip(kind: row.kind)
-                            Text(row.proof).font(row.isCommand ? mono : .callout).foregroundStyle(.secondary)
-                        }
-                    }
-                    if let warning = row.warning {
-                        Label("Heads up: \(warning)", systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout).foregroundStyle(Theme.amber)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if editable, goal.rows.count > 1 || goal.quick {
-                    Spacer()
-                    Button { edit(.removeCriterion(id: row.id)) } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless).help("Remove \(row.id)").opacity(hovering ? 1 : 0.3)
-                }
-            }
-        }
-    }
-
-    private var outOfScope: some View {
-        section("Out of scope") {
-            if !goal.outOfScope.isEmpty || editable {
-                GoalCard {
-                    ForEach(Array(goal.outOfScope.enumerated()), id: \.offset) { _, item in
-                        HoverRow { hovering in
-                            HStack(spacing: 10) {
-                                if editable {
-                                    Text("•")
-                                    CommitField(placeholder: "What must not change", value: item) { new in
-                                        edit { g in
-                                            guard let at = g.outOfScope.firstIndex(of: item) else { return nil }
-                                            var items = g.outOfScope
-                                            items[at] = new
-                                            return .setOutOfScope(items)
-                                        }
-                                    }
-                                    Button {
-                                        edit { g in
-                                            guard let at = g.outOfScope.firstIndex(of: item) else { return nil }
-                                            var items = g.outOfScope
-                                            items.remove(at: at)
-                                            return .setOutOfScope(items)
-                                        }
-                                    } label: { Image(systemName: "xmark") }
-                                        .buttonStyle(.borderless).help("Remove").opacity(hovering ? 1 : 0.3)
-                                } else {
-                                    Text("• \(item)")
-                                }
-                            }
-                        }
-                    }
-                    if editable {
-                        if addingScope {
-                            NewLine(placeholder: "What must not change") { text in
-                                edit { .setOutOfScope($0.outOfScope + [text]) }
-                                addingScope = false
-                            } cancel: { addingScope = false }
-                        } else {
-                            Button("+ out of scope") { addingScope = true }.buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -340,9 +194,6 @@ struct GoalView: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            content()
-        }
+        GoalSection(title: title, content: content)
     }
 }

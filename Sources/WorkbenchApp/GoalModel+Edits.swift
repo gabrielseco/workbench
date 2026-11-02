@@ -19,4 +19,21 @@ extension GoalModel {
         all.remove(at: at)
         return .setReadAlso(all)
     }
+
+    func addingOutOfScope(_ item: String) -> GoalEdit { .setOutOfScope(outOfScope + [item]) }
+
+    /// nil when the goal no longer has the item the click was about.
+    func replacingOutOfScope(_ item: String, with new: String) -> GoalEdit? {
+        guard let at = outOfScope.firstIndex(of: item) else { return nil }
+        var items = outOfScope
+        items[at] = new
+        return .setOutOfScope(items)
+    }
+
+    func removingOutOfScope(_ item: String) -> GoalEdit? {
+        guard let at = outOfScope.firstIndex(of: item) else { return nil }
+        var items = outOfScope
+        items.remove(at: at)
+        return .setOutOfScope(items)
+    }
 }

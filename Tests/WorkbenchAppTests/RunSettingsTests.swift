@@ -81,6 +81,15 @@ import Testing
         #expect(goal.removingReadAlso("../gone") == nil, "the goal no longer has it")
     }
 
+    @Test func theOutOfScopeEditsBuildWhatTheGoalScreenBuilds() {
+        var goal = GoalModel.invalid(path: "/tmp/goal.md", problems: [])
+        goal.outOfScope = ["the timeout", "uploads"]
+        #expect(goal.addingOutOfScope("the UI") == .setOutOfScope(["the timeout", "uploads", "the UI"]))
+        #expect(goal.replacingOutOfScope("uploads", with: "downloads") == .setOutOfScope(["the timeout", "downloads"]))
+        #expect(goal.removingOutOfScope("the timeout") == .setOutOfScope(["uploads"]))
+        #expect(goal.replacingOutOfScope("gone", with: "x") == nil && goal.removingOutOfScope("gone") == nil)
+    }
+
     @Test func aSwitchWritesTheSkipEditThroughTheSameStoreActionAsTheGoalScreen() async throws {
         let (store, edits) = try await store()
         let judge = try #require(store.goal?.steps.first { $0.name == "judge" })

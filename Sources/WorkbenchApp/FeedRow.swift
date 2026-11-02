@@ -5,13 +5,14 @@ import WorkbenchCore
 /// amber needs you, red broken, grey idle.
 struct FeedRow: View {
     var item: FeedItem
-    /// Opens the goal's editor from the goal card; nil when the goal can no longer be edited.
-    var editGoal: (() -> Void)?
-    /// The goal's criteria and their proofs, for the goal card: the log keeps only how many there are.
-    var criteria: [GoalModel.Row]
+    /// The goal, for the goal card: the log keeps only how many criteria there are, not what they say.
+    var goal: GoalModel?
+    var store: ProjectStore?
+    /// The goal may be changed now: its card is the editor.
+    var editable: Bool
 
-    init(item: FeedItem, editGoal: (() -> Void)? = nil, criteria: [GoalModel.Row] = []) {
-        (self.item, self.editGoal, self.criteria) = (item, editGoal, criteria)
+    init(item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false) {
+        (self.item, self.goal, self.store, self.editable) = (item, goal, store, editable)
     }
 
     var body: some View {
@@ -19,7 +20,7 @@ struct FeedRow: View {
         case .userNote(let text): UserNoteRow(text: text)
         case .goalCard(let title, let approval, let count, let hash):
             GoalCardRow(
-                title: title, approval: approval, criteria: count, hash: hash, edit: editGoal, rows: criteria)
+                title: title, approval: approval, criteria: count, hash: hash, goal: goal, store: store, editable: editable)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -102,33 +103,46 @@ struct GoalCardRow: View {
     var approval: ApprovalState?
     var criteria: Int
     var hash: String?
-    var edit: (() -> Void)?
-    var rows: [GoalModel.Row] = []
-    /// Criteria shown on the card; the rest are in the goal's editor.
+    var goal: GoalModel?
+    var store: ProjectStore?
+    var editable = false
+    /// Criteria shown on the summary; a longer list is the editor's to show whole.
     static let shownCriteria = 6
 
+    private var rows: [GoalModel.Row] { goal?.rows ?? [] }
+
     var body: some View {
+        if editable, let goal, let store { editor(goal, store) } else { summary }
+    }
+
+    private var heading: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer()
-                // Outside the combined text below: a button folded into it would make the whole card one button.
-                if let edit {
-                    Button("Edit goal…", action: edit).buttonStyle(.link).font(.callout).help("Opens the goal's editor")
+            Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title ?? "Goal").font(.headline).lineLimit(2)
+            HStack(spacing: 10) {
+                Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
+                Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
+                if let hash, !hash.isEmpty {
+                    Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title ?? "Goal").font(.headline).lineLimit(2)
-                HStack(spacing: 10) {
-                    Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
-                    Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
-                    if let hash, !hash.isEmpty {
-                        Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                    }
-                }
-                .font(.callout)
-            }
-            .accessibilityElement(children: .combine)
+            .font(.callout)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A draft goal: the card is the editor, the Goal screen's blocks changed in place.
+    private func editor(_ goal: GoalModel, _ store: ProjectStore) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            heading
+            GoalBlocks(goal: goal, store: store, editable: true, showsError: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            heading
             if !rows.isEmpty { criteriaList }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -152,8 +166,7 @@ struct GoalCardRow: View {
                 .accessibilityElement(children: .combine)
             }
             if rows.count > Self.shownCriteria {
-                Text("and \(rows.count - Self.shownCriteria) more in the goal's editor")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("and \(rows.count - Self.shownCriteria) more").font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.top, 4)

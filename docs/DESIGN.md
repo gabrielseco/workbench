@@ -74,9 +74,11 @@ ships, and the mockup gets fixed.
   `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation, Send back its popover.
 - **What an action said** (an error in red, a note in grey, a notice in green, a Herdr handoff) is a row above the card, in the words
   the step screens use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
-- **The goal card** lists the criteria with the proof that will check each (six at most, then "and N more in the goal's editor"), a
-  proof Workbench cannot check in amber with why, so what Approve and run means is on screen. It has "Edit goal…" while the goal is a draft; it opens the Goal screen over the feed (a sheet with Done), until the
-  settings have a place of their own.
+- **The goal card** says what Approve and run means. While the goal is a draft that no turn has run, and nothing is going on, the card
+  **is the editor**: the request, each criterion (its text and the proof that will check it, a proof Workbench cannot check in amber with
+  why) and the out-of-scope list are changed in place, as on the Goal screen (they are the same blocks, `GoalBlocks`), a refused edit
+  said under them. Once the goal is approved, run or decided, or while an action is going, the card is its summary: the criteria with
+  their proofs (six at most, then "and N more"), read-only.
 - **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
   hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why), the limits (model, budget, timeout: read-only, "Change these

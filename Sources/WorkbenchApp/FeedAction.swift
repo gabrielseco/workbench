@@ -7,7 +7,7 @@ struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
         case discard, sendBack, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
-        case editGoal, showFindings, refreshCI
+        case showFindings, refreshCI
     }
 
     var kind: Kind
@@ -103,7 +103,6 @@ enum FeedActions {
         }
         guard let pill = c.goalPill, pill != .approved || s.state.lastTurn == 0 else { return FeedDecision() }
         let runnable = c.goalCanApprove && !c.starting && !c.runningHere && !c.busy && s.state.lastTurn == 0
-        more.append(FeedAction(kind: .editGoal, title: "Edit goal…", help: "Opens the goal's editor"))
         more.append(FeedAction(kind: .newGoal, title: "New goal…", help: "Starts another goal"))
         if c.herdrFound {
             more.append(
