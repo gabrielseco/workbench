@@ -54,7 +54,10 @@ ships, and the mockup gets fixed.
 - **Header.** The title (`.title2`, bold, two lines at most), then the **phase row**: the spine's seven steps in one line, each a mark
   (the same symbol and colour as the rail drew it) and its title (`.callout`, semibold from the current step on, `.secondary` while
   pending), with a chevron between. The toolbar above it keeps the project pill, the base, the spend and the state pill. The rail
-  keeps the Thread/Tasks switch, the thread's title and Doctor; the spine is not drawn twice.
+  keeps the Thread/Tasks switch and Doctor and, between them, **the thread list**: a row per thread, newest first (at most 50, then "N older
+  threads"), each a mark (a symbol and a tint: working blue, needs you amber, done green, waiting grey, broken red), the title (`.callout`, two
+  lines at most, semibold when selected) and one `.caption` line of state in the toolbar pill's words. A click shows that thread, with its
+  feed and settings, including a finished one; it starts and stops nothing. The spine is not drawn twice.
 - **Feed.** One scrolling column, newest row at the foot. It is a lazy list that opens at the foot and stays there while it grows,
   so a thousand rows cost what the screen shows. Padding 28 across and 20 above and below, rows 10 apart, a symbol column 16 wide so
   the text beside the marks lines up. It never grows the window and truncates (middle for a path or command) rather than wraps off.

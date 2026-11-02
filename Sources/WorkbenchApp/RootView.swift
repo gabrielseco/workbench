@@ -119,8 +119,11 @@ struct Rail: View {
             .disabled(store.project == nil)
             if store.mode == .tasks {
                 TasksRailSummary(store: store)
+            } else if store.chatFeedOn, store.project != nil, !store.threads.listing.rows.isEmpty {
+                // The spine is the feed's phase row now; the rail lists the project's threads (P22 slice 5).
+                Text("THREADS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ThreadListView(store: store)
             } else if case .thread(let snapshot) = store.screen, store.chatFeedOn {
-                // The spine is the feed's phase row now; the rail keeps the switch and Doctor until the thread list (P22 slice 5).
                 Text("THREAD").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Text(snapshot.title ?? snapshot.id).font(.headline).lineLimit(3)
             } else if case .thread(let snapshot) = store.screen {

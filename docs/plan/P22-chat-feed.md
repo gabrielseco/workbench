@@ -183,6 +183,7 @@ The rail becomes the list: a row per thread from `ThreadStore.summaries()` with 
 one line of state; selecting a row changes `currentThread` and builds that thread's session. Grouped by state once there is more than
 one live thread (artboard E's rail). The single-active-thread guard in the core **stays**: until P23 the list shows history and the
 one live thread. This slice makes "open an old thread" possible in the window, which `later/thread-list.md` said was missing.
+*Built (app only, over `ThreadStore`'s public API, preview on):* newest first, at most 50 rows then "N older threads"; a row's title comes from the goal file and its state from one replay of that log, cached by size and modification time, so a poll with nothing changed reads no log and an older thread's log is never replayed. The pick is `ProjectStore.selectedThread`: it holds across polls, a new goal or a project change clears it, and a picked thread that is gone falls back to the active or newest. A read that began before the pick is dropped.
 *Tests:* switching threads during a reload, during a run and during a doctor run shows the right thread's state each time.
 
 ### 6. Chat before a goal

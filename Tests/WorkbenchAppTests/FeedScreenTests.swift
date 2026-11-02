@@ -253,7 +253,7 @@ import WorkbenchCore
         let box = StoreBox()
         let store = ProjectStore(
             preferences: MemoryPreferences(),
-            loader: { project, feed in
+            loader: { project, feed, _ in
                 guard calls.next() == 2 else { return ProjectLoader.load(project: project, feed: feed) }
                 DispatchQueue.main.sync { box.store?.chatFeedOn = true }
                 return ProjectLoader.Loaded(screen: .noThread, thread: nil, watch: ProjectLoader.Watch())

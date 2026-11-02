@@ -108,7 +108,7 @@ import Testing
         let once = Once()
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project, _ in
+            loader: { project, _, _ in
                 // The turn ends right after the log was read: the screen shows the turn still open.
                 ProjectLoader.load(project: project) {
                     guard once.take(), let handle = try? FileHandle(forWritingTo: url) else { return }
@@ -133,7 +133,7 @@ import Testing
         let hold = HoldFlag()
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project, _ in
+            loader: { project, _, _ in
                 if project.root == firstRoot && hold.isOn {
                     held.enter()
                     held.wait()
@@ -174,6 +174,85 @@ import Testing
         release.yield()
         await running.value
         #expect(store.doctor == .notRun, "the first project's answer is not the second's")
+    }
+
+    // MARK: Picking a thread in the list (P22 slice 5)
+
+    @Test func aReadThatBeganBeforeAThreadWasPickedNeverReplacesThePick() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("a", title: "A")
+        try await fixture.addThread("b", title: "B")
+        let held = Gate()
+        let hold = HoldFlag()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
+            loader: { project, feed, selected in
+                if selected == nil && hold.isOn {
+                    held.enter()
+                    held.wait()
+                }
+                return ProjectLoader.load(project: project, feed: feed, selected: selected)
+            })
+        await store.open(fixture.root)
+        #expect(snapshot(store)?.id == "b", "the newest, until a pick")
+        try fixture.append("b", .turnStarted, turn: 1, data: ["session_id": "s1"])
+        hold.isOn = true
+        let slow = Task { await store.reload() }
+        await held.waitUntilEntered()
+        hold.isOn = false
+        await store.select(thread: "a")
+        #expect(snapshot(store)?.id == "a")
+        held.release()
+        await slow.value
+        #expect(snapshot(store)?.id == "a" && store.currentThread == "a", "the older read's answer is dropped")
+    }
+
+    @Test func aClickBackOnTheThreadOnScreenCancelsAPendingClickOnAnother() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("a", title: "A")
+        try await fixture.addThread("b", title: "B")
+        let held = Gate()
+        let hold = HoldFlag()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
+            loader: { project, feed, selected in
+                if selected == "a" && hold.isOn {
+                    held.enter()
+                    held.wait()
+                }
+                return ProjectLoader.load(project: project, feed: feed, selected: selected)
+            })
+        await store.open(fixture.root)
+        #expect(snapshot(store)?.id == "b")
+        hold.isOn = true
+        let toA = Task { await store.select(thread: "a") }
+        await held.waitUntilEntered()
+        hold.isOn = false
+        await store.select(thread: "b")
+        held.release()
+        await toA.value
+        #expect(snapshot(store)?.id == "b" && store.selectedThread == "b", "the last click wins")
+    }
+
+    @Test func aDoctorRunThatEndsAfterAnotherThreadWasPickedChangesNoThread() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("a", title: "A")
+        try await fixture.addThread("b", title: "B")
+        let (stream, release) = AsyncStream<Void>.makeStream()
+        let store = ProjectStore(
+            preferences: MemoryPreferences(),
+            doctorRunner: { _, _ in
+                for await _ in stream { break }
+                return .healthy(seconds: 0.1)
+            })
+        await store.open(fixture.root)
+        let running = Task { await store.runDoctor() }
+        for _ in 0..<200 where store.doctor != .running { try await Task.sleep(for: .milliseconds(10)) }
+        await store.select(thread: "a")
+        let before = snapshot(store)
+        release.yield()
+        await running.value
+        #expect(store.currentThread == "a" && snapshot(store)?.state == before?.state && store.doctor == .healthy(seconds: 0.1))
     }
 
     // MARK: Accept and Ship start on the click

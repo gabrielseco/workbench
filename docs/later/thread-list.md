@@ -1,5 +1,8 @@
 # Thread list
 
+**Built (P22 slice 5)** for the chat feed preview: the rail lists every thread and one can be opened, live or finished. What still waits is
+what this note says below about more than one live thread (P23); the list shows history and the one live thread.
+
 A list of a project's threads in the app, to switch between them (open an old one, compare, pick one back up).
 
 **Why it waits.** The project has one active thread and no queue (see the [plan README](../plan/README.md)), so the app shows the

@@ -109,6 +109,11 @@ struct RecentProject: Equatable, Identifiable {
     /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
     @ObservationIgnored var lastRefusal: String?
     @ObservationIgnored var currentThread: String? { didSet { rebindSession() } }
+    /// The thread the person picked in the list; nil follows the active thread, else the newest. Cleared by a project change and by a new goal.
+    @ObservationIgnored var selectedThread: String?
+    /// The project's threads as the list shows them, kept current while the chat feed preview is on.
+    let threads = ThreadListModel()
+    @ObservationIgnored var threadRowCache = ThreadListLoader.Cache()
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private let intervals: (working: Duration, idle: Duration)
@@ -116,7 +121,7 @@ struct RecentProject: Equatable, Identifiable {
     /// in flight) is dropped, never shown under the new project.
     @ObservationIgnored var generation = 0
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
-    @ObservationIgnored private let loader: @Sendable (Project, Bool) -> ProjectLoader.Loaded
+    @ObservationIgnored private let loader: @Sendable (Project, Bool, String?) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
     @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
     @ObservationIgnored let actions: GoalActions
@@ -128,7 +133,9 @@ struct RecentProject: Equatable, Identifiable {
         preferences: Preferences, screen: ProjectScreen = .noProject, project: Project? = nil,
         intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2)),
         ciIntervals: (pending: Duration, settled: Duration) = (.seconds(10), .seconds(60)),
-        loader: @escaping @Sendable (Project, Bool) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0, feed: $1) },
+        loader: @escaping @Sendable (Project, Bool, String?) -> ProjectLoader.Loaded = {
+            ProjectLoader.load(project: $0, feed: $1, selected: $2)
+        },
         doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
             await ProjectStore.runCoreDoctor($0, base: $1)
         },
@@ -191,7 +198,7 @@ struct RecentProject: Equatable, Identifiable {
             generation += 1
             (namingGoal, pickingProject) = (false, false)
             cancelSendBack()
-            (project, currentThread, lastWatch, doctor) = (nil, nil, nil, .notRun)
+            (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
             (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
             return false
@@ -205,7 +212,9 @@ struct RecentProject: Equatable, Identifiable {
         current.pendingDiscard = nil
         prReviewShown = nil
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
-        (currentThread, lastWatch) = (nil, nil)
+        (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
+        // A thread id means another thread in another project: what was read for the old project is not the new one's.
+        (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
@@ -222,13 +231,13 @@ struct RecentProject: Equatable, Identifiable {
         guard let project else { return }
         let (thread, mine) = (currentThread, generation)
         let now = await Task.detached { ProjectLoader.watch(project: project, thread: thread) }.value
-        if mine == generation && now != lastWatch { await reload() }
+        if mine == generation && now != lastWatch { await reload() } else { await refreshThreadList() }
     }
 
     func reload() async {
         guard let project else { return }
-        let (mine, loader, feed) = (generation, self.loader, chatFeedOn)
-        let result = await Task.detached { loader(project, feed) }.value
+        let (mine, loader, feed, selected) = (generation, self.loader, chatFeedOn, selectedThread)
+        let result = await Task.detached { loader(project, feed, selected) }.value
         guard mine == generation else { return }
         var model: GoalModel?
         if let thread = result.thread, case .thread = result.screen {
@@ -244,10 +253,13 @@ struct RecentProject: Equatable, Identifiable {
         }
         // A read that began before the preview was turned on or off is for the other window: the read `setChatFeed` started is the one that counts.
         guard feed == chatFeedOn else { return }
+        // Likewise a read that began before another thread was picked: the read `select` started is the one that counts.
+        guard selected == selectedThread else { return }
         (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
         (current.goal, current.review) = (model, reviewed)
         applyOwnership()
         applyPullRequestCI()
+        await refreshThreadList()
         await observeAttention(readTasks: false)
         if case .thread(let shown) = screen, case .ended? = shown.run?.phase { current.stopping = false }
         // Only the thread the run was started in can say it has begun: another project's log is not this run's.
@@ -307,7 +319,7 @@ struct RecentProject: Equatable, Identifiable {
         do {
             try await actions.approve(project, thread)
         } catch {
-            if mine == generation { actionError = "\(error)" }
+            if mine == generation { mineSession.actionError = "\(error)" }
             await reload()
             return
         }
@@ -321,21 +333,22 @@ struct RecentProject: Equatable, Identifiable {
     func startRun(
         _ project: Project, _ thread: String, generation mine: Int, options: RunOptions = RunOptions()
     ) {
+        // Said on the thread the run is for: an approval that took a moment may have left another one on screen.
+        let started = session(project, thread)
         guard ownedRun == nil else {
-            actionError = "A run is already going."
-            reopenSendBack()
+            started.actionError = "A run is already going."
+            if started === current { reopenSendBack() }
             return
         }
         let handle: RunHandle
         do { handle = try actions.makeRun(project, thread, options) } catch {
-            actionError = "The run did not start: \(error)"
-            reopenSendBack()
+            started.actionError = "The run did not start: \(error)"
+            if started === current { reopenSendBack() }
             return
         }
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
         var turnNow = 0
-        if case .thread(let shown) = screen { turnNow = shown.state.lastTurn }
-        let started = session(project, thread)
+        if case .thread(let shown) = screen, shown.id == thread { turnNow = shown.state.lastTurn }
         started.awaitingAfterTurn = turnNow
         started.ownedRun = ThreadSession.OwnedRun(handle: handle, project: project, thread: thread)
         setBusy("Starting the run…", in: started)
@@ -429,8 +442,9 @@ struct RecentProject: Equatable, Identifiable {
     private func runFailed(_ error: Error, in session: ThreadSession, generation mine: Int) {
         guard mine == generation else { return }
         endRunStart(session)
-        actionError = "The run did not start: \(error)"
-        reopenSendBack()
+        // On the thread it was started for: the window may be showing another by now.
+        session.actionError = "The run did not start: \(error)"
+        if session === current { reopenSendBack() }
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.
