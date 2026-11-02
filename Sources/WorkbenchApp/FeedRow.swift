@@ -142,7 +142,7 @@ struct GoalCardRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(row.id).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                         .frame(width: 28, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(row.text).font(.callout).textSelection(.enabled)
                         Text(row.proof).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                             .lineLimit(1).truncationMode(.middle)
@@ -325,12 +325,20 @@ struct PRReviewRow: View {
     var verdict: String?
     var ok: Bool
 
+    static func outcome(ok: Bool, verdict: String?) -> String {
+        if !ok { return "did not finish" }
+        guard let verdict else { return "no verdict" }
+        return verdict == "clean" ? "clean" : "findings to fix"
+    }
+
     var body: some View {
         let clean = ok && verdict == "clean"
+        // The step screen's words for it: the core's verdict is "clean" or a list of findings.
+        let outcome = Self.outcome(ok: ok, verdict: verdict)
         FeedLine(
             symbol: clean ? "checkmark.circle.fill" : (ok ? "exclamationmark.circle.fill" : "xmark.circle.fill"),
             tint: clean ? Theme.green : (ok ? Theme.amber : Theme.red),
-            title: "PR review" + (round.map { " round \($0)" } ?? "") + (verdict.map { " · \($0)" } ?? ""), detail: nil)
+            title: "PR review" + (round.map { " round \($0)" } ?? "") + " · " + outcome, detail: nil)
     }
 }
 

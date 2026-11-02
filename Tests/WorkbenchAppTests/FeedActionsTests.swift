@@ -165,4 +165,32 @@ import Testing
             }
         }
     }
+
+    // MARK: What the card says
+
+    @Test func theCardDoesNotRepeatTheStepUnderItsHeading() {
+        let none = FeedDecision()
+        #expect(DecisionCard.line(step: .review, why: "Review · turn 1 done", decision: none) == "turn 1 done")
+        #expect(DecisionCard.line(step: .goal, why: "Writing", decision: none) == "Writing")
+        #expect(DecisionCard.line(step: nil, why: "Nothing is left to do.", decision: none) == "Nothing is left to do.")
+        #expect(DecisionCard.line(step: .review, why: "Review · x", decision: FeedDecision(why: "Own words")) == "Own words")
+    }
+
+    @Test func mergeSaysWhyItIsTheNextPressAndReviewDoesNot() throws {
+        var shipped = try snapshot(.prOpen)
+        #expect(decide(shipped).why == nil)
+        let green = PRStatus(
+            number: 482, state: .open, head: String(repeating: "a", count: 40),
+            checks: PRChecksSummary(checks: [PRCheck(name: "test", bucket: "pass")]), checksError: nil)
+        shipped.ci = .known(green)
+        let ready = decide(shipped)
+        #expect(ready.primary?.kind == .merge && ready.why?.contains("merged") == true)
+    }
+
+    @Test func aPRReviewIsToldInTheStepScreensWords() {
+        #expect(PRReviewRow.outcome(ok: true, verdict: "clean") == "clean")
+        #expect(PRReviewRow.outcome(ok: true, verdict: "fix") == "findings to fix")
+        #expect(PRReviewRow.outcome(ok: true, verdict: nil) == "no verdict")
+        #expect(PRReviewRow.outcome(ok: false, verdict: nil) == "did not finish")
+    }
 }

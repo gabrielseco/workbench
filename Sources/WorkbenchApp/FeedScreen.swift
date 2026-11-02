@@ -99,7 +99,7 @@ struct FeedScreen: View {
             Text(snapshot.title ?? snapshot.id).font(.title2.weight(.bold)).lineLimit(2)
             PhaseRow(spine: snapshot.spine)
         }
-        .padding(.horizontal, 28).padding(.top, 16).padding(.bottom, 12)
+        .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }
 }
 

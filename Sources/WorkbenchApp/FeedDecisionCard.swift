@@ -9,12 +9,21 @@ struct DecisionCard: View {
     var decision: FeedDecision
     var perform: (FeedAction) -> Void
 
+    /// The decision's own line when it has one, else the spine's without the step name it repeats under the heading.
+    private var shownWhy: String { Self.line(step: step, why: why, decision: decision) }
+
+    static func line(step: SpineStep?, why: String, decision: FeedDecision) -> String {
+        if let own = decision.why { return own }
+        guard let title = step?.title, why.hasPrefix(title + " · ") else { return why }
+        return String(why.dropFirst(title.count + 3))
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("NEXT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Text(step?.title ?? "Nothing left to do").font(.headline)
-                Text(why).font(.callout).foregroundStyle(.secondary)
+                Text(shownWhy).font(.callout).foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             if !decision.more.isEmpty {
