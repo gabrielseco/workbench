@@ -180,11 +180,10 @@ struct GoalActions: Sendable {
                 run: {
                     let report = try await runner.run(options)
                     // `[review] auto`, as `workbench run` does it once the runner is gone: advice, never the turn's result.
-                    let checkFailed = report.check.map { $0.result != .passed } ?? false
-                    if report.result == .succeeded, !checkFailed,
-                        let config = try? Config.load(from: project.configURL), !config.review.auto.isEmpty {
-                        _ = await ThreadService(project: project, git: try GitRunner.discover())
-                            .runAutoAdvice(id: thread, config: config, stop: adviceStop)
+                    let service = ThreadService(project: project, git: try GitRunner.discover())
+                    if let config = try? Config.load(from: project.configURL),
+                        !service.adviceDue(after: report, id: thread, config: config).isEmpty {
+                        _ = await service.runAutoAdvice(id: thread, config: config, stop: adviceStop)
                     }
                 },
                 stop: {

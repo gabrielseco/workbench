@@ -18,6 +18,7 @@ push_to: feature/x          # optional; continue this branch of origin (base mus
 skip: judge, design         # optional; steps that do not run for this goal only
 read_also: ../backend       # optional; more checkouts a run may read, on top of the config's read_also
 quick: true                 # optional; a quick goal, which may have no criteria (below)
+auto_advance: true          # optional; run the advice (judge, review stages) by itself after a passing turn, for this goal only
 approved_at: 2026-10-12T20:10:00Z
 approved_hash: 3f2a...      # hash of everything below the front matter
 ---
@@ -336,6 +337,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # [review]                              # P6: the review stages, in order (the loop runs only pr-review so far)
 # stages = ["pr-review", "design"]      # default ["pr-review"]
 # auto = ["judge", "design"]            # run by themselves after a turn that succeeded with a passing check; default none (each costs its agent's price)
+# auto_advance = true                   # or: the judge and every stage but pr-review, unlisted; `auto` wins if it lists any; default false
 # [review.stage.design]                 # one table per stage; [review.stage.pr-review] may replace [pr_review]
 # prompt = "docs/REVIEW-DESIGN.md"      # or skill = "...SKILL.md", never both; plus checklist, reviewer,
 #                                       # inputs, applies_to, max_rounds
@@ -477,7 +479,14 @@ Notes:
   runner is gone, each entry that `workbench next` lists as due (the judge not yet run for this turn, a stage that applies to the
   change and has no round at this head) runs once, one after the other, through the same code as `workbench judge` and
   `workbench review-stage`: its own event, cost and refusals, and a stage's `max_rounds`. `run` prints one line each, `auto <name>: <a
-  line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. It is advice:
+  line about the answer>`, `auto <name>: skipped, <why>` or `auto <name>: no answer, <why>`, before its `review:` line. **`[review] auto_advance = true`**
+  (default false) is the same without listing the steps: when `auto` lists nothing, the advice is the judge and then every stage in
+  `stages` other than `pr-review`, in that order; a non-boolean is refused when the config loads. A goal's own `auto_advance: true|false`
+  wins over the config for that goal (the approval binds it, as it binds `skip`: setting, changing or clearing it returns an approved
+  goal to draft; a goal without the key keeps the hash it was approved with). An `auto` that lists anything wins over both: the project
+  said which steps, and the switch adds nothing. A turn that was refused a tool call (a grant to decide) is waited on by the switch's
+  advice, as a failed one is; an `auto` the project wrote itself is not held back by it, as before. A stage named `judge` is left out of the
+  switch's list, like `auto` refuses it. (`[run]` is the table that starts the verifier's app; the switch is not there.) It is advice:
   a failed or refused step never changes `run`'s exit code, the turn's result or what `accept` and `ship` do. Off by default, since
   each step spends what its agent costs. Nothing runs after a failed turn or check. A stage reads the branch's commits, so while the turn's
   work is uncommitted (a Codex turn leaves it for `accept`) or the branch has no commit past its base, the stage is skipped with that

@@ -460,6 +460,7 @@ public struct Config: Sendable, Equatable {
 
         # [review]
         # auto = ["judge"]                 # advice run by itself after a passing turn (default none; each costs money)
+        # auto_advance = true              # or: the judge and every stage but pr-review, unlisted (`auto` wins if it lists any)
 
         # [verifier]                       # on by default: runs the project's skill after a passing check
         # enabled = false                  # turn it off; with no skill file at the base it is skipped anyway

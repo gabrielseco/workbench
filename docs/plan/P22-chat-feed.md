@@ -164,6 +164,12 @@ this PR (the "Layout" section describes a 220 pt spine rail and per-step screens
 
 ### 4. Auto-advance (core, then the feed)
 
+Cut in two: **4a** (core and CLI) is `[review] auto_advance` and the goal's `auto_advance:` key, one switch for the advice the core already runs
+by itself with `[review] auto` (the check and the verifier already run after every turn); **4b** is the app's switch in the Run settings. It is
+`[review]`, not the `[run]` this section first said: `[run]` is the table that starts the verifier's app. Decided with the user: no
+auto-accept, no one-press accept-and-ship. The text below is the first plan and is superseded where it differs.
+
+
 `[run] auto_advance` (default `false`) plus a per-goal override. When on, a passing turn goes to check, verify and judge without a
 press, and the thread stops only on the conditions of decision 4. The CLI honours it too (`workbench run` and `next`), so the
 feed does not own a rule the terminal lacks.
