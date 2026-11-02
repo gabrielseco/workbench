@@ -49,15 +49,15 @@ extension ProjectStore {
     /// Herdr's own refusal is the error line.
     func openInHerdr() async {
         guard let project, let thread = currentThread else { return }
-        (actionError, actionNote) = (nil, nil)
-        let mine = generation
+        let session = current
+        (session.actionError, session.actionNote) = (nil, nil)
         await working("Opening in Herdr…") {
             do {
                 let answer = try await actions.openInHerdr(project, thread)
-                guard mine == generation else { return }
                 let note = answer.opened.alreadyOpen ? "Herdr already had it open: brought forward." : "Opened in Herdr."
-                actionNote = answer.projectInstead ? "This thread has no worktree, so the project was opened. \(note)" : note
-            } catch { if mine == generation { actionError = "\(error)" } }
+                session.actionNote =
+                    answer.projectInstead ? "This thread has no worktree, so the project was opened. \(note)" : note
+            } catch { session.actionError = "\(error)" }
         }
     }
 

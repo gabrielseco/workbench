@@ -10,8 +10,8 @@ extension ProjectStore {
         // Set before the first await, so a second click while this one is going starts nothing.
         deciding = true
         defer { deciding = false }
-        actionError = nil
-        notice = nil
+        let session = current
+        (session.actionError, session.notice) = (nil, nil)
         let mine = generation
         var shipped = false
         await working("Checking what Ship would do and describing the change…") {
@@ -22,12 +22,10 @@ extension ProjectStore {
                 nowWorking("Shipping: pushing the branch and opening the pull request…")
                 let outcome = try await actions.ship(project, thread, preview)
                 shipped = true
-                if mine == generation {
-                    notice = (["Shipped as PR #\(outcome.pr.number): \(outcome.pr.url)"] + [preview.note].compactMap { $0 })
-                        .joined(separator: " ")
-                    if let failure = outcome.refreshFailure { actionError = "\(failure)" }
-                }
-            } catch { if mine == generation { actionError = "\(error)" } }
+                session.notice = (["Shipped as PR #\(outcome.pr.number): \(outcome.pr.url)"] + [preview.note].compactMap { $0 })
+                    .joined(separator: " ")
+                if let failure = outcome.refreshFailure { session.actionError = "\(failure)" }
+            } catch { session.actionError = "\(error)" }
             if mine == generation { await reload() }
         }
         return shipped

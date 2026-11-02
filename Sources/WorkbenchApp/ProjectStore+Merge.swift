@@ -76,7 +76,8 @@ extension ProjectStore {
         guard let project, let thread = currentThread, case .thread(let shown) = screen, shown.canMerge,
             let status = shown.ci?.status, let scope = pullRequestScope, !deciding
         else { return }
-        (actionError, notice) = (nil, nil)
+        let session = current
+        (session.actionError, session.notice) = (nil, nil)
         deciding = true
         defer { deciding = false }
         var merged = false
@@ -86,9 +87,9 @@ extension ProjectStore {
                 guard pullRequestScope == scope else { return }
                 (prCI.ci, prCI.readAt) = (.known(after), .now)
                 applyPullRequestCI()
-                notice = "Merged PR #\(after.number)."
+                session.notice = "Merged PR #\(after.number)."
                 merged = true
-            } catch { if pullRequestScope == scope { actionError = "\(error)" } }
+            } catch { session.actionError = "\(error)" }
         }
         if !merged, pullRequestScope == scope { await refreshPullRequestCI() }
     }

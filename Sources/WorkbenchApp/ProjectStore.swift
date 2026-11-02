@@ -148,6 +148,7 @@ struct RecentProject: Equatable, Identifiable {
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
         self.doctorRunner = doctorRunner
+        current.onSaid = { [weak self] in self?.adopt($0) }
     }
 
     /// The raw log of what the window shows, for the footer's button: a thread's, or the damaged one's.
@@ -495,14 +496,23 @@ private extension ProjectStore {
         let key = ThreadSession.Key(project: project, thread: currentThread)
         guard key != current.key else { return }
         if !current.isSpent { sessions[current.key] = current }
-        current = sessions[key] ?? ThreadSession(key: key)
+        current = sessions[key] ?? newSession(key)
         settled()
     }
     /// The thread's session: the one on screen, the one with work going on for it, or a new one.
     func session(_ project: Project, _ thread: String?) -> ThreadSession {
         let key = ThreadSession.Key(project: project, thread: thread)
         if key == current.key { return current }
-        return sessions[key] ?? ThreadSession(key: key)
+        return sessions[key] ?? newSession(key)
+    }
+    func newSession(_ key: ThreadSession.Key) -> ThreadSession {
+        let made = ThreadSession(key: key)
+        made.onSaid = { [weak self] in self?.adopt($0) }
+        return made
+    }
+    /// A session that has something to show is kept while the window is elsewhere.
+    func adopt(_ session: ThreadSession) {
+        if session !== current { sessions[session.key] = session }
     }
     /// Whether any session is working: one action at a time holds the window.
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }

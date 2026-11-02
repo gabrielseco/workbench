@@ -34,15 +34,15 @@ import WorkbenchCore
     /// The latest turn's review while it awaits one; nil otherwise.
     var review: ReviewModel?
     /// What the last action said when it did not go through.
-    var actionError: String?
+    var actionError: String? { didSet { said() } }
     /// Something an action did not do that is not a failure, such as files left out of a diff.
-    var actionNote: String?
+    var actionNote: String? { didSet { said() } }
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
-    var notice: String?
+    var notice: String? { didSet { said() } }
     /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
     var pendingDiscard: DiscardPlan?
     /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
-    var goalEditError: String?
+    var goalEditError: String? { didSet { said() } }
     /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
     var goalEditSerial = 0
     @ObservationIgnored var goalEdits: Task<Void, Never>?
@@ -50,6 +50,10 @@ import WorkbenchCore
     var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
     var stopping = false
+
+    /// Told when the session has something to show, so a session the window has moved away from is kept for when it comes back.
+    @ObservationIgnored var onSaid: (@MainActor (ThreadSession) -> Void)?
+    private func said() { if hasMessages { onSaid?(self) } }
 
     init(key: Key) { self.key = key }
 
