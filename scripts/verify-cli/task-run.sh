@@ -213,13 +213,13 @@ check "a base on origin starts the thread from the freshly fetched origin branch
 
 # --- 2e. labels on the pull request -----------------------------------------------------------------------------
 
-LABELS='labels: [seed-preview, bot]'; [ "$SABOTAGE" = 1 ] && LABELS='max_open: 5'
+LABELS='labels: [seed-preview, bot]'; [ "$SABOTAGE" = 1 ] && LABELS='batch: 1'
 mkdir -p "$P/.workbench/tasks/labelled"
 printf -- '---\nfix: pr\nmax_open: 5\n%s\n---\nDo the thing.\n' "$LABELS" >"$P/.workbench/tasks/labelled/task.md"
 wbp "$SCRATCH/approve6.out" task approve labelled
 wbp "$SCRATCH/labelled.out" task run labelled; shown "$SCRATCH/labelled.out" 6
 check "the task's labels are created and added to its pull request" "exit $RC: $(head -c 300 "$SCRATCH/labelled.out"); gh: $(grep -E 'label|--add-label' "$GHDIR/calls" | tr '\n' ';')" \
-    bash -c '[ "$1" = 0 ] && grep -q "^labelled: pr-opened" "$2" && ! grep -q "label" "$2" && grep -qx "label create --force -- seed-preview" "$3" && grep -qx "label create --force -- bot" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=seed-preview$" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=bot$" "$3"' _ "$RC" "$SCRATCH/labelled.out" "$GHDIR/calls"
+    bash -c '[ "$1" = 0 ] && grep -q "^labelled: pr-opened" "$2" && ! grep -q "label .seed" "$2" && grep -qx "label create --force -- seed-preview" "$3" && grep -qx "label create --force -- bot" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=seed-preview$" "$3" && grep -Eq "^pr edit [0-9]+ --add-label=bot$" "$3"' _ "$RC" "$SCRATCH/labelled.out" "$GHDIR/calls"
 
 mkdir -p "$P/.workbench/tasks/labelfail"
 printf -- '---\nfix: pr\nmax_open: 5\nlabels: [seed-preview]\n---\nDo the other thing.\n' >"$P/.workbench/tasks/labelfail/task.md"
