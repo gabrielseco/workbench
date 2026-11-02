@@ -5,12 +5,21 @@ import WorkbenchCore
 /// amber needs you, red broken, grey idle.
 struct FeedRow: View {
     var item: FeedItem
+    /// Opens the goal's editor from the goal card; nil when the goal can no longer be edited.
+    var editGoal: (() -> Void)?
+    /// The goal's criteria and their proofs, for the goal card: the log keeps only how many there are.
+    var criteria: [GoalModel.Row]
+
+    init(item: FeedItem, editGoal: (() -> Void)? = nil, criteria: [GoalModel.Row] = []) {
+        (self.item, self.editGoal, self.criteria) = (item, editGoal, criteria)
+    }
 
     var body: some View {
         switch item.kind {
         case .userNote(let text): UserNoteRow(text: text)
-        case .goalCard(let title, let approval, let criteria, let hash):
-            GoalCardRow(title: title, approval: approval, criteria: criteria, hash: hash)
+        case .goalCard(let title, let approval, let count, let hash):
+            GoalCardRow(
+                title: title, approval: approval, criteria: count, hash: hash, edit: editGoal, rows: criteria)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -93,23 +102,61 @@ struct GoalCardRow: View {
     var approval: ApprovalState?
     var criteria: Int
     var hash: String?
+    var edit: (() -> Void)?
+    var rows: [GoalModel.Row] = []
+    /// Criteria shown on the card; the rest are in the goal's editor.
+    static let shownCriteria = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(title ?? "Goal").font(.headline).lineLimit(2)
-            HStack(spacing: 10) {
-                Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
-                Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
-                if let hash, !hash.isEmpty {
-                    Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            HStack {
+                Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                // Outside the combined text below: a button folded into it would make the whole card one button.
+                if let edit {
+                    Button("Edit goal…", action: edit).buttonStyle(.link).font(.callout).help("Opens the goal's editor")
                 }
             }
-            .font(.callout)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title ?? "Goal").font(.headline).lineLimit(2)
+                HStack(spacing: 10) {
+                    Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
+                    Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
+                    if let hash, !hash.isEmpty {
+                        Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.callout)
+            }
+            .accessibilityElement(children: .combine)
+            if !rows.isEmpty { criteriaList }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
+    }
+
+    /// What approving means: each criterion and the proof that will check it, and why a proof cannot be checked when it cannot.
+    private var criteriaList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(rows.prefix(Self.shownCriteria)), id: \.id) { row in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.id).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                        .frame(width: 28, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.text).font(.callout).textSelection(.enabled)
+                        Text(row.proof).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                        if let warning = row.warning { Text(warning).font(.caption).foregroundStyle(Theme.amber) }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if rows.count > Self.shownCriteria {
+                Text("and \(rows.count - Self.shownCriteria) more in the goal's editor")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 4)
     }
 
     private var approvalText: String {
@@ -278,12 +325,20 @@ struct PRReviewRow: View {
     var verdict: String?
     var ok: Bool
 
+    static func outcome(ok: Bool, verdict: String?) -> String {
+        if !ok { return "did not finish" }
+        guard let verdict else { return "no verdict" }
+        return verdict == "clean" ? "clean" : "findings to fix"
+    }
+
     var body: some View {
         let clean = ok && verdict == "clean"
+        // The step screen's words for it: the core's verdict is "clean" or a list of findings.
+        let outcome = Self.outcome(ok: ok, verdict: verdict)
         FeedLine(
             symbol: clean ? "checkmark.circle.fill" : (ok ? "exclamationmark.circle.fill" : "xmark.circle.fill"),
             tint: clean ? Theme.green : (ok ? Theme.amber : Theme.red),
-            title: "PR review" + (round.map { " round \($0)" } ?? "") + (verdict.map { " · \($0)" } ?? ""), detail: nil)
+            title: "PR review" + (round.map { " round \($0)" } ?? "") + " · " + outcome, detail: nil)
     }
 }
 

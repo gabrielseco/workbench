@@ -6,6 +6,8 @@ import WorkbenchCore
 @testable import WorkbenchApp
 
 /// The chat feed preview (P22 slice 3a): the switch, what the loader derives for it, and that every row and every fixture scenario draws.
+@MainActor private var keptFeedFixtures: [AppFixture] = []
+
 @MainActor @Suite struct FeedScreenTests {
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -311,5 +313,82 @@ import WorkbenchCore
         snapshot.feed = []
         let without = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
         try differs(RootView(store: withRows), RootView(store: without), "the feed", width: 1100, height: 700)
+    }
+
+    // MARK: The decision card and the messages
+
+    private func card(_ decision: FeedDecision) -> some View {
+        DecisionCard(step: .review, why: "Needs you · Review · turn 1 done", decision: decision, perform: { _ in }).padding(20)
+    }
+
+    private func cardsDiffer(_ first: FeedDecision, _ second: FeedDecision, _ what: String) throws {
+        try differs(card(first), card(second), what, width: 760, height: 120)
+    }
+
+    @Test func theDecisionCardDrawsItsPrimaryButtonAndItsMenuInLightAndDark() throws {
+        let primary = FeedAction(kind: .accept, title: "Accept work")
+        let menu = [
+            FeedAction(kind: .sendBack, title: "Send back…"), FeedAction(kind: .discard, title: "Discard…", destructive: true),
+        ]
+        for dark in [false, true] {
+            let full = try image(card(FeedDecision(primary: primary, more: menu)), width: 760, height: 120, dark: dark)
+            #expect(distinctColours(full) > 2)
+            try save(full, "feed-decision-card-\(dark ? "dark" : "light")")
+        }
+        try cardsDiffer(FeedDecision(primary: primary, more: menu), FeedDecision(primary: nil, more: menu), "the primary button")
+        try cardsDiffer(FeedDecision(primary: primary, more: menu), FeedDecision(primary: primary, more: []), "the menu")
+        let disabled = FeedAction(kind: .accept, title: "Accept work", enabled: false)
+        try cardsDiffer(FeedDecision(primary: primary), FeedDecision(primary: disabled), "a disabled button")
+    }
+
+    @Test func whatAnActionSaidIsDrawnAsRows() throws {
+        func rows(_ error: String?, _ note: String?, _ notice: String?) -> some View {
+            MessageRows(error: error, note: note, notice: notice, handoff: nil).padding(20)
+        }
+        let said = rows("the run did not start", "files left out", "Accepted: abc1234")
+        try differs(said, rows(nil, nil, nil), "the messages", width: 640, height: 140)
+        try differs(rows("broke", nil, nil), rows(nil, nil, "done"), "an error against a notice", width: 640, height: 140)
+        try save(try image(said, width: 640, height: 140, dark: false), "feed-messages-light")
+    }
+
+    @Test func aDraftGoalCardOffersToEditItAndAnApprovedOneDoesNot() throws {
+        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
+        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
+        let editable = FeedRow(item: item, editGoal: {}).padding(20)
+        try differs(editable, FeedRow(item: item).padding(20), "Edit goal…", width: 640, height: 120)
+    }
+
+    @Test func theGoalCardListsTheCriteriaAndTheirProofs() throws {
+        let kind = FeedItem.Kind.goalCard(title: "Add retry", approval: .draft, criteria: 2, hash: nil)
+        let item = FeedItem(id: "goal", seq: 1, turn: 0, kind: kind)
+        let rows = [
+            GoalModel.Row(id: "c1", text: "Retries on 5xx", proof: "test: SyncClientTests/retries"),
+            GoalModel.Row(id: "c2", text: "Never retries on 4xx", proof: "`swift test`", warning: "not in [tools] allowed"),
+        ]
+        func card(_ criteria: [GoalModel.Row]) -> some View { FeedRow(item: item, criteria: criteria).padding(20) }
+        try differs(card(rows), card([]), "the criteria", width: 640, height: 220)
+        let plain = [rows[0]]
+        let warned = [GoalModel.Row(id: "c1", text: rows[0].text, proof: rows[0].proof, warning: "cannot be checked")]
+        try differs(card(plain), card(warned), "a proof's warning", width: 640, height: 220)
+    }
+
+    /// The sheet hosts the existing Review screen: this proves it shows that screen when there is a review and says so when there is
+    /// none. What the Review screen draws is its own (a scroll view, which `ImageRenderer` cannot draw), seen in the live app.
+    @Test func theReviewDetailsSheetHostsTheReviewAndSaysWhenThereIsNone() async throws {
+        let fixture = try await AppFixture()
+        keptFeedFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let reviewing = ProjectStore(preferences: preferences)
+        #expect(await reviewing.open(fixture.root))
+        guard case .thread(let shown) = reviewing.screen else { throw LoadError.notAThread }
+        #expect(reviewing.review != nil, "a turn that ended awaits a review")
+        let empty = ProjectStore(preferences: preferences, screen: .thread(shown), project: fixture.project)
+        #expect(empty.review == nil)
+        try differs(
+            ReviewDetailsSheet(snapshot: shown, store: reviewing), ReviewDetailsSheet(snapshot: shown, store: empty),
+            "the review in its sheet", width: 760, height: 560)
     }
 }

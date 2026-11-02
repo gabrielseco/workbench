@@ -1,0 +1,165 @@
+import Foundation
+import Testing
+
+@testable import WorkbenchApp
+@testable import WorkbenchCore
+
+@MainActor private var keptPerformFixtures: [AppFixture] = []
+
+/// Each button of the decision card runs the action the step screen's button runs, and is refused for the same reasons.
+@MainActor @Suite struct FeedPerformTests {
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var names: [String] = []
+        func add(_ name: String) { lock.withLock { names.append(name) } }
+        var all: [String] { lock.withLock { names } }
+    }
+
+    private actor Gate {
+        private var opened = false
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+        func wait() async {
+            if opened { return }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+        func open() {
+            opened = true
+            waiting.forEach { $0.resume() }
+            waiting = []
+        }
+    }
+
+    private nonisolated static let acceptPlan = AcceptPlan(
+        id: "t1", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1", diff: .unavailable(reason: "x"),
+        hasPendingChanges: true, commits: [], check: nil, openWork: false, snapshot: "s", defaultMessage: "m")
+    private nonisolated static let discardPlan = DiscardPlan(
+        id: "t1", worktree: nil, branch: nil, diff: .unavailable(reason: "x"), commits: [])
+    private nonisolated static let preview = ShipPreview(
+        plan: ShipPlan(
+            id: "t1", worktree: URL(fileURLWithPath: "/tmp/w"), branch: "workbench/t1", remoteBranch: "workbench/t1",
+            base: "origin/main", head: "abcdef1234567890", origin: "git@example.test:me/repo.git", remote: .absent,
+            pullRequest: nil),
+        description: nil, title: "feat: it", body: "Body.", note: nil)
+
+    private func store(_ calls: Calls, gate: Gate? = nil) async throws -> ProjectStore {
+        let fixture = try await AppFixture()
+        keptPerformFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        let actions = GoalActions(
+            approve: { _, _ in calls.add("approve") },
+            makeRun: { _, _, _ in
+                calls.add("makeRun")
+                return RunHandle(run: {}, stop: {})
+            },
+            requestStop: { _, _ in
+                calls.add("requestStop")
+                return true
+            },
+            openWorktree: { _, _ in calls.add("openWorktree") },
+            openInHerdr: { _, _ in
+                calls.add("openInHerdr")
+                return GoalActions.HerdrOpenAnswer(opened: HerdrOpened(space: "s", alreadyOpen: false), projectInstead: false)
+            },
+            openDiff: { _, _, _ in
+                calls.add("openDiff")
+                return nil
+            },
+            acceptPlan: { _, _ in
+                calls.add("acceptPlan")
+                if let gate { await gate.wait() }
+                return Self.acceptPlan
+            },
+            accept: { _, _, _, _ in
+                calls.add("accept")
+                return AcceptResult(branch: "b", commit: "c", committedNow: true)
+            },
+            discardPlan: { _, _ in
+                calls.add("discardPlan")
+                return Self.discardPlan
+            },
+            discard: { _, _, _ in calls.add("discard") },
+            shipPreview: { _, _ in
+                calls.add("shipPreview")
+                return Self.preview
+            },
+            ship: { _, _, shown in
+                calls.add("ship")
+                return ShipOutcome(
+                    push: ShipPushResult(plan: shown.plan, outcome: .pushed, ahead: nil),
+                    pr: ShipPRResult(plan: shown.plan, url: "https://example.test/pull/7", number: 7, outcome: .created))
+            },
+            prReview: { _, _ in
+                calls.add("prReview")
+                throw PerformError.stop
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        return store
+    }
+
+    private enum PerformError: Error { case stop }
+
+    @Test func eachButtonRunsTheActionTheStepScreenRuns() async throws {
+        let table: [(FeedAction.Kind, [String])] = [
+            (.approveAndRun, ["approve", "makeRun"]), (.stopTurn, ["requestStop"]), (.accept, ["acceptPlan", "accept"]),
+            (.ship, ["shipPreview", "ship"]), (.reviewPR, ["prReview"]), (.discard, ["discardPlan"]),
+            (.openDiff, ["openDiff"]), (.openWorktree, ["openWorktree"]), (.openHerdr, ["openInHerdr"]), (.runAgain, ["makeRun"]),
+        ]
+        for (kind, expected) in table {
+            let calls = Calls()
+            let store = try await store(calls)
+            await store.perform(kind)
+            #expect(calls.all == expected, "\(kind.rawValue) ran \(calls.all)")
+        }
+    }
+
+    @Test func theCardOnlyOpensWhatNeedsAViewToOpen() async throws {
+        let calls = Calls()
+        let store = try await store(calls)
+        await store.perform(.newGoal)
+        #expect(store.namingGoal)
+        await store.perform(.sendBack)
+        #expect(store.sendingBack && store.actionError == nil, "the popover opens; nothing is sent")
+        await store.perform(.editGoal)
+        #expect(calls.all.isEmpty, "the goal's editor is the view's to open")
+    }
+
+    @Test func discardAsksForConfirmationAndRemovesNothingOnTheFirstPress() async throws {
+        let calls = Calls()
+        let store = try await store(calls)
+        await store.perform(.discard)
+        #expect(store.pendingDiscard != nil && calls.all == ["discardPlan"], "the plan is shown; discard has not run")
+    }
+
+    @Test func confirmingTheDiscardRunsTheSameDiscardAsTheStepScreen() async throws {
+        let calls = Calls()
+        let store = try await store(calls)
+        await store.perform(.discard)
+        await store.confirmDiscard()
+        #expect(calls.all == ["discardPlan", "discard"] && store.pendingDiscard == nil)
+        await store.perform(.discard)
+        store.cancelDiscard()
+        #expect(calls.all == ["discardPlan", "discard", "discardPlan"], "cancelling removes nothing")
+    }
+
+    @Test func aSecondPressWhileOneIsGoingOnIsRefusedAsOnTheStepScreen() async throws {
+        let (calls, gate) = (Calls(), Gate())
+        let store = try await store(calls, gate: gate)
+        let first = Task { await store.perform(.accept) }
+        for _ in 0..<200 where store.busy == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.busy != nil)
+        let context = store.feedContext(for: try thread(store))
+        #expect(context.busy)
+        #expect(FeedActions.derive(context).primary?.enabled != true, "the card disables the button for the same reason")
+        await store.perform(.accept)
+        await gate.open()
+        await first.value
+        #expect(calls.all.filter { $0 == "acceptPlan" }.count == 1, "the second press started nothing")
+    }
+
+    private func thread(_ store: ProjectStore) throws -> ThreadSnapshot {
+        guard case .thread(let shown) = store.screen else { throw PerformError.stop }
+        return shown
+    }
+}
