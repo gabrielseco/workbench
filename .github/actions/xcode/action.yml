@@ -1,0 +1,12 @@
+name: Select Xcode
+description: The one Xcode every macOS job builds with, so no job compiles with a different Swift than the others (docs/swift-bugs/).
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode 26.6
+      # Change the version here and nowhere else. It must be one of the Xcodes on the runner image (macos-26).
+      shell: bash
+      run: |
+        sudo xcode-select -s /Applications/Xcode_26.6.app
+        xcodebuild -version
+        swift --version

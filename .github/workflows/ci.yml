@@ -41,9 +41,10 @@ jobs:
   # macOS is no longer the PR gate (the Linux workflow is, P18): it holds one of the scarce macOS slots, so it runs nightly and by hand (the `macos-test` label runs it on a PR).
   build-test:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/xcode
       - name: Runner hardware
         run: |
           echo "cores: $(sysctl -n hw.ncpu)"

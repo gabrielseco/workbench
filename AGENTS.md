@@ -27,6 +27,13 @@ scripts/render-icon.sh                   # re-renders Resources/AppIcon.png from
 scripts/verify-app.sh start|list|press|shot|stop  # macOS: run this checkout's app on a fixture project (Fixtures/app/) and drive it (verify-app skill)
 ```
 
+## Toolchain
+
+Every macOS CI job builds with the one Xcode named in `.github/actions/xcode/action.yml` (a composite action: change the version there and
+nowhere else). Build and test locally with the same one when you can (`export DEVELOPER_DIR=/Applications/Xcode_<version>.app/Contents/Developer`),
+so a compiler bug shows up on your Mac and in CI alike. A newer Xcode builds too (release builds carry the optimizer workarounds in
+`Package.swift`, see `docs/swift-bugs/`), but CI has not seen it.
+
 ## Skills
 
 Project skills live in `.agents/skills/<name>/SKILL.md` (`deliver`, `pr-review`, `verify-cli`, `verify-app`, `design-review`, `workbench`). Agents that don't read that directory

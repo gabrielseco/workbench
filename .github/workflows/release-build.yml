@@ -21,13 +21,11 @@ jobs:
   release-build:
     # A PR event without the label (any other label, any push to an unlabelled PR) skips the job; schedule and dispatch always run.
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-build')
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26.1 (Swift 6.2.1)
-        # The runner's default Xcode has Swift 6.1.2, which predates the simplify-cfg bug (docs/swift-bugs/), so CI could not see it.
-        run: sudo xcode-select -s /Applications/Xcode_26.1.app
+      - uses: ./.github/actions/xcode
       - name: Toolchain bug check (informational)
         # Says whether this Swift still has the bug Package.swift works around; never fails the job on its own answer.
         run: scripts/swift-bug-repro.sh || true
