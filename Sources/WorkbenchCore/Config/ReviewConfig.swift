@@ -103,10 +103,22 @@ public struct ReviewConfig: Sendable, Equatable {
     /// The advice a run is followed by, in the order it runs. `auto` when it lists anything: the project said which, and `auto_advance`
     /// adds nothing then. Otherwise, with the switch on (the goal's own first, then the config's), the judge and then every stage but
     /// `pr-review` (which reviews a pushed pull request), in `stages` order. Otherwise none.
-    public func advice(goalAutoAdvance: Bool?) -> [String] {
-        if !auto.isEmpty { return auto }
-        guard goalAutoAdvance ?? autoAdvance else { return [] }
-        return ["judge"] + stages.filter { $0 != Self.prReviewStage }
+    public func advice(goalAutoAdvance: Bool?) -> [String] { advicePlan(goalAutoAdvance: goalAutoAdvance).names }
+
+    /// The advice and whether it comes from the switch rather than from an `auto` list the project wrote itself: the switch also waits
+    /// for a person when the turn was refused a tool call (a grant to decide), which an explicit `auto` has never done.
+    public struct Advice: Sendable, Equatable {
+        public var names: [String]
+        public var fromSwitch: Bool
+    }
+
+    public func advicePlan(goalAutoAdvance: Bool?) -> Advice {
+        if !auto.isEmpty { return Advice(names: auto, fromSwitch: false) }
+        guard goalAutoAdvance ?? autoAdvance else { return Advice(names: [], fromSwitch: true) }
+        // A stage named `judge` cannot be listed (the name is the judge's: `auto` refuses it, and the config says to rename the stage),
+        // so the synthesized list leaves it out as well, instead of naming the built-in judge twice.
+        let others = stages.filter { $0 != Self.prReviewStage && $0 != "judge" }
+        return Advice(names: ["judge"] + others, fromSwitch: true)
     }
 
     /// The `pr-review` stage as configured, listed in `stages` or not: `workbench pr-review` runs it either way.

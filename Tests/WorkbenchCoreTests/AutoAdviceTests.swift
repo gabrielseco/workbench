@@ -92,6 +92,49 @@ private let autoVerdict = #"{"criteria": [{"id": "c1", "met": true, "evidence": 
         #expect(before == after && after.filter { $0 == .turnStarted }.count == after.filter { $0 == .turnEnded }.count)
     }
 
+    // MARK: what a turn must have been for the advice to follow it
+
+    private func report(
+        _ result: RunResult = .succeeded, check: CheckResult? = nil, denials: Int = 0
+    ) -> TurnReport {
+        var turn = TurnReport.sample
+        turn.result = result
+        turn.permissionDenials = denials
+        turn.check = check.map {
+            CheckReport(
+                turn: 1, command: "swift test", result: $0, exitCode: nil, signal: nil, durationMs: 1, outputRef: "o",
+                outputTruncated: false)
+        }
+        return turn
+    }
+
+    @Test func adviceFollowsOnlyATurnThatSucceededWithACheckThatPassedOrNone() async throws {
+        let j = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        let due = { (turn: TurnReport) in j.fx.service.adviceDue(after: turn, id: j.id, config: j.config) }
+        #expect(due(report()) == ["judge"], "no check")
+        #expect(due(report(check: .passed)) == ["judge"])
+        for result in [RunResult.failed, .stopped, .timedOut, .budgetExceeded, .interrupted] {
+            #expect(due(report(result)).isEmpty, "a turn that ended \(result.rawValue)")
+        }
+        for check in [CheckResult.failed, .timedOut, .stopped, .interrupted] {
+            #expect(due(report(check: check)).isEmpty, "a check that ended \(check.rawValue)")
+        }
+    }
+
+    @Test func theSwitchWaitsForAGrantAnExplicitAutoDoesNot() async throws {
+        let switched = try await judged(extraConfig: "[review]\nauto_advance = true\n")
+        #expect(switched.fx.service.adviceDue(after: report(denials: 1), id: switched.id, config: switched.config).isEmpty)
+        let listed = try await judged(extraConfig: "[review]\nauto = [\"judge\"]\n")
+        #expect(listed.fx.service.adviceDue(after: report(denials: 1), id: listed.id, config: listed.config) == ["judge"])
+    }
+
+    @Test func theSwitchIsWaitedOnForAGoalThatSaysTrueToo() async throws {
+        let j = try await judged()
+        try setAutoAdvance(true, j)
+        #expect(j.fx.service.adviceDue(after: report(), id: j.id, config: j.config) == ["judge"])
+        #expect(j.fx.service.adviceDue(after: report(denials: 2), id: j.id, config: j.config).isEmpty, "the goal's own switch")
+    }
+
     private func setAutoAdvance(_ value: Bool, _ j: Judged) throws {
         // The thread is accepted, so the service would refuse the edit; the file is what the advice reads.
         let url = j.fx.project.goalURL(j.id)

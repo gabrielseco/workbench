@@ -55,6 +55,17 @@ extension ThreadService {
         config.review.advice(goalAutoAdvance: readGoal(id: id)?.autoAdvance)
     }
 
+    /// The advice that follows `report`'s turn, or none: only a turn that succeeded, with a check that passed or none. A turn that was
+    /// refused a tool call (a grant for a person to decide) is waited on too when the advice comes from `auto_advance`; an `auto` the
+    /// project wrote itself has never waited. Every front end asks this, so none of them decides it for itself.
+    public func adviceDue(after report: TurnReport, id: String, config: Config) -> [String] {
+        guard report.result == .succeeded else { return [] }
+        if let check = report.check, check.result != .passed { return [] }
+        let plan = config.review.advicePlan(goalAutoAdvance: readGoal(id: id)?.autoAdvance)
+        if plan.fromSwitch, report.permissionDenials > 0 { return [] }
+        return plan.names
+    }
+
     /// Runs the steps of `[review] auto` that `NextSteps` says are due, in the order the config lists them, one after the other.
     /// Called by whoever started the run once its turn has ended and its runner is gone (`judge` and `review-stage` refuse while one
     /// is live), and only after a turn that succeeded with a check that passed or none. Never throws and never blocks anything:

@@ -88,4 +88,17 @@ import Testing
         #expect(off.advice(goalAutoAdvance: true) == ["judge", "design"])
         #expect(on.advice(goalAutoAdvance: true) == ["judge", "design"] && off.advice(goalAutoAdvance: false).isEmpty)
     }
+
+    @Test func aStageNamedJudgeIsLeftOutOfTheSwitchsListAsAutoRefusesIt() throws {
+        let review = "stages = [\"pr-review\", \"judge\", \"design\"]\nauto_advance = true\n"
+            + "[review.stage.judge]\nskill = \"j.md\"\n" + Self.designTable
+        let plan = try parse(review).review.advicePlan(goalAutoAdvance: nil)
+        #expect(plan.names == ["judge", "design"], "the built-in judge once, not twice")
+        #expect(plan.fromSwitch)
+    }
+
+    @Test func theAdviceSaysWhetherItCameFromTheSwitchOrFromAnAutoList() throws {
+        #expect(try parse("auto = [\"judge\"]\nauto_advance = true").review.advicePlan(goalAutoAdvance: nil).fromSwitch == false)
+        #expect(try parse("auto_advance = true").review.advicePlan(goalAutoAdvance: nil).fromSwitch)
+    }
 }
