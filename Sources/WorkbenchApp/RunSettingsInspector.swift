@@ -20,7 +20,15 @@ enum RunSettingsLayout {
         return (Array(all.prefix(shownTools)), max(0, all.count - shownTools))
     }
 
-    static let readOnlyNote = "Settings change while the goal is a draft."
+    static let draftNote = "Settings change while the goal is a draft."
+    static let ranNote = "A goal that has run is not edited."
+    static let readOnlyNote = draftNote
+
+    /// Why the settings are read-only, when they are for a reason that lasts; nil while editable, and nil while only an action is going.
+    static func note(goal: GoalModel, lastTurn: Int) -> String? {
+        if lastTurn > 0 { return ranNote }
+        return goal.editable ? nil : draftNote
+    }
 }
 
 /// What this thread's run is allowed to do, in one column: the steps after a turn, the limits, the tools, the folders it may read, and
@@ -43,11 +51,14 @@ struct RunSettingsInspector: View {
         VStack(alignment: .leading, spacing: 14) {
             if showsTitle { Text("RUN SETTINGS").font(.caption.weight(.semibold)).foregroundStyle(.secondary) }
             if let goal {
-                if !goal.editable { Text(RunSettingsLayout.readOnlyNote).font(.callout).foregroundStyle(.secondary) }
-                afterTheTurn(goal)
+                if let note = RunSettingsLayout.note(goal: goal, lastTurn: snapshot.state.lastTurn) {
+                    Text(note).font(.callout).foregroundStyle(.secondary)
+                }
+                let editable = store.goalEditable(snapshot, goal: goal)
+                afterTheTurn(goal, editable: editable)
                 limits(goal)
                 tools(goal)
-                folders(goal)
+                folders(goal, editable: editable)
                 openers(goal)
                 if let error = store.goalEditError { Text(error).font(.callout).foregroundStyle(Theme.red) }
             } else {
@@ -70,7 +81,7 @@ struct RunSettingsInspector: View {
 
     // MARK: After the turn
 
-    private func afterTheTurn(_ goal: GoalModel) -> some View {
+    private func afterTheTurn(_ goal: GoalModel, editable: Bool) -> some View {
         section("AFTER THE TURN") {
             ForEach(goal.steps, id: \.name) { step in
                 let on = !step.skipped && step.unavailable == nil
@@ -80,7 +91,7 @@ struct RunSettingsInspector: View {
                         get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } })
                 )
                 .toggleStyle(.switch).font(.callout)
-                .disabled(!goal.editable || step.unavailable != nil)
+                .disabled(!editable || step.unavailable != nil)
                 .help(
                     step.unavailable.map { "Not available: \($0)" }
                         ?? (step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project"))
@@ -128,17 +139,17 @@ struct RunSettingsInspector: View {
 
     // MARK: Reference folders
 
-    @ViewBuilder private func folders(_ goal: GoalModel) -> some View {
-        if !goal.readAlso.isEmpty || !goal.goalReadAlso.isEmpty || goal.editable {
+    @ViewBuilder private func folders(_ goal: GoalModel, editable: Bool) -> some View {
+        if !goal.readAlso.isEmpty || !goal.goalReadAlso.isEmpty || editable {
             section("REFERENCE FOLDERS") {
                 Text("Read-only for the run").font(.caption).foregroundStyle(.secondary)
                 ForEach(goal.readAlso, id: \.self) { folder in
                     folderLine(folder, note: "from project config", removable: false)
                 }
                 ForEach(goal.goalReadAlso, id: \.self) { folder in
-                    folderLine(folder, note: "this goal", removable: goal.editable)
+                    folderLine(folder, note: "this goal", removable: editable)
                 }
-                if goal.editable { addFolder }
+                if editable { addFolder }
             }
         }
     }

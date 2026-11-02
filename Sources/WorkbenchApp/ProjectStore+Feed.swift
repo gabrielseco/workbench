@@ -21,6 +21,12 @@ extension ProjectStore {
 }
 
 extension ProjectStore {
+    /// Whether the inspector may change the goal now: it is a draft that no turn has run, and no approval, run or other action is going.
+    /// The core refuses an edit only for a decided thread or a live runner, so the rest is the window's to keep.
+    func goalEditable(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
+        goal.editable && snapshot.state.lastTurn == 0 && !starting && !runningHere && busy == nil
+    }
+
     /// "Run in Herdr" is offered while the goal has not run and nothing has been decided: the Goal screen's own condition.
     func canRunGoalInHerdr(_ snapshot: ThreadSnapshot, goal: GoalModel) -> Bool {
         (goal.pill != .approved || snapshot.state.lastTurn == 0) && snapshot.state.decision == nil

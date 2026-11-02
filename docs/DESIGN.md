@@ -81,8 +81,8 @@ ships, and the mockup gets fixed.
   hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why), the limits (model, budget, timeout: read-only, "Change these
   in the goal file"), the allowed tools (ten, then "and N more", granted ones marked), the reference folders (the config's, and the
-  goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft, and
-  says so. In a window whose centre column is narrower than 880 (a window under about 1100 wide, the 900 minimum included) it opens
+  goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft that no turn has run, and
+  while an approval, a run or another action is going; it says why when the reason lasts ("A goal that has run is not edited."). In a window whose centre column is narrower than 880 (a window under about 1100 wide, the 900 minimum included) it opens
   over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.

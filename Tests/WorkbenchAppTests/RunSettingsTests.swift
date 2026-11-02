@@ -98,7 +98,25 @@ import Testing
         #expect(approved.goal?.editable == false, "an approved goal is changed in the goal file")
         let (ran, _) = try await store(approved: true, turn: true)
         #expect(ran.goal?.editable == false)
-        #expect(RunSettingsLayout.readOnlyNote.contains("draft"))
+        #expect(RunSettingsLayout.note(goal: try #require(draft.goal), lastTurn: 0) == nil)
+        #expect(RunSettingsLayout.note(goal: try #require(approved.goal), lastTurn: 0) == RunSettingsLayout.draftNote)
+        #expect(RunSettingsLayout.note(goal: try #require(ran.goal), lastTurn: 1) == RunSettingsLayout.ranNote)
+    }
+
+    /// The core refuses an edit only for a decided thread or a live runner, so a draft that a turn has run, or one an approval or another
+    /// action is working on, is kept read-only by the window.
+    @Test func aDraftThatHasRunOrIsBeingWorkedOnIsNotEdited() async throws {
+        let (fresh, _) = try await store()
+        guard case .thread(let snapshot) = fresh.screen, let goal = fresh.goal else { throw Failure.notAThread }
+        #expect(fresh.goalEditable(snapshot, goal: goal))
+        var ran = snapshot
+        ran.state.lastTurn = 1
+        #expect(!fresh.goalEditable(ran, goal: goal), "a turn has run")
+        let working = Task { await fresh.working("Opening in Herdr…") { try? await Task.sleep(for: .milliseconds(400)) } }
+        for _ in 0..<100 where fresh.busy == nil { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(!fresh.goalEditable(snapshot, goal: goal), "an action is going")
+        await working.value
+        #expect(fresh.goalEditable(snapshot, goal: goal))
     }
 
     @Test func theRunInHerdrButtonFollowsTheGoalScreensRules() async throws {
@@ -137,6 +155,11 @@ import Testing
         try differs(
             RunSettingsInspector(snapshot: shown, goal: store.goal, store: store),
             RunSettingsInspector(snapshot: shown, goal: nil, store: store), "the settings")
+        var limits = store.goal
+        limits?.model = "opus"
+        try differs(
+            RunSettingsInspector(snapshot: shown, goal: store.goal, store: store),
+            RunSettingsInspector(snapshot: shown, goal: limits, store: store), "the limits")
         var sheet = store.goal
         sheet?.grantedTools = ["Bash(git status)"]
         try differs(
