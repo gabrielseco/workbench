@@ -5,14 +5,14 @@ import WorkbenchCore
 extension ProjectStore {
     func reviewPullRequest() async {
         guard let project, let thread = currentThread, !deciding else { return }
-        actionError = nil
-        notice = nil
+        let session = current
+        (session.actionError, session.notice) = (nil, nil)
         let mine = generation
         await working("Reviewing the pull request with Codex: this takes a few minutes…") {
             do {
                 let shown = try await actions.prReview(project, thread)
                 if mine == generation { prReviewShown = shown }
-            } catch { if mine == generation { actionError = "\(error)" } }
+            } catch { session.actionError = "\(error)" }
             if mine == generation { await reload() }
         }
     }
@@ -20,12 +20,16 @@ extension ProjectStore {
     /// Opens what the latest round found, for a review that was run before (here or from a terminal).
     func showPRReview() async {
         guard let project, let thread = currentThread else { return }
-        actionError = nil
+        let session = current
+        session.actionError = nil
         let mine = generation
         let load = actions.latestPRReview
         let shown = await Task.detached { await load(project, thread) }.value
-        guard mine == generation else { return }
-        if let shown { prReviewShown = shown } else { actionError = "No pull request review has run for this thread yet." }
+        if let shown {
+            if mine == generation { prReviewShown = shown }
+        } else {
+            session.actionError = "No pull request review has run for this thread yet."
+        }
     }
 
     func closePRReview() {

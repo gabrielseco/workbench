@@ -359,4 +359,32 @@ private actor Gate {
         _ = await shipping.value
         #expect(store.notice == nil && store.actionError == nil)
     }
+
+    /// A ship that ends after the window moved on says what happened on its own thread, not on the one on screen.
+    @Test func aShipThatEndsAfterLeavingTheProjectSaysSoOnItsOwnThread() async throws {
+        let gate = Gate()
+        let fixture = try await accepted()
+        let actions = GoalActions(
+            shipPreview: { _, _ in Self.preview },
+            ship: { _, _, preview in
+                await gate.wait()
+                return ShipOutcome(
+                    push: ShipPushResult(plan: preview.plan, outcome: .pushed, ahead: nil),
+                    pr: ShipPRResult(plan: preview.plan, url: "https://example.test/pull/7", number: 7, outcome: .created))
+            })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        let other = try await AppFixture()
+        keptFixtures.append(other)
+        try await other.addThread("o1")
+
+        let shipping = Task { await store.ship() }
+        for _ in 0..<200 where store.busy == nil { try await Task.sleep(for: .milliseconds(10)) }
+        await store.switchTo(other.project.root.path)
+        await gate.open()
+        _ = await shipping.value
+        #expect(store.notice == nil && store.actionError == nil, "the other project does not show the first one's ship")
+        await store.switchTo(fixture.project.root.path)
+        #expect(store.notice == "Shipped as PR #7: https://example.test/pull/7")
+    }
 }

@@ -34,15 +34,15 @@ import WorkbenchCore
     /// The latest turn's review while it awaits one; nil otherwise.
     var review: ReviewModel?
     /// What the last action said when it did not go through.
-    var actionError: String?
+    var actionError: String? { didSet { said() } }
     /// Something an action did not do that is not a failure, such as files left out of a diff.
-    var actionNote: String?
+    var actionNote: String? { didSet { said() } }
     /// What the last decision did, in words: `Accepted: abc1234 on workbench/x`. Cleared by the next action.
-    var notice: String?
+    var notice: String? { didSet { said() } }
     /// What core says Discard would remove, shown for confirmation and passed back as `shown:` exactly as shown.
-    var pendingDiscard: DiscardPlan?
+    var pendingDiscard: DiscardPlan? { didSet { said() } }
     /// Why the last change to the draft goal was refused (shown under its blocks); nil after one that went through.
-    var goalEditError: String?
+    var goalEditError: String? { didSet { said() } }
     /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
     var goalEditSerial = 0
     @ObservationIgnored var goalEdits: Task<Void, Never>?
@@ -51,13 +51,28 @@ import WorkbenchCore
     /// A turn the user is stopping: set from Stop until the log says it ended.
     var stopping = false
 
+    /// Told when the session has something to show, so a session the window has moved away from is kept for when it comes back.
+    @ObservationIgnored var onSaid: (@MainActor (ThreadSession) -> Void)?
+    /// Takes what another session of the same thread said, so a result that lands late on a session the window has since
+    /// replaced still reaches the one on screen.
+    func absorb(_ other: ThreadSession) {
+        if let text = other.actionError { (actionError, other.actionError) = (text, nil) }
+        if let text = other.actionNote { (actionNote, other.actionNote) = (text, nil) }
+        if let text = other.notice { (notice, other.notice) = (text, nil) }
+        if let plan = other.pendingDiscard { (pendingDiscard, other.pendingDiscard) = (plan, nil) }
+    }
+
+    private func said() { if hasMessages { onSaid?(self) } }
+
     init(key: Key) { self.key = key }
 
     var awaitingRun: Bool { awaitingAfterTurn != nil }
     /// Nothing is going on for the thread: the session can be dropped.
     var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil }
     /// The thread has said something that is still up (an error, a note, a decision's outcome): going back to it shows it again.
-    var hasMessages: Bool { actionError != nil || actionNote != nil || notice != nil || goalEditError != nil }
+    var hasMessages: Bool {
+        actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil
+    }
     /// Nothing to remember: not working and nothing to show.
     var isSpent: Bool { isIdle && !hasMessages }
 }

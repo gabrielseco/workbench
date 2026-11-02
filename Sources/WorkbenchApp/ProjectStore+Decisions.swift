@@ -11,8 +11,9 @@ extension ProjectStore {
         // Set before the first await, so a second click while this one is going starts nothing.
         deciding = true
         defer { deciding = false }
-        actionError = nil
-        notice = nil
+        // What the action says belongs to the thread it was started in, wherever the window is when it ends.
+        let session = current
+        (session.actionError, session.notice) = (nil, nil)
         let mine = generation
         var accepted = false
         await working("Checking what Accept would do…") {
@@ -22,8 +23,8 @@ extension ProjectStore {
                 nowWorking("Accepting: committing the work…")
                 let result = try await actions.accept(project, thread, plan, message)
                 accepted = true
-                if mine == generation { notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)" }
-            } catch { if mine == generation { actionError = "\(error)" } }
+                session.notice = "Accepted: \(result.commit.prefix(7)) on \(result.branch)"
+            } catch { session.actionError = "\(error)" }
             if mine == generation { await reload() }
         }
         return accepted
@@ -40,14 +41,12 @@ extension ProjectStore {
 
     func prepareDiscard() async {
         guard let project, let thread = currentThread, !deciding else { return }
-        actionError = nil
-        notice = nil
-        let mine = generation
+        let session = current
+        (session.actionError, session.notice) = (nil, nil)
         await working("Checking what Discard would remove…") {
             do {
-                let plan = try await actions.discardPlan(project, thread)
-                if mine == generation { pendingDiscard = plan }
-            } catch { if mine == generation { actionError = "\(error)" } }
+                session.pendingDiscard = try await actions.discardPlan(project, thread)
+            } catch { session.actionError = "\(error)" }
         }
     }
 
@@ -55,9 +54,10 @@ extension ProjectStore {
         guard let project, let thread = currentThread, let plan = pendingDiscard, !deciding else { return }
         deciding = true
         defer { deciding = false }
-        pendingDiscard = nil
+        let session = current
+        session.pendingDiscard = nil
         await working("Discarding: removing the worktree and branch…") {
-            do { try await actions.discard(project, thread, plan) } catch { actionError = "\(error)" }
+            do { try await actions.discard(project, thread, plan) } catch { session.actionError = "\(error)" }
             await reload()
         }
     }
