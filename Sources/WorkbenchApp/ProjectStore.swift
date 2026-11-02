@@ -98,6 +98,8 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false { didSet { resumeIdleWaiters() } }
     @ObservationIgnored let preferences: Preferences
+    /// The chat feed preview is on: the thread screen is the feed, and the loader derives its items. Set by `setChatFeed`.
+    var chatFeedOn: Bool
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
@@ -112,7 +114,7 @@ struct RecentProject: Equatable, Identifiable {
     /// in flight) is dropped, never shown under the new project.
     @ObservationIgnored var generation = 0
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
-    @ObservationIgnored private let loader: @Sendable (Project) -> ProjectLoader.Loaded
+    @ObservationIgnored private let loader: @Sendable (Project, Bool) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
     @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
     @ObservationIgnored let actions: GoalActions
@@ -124,7 +126,7 @@ struct RecentProject: Equatable, Identifiable {
         preferences: Preferences, screen: ProjectScreen = .noProject, project: Project? = nil,
         intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2)),
         ciIntervals: (pending: Duration, settled: Duration) = (.seconds(10), .seconds(60)),
-        loader: @escaping @Sendable (Project) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0) },
+        loader: @escaping @Sendable (Project, Bool) -> ProjectLoader.Loaded = { ProjectLoader.load(project: $0, feed: $1) },
         doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
             await ProjectStore.runCoreDoctor($0, base: $1)
         },
@@ -147,6 +149,7 @@ struct RecentProject: Equatable, Identifiable {
         self.intervals = intervals
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
+        self.chatFeedOn = preferences.chatFeed
         self.doctorRunner = doctorRunner
         current.onSaid = { [weak self] in self?.adopt($0) }
     }
@@ -221,8 +224,8 @@ struct RecentProject: Equatable, Identifiable {
 
     func reload() async {
         guard let project else { return }
-        let (mine, loader) = (generation, self.loader)
-        let result = await Task.detached { loader(project) }.value
+        let (mine, loader, feed) = (generation, self.loader, chatFeedOn)
+        let result = await Task.detached { loader(project, feed) }.value
         guard mine == generation else { return }
         var model: GoalModel?
         if let thread = result.thread, case .thread = result.screen {
@@ -236,6 +239,8 @@ struct RecentProject: Equatable, Identifiable {
             reviewed = await Task.detached { await load(project, thread) }.value.map(ReviewModel.derive)
             guard mine == generation else { return }
         }
+        // A read that began before the preview was turned on or off is for the other window: the read `setChatFeed` started is the one that counts.
+        guard feed == chatFeedOn else { return }
         (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)
         (current.goal, current.review) = (model, reviewed)
         applyOwnership()

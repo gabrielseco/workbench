@@ -42,6 +42,33 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - One primary action per screen state (`.borderedProminent`); the others are `.bordered`, `.borderless` or `.link`. A second
   prominent button in the same state is a finding.
 
+## Chat feed (preview)
+
+The thread as one conversation ([P22](plan/P22-chat-feed.md)), behind View ▸ Chat feed (preview) and off by default: with it on, the
+thread screen is `FeedScreen` instead of the per-step screens, with it off nothing here applies. It draws `snapshot.feed` (the core's
+`Feed.items`) and acts on nothing yet: every button stays on the step screens until the feed takes them over (slices 3b and 3c). The
+mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a mockup disagree on a layout value, this file is what
+ships, and the mockup gets fixed.
+
+- **Header.** The title (`.title2`, bold, two lines at most), then the **phase row**: the spine's seven steps in one line, each a mark
+  (the same symbol and colour as the rail drew it) and its title (`.callout`, semibold from the current step on, `.secondary` while
+  pending), with a chevron between. The toolbar above it keeps the project pill, the base, the spend and the state pill. The rail
+  keeps the Thread/Tasks switch, the thread's title and Doctor; the spine is not drawn twice.
+- **Feed.** One scrolling column, newest row at the foot. It is a lazy list that opens at the foot and stays there while it grows,
+  so a thousand rows cost what the screen shows. Padding 28 across and 20 above and below, rows 10 apart, a symbol column 16 wide so
+  the text beside the marks lines up. It never grows the window and truncates (middle for a path or command) rather than wraps off.
+- **Rows.** A row says what happened in a line, with the thing it is about after it on the same line when that is a file or a command
+  (`Edit  Sources/Client.swift`, `Refused Bash  git push origin main`) and under it when it is a sentence. Agent text is plain body
+  text; a note sent back is a quiet bubble (`.quaternary`) on the right; the goal and the next step are cards (grey fill, or a grey
+  outline for the next step); a turn is a semibold line with its time and cost; tool calls are grouped into one line.
+- **Colour.** The five meanings, as everywhere: blue a turn that is working, green done or passed (a turn that ended, a check or verify
+  that passed, an approved goal), amber needs you (a refused call, a judge that disagrees, a stale goal, a runner that is gone), red
+  broken (a failed or timed-out turn, a failed check or verify, a damaged log), grey everything else. Every row also says it in a
+  symbol and words, never by colour alone.
+- **The next step** is the last row: the step and why, from the spine and attention, as a statement. It is not a button yet.
+- **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
+  send the person to the event log; a damaged log is red and first.
+
 ## Tasks screen
 
 The rail's `Thread | Tasks` switch (a native segmented control) changes the centre between the thread screens and the project's

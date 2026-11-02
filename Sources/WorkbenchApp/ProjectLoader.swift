@@ -46,7 +46,7 @@ enum ProjectLoader {
     /// the snapshot, so the next poll reads again. Taken after, it would describe the new file with the old screen and the
     /// write would be missed for good.
     /// `afterRead` runs right after the log was read: a test writes to the log there, as a runner would in that instant.
-    static func load(project: Project, afterRead: @Sendable () -> Void = {}) -> Loaded {
+    static func load(project: Project, feed: Bool = false, afterRead: @Sendable () -> Void = {}) -> Loaded {
         let folders = watch(project: project, thread: nil)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: project.workbenchDirectory.path, isDirectory: &isDirectory),
@@ -56,12 +56,12 @@ enum ProjectLoader {
         guard let id = currentThread(store: store) else { return Loaded(screen: .noThread, thread: nil, watch: folders) }
         var seen = watch(project: project, thread: id)
         seen.threadsDirectory = folders.threadsDirectory
-        let screen = snapshot(project: project, store: store, id: id)
+        let screen = snapshot(project: project, store: store, id: id, feed: feed)
         afterRead()
         return Loaded(screen: screen, thread: id, watch: seen)
     }
 
-    static func snapshot(project: Project, store: ThreadStore, id: String) -> ProjectScreen {
+    static func snapshot(project: Project, store: ThreadStore, id: String, feed: Bool = false) -> ProjectScreen {
         let log = project.eventsURL(id)
         let contents: EventLogContents
         do { contents = try EventLogReader.read(at: log) } catch {
@@ -83,15 +83,27 @@ enum ProjectLoader {
             (title, base, approval, budget, timeout) = (goal.title, goal.base, goal.approval, goal.budgetUSD, goal.turnTimeoutMin)
         }
         let spine = ThreadSpine.derive(state: state, approval: approval)
+        let attention = Attention.derive(spine: spine, state: state)
+        let alive = store.runnerPID(id: id) != nil
         let run = RunModel.derive(
-            events: contents.events, state: state, runnerAlive: store.runnerPID(id: id) != nil, budgetUSD: budget,
-            turnTimeoutMin: timeout)
+            events: contents.events, state: state, runnerAlive: alive, budgetUSD: budget, turnTimeoutMin: timeout)
+        var items: [FeedItem] = []
+        if feed {
+            let summary = goalSummary(text)
+            items = Feed.items(
+                contents: contents, goal: summary, state: state, spine: spine, attention: attention, runnerAlive: alive)
+        }
         return .thread(
             ThreadSnapshot(
                 id: id, title: title, base: base, approval: approval, budgetUSD: budget, turnTimeoutMin: timeout,
-                state: state, spine: spine, attention: Attention.derive(spine: spine, state: state),
-                lastSeq: contents.events.last?.seq ?? 0, logURL: log, problems: contents.problems.prefix(3).map(describe),
-                run: run))
+                state: state, spine: spine, attention: attention, lastSeq: contents.events.last?.seq ?? 0, logURL: log,
+                problems: contents.problems.prefix(3).map(describe), run: run, feed: items))
+    }
+
+    /// What the feed needs of the goal file; nil when it cannot be read.
+    private static func goalSummary(_ text: String?) -> Feed.GoalSummary? {
+        guard let text, let goal = try? GoalFile.parse(text).goal else { return nil }
+        return Feed.GoalSummary(title: goal.title, approval: goal.approval, criteria: goal.criteria.count)
     }
 
     /// A damaged line in words a person can act on.

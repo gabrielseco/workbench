@@ -147,6 +147,10 @@ Decided: it lives in `WorkbenchCore/Feed/` (so `workbench log` and a future web 
 
 ### 3. The feed screen, behind the flag
 
+Cut in three PRs: **3a** the preference, the feed derived in the loader and a read-only feed screen (header with the phase row, the rows,
+the footer); **3b** the actions (goal card edits and Approve, run and stop, the decision card); **3c** the Run settings inspector. The
+composer waits for chat (slice 6): it would be a dead control before then. The feed rules are in [`../DESIGN.md`](../DESIGN.md).
+
 The new thread screen: header with the phase row and the state pill, the feed, the composer, the inspector, the footer as today.
 Reads `ThreadSession` and `Feed.items`. Shows the existing flow only: the goal card edits through the P20 `GoalEditor`, "Approve goal"
 calls `approve`, the run events are the live log, the decision card calls `ship`, `accept`, `send-back` and `discard`. No chat, no
