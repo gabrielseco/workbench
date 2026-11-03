@@ -1,0 +1,4 @@
+{"v":1,"seq":1,"ts":"2026-10-30T08:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"04aa6cf5ceaae423e04aec13967ceb854eda6b75138e61c3698efdeea054d7c8"}}
+{"v":1,"seq":2,"ts":"2026-10-30T19:00:00.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-30T19:00:00.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"update-tracker-1","units":[]}}
+{"v":1,"seq":4,"ts":"2026-10-30T19:01:24.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"nothing-to-do","reason":"the agent changed nothing, so there is nothing to ship; the agent said: I updated PBYR-5087","thread":"update-tracker-1","units":[]}}

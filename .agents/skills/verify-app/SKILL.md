@@ -67,6 +67,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `no-thread` | a project with no thread yet |
 | `tasks` | seven scheduled tasks (pr-opened, failed with a long reason, stale approval, budget-exceeded, a run going, never run, one that does not load) and the thread `invoice-pagination`; press `Tasks` in the rail's switch. The timer card reads stand-ins for `launchctl`, `pmset` and `fdesetup` (a loaded agent, no wake schedule, FileVault on), never the machine's |
 | `task-threads` | with the preview on: Threads has `export-csv` and `invoice-pagination` (a task's thread that needs you stays); `bump-contract-details` has `1 thread` (shipped #415) and `sync-fixtures` has `1 thread` (discarded) under them, closed until pressed; `retry-uploads` is the project's own discarded thread and stays in Threads |
+| `task-done` | a task whose runs act through a tool and change no file: `update-contract-details-tracker` with one `done` run (log outcome `nothing-to-do`, green mark) and its thread, which the rail lists as `Succeeded`, not `Abandoned` |
 | `tasks-empty` | no tasks and no thread: press `Tasks` for the empty state that says where tasks are made |
 
 A state no scenario has is a new scenario: add it to `AppScenario` in `Tests/WorkbenchAppTests/AppScenario.swift`, rewrite the files with
