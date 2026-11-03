@@ -281,11 +281,6 @@ struct RunSettingsInspector: View {
                 Button("Open in editor") { Task { await store.openGoalFile() } }
                     .help("Opens the goal file in your editor")
             }
-            if store.herdrFound, !ran {
-                Button("Open in Herdr") { Task { await store.openInHerdr() } }
-                    .disabled(store.busy != nil)
-                    .help("Herdr opens this thread's worktree, or the project when it has none, without starting anything")
-            }
             if store.canRunGoalInHerdr(snapshot, goal: goal) {
                 Button(goal.pill == .approved ? "Run in Herdr instead" : "Approve and run in Herdr instead") {
                     Task { await store.runGoalInHerdr() }

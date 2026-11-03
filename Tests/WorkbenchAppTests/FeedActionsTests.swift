@@ -90,14 +90,16 @@ import Testing
         let shown = try snapshot(.needsYou)
         let decision = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true }
         #expect(decision.primary?.kind == .accept && decision.primary?.enabled == true)
-        #expect(kinds(decision.more).prefix(4) == [.reviewDetails, .sendBack, .discard, .openDiff])
+        #expect(kinds(decision.more).prefix(3) == [.reviewDetails, .sendBack, .discard])
+        #expect(decision.secondary?.kind == .openDiff, "what changed is one plain button beside Accept, not in the menu")
+        #expect(!kinds(decision.more).contains(.openDiff))
         #expect(decision.more.first { $0.kind == .discard }?.destructive == true)
         let open = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = false }
         #expect(open.primary?.enabled == false, "criteria are still open")
         let deciding = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.deciding = true }
         #expect(deciding.primary?.enabled == false)
         let noFiles = decide(shown) { $0.reviewShown = true; $0.reviewHasFiles = false }
-        #expect(noFiles.more.first { $0.kind == .openDiff }?.enabled == false)
+        #expect(noFiles.secondary?.enabled == false)
     }
 
     @Test func anAcceptedThreadIsShippedAndAShippedOneIsReviewedThenMerged() throws {
@@ -143,7 +145,8 @@ import Testing
     @Test func theButtonsThatOpenAnotherAppSayWhatTheyOpen() throws {
         let shown = try snapshot(.needsYou)
         let decision = decide(shown) { $0.reviewShown = true; $0.reviewHasFiles = true; $0.herdrFound = true }
-        let help = Dictionary(uniqueKeysWithValues: decision.more.map { ($0.kind, $0.help ?? "") })
+        let all = decision.more + [decision.secondary].compactMap { $0 }
+        let help = Dictionary(uniqueKeysWithValues: all.map { ($0.kind, $0.help ?? "") })
         #expect(help[.openDiff]?.contains("editor") == true)
         #expect(help[.openWorktree]?.contains("editor") == true)
         #expect(help[.openHerdr]?.contains("Herdr") == true)
@@ -160,7 +163,7 @@ import Testing
             checked += 1
             for review in [false, true] {
                 let decision = decide(shown) { $0.reviewShown = review; $0.goalPill = .draft; $0.goalCanApprove = true }
-                let all = (decision.primary.map { [$0] } ?? []) + decision.more
+                let all = [decision.primary, decision.secondary].compactMap { $0 } + decision.more
                 #expect(Set(all.map(\.kind)).count == all.count, "\(scenario.rawValue) lists a button twice")
             }
         }
