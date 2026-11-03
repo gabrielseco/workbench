@@ -20,7 +20,7 @@ struct ThreadListView: View {
     var body: some View {
         let listing = store.threads.listing
         let shown = shownThread
-        let selectedHere = store.mode == .thread
+        let selectedHere = store.mode == .thread && !store.newThread
         LazyVStack(alignment: .leading, spacing: 2) {
             ForEach(listing.rows) { row in
                 RailRowView(row: RailRow.thread(row), selected: selectedHere && row.id == shown) {

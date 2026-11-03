@@ -67,6 +67,16 @@ ships, and the mockup gets fixed.
   that thread, with its feed and settings, or that task's page; it starts
   and stops nothing. A task's line is its schedule, then what keeps it from running (`needs a fix`, `approval stale`, `not approved`) or
   how its last run ended. The spine is not drawn twice.
+- **The new-thread screen** is what the rail's `+` and ⌘N open with the preview on (the popover is the old window's): in the feed's 680 column
+  under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says
+  nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
+  screenshots as small thumbnails with a remove button, a `+` to choose screenshots and `Paste or drop screenshots.`, and two buttons,
+  `Do it now` (⌘↵) and `Send` (↵, the one prominent button). Under it `Send starts a free chat. Do it now skips brainstorming and drafts the
+  goal from your words for you to approve.` and a small `Write it as the goal` (a quick goal, no agent), the two starters that have something
+  behind them (`Brainstorm an idea`, `Fix a bug from a screenshot`) and `Drop a screenshot on the window to start one`. Send needs text and no
+  screenshots (a chat takes none); a refusal is an amber row above the panel with the text kept; a project with no goal agent offers `Draft
+  with Claude` / `Draft with Codex`. While it is open the rail's first row is `New thread · Type to start · free`, selected; the toolbar says
+  `$0.00` and `No run`; the footer has no Event log.
 - **A task's page** is in the feed's 680 column: the name (`.title3`, semibold), one line `schedule · opens a PR · N runs · next …`, and
   `Defined in .workbench/tasks/<name>/task.md. Edit that file to change it.` in a monospaced caption, with the task's buttons at the
   right (Approve… while it is not approved, Run now once it is, Stop while a run started here goes). Under it the task's own

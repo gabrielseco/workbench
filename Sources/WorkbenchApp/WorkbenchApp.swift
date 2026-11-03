@@ -28,7 +28,7 @@ import WorkbenchCore
         .commands {
             // There is one window, so File ▸ New has nothing else to mean; the buttons all set the same flag.
             CommandGroup(replacing: .newItem) {
-                Button("New goal…") { store.namingGoal = true }
+                Button("New goal…") { store.beginNewGoal() }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(store.project == nil || store.namingGoal)
             }

@@ -162,7 +162,7 @@ struct GoalView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Button("Open in editor") { Task { await store.openGoalFile() } }
-                Button("New goal…") { store.namingGoal = true }
+                Button("New goal…") { store.beginNewGoal() }
                 // Opens only, nothing approved or started: the project's checkout until the thread has a worktree.
                 if store.herdrFound {
                     Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)

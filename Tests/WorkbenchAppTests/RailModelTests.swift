@@ -121,13 +121,19 @@ import WorkbenchCore
             try await fixture.addThread("t1")
             let preferences = MemoryPreferences(projectPath: nil)
             preferences.chatFeed = preview
-            let actions = GoalActions(quickGoal: { _, name, _, _ in name })
+            let actions = GoalActions(
+                draftGoal: { _, name, _, _, _ in GoalDraftResult(id: "g-\(name)", provider: .claude) },
+                quickGoal: { _, name, _, _ in name })
             let store = ProjectStore(preferences: preferences, actions: actions)
             #expect(await store.open(fixture.root))
             store.selectTask("nightly-lint")
             #expect(store.mode == .tasks)
             #expect(await store.quickGoal(request: "Fix it"))
             #expect(store.mode == (preview ? .thread : .tasks), "preview \(preview)")
+            // The same with a drafted goal (Do it now, the popover's Advanced).
+            store.selectTask("nightly-lint")
+            #expect(await store.draftGoal(request: "Fix it again"))
+            #expect(store.mode == (preview ? .thread : .tasks), "a drafted goal, preview \(preview)")
         }
     }
 

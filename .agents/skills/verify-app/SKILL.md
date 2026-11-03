@@ -138,6 +138,10 @@ anything a scenario does not have. Put the screenshots in the pull request with 
 
 This checks behaviour, not looks. A change to how it looks (layout, colour, spacing) is also reviewed against the mockups in `docs/mac-app/`.
 
+A placeholder that is not on the line you type on (the caret looks funny) is not something to judge by eye: shoot the empty box, `typekeys`
+some letters without descenders, shoot again, and run `scripts/check-text-alignment.py <empty> <typed> X0 Y0 X1 Y1` (it measures the rows of
+each and exits 1 above 3 px). Do not use the caret: it blinks.
+
 ## 6. Post the screenshots to the pull request
 
 A PR that changes what the app shows carries the screenshots that prove it, with the PR's own words about what each one shows. From

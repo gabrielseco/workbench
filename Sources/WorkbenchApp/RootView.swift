@@ -58,7 +58,13 @@ struct ToolbarBar: View {
         HStack(spacing: 12) {
             ProjectPill(store: store)
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
-            if store.mode == .thread, case .thread(let snapshot) = store.screen {
+            if store.chatFeedOn, store.newThread {
+                // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
+                Spacer()
+                Text("$0.00").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                Text("No run").font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
+                    .foregroundStyle(Theme.grey).background(Theme.grey.opacity(0.12), in: Capsule())
+            } else if store.mode == .thread, case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
                 Text(snapshot.spendText).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
@@ -191,7 +197,9 @@ struct Centre: View {
     var store: ProjectStore
 
     var body: some View {
-        if store.mode == .tasks, store.project != nil {
+        if store.chatFeedOn, store.newThread, store.project != nil {
+            NewThreadScreen(store: store)
+        } else if store.mode == .tasks, store.project != nil {
             TasksView(store: store)
         } else if case .thread(let snapshot) = store.screen {
             if store.chatFeedOn {
@@ -300,7 +308,7 @@ struct FinishedBanner: View {
                         .disabled(!snapshot.canMerge || store.busy != nil || store.deciding)
                         .help(snapshot.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub")
                 }
-                Button("New goal…") { store.namingGoal = true }
+                Button("New goal…") { store.beginNewGoal() }
             }
             if snapshot.watchesPullRequest, let ci = snapshot.ci {
                 PullRequestCIView(ci: ci, store: store)
@@ -418,7 +426,7 @@ struct EmptyState: View {
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             HStack {
                 Button("Choose project…") { Task { await store.chooseFolder() } }
-                if store.screen == .noThread { Button("New goal…") { store.namingGoal = true } }
+                if store.screen == .noThread { Button("New goal…") { store.beginNewGoal() } }
             }
             .padding(.top, 6)
             if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
@@ -432,7 +440,7 @@ struct FooterBar: View {
 
     var body: some View {
         HStack {
-            if let url = store.logURL {
+            if let url = store.logURL, !(store.chatFeedOn && store.newThread) {
                 Button {
                     // A .jsonl may have no app to open it: show it in Finder rather than do nothing.
                     if !NSWorkspace.shared.open(url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -447,7 +455,7 @@ struct FooterBar: View {
             if store.chatFeedOn {
                 DoctorButton(store: store, compact: true).font(.callout)
                 Spacer()
-                if let limit = FooterBar.limitText(store.screen, mode: store.mode) {
+                if let limit = FooterBar.limitText(store.screen, mode: store.mode, composing: store.newThread) {
                     Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                 }
             } else {
@@ -458,9 +466,11 @@ struct FooterBar: View {
     }
 
     /// The thread's per-turn limit, as the design's footer says it; nil when the thread has none or is not on screen.
-    static func limitText(_ screen: ProjectScreen, mode: WindowMode) -> String? {
+    static func limitText(_ screen: ProjectScreen, mode: WindowMode, composing: Bool = false) -> String? {
         // The thread stays loaded behind the Tasks screen, which has limits of its own: it says nothing there.
-        guard mode == .thread, case .thread(let snapshot) = screen, let minutes = snapshot.turnTimeoutMin else { return nil }
+        guard mode == .thread, !composing, case .thread(let snapshot) = screen, let minutes = snapshot.turnTimeoutMin else {
+            return nil
+        }
         return "\(minutes) min per turn"
     }
 
