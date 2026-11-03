@@ -6,7 +6,8 @@
 # `[tools] denied`; the script checks what `grant` lists, grants the chmod once, refuses the rest with the
 # documented exit codes, and turn 2 (send-back) must run the chmod. Exit 0 only when every step passed, 1 when
 # one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 turns the once grant into a
-# `--never` before turn 2, so the grant does nothing and the chmod steps must FAIL. The frame and the other
+# `--never` before turn 2, so the grant does nothing and the chmod steps must FAIL, and reads the refusals' command from a
+# field that does not exist, so the step that wants each refusal's command in its `agent.activity` event must FAIL too. The frame and the other
 # switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -66,6 +67,19 @@ read -r result1 denials1 <<<"$(turn_result 1)"
 echo "    turn 1: $result1, $denials1 denial(s)"
 check "turn 1 ended succeeded although commands were denied" "turn 1 ended '$result1' with $denials1 denial(s)" \
     bash -c '[ "$1" = succeeded ] && [ "$2" -gt 0 ]' _ "$result1" "$denials1"
+
+# Each refused call's own `agent.activity` event names its command (the feed shows it while the turn runs), the chmod included.
+FIELD=input; [ "$SABOTAGE" = 1 ] && FIELD=inputs
+refusal_inputs() {
+    wb "$T_WB" log "$ID" --json | py "r=[x['data'] for x in lines if x['kind']=='agent.activity' and x['turn']==1
+    and x['data'].get('type')=='permission_denied']
+print(len(r), sum(1 for x in r if x.get('$FIELD')), any('chmod' in (x.get('$FIELD') or '') for x in r))"
+}
+read -r refused with_input chmod_named <<<"$(refusal_inputs)"
+echo "    turn 1: $refused refusal event(s), $with_input with the command, chmod named: $chmod_named"
+check "every refusal event of turn 1 carries its command, the chmod among them" \
+    "$with_input of $refused have '$FIELD'; chmod named: $chmod_named" \
+    bash -c '[ "$1" -gt 0 ] && [ "$1" = "$2" ] && [ "$3" = True ]' _ "$refused" "$with_input" "$chmod_named"
 
 LIST1=$(wb "$T_WB" grant "$ID" --json)
 # The denial number of the first entry whose `input` satisfies the Python predicate $1 (over `x`), else nothing.

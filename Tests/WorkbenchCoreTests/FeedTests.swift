@@ -285,6 +285,13 @@ import Testing
         #expect(refused == ["git push origin main", "rm -rf build"])
     }
 
+    @Test func aRefusalCarriesItsCommandWhileTheTurnIsStillRunning() {
+        let items = feed([
+            created, ev(2, 1, .turnStarted), activity(3, "permission_denied", ["tool": "Bash", "input": "git push origin main"]),
+        ])
+        #expect(items.contains { $0.kind == .denied(tool: "Bash", input: "git push origin main") })
+    }
+
     @Test func aRefusalWhoseInputWasNotRecordedHasNone() {
         let items = feed([
             created, ev(2, 1, .turnStarted), activity(3, "permission_denied", ["tool": "Bash"]),

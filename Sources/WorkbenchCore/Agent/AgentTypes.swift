@@ -215,7 +215,8 @@ public enum AgentActivity: Sendable, Equatable {
     case started(pid: Int32)
     case text(String)
     case tool(name: String, summary: String)
-    case permissionDenied(tool: String)
+    /// `input` is the refused call's command or path as the stream gave it, when the decoder had seen the call.
+    case permissionDenied(tool: String, input: String? = nil)
     /// The agent's task list as it stands now (each update replaces the last). Only a provider that reports one emits it.
     case plan([AgentPlanItem])
     case usage(AgentUsage)

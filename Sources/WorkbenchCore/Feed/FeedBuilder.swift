@@ -161,9 +161,11 @@ extension Feed {
             case "permission_denied":
                 let index = deniedSeen[event.turn, default: 0]
                 deniedSeen[event.turn] = index + 1
-                // The inputs arrive whole on `turn.ended` and are matched by order: the rows are the first refusals of the turn.
+                // The row's own input is there while the turn runs; older logs and Codex have it only on `turn.ended`, whole, and
+                // matched by order: the rows are the first refusals of the turn.
                 let calls = denials[event.turn] ?? []
-                let input = index < calls.count ? calls[index].input : nil
+                let own = event.data["input"]?.stringValue.map(short)
+                let input = own ?? (index < calls.count ? calls[index].input : nil)
                 let tool = ThreadState.safeLine(event.data["tool"]?.stringValue ?? "call", limit: 40)
                 push(event, .denied(tool: tool, input: input))
             case "dropped":
