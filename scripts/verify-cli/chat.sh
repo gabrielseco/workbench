@@ -4,7 +4,7 @@
 #   bash scripts/verify-cli/chat.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/chat.sh   (the same, on a branch that contains origin/main)
 # With no [agents.goal] the command is refused (exit 6) and nothing is created. With a goal agent a first message starts a chat thread
-# (no goal file, no worktree, no branch; the log says it is a chat), the reply is printed, a later message with the thread's id
+# (no goal file, no worktree, no branch; the log says it is a chat), the reply is printed, a later message with the name or the id
 # continues the conversation (the earlier messages reach the agent as quoted data), and `workbench chat <id>` prints it. A turn whose
 # agent fails ends with exit 1 and the log says how it ended; a chat is the active thread (a second chat is refused, exit 6, until
 # --abandon-active), and `status --json` says `kind: chat`.
@@ -108,8 +108,8 @@ check "status --json says it is a chat and counts its turn" "status says otherwi
 # --- 3. a later message continues it ------------------------------------------------------------------------
 
 echo "Then say that, and I can make it a goal." >"$FAKE/answer"
-wbp "$SCRATCH/second.out" chat "$ID" --message "give up and keep the file"
-check "the second message: exit 0" "workbench chat exited $RC" test "$RC" = 0
+wbp "$SCRATCH/second.out" chat idea --message "give up and keep the file"
+check "the second message, by the name the chat was started under: exit 0" "workbench chat exited $RC" test "$RC" = 0
 check "the earlier messages reached the agent, quoted" "the prompt does not hold the conversation" \
     bash -c 'grep -q "^> could uploads retry?" "$1" && grep -q "^> What should happen after the fifth try?" "$1" && grep -q "^> give up and keep the file" "$1"' _ "$FAKE/args_2"
 check "it is the same thread" "threads: $(threads)" test "$(threads)" = 1

@@ -132,6 +132,61 @@ import Testing
         #expect(state(d, first.id).chat?.open == false)
     }
 
+    @Test func aSecondSubmissionRefusedByTheLogLockLeavesTheFirstOnesFolderAlone() async throws {
+        let d = try await drafting()
+        let first = try await chat(d)
+        let scratch = d.fx.service.chatScratch(first.id)
+        try FileManager.default.createDirectory(at: scratch.appendingPathComponent("work"), withIntermediateDirectories: true)
+        let answer = scratch.appendingPathComponent("work/answer.txt")
+        try "the first turn's reply".write(to: answer, atomically: true, encoding: .utf8)
+        let held = try EventLogWriter.open(at: d.fx.project.eventsURL(first.id))
+        let runs = d.codex?.runs
+        await #expect(throws: ChatRefusal.busy) { _ = try await chat(d, .existing(id: first.id), "and then?") }
+        await held.close()
+        #expect(FileManager.default.fileExists(atPath: answer.path), "a refused submission does not touch the folder")
+        #expect(d.codex?.runs == runs)
+        try? FileManager.default.removeItem(at: scratch)
+    }
+
+    @Test func aContinuationIsRefusedWhileDoctorHoldsTheProject() async throws {
+        let d = try await drafting()
+        let first = try await chat(d)
+        let runs = d.codex?.runs
+        let doctor = try ProjectLock.acquire(d.fx.project)
+        defer { ProjectLock.release(doctor) }
+        await #expect(throws: ChatRefusal.doctorRunning) { _ = try await chat(d, .existing(id: first.id), "and then?") }
+        #expect(d.codex?.runs == runs && state(d, first.id).chat?.messages.count == 2, "nothing was spent or written")
+    }
+
+    @Test func abandoningAChatEndsWhatItsKilledTurnLeftRunning() async throws {
+        let d = try await drafting()
+        let first = try await chat(d)
+        let work = d.fx.service.chatScratch(first.id).appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        // Left by a killed runner means no parent is waiting for it: started from a shell that exits, it is the init's.
+        let pidFile = work.deletingLastPathComponent().appendingPathComponent("pid")
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        let script = "cd \"$1\" && (exec sleep 120 >/dev/null 2>&1 & echo $! > \"$2\")"
+        shell.arguments = ["-c", script, "sh", work.path, pidFile.path]
+        try shell.run()
+        shell.waitUntilExit()
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: pidFile.path) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        let text = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try #require(Int32(text))
+        defer { kill(pid, SIGKILL) }
+        let log = try EventLogWriter.open(at: d.fx.project.eventsURL(first.id))
+        try await log.append(.chatMessage, data: ["role": "user", "text": "and then?"])
+        await log.close()
+        _ = try await d.fx.service.abandon(id: first.id)
+        for _ in 0..<50 where kill(pid, 0) == 0 { try await Task.sleep(nanoseconds: 100_000_000) }
+        #expect(kill(pid, 0) != 0, "the agent the killed turn left is ended")
+        #expect(!FileManager.default.fileExists(atPath: work.deletingLastPathComponent().path))
+        #expect(state(d, first.id).decision == "abandoned" && state(d, first.id).chat?.open == false)
+    }
+
     // MARK: Limits and refusals
 
     @Test func refusalsHappenBeforeAnythingIsSpentOrWritten() async throws {
@@ -154,13 +209,13 @@ import Testing
     @Test func aLongConversationIsRefusedNotCut() {
         func said(_ role: ChatMessage.Role, _ text: String) -> ChatMessage { ChatMessage(role: role, text: text, seq: 1) }
         let many = (0..<Chat.maxTurns).flatMap { _ in [said(.user, "q"), said(.assistant, "a")] }
-        #expect(Chat.refusal(history: many, message: "q", costUSD: 0, costUnknown: false) == .tooManyTurns)
+        #expect(Chat.refusal(history: many, message: "q", costUSD: 0) == .tooManyTurns)
         let big = [said(.assistant, String(repeating: "x", count: Chat.maxConversationBytes))]
-        #expect(Chat.refusal(history: big, message: "q", costUSD: 0, costUnknown: false) == .conversationTooLong)
-        #expect(Chat.refusal(history: [], message: "q", costUSD: Chat.totalBudgetUSD, costUnknown: false) == .overBudget)
-        let unknown = Chat.refusal(history: [], message: "q", costUSD: Chat.totalBudgetUSD, costUnknown: true)
-        #expect(unknown == nil, "an unknown cost is not a sum")
-        #expect(Chat.refusal(history: [], message: "q", costUSD: 0, costUnknown: false) == nil)
+        #expect(Chat.refusal(history: big, message: "q", costUSD: 0) == .conversationTooLong)
+        #expect(Chat.refusal(history: [], message: "q", costUSD: Chat.totalBudgetUSD) == .overBudget)
+        let floor = Chat.refusal(history: [], message: "q", costUSD: Chat.totalBudgetUSD + 1)
+        #expect(floor == .overBudget, "known costs are a floor")
+        #expect(Chat.refusal(history: [], message: "q", costUSD: 0) == nil)
     }
 
     @Test func aProviderThatCannotCapDollarsIsRefusedWhenTheConfigForbidsIt() async throws {

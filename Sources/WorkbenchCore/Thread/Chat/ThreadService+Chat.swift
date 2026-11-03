@@ -43,7 +43,7 @@ extension ThreadService {
         guard let config, let agent = config.resolvedGoalAgent else { throw ChatRefusal.noGoalAgent }
         let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
         var history: [ChatMessage] = []
-        var spent = (0.0, false)
+        var spent = 0.0
         var existing: String?
         switch target {
         case .newThread(let name):
@@ -56,10 +56,10 @@ extension ThreadService {
             if let decision = state.decision { throw ChatRefusal.ended(decision) }
             if let pid = runnerPID(id: id) { throw ChatRefusal.running(pid: pid) }
             history = state.chat?.messages ?? []
-            spent = (state.chat?.costUSD ?? 0, state.chat?.costUnknown ?? false)
+            spent = state.chat?.costUSD ?? 0
             existing = id
         }
-        if let refusal = Chat.refusal(history: history, message: text, costUSD: spent.0, costUnknown: spent.1) { throw refusal }
+        if let refusal = Chat.refusal(history: history, message: text, costUSD: spent) { throw refusal }
         guard let provider = config.agentProvider(agent.provider) else {
             throw ChatRefusal.unavailable("there is no adapter for \(agent.provider)")
         }
@@ -92,19 +92,42 @@ extension ThreadService {
             id = try await createChatThread(name: name, abandonActive: abandonActive)
         }
         guard let id else { throw ChatRefusal.noThread("") }
-        let prepared = try await prepare(
-            id: id, text: text, history: history, config: config, agent: agent, provider: provider, spend: spend,
-            environment: environment, timeout: timeout)
+        let scratch = chatScratch(id)
+        // Whatever the agent left running in its folder ends with the turn: a chat leaves no process behind. Only the holder of the
+        // log gets here with the folder in hand, so a refused second submission never touches the first one's.
+        var holdsScratch = false
         defer {
-            // Whatever the agent left running in its folder ends with the turn: a chat leaves no process behind.
-            OrphanSweeper.sweep(inside: prepared.scratch)
-            try? FileManager.default.removeItem(at: prepared.scratch)
+            if holdsScratch { Self.clearChatScratch(scratch) }
         }
         do {
             return try await withLog(id) { log in
-                try await self.turn(id: id, text: text, prepared: prepared, log: log, attach: attach)
+                // What was checked before is checked again with the log held: another command may have decided, spent or started.
+                let state = ThreadStore(project: self.project).state(of: id)
+                guard state.isChat else { throw ChatRefusal.notAChat(id) }
+                if let decision = state.decision { throw ChatRefusal.ended(decision) }
+                let held = state.chat?.messages ?? []
+                let total = state.chat?.costUSD ?? 0
+                if let refusal = Chat.refusal(history: held, message: text, costUSD: total) { throw refusal }
+                do { try ThreadStore(project: self.project).requireNoDoctor() } catch { throw ChatRefusal.doctorRunning }
+                holdsScratch = true
+                let prepared = try await self.prepare(
+                    id: id, text: text, history: held, config: config, agent: agent, provider: provider, spend: spend,
+                    environment: environment, timeout: timeout)
+                return try await self.turn(id: id, text: text, prepared: prepared, log: log, attach: attach)
             }
         } catch EventLogError.alreadyOpen { throw ChatRefusal.busy }
+    }
+
+    /// The agent's folder for a chat: one per thread and project, outside the checkout.
+    func chatScratch(_ id: String) -> URL {
+        let digest = SHA256.hash(data: Data(project.root.path.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        return FileManager.default.temporaryDirectory.appendingPathComponent("workbench-chat-\(digest)-\(id)")
+    }
+
+    /// Ends what is running in a chat's folder and removes it.
+    static func clearChatScratch(_ scratch: URL) {
+        OrphanSweeper.sweep(inside: scratch)
+        try? FileManager.default.removeItem(at: scratch)
     }
 
     /// The thread of a new chat: a folder and a log that says it is a chat. No worktree, no branch and no goal file.
@@ -132,8 +155,7 @@ extension ThreadService {
         id: String, text: String, history: [ChatMessage], config: Config, agent: ResolvedAgent, provider: any AgentProvider,
         spend: AgentSpend, environment: [String: String], timeout: TimeInterval
     ) async throws -> PreparedChat {
-        let digest = SHA256.hash(data: Data(project.root.path.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
-        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("workbench-chat-\(digest)-\(id)")
+        let scratch = chatScratch(id)
         // An agent a killed process left behind is found by where it works, and ended, before another starts.
         OrphanSweeper.sweep(inside: scratch)
         try? FileManager.default.removeItem(at: scratch)

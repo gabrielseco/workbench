@@ -54,13 +54,14 @@ public enum Chat {
     }
 
     /// Why this message cannot be added to this conversation, nil when it can.
-    static func refusal(history: [ChatMessage], message: String, costUSD: Double, costUnknown: Bool) -> ChatRefusal? {
+    /// `costUSD` is what the turns that reported a cost came to: a lower bound, so a turn that reported none does not lift the limit.
+    static func refusal(history: [ChatMessage], message: String, costUSD: Double) -> ChatRefusal? {
         let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return .emptyMessage }
         if text.utf8.count > messageLimit || text.contains("\0") { return .messageTooLong }
         if history.filter({ $0.role == .user }).count >= maxTurns { return .tooManyTurns }
         if history.reduce(0, { $0 + $1.text.utf8.count }) + text.utf8.count > maxConversationBytes { return .conversationTooLong }
-        if !costUnknown, costUSD >= totalBudgetUSD { return .overBudget }
+        if costUSD >= totalBudgetUSD { return .overBudget }
         return nil
     }
 }

@@ -36,9 +36,10 @@ let workbenchUsage = """
                                  refused (exit 6) with no [agents.goal]: write the goal by hand with goal new
       chat [<name-or-id>] [--message "<text>" | --message-file <path>] [--abandon-active]
                                  talk with the goal agent ([agents.goal]) before there is a goal, read-only: a name that is
-                                 not a thread starts a chat thread (no goal, no worktree, no branch), an id continues it;
-                                 without a message it prints the conversation. Each turn is bounded (300 s; $0.50 on
-                                 Claude; Codex has no dollar cap), the conversation is (30 messages, 128 KiB, $5), and
+                                 not a thread starts a chat thread (no goal, no worktree, no branch); its id, or the name it
+                                 was started under, continues it; without a message it prints the conversation.
+                                 Each turn is bounded (300 s; $0.50 on Claude; Codex has no dollar cap), the conversation
+                                 is (30 messages, 128 KiB, $5 of known cost), and
                                  every message and how its turn ended (ok, stopped, timeout, failed) is in the log
                                  a chat is the active thread: one at a time, --abandon-active ends the active one first
                                  refused (exit 6) with no [agents.goal]; exit 3 stopped, 4 timed out, 1 failed

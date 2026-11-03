@@ -22,9 +22,7 @@ extension Commands {
         let config: Config? =
             FileManager.default.fileExists(atPath: ctx.project.configURL.path)
             ? try Config.load(from: ctx.project.configURL) : nil
-        let target: ChatTarget =
-            FileManager.default.fileExists(atPath: ctx.project.threadDirectory(named).path)
-            ? .existing(id: named) : .newThread(name: named)
+        let target = resolve(named, in: ctx)
         if let agent = config?.resolvedGoalAgent {
             let model = agent.model.map { ", \($0)" } ?? ""
             out("talking with \(agent.provider)\(model) (read-only; up to \(Int(Chat.timeout / 60)) min)...")
@@ -52,6 +50,15 @@ extension Commands {
         let kind: FailureKind =
             holder.isStopRequested || result.end == "stopped" ? .stopped : result.end == "timeout" ? .timedOut : .failed
         return fail(kind, "no reply (\(cost)): \(why). The message and how the turn ended are in the log of \(result.id).")
+    }
+
+    /// An id continues that thread; a name continues the open chat made under it (`g-<day>-<name>`), and otherwise starts a new one.
+    static func resolve(_ named: String, in ctx: Context) -> ChatTarget {
+        if FileManager.default.fileExists(atPath: ctx.project.threadDirectory(named).path) { return .existing(id: named) }
+        if let active = ctx.store.activeThreadID(), active.hasSuffix("-\(named)"), ctx.store.state(of: active).isChat {
+            return .existing(id: active)
+        }
+        return .newThread(name: named)
     }
 
     /// The conversation of a chat thread, or what is known of the thread if it is not one.

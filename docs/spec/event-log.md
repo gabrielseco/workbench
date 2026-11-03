@@ -372,6 +372,7 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   synthetic `chat.ended {ok: false, reason: "interrupted", synthetic: true}`, and the open `agent.attempt.started` with its own
   `interrupted` end. Exactly one `chat.ended` per user message, whether the turn was stopped (`reason: "stopped"`), timed out
   (`"timeout"`), crashed or answered nothing (the failure's text, credentials scrubbed, at most 600 characters).
+- **Abandoning a chat** ends what its killed turn left running in the agent's folder (a chat has no worktree to sweep) and removes the folder, then writes the `abandoned` decision as for any thread. A turn takes the folder only with the log held, and refuses (`doctor` running, the chat decided, over a limit) again under that lock.
 - **The reply** is stored in the log (a chat has no transcript file), scrubbed of credentials and cut at 16 KiB.
 - **Limits** (a message over 16 KiB, a 31st message from the person, a conversation over 128 KiB or a known cost of $5 or more) are refused
   before anything is spent or written.
