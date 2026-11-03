@@ -285,16 +285,16 @@ import Testing
         try differs(RootView(store: showing), RootView(store: hidden), "the inspector at 1400 wide", width: 1_400, height: 800)
     }
 
-    @Test func openInEditorOpensTheWorktreeOnceTheThreadHasRun() {
+    @Test func theInspectorLeavesTheWorktreeToTheStepMenuOnceTheThreadHasRun() {
         var state = ThreadState.derive(from: [], id: "t1")
-        #expect(!RunSettingsLayout.opensWorktree(state), "no turn yet: the goal file is all there is")
+        #expect(!RunSettingsLayout.hasWorktree(state), "no turn yet: the goal file is all there is")
         state.lastTurn = 1
-        #expect(RunSettingsLayout.opensWorktree(state))
+        #expect(RunSettingsLayout.hasWorktree(state))
         state.decision = "discarded"
-        #expect(!RunSettingsLayout.opensWorktree(state), "the worktree is gone")
+        #expect(!RunSettingsLayout.hasWorktree(state), "the worktree is gone")
         state.decision = "accepted"
-        #expect(RunSettingsLayout.opensWorktree(state))
+        #expect(RunSettingsLayout.hasWorktree(state))
         state.cleaned = true
-        #expect(!RunSettingsLayout.opensWorktree(state))
+        #expect(!RunSettingsLayout.hasWorktree(state))
     }
 }

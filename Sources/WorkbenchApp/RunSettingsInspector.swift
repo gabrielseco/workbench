@@ -10,9 +10,9 @@ enum RunSettingsLayout {
 
     enum Placement: Equatable { case beside, sheet }
 
-    /// What "Open in editor" opens: the worktree once the thread has run (that is where the changes are) until it is discarded or
-    /// cleaned, otherwise the goal file.
-    static func opensWorktree(_ state: ThreadState) -> Bool {
+    /// Whether the thread has a worktree with the run's changes (its step menu then offers to open it): from the first turn until it
+    /// is discarded or cleaned.
+    static func hasWorktree(_ state: ThreadState) -> Bool {
         state.lastTurn > 0 && state.decision != "discarded" && !state.cleaned
     }
 
@@ -272,14 +272,11 @@ struct RunSettingsInspector: View {
 
     private func openers(_ goal: GoalModel) -> some View {
         section("OPEN") {
-            if RunSettingsLayout.opensWorktree(snapshot.state) {
-                Button("Open in editor") { Task { await store.openWorktree() } }
-                    .help("Opens the worktree, where the run's changes are, in your editor")
-            } else {
-                Button("Open in editor") { Task { await store.openGoalFile() } }
-                    .help("Opens the goal file in your editor")
-            }
-            if store.herdrFound {
+            // Once a thread has run, the step's "…" menu has Open worktree and Open in Herdr: only the goal file is left to list here.
+            let ran = RunSettingsLayout.hasWorktree(snapshot.state)
+            Button(ran ? "Open goal file" : "Open in editor") { Task { await store.openGoalFile() } }
+                .help("Opens the goal file in your editor")
+            if store.herdrFound, !ran {
                 Button("Open in Herdr") { Task { await store.openInHerdr() } }
                     .disabled(store.busy != nil)
                     .help("Herdr opens this thread's worktree, or the project when it has none, without starting anything")
