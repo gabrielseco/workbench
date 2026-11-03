@@ -196,7 +196,9 @@ thread you can read and discard, never a leftover process.
 *Slice 6c, in two PRs.* 6c-1 is the store and session side with no screen: `ProjectStore.sendChat`, `startChat`, `stopChat`, `makeChatGoal`
 and `doItNow`, the per-thread `ThreadSession.chatDraft` and `replying`, and two `GoalActions` seams over `ThreadService.chat` and
 `draftGoal(.fromChat)`. "Do it now" is the existing advanced draft from the person's words (artboard G), not a one-message chat followed by
-make-goal: it spends no chat turn. 6c-2 draws the messages, the "replying…" row, the composer, the buttons and the way in beside New goal.
+make-goal: it spends no chat turn. 6c-2 draws the messages (from `state.chat`, no new feed items), the "replying…" row with Stop, the
+composer (Return sends, Shift-Return a new line), `Make this a goal`, and the way in: a Chat kind on the New goal card while the preview is on
+(artboard G's Send / Do it now are Chat / Advanced there). Fixtures `chat`, `chat-replying`, `chat-goal`.
 *Tests:* a chat turn is bounded and always ends; a stopped, timed-out and crashed chat turn each record how it ended; a chat creates no
 worktree and no branch; an old log with no `chat.*` events opens as before.
 
