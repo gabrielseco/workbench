@@ -57,14 +57,31 @@ struct NewThreadHeading: View {
     }
 }
 
-/// What Send and Do it now each do, with the two names bold: a `LocalizedStringKey`, since two string literals joined with `+` would show
-/// the asterisks.
+/// What the three ways on each do, one line each in the buttons' order. The third name is the button itself: a quick goal from the words.
 struct NewThreadCaption: View {
-    private static let text = LocalizedStringKey(
-        "**Discuss first** opens a free chat; the goal is written after. **Draft the goal** skips the chat: "
-            + "the goal agent drafts it from your words and you approve it. Nothing runs until you do.")
+    var canUseText = true
+    var useText: () -> Void = {}
 
-    var body: some View { Text(Self.text).font(.caption).foregroundStyle(.secondary) }
+    var body: some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
+            row("Discuss first", "Talk it through with the agent; the goal comes after. Free.")
+            row("Draft the goal", "The agent writes the goal from your words, with criteria. You approve it.")
+            GridRow {
+                Button("Use my text as the goal", action: useText).buttonStyle(.link).font(.caption.weight(.semibold))
+                    .disabled(!canUseText)
+                    .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
+                Text("Your words become the goal as typed. No agent, no criteria. Free.")
+            }
+        }
+        .font(.caption).foregroundStyle(.secondary)
+    }
+
+    private func row(_ name: String, _ what: String) -> some View {
+        GridRow {
+            Text(name).fontWeight(.semibold).foregroundStyle(.primary)
+            Text(what)
+        }
+    }
 }
 
 /// The new-thread screen (P22 design parity 6): what to work on, a composer, and three ways to go on, in the feed's column.
@@ -234,13 +251,7 @@ struct NewThreadScreen: View {
     }
 
     private var caption: some View {
-        HStack(alignment: .firstTextBaseline) {
-            NewThreadCaption()
-            Spacer(minLength: 12)
-            Button("Use my text as the goal") { Task { await writeAsGoal() } }
-                .buttonStyle(.link).font(.caption).disabled(!state.canWriteAsGoal)
-                .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
-        }
+        NewThreadCaption(canUseText: state.canWriteAsGoal) { Task { await writeAsGoal() } }
     }
 
     /// A button's name and its key, as the artboard draws them.
