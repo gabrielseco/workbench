@@ -80,6 +80,10 @@ import Testing
         let diff = try #require(decide(shown).secondary)
         #expect(diff.kind == .openDiff && diff.enabled, "the worktree is there while the turn works")
         #expect(decide(shown) { $0.busy = true }.secondary?.enabled == false)
+        // A thread that has not started a turn has no worktree to read.
+        var fresh = shown
+        fresh.state.lastTurn = 0
+        #expect(decide(fresh).secondary?.enabled == false)
     }
 
     @Test func aTurnWhoseRunnerIsGoneCanBeRunAgainAndASuccessfulOneCannot() throws {
