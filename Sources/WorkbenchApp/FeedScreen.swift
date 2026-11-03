@@ -188,7 +188,16 @@ struct PhaseDot: Equatable {
 /// The spine as a row under the title: the same steps, marks and colours as the rail drew them, in the artboards' form. A thread that began
 /// as a chat has a Chat step first; a thread that began as a goal never had one.
 struct PhaseRow: View {
-    var snapshot: ThreadSnapshot
+    var steps: [PhaseStep]
+
+    init(snapshot: ThreadSnapshot) { steps = Self.steps(for: snapshot) }
+    init(steps: [PhaseStep]) { self.steps = steps }
+
+    /// The row of a thread that does not exist yet (the new-thread screen): Chat is where it starts, and nothing else is reached.
+    static var newThreadSteps: [PhaseStep] {
+        [PhaseStep(title: "Chat", mark: .current, sublabel: "talking it through")]
+            + SpineStep.allCases.map { PhaseStep(title: $0.title, mark: .pending, sublabel: "") }
+    }
 
     /// The steps for a thread: the spine's seven (a chat that has no goal is on none of them), with Chat first when the thread began as a chat.
     static func steps(for snapshot: ThreadSnapshot) -> [PhaseStep] {
@@ -207,7 +216,7 @@ struct PhaseRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ForEach(Array(Self.steps(for: snapshot).enumerated()), id: \.offset) { _, step in
+            ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                 let dot = PhaseDot.of(step.mark)
                 let tint = Theme.color(for: step.mark)
                 HStack(spacing: 6) {

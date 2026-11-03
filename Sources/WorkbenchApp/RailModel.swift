@@ -51,16 +51,21 @@ struct RailRow: Equatable, Identifiable {
 /// What the rail lists with the chat feed preview on: the project's threads, then its scheduled tasks. Pure, so the sections are tested
 /// without a window.
 struct RailModel: Equatable {
+    /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.
+    var composing: RailRow?
     var threads: [RailRow]
     var older: Int
     var tasks: [RailRow]
     /// The tasks have been read; until then the section says so rather than claiming there are none.
     var tasksRead: Bool
 
-    static func derive(listing: ThreadListing, tasks: TasksSnapshot?) -> RailModel {
+    static let composingRow = RailRow(
+        kind: .thread, key: "new-thread", title: "New thread", mark: .idle, line: "Type to start · free")
+
+    static func derive(listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false) -> RailModel {
         RailModel(
-            threads: listing.rows.map(RailRow.thread), older: listing.older, tasks: tasks?.entries.map(RailRow.task) ?? [],
-            tasksRead: tasks != nil)
+            composing: composing ? composingRow : nil, threads: listing.rows.map(RailRow.thread), older: listing.older,
+            tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
     }
 
     var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }

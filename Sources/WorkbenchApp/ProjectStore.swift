@@ -67,6 +67,10 @@ struct RecentProject: Equatable, Identifiable {
     /// The goal agent is drafting a goal from a request.
     /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
     var namingGoal = false
+    /// The new-thread screen is up (preview only): the main area asks what to work on, and nothing is on screen as a thread.
+    var newThread = false
+    /// What is typed on it: kept while another row is looked at, cleared when a thread is made.
+    var newThreadText = ""
     /// Whether the project card under the project pill is up.
     var pickingProject = false
     /// Whether the Send back card is up; the Review screen's button sets it, `sendBack` clears it once a turn has started.
@@ -197,7 +201,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (namingGoal, pickingProject) = (false, false)
+            (namingGoal, pickingProject, newThread) = (false, false, false)
             cancelSendBack()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
             (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
@@ -208,7 +212,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        (namingGoal, pickingProject) = (false, false)
+        (namingGoal, pickingProject, newThread) = (false, false, false)
         cancelSendBack()
         current.pendingDiscard = nil
         prReviewShown = nil

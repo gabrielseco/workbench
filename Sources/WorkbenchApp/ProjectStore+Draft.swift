@@ -115,6 +115,7 @@ extension ProjectStore {
         }
         // A new goal is the thread to show, as it always has been, not the old one picked in the list.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
+        showCreatedThread()
         await reload()
         return true
     }

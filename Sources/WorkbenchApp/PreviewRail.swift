@@ -9,21 +9,23 @@ struct PreviewRail: View {
     static let width: CGFloat = 288
 
     var body: some View {
-        let model = RailModel.derive(listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project))
+        let model = RailModel.derive(
+            listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project), composing: store.newThread)
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 header("THREADS") {
-                    Button { store.namingGoal = true } label: {
+                    Button { store.beginNewGoal() } label: {
                         Image(systemName: "plus").font(.callout.weight(.semibold)).frame(width: 24, height: 24)
                             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
                     }
                     .buttonStyle(.plain).disabled(store.project == nil || store.namingGoal)
                     .accessibilityLabel("New goal").help("New goal…")
                 }
-                if model.threads.isEmpty {
+                if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
+                if model.threads.isEmpty && model.composing == nil {
                     Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
                         .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
-                } else {
+                } else if !model.threads.isEmpty {
                     ThreadListView(store: store)
                 }
                 header(model.scheduledHeader).padding(.top, 10)
@@ -56,7 +58,7 @@ struct PreviewRail: View {
 
     /// The task on screen, when a task is: the highlighted row. The first one the Tasks screen would pick when none was chosen.
     private var shownTaskName: String? {
-        guard store.mode == .tasks, let snapshot = store.tasks.snapshot(for: store.project) else { return nil }
+        guard store.mode == .tasks, !store.newThread, let snapshot = store.tasks.snapshot(for: store.project) else { return nil }
         return store.tasks.selected(in: snapshot)?.id
     }
 

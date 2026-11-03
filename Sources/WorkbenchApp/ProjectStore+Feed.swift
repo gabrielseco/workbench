@@ -69,7 +69,7 @@ extension ProjectStore {
         case .ship: await ship()
         case .reviewPR, .reviewAgain: await reviewPullRequest()
         case .merge: await mergePullRequest()
-        case .newGoal: namingGoal = true
+        case .newGoal: beginNewGoal()
         case .discard: await prepareDiscard()
         case .sendBack: (actionError, sendingBack) = (nil, true)
         case .openDiff: await openDiff()
