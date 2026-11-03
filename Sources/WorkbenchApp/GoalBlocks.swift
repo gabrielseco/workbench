@@ -82,7 +82,7 @@ struct GoalBlocks: View {
     }
 
     private var criteria: some View {
-        section(goal.rows.isEmpty && goal.quick ? "Criteria · none, a quick goal" : "Criteria · \(goal.checkableText)") {
+        section(criteriaHeading) {
             VStack(alignment: .leading, spacing: 14) {
                 if goal.rows.isEmpty && goal.quick {
                     Text(
@@ -106,6 +106,14 @@ struct GoalBlocks: View {
                 }
             }
         }
+    }
+
+    /// The artboard's `Criteria · 5` in the feed while every one can be checked; the Goal screen's `1 of 3 checkable` always, and in the
+    /// feed too when some cannot, since that is what the person has to act on.
+    private var criteriaHeading: String {
+        if goal.rows.isEmpty && goal.quick { return "Criteria · none, a quick goal" }
+        if style == .feed && goal.checkable == goal.rows.count { return "Criteria · \(goal.rows.count)" }
+        return "Criteria · \(goal.checkableText)"
     }
 
     private func criterion(_ row: GoalModel.Row) -> some View {

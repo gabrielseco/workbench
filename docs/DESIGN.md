@@ -121,7 +121,7 @@ ships, and the mockup gets fixed.
   no more messages). The Run settings panel is open by default beside the feed until a person closes it (a narrow window shows it over the feed
   only once they have chosen).
 - **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
-  hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
+  open by default until a person closes it, and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by
   themselves after a passing turn ("Run the judge and review stages by themselves", a line saying what a run will do, "Runs: judge,
   design" or "Off", and whether that is the goal's own setting or the project's; disabled, with the project's `[review] auto` named, when

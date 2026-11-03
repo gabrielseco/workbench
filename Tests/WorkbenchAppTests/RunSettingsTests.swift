@@ -52,6 +52,16 @@ import Testing
         #expect(!memory.runSettings && memory.runSettingsChosen)
     }
 
+    @Test func theHeadersButtonOpensWhatIsNotShownAndClosesWhatIs() {
+        func sets(_ on: Bool, _ chosen: Bool, _ fits: Bool) -> Bool {
+            RunSettingsLayout.toggled(on: on, chosen: chosen, fits: fits)
+        }
+        #expect(!sets(true, false, true), "the default shown beside the feed: the click closes it")
+        #expect(sets(true, false, false), "the default in a narrow window shows nothing: the first click opens it")
+        #expect(!sets(true, true, false), "chosen and shown over the feed: the click closes it")
+        #expect(sets(false, true, true) && sets(false, true, false), "closed: the click opens it")
+    }
+
     @Test func theDefaultOpensItOnlyBesideTheFeedNeverOverItUntilAPersonHasChosen() {
         let store = ProjectStore(preferences: MemoryPreferences())
         #expect(store.runSettingsOn && !store.runSettingsChosen, "on by default, not chosen: a narrow window shows no sheet")

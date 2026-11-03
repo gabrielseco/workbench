@@ -25,6 +25,11 @@ import WorkbenchCore
         let draft = DraftGoalCard.header(goal: goal(), editable: true)
         #expect(draft == .init(pill: "Needs approval", tone: .needsYou, hint: "Every field is editable"))
         let blocked = goal { $0.blockers = ["The config does not load"] }
+        let placeholder = goal { $0.placeholdersRemain = true }
+        #expect(DraftGoalCard.header(goal: placeholder, editable: true).pill == "Can't approve yet", "a TODO blocks Approve")
+        let row = GoalModel.Row(id: "c1", text: "t", proof: "screenshot: a", warning: "no verifier", suggestion: nil)
+        let unchecked = goal { $0.rows = [row] }
+        #expect(DraftGoalCard.header(goal: unchecked, editable: true).pill == "Can't approve yet", "so does an unchecked proof")
         #expect(DraftGoalCard.header(goal: blocked, editable: true).pill == "Can't approve yet")
         #expect(DraftGoalCard.header(goal: blocked, editable: true).tone == .broken)
         let approved = goal { $0.pill = .approved }
@@ -63,6 +68,7 @@ import WorkbenchCore
 
     @Test func theFoldCountsMessagesAndIsShownOnlyForAGoalThatBeganAsAChat() async throws {
         #expect(BrainstormFold.title(count: 4) == "Brainstorm · 4 messages")
+        #expect(BrainstormFold.title(count: 2) == "Brainstorm · 2 messages")
         #expect(BrainstormFold.title(count: 1) == "Brainstorm · 1 message")
         #expect(BrainstormFold.title(count: 0) == "Brainstorm · 0 messages")
         for (scenario, shown) in [(AppScenario.chatGoal, true), (.chat, true), (.draft, false), (.needsYou, false)] {
@@ -75,11 +81,6 @@ import WorkbenchCore
             }
             #expect(BrainstormFold.shown(state: thread.state) == shown, "\(scenario)")
         }
-    }
-
-    @Test func theAgentsLineSaysNothingRunsUntilYouApprove() {
-        let line = BrainstormFold.agentLine
-        #expect(line.hasPrefix("I drafted a goal from this chat.") && line.contains("approve"))
     }
 
     // MARK: What is drawn

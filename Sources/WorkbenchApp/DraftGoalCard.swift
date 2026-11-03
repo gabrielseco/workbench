@@ -12,8 +12,9 @@ enum DraftGoalCard {
 
     static func header(goal: GoalModel, editable: Bool) -> Header {
         let hint = editable ? "Every field is editable" : nil
-        if !goal.blockers.isEmpty { return Header(pill: "Can't approve yet", tone: .broken, hint: hint) }
         switch goal.pill {
+        // Approve is off for a blocker, a placeholder left in the file and a proof Workbench cannot check: the pill says so for all three.
+        case .draft where !goal.canApprove: return Header(pill: "Can't approve yet", tone: .broken, hint: hint)
         case .draft: return Header(pill: "Needs approval", tone: .needsYou, hint: hint)
         case .approved: return Header(pill: "Approved", tone: .done, hint: hint)
         case .changedSinceApproval: return Header(pill: "Changed since approval", tone: .needsYou, hint: hint)
@@ -44,7 +45,8 @@ enum DraftGoalCard {
 enum BrainstormFold {
     static func title(count: Int) -> String { "Brainstorm · \(count) message\(count == 1 ? "" : "s")" }
 
-    /// Shown for a thread that began as a chat and has messages; a goal that began as a goal has none.
+    /// Shown for a thread that began as a chat and has messages, whatever has become of the goal since (the conversation is there to read
+    /// again); a goal that began as a goal has none. The agent's line is only for a draft that can still be edited.
     static func shown(state: ThreadState) -> Bool { state.isChat && !(state.chat?.messages.isEmpty ?? true) }
 
     static let agentLine = "I drafted a goal from this chat. Edit anything below, then approve. Nothing runs until you do."

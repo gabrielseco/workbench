@@ -15,6 +15,8 @@ struct FeedScreen: View {
     @Environment(\.feedDrawsEagerly) private var drawsEagerly
     @State private var confirmingMerge = false
     @State private var reviewingDetails = false
+    /// The centre is wide enough to hold the Run settings beside the feed (read from the layout, for the header's button).
+    @State private var roomForInspector = false
 
     /// The feed's own rows, and the next-step card, which is drawn as the decision card instead.
     private var rows: [FeedItem] {
@@ -29,7 +31,8 @@ struct FeedScreen: View {
         FeedRow(
             item: item, goal: store.goal, store: store, editable: canEditGoal,
             draft: canEditGoal
-                ? DraftGoalContext(snapshot: snapshot, decision: store.feedDecision(for: snapshot), perform: perform) : nil)
+                ? DraftGoalContext(snapshot: snapshot, decision: store.feedDecision(for: snapshot), perform: perform) : nil,
+            brainstorm: BrainstormFold.shown(state: snapshot.state) ? snapshot.state.chat?.messages ?? [] : [])
     }
 
     @ViewBuilder private var foot: some View {
@@ -84,6 +87,9 @@ struct FeedScreen: View {
                     Divider()
                     RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store).frame(width: RunSettingsLayout.width)
                 }
+            }
+            .onChange(of: proxy.size.width, initial: true) { _, width in
+                roomForInspector = RunSettingsLayout.placement(centreWidth: width) == .beside
             }
             // Too narrow for it beside the feed, it opens over it.
             .sheet(
@@ -143,13 +149,15 @@ struct FeedScreen: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.title ?? snapshot.id).font(.title3.weight(.semibold)).lineLimit(2)
                 Spacer(minLength: 12)
+                let (on, chosen) = (store.runSettingsOn, store.runSettingsChosen)
+                let showing = !RunSettingsLayout.toggled(on: on, chosen: chosen, fits: roomForInspector)
                 Button {
-                    store.setRunSettings(!store.runSettingsOn)
+                    store.setRunSettings(!showing)
                 } label: {
                     Label("Run settings", systemImage: "sidebar.right")
                 }
                 .buttonStyle(.borderless).font(.callout)
-                .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
+                .help(showing ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
             if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
         }

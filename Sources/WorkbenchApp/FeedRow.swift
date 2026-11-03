@@ -12,11 +12,15 @@ struct FeedRow: View {
     var editable: Bool
     /// What the draft goal card needs of the thread: its footer holds the decision's actions.
     var draft: DraftGoalContext?
+    /// The conversation a goal made from a chat came from: its fold stays above the goal card in every state.
+    var brainstorm: [ChatMessage] = []
 
     init(
-        item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false, draft: DraftGoalContext? = nil
+        item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false,
+        draft: DraftGoalContext? = nil, brainstorm: [ChatMessage] = []
     ) {
         (self.item, self.goal, self.store, self.editable, self.draft) = (item, goal, store, editable, draft)
+        self.brainstorm = brainstorm
     }
 
     var body: some View {
@@ -25,7 +29,7 @@ struct FeedRow: View {
         case .goalCard(let title, let approval, let count, let hash):
             GoalCardRow(
                 title: title, approval: approval, criteria: count, hash: hash, goal: goal, store: store, editable: editable,
-                draft: draft)
+                draft: draft, brainstorm: brainstorm)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -120,6 +124,7 @@ struct GoalCardRow: View {
     var store: ProjectStore?
     var editable = false
     var draft: DraftGoalContext?
+    var brainstorm: [ChatMessage] = []
     @State private var showAllRequest = false
     /// A read-only request this long is folded, as on the Goal screen.
     static let foldedRequest = 500
@@ -129,7 +134,12 @@ struct GoalCardRow: View {
     private var rows: [GoalModel.Row] { goal?.rows ?? [] }
 
     var body: some View {
-        if editable, let goal, let store { editor(goal, store) } else { summary }
+        VStack(alignment: .leading, spacing: 14) {
+            // The conversation a goal made from a chat came from stays to read, whatever has become of the goal.
+            if !brainstorm.isEmpty { BrainstormFoldView(messages: brainstorm) }
+            if editable, let goal, let store { editor(goal, store) } else { summary }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var heading: some View {
@@ -152,10 +162,7 @@ struct GoalCardRow: View {
     @ViewBuilder private func editor(_ goal: GoalModel, _ store: ProjectStore) -> some View {
         if let draft {
             VStack(alignment: .leading, spacing: 14) {
-                if BrainstormFold.shown(state: draft.snapshot.state) {
-                    BrainstormFoldView(messages: draft.snapshot.state.chat?.messages ?? [])
-                    AgentLineView(text: BrainstormFold.agentLine)
-                }
+                if !brainstorm.isEmpty { AgentLineView(text: BrainstormFold.agentLine) }
                 DraftGoalCardView(
                     goal: goal, store: store, base: draft.snapshot.base, decision: draft.decision, perform: draft.perform)
             }
