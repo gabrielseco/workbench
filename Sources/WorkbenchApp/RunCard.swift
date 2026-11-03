@@ -11,6 +11,8 @@ struct RunCardModel: Equatable {
     var tail: [String]
     /// The decision's stop button, when it has one: the card is then the only place a running turn is stopped from.
     var stop: FeedAction?
+    /// Open diff, beside Stop: what the turn has changed so far.
+    var diff: FeedAction?
     /// The feed's items the card stands for; they are not drawn again.
     var consumed: Set<String>
 
@@ -66,7 +68,8 @@ struct RunCardModel: Equatable {
         let stop = ([decision.primary].compactMap { $0 } + decision.more).first { $0.kind == .stopTurn }
         return RunCardModel(
             number: number, progress: snapshot.state.progress, limit: snapshot.turnTimeoutMin.map { TimeInterval($0 * 60) },
-            tasks: tasks, tail: Array((latest.isEmpty ? tail : latest).suffix(tailLines)), stop: stop, consumed: consumed)
+            tasks: tasks, tail: Array((latest.isEmpty ? tail : latest).suffix(tailLines)), stop: stop,
+            diff: decision.secondary?.kind == .openDiff ? decision.secondary : nil, consumed: consumed)
     }
 }
 
@@ -126,7 +129,7 @@ struct RunCardView: View {
                 }
                 .padding(14)
             }
-            if let stop = model.stop { footer(stop) }
+            if let stop = model.stop { footer(stop, diff: model.diff) }
         }
         .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
@@ -181,9 +184,13 @@ struct RunCardView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line))
     }
 
-    private func footer(_ stop: FeedAction) -> some View {
+    private func footer(_ stop: FeedAction, diff: FeedAction?) -> some View {
         HStack {
             Spacer()
+            if let diff {
+                Button { perform(diff) } label: { Label(diff.title, systemImage: "doc.text.magnifyingglass") }
+                    .plainButton().disabled(!diff.enabled).help(diff.help ?? diff.title)
+            }
             Button { perform(stop) } label: { Label(stop.title, systemImage: "stop.fill") }
                 .plainButton().disabled(!stop.enabled).help(stop.help ?? stop.title)
         }

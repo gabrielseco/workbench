@@ -73,11 +73,15 @@ enum FeedActions {
         if let run = s.run, let stoppable = RunModel.stoppable(phase: run.phase, runningHere: c.runningHere) {
             worktree()
             let title = c.stopping ? "Stopping…" : (stoppable == .advice ? "Stop advice" : "Stop turn")
+            // What the agent has changed so far is readable in the worktree while it works: no need to wait for Review to look at it.
+            let diff = FeedAction(
+                kind: .openDiff, title: "Open diff", help: "What changed so far, against the base, in your editor",
+                enabled: !c.busy && RunSettingsLayout.hasWorktree(s.state))
             return FeedDecision(
                 primary: FeedAction(
                     kind: stoppable == .advice ? .stopAdvice : .stopTurn, title: title,
                     help: "Asks it to end; it still ends with a recorded stop", enabled: !c.stopping),
-                more: more)
+                secondary: diff, more: more)
         }
         if c.reviewShown {
             let accept = FeedAction(
