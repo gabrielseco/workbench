@@ -48,7 +48,7 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 ## Chat feed
 
 The thread as one conversation ([P22](plan/P22-chat-feed.md)): the thread screen is `FeedScreen`. It draws `snapshot.feed` (the core's
-`Feed.items`), what the last action said, and a decision card whose buttons run the actions the step screens run (slice 3b); the
+`Feed.items`), what the last action said, and a decision card whose buttons run the thread actions (`GoalActions`, slice 3b); the
 Run settings inspector comes in 3c. The
 mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a mockup disagree on a layout value, this file is what
 ships, and the mockup gets fixed.
@@ -100,14 +100,14 @@ ships, and the mockup gets fixed.
 - **The decision card** is the last row: the step and why, from the spine and attention, and **one** prominent button for the next press
   (Approve and run, Run, Stop turn, Accept work, Ship, Review PR, Merge…, New goal…). The other actions of the step (Send back…,
   Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
-  step screens) are in a borderless `…` menu beside it, Discard in red, each disabled for
+  the old step screens' own) are in a borderless `…` menu beside it, Discard in red, each disabled for
   the same reason as on the step screen. The card decides nothing: `FeedActions.derive` reads `canShip`, `canMerge`, the goal's
   `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation, Send back its popover.
 - **What an action said** (an error in red, a note in grey, a notice in green, a Herdr handoff) is a row above the card, in the words
-  the step screens use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
+  the actions use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
 - **The goal card** says what Approve and run means. While the goal is a draft that no turn has run, and nothing is going on, the card
   **is the editor**: the request, each criterion (its text and the proof that will check it, a proof Workbench cannot check in amber with
-  why) and the out-of-scope list are changed in place, as on the Goal screen (they are the same blocks, `GoalBlocks`), a refused edit
+  why) and the out-of-scope list are changed in place, (`GoalBlocks`, also the Run settings' goal edits), a refused edit
   said under them. Once the goal is approved, run or decided, or while an action is going, the card is its summary: the criteria with
   their proofs (six at most, then "and N more"), read-only.
 - **A draft goal's card** (the editable one) is the artboard's *Draft goal*: `DRAFT GOAL` (caption), a pill (`Needs approval` amber, `Can't approve
@@ -141,7 +141,7 @@ ships, and the mockup gets fixed.
   in the goal file"), the allowed tools (chips: ten, then `+N more`, granted ones marked), the reference folders (the config's, and the
   goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft that no turn has run, and
   while an approval, a run or another action is going; it says why when the reason lasts ("A goal that has run is not edited."). In a window whose centre column is narrower than 900 (a window under about 1100 wide, the 900 minimum included) it opens
-  over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
+  over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the same goal actions.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.
 - **The feed is a centred column**, at most 680 wide (`FeedLayout.maxColumn`): the rows, what an action said, the decision card and a

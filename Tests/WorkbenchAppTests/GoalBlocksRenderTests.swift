@@ -65,12 +65,8 @@ import WorkbenchCore
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil))
         #expect(await store.open(fixture.root))
         let goal = try #require(store.goal)
-        guard case .thread(let snapshot) = store.screen else {
-            Issue.record("\(store.screen)")
-            return store
-        }
         #expect(goal.editable == !approved)
-        let view = GoalView(snapshot: snapshot, goal: goal, store: store).content.frame(width: 760, height: 1000, alignment: .top)
+        let view = GoalBlocks(goal: goal, store: store, editable: goal.editable).frame(width: 760, height: 1000, alignment: .top)
             .background(Color.white).environment(\.colorScheme, .light)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1

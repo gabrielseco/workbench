@@ -33,41 +33,26 @@ private final class Calls: @unchecked Sendable {
         return store
     }
 
-    @Test func theCardOpensOnAQuickGoal() {
-        let form = NewGoalForm()
-        #expect(form.mode == .quick && form.isEmpty)
-        #expect(NewGoalForm.Mode.offered.contains(.advanced), "Advanced is offered beside it")
-    }
-
-    @Test func createMakesAQuickGoalFromTheTextAsTypedWithNoDrafter() async throws {
+    @Test func aQuickGoalIsMadeFromTheTextAsTypedWithNoDrafter() async throws {
         let calls = Calls()
         let store = try await store(calls)
-        var form = NewGoalForm()
-        form.request = "  Make the header blue.\n\nand bold \n"
-        #expect(await store.createGoal(form, attachments: [URL(fileURLWithPath: "/staged/1.png")]))
+        let staged = [URL(fileURLWithPath: "/staged/1.png")]
+        #expect(await store.quickGoal(request: "  Make the header blue.\n\nand bold \n", attachments: staged))
         #expect(calls.all == ["quick make-the-header-blue|Make the header blue.\n\nand bold|1.png"])
         #expect(!store.drafting && store.actionError == nil)
     }
 
-    @Test func switchingToAdvancedKeepsTheTextAndHasTheGoalAgentDraftIt() async throws {
+    @Test func anAdvancedGoalHasTheGoalAgentDraftIt() async throws {
         let calls = Calls()
         let store = try await store(calls)
-        var form = NewGoalForm()
-        form.request = "Make the header blue."
-        form.mode = .advanced
-        #expect(form.request == "Make the header blue.")
-        #expect(await store.createGoal(form))
-        form.mode = .quick
-        #expect(form.request == "Make the header blue.", "and back again")
+        #expect(await store.draftGoal(request: "Make the header blue."))
         #expect(calls.all == ["draft make-the-header-blue|Make the header blue."])
     }
 
     @Test func aRefusedQuickGoalSaysWhyAndKeepsTheCardUp() async throws {
         let calls = Calls()
         let store = try await store(calls, quick: GoalActions.RefusalText("the request is empty"))
-        var form = NewGoalForm()
-        form.request = "x"
-        #expect(await store.createGoal(form) == false)
+        #expect(await store.quickGoal(request: "x") == false)
         #expect(store.actionError == "the request is empty" && !store.goalAgentOff && !store.drafting)
     }
 
