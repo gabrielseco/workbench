@@ -61,6 +61,8 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `agent.attempt.started` | a provider process is about to be started (a coding turn, the judge, a review round; a capacity retry is another) | `attempt`, `role`, `stage`, `round`, `provider`, `model`, `spawned` |
 | `agent.attempt.ended` | that attempt ended; exactly one per start | `attempt`, `outcome`, `reason`, `synthetic` |
 | `goal.draft.started` | `workbench goal draft` asked the goal agent for a draft (P9 PR 14); thread-level (`turn` 0), no coding turn | `provider`, `model`, `attempt` |
+| `chat.message` | a message of a chat (P22 slice 6): the person's (before anything is spent) or the agent's reply; thread-level (`turn` 0) | `role` (`user`, `assistant`), `text` |
+| `chat.ended` | a chat turn ended; exactly one per `user` `chat.message`, whatever came of it, after the reply when there is one | `ok`, `reason` (`stopped`, `timeout`, `interrupted` or the failure; absent when `ok`), `attempt`, `provider`, `model`, `cost_usd`, `synthetic` |
 | `goal.draft.finished` | the draft ended; one per start. `ok: true` carries the proposal's place, `ok: false` the failure | `ok`, `proposal_ref`, `provider`, `model`, `attempt`, `reason`, `cost_usd`, `synthetic` |
 
 ## Transcript files
@@ -356,6 +358,26 @@ Claude turn's only where the provider differs:
 - `turn.ended` has no `session_id` and no `cost_usd` (Codex reports tokens only), so the thread's cost is `unknown`, and
   `permission_denials` is `null`. Nothing is written to `session.json`.
 - Crash recovery, stop and the orphan sweep are the Claude turn's: one `turn.ended` per `turn.started`, the attempt closed once.
+
+## A chat before a goal (P22 slice 6)
+
+Event version stays 1: new kinds and fields only; a log with no `chat.*` events replays as it did.
+
+- **A chat thread** is a thread whose `thread.created` has `kind: "chat"` and no `worktree`, `branch` or `base`: `workbench chat <name>`
+  makes it. It has no `goal.md` and no worktree, and no turn (`turn.started` is a coding turn). It is a thread like any other for the
+  rest: it has no `review.decision` until `workbench abandon` writes one, so it is the project's active thread while it is open.
+- **A turn** is `chat.message` (`role: user`), `agent.attempt.started` (`role: chat`), `agent.attempt.ended`, `chat.message`
+  (`role: assistant`, only when there is a reply) and `chat.ended`. The user message and the attempt are on record before the agent is started,
+  so a killed process leaves a start with no end: the next command that opens the log closes it (`recoverOrphanedEvaluations`) with a
+  synthetic `chat.ended {ok: false, reason: "interrupted", synthetic: true}`, and the open `agent.attempt.started` with its own
+  `interrupted` end. Exactly one `chat.ended` per user message, whether the turn was stopped (`reason: "stopped"`), timed out
+  (`"timeout"`), crashed or answered nothing (the failure's text, credentials scrubbed, at most 600 characters).
+- **Abandoning a chat** ends what its killed turn left running in the agent's folder (a chat has no worktree to sweep) and removes the folder, then writes the `abandoned` decision as for any thread. A turn takes the folder only with the log held, and refuses (`doctor` running, the chat decided, over a limit) again under that lock.
+- **The reply** is stored in the log (a chat has no transcript file), scrubbed of credentials and cut at 16 KiB.
+- **Limits** (a message over 16 KiB, a 31st message from the person, a conversation over 128 KiB or a known cost of $5 or more) are refused
+  before anything is spent or written.
+- `ThreadState.chat` (messages, turns, `lastEnd`, `costUSD`, `costUnknown`, `open`) and `isChat` derive from these; both are nil/false for
+  every other thread.
 
 ## Run results
 

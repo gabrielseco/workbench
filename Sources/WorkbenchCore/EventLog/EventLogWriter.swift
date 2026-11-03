@@ -202,8 +202,14 @@ public actor EventLogWriter {
         let judging = state.judgeStarts
         let reviewing = state.reviewStarts
         let drafting = state.draftStarts
-        guard !judging.isEmpty || !reviewing.isEmpty || !drafting.isEmpty || !state.openAttempts.isEmpty else { return [] }
-        var closed = try recoverOrphanedAttempts(roles: ["judge", "review", "goal"])
+        let chatting = state.chatStarts
+        let anything = !judging.isEmpty || !reviewing.isEmpty || !drafting.isEmpty || !chatting.isEmpty
+        guard anything || !state.openAttempts.isEmpty else { return [] }
+        var closed = try recoverOrphanedAttempts(roles: ["judge", "review", "goal", "chat"])
+        // A chat turn whose process was killed: its user message has no end, so the turn says how it ended (it never got a reply).
+        for _ in chatting.reversed() {
+            closed.append(try append(.chatEnded, data: ["ok": false, "reason": "interrupted", "synthetic": true]))
+        }
         for started in drafting.reversed() {
             var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
             for key in ["attempt", "provider", "model"] { if let value = started.data[key] { data[key] = value } }

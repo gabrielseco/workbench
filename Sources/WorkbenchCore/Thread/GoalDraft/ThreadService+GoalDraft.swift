@@ -262,13 +262,13 @@ extension ThreadService {
     }
 
     /// The project's instructions and the tracked paths at the base: the repository context the prompt declares.
-    private struct DraftContext {
+    struct DraftContext {
         var instructions: String?
         var paths: [String]
         var cut: Bool
     }
 
-    private func draftContext(base: String) async -> DraftContext {
+    func draftContext(base: String) async -> DraftContext {
         let instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: base)?.text
         guard let listed = try? await git.run(["ls-tree", "-r", "--name-only", base], in: project.root), listed.succeeded else {
             return DraftContext(instructions: instructions, paths: [], cut: false)
@@ -467,7 +467,7 @@ extension ThreadService {
 
     // MARK: Text
 
-    private static func draftFailureText(_ error: Error) -> String {
+    static func draftFailureText(_ error: Error) -> String {
         (error as? AgentFailure)?.message ?? "\(error)"
     }
 

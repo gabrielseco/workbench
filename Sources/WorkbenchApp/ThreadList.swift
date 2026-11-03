@@ -122,6 +122,21 @@ enum ThreadListLoader {
         return nil
     }
 
+    /// A chat's name: the first line of what the person first said, else the thread's id.
+    static func chatTitle(state: ThreadState, id: String) -> String {
+        let first = state.chat?.messages.first { $0.role == .user }?.text ?? ""
+        let words = first.split(whereSeparator: \.isNewline).first.map { String($0.prefix(60)) } ?? ""
+        return words.trimmingCharacters(in: .whitespaces).isEmpty ? id : words
+    }
+
+    /// A chat thread's row: its first words, and grey while it waits, blue while a turn is going, over once it has ended.
+    static func chatRow(id: String, state: ThreadState) -> ThreadRow {
+        let title = chatTitle(state: state, id: id)
+        if let decision = state.decision { return ThreadRow(id: id, title: title, mark: .idle, line: decision.capitalized) }
+        if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: .working, line: "Chat · replying") }
+        return ThreadRow(id: id, title: title, mark: .idle, line: "Chat")
+    }
+
     /// One thread's row: its log replayed once, the way the toolbar's pill is derived.
     static func row(project: Project, store: ThreadStore, id: String) -> ThreadRow {
         let contents: EventLogContents
@@ -132,6 +147,10 @@ enum ThreadListLoader {
             return ThreadRow(id: id, title: id, mark: .broken, line: "The log cannot be read")
         }
         let state = store.state(from: contents.events, id: id)
+        // A chat has no goal file until one is made from it: its first words are its title, and its line says Chat.
+        if state.isChat, !FileManager.default.fileExists(atPath: project.goalURL(id).path) {
+            return chatRow(id: id, state: state)
+        }
         var title: String?
         var approval: ApprovalState?
         let (text, whole) = goalHead(project.goalURL(id))

@@ -138,6 +138,8 @@ struct ThreadSnapshot: Equatable {
         if case .needsYou(let reason) = attention { return "Needs you · \(reason.text)" }
         if attention == .working { return "Working" }
         if let decision = state.decision { return decision.capitalized }
+        // A chat is not a draft goal: it has no goal file yet.
+        if state.isChat, approval == nil { return state.chat?.open == true ? "Chat · replying" : "Chat" }
         if approval != .approved && state.lastTurn == 0 { return "Draft · not approved" }
         return "Waiting"
     }

@@ -156,6 +156,16 @@ extension Commands {
         let state = ctx.store.state(from: events, id: id)
         out("thread:    \(id)\(state.isActive ? "" : "  (ended: \(state.decision ?? "?"))")")
         for line in lineageLines(state, ctx: ctx) { out(line) }
+        // A chat has no goal until one is made from it, no turns and no worktree: say what it has instead.
+        if state.isChat, !FileManager.default.fileExists(atPath: ctx.project.goalURL(id).path) {
+            out("kind:      chat (no goal yet)")
+            let chat = state.chat ?? ChatState()
+            let cost = chat.costUnknown ? "cost unknown" : String(format: "$%.4f", chat.costUSD)
+            let last = chat.lastEnd.map { ", last ended: \($0)" } ?? ""
+            out("chat:      \(chat.turns) turn(s), \(chat.messages.count) message(s), \(cost)\(last)")
+            if chat.open { out("           a turn is open: it is recorded as interrupted on the next command") }
+            return
+        }
 
         var approvalState: ApprovalState?
         if let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8) {
@@ -243,7 +253,7 @@ extension Commands {
         }
         for state in states {
             // How it ended: the decision once there is one, else where the thread stands.
-            var line = state.decision ?? statusString(state.review.status)
+            var line = state.decision ?? (state.isChat ? "chat" : statusString(state.review.status))
             if let result = state.lastResult { line += " (last turn \(result))" }
             let follows = state.lineage.map { "  (follows \($0.parent), round \($0.round))" } ?? ""
             out("\(state.id)  \(line)  \(listCost(state))\(follows)")

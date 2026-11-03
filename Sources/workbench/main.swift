@@ -67,6 +67,8 @@ do {
         default:
             throw CLIError.usage("usage: workbench goal new <name> | goal draft <name> | goal approve [id]")
         }
+    case "chat":
+        exit(try await Commands.chat(Array(arguments.dropFirst())))
     case "run":
         exit(try await Commands.run(Array(arguments.dropFirst())))
     case "send-back":

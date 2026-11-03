@@ -22,7 +22,7 @@ struct DecisionCard: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("NEXT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(step?.title ?? "Nothing left to do").font(.headline)
+                Text(decision.title ?? step?.title ?? "Nothing left to do").font(.headline)
                 Text(shownWhy).font(.callout).foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)

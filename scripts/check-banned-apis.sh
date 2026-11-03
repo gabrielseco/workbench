@@ -14,6 +14,15 @@ for pattern in 'waitUntilExit' 'readDataToEndOfFile' 'Process()'; do
         status=1
     fi
 done
+# Frameworks Linux does not have. The library and the CLI build there (the PR gate), and the macOS lint job cannot see a missing module:
+# `import CryptoKit` passed it and failed only the Linux build (#366). Hashing is `SHA256` in WorkbenchCore (it has CryptoKit's shape);
+# a macOS-only file in the app is guarded with `#if canImport(...)`, as the tests are.
+hits=$(grep -rnE --include='*.swift' '^[[:space:]]*import[[:space:]]+CryptoKit' Sources | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//')
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: 'import CryptoKit' in Sources/: Linux has no such module; use SHA256 from WorkbenchCore" >&2
+    status=1
+fi
 # The app (P19) starts nothing itself: it calls WorkbenchCore, which spawns through `Spawner`. Every way of starting a process
 # or shell out of Swift is banned there, not only the three above.
 for pattern in 'Process(' 'Subprocess' 'posix_spawn' 'NSTask' '/bin/sh' '/bin/bash' '/bin/zsh'; do

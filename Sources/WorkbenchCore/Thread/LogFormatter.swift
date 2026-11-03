@@ -59,6 +59,13 @@ public enum LogFormatter {
             return head + "decision: \(event.data["decision"]?.stringValue ?? "?")"
         case .agentAttemptStarted, .agentAttemptEnded, .goalDraftStarted, .goalDraftFinished, .goalApproved:
             return head + describeAgent(event)
+        case .chatMessage:
+            let who = event.data["role"]?.stringValue == "user" ? "you" : "agent"
+            return head + "chat \(who): " + ThreadState.safeLine(event.data["text"]?.stringValue ?? "", limit: 100)
+        case .chatEnded:
+            let reason = ThreadState.safeLine(event.data["reason"]?.stringValue ?? "failed", limit: 100)
+            let how = event.data["ok"] == true ? "ok" : reason
+            return head + "chat turn ended: \(how)" + (event.data["synthetic"] == true ? " (recovered)" : "")
         case .worktreeRemoved, .branchRemoved, .branchAhead:
             return head + describeBranch(event)
         default:

@@ -1,0 +1,4 @@
+{"data":{"kind":"chat"},"kind":"thread.created","seq":1,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"role":"user","text":"Could uploads retry with backoff?"},"kind":"chat.message","seq":2,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"role":"assistant","text":"What should happen after the fifth try?"},"kind":"chat.message","seq":3,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"cost_usd":0.01,"ok":true},"kind":"chat.ended","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}

@@ -129,7 +129,8 @@ struct FeedScreen: View {
                 .buttonStyle(.borderless).font(.callout)
                 .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
-            PhaseRow(spine: snapshot.spine)
+            // A chat is on no step: it has no goal, no run and nothing to accept.
+            if !(snapshot.state.isChat && snapshot.approval == nil) { PhaseRow(spine: snapshot.spine) }
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }

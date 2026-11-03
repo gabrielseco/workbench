@@ -509,7 +509,7 @@ public struct ThreadService: Sendable {
 }
 
 extension DateFormatter {
-    fileprivate static let dayStamp: DateFormatter = {
+    static let dayStamp: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
