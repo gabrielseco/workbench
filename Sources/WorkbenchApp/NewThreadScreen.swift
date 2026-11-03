@@ -229,17 +229,17 @@ struct NewThreadScreen: View {
 
     private var caption: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(
-                "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words "
-                    + "for you to approve."
-            )
-            .font(.caption).foregroundStyle(.secondary)
+            Text(Self.captionText).font(.caption).foregroundStyle(.secondary)
             Spacer(minLength: 12)
             Button("Write it as the goal") { Task { await writeAsGoal() } }
                 .buttonStyle(.link).font(.caption).disabled(!state.canWriteAsGoal)
                 .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
         }
     }
+
+    /// A `LocalizedStringKey`, so the two names are bold: two string literals joined with `+` would show the asterisks.
+    private static let captionText = LocalizedStringKey(
+        "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words for you to approve.")
 
     private func send() async {
         if await store.sendNewThread() { staging.clear() }
