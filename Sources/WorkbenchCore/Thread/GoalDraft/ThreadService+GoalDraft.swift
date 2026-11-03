@@ -1,3 +1,5 @@
+// The drafter, its three targets (a new thread, a replacement, a chat made into a goal) and their refusals share this file's private types.
+// swiftlint:disable file_length
 import Foundation
 
 /// Where a drafted goal goes: a new thread, or over the goal of an existing one (explicitly).
@@ -135,6 +137,22 @@ extension ThreadService {
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = GoalDraft.timeout,
         attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> GoalDraftResult {
+        if case .fromChat(let id, _) = target {
+            // Refused before the log is touched: no goal agent, nothing to draft from.
+            guard config?.resolvedGoalAgent != nil else { throw GoalDraftRefusal.noGoalAgent }
+            _ = try chatTranscript(id)
+            do {
+                return try await withLog(id) { log in
+                    // The folder is taken with the log held: a refused second command never reaches it to clear the first one's.
+                    let prepared = try await self.prepareDraft(
+                        target: target, request: request, config: config, attachments: attachments,
+                        abandonActive: abandonActive, environment: environment, timeout: timeout)
+                    defer { prepared.scratch.map { try? FileManager.default.removeItem(at: $0) } }
+                    return try await self.chatGoalLocked(
+                        id: id, prepared: prepared, config: config, log: log, attach: attach)
+                }
+            } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
+        }
         let prepared = try await prepareDraft(
             target: target, request: request, config: config, attachments: attachments, abandonActive: abandonActive,
             environment: environment, timeout: timeout)
@@ -146,12 +164,9 @@ extension ThreadService {
                     try await self.replaceLocked(id: id, prepared: prepared, log: log, attach: attach)
                 }
             } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
-        case .fromChat(let id, _):
-            do {
-                return try await withLog(id) { log in
-                    try await self.chatGoalLocked(id: id, prepared: prepared, config: config, log: log, attach: attach)
-                }
-            } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
+        case .fromChat:
+            // Handled above, with the log held before the folder is made.
+            throw GoalDraftRefusal.busy
         case .newThread(let name, _):
             return try await newDraft(
                 name: name, prepared: prepared, config: config, abandonActive: abandonActive, attach: attach)
@@ -455,6 +470,8 @@ extension ThreadService {
     ) async throws -> GoalDraftResult {
         // A draft or a chat turn a killed process left open ends here, before another is started.
         try await log.recoverOrphanedEvaluations()
+        // A chat turn a killed process left open may have left its agent running: it ends before the drafter starts.
+        Self.clearChatScratch(chatScratch(id))
         let agent = prepared.agent
         // What was checked before is checked again with the log held: another command may have written the goal or decided.
         if let decision = ThreadStore(project: project).state(of: id).decision { throw GoalDraftRefusal.ended(decision) }

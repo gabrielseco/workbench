@@ -212,7 +212,7 @@ public actor EventLogWriter {
         }
         for started in drafting.reversed() {
             var data: [String: JSONValue] = ["ok": false, "reason": "interrupted", "synthetic": true]
-            for key in ["attempt", "provider", "model"] { if let value = started.data[key] { data[key] = value } }
+            for key in ["attempt", "provider", "model", "from_chat"] { if let value = started.data[key] { data[key] = value } }
             closed.append(try append(.goalDraftFinished, turn: started.turn, data: .object(data)))
         }
         for started in judging.reversed() {

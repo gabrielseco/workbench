@@ -118,7 +118,7 @@ import Testing
         let result = try await draft(d, id)
         #expect(result.id == id)
         let events = try EventLogReader.read(at: d.fx.project.eventsURL(id)).events
-        #expect(events.contains { $0.kind == .goalDraftFinished && $0.data["synthetic"] == true })
+        #expect(events.contains { $0.kind == .goalDraftFinished && $0.data["synthetic"] == true && $0.data["from_chat"] == true })
         #expect(events.filter { $0.kind == .goalDraftStarted }.count == events.filter { $0.kind == .goalDraftFinished }.count)
     }
 
@@ -176,6 +176,63 @@ import Testing
         ProjectLock.release(doctor)
         _ = try await d.fx.service.abandon(id: id)
         await #expect(throws: GoalDraftRefusal.ended("abandoned")) { _ = try await draft(d, id) }
+    }
+
+    @Test func aSecondCommandRefusedByTheLogLockLeavesTheFirstOnesFolderAlone() async throws {
+        let (d, id) = try await conversation()
+        let scratch = d.fx.service.draftScratch(for: .fromChat(id: id, base: nil))
+        let work = scratch.appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let answer = work.appendingPathComponent("answer.txt")
+        try "the first draft's answer".write(to: answer, atomically: true, encoding: .utf8)
+        let held = try EventLogWriter.open(at: d.fx.project.eventsURL(id))
+        let runs = d.codex?.runs
+        await #expect(throws: GoalDraftRefusal.busy) { _ = try await draft(d, id) }
+        await held.close()
+        #expect(FileManager.default.fileExists(atPath: answer.path), "a refused command does not touch the folder")
+        #expect(d.codex?.runs == runs)
+        try? FileManager.default.removeItem(at: scratch)
+    }
+
+    @Test func theAgentAnInterruptedChatTurnLeftRunningEndsBeforeTheDrafterStarts() async throws {
+        let (d, id) = try await conversation()
+        let work = d.fx.service.chatScratch(id).appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let pidFile = work.deletingLastPathComponent().appendingPathComponent("pid")
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        let script = "cd \"$1\" && (exec sleep 120 >/dev/null 2>&1 & echo $! > \"$2\")"
+        shell.arguments = ["-c", script, "sh", work.path, pidFile.path]
+        try shell.run()
+        shell.waitUntilExit()
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: pidFile.path) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        let text = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try #require(Int32(text))
+        defer { kill(pid, SIGKILL) }
+        let log = try EventLogWriter.open(at: d.fx.project.eventsURL(id))
+        try await log.append(.chatMessage, data: ["role": "user", "text": "and then?"])
+        await log.close()
+        _ = try await draft(d, id)
+        for _ in 0..<50 where kill(pid, 0) == 0 { try await Task.sleep(nanoseconds: 100_000_000) }
+        #expect(kill(pid, 0) != 0, "the chat's agent is ended before the draft")
+    }
+
+    @Test func theConversationReachesTheDrafterInOrderAndWhole() async throws {
+        let d = try await drafting(answer: "reply-one")
+        let first = try await chat(d, .newThread(name: "idea"), "message-one")
+        try d.codex?.put("answer", "reply-two")
+        _ = try await chat(d, .existing(id: first.id), "message-two")
+        try d.codex?.put("answer", proposalJSON)
+        _ = try await draft(d, first.id)
+        // Only the drafter's prompt: what follows the heading no chat prompt has.
+        let all = (d.codex?.calls ?? []).joined(separator: "\n")
+        let prompt = try #require(all.range(of: "drafting the goal they are converging on", options: .backwards)).upperBound
+        let drafted = String(all[prompt...])
+        let said = ["message-one", "reply-one", "message-two", "reply-two"]
+        let order = said.compactMap { drafted.range(of: "> \($0)")?.lowerBound }
+        #expect(order.count == 4 && order == order.sorted(), "all four, in the order they were said")
     }
 
     // MARK: After the draft
