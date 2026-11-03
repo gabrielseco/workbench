@@ -84,17 +84,7 @@ import WorkbenchCore
 
     // MARK: The way in
 
-    @Test func theCardOffersChat() {
-        #expect(NewGoalForm.Mode.offered == [.quick, .advanced, .chat])
-        var form = NewGoalForm()
-        form.mode = .chat
-        #expect(form.action == "Send" && form.busyText == "Waiting for the reply…")
-        #expect(form.note != NewGoalForm().note, "the chat says what it does, not what Quick does")
-        form.mode = .quick
-        #expect(form.action == "Create")
-    }
-
-    @Test func theChatKindStartsAChatAndNoDraft() async throws {
+    @Test func aChatStartsAChatAndNoDraft() async throws {
         final class Seen: @unchecked Sendable {
             let lock = NSLock()
             var calls: [String] = []
@@ -114,10 +104,7 @@ import WorkbenchCore
             })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
-        var form = NewGoalForm()
-        form.mode = .chat
-        form.request = "Could uploads retry?"
-        #expect(await store.createGoal(form))
+        #expect(await store.startChat("Could uploads retry?"))
         #expect(seen.calls == ["chat newThread(name: \"could-uploads-retry\")|Could uploads retry?"])
     }
 

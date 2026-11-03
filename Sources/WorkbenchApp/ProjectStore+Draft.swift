@@ -1,70 +1,8 @@
 import Foundation
 import WorkbenchCore
 
-/// What the New goal card holds: the request and which kind of goal it makes. Switching the kind never touches the request.
-struct NewGoalForm: Equatable {
-    enum Mode: String, CaseIterable, Identifiable {
-        /// The request as typed is the goal: no agent, no criteria, no judge.
-        case quick
-        /// The goal agent drafts a title, criteria with proofs and out of scope from the request.
-        case advanced
-        /// A read-only conversation with the goal agent first (P22 slice 6c).
-        case chat
-
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .quick: "Quick"
-            case .advanced: "Advanced"
-            case .chat: "Chat"
-            }
-        }
-
-        /// The kinds the new-thread screen offers.
-        static let offered: [Mode] = [.quick, .advanced, .chat]
-    }
-
-    var request = ""
-    var mode = Mode.quick
-
-    var isEmpty: Bool { request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-    /// What Create will do, said under the text.
-    var note: String {
-        switch mode {
-        case .quick:
-            "Keeps your words as the goal, with no criteria: the judge does not run and the verifier works from "
-                + "your words. You approve it next."
-        case .advanced: "The goal agent drafts criteria from this. You read it and approve it next; nothing runs before that."
-        case .chat:
-            "Talk it through with the goal agent first. It reads nothing and runs nothing, and nothing is written to the "
-                + "repository; make it a goal when it is clear."
-        }
-    }
-
-    var busyText: String {
-        switch mode {
-        case .quick: "Creating the goal…"
-        case .advanced: "Drafting the goal…"
-        case .chat: "Waiting for the reply…"
-        }
-    }
-
-    /// The card's main button.
-    var action: String { mode == .chat ? "Send" : "Create" }
-}
-
-/// The new goal sheet's work: a quick goal written from what the person wrote, or one the goal agent drafts from it.
+/// The new-thread screen's work: a quick goal written from what the person wrote, or one the goal agent drafts from it.
 extension ProjectStore {
-    /// Makes the goal `form` asks for, from its request as it is now.
-    @discardableResult func createGoal(_ form: NewGoalForm, attachments: [URL] = []) async -> Bool {
-        switch form.mode {
-        case .quick: await quickGoal(request: form.request, attachments: attachments)
-        case .advanced: await draftGoal(request: form.request, attachments: attachments)
-        case .chat: await startChat(form.request)
-        }
-    }
-
     /// Writes a quick goal from the request as typed and opens the new thread on it. Nothing is drafted or spent; a refusal leaves
     /// the project as it was, so the card keeps the text.
     @discardableResult func quickGoal(request raw: String, attachments: [URL] = []) async -> Bool {

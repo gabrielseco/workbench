@@ -10,7 +10,7 @@ struct RootView: View {
             ToolbarBar(store: store)
             Divider()
             HStack(spacing: 0) {
-                Rail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
+                PreviewRail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
                 Divider()
                 Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity).background { Theme.canvas }
             }
@@ -115,12 +115,6 @@ struct StatePill: View {
     }
 }
 
-struct Rail: View {
-    var store: ProjectStore
-
-    var body: some View { PreviewRail(store: store) }
-}
-
 struct DoctorButton: View {
     var store: ProjectStore
     /// The footer's form: a word and its result, no frame.
@@ -171,54 +165,6 @@ struct Centre: View {
     }
 }
 
-struct ThreadPane: View {
-    var snapshot: ThreadSnapshot
-    var goal: GoalModel?
-    var store: ProjectStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let busy = store.busy { BusyBar(text: busy) }
-            if goal == nil {
-                Text(snapshot.title ?? snapshot.id).font(.title.weight(.bold))
-                Text(".workbench/threads/\(snapshot.id)/goal.md")
-                    .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                Text(snapshot.stateText).font(.title3).foregroundStyle(.secondary).padding(.top, 4)
-            }
-            if !snapshot.problems.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("The log has damaged lines; this shows what could be read.", systemImage: "xmark.octagon.fill")
-                        .foregroundStyle(Theme.red)
-                    ForEach(snapshot.problems, id: \.self) { Text($0).font(.callout).foregroundStyle(.secondary) }
-                    Text("Open the event log to see it; Workbench never rewrites it.").font(.callout).foregroundStyle(.secondary)
-                }
-                .padding(.top, 8)
-            }
-            if case .needsYou(let reason) = snapshot.attention, store.review == nil {
-                Label(reason.text, systemImage: "exclamationmark.circle.fill").foregroundStyle(Theme.amber).padding(.top, 8)
-            }
-            if let notice = store.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Theme.green) }
-            if let finished = snapshot.finishedText {
-                FinishedBanner(snapshot: snapshot, text: finished, store: store)
-            }
-            if let review = store.review {
-                ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
-            } else if let run = snapshot.run {
-                RunView(snapshot: snapshot, run: run, store: store)
-            } else if let goal {
-                GoalView(snapshot: snapshot, goal: goal, store: store)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 28).padding(.top, 28).padding(.bottom, scrollsItself ? 0 : 28)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The Goal screen is a scroll view with its own padding: no bottom padding here, so it scrolls to the footer and does not
-    /// cut its last row off in the middle of the window.
-    private var scrollsItself: Bool { store.review == nil && snapshot.run == nil && goal != nil }
-}
-
 /// What the app is doing for the person right now: a click is answered at once, even when the work behind it takes a while.
 struct BusyBar: View {
     var text: String
@@ -232,67 +178,6 @@ struct BusyBar: View {
         .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
     }
-}
-
-/// How a decided thread ended, and the way to the next goal: the one active thread is over, so a new one may start.
-struct FinishedBanner: View {
-    var snapshot: ThreadSnapshot
-    var text: String
-    var store: ProjectStore
-    @State private var confirmingMerge = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                if let url = snapshot.pullRequestURL {
-                    Link(destination: url) { Label(text, systemImage: "flag.checkered") }
-                        .help("Opens \(url.absoluteString) in the browser")
-                } else {
-                    Label(text, systemImage: "flag.checkered").foregroundStyle(.secondary)
-                }
-                Spacer()
-                if snapshot.canShip {
-                    Button("Ship") { Task { await store.ship() } }.disabled(store.busy != nil || store.deciding)
-                        .help("Pushes the branch and opens or updates its pull request")
-                }
-                if snapshot.canReviewPullRequest {
-                    Button(snapshot.state.review.prReview == nil ? "Review PR" : "Review again") {
-                        Task { await store.reviewPullRequest() }
-                    }
-                    .disabled(store.busy != nil).help("Codex reads the pull request, read-only, and says what it found")
-                }
-                if snapshot.watchesPullRequest {
-                    Button("Merge…") { confirmingMerge = true }
-                        .disabled(!snapshot.canMerge || store.busy != nil || store.deciding)
-                        .help(snapshot.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub")
-                }
-                Button("New goal…") { store.beginNewGoal() }
-            }
-            if snapshot.watchesPullRequest, let ci = snapshot.ci {
-                PullRequestCIView(ci: ci, store: store)
-            }
-            if let line = snapshot.prReviewText {
-                HStack {
-                    Text(line).font(.callout).foregroundStyle(.secondary)
-                    Button("Show findings") { Task { await store.showPRReview() } }.buttonStyle(.link)
-                }
-            }
-            if let note = snapshot.newGoalNote { Text(note).font(.callout).foregroundStyle(.secondary) }
-            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
-        }
-        .padding(12).background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
-            PRReviewSheet(store: store)
-        }
-        .confirmationDialog(mergeTitle, isPresented: $confirmingMerge) {
-            Button("Merge") { Task { await store.mergePullRequest() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Squash-merges it on GitHub at the commit whose checks are green. This cannot be undone from Workbench.")
-        }
-    }
-
-    private var mergeTitle: String { snapshot.state.pullRequest.map { "Merge PR #\($0.number)?" } ?? "Merge?" }
 }
 
 /// The shipped pull request's CI as GitHub said it last: one line, then one row per check, and why Merge waits when it does.
