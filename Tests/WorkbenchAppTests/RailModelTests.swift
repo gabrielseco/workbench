@@ -9,10 +9,10 @@ import WorkbenchCore
 
 /// The rail with the preview on (design parity 4): what it lists, how a row says its state, and what choosing a row does.
 @MainActor @Suite struct RailModelTests {
-    private func tasksSnapshot() async throws -> TasksSnapshot {
+    private func tasksSnapshot(_ scenario: AppScenario = .tasks) async throws -> TasksSnapshot {
         let fixture = try await AppFixture(git: false)
         keptRailFixtures.append(fixture)
-        try await AppScenario.tasks.build(in: fixture)
+        try await scenario.build(in: fixture)
         let probes = fixture.root.appendingPathComponent("probes")
         try FileManager.default.createDirectory(at: probes, withIntermediateDirectories: true)
         let answers = [
@@ -50,8 +50,8 @@ import WorkbenchCore
 
     @Test func aProjectWithNoTasksSaysSoAndOneNotReadYetSaysThatInstead() async throws {
         let shown = try await listing()
-        var empty = try await tasksSnapshot()
-        empty.entries = []
+        let empty = try await tasksSnapshot(.tasksEmpty)
+        #expect(empty.entries.isEmpty, "the tasks-empty fixture has none")
         let none = RailModel.derive(listing: shown, tasks: empty)
         #expect(none.scheduledHeader == "SCHEDULED · 0")
         #expect(none.scheduledNote?.hasPrefix("No scheduled tasks.") == true)
@@ -60,6 +60,14 @@ import WorkbenchCore
     }
 
     // MARK: Rows
+
+    @Test func aThreadRowKeepsItsTitleMarkAndLineInTheRail() async throws {
+        for row in try await listing().rows {
+            let rail = RailRow.thread(row)
+            #expect(rail.kind == .thread && rail.key == row.id && rail.title == row.title)
+            #expect(rail.mark == row.mark && rail.line == row.line)
+        }
+    }
 
     @Test func eachTaskStateHasItsMarkAndItsLine() async throws {
         let rows = Dictionary(uniqueKeysWithValues: try await tasksSnapshot().entries.map { ($0.id, RailRow.task($0)) })

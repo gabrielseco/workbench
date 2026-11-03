@@ -56,7 +56,7 @@ struct RailRowView: View {
             HStack(alignment: .center, spacing: 10) {
                 RailMark(mark: row.mark).frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(row.title).font(.callout.weight(.semibold)).lineLimit(1).truncationMode(.tail)
+                    Text(row.title).font(.callout.weight(.semibold)).lineLimit(1).truncationMode(.middle)
                     Text(row.line).font(.caption).lineLimit(1)
                         .foregroundStyle(row.mark.lineTint == .quiet ? Color.secondary : row.mark.tint)
                 }
@@ -80,7 +80,7 @@ struct RailMark: View {
 
     var body: some View {
         switch mark {
-        case .working: ProgressView().controlSize(.small).scaleEffect(0.7)
+        case .working: ProgressView().controlSize(.small).scaleEffect(0.7).tint(Theme.blue)
         case .needsYou:
             Circle().fill(Theme.amber).frame(width: 9, height: 9)
                 .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))
