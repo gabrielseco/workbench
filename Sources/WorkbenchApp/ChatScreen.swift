@@ -208,6 +208,9 @@ struct ChatComposer: View {
     private func editor(_ state: ChatComposerState) -> some View {
         TextEditor(text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }))
             .font(.body).scrollContentBackground(.hidden).focused($focused)
+            // One line high, the box scrolls only past six: on a Mac that always shows scroll bars (a mouse, or the setting) its bar would
+            // sit in the panel as a stray grey pill beside the Send button.
+            .scrollIndicators(.hidden)
             .frame(height: ChatComposerState.editorHeight(for: state.text))
             .disabled(!state.canType)
             .opacity(state.replying ? 0.6 : 1)
