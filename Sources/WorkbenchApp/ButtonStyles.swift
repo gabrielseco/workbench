@@ -10,7 +10,10 @@ struct PrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Theme.invfg)
             .padding(.horizontal, 16).frame(minHeight: 34)
-            .background(Theme.inv.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 7))
+            // Pressed is darker in both appearances (a lower opacity would fade toward the canvas, lighter on the light one).
+            .background {
+                RoundedRectangle(cornerRadius: 7).fill(Theme.inv).brightness(configuration.isPressed ? -0.2 : 0)
+            }
             .opacity(enabled ? 1 : 0.4)
             .contentShape(RoundedRectangle(cornerRadius: 7))
     }

@@ -55,7 +55,7 @@ struct SendBackPopover: View {
             Text("The next turn also gets the failed check's output.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 12)
-            Button("Cancel", action: close).keyboardShortcut(.cancelAction)
+            Button("Cancel", action: close).plainButton().keyboardShortcut(.cancelAction)
             Button("Send back") { store.sendBack() }
                 .primaryButton()
                 .keyboardShortcut(.return, modifiers: .command).disabled(empty || store.grantsInFlight > 0)
