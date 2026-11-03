@@ -229,7 +229,7 @@ import WorkbenchCore
         let progress = ThreadState.derive(from: [started], id: "t").progress
         let model = RunCardModel(
             number: 1, progress: progress, limit: 1800, tasks: tasks, tail: ["Read a.swift", "Edit b.swift"], stop: stop,
-            consumed: [])
+            diff: FeedAction(kind: .openDiff, title: "Open diff"), consumed: [])
         let decision = FeedDecision(
             primary: FeedAction(kind: .ship, title: "Ship"), more: [FeedAction(kind: .sendBack, title: "Send back…")])
         let ship = DecisionCard(step: .ship, why: "", decision: decision, perform: { _ in }, route: "wb/g-1 → main")
