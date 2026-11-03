@@ -19,6 +19,8 @@ struct RootView: View {
             Divider()
             FooterBar(store: store)
         }
+        // The palette is read when a colour is drawn, so a window already on screen is rebuilt when the preview is switched.
+        .id(store.chatFeedOn)
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
         .disabled(
             store.namingGoal || store.sendingBack || store.pickingProject || store.tasks.approving != nil
