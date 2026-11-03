@@ -232,8 +232,9 @@ struct NewThreadScreen: View {
             .disabled(busy)
             .overlay(alignment: .topLeading) {
                 if state.isBlank {
+                    // Where the text view starts its text: the caret and the placeholder are on one line.
                     Text("Describe the change, the bug or the idea.").foregroundStyle(.tertiary)
-                        .padding(.leading, 5).padding(.top, 6).allowsHitTesting(false)
+                        .padding(.leading, 5).padding(.top, 0).allowsHitTesting(false)
                 }
             }
             .onKeyPress(.return, phases: .down) { press in

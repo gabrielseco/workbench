@@ -218,7 +218,7 @@ struct ChatComposer: View {
             .overlay(alignment: .topLeading) {
                 if state.isBlank {
                     Text(state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…")
-                        .foregroundStyle(.tertiary).padding(.leading, 5).padding(.top, 6).allowsHitTesting(false)
+                        .foregroundStyle(.tertiary).padding(.leading, 5).padding(.top, 0).allowsHitTesting(false)
                 }
             }
             .onKeyPress(.return, phases: .down) { press in
