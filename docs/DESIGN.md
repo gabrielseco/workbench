@@ -120,6 +120,14 @@ ships, and the mockup gets fixed.
   goal from this chat. Edit anything below, then approve. Nothing runs until you do.`; there is no `Back to chat` (a chat that became a goal takes
   no more messages). The Run settings panel is open by default beside the feed until a person closes it (a narrow window shows it over the feed
   only once they have chosen).
+- **A running turn** is one card (the artboard's *Run*): `Claude is working` with `3:41 of 30:00` (the turn's time against its limit, ticking
+  each second) over a thin bar, `TASKS · 3 OF 5` when the agent kept a task list (done ticked, the working one bold with a spinner, the rest
+  a grey ring), the last three tool calls as a mono tail, and `Stop` (the decision's stop action; the *Next* card is not drawn while the card
+  is). Under it, `Judge` and `Verify` as grey rings with what they will do, each only when it is on for the goal. A refused call and the
+  agent's words stay rows of their own. A finished turn is `Run finished · 5 tasks · 3 files · +7 −1 · $1.88` with `View diff`;
+  `Verify passed` is a card with up to three screenshot thumbnails and their names; when the next press is Ship the foot is `Ready to ship`
+  (the branch and base, then `Request changes` where a send-back is allowed, and `Ship`). Not in the artboard and not built: the steer
+  input, the verify card's command chips.
 - **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
   open by default until a person closes it, and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by

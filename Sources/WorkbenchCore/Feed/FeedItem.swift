@@ -25,12 +25,22 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
         case earlierNotShown(count: Int)
     }
 
+    /// One task of the agent's own list in a turn.
+    public struct PlanTask: Sendable, Equatable {
+        public enum State: String, Sendable, Equatable { case pending, working, done }
+        public var text: String
+        public var state: State
+        public init(text: String, state: State) { (self.text, self.state) = (text, state) }
+    }
+
     public enum Kind: Sendable, Equatable {
         case userNote(text: String)
         /// `hash` is the latest approved revision the log names, else the latest saved one.
         case goalCard(title: String?, approval: ApprovalState?, criteria: Int, hash: String?)
         case turn(number: Int, phase: Phase, durationMs: Int?, costUSD: Double?)
         case agentText(String)
+        /// The agent's task list as the turn left it, once per turn, where it was first written. Only a provider that reports one has it.
+        case plan(tasks: [PlanTask])
         /// Consecutive tool calls other than edits: how many, and the first few summaries.
         case toolGroup(count: Int, summaries: [String])
         case edit(file: String, tool: String)
@@ -53,6 +63,11 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
     public var seq: Int
     public var turn: Int
     public var kind: Kind
+    /// For a turn: the labels of its last few calls, every call (an edit the feed shows once counts again when repeated), so a live
+    /// view shows what is happening now.
+    public var latest: [String]
 
-    public init(id: String, seq: Int, turn: Int, kind: Kind) { (self.id, self.seq, self.turn, self.kind) = (id, seq, turn, kind) }
+    public init(id: String, seq: Int, turn: Int, kind: Kind, latest: [String] = []) {
+        (self.id, self.seq, self.turn, self.kind, self.latest) = (id, seq, turn, kind, latest)
+    }
 }

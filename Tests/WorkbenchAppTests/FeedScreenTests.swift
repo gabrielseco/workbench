@@ -127,6 +127,7 @@ import WorkbenchCore
         ("turn-failed", .turn(number: 1, phase: .ended(result: "timed_out"), durationMs: 1_800_000, costUSD: nil)),
         ("turn-orphaned", .turn(number: 3, phase: .orphaned, durationMs: nil, costUSD: nil)),
         ("turn-unrecorded", .turn(number: 3, phase: .unrecorded, durationMs: nil, costUSD: nil)),
+        ("plan", .plan(tasks: [.init(text: "Add rows", state: .done), .init(text: "Wire it", state: .working)])),
         ("agent-text", .agentText("Reading the client before changing how it retries.")),
         ("tool-group", .toolGroup(count: 14, summaries: ["Read Sources/Client.swift", "Grep retry", "Bash swift build"])),
         ("edit", .edit(file: "Sources/Thread/AutoAdvance.swift", tool: "Edit")),
@@ -170,7 +171,7 @@ import WorkbenchCore
         for (_, kind) in Self.samples { seen.insert(String("\(kind)".prefix { $0 != "(" })) }
         #expect(
             seen == [
-                "userNote", "goalCard", "turn", "agentText", "toolGroup", "edit", "denied", "check", "judge", "verify",
+                "userNote", "goalCard", "turn", "plan", "agentText", "toolGroup", "edit", "denied", "check", "judge", "verify",
                 "decision", "pullRequest", "prReview", "next", "notice",
             ])
     }

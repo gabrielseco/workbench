@@ -19,6 +19,10 @@ extension Feed {
         private var denials: [Int: [(tool: String, input: String?)]] = [:]
         private var deniedSeen: [Int: Int] = [:]
         private var deniedRows: [Int: Int] = [:]
+        private var lastPlan: [Int: [FeedItem.PlanTask]] = [:]
+        private var planSeen = Set<Int>()
+        /// The last few calls of each turn, every one of them (an edit shown once in the feed is still the latest call when it repeats).
+        private var recent: [Int: [String]] = [:]
 
         init(contents: EventLogContents, runnerAlive: Bool) { (self.contents, self.runnerAlive) = (contents, runnerAlive) }
 
@@ -35,8 +39,30 @@ extension Feed {
             for event in contents.events where event.kind == .agentActivity {
                 if event.data["type"]?.stringValue == "permission_denied" { deniedRows[event.turn, default: 0] += 1 }
             }
+            for event in contents.events where event.kind == .agentActivity && event.data["type"]?.stringValue == "plan" {
+                guard case .array(let entries)? = event.data["items"] else { continue }
+                // An empty list is the agent clearing its tasks, not a damaged record: it replaces the last one.
+                if entries.isEmpty {
+                    lastPlan[event.turn] = []
+                    continue
+                }
+                let tasks = entries.prefix(AgentActivityRecord.maxPlanItems).compactMap { entry -> FeedItem.PlanTask? in
+                    guard let text = entry["text"]?.stringValue, !text.isEmpty else { return nil }
+                    let state: FeedItem.PlanTask.State =
+                        switch entry["status"]?.stringValue {
+                        case "done": .done
+                        case "in_progress": .working
+                        default: .pending
+                        }
+                    return FeedItem.PlanTask(text: short(text), state: state)
+                }
+                if !tasks.isEmpty { lastPlan[event.turn] = tasks }
+            }
             for event in contents.events { add(event, ended: ended[event.turn]) }
             flush()
+            for index in out.indices {
+                if case .turn = out[index].kind { out[index].latest = recent[out[index].turn] ?? [] }
+            }
             return Feed.fold(out)
         }
 
@@ -124,6 +150,10 @@ extension Feed {
 
         private mutating func activity(_ event: Event) {
             switch event.data["type"]?.stringValue ?? "" {
+            case "plan":
+                // Each update replaces the list: the turn shows one row, where it first appeared, with the last list.
+                guard planSeen.insert(event.turn).inserted, let tasks = lastPlan[event.turn], !tasks.isEmpty else { return }
+                push(event, .plan(tasks: tasks))
             case "text":
                 push(event, .agentText(ThreadState.safeLine(event.data["text"]?.stringValue ?? "", limit: Feed.textLimit)))
             case "tool":
@@ -156,6 +186,8 @@ extension Feed {
         private mutating func tool(_ event: Event) {
             let name = ThreadState.safeLine(event.data["name"]?.stringValue ?? "tool", limit: 40)
             let summary = short(event.data["summary"]?.stringValue ?? "")
+            let label = summary.isEmpty ? name : "\(name) \(summary)"
+            recent[event.turn] = Array((recent[event.turn, default: []] + [label]).suffix(Feed.summariesPerGroup))
             if Feed.editTools.contains(name) {
                 // A file edited again in the same turn is the same row: the feed says what changed, not how often.
                 // Two files are the same only when the whole recorded path is, not the part that fits on a row.
@@ -165,7 +197,6 @@ extension Feed {
                 push(event, .edit(file: file, tool: name))
                 return
             }
-            let label = summary.isEmpty ? name : "\(name) \(summary)"
             if var open = group, open.turn == event.turn {
                 open.count += 1
                 if open.summaries.count < Feed.summariesPerGroup { open.summaries.append(label) }

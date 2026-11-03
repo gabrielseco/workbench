@@ -112,6 +112,56 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(other.consume(line: #"{"type":"system","session_id":"other"}"#).isEmpty)
     }
 
+    @Test func aTodoWriteCallAlsoReportsTheTaskList() {
+        var d = decoder()
+        let todos =
+            #"[{"content":"Add rows","status":"completed","activeForm":"Adding"},{"content":"Wire it","status":"in_progress"},"#
+            + #"{"content":"Test it","status":"pending"},{"content":"","status":"pending"},{"status":"pending"}]"#
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let line = head + #""input":{"todos":\#(todos)}}]}}"#
+        #expect(
+            d.consume(line: line) == [
+                .tool(name: "TodoWrite", summary: ""),
+                .plan([
+                    AgentPlanItem(text: "Add rows", status: .done), AgentPlanItem(text: "Wire it", status: .inProgress),
+                    AgentPlanItem(text: "Test it", status: .pending),
+                ]),
+            ], "empty and malformed tasks are dropped")
+        let none = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[]}}]}}"#
+        #expect(d.consume(line: none) == [.tool(name: "TodoWrite", summary: ""), .plan([])], "empty: the tasks are cleared")
+        let other =
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","#
+            + #""input":{"todos":[{"content":"x"}]}}]}}"#
+        #expect(d.consume(line: other) == [.tool(name: "Bash", summary: "")], "only TodoWrite carries a task list")
+    }
+
+    @Test func aCredentialThatStraddlesTheCutIsStillScrubbed() throws {
+        var d = decoder()
+        let padding = String(repeating: "z", count: 200)
+        let task = "https://user:\(padding)@example.com/x"
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let items = d.consume(line: head + #""input":{"todos":[{"content":"\#(task)","status":"pending"}]}}]}}"#)
+        guard case .plan(let plan)? = items.last else {
+            Issue.record("no plan")
+            return
+        }
+        #expect(!plan[0].text.contains("zzzz"), "the userinfo is removed before the text is cut")
+    }
+
+    @Test func anOversizedTodoListReachesTheRecorderWithRoomToSayItWasCut() throws {
+        var d = decoder()
+        let long = String(repeating: "y", count: 400)
+        let todos = (0..<30).map { _ in #"{"content":"\#(long)","status":"pending"}"# }.joined(separator: ",")
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let items = d.consume(line: head + #""input":{"todos":[\#(todos)]}}]}}"#)
+        guard case .plan(let plan)? = items.last else {
+            Issue.record("no plan")
+            return
+        }
+        let stored = try #require(AgentActivityRecord.data(for: .plan(plan), provider: "claude"))
+        #expect(stored["truncated"] == true, "the decoder does not hide the cut from the log")
+    }
+
     @Test func assistantTextAndToolCallsBecomeActivity() {
         var d = decoder()
         let line =

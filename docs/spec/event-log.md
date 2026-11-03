@@ -26,7 +26,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `goal.approved` | approve | `hash`, `budget_usd`, `provider`, `model`, `reasoning_effort` |
 | `turn.started` | process spawned | `session_id` (Claude only), `resume`, `pid`, `argv` (redacted), `prompt_ref`, `provider`, `continuation` (Codex follow-up only) |
 | `claude` | **No longer written or read.** A log from before every provider recorded `agent.activity` holds it (every stream line, or a turn's `result` line); a reader ignores it as an unknown kind. `workbench compact` of the release before this change rewrote such logs | the raw line, unmodified |
-| `agent.activity` | one normalized item of a coding turn, whatever the provider (P9). The raw lines are in the turn's [transcript file](#transcript-files) | `provider`, `type` (`text`, `tool`, `permission_denied`, `usage`, `session`, `diagnostic`, `unknown`, `dropped`) and that type's fields |
+| `agent.activity` | one normalized item of a coding turn, whatever the provider (P9). The raw lines are in the turn's [transcript file](#transcript-files) | `provider`, `type` (`text`, `tool`, `plan`, `permission_denied`, `usage`, `session`, `diagnostic`, `unknown`, `dropped`) and that type's fields |
 | `turn.ended` | always, exactly once per turn | `result`, `exit_code`, `signal`, `duration_ms`, `cost_usd?`, `transcript?` (`{lines, bytes}` of the turn's transcript file; absent when the turn wrote none) |
 | `worktree.created` | the worktree was cut from `base` | `path`, `branch`, `base_commit` |
 | `check.started` | before the project's check command starts | `command` |
@@ -160,6 +160,12 @@ activity once. `progress.tool_calls` and `denied_calls` of a
 turn are `null` in `status --json` until the provider has reported one: a provider that streams no tool or
 denial events has not said there were none, and neither is one that dropped items without counting them. Usage from
 `agent.activity` is summed per field in `ThreadState.reportedUsage`; a field never reported stays nil.
+
+`plan` is the agent's own task list as it stands after one update (Claude's `TodoWrite`, which also records its `tool` item as
+before): `items`, at most 20, each `{text, status}` with `text` cut at 120 characters and `status` one of `pending`,
+`in_progress`, `done`; `truncated` is true when the list or a text was cut. Each update replaces the list, so the
+feed reads the last one of a turn. A provider that reports no task list records none, and a log without any reads as before.
+It counts toward the turn's activity cap like any item.
 
 Event version stays 1: a reader that does not know `agent.activity` ignores it (envelope rule), and every earlier
 log replays unchanged, since only the new kind carries the new data. Tested by replaying a log with and without the

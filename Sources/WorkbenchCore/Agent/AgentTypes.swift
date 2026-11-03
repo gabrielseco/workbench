@@ -203,11 +203,21 @@ public struct AgentUsage: Sendable, Equatable, Codable {
 
 /// One thing the agent did, normalized. An event the adapter does not understand is kept as `.unknown`, with
 /// its provider and a bounded copy of the original line, rather than dropped.
+/// One task of the agent's own task list (Claude's TodoWrite), as the run card shows it.
+public struct AgentPlanItem: Sendable, Equatable {
+    public enum Status: String, Sendable, Equatable { case pending, inProgress = "in_progress", done }
+    public var text: String
+    public var status: Status
+    public init(text: String, status: Status) { (self.text, self.status) = (text, status) }
+}
+
 public enum AgentActivity: Sendable, Equatable {
     case started(pid: Int32)
     case text(String)
     case tool(name: String, summary: String)
     case permissionDenied(tool: String)
+    /// The agent's task list as it stands now (each update replaces the last). Only a provider that reports one emits it.
+    case plan([AgentPlanItem])
     case usage(AgentUsage)
     case session(AgentSessionHandle)
     case diagnostic(String)

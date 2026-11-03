@@ -25,12 +25,42 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         AgentActivityRecord.data(for: item, provider: provider)
     }
 
+    @Test func aTaskIsScrubbedOfPathsAndCredentialsBeforeItIsKept() throws {
+        let text = "Fix /Users/me/work/app/List.swift with ghp_abcdefgh12345678 and https://tok@example.com/x"
+        let stored = try #require(data(.plan([AgentPlanItem(text: text, status: .pending)])))
+        guard case .array(let items)? = stored["items"], let kept = items.first?["text"]?.stringValue else {
+            Issue.record("no items")
+            return
+        }
+        #expect(!kept.contains("/Users/me") && !kept.contains("ghp_abcdefgh") && !kept.contains("tok@"))
+        #expect(kept.contains("<path>") && kept.contains("<redacted>"))
+    }
+
+    @Test func aTaskListIsBoundedInItemsAndInCharacters() throws {
+        let long = String(repeating: "x", count: 300)
+        var many: [AgentPlanItem] = []
+        for _ in 0..<30 { many.append(AgentPlanItem(text: long, status: .pending)) }
+        let stored = try #require(data(.plan(many)))
+        guard case .array(let items)? = stored["items"] else {
+            Issue.record("no items")
+            return
+        }
+        #expect(items.count == AgentActivityRecord.maxPlanItems)
+        #expect(items[0]["text"]?.stringValue?.count == AgentActivityRecord.maxPlanItemCharacters)
+        #expect(stored["truncated"] == true, "it says it was cut")
+    }
+
     @Test func mapsEveryCase() {
         #expect(data(.started(pid: 4)) == nil, "turn.started has the pid")
         #expect(data(.text("hi")) == activity("text", ["text": "hi"]))
         #expect(data(.tool(name: "shell", summary: "ls")) == activity("tool", ["name": "shell", "summary": "ls"]))
         #expect(data(.permissionDenied(tool: "Bash")) == activity("permission_denied", ["tool": "Bash"]))
         #expect(data(.diagnostic("slow")) == activity("diagnostic", ["text": "slow"]))
+        let first: JSONValue = .object(["text": "Add rows", "status": "done"])
+        let second: JSONValue = .object(["text": "Wire", "status": "in_progress"])
+        let items = [AgentPlanItem(text: "Add rows", status: .done), AgentPlanItem(text: "Wire", status: .inProgress)]
+        let planned = data(.plan(items))
+        #expect(planned == activity("plan", ["items": .array([first, second])]))
         #expect(data(.dropped(count: 3)) == activity("dropped", ["count": 3]))
         let handle = AgentSessionHandle(provider: .codex, purpose: .coding, value: "t-1")
         #expect(data(.session(handle)) == activity("session", ["value": "t-1", "purpose": "coding"]))
@@ -58,6 +88,10 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         let partial = try #require(data(.usage(AgentUsage(inputTokens: 10))))
         #expect(partial["output_tokens"] == nil && partial["cached_input_tokens"] == nil && partial["cost_usd"] == nil)
         #expect(LogFormatter.describeActivity(activity("usage")) == "usage: not reported")
+        let done: JSONValue = .object(["text": "a", "status": "done"])
+        let todo: JSONValue = .object(["text": "b", "status": "pending"])
+        #expect(LogFormatter.describeActivity(activity("plan", ["items": .array([done, todo])])) == "tasks: 1 of 2 done")
+        #expect(LogFormatter.describeActivity(activity("plan")) == "codex task list", "a damaged list still says what it is")
 
         let state = ThreadState.derive(
             from: [

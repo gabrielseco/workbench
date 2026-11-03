@@ -14,13 +14,16 @@ struct FeedRow: View {
     var draft: DraftGoalContext?
     /// The conversation a goal made from a chat came from: its fold stays above the goal card in every state.
     var brainstorm: [ChatMessage] = []
+    /// What the latest finished turn says beside "Run finished", and the screenshots under the latest "Verify passed".
+    var finish: FinishContext?
+    var shots: [ProofShot] = []
 
     init(
         item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false,
-        draft: DraftGoalContext? = nil, brainstorm: [ChatMessage] = []
+        draft: DraftGoalContext? = nil, brainstorm: [ChatMessage] = [], finish: FinishContext? = nil, shots: [ProofShot] = []
     ) {
         (self.item, self.goal, self.store, self.editable, self.draft) = (item, goal, store, editable, draft)
-        self.brainstorm = brainstorm
+        (self.brainstorm, self.finish, self.shots) = (brainstorm, finish, shots)
     }
 
     var body: some View {
@@ -31,7 +34,7 @@ struct FeedRow: View {
                 title: title, approval: approval, criteria: count, hash: hash, goal: goal, store: store, editable: editable,
                 draft: draft, brainstorm: brainstorm)
         case .turn(let number, let phase, let durationMs, let cost):
-            TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
+            TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost, finish: finish)
         case .agentText(let text):
             Text(text).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         case .toolGroup(let count, let summaries): ToolGroupRow(count: count, summaries: summaries)
@@ -43,7 +46,8 @@ struct FeedRow: View {
         case .check(let result, let command, let durationMs): CheckRow(result: result, command: command, durationMs: durationMs)
         case .judge(let ok, let criteria, let unmet, let concerns):
             JudgeRow(ok: ok, criteria: criteria, unmet: unmet, concerns: concerns)
-        case .verify(let ok, let reason, let proofs): VerifyRow(ok: ok, reason: reason, proofs: proofs)
+        case .verify(let ok, let reason, let proofs): VerifyRow(ok: ok, reason: reason, proofs: proofs, shots: shots)
+        case .plan(let tasks): PlanRow(tasks: tasks)
         case .decision(let text):
             FeedLine(
                 symbol: text == "accepted" ? "checkmark.circle.fill" : "minus.circle.fill",
@@ -260,6 +264,7 @@ struct TurnRow: View {
     var phase: FeedItem.Phase
     var durationMs: Int?
     var cost: Double?
+    var finish: FinishContext?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -270,6 +275,9 @@ struct TurnRow: View {
             Text(title).font(.callout.weight(.semibold))
             if let detail { Text(detail).font(.callout).foregroundStyle(.secondary) }
             Spacer(minLength: 0)
+            if let finish, case .ended(let result) = phase, result == "succeeded" {
+                Button("View diff", action: finish.viewDiff).controlSize(.small)
+            }
         }
         .padding(.top, 6)
         .accessibilityElement(children: .combine)
@@ -282,7 +290,7 @@ struct TurnRow: View {
         case .unrecorded: "Turn \(number) · how it ended is not recorded"
         case .ended(let result):
             switch result {
-            case "succeeded": "Turn \(number) ended"
+            case "succeeded": finish == nil ? "Turn \(number) ended" : "Run finished"
             case "timed_out": "Turn \(number) timed out"
             case "budget_exceeded": "Turn \(number) went over budget"
             default: "Turn \(number) \(result.replacingOccurrences(of: "_", with: " "))"
@@ -292,6 +300,10 @@ struct TurnRow: View {
 
     private var detail: String? {
         var parts: [String] = []
+        if let finish, case .ended(let result) = phase, result == "succeeded" {
+            if let tasks = finish.tasks { parts.append("\(tasks) \(tasks == 1 ? "task" : "tasks")") }
+            if let totals = finish.totals { parts.append(totals) }
+        }
         if let durationMs { parts.append(Self.duration(durationMs)) }
         if let cost { parts.append(String(format: "$%.2f", cost)) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -381,8 +393,25 @@ struct VerifyRow: View {
     var ok: Bool
     var reason: String?
     var proofs: [String]
+    var shots: [ProofShot] = []
 
     var body: some View {
+        if ok, !shots.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                FeedLine(symbol: "checkmark.circle.fill", tint: Theme.green, title: "Verify passed", detail: nil)
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(shots) { ProofThumbnail(shot: $0) }
+                }
+            }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        } else {
+            line
+        }
+    }
+
+    private var line: some View {
         FeedLine(
             symbol: ok ? "checkmark.circle.fill" : "xmark.circle.fill", tint: ok ? Theme.green : Theme.red,
             title: ok ? "Verify passed" : "Verify failed" + (reason.map { ": \($0)" } ?? ""),

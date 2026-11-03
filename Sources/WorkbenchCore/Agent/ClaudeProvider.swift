@@ -240,10 +240,32 @@ struct ClaudeDecoder: AgentDecoder {
                     let input = block["input"] as? [String: Any]
                     let summary = Self.deniedInputKeys.lazy.compactMap { input?[$0] as? String }.first ?? ""
                     items.append(.tool(name: String(name.prefix(200)), summary: String(summary.prefix(200))))
+                    if name == "TodoWrite", let plan = Self.plan(from: input) { items.append(.plan(plan)) }
                 }
             default: break
             }
         }
+        return items
+    }
+
+    /// The task list a `TodoWrite` call carries: `todos` of `content` and `status`. Anything else in it is not read; nil when the call has
+    /// no `todos` at all.
+    static func plan(from input: [String: Any]?) -> [AgentPlanItem]? {
+        guard let todos = input?["todos"] as? [[String: Any]] else { return nil }
+        // One more item and one more character than the log keeps, so the recorder can tell a list was cut and say so.
+        let items = todos.prefix(AgentActivityRecord.maxPlanItems + 1).compactMap { todo -> AgentPlanItem? in
+            guard let text = todo["content"] as? String, !text.isEmpty else { return nil }
+            let status: AgentPlanItem.Status =
+                switch todo["status"] as? String {
+                case "completed": .done
+                case "in_progress": .inProgress
+                default: .pending
+                }
+            // Scrubbed whole, then cut: a credential must not straddle the cut and slip past the scrub.
+            let clean = ThreadService.withoutCredentials(PRBodyBuilder.scrub(String(text.prefix(2_000))))
+            return AgentPlanItem(text: String(clean.prefix(AgentActivityRecord.maxPlanItemCharacters + 1)), status: status)
+        }
+        // An empty list is the agent clearing its tasks; it is reported so the feed can clear them too.
         return items
     }
 
