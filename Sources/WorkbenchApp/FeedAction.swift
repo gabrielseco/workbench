@@ -22,6 +22,8 @@ struct FeedAction: Equatable, Identifiable {
 /// The next press and the rest. At most one primary, so a state never has two prominent buttons.
 struct FeedDecision: Equatable {
     var primary: FeedAction?
+    /// The one plain button beside the primary, for what a person does before pressing it (Review: see what changed).
+    var secondary: FeedAction?
     var more: [FeedAction] = []
     /// Replaces the spine's line under the step when the button is not about what that line says (Merge, on the PR review step).
     var why: String?
@@ -91,13 +93,12 @@ enum FeedActions {
                 FeedAction(
                     kind: .discard, title: "Discard…", help: "Shows what would be removed, and asks first", enabled: !c.busy,
                     destructive: true))
-            more.append(
-                FeedAction(
-                    kind: .openDiff, title: "Open diff", help: "Each changed file against the base, in your editor",
-                    enabled: !c.busy && c.reviewHasFiles))
+            let diff = FeedAction(
+                kind: .openDiff, title: "Open diff", help: "Each changed file against the base, in your editor",
+                enabled: !c.busy && c.reviewHasFiles)
             worktree()
             more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
-            return FeedDecision(primary: accept, more: more)
+            return FeedDecision(primary: accept, secondary: diff, more: more)
         }
         if let run = s.run {
             worktree()

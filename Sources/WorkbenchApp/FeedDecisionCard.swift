@@ -79,6 +79,9 @@ struct DecisionActions: View {
     var body: some View {
         HStack(spacing: 12) {
             MoreActionsMenu(actions: decision.more, perform: perform)
+            if let side = decision.secondary {
+                Button(side.title) { perform(side) }.plainButton().disabled(!side.enabled).help(side.help ?? side.title)
+            }
             if let primary = decision.primary {
                 Button(primary.title) { perform(primary) }
                     .primaryButton()
