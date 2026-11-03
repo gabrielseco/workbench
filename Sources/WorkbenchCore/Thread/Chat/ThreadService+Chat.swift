@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// Where a chat message goes: a new thread, or the conversation of an existing chat.
