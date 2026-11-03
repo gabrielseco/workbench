@@ -89,8 +89,11 @@ wbp "$SCRATCH/first.out" chat idea --message "could uploads retry?"
 shown "$SCRATCH/first.out" 6
 check "the first message: exit 0" "workbench chat exited $RC" test "$RC" = 0
 check "the reply is printed" "reply missing" grep -q "What should happen after the fifth try?" "$SCRATCH/first.out"
-ID=$(sed -n 's/^chat \([^ ]*\) .*/\1/p' "$SCRATCH/first.out")
-[[ $ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "chat printed no thread id ($(head -3 "$SCRATCH/first.out"))"
+# The thread is a folder whether or not the turn answered: its name is read from there, so a failed first turn is judged by the steps below.
+ID=$(ls "$P/.workbench/threads" | head -1)
+[[ $ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "the first message made no thread ($(head -3 "$SCRATCH/first.out"))"
+check "the printed thread id is the thread's" "printed: $(sed -n 's/^chat \([^ ]*\) .*/\1/p' "$SCRATCH/first.out")" \
+    test "$(sed -n 's/^chat \([^ ]*\) .*/\1/p' "$SCRATCH/first.out")" = "$ID"
 check "a chat thread has no goal file" "goal.md exists" test ! -e "$P/.workbench/threads/$ID/goal.md"
 check "and no worktree and no branch" "worktree or branch exists" \
     bash -c 'test ! -e "$1/.workbench/worktrees/$2" && ! git -C "$1" branch --list | grep -q "$2"' _ "$P" "$ID"
