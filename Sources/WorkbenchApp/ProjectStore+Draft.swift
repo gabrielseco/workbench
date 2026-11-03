@@ -8,9 +8,20 @@ struct NewGoalForm: Equatable {
         case quick
         /// The goal agent drafts a title, criteria with proofs and out of scope from the request.
         case advanced
+        /// A read-only conversation with the goal agent first (P22 slice 6c); offered only while the chat feed preview is on.
+        case chat
 
         var id: String { rawValue }
-        var label: String { self == .quick ? "Quick" : "Advanced" }
+        var label: String {
+            switch self {
+            case .quick: "Quick"
+            case .advanced: "Advanced"
+            case .chat: "Chat"
+            }
+        }
+
+        /// The kinds the card offers: Chat only with the preview on, so the card is as it was without it.
+        static func offered(chatFeed: Bool) -> [Mode] { chatFeed ? [.quick, .advanced, .chat] : [.quick, .advanced] }
     }
 
     var request = ""
@@ -25,10 +36,22 @@ struct NewGoalForm: Equatable {
             "Keeps your words as the goal, with no criteria: the judge does not run and the verifier works from "
                 + "your words. You approve it next."
         case .advanced: "The goal agent drafts criteria from this. You read it and approve it next; nothing runs before that."
+        case .chat:
+            "Talk it through with the goal agent first. It reads nothing and runs nothing, and nothing is written to the "
+                + "repository; make it a goal when it is clear."
         }
     }
 
-    var busyText: String { mode == .quick ? "Creating the goal…" : "Drafting the goal…" }
+    var busyText: String {
+        switch mode {
+        case .quick: "Creating the goal…"
+        case .advanced: "Drafting the goal…"
+        case .chat: "Waiting for the reply…"
+        }
+    }
+
+    /// The card's main button.
+    var action: String { mode == .chat ? "Send" : "Create" }
 }
 
 /// The new goal sheet's work: a quick goal written from what the person wrote, or one the goal agent drafts from it.
@@ -38,6 +61,7 @@ extension ProjectStore {
         switch form.mode {
         case .quick: await quickGoal(request: form.request, attachments: attachments)
         case .advanced: await draftGoal(request: form.request, attachments: attachments)
+        case .chat: await startChat(form.request)
         }
     }
 

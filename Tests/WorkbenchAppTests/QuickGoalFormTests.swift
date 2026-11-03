@@ -36,7 +36,7 @@ private final class Calls: @unchecked Sendable {
     @Test func theCardOpensOnAQuickGoal() {
         let form = NewGoalForm()
         #expect(form.mode == .quick && form.isEmpty)
-        #expect(NewGoalForm.Mode.allCases == [.quick, .advanced], "Advanced is offered beside it")
+        #expect(NewGoalForm.Mode.offered(chatFeed: false) == [.quick, .advanced], "Advanced is offered beside it")
     }
 
     @Test func createMakesAQuickGoalFromTheTextAsTypedWithNoDrafter() async throws {
