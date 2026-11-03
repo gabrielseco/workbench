@@ -271,11 +271,16 @@ struct RunSettingsInspector: View {
     // MARK: Open
 
     private func openers(_ goal: GoalModel) -> some View {
-        section("OPEN") {
-            // Once a thread has run, the step's "…" menu has Open worktree and Open in Herdr: only the goal file is left to list here.
-            let ran = RunSettingsLayout.hasWorktree(snapshot.state)
-            Button(ran ? "Open goal file" : "Open in editor") { Task { await store.openGoalFile() } }
-                .help("Opens the goal file in your editor")
+        // Once a thread has run, the step's "…" menu has Open worktree and Open in Herdr: only the goal file is left to list here.
+        let ran = RunSettingsLayout.hasWorktree(snapshot.state)
+        return section("OPEN") {
+            if ran {
+                Button("Open goal file") { Task { await store.openGoalFile() } }
+                    .help("Opens the goal file in your editor")
+            } else {
+                Button("Open in editor") { Task { await store.openGoalFile() } }
+                    .help("Opens the goal file in your editor")
+            }
             if store.herdrFound, !ran {
                 Button("Open in Herdr") { Task { await store.openInHerdr() } }
                     .disabled(store.busy != nil)
