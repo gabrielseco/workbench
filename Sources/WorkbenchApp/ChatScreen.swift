@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WorkbenchCore
 
@@ -208,9 +209,9 @@ struct ChatComposer: View {
     private func editor(_ state: ChatComposerState) -> some View {
         TextEditor(text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }))
             .font(.body).scrollContentBackground(.hidden).focused($focused)
-            // One line high, the box scrolls only past six: on a Mac that always shows scroll bars (a mouse, or the setting) its bar would
-            // sit in the panel as a stray grey pill beside the Send button.
-            .scrollIndicators(.hidden)
+            // One line high, the box scrolls only past six. `.scrollIndicators(.hidden)` is not honoured by `TextEditor` on macOS, and its
+            // scroll bar, a knob filling its track, sat in the panel as a stray grey pill beside the Send button.
+            .background(TextScrollerHider())
             .frame(height: ChatComposerState.editorHeight(for: state.text))
             .disabled(!state.canType)
             .opacity(state.replying ? 0.6 : 1)
@@ -244,4 +245,59 @@ extension FeedItem {
         if case .notice = kind { return true }
         return false
     }
+}
+
+/// A scroller that draws nothing: its knob and its slot are blank, and it takes no room.
+final class BlankScroller: NSScroller {
+    override func draw(_ dirtyRect: NSRect) {}
+    override func drawKnob() {}
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+    override static func scrollerWidth(for controlSize: NSControl.ControlSize, scrollerStyle: NSScroller.Style) -> CGFloat { 0 }
+}
+
+/// Takes the scroll bar off the `TextEditor` it sits behind. `TextEditor` is an `NSScrollView` around an `NSTextView`; SwiftUI does not
+/// honour `.scrollIndicators(.hidden)` there, and turning the scrollers off once is not enough: AppKit brings the vertical one back on a
+/// later layout, and its knob, filling its track, shows as a grey pill beside the Send button. So this finds that scroll view (the one in
+/// the window that holds a text view and this view's centre) and puts a scroller in it that draws nothing, again on every update. The box
+/// still scrolls, with the wheel and the keyboard.
+struct TextScrollerHider: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            hide()
+        }
+
+        override func layout() {
+            super.layout()
+            hide()
+        }
+
+        func hide() {
+            // After the layout that puts the text editor where it is.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let root = self.window?.contentView else { return }
+                let centre = self.convert(NSPoint(x: self.bounds.midX, y: self.bounds.midY), to: nil)
+                func scan(_ view: NSView) {
+                    if let scroll = view as? NSScrollView, scroll.documentView is NSTextView,
+                        scroll.convert(scroll.bounds, to: nil).contains(centre) {
+                        TextScrollerHider.blank(scroll)
+                    }
+                    view.subviews.forEach(scan)
+                }
+                scan(root)
+            }
+        }
+    }
+
+    /// What is done to the scroll view: a scroller that draws nothing, no horizontal one, and the vertical one transparent and hidden
+    /// (the overlay style paints its knob through a layer, which `draw` does not reach). Safe to repeat.
+    static func blank(_ scroll: NSScrollView) {
+        if !(scroll.verticalScroller is BlankScroller) { scroll.verticalScroller = BlankScroller() }
+        scroll.verticalScroller?.alphaValue = 0
+        scroll.verticalScroller?.isHidden = true
+        scroll.hasHorizontalScroller = false
+    }
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) { view.hide() }
 }

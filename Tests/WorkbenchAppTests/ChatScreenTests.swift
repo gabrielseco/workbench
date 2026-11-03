@@ -214,3 +214,21 @@ import WorkbenchCore
 
     private enum Failure: Error { case notAThread }
 }
+
+/// The composer's text box shows no scroll bar (a grey pill beside the Send button on a Mac that shows scroll bars): what is done to its
+/// scroll view, which is all a test can see of it.
+@MainActor @Suite struct TextScrollerHiderTests {
+    @Test func aScrollViewIsGivenAScrollerThatDrawsNothingAndItStaysThatWay() {
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 200, height: 30))
+        scroll.documentView = NSTextView(frame: scroll.bounds)
+        scroll.hasVerticalScroller = true
+        TextScrollerHider.blank(scroll)
+        #expect(scroll.verticalScroller is BlankScroller)
+        #expect(scroll.verticalScroller?.alphaValue == 0 && scroll.verticalScroller?.isHidden == true)
+        #expect(!scroll.hasHorizontalScroller)
+        let first = scroll.verticalScroller
+        TextScrollerHider.blank(scroll)
+        #expect(scroll.verticalScroller === first, "repeating it keeps the same scroller")
+        #expect(BlankScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) == 0, "it takes no room")
+    }
+}
