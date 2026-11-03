@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import WorkbenchCore
@@ -91,6 +92,34 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 }
 
 @MainActor @Suite struct LaunchOptionsTests {
+    @Test func theAppearanceIsLightOrDarkAndAnythingElseIsTheSystems() {
+        func appearance(_ value: String?) -> LaunchOptions.Appearance? {
+            LaunchOptions.from(environment: value.map { ["WORKBENCH_APPEARANCE": $0] } ?? [:]).appearance
+        }
+        #expect(appearance("light") == .light && appearance("dark") == .dark)
+        #expect(appearance("LIGHT") == .light && appearance("Dark") == .dark)
+        #expect(appearance(nil) == nil && appearance("") == nil && appearance("sepia") == nil && appearance("light ") == nil)
+        let project = LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": "/tmp/p", "WORKBENCH_APPEARANCE": "dark"])
+        #expect(project.appearance == .dark && project.project != nil, "a fixture launch takes it too")
+    }
+
+    @Test func theLaunchAppliesItToTheAppAndOnlyWhenAsked() async {
+        final class Seen: @unchecked Sendable {
+            var names: [NSAppearance.Name?] = []
+        }
+        let seen = Seen()
+        for value in ["light", "dark", nil] as [String?] {
+            var environment = ["WORKBENCH_SKIP_LOGIN_PATH": "1"]
+            environment["WORKBENCH_APPEARANCE"] = value
+            let options = LaunchOptions.from(environment: environment)
+            let preferences = SpyPreferences()
+            let store = ProjectStore(preferences: preferences)
+            await options.start(store, applyLoginPath: {}, setAppearance: { seen.names.append($0?.name) })
+            #expect(preferences.writes == 0, "no preference is written for it, not even with the same value")
+        }
+        #expect(seen.names == [.aqua, .darkAqua], "light, dark, and nothing at all when it is not asked for")
+    }
+
     @Test func theLoginShellPathIsAskedForUnlessAnEnvironmentVariableSaysNot() {
         #expect(!LaunchOptions.from(environment: [:]).skipsLoginPath)
         #expect(!LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": "/tmp/p"]).skipsLoginPath, "a fixture asks too")

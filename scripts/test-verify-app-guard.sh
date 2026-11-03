@@ -30,6 +30,13 @@ echo "$out" | grep -q "macOS app and this is Linux" || fail "on Linux it does no
 
 expect 2 "start [scenario]"
 expect 2 "start [scenario]" frobnicate
+# the appearance is checked first, before anything is built: a typo is refused even for a scenario that does not exist, and light and
+# dark are let through to the next check (here the scenario's, which this names wrongly on purpose)
+VERIFY_APPEARANCE=sepia expect 1 "bad VERIFY_APPEARANCE: sepia (want light or dark)" start no-such-scenario
+VERIFY_APPEARANCE=Light expect 1 "bad VERIFY_APPEARANCE: Light" start no-such-scenario
+VERIFY_APPEARANCE=light expect 1 "no such scenario: no-such-scenario" start no-such-scenario
+VERIFY_APPEARANCE=dark expect 1 "no such scenario: no-such-scenario" start no-such-scenario
+expect 1 "no such scenario: no-such-scenario" start no-such-scenario
 # a pid it did not start, whatever the command
 expect 1 "is not a build started by verify-app.sh start" list 1
 expect 1 "is not a build started by verify-app.sh start" press 1 "Doctor"

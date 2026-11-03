@@ -30,7 +30,7 @@ are for a person's checkout. You have `Read` and `scripts/verify-app.sh`, nothin
    they run, which is expected here.
 4. **Capture.** `scripts/verify-app.sh shot <pid> <name>` writes `$WORKBENCH_PROOF_DIR/<name>.png`; `Read` it and look. If it does not
    show the state, press again and shoot again under the same name. A criterion that names several screenshots (before and after a
-   press, a second window size with `VERIFY_WINDOW_SIZE=900x600`) gets one `shot` each, in the order the goal names them. A design
+   press, a second window size with `VERIFY_WINDOW_SIZE=900x600`, the other appearance with `VERIFY_APPEARANCE=light` or `dark`) gets one `shot` each, in the order the goal names them. A design
    change is captured at 900×600 and at a roomy size.
 5. **Stop it, always,** with `scripts/verify-app.sh stop <pid>`, also when a step failed.
 6. **Report.** One line per criterion: its id, `holds` or `does not hold`, what you saw (quote the `list` line) and the file. Say plainly

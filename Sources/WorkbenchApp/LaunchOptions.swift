@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import WorkbenchCore
 
@@ -11,14 +12,33 @@ struct LaunchOptions: Equatable {
     /// `WORKBENCH_CHAT_FEED` set: this launch shows the chat feed (P22 preview) without touching the preference, so a check can show
     /// either window on the same fixture.
     var chatFeed = false
+    /// `WORKBENCH_APPEARANCE` set to `light` or `dark`: this launch draws in that appearance whatever the system is set to, so a check can
+    /// show both. Nothing outside the process changes and no preference is written; unset or anything else is the system's.
+    var appearance: Appearance?
+
+    enum Appearance: Equatable {
+        case light, dark
+
+        init?(_ value: String?) {
+            switch value?.lowercased() {
+            case "light": self = .light
+            case "dark": self = .dark
+            default: return nil
+            }
+        }
+
+        var nsAppearance: NSAppearance? { NSAppearance(named: self == .light ? .aqua : .darkAqua) }
+    }
 
     static func from(environment: [String: String]) -> LaunchOptions {
         let skips = environment["WORKBENCH_SKIP_LOGIN_PATH"].map { !$0.isEmpty } ?? false
         let feed = environment["WORKBENCH_CHAT_FEED"].map { !$0.isEmpty } ?? false
+        let appearance = Appearance(environment["WORKBENCH_APPEARANCE"])
         guard let path = environment["WORKBENCH_APP_PROJECT"], !path.isEmpty else {
-            return LaunchOptions(project: nil, skipsLoginPath: skips, chatFeed: feed)
+            return LaunchOptions(project: nil, skipsLoginPath: skips, chatFeed: feed, appearance: appearance)
         }
-        return LaunchOptions(project: URL(fileURLWithPath: path), skipsLoginPath: skips, chatFeed: feed)
+        return LaunchOptions(
+            project: URL(fileURLWithPath: path), skipsLoginPath: skips, chatFeed: feed, appearance: appearance)
     }
 
     /// The store for these options: the real preferences normally, a throwaway set when a project was named.
@@ -33,8 +53,10 @@ struct LaunchOptions: Equatable {
     /// What the window does when it appears: open the named project, else restore the remembered one. The `PATH` comes first, so
     /// nothing the window starts is looked for on the system's bare one.
     @MainActor func start(
-        _ store: ProjectStore, applyLoginPath: @MainActor () async -> Void = { await LoginShellPath.applyToEnvironment() }
+        _ store: ProjectStore, applyLoginPath: @MainActor () async -> Void = { await LoginShellPath.applyToEnvironment() },
+        setAppearance: @MainActor (NSAppearance?) -> Void = { NSApplication.shared.appearance = $0 }
     ) async {
+        if let appearance { setAppearance(appearance.nsAppearance) }
         if !skipsLoginPath { await applyLoginPath() }
         if let project { await store.open(project) } else { await store.restore() }
     }
