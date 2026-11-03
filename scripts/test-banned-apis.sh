@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks scripts/check-banned-apis.sh on small trees of its own (BANNED_APIS_ROOT): a bare TextEditor( in the app fails, the shared
-# component, a comment and any other name that ends in TextEditor do not. Needs no build and no screen, so the Linux lint job runs it.
+# component, a comment and any other name that ends in TextEditor do not; a bare .borderedProminent fails likewise. Needs no build and no screen, so the Linux lint job runs it.
 set -u
 cd "$(dirname "$0")/.."
 script="$PWD/scripts/check-banned-apis.sh"
@@ -33,6 +33,21 @@ rm -rf "$dir"
 
 dir=$(tree other Other.swift 'struct A: View { var body: some View { MarkdownTextEditor(text: $x) } }')
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "another name ending in TextEditor( was refused"
+rm -rf "$dir"
+
+dir=$(tree prominent Bad.swift 'struct A: View { var body: some View { Button("x") {}.buttonStyle(.borderedProminent) } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a bare .borderedProminent passed ($code)"
+echo "$out" | grep -q "use .primaryButton()" || fail "the message does not say what to use: $out"
+rm -rf "$dir"
+
+dir=$(tree styles ButtonStyles.swift 'func f() { buttonStyle(.borderedProminent) }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the style file's own .borderedProminent was refused"
+rm -rf "$dir"
+
+dir=$(tree primary Good.swift '// .borderedProminent is the system accent
+struct A: View { var body: some View { Button("x") {}.primaryButton() } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail ".primaryButton() or a comment was refused"
 rm -rf "$dir"
 
 # and the real tree is clean

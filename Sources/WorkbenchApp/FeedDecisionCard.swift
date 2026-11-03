@@ -41,10 +41,10 @@ struct DecisionCard: View {
             Spacer(minLength: 12)
             MoreActionsMenu(actions: Self.shipMenu(decision), perform: perform)
             if let back = decision.more.first(where: { $0.kind == .sendBack }) {
-                Button("Request changes") { perform(back) }.disabled(!back.enabled).help(back.help ?? back.title)
+                Button("Request changes") { perform(back) }.plainButton().disabled(!back.enabled).help(back.help ?? back.title)
             }
             if let ship = decision.primary {
-                Button(ship.title) { perform(ship) }.buttonStyle(.borderedProminent).disabled(!ship.enabled)
+                Button(ship.title) { perform(ship) }.primaryButton().disabled(!ship.enabled)
                     .help(ship.help ?? ship.title)
             }
         }
@@ -81,7 +81,7 @@ struct DecisionActions: View {
             MoreActionsMenu(actions: decision.more, perform: perform)
             if let primary = decision.primary {
                 Button(primary.title) { perform(primary) }
-                    .buttonStyle(.borderedProminent)
+                    .primaryButton()
                     .disabled(!primary.enabled)
                     .help(primary.help ?? primary.title)
             }

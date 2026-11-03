@@ -128,7 +128,13 @@ ships, and the mockup gets fixed.
   `Verify passed` is a card with up to three screenshot thumbnails and their names; when the next press is Ship the foot is `Ready to ship`
   (the branch and base, then `Request changes` where a send-back is allowed, and `Ship`). Not in the artboard and not built: the steer
   input, the verify card's command chips.
-- **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
+- **Buttons and switches** (preview on): the screen's main action is `.primaryButton()`, the artboards' inverse pill (`inv` fill, `invfg`
+  label, radius 7, 34 high; 40 % when disabled), and every other plain button is `.plainButton()` (raised fill, hairline border, radius 7,
+  30 high). Neutral on purpose: the system accent follows the person's macOS setting and the five state colours already mean something, so a
+  setting that is on takes none of them. Native switches are tinted `inv` (`.switchTint()`); macOS softens a near-white or near-black tint to a
+  mid grey, so an on switch reads as a grey track with the knob at the right, not the artboard's crisp pill. With the preview off the
+  modifiers return the system styles, and `scripts/check-banned-apis.sh` refuses a bare `.borderedProminent`.
+- **Run settings** is a column (300 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
   open by default until a person closes it, and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by
   themselves after a passing turn ("Run the judge and review stages by themselves", a line saying what a run will do, "Runs: judge,

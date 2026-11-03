@@ -1,0 +1,49 @@
+import SwiftUI
+
+/// A small rounded label: an allowed tool, or the count of the rest.
+struct Chip: View {
+    var text: String
+    var mono: Bool
+
+    var body: some View {
+        Text(text).font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 11.5)).foregroundStyle(Theme.fg2)
+            .lineLimit(1).padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
+    }
+}
+
+/// Children laid out left to right and wrapped to the next line when the width runs out, as the artboard's tool chips are.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(in: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(in: bounds.width, subviews: subviews)
+        for (index, origin) in result.origins.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+        }
+    }
+
+    /// Where each child goes and how big the whole is: pure, so a test can read it.
+    func layout(in width: CGFloat, subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
+        FlowLayout.arrange(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, width: width, spacing: spacing)
+    }
+
+    static func arrange(sizes: [CGSize], width: CGFloat, spacing: CGFloat) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = []
+        var (x, y, rowHeight, widest) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+        for size in sizes {
+            if x > 0, x + size.width > width {
+                (x, y, rowHeight) = (0, y + rowHeight + spacing, 0)
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (origins, CGSize(width: widest, height: y + rowHeight))
+    }
+}

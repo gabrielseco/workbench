@@ -122,6 +122,7 @@ struct FeedScreen: View {
                 if beside {
                     Divider()
                     RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store).frame(width: RunSettingsLayout.width)
+                        .background(Theme.rail)
                 }
             }
             .onChange(of: proxy.size.width, initial: true) { _, width in

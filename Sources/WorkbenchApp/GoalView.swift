@@ -179,7 +179,7 @@ struct GoalView: View {
                     Button(goal.pill == .approved ? "Run" : "Approve and run") {
                         Task { await store.approveAndRun() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .primaryButton()
                     .disabled(runDisabled)
                 }
             }

@@ -343,7 +343,7 @@ struct TaskButtons: View {
             } else {
                 if needsApproval {
                     Button("Approve…") { tasks.beginApprove(store.project, entry.id) }
-                        .buttonStyle(.borderedProminent).disabled(tasks.isRunning)
+                        .primaryButton().disabled(tasks.isRunning)
                         .help("Shows what would run with nobody watching, then records the approval")
                 }
                 Button("Run now") {
@@ -360,7 +360,7 @@ struct PrimaryWhen: ViewModifier {
     init(_ primary: Bool) { self.primary = primary }
 
     func body(content: Content) -> some View {
-        if primary { content.buttonStyle(.borderedProminent) } else { content.buttonStyle(.bordered) }
+        if primary { content.primaryButton() } else { content.plainButton() }
     }
 }
 

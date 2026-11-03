@@ -207,7 +207,7 @@ struct NewThreadScreen: View {
                         .keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
                         .help("Skips the conversation: the goal agent drafts a goal from your words for you to approve")
                     Button { Task { await send() } } label: { Self.labelled("Send", "↵") }
-                        .buttonStyle(.borderedProminent).disabled(!state.canSend).help(state.sendHelp)
+                        .primaryButton().disabled(!state.canSend).help(state.sendHelp)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 10)

@@ -173,7 +173,7 @@ struct NewGoalPopover: View {
                             if made { close() }
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .primaryButton()
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(form.isEmpty || (form.mode != .chat && staging.pending > 0))
                 }
