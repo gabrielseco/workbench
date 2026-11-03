@@ -70,16 +70,17 @@ struct PreviewRail: View {
         if !rows.isEmpty {
             let shown = shownThreadID
             let open = expanded.contains(task)
+            let count = rows.count == 1 ? "1 thread" : "\(rows.count) threads"
             Button {
                 if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
-                    Text(rows.count == 1 ? "1 thread" : "\(rows.count) threads").font(.caption)
+                    Text(count).font(.caption)
                 }
                 .foregroundStyle(.secondary).padding(.leading, 30).padding(.vertical, 2)
             }
-            .buttonStyle(.plain).accessibilityLabel("\(task): \(rows.count) threads, \(open ? "shown" : "hidden")")
+            .buttonStyle(.plain).accessibilityLabel("\(task): \(count), \(open ? "shown" : "hidden")")
             if open {
                 ForEach(rows) { row in
                     RailRowView(row: row, selected: store.mode == .thread && !store.newThread && row.key == shown) {
