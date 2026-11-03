@@ -107,6 +107,14 @@ import Testing
         #expect(items.contains { $0.kind == .verify(ok: true, reason: nil, proofs: ["shot.png"]) })
     }
 
+    @Test func aTaskRunsOwnEndIsSucceededNotAbandoned() {
+        let ended = ev(2, 1, .turnEnded, ["result": "succeeded"])
+        let byTask = feed([created, ended, ev(3, 1, .reviewDecision, ["decision": "abandoned", "by": "task"])])
+        #expect(byTask.contains { $0.kind == .decision("succeeded") })
+        let byUser = feed([created, ended, ev(3, 1, .reviewDecision, ["decision": "abandoned", "by": "user"])])
+        #expect(byUser.contains { $0.kind == .decision("abandoned") })
+    }
+
     @Test func aJudgeThatFailedHasNoCriteria() {
         let items = feed([created, ev(2, 1, .judgeRan, ["ok": false, "reason": "no answer"])])
         #expect(items.contains { $0.kind == .judge(ok: false, criteria: 0, unmet: 0, concerns: 0) })

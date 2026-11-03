@@ -100,7 +100,14 @@ extension Feed {
             case .verifierEnded:
                 push(event, verify(event))
             case .reviewDecision:
-                push(event, .decision(short(event.data["decision"]?.stringValue ?? "decided")))
+                let decision = event.data["decision"]?.stringValue ?? "decided"
+                // A task run that ended its own thread says how the run went, not that it was abandoned.
+                let lastResult = contents.events.last { $0.kind == .turnEnded && $0.seq < event.seq }?.data["result"]?.stringValue
+                if decision == "abandoned", event.data["by"]?.stringValue == "task", let lastResult {
+                    push(event, .decision(lastResult == "succeeded" ? "succeeded" : short(lastResult)))
+                } else {
+                    push(event, .decision(short(decision)))
+                }
             case .prOpened:
                 push(event, .pullRequest(number: event.data["number"]?.intValue, url: event.data["url"]?.stringValue.map(short)))
             case .prReviewFinished:

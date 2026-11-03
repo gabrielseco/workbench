@@ -50,8 +50,8 @@ struct FeedRow: View {
         case .plan(let tasks): PlanRow(tasks: tasks)
         case .decision(let text):
             FeedLine(
-                symbol: text == "accepted" ? "checkmark.circle.fill" : "minus.circle.fill",
-                tint: text == "accepted" ? Theme.green : Theme.grey, title: text.capitalized, detail: nil)
+                symbol: ["accepted", "succeeded"].contains(text) ? "checkmark.circle.fill" : "minus.circle.fill",
+                tint: ["accepted", "succeeded"].contains(text) ? Theme.green : Theme.grey, title: text.capitalized, detail: nil)
         case .pullRequest(let number, let url):
             FeedLine(
                 symbol: "arrow.up.right.circle.fill", tint: Theme.green,

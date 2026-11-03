@@ -18,14 +18,18 @@ enum TaskOutcomeStyle {
     static func tone(_ outcome: TaskOutcome?) -> TaskTone {
         switch outcome {
         case nil: .working
-        case .prOpened?, .reported?: .done
-        case .nothingPending?, .nothingToDo?, .skippedProjectBusy?, .skippedAlreadyRunning?, .skippedTooManyOpen?: .idle
+        // A nothing-to-do run reached its end only after a succeeded turn and a passed check: the agent did its work (it may have acted
+        // through a tool), there was just no change to ship.
+        case .prOpened?, .reported?, .nothingToDo?: .done
+        case .nothingPending?, .skippedProjectBusy?, .skippedAlreadyRunning?, .skippedTooManyOpen?: .idle
         case .staleApproval?: .needsYou
         case .failed?, .budgetExceeded?, .interrupted?: .broken
         }
     }
 
-    static func word(_ outcome: TaskOutcome?) -> String { outcome?.rawValue ?? "running" }
+    static func word(_ outcome: TaskOutcome?) -> String {
+        outcome == .nothingToDo ? "done" : outcome?.rawValue ?? "running"
+    }
 
     static func symbol(_ outcome: TaskOutcome?) -> String {
         switch tone(outcome) {

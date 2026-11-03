@@ -304,7 +304,8 @@ struct RunRow: View {
                         .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).textSelection(.enabled)
                 }
                 if let reason = TasksText.reason(run) {
-                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
+                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                         .help(reason)
                 }
                 if let pr = run.pullRequest {

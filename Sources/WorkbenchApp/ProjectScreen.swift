@@ -76,7 +76,7 @@ struct ThreadSnapshot: Equatable {
         switch state.decision {
         case "accepted": return "Accepted, not shipped yet."
         case "discarded": return "Discarded: the worktree and branch were removed."
-        case "abandoned": return "Abandoned."
+        case "abandoned": return state.decisionLabel.map { $0 + "." } ?? "Abandoned."
         case let other?: return other.capitalized + "."
         case nil: return nil
         }
@@ -144,7 +144,7 @@ struct ThreadSnapshot: Equatable {
     static func stateText(attention: Attention, state: ThreadState, approval: ApprovalState?) -> String {
         if case .needsYou(let reason) = attention { return "Needs you · \(reason.text)" }
         if attention == .working { return "Working" }
-        if let decision = state.decision { return decision.capitalized }
+        if let label = state.decisionLabel { return label }
         // A chat is not a draft goal: it has no goal file yet.
         if state.isChat, approval == nil { return state.chat?.open == true ? "Chat · replying" : "Chat" }
         if approval != .approved && state.lastTurn == 0 { return "Draft · not approved" }

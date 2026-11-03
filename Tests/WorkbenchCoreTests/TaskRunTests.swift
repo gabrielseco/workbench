@@ -378,6 +378,9 @@ private struct Run {
         let result = await run.runner().run("bump", trigger: .tick)
         #expect(result.outcome == .nothingToDo && result.isDone && result.thread != nil)
         #expect(ThreadStore(project: run.fx.project).activeThreadID() == nil)
+        // The thread says how the run went, not that a person abandoned it.
+        let state = ThreadStore(project: run.fx.project).state(of: try #require(result.thread))
+        #expect(state.decision == "abandoned" && state.decisionBy == "task" && state.decisionLabel == "Succeeded")
         let again = await run.runner().run("bump", trigger: .tick)
         #expect(again.outcome != .skippedProjectBusy)
     }
