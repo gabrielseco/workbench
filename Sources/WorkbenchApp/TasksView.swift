@@ -52,14 +52,9 @@ struct TasksView: View {
                 if snapshot.entries.isEmpty {
                     NoTasks(timer: snapshot.timer)
                 } else if store.chatFeedOn {
-                    // The rail lists the tasks; the main area is the project's *Will it run tonight?* card above the selected task's runs
-                    // (the task page itself is design parity 5).
-                    VStack(alignment: .leading, spacing: 0) {
-                        TimerCardView(card: snapshot.timer).padding(14)
-                        Divider()
-                        if let entry = store.tasks.selected(in: snapshot) {
-                            Timeline(store: store, entry: entry, now: snapshot.readAt)
-                        }
+                    // The rail lists the tasks; the main area is the selected task's page (design parity 5).
+                    if let entry = store.tasks.selected(in: snapshot) {
+                        TaskPageView(store: store, snapshot: snapshot, entry: entry)
                     }
                 } else {
                     HStack(alignment: .top, spacing: 0) {

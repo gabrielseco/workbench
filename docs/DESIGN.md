@@ -64,9 +64,19 @@ ships, and the mockup gets fixed.
   threads"); a task row follows. Each row has a mark at the left (working a spinner, needs you an amber dot with a halo, done a check,
   idle a hollow ring, broken a cross), the title on one line (`.callout`, semibold) and a `.caption` state line coloured by the same mark
   (blue running, amber needs you, green done, red broken, `.secondary` for idle); the selected row sits on `Theme.raised`. A click shows
-  that thread, with its feed and settings, or that task: its *Will it run tonight?* card above its runs, until the task page; it starts
+  that thread, with its feed and settings, or that task's page; it starts
   and stops nothing. A task's line is its schedule, then what keeps it from running (`needs a fix`, `approval stale`, `not approved`) or
   how its last run ended. The spine is not drawn twice.
+- **A task's page** is in the feed's 680 column: the name (`.title3`, semibold), one line `schedule · opens a PR · N runs · next …`, and
+  `Defined in .workbench/tasks/<name>/task.md. Edit that file to change it.` in a monospaced caption, with the task's buttons at the
+  right (Approve… while it is not approved, Run now once it is, Stop while a run started here goes). Under it the task's own
+  **Will it run tonight?** card: a verdict (`Will run`, `Will run, check the warnings`, `Will not run`) and its warnings, problems first,
+  from the task (a file that does not load, an approval missing or stale, a last run that waited for review), the project (another
+  thread is still active, so the next run would skip) and the machine (the timer's own lines that warn or fail), each with the one
+  button that deals with it (`Approve…` / `Re-approve`, `Open thread`); open when it has warnings, one line when it has none. Then the
+  runs, newest first, under a quiet `TODAY` / `YESTERDAY` / `WED, OCT 28` heading: a mark, the outcome in bold (coloured when it failed or
+  needs you), the time, the trigger, a line of what happened, and at the right one button: `View log` for a run that ended badly
+  (reveals the run log in Finder), `Re-approve` for a stale approval, `Open thread` when it has a thread the rail lists.
 - **Feed.** One scrolling column, newest row at the foot. It is a lazy list that opens at the foot and stays there while it grows,
   so a thousand rows cost what the screen shows. Padding 28 across and 20 above and below, rows 10 apart, a symbol column 16 wide so
   the text beside the marks lines up. It never grows the window and truncates (middle for a path or command) rather than wraps off.
