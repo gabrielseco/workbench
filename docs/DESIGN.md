@@ -56,8 +56,8 @@ mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a m
 ships, and the mockup gets fixed.
 
 - **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each an 8 pt dot with a 1.5 pt ring (the colour the rail
-  draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `.secondary` when done, primary when current,
-  `.tertiary` while pending), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
+  draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
+  `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
   chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
   keeps the Thread/Tasks switch and, below it, **the thread list**: a row per thread, newest first (at most 50, then "N older
   threads"), each a mark (a symbol and a tint: working blue, needs you amber, done green, waiting grey, broken red), the title (`.callout`, two

@@ -212,8 +212,7 @@ struct PhaseRow: View {
                         .overlay(Circle().strokeBorder(tint, lineWidth: 1.5)).frame(width: 8, height: 8)
                     Text(step.title).font(.callout).lineLimit(1)
                         .foregroundStyle(
-                            dot.label == .primary ? AnyShapeStyle(.primary)
-                                : dot.label == .secondary ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                            dot.label == .primary ? Color.primary : dot.label == .secondary ? Theme.fg2 : Theme.fg3)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(step.spoken)

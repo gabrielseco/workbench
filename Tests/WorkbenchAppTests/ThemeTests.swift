@@ -24,6 +24,7 @@ import Testing
             Row(token: .grey, dark: "#7e8695", light: "#667084"), Row(token: .rail, dark: "#1b1e24", light: "#eceef2"),
             Row(token: .canvas, dark: "#16191e", light: "#f4f5f8"), Row(token: .raised, dark: "#2a2f39", light: "#e1e5ec"),
             Row(token: .panel, dark: "#21252d", light: "#ffffff"), Row(token: .line, dark: "#323844", light: "#d3d8e0"),
+            Row(token: .fg2, dark: "#b0b7c4", light: "#454d5d"), Row(token: .fg3, dark: "#919aaa", light: "#5d667a"),
         ]
         for row in artboards {
             #expect(hex(Theme.rgb(row.token, dark: true, preview: true)) == row.dark, "\(row.token) dark")
@@ -33,7 +34,7 @@ import Testing
 
     /// The preview's surfaces have no old-window value: nothing outside the preview draws them, so the flag does not change them.
     @Test func theSurfacesAreTheSameWhateverTheFlagSays() {
-        for token in [Theme.Token.raised, .panel, .line] {
+        for token in [Theme.Token.raised, .panel, .line, .fg2, .fg3] {
             for dark in [true, false] {
                 #expect(Theme.rgb(token, dark: dark, preview: true) == Theme.rgb(token, dark: dark, preview: false), "\(token)")
             }
