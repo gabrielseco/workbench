@@ -112,6 +112,29 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(other.consume(line: #"{"type":"system","session_id":"other"}"#).isEmpty)
     }
 
+    @Test func aTodoWriteCallAlsoReportsTheTaskList() {
+        var d = decoder()
+        let todos =
+            #"[{"content":"Add rows","status":"completed","activeForm":"Adding"},{"content":"Wire it","status":"in_progress"},"#
+            + #"{"content":"Test it","status":"pending"},{"content":"","status":"pending"},{"status":"pending"}]"#
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let line = head + #""input":{"todos":\#(todos)}}]}}"#
+        #expect(
+            d.consume(line: line) == [
+                .tool(name: "TodoWrite", summary: ""),
+                .plan([
+                    AgentPlanItem(text: "Add rows", status: .done), AgentPlanItem(text: "Wire it", status: .inProgress),
+                    AgentPlanItem(text: "Test it", status: .pending),
+                ]),
+            ], "empty and malformed tasks are dropped")
+        let none = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[]}}]}}"#
+        #expect(d.consume(line: none) == [.tool(name: "TodoWrite", summary: "")], "an empty list says nothing")
+        let other =
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","#
+            + #""input":{"todos":[{"content":"x"}]}}]}}"#
+        #expect(d.consume(line: other) == [.tool(name: "Bash", summary: "")], "only TodoWrite carries a task list")
+    }
+
     @Test func assistantTextAndToolCallsBecomeActivity() {
         var d = decoder()
         let line =

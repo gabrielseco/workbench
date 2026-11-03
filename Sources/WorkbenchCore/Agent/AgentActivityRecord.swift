@@ -5,6 +5,9 @@ import Foundation
 public enum AgentActivityRecord {
     /// Characters kept of any text field; `truncated` is set when one was cut.
     public static let maxTextCharacters = 4096
+    /// Tasks kept of an agent's task list, and characters of each.
+    public static let maxPlanItems = 20
+    public static let maxPlanItemCharacters = 120
     /// Persisted activity events per turn. The rest are counted in one `dropped` event.
     public static let maxPerTurn = 1000
     /// Past the cap, a `dropped` record at most this often (seconds) while the turn goes on, so it does not read as stuck.
@@ -28,6 +31,14 @@ public enum AgentActivityRecord {
             out["type"] = "tool"
             out["name"] = bounded(name)
             out["summary"] = bounded(summary)
+        case .plan(let items):
+            out["type"] = "plan"
+            out["items"] = .array(
+                items.prefix(maxPlanItems).map {
+                    let text = String($0.text.prefix(maxPlanItemCharacters))
+                    return .object(["text": .string(text), "status": .string($0.status.rawValue)])
+                })
+            if items.count > maxPlanItems || items.contains(where: { $0.text.count > maxPlanItemCharacters }) { truncated = true }
         case .permissionDenied(let tool):
             out["type"] = "permission_denied"
             out["tool"] = bounded(tool)

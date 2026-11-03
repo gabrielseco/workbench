@@ -25,20 +25,51 @@ struct FeedScreen: View {
     /// The goal card is the editor while the goal may be changed: a draft, no turn run, nothing going on (the Run settings' rule).
     private var canEditGoal: Bool { store.feedEditsGoal(snapshot) }
 
+    /// The live card for a turn that is working, with the rows it stands for taken out of the list.
+    private var runCard: RunCardModel? { RunCardModel.make(snapshot: snapshot, decision: store.feedDecision(for: snapshot)) }
+
+    /// The latest finished turn, where "Run finished" can say how many files changed and open the diff.
+    private var finishedTurnID: String? {
+        guard let last = snapshot.feed.last(where: { if case .turn = $0.kind { true } else { false } }),
+            case .turn(_, .ended(let result), _, _) = last.kind, result == "succeeded"
+        else { return nil }
+        return last.id
+    }
+
+    private var latestVerifyID: String? { snapshot.feed.last(where: { if case .verify = $0.kind { true } else { false } })?.id }
+
+    private func finish(for item: FeedItem) -> FinishContext? {
+        guard item.id == finishedTurnID else { return nil }
+        let tasks = snapshot.feed.compactMap { entry -> Int? in
+            if case .plan(let list) = entry.kind, entry.turn == item.turn { list.count } else { nil }
+        }.first
+        let totals = store.review.map(\.totals).flatMap { $0.isEmpty ? nil : $0 }
+        return FinishContext(tasks: tasks, totals: totals, viewDiff: { reviewingDetails = true })
+    }
+
+    private func shots(for item: FeedItem) -> [ProofShot] {
+        let proof = snapshot.state.review.verifier?.proof
+        guard item.id == latestVerifyID, let project = store.project, let proof else { return [] }
+        return ProofShot.shots(from: proof.map { ($0.name, $0.path) }, threadDirectory: project.threadDirectory(snapshot.id))
+    }
+
     private func row(_ item: FeedItem) -> some View {
         FeedRow(
             item: item, goal: store.goal, store: store, editable: canEditGoal,
             draft: canEditGoal
                 ? DraftGoalContext(snapshot: snapshot, decision: store.feedDecision(for: snapshot), perform: perform) : nil,
-            brainstorm: BrainstormFold.shown(state: snapshot.state) ? snapshot.state.chat?.messages ?? [] : [])
+            brainstorm: BrainstormFold.shown(state: snapshot.state) ? snapshot.state.chat?.messages ?? [] : [],
+            finish: finish(for: item), shots: shots(for: item))
     }
 
     @ViewBuilder private var foot: some View {
         MessageRows(error: store.actionError, note: store.actionNote, notice: store.notice, handoff: store.herdrHandoffOutcome)
         if snapshot.watchesPullRequest, let ci = snapshot.ci { PullRequestCIView(ci: ci, store: store) }
         let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
-        if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard {
-            DecisionCard(step: step, why: why, decision: store.feedDecision(for: snapshot), perform: perform)
+        if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard, runCard?.stop == nil {
+            DecisionCard(
+                step: step, why: why, decision: store.feedDecision(for: snapshot), perform: perform,
+                route: snapshot.base.map { "\(WorktreeManager.branch(for: snapshot.id)) → \($0)" })
         }
     }
 
@@ -55,7 +86,13 @@ struct FeedScreen: View {
         if snapshot.showsChat {
             ChatRows(snapshot: snapshot, store: store)
         } else {
-            ForEach(rows) { row($0) }
+            let card = runCard
+            ForEach(rows.filter { !(card?.consumed.contains($0.id) ?? false) }) { row($0) }
+            if let card {
+                RunCardView(model: card, perform: perform)
+                let pending = PendingStep.pending(goal: store.goal, criteria: store.goal?.rows.count ?? 0, have: [])
+                ForEach(pending) { PendingStepRow(step: $0) }
+            }
             foot
         }
     }

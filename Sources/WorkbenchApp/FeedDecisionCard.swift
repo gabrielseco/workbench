@@ -8,6 +8,11 @@ struct DecisionCard: View {
     var why: String
     var decision: FeedDecision
     var perform: (FeedAction) -> Void
+    /// `branch → base`, for the ready-to-ship bar's line.
+    var route: String?
+
+    /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
+    static func isReadyToShip(_ decision: FeedDecision) -> Bool { decision.primary?.kind == .ship }
 
     /// The decision's own line when it has one, else the spine's without the step name it repeats under the heading.
     private var shownWhy: String { Self.line(step: step, why: why, decision: decision) }
@@ -19,6 +24,32 @@ struct DecisionCard: View {
     }
 
     var body: some View {
+        if Self.isReadyToShip(decision) { readyToShip } else { next }
+    }
+
+    private var readyToShip: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Ready to ship").font(.headline)
+                Text([route, "PR review comes back to this chat"].compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 12)
+            if let back = decision.more.first(where: { $0.kind == .sendBack }) {
+                Button("Request changes") { perform(back) }.disabled(!back.enabled).help(back.help ?? back.title)
+            }
+            if let ship = decision.primary {
+                Button(ship.title) { perform(ship) }.buttonStyle(.borderedProminent).disabled(!ship.enabled)
+                    .help(ship.help ?? ship.title)
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        .padding(.top, 6)
+    }
+
+    private var next: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("NEXT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)

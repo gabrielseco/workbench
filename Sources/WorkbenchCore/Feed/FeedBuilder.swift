@@ -19,6 +19,8 @@ extension Feed {
         private var denials: [Int: [(tool: String, input: String?)]] = [:]
         private var deniedSeen: [Int: Int] = [:]
         private var deniedRows: [Int: Int] = [:]
+        private var lastPlan: [Int: [FeedItem.PlanTask]] = [:]
+        private var planSeen = Set<Int>()
 
         init(contents: EventLogContents, runnerAlive: Bool) { (self.contents, self.runnerAlive) = (contents, runnerAlive) }
 
@@ -34,6 +36,20 @@ extension Feed {
             }
             for event in contents.events where event.kind == .agentActivity {
                 if event.data["type"]?.stringValue == "permission_denied" { deniedRows[event.turn, default: 0] += 1 }
+            }
+            for event in contents.events where event.kind == .agentActivity && event.data["type"]?.stringValue == "plan" {
+                guard case .array(let entries)? = event.data["items"] else { continue }
+                let tasks = entries.prefix(AgentActivityRecord.maxPlanItems).compactMap { entry -> FeedItem.PlanTask? in
+                    guard let text = entry["text"]?.stringValue, !text.isEmpty else { return nil }
+                    let state: FeedItem.PlanTask.State =
+                        switch entry["status"]?.stringValue {
+                        case "done": .done
+                        case "in_progress": .working
+                        default: .pending
+                        }
+                    return FeedItem.PlanTask(text: short(text), state: state)
+                }
+                if !tasks.isEmpty { lastPlan[event.turn] = tasks }
             }
             for event in contents.events { add(event, ended: ended[event.turn]) }
             flush()
@@ -124,6 +140,10 @@ extension Feed {
 
         private mutating func activity(_ event: Event) {
             switch event.data["type"]?.stringValue ?? "" {
+            case "plan":
+                // Each update replaces the list: the turn shows one row, where it first appeared, with the last list.
+                guard planSeen.insert(event.turn).inserted, let tasks = lastPlan[event.turn] else { return }
+                push(event, .plan(tasks: tasks))
             case "text":
                 push(event, .agentText(ThreadState.safeLine(event.data["text"]?.stringValue ?? "", limit: Feed.textLimit)))
             case "tool":
