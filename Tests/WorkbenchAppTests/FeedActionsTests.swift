@@ -74,6 +74,14 @@ import Testing
         #expect(decide(shown) { $0.stopping = true }.primary?.enabled == false)
     }
 
+    @Test func aTurnThatIsGoingOnCanShowWhatItChangedSoFar() throws {
+        var shown = try snapshot(.running)
+        shown.run?.phase = .working
+        let diff = try #require(decide(shown).secondary)
+        #expect(diff.kind == .openDiff && diff.enabled, "the worktree is there while the turn works")
+        #expect(decide(shown) { $0.busy = true }.secondary?.enabled == false)
+    }
+
     @Test func aTurnWhoseRunnerIsGoneCanBeRunAgainAndASuccessfulOneCannot() throws {
         let gone = try snapshot(.running)
         #expect(gone.run?.phase == .orphaned && decide(gone).primary?.kind == .runAgain)

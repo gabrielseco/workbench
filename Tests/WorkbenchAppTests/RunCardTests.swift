@@ -62,7 +62,10 @@ import WorkbenchCore
         let model = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision(primary: stop)))
         #expect(model.tasks == tasks && model.done == 1 && model.tasksTitle == "TASKS · 1 OF 3")
         #expect(model.tail == ["Grep b", "Edit c.swift", "Bash build"], "the last three, oldest first")
-        #expect(model.stop == stop)
+        #expect(model.stop == stop && model.diff == nil)
+        let diff = FeedAction(kind: .openDiff, title: "Open diff")
+        let withDiff = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision(primary: stop, secondary: diff)))
+        #expect(withDiff.diff == diff, "Open diff sits beside Stop on the card")
         #expect(model.consumed == ["2", "3", "4", "5", "6"], "a refusal and the agent's words stay rows of their own")
     }
 
