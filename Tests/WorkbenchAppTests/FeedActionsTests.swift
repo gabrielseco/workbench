@@ -163,7 +163,7 @@ import Testing
             checked += 1
             for review in [false, true] {
                 let decision = decide(shown) { $0.reviewShown = review; $0.goalPill = .draft; $0.goalCanApprove = true }
-                let all = (decision.primary.map { [$0] } ?? []) + decision.more
+                let all = [decision.primary, decision.secondary].compactMap { $0 } + decision.more
                 #expect(Set(all.map(\.kind)).count == all.count, "\(scenario.rawValue) lists a button twice")
             }
         }
