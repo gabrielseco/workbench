@@ -159,7 +159,7 @@ struct ChatComposer: View {
             .opacity(state.replying ? 0.6 : 1)
             .overlay(alignment: .topLeading) {
                 if state.isBlank {
-                    Text("Reply…  (Return sends, Shift-Return adds a line)")
+                    Text(state.busy ? "Waiting for the agent…" : "Reply…  (Return sends, Shift-Return adds a line)")
                         .foregroundStyle(.tertiary).padding(.leading, 11).padding(.top, 6).allowsHitTesting(false)
                 }
             }
@@ -171,6 +171,8 @@ struct ChatComposer: View {
                 return .handled
             }
             .accessibilityLabel("Message")
+            // A box that takes no typing does not keep the caret.
+            .onChange(of: state.canType) { focused = state.canType }
             .task {
                 try? await Task.sleep(for: .milliseconds(40))
                 focused = true
