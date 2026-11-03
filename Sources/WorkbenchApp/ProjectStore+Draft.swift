@@ -79,11 +79,7 @@ extension ProjectStore {
             let result = try await actions.draftGoal(project, name, request, attachments, stop)
             guard mine == generation else { return false }
             guard result.id != nil else {
-                let cost = result.costUSD.map { String(format: " ($%.4f spent)", $0) } ?? ""
-                actionError =
-                    stop.wasRequested
-                    ? "Drafting was stopped. Nothing was written."
-                    : "No draft\(cost): \(result.failure ?? "no proposal"). Nothing was written."
+                actionError = Self.draftFailure(result, stopped: stop.wasRequested)
                 return false
             }
         } catch {
@@ -96,6 +92,14 @@ extension ProjectStore {
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         await reload()
         return true
+    }
+
+    /// What a draft that did not come out says: stopped, or why there was none and what it cost.
+    static func draftFailure(_ result: GoalDraftResult, stopped: Bool) -> String {
+        let cost = result.costUSD.map { String(format: " ($%.4f spent)", $0) } ?? ""
+        return stopped
+            ? "Drafting was stopped. Nothing was written."
+            : "No draft\(cost): \(result.failure ?? "no proposal"). Nothing was written."
     }
 
     /// Stops the drafter that is running, if any.

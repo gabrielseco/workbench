@@ -46,6 +46,8 @@ struct GoalActions: Sendable {
     var makeRun: @Sendable (Project, String, RunOptions) throws -> RunHandle
     /// Has the goal agent draft a goal from a rough request (and screenshots), as a new thread named `name`; `DraftStop` ends the drafter early.
     var draftGoal: DraftGoal
+    var chat: Chat
+    var draftFromChat: DraftFromChat
     /// Writes a quick goal from the request as typed (and screenshots), as a new thread named `name`, and returns its id. No agent runs.
     var quickGoal: @Sendable (Project, String, String, [URL]) async throws -> String
     /// Names the goal agent in the project's config, so a project with none can draft.
@@ -98,6 +100,8 @@ struct GoalActions: Sendable {
             RunHandle(run: {}, stop: {})
         },
         draftGoal: @escaping DraftGoal = { _, _, _, _, _ in throw Unset() },
+        chat: @escaping Chat = { _, _, _, _ in throw Unset() },
+        draftFromChat: @escaping DraftFromChat = { _, _, _ in throw Unset() },
         quickGoal: @escaping @Sendable (Project, String, String, [URL]) async throws -> String = { _, _, _, _ in throw Unset() },
         enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -130,6 +134,7 @@ struct GoalActions: Sendable {
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.editGoal = editGoal
+        (self.chat, self.draftFromChat) = (chat, draftFromChat)
         (self.quickGoal, self.enableGoalAgent) = (quickGoal, enableGoalAgent)
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.herdrFound, self.openInHerdr, self.runGoalInHerdr) = (herdrFound, openInHerdr, runGoalInHerdr)
@@ -193,13 +198,13 @@ struct GoalActions: Sendable {
         },
         draftGoal: { project, name, request, attachments, stop in
             let git = try GitRunner.discover()
-            // A config that is there but broken is its own error, not "no goal agent".
-            let config: Config? =
-                FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
             return try await ThreadService(project: project, git: git).draftGoal(
-                target: .newThread(name: name, base: nil), request: request, config: config, attachments: attachments,
+                target: .newThread(name: name, base: nil), request: request, config: try loadConfigIfPresent(project),
+                attachments: attachments,
                 abandonActive: true, attach: { stop.attach($0) })
         },
+        chat: chatThroughCore,
+        draftFromChat: draftFromChatThroughCore,
         quickGoal: { project, name, request, attachments in try await quickGoal(project, name, request, attachments) },
         enableGoalAgent: { project, provider in try GoalAgentSetup.enable(provider: provider, in: project) },
         openGoal: { project, thread in try await openInEditor(project, thread) },

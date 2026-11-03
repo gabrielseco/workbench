@@ -18,6 +18,14 @@ public struct ChatResult: Sendable, Equatable {
     public var costUSD: Double?
     public var provider: AgentProviderID
     public var model: String?
+
+    public init(
+        id: String, reply: String? = nil, end: String, failure: String? = nil, costUSD: Double? = nil,
+        provider: AgentProviderID, model: String? = nil
+    ) {
+        (self.id, self.reply, self.end, self.failure) = (id, reply, end, failure)
+        (self.costUSD, self.provider, self.model) = (costUSD, provider, model)
+    }
 }
 
 extension ThreadService {

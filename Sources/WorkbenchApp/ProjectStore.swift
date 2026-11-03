@@ -558,3 +558,16 @@ private extension ProjectStore {
         resumeIdleWaiters()
     }
 }
+
+extension ProjectStore {
+    /// The session of a thread (or of a chat with no thread yet), the one on screen or the one the store keeps for it.
+    func threadSession(_ project: Project, _ thread: String?) -> ThreadSession { session(project, thread) }
+
+    /// Marks a chat turn as going (or over) in `session`, which the store keeps while it replies, wherever the window is.
+    func setReplying(_ on: Bool, in session: ThreadSession, stop: DraftStop? = nil) {
+        session.replying = on
+        session.chatStop = on ? stop : nil
+        sessions[session.key] = session
+        settled()
+    }
+}
