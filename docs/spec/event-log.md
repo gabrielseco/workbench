@@ -373,6 +373,13 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   `interrupted` end. Exactly one `chat.ended` per user message, whether the turn was stopped (`reason: "stopped"`), timed out
   (`"timeout"`), crashed or answered nothing (the failure's text, credentials scrubbed, at most 600 characters).
 - **Abandoning a chat** ends what its killed turn left running in the agent's folder (a chat has no worktree to sweep) and removes the folder, then writes the `abandoned` decision as for any thread. A turn takes the folder only with the log held, and refuses (`doctor` running, the chat decided, over a limit) again under that lock.
+- **Made into a goal (slice 6b):** `workbench goal draft --from-chat <name-or-id>` drafts a goal from the conversation and writes it as the
+  `goal.md` of the same thread. The log gets the drafter's attempt (`agent.attempt.started`, role `goal`), `goal.draft.started`,
+  `agent.attempt.ended`, `goal.saved {status: "draft"}` and `goal.draft.finished`, with `from_chat: true` on the two draft events. Recovery
+  is the drafter's (an open draft is closed as `interrupted`). A draft that fails writes no goal file and `goal.draft.finished {ok: false}`; the
+  thread stays a chat. The thread's `thread.created` still says `kind: "chat"` (it began as one), so a chat has a goal exactly when `goal.md`
+  exists, and then takes no more messages (`chat` is refused). The drafter is given the conversation, quoted line by line with who said each
+  message, in place of the rough request (up to the chat's own 128 KiB, not the 16 KiB of a rough request).
 - **The reply** is stored in the log (a chat has no transcript file), scrubbed of credentials and cut at 16 KiB.
 - **Limits** (a message over 16 KiB, a 31st message from the person, a conversation over 128 KiB or a known cost of $5 or more) are refused
   before anything is spent or written.

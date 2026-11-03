@@ -79,7 +79,9 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 2 | `usage` | wrong command line: no request or two, `--base` with `--replace`, an unreadable or oversized `--request-file` |
 | 3 | `stopped` | stopped by Ctrl-C; nothing was written |
 | 6 | `refused` | nothing was started: no `[agents.goal]`, Codex with `allow_unpriced = false`, no executable, an empty or oversized request, another thread is active, `doctor` is running, or with `--replace` the thread has ended or has a live run |
-| 7 | `not-found` | `--replace` names no thread |
+| 7 | `not-found` | `--replace` names no thread, or `--from-chat` names no chat |
+
+`goal draft --from-chat <name-or-id>` drafts from a chat's conversation into the same thread; it exits as above, and refuses (6, nothing spent or written) a thread that is not a chat, a chat that has a goal already (use `--replace`), a chat with no finished exchange, a chat that has ended or that another command holds, and `doctor` running. A failed draft (exit 1, 3 stopped, 4 timed out) leaves the chat as it was.
 
 ### `chat`
 
