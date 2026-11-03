@@ -4,4 +4,4 @@
 {"data":{"provider":"claude","text":"Reading the invoice list and its tests","type":"text"},"kind":"agent.activity","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
 {"data":{"name":"Read","provider":"claude","summary":"Sources\/Invoices\/List.swift","type":"tool"},"kind":"agent.activity","seq":5,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
 {"data":{"name":"Edit","provider":"claude","summary":"Sources\/Invoices\/List.swift","type":"tool"},"kind":"agent.activity","seq":6,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
-{"data":{"provider":"claude","tool":"Bash","type":"permission_denied"},"kind":"agent.activity","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"input":"git push origin main","provider":"claude","tool":"Bash","type":"permission_denied"},"kind":"agent.activity","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
