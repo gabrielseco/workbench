@@ -100,8 +100,10 @@ struct NewThreadScreen: View {
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
 
-    /// The text box's width inside the column, for sizing it to the lines the text wraps into.
-    private var composerWidth: CGFloat { FeedLayout.maxColumn - 2 * 14 - 12 }
+    /// The panel's width as it is drawn (the column, or less at a narrow window): the text box is that less its padding and inset, and
+    /// it is sized to the lines the text wraps into at that width.
+    @State private var panelWidth: CGFloat = FeedLayout.maxColumn
+    private var composerWidth: CGFloat { max(0, panelWidth - 2 * 14 - 12) }
 
     private var busy: Bool { store.drafting || store.chatReplying }
 
@@ -214,6 +216,12 @@ struct NewThreadScreen: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(focused ? Theme.blue.opacity(0.6) : Theme.line, lineWidth: focused ? 1.5 : 1))
+        .background {
+            GeometryReader { proxy in
+                Color.clear.onAppear { panelWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { panelWidth = proxy.size.width }
+            }
+        }
     }
 
     private func editor(_ state: NewThreadState) -> some View {
