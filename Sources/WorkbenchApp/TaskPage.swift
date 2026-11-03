@@ -77,6 +77,13 @@ struct RunTonight: Equatable {
                     fails: true, text: "The task changed since you approved it.",
                     detail: "workbench task approve \(summary.name)", action: .reapprove))
         }
+        // The timer's own line for this (`approved but has no schedule`) is one of the task lines left out below, so it is said here.
+        if summary.problem == nil, summary.approval == .approved, summary.schedule == nil {
+            found.append(
+                Warning(
+                    fails: false, text: "It has no schedule: a tick never runs it, so it runs only when you run it.",
+                    detail: "workbench task run \(summary.name)"))
+        }
         if let active = activeThread, !entry.isRunning {
             found.append(
                 Warning(

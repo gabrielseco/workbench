@@ -95,6 +95,19 @@ import WorkbenchCore
         #expect(tonight.warnings.map(\.text) == ["It has as many pull requests open as it allows: it waits for review."])
     }
 
+    @Test func anApprovedTaskWithNoScheduleSaysATickNeverRunsIt() async throws {
+        var manual = try await entry("weekly-report")
+        manual.summary.schedule = nil
+        let tonight = RunTonight.derive(manual, timer: clean, activeThread: nil)
+        #expect(tonight.verdict == .checkWarnings, "it is not going to run tonight by itself")
+        #expect(tonight.warnings.first?.text.hasPrefix("It has no schedule") == true)
+        #expect(tonight.warnings.first?.detail == "workbench task run weekly-report")
+        var notApproved = try await entry("cleanup-branches")
+        notApproved.summary.schedule = nil
+        let unapproved = RunTonight.derive(notApproved, timer: clean, activeThread: nil)
+        #expect(!unapproved.warnings.contains { $0.text.hasPrefix("It has no schedule") }, "its reason is the approval")
+    }
+
     @Test func theCardsButtonsAreTheOnesTheWarningsAskFor() {
         func button(_ action: RunTonight.Action?) -> RunAction? {
             RunTonightCard.action(for: RunTonight.Warning(fails: true, text: "w", detail: nil, action: action))
