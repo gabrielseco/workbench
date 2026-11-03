@@ -19,7 +19,7 @@ struct NewThreadState: Equatable {
 
     var sendHelp: String {
         screenshots > 0
-            ? "A chat takes no screenshots: use Do it now."
+            ? "A chat takes no screenshots: use Draft the goal."
             : "Starts a free chat. Nothing runs and nothing costs until you say so."
     }
 
@@ -57,39 +57,33 @@ struct NewThreadHeading: View {
     }
 }
 
-/// What Send and Do it now each do, with the two names bold: a `LocalizedStringKey`, since two string literals joined with `+` would show
-/// the asterisks.
+/// What the three ways on each do, one line each in the buttons' order. The third name is the button itself: a quick goal from the words.
 struct NewThreadCaption: View {
-    private static let text = LocalizedStringKey(
-        "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words for you to approve.")
-
-    var body: some View { Text(Self.text).font(.caption).foregroundStyle(.secondary) }
-}
-
-struct NewThreadHint: View {
-    var body: some View {
-        Text("Drop a screenshot on the window to start one").font(.caption).foregroundStyle(Theme.fg3)
-    }
-}
-
-/// The two starters that have something behind them.
-struct NewThreadChips: View {
-    var brainstorm: () -> Void
-    var screenshot: () -> Void
+    var canUseText = true
+    var useText: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 8) {
-            chip("Brainstorm an idea", brainstorm)
-            chip("Fix a bug from a screenshot", screenshot)
+        Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
+            row("Discuss first", "Talk it through with the agent; the goal comes after. Free.")
+            row("Draft the goal", "The agent writes the goal from your words, with criteria. You approve it.")
+            GridRow {
+                // Blue with an arrow, and only faded while the box is empty, so it reads as a link in every state.
+                Button(action: useText) { Text("Use my text as the goal \(Image(systemName: "arrow.right"))") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.blue).opacity(canUseText ? 1 : 0.5)
+                    .font(.caption.weight(.semibold)).disabled(!canUseText)
+                    .accessibilityLabel("Use my text as the goal")
+                    .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
+                Text("Your words become the goal as typed. No agent, no criteria. Free.")
+            }
         }
+        .font(.caption).foregroundStyle(.secondary)
     }
 
-    private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.callout).padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
+    private func row(_ name: String, _ what: String) -> some View {
+        GridRow {
+            Text(name).fontWeight(.semibold).foregroundStyle(.primary)
+            Text(what)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -121,8 +115,6 @@ struct NewThreadScreen: View {
                     messages
                     composer
                     caption
-                    NewThreadChips(brainstorm: { focused = true }, screenshot: chooseImages).disabled(busy)
-                    NewThreadHint().padding(.top, 12)
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
                 .padding(.horizontal, 28).padding(.vertical, 36).frame(maxWidth: .infinity)
@@ -203,10 +195,10 @@ struct NewThreadScreen: View {
                     }
                     .buttonStyle(.borderless)
                 } else {
-                    Button { Task { await doItNow() } } label: { Self.labelled("Do it now", "⌘↵") }
+                    Button { Task { await doItNow() } } label: { Self.labelled("Draft the goal", "⌘↵") }
                         .plainButton().keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
                         .help("Skips the conversation: the goal agent drafts a goal from your words for you to approve")
-                    Button { Task { await send() } } label: { Self.labelled("Send", "↵") }
+                    Button { Task { await send() } } label: { Self.labelled("Discuss first", "↵") }
                         .primaryButton().disabled(!state.canSend).help(state.sendHelp)
                 }
             }
@@ -262,13 +254,7 @@ struct NewThreadScreen: View {
     }
 
     private var caption: some View {
-        HStack(alignment: .firstTextBaseline) {
-            NewThreadCaption()
-            Spacer(minLength: 12)
-            Button("Write it as the goal") { Task { await writeAsGoal() } }
-                .buttonStyle(.link).font(.caption).disabled(!state.canWriteAsGoal)
-                .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
-        }
+        NewThreadCaption(canUseText: state.canWriteAsGoal) { Task { await writeAsGoal() } }
     }
 
     /// A button's name and its key, as the artboard draws them.

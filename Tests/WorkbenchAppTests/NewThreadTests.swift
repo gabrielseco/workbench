@@ -52,7 +52,7 @@ import WorkbenchCore
         #expect(state.canSend && state.canDoItNow && state.canWriteAsGoal)
         state.screenshots = 1
         #expect(!state.canSend && state.canDoItNow, "a chat takes no screenshots; Do it now does")
-        #expect(state.sendHelp == "A chat takes no screenshots: use Do it now.")
+        #expect(state.sendHelp == "A chat takes no screenshots: use Draft the goal.")
         state.screenshots = 0
         state.pending = 1
         #expect(!state.canSend && !state.canDoItNow, "an image still being read is not left out")
@@ -190,9 +190,7 @@ import WorkbenchCore
     @Test func eachPartOfTheScreenIsDrawnOnItsOwn() throws {
         let blank = try drawn(Color.clear)
         #expect(try drawn(NewThreadHeading()) != blank)
-        #expect(try drawn(NewThreadChips(brainstorm: {}, screenshot: {})) != blank)
         #expect(try drawn(NewThreadCaption()) != blank)
-        #expect(try drawn(NewThreadHint()) != blank)
     }
 
     @Test func theBoxGrowsWithTheLinesATextWrapsIntoNotOnlyItsNewlines() {
