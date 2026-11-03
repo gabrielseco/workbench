@@ -84,18 +84,12 @@ struct NewGoalPopover: View {
     }
 
     private var writing: some View {
-        TextEditor(text: $form.request)
-            .font(.system(size: 17, design: .serif)).lineSpacing(6)
-            .focused($focused).scrollContentBackground(.hidden)
-            .frame(height: 170)
-            .disabled(working)
-            .overlay(alignment: .topLeading) {
-                if form.request.isEmpty {
-                    Text(placeholder)
-                        .font(.system(size: 17, design: .serif)).lineSpacing(6)
-                        .foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
-                }
-            }
+        PlaceholderTextEditor(
+            text: $form.request, placeholder: placeholder, font: .system(size: 17, design: .serif), lineSpacing: 6,
+            focus: $focused
+        )
+        .frame(height: 170)
+        .disabled(working)
     }
 
     /// The screenshots added so far, and the ways to add one: paste, drop or the button.

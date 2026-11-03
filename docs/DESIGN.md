@@ -213,6 +213,8 @@ Every screen answers four questions without a click, and a change that touches a
 - Text a person may want to copy (a command, a path, a PR number) is selectable.
 - A sheet or card (`OverlayCard`) has one way out (Esc and a Cancel) and does not move the screen under it.
 - Keyboard shortcuts where the siblings have them: a card cancels with Esc and confirms with ⌘Return.
+- A multi-line text box is `PlaceholderTextEditor` (the placeholder sits where the text view starts its text, measured by
+  `scripts/check-text-alignment.py`; a box that grows with its text hides its scroll bar). Never a bare `TextEditor`: CI refuses it.
 
 ## What this file does not cover
 

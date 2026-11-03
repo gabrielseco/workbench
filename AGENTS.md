@@ -163,6 +163,11 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   word "concurrent", it belongs in `docs/later/`.
 - **Reliability is an acceptance criterion.** Hangs, leaks and leftover processes are tested with the
   fake claude (`Sources/fake-claude`), which can hang, crash, ignore SIGTERM and leave children.
+- **A multi-line text box is `PlaceholderTextEditor`**, never a bare `TextEditor(` (`scripts/check-banned-apis.sh` fails one). SwiftUI's
+  `TextEditor` has no placeholder, and one placed by hand was 6 pt off the line you type on, so the caret looked wrong beside it, three times.
+  A change that adds or moves a text box, or changes what the component does, shows `scripts/check-text-alignment.py` in its PR: shoot the
+  empty box, `typekeys` some letters without descenders, shoot again, and the tool measures the two (it exits 1 above 3 px; the caret is not
+  used, it blinks). The `design-review` skill asks for it.
 - **Comments say why**, in one line, and are not added to restate code.
 
 ## Using Workbench on this repo

@@ -225,19 +225,11 @@ struct NewThreadScreen: View {
     }
 
     private func editor(_ state: NewThreadState) -> some View {
-        TextEditor(text: Binding(get: { store.newThreadText }, set: { store.newThreadText = $0 }))
-            .font(.body).scrollContentBackground(.hidden).focused($focused)
-            .frame(height: NewThreadState.editorHeight(lines: NewThreadState.lineCount(state.text, width: composerWidth)))
-            .background(TextScrollerHider())
-            .disabled(busy)
-            .overlay(alignment: .topLeading) {
-                if state.isBlank {
-                    // Where the text view starts its text: the caret and the placeholder are on one line.
-                    Text("Describe the change, the bug or the idea.").foregroundStyle(.tertiary)
-                        .padding(.leading, 5).padding(.top, 0).allowsHitTesting(false)
-                }
-            }
-            .onKeyPress(.return, phases: .down) { press in
+        PlaceholderTextEditor(
+            text: Binding(get: { store.newThreadText }, set: { store.newThreadText = $0 }),
+            placeholder: "Describe the change, the bug or the idea.", font: .body, hidesScroller: true,
+            showsPlaceholder: state.isBlank, accessibilityLabel: "What do you want to work on?", focus: $focused,
+            onReturn: { press in
                 let key = NewThreadState.key(
                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option),
                     command: press.modifiers.contains(.command))
@@ -246,7 +238,9 @@ struct NewThreadScreen: View {
                 if state.canSend { Task { await send() } }
                 return .handled
             }
-            .accessibilityLabel("What do you want to work on?")
+        )
+        .frame(height: NewThreadState.editorHeight(lines: NewThreadState.lineCount(state.text, width: composerWidth)))
+        .disabled(busy)
     }
 
     private var thumbnails: some View {

@@ -43,17 +43,11 @@ struct SendBackPopover: View {
     }
 
     private var writing: some View {
-        TextEditor(text: $store.sendBackNote)
-            .font(.system(size: 17, design: .serif)).lineSpacing(6)
-            .focused($focused).scrollContentBackground(.hidden)
-            .frame(height: 170)
-            .overlay(alignment: .topLeading) {
-                if store.sendBackNote.isEmpty {
-                    Text("What should change? Say what is wrong and what you expect instead.")
-                        .font(.system(size: 17, design: .serif)).lineSpacing(6)
-                        .foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
-                }
-            }
+        PlaceholderTextEditor(
+            text: $store.sendBackNote, placeholder: "What should change? Say what is wrong and what you expect instead.",
+            font: .system(size: 17, design: .serif), lineSpacing: 6, focus: $focused
+        )
+        .frame(height: 170)
     }
 
     private var footer: some View {

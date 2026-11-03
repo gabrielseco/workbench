@@ -30,11 +30,15 @@ matters; say which file and line):
 - An icon-only `Button` or `Image` with no `.help(`.
 - A hand-made control (a shape with `onTapGesture` that acts as a button) where a system one exists.
 - A cost, count or duration shown as a number when the core says it is unknown.
+- A text box that is not `PlaceholderTextEditor`, or a change to a text box or its placeholder with no `scripts/check-text-alignment.py`
+  result in the PR (empty shot, typed shot, the offset in pixels; the verify-app skill says how).
 
 Then, for each screenshot, in this order:
 
 1. **Hierarchy.** In one second, is it clear which step the thread is on and what to do? One primary action?
-2. **Alignment and rhythm.** Leading edges line up across rows and sections; spacing is larger between groups than within.
+2. **Alignment and rhythm.** Leading edges line up across rows and sections; spacing is larger between groups than within. A text box
+   with a placeholder: the placeholder is on the line you type on, measured with `scripts/check-text-alignment.py` (empty shot, typed shot),
+   not judged by eye: the caret looks wrong when it is not.
 3. **Typography.** The DESIGN.md styles, at most three sizes in a component.
 4. **Colour and contrast.** Each colour means one thing; readable in the appearance shown.
 5. **Fit at 900×600.** Truncates with an ellipsis; nothing important is pushed off screen or under the footer.
