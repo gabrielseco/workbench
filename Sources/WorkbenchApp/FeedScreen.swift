@@ -59,14 +59,16 @@ struct FeedScreen: View {
         VStack(alignment: .leading, spacing: 10) {
             content
         }
-        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
+        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var lazyRows: some View {
         LazyVStack(alignment: .leading, spacing: 10) {
             content
         }
-        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
+        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
     }
 
     var body: some View {
@@ -146,6 +148,14 @@ struct FeedScreen: View {
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }
+}
+
+/// How wide the feed's column is (the artboards': a centred column, not the window): rows, the foot and a chat's composer share it.
+enum FeedLayout {
+    static let maxColumn: CGFloat = 680
+    /// What a chat's message bubbles and agent text are kept to inside it.
+    static let userBubble: CGFloat = 540
+    static let agentText: CGFloat = 620
 }
 
 /// The spine as a row under the title: the same seven steps, marks and colours as the rail drew them.

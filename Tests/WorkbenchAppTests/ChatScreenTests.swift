@@ -180,6 +180,26 @@ import WorkbenchCore
         #expect(whole != (try drawn(ChatComposer(snapshot: ended, store: store), height: 200)), "the composer")
     }
 
+    @Test func theBubblesAndTheAvatarCarryNoLabelSoVoiceOverSaysWhoSpoke() async throws {
+        let chat = try await snapshot(.chat)
+        let spoken = (chat.state.chat?.messages ?? []).map(\.spoken)
+        #expect(spoken == ["You: Could uploads retry with backoff?", "Goal agent: What should happen after the fifth try?"])
+    }
+
+    /// The button on its own, so it cannot be hidden by the text box changing: drawn, dimmed when there is nothing to send, and not
+    /// the same as nothing at all.
+    @Test func theSendButtonIsDrawnAndDimmedOnItsOwn() throws {
+        let on = try drawn(ComposerSendButton(enabled: true) {}, height: 60)
+        let off = try drawn(ComposerSendButton(enabled: false) {}, height: 60)
+        let nothing = try drawn(Color.clear, height: 60)
+        #expect(on != off, "dimmed without text")
+        #expect(on != nothing && off != nothing, "drawn either way")
+    }
+
+    @Test func theColumnAndTheBubblesAreTheArtboardsWidths() {
+        #expect(FeedLayout.maxColumn == 680 && FeedLayout.agentText == 620 && FeedLayout.userBubble == 540)
+    }
+
     @Test func aDamagedLogIsSaidOnTheChatScreen() async throws {
         let chat = try await snapshot(.chat)
         let fixture = try await AppFixture()
