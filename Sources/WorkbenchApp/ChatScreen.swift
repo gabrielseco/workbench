@@ -196,7 +196,7 @@ struct ChatComposer: View {
                         Image(systemName: "arrow.right").accessibilityHidden(true)
                     }
                 }
-                .buttonStyle(.borderedProminent).disabled(!state.canMakeGoal)
+                .primaryButton().disabled(!state.canMakeGoal)
                 .accessibilityLabel("Make this a goal")
                 .help(
                     state.hasExchange

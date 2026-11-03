@@ -25,10 +25,25 @@ import Testing
             Row(token: .canvas, dark: "#16191e", light: "#f4f5f8"), Row(token: .raised, dark: "#2a2f39", light: "#e1e5ec"),
             Row(token: .panel, dark: "#21252d", light: "#ffffff"), Row(token: .line, dark: "#323844", light: "#d3d8e0"),
             Row(token: .fg2, dark: "#b0b7c4", light: "#454d5d"), Row(token: .fg3, dark: "#919aaa", light: "#5d667a"),
+            Row(token: .inv, dark: "#eef0f4", light: "#1b1f27"), Row(token: .invfg, dark: "#14171c", light: "#f4f5f8"),
         ]
         for row in artboards {
             #expect(hex(Theme.rgb(row.token, dark: true, preview: true)) == row.dark, "\(row.token) dark")
             #expect(hex(Theme.rgb(row.token, dark: false, preview: true)) == row.light, "\(row.token) light")
+        }
+    }
+
+    /// The primary button's label sits on its fill: the pair is readable (WCAG contrast at least 7:1) in both appearances.
+    @Test func theInversePairIsReadableInBothAppearances() {
+        func luminance(_ rgb: [Double]) -> Double {
+            let lin = rgb.map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+        }
+        for dark in [true, false] {
+            let a = luminance(Theme.rgb(.inv, dark: dark, preview: true))
+            let b = luminance(Theme.rgb(.invfg, dark: dark, preview: true))
+            let ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+            #expect(ratio >= 7, "\(dark ? "dark" : "light") contrast \(ratio)")
         }
     }
 

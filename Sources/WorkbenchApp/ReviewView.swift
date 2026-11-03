@@ -153,7 +153,7 @@ struct ReviewView: View {
                 Spacer()
                 Button("Send back…") { (store.actionError, store.sendingBack) = (nil, true) }.disabled(store.busy != nil)
                 Button("Accept work") { Task { await store.accept() } }
-                    .buttonStyle(.borderedProminent)
+                    .primaryButton()
                     .disabled(!review.canDecide || store.deciding || store.busy != nil)
             }
             if review.undecided > 0 {

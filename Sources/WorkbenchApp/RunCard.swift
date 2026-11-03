@@ -185,7 +185,7 @@ struct RunCardView: View {
         HStack {
             Spacer()
             Button { perform(stop) } label: { Label(stop.title, systemImage: "stop.fill") }
-                .disabled(!stop.enabled).help(stop.help ?? stop.title)
+                .plainButton().disabled(!stop.enabled).help(stop.help ?? stop.title)
         }
         .padding(.horizontal, 14).padding(.bottom, 12)
     }

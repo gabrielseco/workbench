@@ -47,9 +47,9 @@ struct TaskApproveCard: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") { store.tasks.cancelApprove() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { store.tasks.cancelApprove() }.plainButton().keyboardShortcut(.cancelAction)
                 Button("Approve") { Task { await store.tasks.confirmApprove(store.project) } }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
+                    .primaryButton().keyboardShortcut(.return, modifiers: .command)
             }
             .padding(.top, 16)
         }
@@ -79,9 +79,9 @@ struct TaskRunCard: View {
             .font(.callout).padding(.top, 8)
             HStack {
                 Spacer()
-                Button("Cancel") { store.tasks.cancelRun() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { store.tasks.cancelRun() }.plainButton().keyboardShortcut(.cancelAction)
                 Button("Run now") { Task { await store.tasks.confirmRun(store.project) } }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
+                    .primaryButton().keyboardShortcut(.return, modifiers: .command)
             }
             .padding(.top, 16)
         }

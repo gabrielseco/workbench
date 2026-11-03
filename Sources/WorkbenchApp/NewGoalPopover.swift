@@ -155,7 +155,7 @@ struct NewGoalPopover: View {
                 if form.mode == .advanced { Button("Stop") { store.stopDrafting() } }
                 if form.mode == .chat { Button("Stop") { store.stopChat() } }
             } else {
-                Button("Cancel", action: close).keyboardShortcut(.cancelAction)
+                Button("Cancel", action: close).plainButton().keyboardShortcut(.cancelAction)
                 if agentOff {
                     ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
                         Button("Draft with \(provider.rawValue.capitalized)") {
@@ -173,7 +173,7 @@ struct NewGoalPopover: View {
                             if made { close() }
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .primaryButton()
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(form.isEmpty || (form.mode != .chat && staging.pending > 0))
                 }

@@ -82,7 +82,7 @@ private struct GrantRowView: View {
                 HStack {
                     Text("This is rated unsafe. Allow it for the next turn only?").font(.caption).foregroundStyle(Theme.red)
                     Spacer()
-                    Button("Cancel") { confirming = false }
+                    Button("Cancel") { confirming = false }.plainButton()
                     Button("Allow once") {
                         confirming = false
                         Task { await store.decide(row, .once, dangerous: true) }

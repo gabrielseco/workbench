@@ -1,12 +1,12 @@
 import SwiftUI
 import WorkbenchCore
 
-/// Where the inspector goes. Beside the feed it takes 260 of the centre column, so a window that leaves the feed less than a usable
+/// Where the inspector goes. Beside the feed it takes 300 of the centre column, so a window that leaves the feed less than a usable
 /// width (the 900×600 minimum does) shows it over the feed, as a sheet, instead.
 enum RunSettingsLayout {
-    static let width: CGFloat = 260
-    /// The centre column's width from which the inspector sits beside the feed: a window about 1100 wide.
-    static let besideFrom: CGFloat = 880
+    static let width: CGFloat = 300
+    /// The centre column's width from which the inspector sits beside the feed (300 for it and at least 600 for the feed): a window about 1150 wide.
+    static let besideFrom: CGFloat = 900
 
     enum Placement: Equatable { case beside, sheet }
 
@@ -23,6 +23,19 @@ enum RunSettingsLayout {
         let all = allowed + granted.map { "\($0) (granted)" }
         return (Array(all.prefix(shownTools)), max(0, all.count - shownTools))
     }
+
+    /// The one line under a step's switch. Verifier and Judge are Workbench's own and have one; a review stage comes from the project's
+    /// config and says nothing of its own.
+    static func description(forStep name: String) -> String? {
+        switch name {
+        case "verifier": "Drives the app from the request and posts screenshots."
+        case "judge": "Checks the work against your criteria. Needs at least one."
+        default: nil
+        }
+    }
+
+    /// The foot: where the goal is saved, as the goal model names it.
+    static func savedTo(_ goal: GoalModel) -> String { "Saved to \(goal.path)" }
 
     static let draftNote = "Settings change while the goal is a draft."
     static let ranNote = "A goal that has run is not edited."
@@ -55,7 +68,7 @@ struct RunSettingsInspector: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if showsTitle { Text("RUN SETTINGS").font(.caption.weight(.semibold)).foregroundStyle(.secondary) }
+            if showsTitle { heading }
             if let goal {
                 if let note = RunSettingsLayout.note(goal: goal, lastTurn: snapshot.state.lastTurn) {
                     Text(note).font(.callout).foregroundStyle(.secondary)
@@ -66,6 +79,8 @@ struct RunSettingsInspector: View {
                 tools(goal)
                 folders(goal, editable: editable)
                 openers(goal)
+                Text(RunSettingsLayout.savedTo(goal)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.fg3)
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 if let error = store.goalEditError { Text(error).font(.callout).foregroundStyle(Theme.red) }
                 if showsMessages {
                     MessageRows(
@@ -77,6 +92,16 @@ struct RunSettingsInspector: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The artboard's heading: the name and an X that closes the panel (the header's button does the same).
+    private var heading: some View {
+        HStack {
+            Text("Run settings").font(.system(size: 13, weight: .semibold))
+            Spacer(minLength: 8)
+            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").font(.system(size: 11)) }
+                .buttonStyle(.borderless).help("Close Run settings").accessibilityLabel("Close Run settings")
+        }
     }
 
     private func mono(_ text: String) -> some View {
@@ -96,17 +121,22 @@ struct RunSettingsInspector: View {
         section("AFTER THE TURN") {
             ForEach(goal.steps, id: \.name) { step in
                 let on = !step.skipped && step.unavailable == nil
-                // The switches share a column on the right, whatever the labels' widths.
-                HStack {
-                    Text(step.label).font(.callout)
-                    Spacer(minLength: 8)
+                // The switch at the left, the label and what it does beside it, as the artboard has them.
+                HStack(alignment: .top, spacing: 10) {
                     Toggle(
                         step.label,
                         isOn: Binding(
                             get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } })
                     )
-                    .toggleStyle(.switch).labelsHidden()
+                    .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
                     .disabled(!editable || step.unavailable != nil)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(step.label).font(.system(size: 13, weight: .medium))
+                        if let line = RunSettingsLayout.description(forStep: step.name) {
+                            Text(line).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
                 .help(
                     step.unavailable.map { "Not available: \($0)" }
@@ -122,18 +152,21 @@ struct RunSettingsInspector: View {
 
     /// One switch for the advice: the steps themselves are the switches above, this says whether they run by themselves after a turn.
     private func adviceSwitch(_ advice: AutoAdviceSetting, editable: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(AutoAdviceSetting.label).font(.callout).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                Toggle(
-                    AutoAdviceSetting.label,
-                    isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
-                )
-                .toggleStyle(.switch).labelsHidden().disabled(!advice.switchEnabled(editable: editable))
+        // The switch at the left and everything it says beside it, one column, as the steps above.
+        HStack(alignment: .top, spacing: 10) {
+            Toggle(
+                AutoAdviceSetting.label,
+                isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
+            )
+            .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
+            .disabled(!advice.switchEnabled(editable: editable))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AutoAdviceSetting.label).font(.system(size: 13, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(advice.line).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(advice.source).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
             }
-            Text(advice.line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text(advice.source).font(.caption).foregroundStyle(.secondary)
         }
         .padding(.top, 10)
         .help("Runs the judge and the review stages after a turn that passed, unasked. Each costs what its agent costs.")
@@ -144,7 +177,7 @@ struct RunSettingsInspector: View {
     private func limits(_ goal: GoalModel) -> some View {
         section("LIMITS") {
             // Labels and values in two columns, so the values start where each other do.
-            Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 4) {
+            Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 6) {
                 limit("Model", goal.model)
                 limit("Budget", goal.budget)
                 limit("Timeout", goal.turnTimeout)
@@ -155,8 +188,9 @@ struct RunSettingsInspector: View {
 
     private func limit(_ label: String, _ value: String) -> some View {
         GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value).fixedSize(horizontal: false, vertical: true)
+            Text(label).foregroundStyle(Theme.fg2)
+            Text(value).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
         }
         .font(.callout)
     }
@@ -165,10 +199,10 @@ struct RunSettingsInspector: View {
         let tools = RunSettingsLayout.tools(allowed: goal.allowedTools, granted: goal.grantedTools)
         if !tools.shown.isEmpty {
             section("ALLOWED TOOLS · \(goal.allowedTools.count + goal.grantedTools.count)") {
-                ForEach(tools.shown, id: \.self) { tool in
-                    mono(tool)
+                FlowLayout(spacing: 5) {
+                    ForEach(tools.shown, id: \.self) { Chip(text: $0, mono: true) }
+                    if tools.more > 0 { Chip(text: "+\(tools.more) more", mono: false) }
                 }
-                if tools.more > 0 { Text("and \(tools.more) more").font(.caption).foregroundStyle(.secondary) }
             }
         }
     }
@@ -211,12 +245,13 @@ struct RunSettingsInspector: View {
             HStack(spacing: 6) {
                 TextField("../backend", text: $folderText).textFieldStyle(.roundedBorder).font(.callout)
                     .onSubmit(commitFolder)
-                Button("Add", action: commitFolder).disabled(folderText.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Cancel") { (addingFolder, folderText) = (false, "") }
+                Button("Add", action: commitFolder).plainButton()
+                    .disabled(folderText.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel") { (addingFolder, folderText) = (false, "") }.plainButton()
             }
             Text("A git checkout: ../backend, ~/shared or an absolute path").font(.caption).foregroundStyle(.secondary)
         } else {
-            Button("+ reference folder") { addingFolder = true }.buttonStyle(.borderless).font(.callout)
+            Button("+ reference folder") { addingFolder = true }.plainButton(fill: true)
         }
     }
 
@@ -246,7 +281,7 @@ struct RunSettingsInspector: View {
                 .help("Approves the goal, cuts the worktree and starts a Claude session on it in Herdr")
             }
         }
-        .buttonStyle(.link).font(.callout)
+        .plainButton(fill: true)
     }
 }
 
@@ -261,12 +296,12 @@ struct RunSettingsSheet: View {
             HStack {
                 Text("Run settings").font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction).plainButton()
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             Divider()
             RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
         }
-        .frame(width: 420, height: 560)
+        .frame(width: 420, height: 560).background(Theme.rail)
     }
 }

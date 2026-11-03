@@ -122,3 +122,6 @@ design has no empty state to compare it with.
 2. **Column width (3)** and the **chat composer (4)**: small, and they change how every screen reads.
 3. Settle **colour (12)** once, in `Theme.swift` or in the artboards, so the next check has nothing to argue about.
 4. The rest (5 to 9, 11) are features the artboards show and the app does not have yet: each is a slice, not a polish.
+
+## Buttons, switches and the Run settings panel (PR 9)
+Found by comparing `B-Goal.dc.html` with the app after PR 8: the primary button is an inverse pill (not the system blue), the plain button is raised and bordered, switches are neutral, and the panel is 300 wide with its own heading and X, switches at the left with a line each, mono limits, tool chips, full-width Open buttons and a `Saved to` foot. **Done, PR 9** (the native switch is tinted, not redrawn: on reads as a mid-grey track).

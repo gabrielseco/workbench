@@ -52,6 +52,19 @@ import Testing
         #expect(!memory.runSettings && memory.runSettingsChosen)
     }
 
+    @Test func theVerifierAndTheJudgeSayWhatTheyDoAndAReviewStageSaysNothing() {
+        #expect(RunSettingsLayout.description(forStep: "verifier") == "Drives the app from the request and posts screenshots.")
+        #expect(RunSettingsLayout.description(forStep: "judge") == "Checks the work against your criteria. Needs at least one.")
+        #expect(RunSettingsLayout.description(forStep: "design") == nil, "a project's own review stage has no line of ours")
+    }
+
+    @Test func theFootNamesWhereTheGoalIsSaved() {
+        var goal = GoalModel.invalid(path: ".workbench/threads/g-1/goal.md", problems: [])
+        goal.path = ".workbench/threads/g-1/goal.md"
+        #expect(RunSettingsLayout.savedTo(goal) == "Saved to .workbench/threads/g-1/goal.md")
+        #expect(RunSettingsLayout.width == 300)
+    }
+
     @Test func theHeadersButtonOpensWhatIsNotShownAndClosesWhatIs() {
         func sets(_ on: Bool, _ chosen: Bool, _ fits: Bool) -> Bool {
             RunSettingsLayout.toggled(on: on, chosen: chosen, fits: fits)
@@ -86,11 +99,11 @@ import Testing
 
     @Test func aNarrowWindowOpensItOverTheFeedAndAWideOneBesideIt() {
         #expect(RunSettingsLayout.placement(centreWidth: 679) == .sheet, "the 900-wide minimum leaves the centre 679")
-        #expect(RunSettingsLayout.placement(centreWidth: 879) == .sheet)
-        #expect(RunSettingsLayout.placement(centreWidth: 880) == .beside)
+        #expect(RunSettingsLayout.placement(centreWidth: 899) == .sheet)
+        #expect(RunSettingsLayout.placement(centreWidth: 900) == .beside)
         #expect(RunSettingsLayout.placement(centreWidth: 1_379) == .beside, "a 1600-wide window")
-        #expect(RunSettingsLayout.width == 260)
-        #expect(880 - RunSettingsLayout.width >= 600, "the feed keeps a usable width beside it")
+        #expect(RunSettingsLayout.width == 300)
+        #expect(RunSettingsLayout.besideFrom - RunSettingsLayout.width >= 600, "the feed keeps a usable width beside it")
     }
 
     @Test func theToolsListIsTenAndHowManyMoreAndMarksTheGrantedOnes() {
