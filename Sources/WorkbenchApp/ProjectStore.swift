@@ -99,7 +99,7 @@ struct RecentProject: Equatable, Identifiable {
     var deciding = false { didSet { resumeIdleWaiters() } }
     @ObservationIgnored let preferences: Preferences
     /// The chat feed preview is on: the thread screen is the feed, and the loader derives its items. Set by `setChatFeed`.
-    var chatFeedOn: Bool
+    var chatFeedOn: Bool { didSet { Theme.preview = chatFeedOn } }
     /// The Run settings inspector is shown beside the feed (or over it, in a narrow window). Set by `setRunSettings`.
     var runSettingsOn: Bool
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
@@ -159,6 +159,7 @@ struct RecentProject: Equatable, Identifiable {
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
         self.chatFeedOn = preferences.chatFeed
+        Theme.preview = preferences.chatFeed
         self.runSettingsOn = preferences.runSettings
         self.doctorRunner = doctorRunner
         current.onSaid = { [weak self] in self?.adopt($0) }

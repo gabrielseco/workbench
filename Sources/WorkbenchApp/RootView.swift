@@ -12,7 +12,9 @@ struct RootView: View {
             HStack(spacing: 0) {
                 Rail(store: store).frame(width: 220).background(Theme.rail)
                 Divider()
+                // The design's content colour while the preview is on; without it the window draws its own, as before.
                 Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background { if store.chatFeedOn { Theme.canvas } }
             }
             Divider()
             FooterBar(store: store)
@@ -58,7 +60,7 @@ struct ToolbarBar: View {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
                 Text(snapshot.spendText).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                StatePill(snapshot: snapshot)
+                StatePill(snapshot: snapshot, short: store.chatFeedOn)
             } else {
                 Spacer()
             }
@@ -94,6 +96,8 @@ struct ProjectPill: View {
 
 struct StatePill: View {
     var snapshot: ThreadSnapshot
+    /// Only the head of the state (`Needs you`): the reason is in the thread's row and the decision card.
+    var short = false
 
     var body: some View {
         let tint: Color = {
@@ -101,7 +105,7 @@ struct StatePill: View {
             if snapshot.attention == .working { return Theme.blue }
             return Theme.grey
         }()
-        Text(snapshot.stateText)
+        Text(short ? snapshot.stateHead : snapshot.stateText)
             .font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
             .foregroundStyle(tint).background(tint.opacity(0.12), in: Capsule())
     }
@@ -133,7 +137,8 @@ struct Rail: View {
                 Text("None").font(.headline)
             }
             Spacer()
-            DoctorButton(store: store)
+            // With the preview on, Doctor is in the footer, as the design has it.
+            if !store.chatFeedOn { DoctorButton(store: store) }
         }
         .padding(16)
     }
@@ -141,14 +146,16 @@ struct Rail: View {
 
 struct DoctorButton: View {
     var store: ProjectStore
+    /// The footer's form: a word and its result, no frame.
+    var compact = false
 
     var body: some View {
         Button {
             Task { await store.runDoctor() }
         } label: {
-            HStack {
+            HStack(spacing: compact ? 6 : nil) {
                 Text("Doctor")
-                Spacer()
+                if !compact { Spacer() }
                 switch store.doctor {
                 case .notRun: Text("Not run").foregroundStyle(.secondary)
                 case .running: ProgressView().controlSize(.small)
@@ -157,7 +164,8 @@ struct DoctorButton: View {
                 case .problem: Text("Problem").foregroundStyle(Theme.red)
                 }
             }
-            .padding(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)))
+            .padding(compact ? 0 : 8)
+            .overlay { if !compact { RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)) } }
         }
         .buttonStyle(.plain)
         .disabled(store.project == nil)
@@ -427,9 +435,23 @@ struct FooterBar: View {
             } else {
                 Text("Nothing is running.").foregroundStyle(.secondary)
             }
-            Spacer()
+            if store.chatFeedOn {
+                DoctorButton(store: store, compact: true).font(.callout)
+                Spacer()
+                if let limit = FooterBar.limitText(store.screen) {
+                    Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                }
+            } else {
+                Spacer()
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    /// The thread's per-turn limit, as the design's footer says it; nil when the thread has none or is not on screen.
+    static func limitText(_ screen: ProjectScreen) -> String? {
+        guard case .thread(let snapshot) = screen, let minutes = snapshot.turnTimeoutMin else { return nil }
+        return "\(minutes) min per turn"
     }
 
     private var label: String {

@@ -31,6 +31,10 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - Both appearances are supported. A tinted label has to be readable on the rail in light and in dark (the amber and green
   text is the one that fails first).
 - Neutral surfaces use the system fills (`.quaternary`, the rail's own `Theme.rail`), not a new grey.
+- **With the chat feed preview on, the palette is the artboards'** (`Theme.preview`, set by the store; the old window keeps its values
+  until P22 slice 7). Dark / light: blue `#5b9dff` / `#1f5fd1`, green `#4cc38a` / `#1b7f4e`, amber `#f0b04a` / `#a35f00`, red `#f2685f` /
+  `#c8322a`, grey `#7e8695` / `#667084`; the rail `#1b1e24` / `#eceef2` and the thread screens' content `#16191e` / `#f4f5f8`
+  (`Theme.canvas`; without the preview the window draws its own). The values are in `ThemeTests`, which is what fails if they drift.
 
 ## Layout
 
@@ -51,10 +55,10 @@ Run settings inspector comes in 3c. The
 mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a mockup disagree on a layout value, this file is what
 ships, and the mockup gets fixed.
 
-- **Header.** The title (`.title2`, bold, two lines at most), then the **phase row**: the spine's seven steps in one line, each a mark
+- **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each a mark
   (the same symbol and colour as the rail drew it) and its title (`.callout`, semibold from the current step on, `.secondary` while
-  pending), with a chevron between. The toolbar above it keeps the project pill, the base, the spend and the state pill. The rail
-  keeps the Thread/Tasks switch and Doctor and, between them, **the thread list**: a row per thread, newest first (at most 50, then "N older
+  pending), with a chevron between. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
+  keeps the Thread/Tasks switch and, below it, **the thread list**: a row per thread, newest first (at most 50, then "N older
   threads"), each a mark (a symbol and a tint: working blue, needs you amber, done green, waiting grey, broken red), the title (`.callout`, two
   lines at most, semibold when selected) and one `.caption` line of state in the toolbar pill's words. A click shows that thread, with its
   feed and settings, including a finished one; it starts and stops nothing. The spine is not drawn twice.
