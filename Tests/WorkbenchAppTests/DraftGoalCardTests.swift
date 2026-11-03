@@ -91,6 +91,41 @@ import WorkbenchCore
         return try #require(renderer.cgImage).dataProvider?.data as Data?
     }
 
+    /// The card with a real goal read from a fixture, in both appearances. `ImageRenderer` draws native controls (the text boxes) as placeholders,
+    /// so this is for the layout: the header, the blocks and the footer. Set `WORKBENCH_RENDER_DIR` to keep the images.
+    @Test(arguments: [AppScenario.draft, .goalWarning, .chatGoal])
+    func theCardIsDrawnWithItsHeaderBlocksAndFooter(_ scenario: AppScenario) async throws {
+        let fixture = try await AppFixture()
+        keptDraftCardFixtures.append(fixture)
+        try await scenario.build(in: fixture)
+        guard case .thread(let thread) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+            Issue.record("no thread")
+            return
+        }
+        let model = await GoalModel.load(project: fixture.project, thread: thread.id) { _, _ in true }
+        let store = ProjectStore(preferences: MemoryPreferences(), project: fixture.project)
+        let decision = store.feedDecision(for: thread)
+        let card = DraftGoalCardView(goal: model, store: store, base: thread.base, decision: decision) { _ in }
+        let directory = ProcessInfo.processInfo.environment["WORKBENCH_RENDER_DIR"]
+        var seen: [Data?] = []
+        for dark in [false, true] {
+            let framed = card.frame(width: 680).padding(20).background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, dark ? .dark : .light)
+            let renderer = ImageRenderer(content: framed)
+            renderer.scale = 1
+            let image = try #require(renderer.cgImage)
+            #expect(image.height > 300, "the header, the blocks and the footer take room: \(image.height)")
+            seen.append(image.dataProvider?.data as Data?)
+            if let directory {
+                let name = "draft-card-\(scenario.rawValue)-\(dark ? "dark" : "light").png"
+                let url = URL(fileURLWithPath: directory).appendingPathComponent(name)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
+            }
+        }
+        #expect(seen[0] != seen[1], "light and dark differ")
+    }
+
     @Test func theFoldAndTheAgentsLineAreDrawn() async throws {
         let blank = try drawn(Color.clear)
         let fixture = try await AppFixture()
