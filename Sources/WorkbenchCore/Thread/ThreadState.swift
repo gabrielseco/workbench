@@ -180,6 +180,8 @@ public struct ThreadState: Sendable, Equatable {
     public var lastCheck: String?
     /// `accepted`, `discarded` or `abandoned` once the thread has ended.
     public var decision: String?
+    /// Who recorded `decision` (`user`, or `task` for a run that ended its own thread); nil for a log that did not say.
+    public var decisionBy: String?
     public var lastResult: String?
     public var totalCostUSD: Double
     /// True once a turn ended without a `cost_usd`: the total is then not known, and is never shown as a sum or as 0.
@@ -223,6 +225,16 @@ public struct ThreadState: Sendable, Equatable {
     public var knownCostUSD: Double? { costUnknown ? nil : totalCostUSD }
 
     public var isActive: Bool { decision == nil }
+
+    /// How the thread ended, in words. A task run ends its own thread when the agent changed nothing to ship; that is how the run
+    /// went (Succeeded, Failed), not an abandonment by a person.
+    public var decisionLabel: String? {
+        guard let decision else { return nil }
+        if decision == "abandoned", decisionBy == "task", let result = lastResult {
+            return result == "succeeded" ? "Succeeded" : result.capitalized
+        }
+        return decision.capitalized
+    }
 
     /// True while a verifier or judge run has started and not ended: advice is being made, nobody is asked yet.
     public var adviceIsOpen: Bool { review.verifier?.open == true || review.judge?.isOpen == true }
@@ -404,6 +416,7 @@ public struct ThreadState: Sendable, Equatable {
             case .reviewDecision:
                 if let decision = event.data["decision"]?.stringValue, terminalDecisions.contains(decision) {
                     state.decision = decision
+                    state.decisionBy = event.data["by"]?.stringValue
                 }
             default:
                 break

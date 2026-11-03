@@ -26,6 +26,7 @@ enum AppScenario: String, CaseIterable {
     case tasks
     case tasksEmpty = "tasks-empty"
     case taskThreads = "task-threads"
+    case taskDone = "task-done"
     case threads
     case chat
     case chatGoal = "chat-goal"
@@ -210,6 +211,8 @@ enum AppScenario: String, CaseIterable {
             try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
         case .taskThreads:
             try await buildTaskThreads(in: fixture)
+        case .taskDone:
+            try await buildTaskDone(in: fixture)
         case .tasks:
             // The thread a task's run made, so that run's link can be pressed; the tasks themselves are written by `buildTasks`.
             try await fixture.addThread(id, approved: true, title: Self.title)
@@ -403,5 +406,38 @@ extension AppScenario {
         try fixture.append(open, .turnStarted, turn: 1, data: ["session_id": "s1"])
         try fixture.append(open, .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-29T04:09:12.000Z")
         try await buildTasks(in: fixture)
+    }
+}
+
+extension AppScenario {
+    /// A task that acts through a tool and changes no file: its runs end `nothing-to-do`, and the thread each made was ended by the
+    /// task itself after a succeeded turn and a passed check.
+    @MainActor private func buildTaskDone(in fixture: AppFixture) async throws {
+        let project = fixture.project
+        let name = "update-contract-details-tracker"
+        let folder = project.taskFileURL(name).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "---\nat: 21:00\ndays: weekdays\nfix: pr\nbudget: 3.00\n---\nRefresh the Linear issue.\n"
+            .write(to: project.taskFileURL(name), atomically: true, encoding: .utf8)
+        let box = ClockBox()
+        box.date = Self.parse("2026-10-30T08:00:00.000Z")
+        try await TaskLibrary(project: project).approve(name, now: { box.date })
+        let thread = "update-tracker-1"
+        try await fixture.addThread(thread, approved: true, title: name)
+        try fixture.append(thread, .turnStarted, turn: 1, data: ["session_id": "s1"])
+        try fixture.append(thread, .turnEnded, turn: 1, data: ["result": "succeeded", "cost_usd": 0.91])
+        try fixture.append(thread, .checkStarted, turn: 1)
+        try fixture.append(thread, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": [], "tests_failed": []])
+        try fixture.append(thread, .reviewDecision, data: ["decision": "abandoned", "by": "task"])
+        let writer = try await TaskRunLog(project: project, name: name).openWriter(now: { box.date })
+        box.date = Self.parse("2026-10-30T19:00:00.000Z")
+        try await writer.append(.taskRunStarted, data: ["trigger": "tick"])
+        try await writer.append(.taskRunThread, data: ["thread": .string(thread), "units": [], "hash": "h"])
+        box.date = Self.parse("2026-10-30T19:01:24.000Z")
+        let reason = "the agent changed nothing, so there is nothing to ship; the agent said: I updated PBYR-5087"
+        try await writer.append(
+            .taskRunEnded,
+            data: ["outcome": "nothing-to-do", "units": [], "thread": .string(thread), "reason": .string(reason)])
+        await writer.close()
     }
 }

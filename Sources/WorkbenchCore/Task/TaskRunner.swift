@@ -213,7 +213,7 @@ public struct TaskRunner: Sendable {
     /// then still active, and the caller says so instead of claiming it is gone.
     func discard(_ id: String, service: ThreadService) async -> Bool {
         do {
-            _ = try await service.abandon(id: id)
+            _ = try await service.abandon(id: id, by: "task")
             return true
         } catch {
             notice("could not discard thread \(id): \(error)")

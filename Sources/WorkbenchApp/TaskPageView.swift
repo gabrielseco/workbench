@@ -170,8 +170,10 @@ struct TaskRunRow: View {
                         .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     Text(run.trigger).font(.caption).foregroundStyle(.secondary)
                 }
+                // Not selectable: a selected line-limited Text grows past its row and paints over the next one; the full text is the help.
                 if let reason = TasksText.reason(run) {
-                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled).help(reason)
+                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true).help(reason)
                 }
                 if !run.units.isEmpty {
                     Text(run.units.joined(separator: ", ")).font(.system(.caption, design: .monospaced))

@@ -27,6 +27,8 @@
 # A task with `labels: [seed-preview, bot]` must have each label created (`gh label create --force`) and added to its pull request; one whose
 # label cannot be created must still end pr-opened with the failed label named in the reason (the sabotage drops the `labels:` line from the first
 # and the failure from the second, so "the task's labels are created and added to its pull request" and "a label that fails is only noted ..." must FAIL).
+# A task whose agent changes nothing must end nothing-to-do, and `status` of its thread must read Succeeded, not Abandoned (the sabotage
+# records the thread's end as a person's abandon, so "a run that changes nothing ends nothing-to-do and its thread reads Succeeded" must FAIL).
 # `task run` prints what the run is doing as it goes (the turn starting, a tool call at most every 2 s, the check). Not named in the sabotage.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -52,7 +54,8 @@ mkdir -p "$BIN" "$GHDIR" || die "could not make the stand-in folders"
 echo '{"title": "chore: bump countries", "summary": "Bumps the next countries.", "decisions": [], "deviations": []}' >"$SCRATCH/answer.txt"
 cat >"$BIN/claude" <<STUB
 #!/bin/sh
-FAKE_CLAUDE=write=task-probe.txt,answer=$SCRATCH/answer.txt exec '$FAKE' "\$@"
+if [ -f "$SCRATCH/quiet" ]; then FAKE_CLAUDE=answer=$SCRATCH/answer.txt; else FAKE_CLAUDE=write=task-probe.txt,answer=$SCRATCH/answer.txt; fi
+FAKE_CLAUDE=\$FAKE_CLAUDE exec '$FAKE' "\$@"
 STUB
 # A gh that is logged in, opens pull requests into a file, and answers `pr list --head X` for the branches it opened.
 STATE=OPEN
@@ -231,6 +234,22 @@ check "a label that fails is only noted: the run still ends pr-opened, with a pu
     bash -c '[ "$1" = 0 ] && grep -q "^labelfail: pr-opened" "$2" && grep -q "pull request: https://github.com/o/r/pull/" "$2" && grep -q "label .seed-preview.: HTTP 403" "$2"' _ "$RC" "$SCRATCH/labelfail.out"
 check "that run's log has the same reason and its thread was shipped, not abandoned" "log: $(tail -c 400 "$P/.workbench/tasks/labelfail/runs.jsonl")" \
     bash -c 'tail -1 "$1" | grep -q "\"outcome\":\"pr-opened\"" && tail -1 "$1" | grep -q "label .seed-preview.: HTTP 403"' _ "$P/.workbench/tasks/labelfail/runs.jsonl"
+
+# --- 2f. a run that changes nothing -----------------------------------------------------------------------------
+
+# The agent finds nothing to change (a task that only acts through a tool): the run is nothing-to-do, and the thread it ended says the
+# run succeeded, not that someone abandoned it. (The sabotage records the end as a person's abandon, so the step must FAIL.)
+touch "$SCRATCH/quiet"
+mkdir -p "$P/.workbench/tasks/quiet"
+printf -- '---\nfix: pr\nmax_open: 5\n---\nCheck something.\n' >"$P/.workbench/tasks/quiet/task.md"
+wbp "$SCRATCH/approve8.out" task approve quiet
+wbp "$SCRATCH/quiet.out" task run quiet; shown "$SCRATCH/quiet.out" 4
+rm -f "$SCRATCH/quiet"
+QTHREAD=$(sed -n 's/^  thread: //p' "$SCRATCH/quiet.out" | head -1)
+[ "$SABOTAGE" = 1 ] && [ -n "$QTHREAD" ] && sed -i.bak 's/"by":"task"/"by":"user"/' "$P/.workbench/threads/$QTHREAD/events.jsonl"
+wbp "$SCRATCH/quiet-status.out" status "$QTHREAD"; shown "$SCRATCH/quiet-status.out" 12
+check "a run that changes nothing ends nothing-to-do and its thread reads Succeeded, not Abandoned" "exit $RC: $(head -c 300 "$SCRATCH/quiet.out"); status: $(head -c 400 "$SCRATCH/quiet-status.out")" \
+    bash -c 'grep -q "^quiet: nothing-to-do" "$1" && grep -q "Succeeded" "$2" && ! grep -q "Abandoned" "$2"' _ "$SCRATCH/quiet.out" "$SCRATCH/quiet-status.out"
 
 # --- 3. what stops a run -----------------------------------------------------------------------------------
 

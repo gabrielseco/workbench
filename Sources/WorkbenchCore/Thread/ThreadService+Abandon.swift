@@ -11,12 +11,14 @@ extension ThreadService {
     /// the worktree's tree is read again first and must be the one the patch was taken from, and that no run is
     /// still working in it. `force` lifts git's refusals for a worktree that had nothing to save.
     @discardableResult
-    public func abandon(id: String, force: Bool = false) async throws -> SavedPatch? {
-        try await abandon(id: id, force: force, afterSave: nil)
+    public func abandon(id: String, force: Bool = false, by: String = "user") async throws -> SavedPatch? {
+        try await abandon(id: id, force: force, by: by, afterSave: nil)
     }
 
     /// `afterSave` runs between the patch and the removal; only tests pass one, to write into the worktree there.
-    func abandon(id: String, force: Bool, afterSave: (@Sendable () async throws -> Void)?) async throws -> SavedPatch? {
+    func abandon(
+        id: String, force: Bool, by: String = "user", afterSave: (@Sendable () async throws -> Void)?
+    ) async throws -> SavedPatch? {
         if let decision = ThreadStore(project: project).state(of: id).decision {
             throw ThreadServiceError.threadEnded(decision)
         }
@@ -58,7 +60,7 @@ extension ThreadService {
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
             _ = try await log.recoverOrphanedEvaluations()
-            try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": "user"])
+            try await log.append(.reviewDecision, data: ["decision": "abandoned", "by": .string(by)])
             return saved
         }
     }

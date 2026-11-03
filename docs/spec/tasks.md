@@ -215,7 +215,7 @@ In order, ending the run with an outcome at the first step that stops it:
    come back when it was closed unmerged or GitHub says there is none.
 8. The check must have passed, and the verifier too if one ran, else `failed` and the thread is **left for you**, not discarded: the next run
    is then `skipped-project-busy` until you look at it and finish or abandon it.
-9. When the agent changed nothing there is nothing to accept: the run is `nothing-to-do`, the thread is abandoned (so the next run is not
+9. When the agent changed nothing there is nothing to accept: the run is `nothing-to-do` (the app shows it as `done`: the turn and check passed, there was just nothing to ship), the thread is abandoned with `by: task` (shown as `Succeeded`, not `Abandoned`; so the next run is not
    skipped for it) and the units stay pending. Otherwise the thread is accepted with `by: task:<name>` (the approved task file is the consent). Then the usual preflight, a description of the change from
    the read-only describing turn, and the push and pull request. A pull request needs that description: when the turn fails the run is `failed`,
    the thread stays accepted and `workbench ship` finishes it by hand, because the fallback body is the goal's request, which holds the skill

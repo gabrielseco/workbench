@@ -83,8 +83,8 @@ public struct ThreadSpine: Sendable, Equatable {
         }
 
         let reviewEntry: Entry
-        if let decision = state.decision {
-            reviewEntry = Entry(step: .review, mark: .done, sublabel: decision.capitalized)
+        if let label = state.decisionLabel {
+            reviewEntry = Entry(step: .review, mark: .done, sublabel: label)
         } else if review.status == .awaitingReview && !state.adviceIsOpen {
             reviewEntry = Entry(step: .review, mark: .needsYou, sublabel: "Needs you")
         } else {

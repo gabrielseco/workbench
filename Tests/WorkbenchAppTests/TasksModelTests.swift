@@ -141,8 +141,11 @@ import WorkbenchCore
     @Test func outcomeMarks() {
         #expect(TaskOutcomeStyle.tone(.prOpened) == .done)
         #expect(TaskOutcomeStyle.tone(.reported) == .done)
+        // The run's turn and check passed; it only had no change to ship.
+        #expect(TaskOutcomeStyle.tone(.nothingToDo) == .done)
+        #expect(TaskOutcomeStyle.word(.nothingToDo) == "done")
         let idle: [TaskOutcome] = [
-            .nothingPending, .nothingToDo, .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen,
+            .nothingPending, .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen,
         ]
         for outcome in idle {
             #expect(TaskOutcomeStyle.tone(outcome) == .idle)
