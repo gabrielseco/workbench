@@ -21,6 +21,29 @@ controls as placeholders and are not a fair comparison), the **Run settings insp
 them open), the **E · Autopilot** boards (dropped from P22), and anything that moves. The `running` fixture has a dead runner (a
 fixture cannot have a live one), so C compares a live design with a "runner is gone" app.
 
+## Decisions (2026-11-03) and the order of the fixes
+
+| Question | Decision |
+|---|---|
+| Rail and Tasks (1, 2) | **Follow the design.** One rail: *Threads* with a `+`, then *Scheduled*. A task opens the design's task page. The `Thread \| Tasks` switch and the three-column Tasks screen go. |
+| Palette (12) | **The artboards win.** `Theme.swift` and the rail colour take the artboards' values. |
+| New thread (5) | **An in-feed screen**, reached from the rail's `+`; the popover stays for ⌘N. |
+| Phase row (9) | **Keep Accept, add Chat.** The artboards get an Accept step; the row shows Chat first. No core change. |
+| Everything marked *App* (3, 4, 10), type (13), footer (11) | Done to the design: the thread title `.title3` (15 pt), the footer carries Doctor and the per-turn limit. |
+| Steer this run, Autopilot | Stay out (P22 decision 5; Autopilot dropped). |
+
+One PR each, in this order; each starts from its own goal file.
+
+1. **Tokens and chrome:** palette and rail colour, thread title size, a short state pill, the footer (11, 12, 13, part of 10).
+2. **The feed column and the chat:** a centred column, the chat's messages and composer as designed (3, 4).
+3. **The phase row:** Chat first, the artboards' marks, shown on a chat (9).
+4. **The rail:** one list, `+`, *Scheduled*; the Tasks mode goes (2).
+5. **The task page:** header, per-task *Will it run tonight?*, runs by day with a button each (1).
+6. **The new-thread screen** (5).
+7. **The goal screen:** *Draft goal* card with `Back to chat` and `Approve goal` inside it, the inspector open by default (6).
+8. **Run and Verify:** a live card with progress and timer, plan tasks, pending *Judge* / *Verify* rows, screenshots in the feed, *Ready to
+   ship* with `Request changes` and `Ship` (7, 8). The biggest, and it needs core events for plan progress; it gets its own plan first.
+
 ## What differs, most to least structural
 
 | # | Where | Design | App | Decide |
