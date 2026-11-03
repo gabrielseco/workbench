@@ -63,7 +63,10 @@ extension Commands {
 
     /// The conversation of a chat thread, or what is known of the thread if it is not one.
     private static func showChat(_ ctx: Context, _ named: String?) throws -> Int32 {
-        let id = try ctx.threadIDForViewing(named)
+        // The name a chat was started under shows it, as it continues it.
+        var shown = named
+        if let named, case .existing(let id) = resolve(named, in: ctx) { shown = id }
+        let id = try ctx.threadIDForViewing(shown)
         let state = ctx.store.state(of: id)
         guard state.isChat, let chat = state.chat else {
             throw CLIError.refused("thread \(id) is not a chat: use `workbench chat <name> --message \"...\"` to start one.")

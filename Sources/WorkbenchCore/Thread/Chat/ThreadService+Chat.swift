@@ -93,14 +93,14 @@ extension ThreadService {
         }
         guard let id else { throw ChatRefusal.noThread("") }
         let scratch = chatScratch(id)
-        // Whatever the agent left running in its folder ends with the turn: a chat leaves no process behind. Only the holder of the
-        // log gets here with the folder in hand, so a refused second submission never touches the first one's.
-        var holdsScratch = false
-        defer {
-            if holdsScratch { Self.clearChatScratch(scratch) }
-        }
         do {
             return try await withLog(id) { log in
+                // Whatever the agent left running in its folder ends with the turn, while the log is still held: the next
+                // submission cannot have taken the folder yet, and a refused one never reaches here to touch it.
+                var holdsScratch = false
+                defer {
+                    if holdsScratch { Self.clearChatScratch(scratch) }
+                }
                 // What was checked before is checked again with the log held: another command may have decided, spent or started.
                 let state = ThreadStore(project: self.project).state(of: id)
                 guard state.isChat else { throw ChatRefusal.notAChat(id) }
@@ -202,6 +202,8 @@ extension ThreadService {
         let agent = prepared.agent
         try? writeHolderMarker(id)
         defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+        // Doctor looks for a holder's marker: one that began while the folder was being made is seen here, now that it can see us.
+        do { try ThreadStore(project: project).requireNoDoctor() } catch { throw ChatRefusal.doctorRunning }
         try await log.append(.chatMessage, data: ["role": "user", "text": .string(text)])
         let attempts = AttemptLog(log: log, role: "chat", turn: 0, agent: agent)
         let attempt = try await attempts.start()

@@ -113,9 +113,9 @@ check "the second message, by the name the chat was started under: exit 0" "work
 check "the earlier messages reached the agent, quoted" "the prompt does not hold the conversation" \
     bash -c 'grep -q "^> could uploads retry?" "$1" && grep -q "^> What should happen after the fifth try?" "$1" && grep -q "^> give up and keep the file" "$1"' _ "$FAKE/args_2"
 check "it is the same thread" "threads: $(threads)" test "$(threads)" = 1
-wbp "$SCRATCH/show.out" chat "$ID"
+wbp "$SCRATCH/show.out" chat idea
 shown "$SCRATCH/show.out" 12
-check "chat <id> prints the conversation in order" "conversation is not as expected" \
+check "chat <name> prints the conversation in order" "conversation is not as expected" \
     bash -c 'test "$(grep -c "^you:" "$1")" = 2 && test "$(grep -c "^agent:" "$1")" = 2 && grep -q "2 turn" "$1"' _ "$SCRATCH/show.out"
 
 # --- 4. a turn that fails ends, and says how ----------------------------------------------------------------
