@@ -38,6 +38,11 @@ enum Help {
                 + "draft thread (or, with --replace, rewrites an existing goal and returns it to draft); goal approve: "
                 + "records the approval in the thread's log",
             example: "workbench goal new add-retry && workbench goal approve"),
+        "chat": Extra(
+            changes:
+                "starts a chat thread on a new name (a folder and a log, no goal, worktree or branch) and appends the "
+                + "messages and each turn's end to its log; runs the goal agent read-only in an empty folder",
+            example: "workbench chat idea --message \"could uploads retry?\""),
         "run": Extra(
             changes: "creates the thread's worktree and branch, runs Claude and the project's check there, appends to the log",
             example: "workbench run"),

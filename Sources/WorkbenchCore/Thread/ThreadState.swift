@@ -210,6 +210,10 @@ public struct ThreadState: Sendable, Equatable {
     public var pullRequest: PullRequestRecord?
     /// True once `clean` deleted the shipped branch (`branch.removed`).
     public var cleaned = false
+    /// The conversation of a chat thread; nil on a thread that has none (P22 slice 6).
+    public var chat: ChatState?
+    /// A thread made by `workbench chat`: it has no goal until one is made from it, and no worktree.
+    public var isChat = false
     /// The `seq` of the latest `turn.ended`, nil when none has ended.
     public var lastTurnEndedSeq: Int?
     /// What the latest ended turn cost; nil when it reported none (never 0).
@@ -334,6 +338,7 @@ public struct ThreadState: Sendable, Equatable {
             switch event.kind {
             case .threadCreated:
                 state.createdAt = event.ts
+                state.isChat = event.data["kind"]?.stringValue == "chat"
                 state.lineage = Self.lineage(event)
             case .turnStarted:
                 state.lastTurn = max(state.lastTurn, event.turn)
@@ -371,6 +376,10 @@ public struct ThreadState: Sendable, Equatable {
                         outputRef: event.data["output_ref"]?.stringValue,
                         command: event.data["command"]?.stringValue, tests: Self.tests(in: event))
                 }
+            case .chatMessage, .chatEnded:
+                var chat = state.chat ?? ChatState()
+                chat.apply(event)
+                state.chat = chat
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
                 .prReviewFinished:
                 Self.applyAdvisory(event, to: &state)

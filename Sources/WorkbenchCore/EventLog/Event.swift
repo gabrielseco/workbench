@@ -48,6 +48,8 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let agentAttemptEnded: EventKind = "agent.attempt.ended"
     public static let goalDraftStarted: EventKind = "goal.draft.started"
     public static let goalDraftFinished: EventKind = "goal.draft.finished"
+    public static let chatMessage: EventKind = "chat.message"
+    public static let chatEnded: EventKind = "chat.ended"
     public static let prOpened: EventKind = "pr.opened"
     public static let prDescribed: EventKind = "pr.described"
     public static let prRefreshed: EventKind = "pr.refreshed"

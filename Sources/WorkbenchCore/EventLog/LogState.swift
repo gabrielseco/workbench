@@ -41,6 +41,8 @@ struct LogState: Sendable {
     var reviewStarts: [Event] = []
     /// The `goal.draft.started` no `goal.draft.finished` has closed, oldest first. Crash recovery only.
     var draftStarts: [Event] = []
+    /// User messages of a chat that have no `chat.ended` yet.
+    var chatStarts: [Event] = []
     /// Every `agent.attempt.started` no `agent.attempt.ended` has closed, by attempt id. Crash recovery only.
     var openAttempts: [String: Event] = [:]
 
@@ -111,6 +113,10 @@ struct LogState: Sendable {
         case .prReviewFinished, .reviewStageFinished:
             // A skip writes a finish with no start, so a finish only closes the latest start it matches.
             if let at = reviewStarts.lastIndex(where: { Self.finish(event, closes: $0) }) { reviewStarts.remove(at: at) }
+        case .chatMessage:
+            if event.data["role"]?.stringValue == "user" { chatStarts.append(event) }
+        case .chatEnded:
+            if !chatStarts.isEmpty { chatStarts.removeLast() }
         case .goalDraftStarted:
             draftStarts.append(event)
         case .goalDraftFinished:

@@ -8,7 +8,7 @@ extension Commands {
 
     static func statusKeys() -> [String] {
         ["v", "thread", "ended", "goal", "turns", "open_turn", "running", "last_result", "check", "cost_usd",
-         "notes", "base_gap", "worktree", "progress", "spine", "attention"]
+         "notes", "base_gap", "worktree", "progress", "spine", "attention", "kind", "chat"]
     }
 
     static func reviewKeys() -> [String] {
@@ -40,6 +40,16 @@ extension Commands {
     }
 
     /// `status --all`: one entry per thread on disk, newest first. Read-only; nothing in it can be started.
+    /// A chat thread's conversation summary; null on any other thread.
+    static func chatJSON(_ state: ThreadState) -> JSONValue {
+        guard let chat = state.chat else { return .null }
+        return [
+            "messages": .int(chat.messages.count), "turns": .int(chat.turns),
+            "last_end": chat.lastEnd.map { .string($0) } ?? .null, "open": .bool(chat.open),
+            "cost_usd": chat.costUnknown ? .null : .double(chat.costUSD),
+        ]
+    }
+
     static func statusAllJSON(_ states: [ThreadState]) -> JSONValue {
         [
             "v": .int(jsonVersion),
@@ -53,6 +63,7 @@ extension Commands {
                         "parent": state.lineage.map { .string($0.parent) } ?? .null,
                         "root": state.lineage.map { .string($0.root) } ?? .null,
                         "round": state.lineage.map { .int($0.round) } ?? .null,
+                        "kind": .string(state.isChat ? "chat" : "goal"),
                     ]
                 }),
         ]
@@ -165,6 +176,7 @@ extension Commands {
             "notes": noteJSON(state.review.notes), "base_gap": gap,
             "worktree": worktreeValue, "progress": progressValue,
             "spine": spineJSON(spine), "attention": attentionJSON(Attention.derive(spine: spine, state: state)),
+            "kind": .string(state.isChat ? "chat" : "goal"), "chat": chatJSON(state),
         ]
     }
 
