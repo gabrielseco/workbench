@@ -175,7 +175,7 @@ struct ChatComposer: View {
             .onChange(of: state.canType) { focused = state.canType }
             .task {
                 try? await Task.sleep(for: .milliseconds(40))
-                focused = true
+                focused = state.canType
             }
     }
 
