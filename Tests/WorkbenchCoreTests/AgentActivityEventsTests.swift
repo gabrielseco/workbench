@@ -77,6 +77,10 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         let partial = try #require(data(.usage(AgentUsage(inputTokens: 10))))
         #expect(partial["output_tokens"] == nil && partial["cached_input_tokens"] == nil && partial["cost_usd"] == nil)
         #expect(LogFormatter.describeActivity(activity("usage")) == "usage: not reported")
+        let done: JSONValue = .object(["text": "a", "status": "done"])
+        let todo: JSONValue = .object(["text": "b", "status": "pending"])
+        #expect(LogFormatter.describeActivity(activity("plan", ["items": .array([done, todo])])) == "tasks: 1 of 2 done")
+        #expect(LogFormatter.describeActivity(activity("plan")) == "codex task list", "a damaged list still says what it is")
 
         let state = ThreadState.derive(
             from: [

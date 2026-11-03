@@ -134,6 +134,10 @@ public enum LogFormatter {
         case "text": return "\(provider): \(safe("text"))"
         case "tool": return "tool: \(safe("name", 40)) \(safe("summary", 60))"
         case "permission_denied": return "tool denied: \(safe("tool", 60))"
+        case "plan":
+            guard case .array(let items)? = data["items"] else { return "\(provider) task list" }
+            let done = items.filter { $0["status"]?.stringValue == "done" }.count
+            return "tasks: \(done) of \(items.count) done"
         case "usage":
             var parts: [String] = []
             if let n = data["input_tokens"]?.intValue { parts.append("\(n) in") }
