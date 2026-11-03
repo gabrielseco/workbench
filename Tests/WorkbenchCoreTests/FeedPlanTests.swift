@@ -63,4 +63,21 @@ import Testing
         #expect(!items.contains { if case .plan = $0.kind { true } else { false } })
     }
 
+    @Test func aLongRunOfCallsKeepsItsLatestThreeBesideTheFirstThree() {
+        var events = [created, ev(2, 1, .turnStarted)]
+        for n in 1...10 { events.append(activity(2 + n, "tool", ["name": "Read", "summary": .string("f\(n).swift")])) }
+        let group = feed(events).first { if case .toolGroup = $0.kind { true } else { false } }
+        guard case .toolGroup(let count, let first)? = group?.kind else {
+            Issue.record("no group")
+            return
+        }
+        #expect(count == 10 && first == ["Read f1.swift", "Read f2.swift", "Read f3.swift"])
+        #expect(group?.latest == ["Read f8.swift", "Read f9.swift", "Read f10.swift"], "what is happening now")
+    }
+
+    @Test func aJudgeThatDisagreesIsARowNotAHiddenOne() {
+        let judged = ev(4, 1, .judgeRan, ["ok": true, "criteria": [["met": true], ["met": false]], "concerns": ["x"]])
+        let items = feed([created, ev(2, 1, .turnStarted), ev(3, 1, .turnEnded, ["result": "succeeded"]), judged])
+        #expect(items.contains { $0.kind == .judge(ok: true, criteria: 2, unmet: 1, concerns: 1) })
+    }
 }

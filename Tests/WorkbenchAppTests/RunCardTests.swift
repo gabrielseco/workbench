@@ -116,14 +116,64 @@ import WorkbenchCore
         #expect(PendingStep.pending(goal: nil, criteria: 0, have: []).isEmpty, "no goal read, nothing is promised")
     }
 
+    @Test func theStepsShownAfterTheTurnAreOnlyTheOnesRunningNow() {
+        let steps = goal([step("verifier"), step("judge")])
+        func shown(working: Bool, judge: Bool = false, verify: Bool = false) -> [PendingStep] {
+            PendingStep.shown(goal: steps, criteria: 3, working: working, judgeRunning: judge, verifyRunning: verify)
+        }
+        #expect(shown(working: true).map(\.name) == ["Judge", "Verify"], "while it works both are still to come")
+        #expect(shown(working: false).isEmpty, "turn over, neither started: nothing is promised that may never run")
+        #expect(shown(working: false, judge: true).map(\.detail) == ["running now"])
+        #expect(shown(working: false, judge: true, verify: true).map(\.name) == ["Judge", "Verify"])
+    }
+
+    @Test func theLiveTailTakesAGroupsLatestCallsNotItsFirst() throws {
+        let group = FeedItem(
+            id: "3", seq: 3, turn: 1, kind: .toolGroup(count: 10, summaries: ["Read 1", "Read 2", "Read 3"]),
+            latest: ["Read 8", "Read 9", "Read 10"])
+        let shown = try snapshot(.running, feed: [item(2, working), group])
+        let model = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision()))
+        #expect(model.tail == ["Read 8", "Read 9", "Read 10"])
+    }
+
     // MARK: Screenshots
 
-    @Test func onlyRecordedPNGsAreShownTheFirstThreeWithTheirNamesAsCaptions() {
+    private func recorded(_ names: [String], in dir: URL, bytes: Int = 4) throws -> [ProofFile] {
+        var events = [Event(seq: 1, ts: "2026-11-02T10:00:00.000Z", turn: 1, kind: .verifierStarted, data: [:])]
+        for (index, name) in names.enumerated() {
+            let data: JSONValue = [
+                "source": "verifier", "name": .string(name), "path": .string("proof/\(name)"), "sha256": "x",
+                "bytes": .int(bytes),
+            ]
+            events.append(Event(seq: 2 + index, ts: "2026-11-02T10:00:01.000Z", turn: 1, kind: .proofAdded, data: data))
+        }
+        events.append(Event(seq: 9, ts: "2026-11-02T10:00:02.000Z", turn: 1, kind: .verifierEnded, data: ["ok": true]))
+        return try #require(ThreadState.derive(from: events, id: "t").review.verifier).proof
+    }
+
+    @Test func onlyRecordedPNGsStillAsRecordedAreShownTheFirstThreeWithTheirNamesAsCaptions() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ps-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("proof"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
         let names = ["list-states.png", "notes.txt", "chat_opens.PNG", "c.png", "d.png"]
-        let files = names.map { (name: $0, path: "proof/\($0)") }
-        let shots = ProofShot.shots(from: files, threadDirectory: URL(fileURLWithPath: "/t"))
+        for name in names { try Data("abcd".utf8).write(to: dir.appendingPathComponent("proof/\(name)")) }
+        let shots = ProofShot.shots(from: try recorded(names, in: dir), threadDirectory: dir)
         #expect(shots.map(\.caption) == ["list states", "chat opens", "c"])
-        #expect(shots[0].url.path == "/t/proof/list-states.png")
+        #expect(shots[0].url.path == dir.appendingPathComponent("proof/list-states.png").path)
+    }
+
+    @Test func aProofFileThatChangedOrWasReplacedByALinkIsNotShown() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ps-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("proof"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let names = ["same.png", "grew.png", "link.png", "gone.png"]
+        try Data("abcd".utf8).write(to: dir.appendingPathComponent("proof/same.png"))
+        try Data("abcdefgh".utf8).write(to: dir.appendingPathComponent("proof/grew.png"))
+        try Data("abcd".utf8).write(to: dir.appendingPathComponent("real.png"))
+        try FileManager.default.createSymbolicLink(
+            at: dir.appendingPathComponent("proof/link.png"), withDestinationURL: dir.appendingPathComponent("real.png"))
+        let shots = ProofShot.shots(from: try recorded(names, in: dir), threadDirectory: dir)
+        #expect(shots.map(\.caption) == ["same"], "a different size, a link and a missing file are left out")
     }
 
     @Test func aThumbnailIsDecodedSmallAndAMissingFileIsNil() throws {
@@ -144,6 +194,16 @@ import WorkbenchCore
     }
 
     // MARK: Ready to ship
+
+    @Test func theShipBarKeepsEveryOtherActionInItsMenu() {
+        let decision = FeedDecision(
+            primary: FeedAction(kind: .ship, title: "Ship"),
+            more: [
+                FeedAction(kind: .sendBack, title: "Send back…"), FeedAction(kind: .openWorktree, title: "Open worktree"),
+                FeedAction(kind: .newGoal, title: "New goal"),
+            ])
+        #expect(DecisionCard.shipMenu(decision).map(\.kind) == [.openWorktree, .newGoal], "Request changes is its own button")
+    }
 
     @Test func theShipBarIsForTheShipStepOnly() {
         #expect(DecisionCard.isReadyToShip(FeedDecision(primary: FeedAction(kind: .ship, title: "Ship"))))

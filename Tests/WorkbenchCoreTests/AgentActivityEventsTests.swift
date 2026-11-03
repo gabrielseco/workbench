@@ -25,6 +25,17 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         AgentActivityRecord.data(for: item, provider: provider)
     }
 
+    @Test func aTaskIsScrubbedOfPathsAndCredentialsBeforeItIsKept() throws {
+        let text = "Fix /Users/me/work/app/List.swift with ghp_abcdefgh12345678 and https://tok@example.com/x"
+        let stored = try #require(data(.plan([AgentPlanItem(text: text, status: .pending)])))
+        guard case .array(let items)? = stored["items"], let kept = items.first?["text"]?.stringValue else {
+            Issue.record("no items")
+            return
+        }
+        #expect(!kept.contains("/Users/me") && !kept.contains("ghp_abcdefgh") && !kept.contains("tok@"))
+        #expect(kept.contains("<path>") && kept.contains("<redacted>"))
+    }
+
     @Test func aTaskListIsBoundedInItemsAndInCharacters() throws {
         let long = String(repeating: "x", count: 300)
         var many: [AgentPlanItem] = []

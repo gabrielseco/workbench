@@ -35,7 +35,9 @@ public enum AgentActivityRecord {
             out["type"] = "plan"
             out["items"] = .array(
                 items.prefix(maxPlanItems).map {
-                    let text = String($0.text.prefix(maxPlanItemCharacters))
+                    // A task can name a path or paste a credential: the same scrub the plan and the verifier's report get.
+                    let clean = ThreadService.withoutCredentials(PRBodyBuilder.scrub($0.text))
+                    let text = String(clean.prefix(maxPlanItemCharacters))
                     return .object(["text": .string(text), "status": .string($0.status.rawValue)])
                 })
             if items.count > maxPlanItems || items.contains(where: { $0.text.count > maxPlanItemCharacters }) { truncated = true }

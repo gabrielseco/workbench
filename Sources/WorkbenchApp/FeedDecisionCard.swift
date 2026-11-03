@@ -12,6 +12,10 @@ struct DecisionCard: View {
     var route: String?
 
     /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
+    /// What the ship bar's `…` keeps: every other action of the decision, so Open worktree and New goal do not vanish; `Request changes`
+    /// is its own button.
+    static func shipMenu(_ decision: FeedDecision) -> [FeedAction] { decision.more.filter { $0.kind != .sendBack } }
+
     static func isReadyToShip(_ decision: FeedDecision) -> Bool { decision.primary?.kind == .ship }
 
     /// The decision's own line when it has one, else the spine's without the step name it repeats under the heading.
@@ -35,6 +39,7 @@ struct DecisionCard: View {
                     .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 12)
+            MoreActionsMenu(actions: Self.shipMenu(decision), perform: perform)
             if let back = decision.more.first(where: { $0.kind == .sendBack }) {
                 Button("Request changes") { perform(back) }.disabled(!back.enabled).help(back.help ?? back.title)
             }
@@ -73,25 +78,35 @@ struct DecisionActions: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if !decision.more.isEmpty {
-                Menu {
-                    ForEach(decision.more) { action in
-                        Button(role: action.destructive ? .destructive : nil) { perform(action) } label: { Text(action.title) }
-                            .disabled(!action.enabled)
-                            .help(action.help ?? action.title)
-                    }
-                } label: {
-                    Label("More actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
-                }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                .help("More actions")
-            }
+            MoreActionsMenu(actions: decision.more, perform: perform)
             if let primary = decision.primary {
                 Button(primary.title) { perform(primary) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!primary.enabled)
                     .help(primary.help ?? primary.title)
             }
+        }
+    }
+}
+
+/// The `…` menu with a decision's other actions; nothing when there are none.
+struct MoreActionsMenu: View {
+    var actions: [FeedAction]
+    var perform: (FeedAction) -> Void
+
+    var body: some View {
+        if !actions.isEmpty {
+            Menu {
+                ForEach(actions) { action in
+                    Button(role: action.destructive ? .destructive : nil) { perform(action) } label: { Text(action.title) }
+                        .disabled(!action.enabled)
+                        .help(action.help ?? action.title)
+                }
+            } label: {
+                Label("More actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("More actions")
         }
     }
 }

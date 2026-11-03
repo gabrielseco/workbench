@@ -50,7 +50,7 @@ struct FeedScreen: View {
     private func shots(for item: FeedItem) -> [ProofShot] {
         let proof = snapshot.state.review.verifier?.proof
         guard item.id == latestVerifyID, let project = store.project, let proof else { return [] }
-        return ProofShot.shots(from: proof.map { ($0.name, $0.path) }, threadDirectory: project.threadDirectory(snapshot.id))
+        return ProofShot.shots(from: proof, threadDirectory: project.threadDirectory(snapshot.id))
     }
 
     private func row(_ item: FeedItem) -> some View {
@@ -88,11 +88,12 @@ struct FeedScreen: View {
         } else {
             let card = runCard
             ForEach(rows.filter { !(card?.consumed.contains($0.id) ?? false) }) { row($0) }
-            if let card {
-                RunCardView(model: card, perform: perform)
-                let pending = PendingStep.pending(goal: store.goal, criteria: store.goal?.rows.count ?? 0, have: [])
-                ForEach(pending) { PendingStepRow(step: $0) }
-            }
+            if let card { RunCardView(model: card, perform: perform) }
+            let pending = PendingStep.shown(
+                goal: store.goal, criteria: store.goal?.rows.count ?? 0, working: card != nil,
+                judgeRunning: snapshot.state.review.judge?.isOpen == true,
+                verifyRunning: snapshot.state.review.verifier?.open == true)
+            ForEach(pending) { PendingStepRow(step: $0) }
             foot
         }
     }

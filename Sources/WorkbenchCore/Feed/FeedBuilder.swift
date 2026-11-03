@@ -12,6 +12,7 @@ extension Feed {
             var turn: Int
             var count: Int
             var summaries: [String]
+            var latest: [String]
         }
         private var group: ToolGroup?
         private var edited: [Int: Set<String>] = [:]
@@ -65,7 +66,7 @@ extension Feed {
             guard let open = group else { return }
             group = nil
             let kind = FeedItem.Kind.toolGroup(count: open.count, summaries: open.summaries)
-            out.append(FeedItem(id: "\(open.seq)", seq: open.seq, turn: open.turn, kind: kind))
+            out.append(FeedItem(id: "\(open.seq)", seq: open.seq, turn: open.turn, kind: kind, latest: open.latest))
         }
 
         private mutating func add(_ event: Event, ended: Event?) {
@@ -189,10 +190,11 @@ extension Feed {
             if var open = group, open.turn == event.turn {
                 open.count += 1
                 if open.summaries.count < Feed.summariesPerGroup { open.summaries.append(label) }
+                open.latest = Array((open.latest + [label]).suffix(Feed.summariesPerGroup))
                 group = open
             } else {
                 flush()
-                group = ToolGroup(seq: event.seq, turn: event.turn, count: 1, summaries: [label])
+                group = ToolGroup(seq: event.seq, turn: event.turn, count: 1, summaries: [label], latest: [label])
             }
         }
     }

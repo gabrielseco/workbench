@@ -63,6 +63,10 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
     public var seq: Int
     public var turn: Int
     public var kind: Kind
+    /// For a tool group: the labels of its last few calls (`kind` keeps the first few), so a live view shows what is happening now.
+    public var latest: [String]
 
-    public init(id: String, seq: Int, turn: Int, kind: Kind) { (self.id, self.seq, self.turn, self.kind) = (id, seq, turn, kind) }
+    public init(id: String, seq: Int, turn: Int, kind: Kind, latest: [String] = []) {
+        (self.id, self.seq, self.turn, self.kind, self.latest) = (id, seq, turn, kind, latest)
+    }
 }

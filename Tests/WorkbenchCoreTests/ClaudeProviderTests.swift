@@ -135,6 +135,20 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(d.consume(line: other) == [.tool(name: "Bash", summary: "")], "only TodoWrite carries a task list")
     }
 
+    @Test func anOversizedTodoListReachesTheRecorderWithRoomToSayItWasCut() throws {
+        var d = decoder()
+        let long = String(repeating: "y", count: 400)
+        let todos = (0..<30).map { _ in #"{"content":"\#(long)","status":"pending"}"# }.joined(separator: ",")
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let items = d.consume(line: head + #""input":{"todos":[\#(todos)]}}]}}"#)
+        guard case .plan(let plan)? = items.last else {
+            Issue.record("no plan")
+            return
+        }
+        let stored = try #require(AgentActivityRecord.data(for: .plan(plan), provider: "claude"))
+        #expect(stored["truncated"] == true, "the decoder does not hide the cut from the log")
+    }
+
     @Test func assistantTextAndToolCallsBecomeActivity() {
         var d = decoder()
         let line =

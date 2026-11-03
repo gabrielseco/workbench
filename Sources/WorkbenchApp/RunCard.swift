@@ -53,7 +53,8 @@ struct RunCardModel: Equatable {
                 tasks = list
                 consumed.insert(item.id)
             case .toolGroup(_, let summaries):
-                tail += summaries
+                // The group's last calls when it has them (its first few are what the group row shows).
+                tail += item.latest.isEmpty ? summaries : item.latest
                 consumed.insert(item.id)
             case .edit(let file, let tool):
                 tail.append("\(tool) \(file)")
@@ -73,6 +74,17 @@ struct PendingStep: Equatable, Identifiable {
     var name: String
     var detail: String
     var id: String { name }
+
+    /// The steps to show under the feed: all that are on while the turn works; after it, only the ones that have started and not
+    /// ended (a step that has not started may never, when it does not run by itself), each saying it is running.
+    static func shown(
+        goal: GoalModel?, criteria: Int, working: Bool, judgeRunning: Bool, verifyRunning: Bool
+    ) -> [PendingStep] {
+        if working { return pending(goal: goal, criteria: criteria, have: []) }
+        let running: Set<String> = Set([judgeRunning ? "Judge" : nil, verifyRunning ? "Verify" : nil].compactMap { $0 })
+        return pending(goal: goal, criteria: criteria, have: []).filter { running.contains($0.name) }
+            .map { PendingStep(name: $0.name, detail: "running now") }
+    }
 
     static func pending(goal: GoalModel?, criteria: Int, have: Set<String>) -> [PendingStep] {
         guard let goal else { return [] }
@@ -223,8 +235,10 @@ struct ProofShot: Equatable, Identifiable {
     static let thumbnailPixels = 480
 
     /// `list-states.png` is "list states". Only PNGs the verifier recorded, the first few, in the order recorded.
-    static func shots(from files: [(name: String, path: String)], threadDirectory: URL) -> [ProofShot] {
-        files.filter { $0.name.lowercased().hasSuffix(".png") }.prefix(shown).map {
+    static func shots(from recorded: [ProofFile], threadDirectory: URL) -> [ProofShot] {
+        // Only a file that is still what the log recorded: a regular file of the recorded size, not a link.
+        let files = recorded.filter { $0.isAvailable(in: threadDirectory) }.map { (name: $0.name, path: $0.path) }
+        return files.filter { $0.name.lowercased().hasSuffix(".png") }.prefix(shown).map {
             let stem = ($0.name as NSString).deletingPathExtension
                 .replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
             return ProofShot(url: threadDirectory.appendingPathComponent($0.path), caption: stem)

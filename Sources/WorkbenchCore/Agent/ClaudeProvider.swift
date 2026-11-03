@@ -251,7 +251,8 @@ struct ClaudeDecoder: AgentDecoder {
     /// The task list a `TodoWrite` call carries: `todos` of `content` and `status`. Anything else in it is not read.
     static func plan(from input: [String: Any]?) -> [AgentPlanItem]? {
         guard let todos = input?["todos"] as? [[String: Any]] else { return nil }
-        let items = todos.prefix(AgentActivityRecord.maxPlanItems).compactMap { todo -> AgentPlanItem? in
+        // One more item and one more character than the log keeps, so the recorder can tell a list was cut and say so.
+        let items = todos.prefix(AgentActivityRecord.maxPlanItems + 1).compactMap { todo -> AgentPlanItem? in
             guard let text = todo["content"] as? String, !text.isEmpty else { return nil }
             let status: AgentPlanItem.Status =
                 switch todo["status"] as? String {
@@ -259,7 +260,7 @@ struct ClaudeDecoder: AgentDecoder {
                 case "in_progress": .inProgress
                 default: .pending
                 }
-            return AgentPlanItem(text: String(text.prefix(AgentActivityRecord.maxPlanItemCharacters)), status: status)
+            return AgentPlanItem(text: String(text.prefix(AgentActivityRecord.maxPlanItemCharacters + 1)), status: status)
         }
         return items.isEmpty ? nil : items
     }
