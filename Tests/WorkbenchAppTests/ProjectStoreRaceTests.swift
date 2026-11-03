@@ -6,7 +6,10 @@ import Testing
 
 /// What the Codex reviews of the app shell found: a damaged log, a failed switch, and reads and doctor runs that finish for a
 /// project that is no longer the open one.
-@MainActor @Suite struct ProjectStoreRaceTests {
+/// Serialized: these tests hold a loader or a doctor run half way with a semaphore, which blocks a thread of the cooperative pool.
+/// Run together with the rest of the suites on a runner with few cores, four of them starve the pool and nothing that would release
+/// them can run (the app job hung for 10 minutes on #366), so at most one blocks at a time.
+@MainActor @Suite(.serialized) struct ProjectStoreRaceTests {
     private func store(_ remembered: String? = nil) -> (ProjectStore, MemoryPreferences) {
         let prefs = MemoryPreferences(projectPath: remembered)
         return (ProjectStore(preferences: prefs, intervals: (.milliseconds(20), .milliseconds(20))), prefs)
