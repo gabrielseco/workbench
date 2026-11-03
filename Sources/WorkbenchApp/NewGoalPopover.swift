@@ -30,7 +30,7 @@ struct NewGoalPopover: View {
         .overlayCard()
         .onExitCommand { if !working { close() } }
         .dropDestination(for: URL.self) { urls, _ in
-            guard !working else { return false }
+            guard !working, form.mode != .chat else { return false }
             Task { await staging.add(files: urls) }
             return true
         }
@@ -38,6 +38,7 @@ struct NewGoalPopover: View {
             store.actionError = nil
             watchPaste()
         }
+        .onChange(of: form.mode) { staging.takesPastedImages = form.mode != .chat }
         // An overlay is not yet in the window when `onAppear` runs, and focus set then is lost: one tick later it takes.
         .task {
             try? await Task.sleep(for: .milliseconds(40))
@@ -141,7 +142,8 @@ struct NewGoalPopover: View {
             )
             .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.top, 14)
         } else if let error = store.actionError {
-            Text(error).font(.callout).foregroundStyle(Theme.red).padding(.top, 14)
+            // A chat's refusals ask the person to change something (too long, no agent): amber, not broken.
+            Text(error).font(.callout).foregroundStyle(form.mode == .chat ? Theme.amber : Theme.red).padding(.top, 14)
         }
     }
 
@@ -178,7 +180,8 @@ struct NewGoalPopover: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: .command).disabled(form.isEmpty || staging.pending > 0)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(form.isEmpty || (form.mode != .chat && staging.pending > 0))
                 }
             }
         }
@@ -190,7 +193,7 @@ struct NewGoalPopover: View {
         guard pasteMonitor == nil else { return }
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [staging, store] event in
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == .command, event.charactersIgnoringModifiers == "v", !working,
+            guard flags == .command, event.charactersIgnoringModifiers == "v", !working, staging.takesPastedImages,
                 AttachmentStaging.wantsImages(.general)
             else { return event }
             Task { await staging.add(from: .general) }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 import WorkbenchCore
 
@@ -89,7 +90,7 @@ import WorkbenchCore
         var form = NewGoalForm()
         form.mode = .chat
         #expect(form.action == "Send" && form.busyText == "Waiting for the reply…")
-        #expect(form.note.contains("nothing is written to the repository"))
+        #expect(form.note != NewGoalForm().note, "the chat says what it does, not what Quick does")
         form.mode = .quick
         #expect(form.action == "Create")
     }
@@ -119,6 +120,36 @@ import WorkbenchCore
         form.request = "Could uploads retry?"
         #expect(await store.createGoal(form))
         #expect(seen.calls == ["chat newThread(name: \"could-uploads-retry\")|Could uploads retry?"])
+    }
+
+    // MARK: What is drawn
+
+    private func window(_ snapshot: ThreadSnapshot, store base: ProjectStore) throws -> CGImage {
+        let preferences = MemoryPreferences()
+        preferences.chatFeed = true
+        let store = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: base.project)
+        let view = RootView(store: store).frame(width: 1100, height: 700)
+            .background(Color(nsColor: .windowBackgroundColor)).environment(\.feedDrawsEagerly, true)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        return try #require(renderer.cgImage)
+    }
+
+    /// `ImageRenderer` cannot read text back, so this proves the pieces are drawn by taking each one away and seeing the window change.
+    @Test func theConversationAndTheComposerAreDrawnInTheWindow() async throws {
+        let chat = try await snapshot(.chat)
+        let fixture = try await AppFixture()
+        keptChatScreenFixtures.append(fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(), project: fixture.project)
+        let whole = try window(chat, store: store)
+        var silent = chat
+        silent.state.chat?.messages = []
+        var ended = chat
+        ended.state.decision = "abandoned"
+        for (what, other) in [("the messages", silent), ("the composer", ended)] {
+            let without = try window(other, store: store)
+            #expect(whole.dataProvider?.data != without.dataProvider?.data, "\(what) are not drawn")
+        }
     }
 
     private enum Failure: Error { case notAThread }

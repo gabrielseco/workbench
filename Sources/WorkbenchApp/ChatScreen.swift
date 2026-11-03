@@ -116,7 +116,11 @@ struct ChatComposer: View {
     var body: some View {
         let state = state
         VStack(alignment: .leading, spacing: 8) {
-            MessageRows(error: store.actionError, note: store.actionNote, notice: store.notice, handoff: nil)
+            if let said = store.actionError {
+                // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
+                MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: said)
+            }
+            MessageRows(error: nil, note: store.actionNote, notice: store.notice, handoff: nil)
             if state.ended {
                 Text("This chat has ended.").font(.callout).foregroundStyle(.secondary)
             } else {
