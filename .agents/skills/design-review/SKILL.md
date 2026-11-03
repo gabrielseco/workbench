@@ -30,6 +30,8 @@ matters; say which file and line):
 - An icon-only `Button` or `Image` with no `.help(`.
 - A hand-made control (a shape with `onTapGesture` that acts as a button) where a system one exists.
 - A cost, count or duration shown as a number when the core says it is unknown.
+- A text box that is not `PlaceholderTextEditor`, or a change to a text box or its placeholder with no `scripts/check-text-alignment.py`
+  result in the PR (empty shot, typed shot, the offset in pixels; the verify-app skill says how).
 
 Then, for each screenshot, in this order:
 

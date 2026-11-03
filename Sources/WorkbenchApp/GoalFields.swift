@@ -48,11 +48,10 @@ struct CommitEditor: View {
     @Environment(\.goalEditSerial) private var serial
 
     var body: some View {
-        TextEditor(text: $text)
-            .font(.system(size: 16, design: .serif)).lineSpacing(5)
-            .scrollContentBackground(.hidden).scrollDisabled(true)
-            .frame(minHeight: 30)
-            .focused($focused)
+        PlaceholderTextEditor(
+            text: $text, font: .system(size: 16, design: .serif), lineSpacing: 5, scrollDisabled: true, focus: $focused
+        )
+        .frame(minHeight: 30)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
             .onChange(of: serial) { _, _ in if !focused { text = value } }

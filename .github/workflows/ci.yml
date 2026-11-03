@@ -22,6 +22,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Banned process APIs
         run: scripts/check-banned-apis.sh
+      - name: The banned-APIs check refuses what it must
+        # The bare TextEditor( rule, on trees of its own: no build and no screen.
+        run: scripts/test-banned-apis.sh
       - name: SwiftLint
         # Pinned to the version developers run locally; the static Linux binary needs no Swift toolchain.
         run: |

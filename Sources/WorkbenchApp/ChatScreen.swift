@@ -207,34 +207,27 @@ struct ChatComposer: View {
     }
 
     private func editor(_ state: ChatComposerState) -> some View {
-        TextEditor(text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }))
-            .font(.body).scrollContentBackground(.hidden).focused($focused)
-            // One line high, the box scrolls only past six. `.scrollIndicators(.hidden)` is not honoured by `TextEditor` on macOS, and its
-            // scroll bar, a knob filling its track, sat in the panel as a stray grey pill beside the Send button.
-            .background(TextScrollerHider())
-            .frame(height: ChatComposerState.editorHeight(for: state.text))
-            .disabled(!state.canType)
-            .opacity(state.replying ? 0.6 : 1)
-            .overlay(alignment: .topLeading) {
-                if state.isBlank {
-                    Text(state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…")
-                        .foregroundStyle(.tertiary).padding(.leading, 5).padding(.top, 0).allowsHitTesting(false)
-                }
-            }
-            .onKeyPress(.return, phases: .down) { press in
+        PlaceholderTextEditor(
+            text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }),
+            placeholder: state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…", font: .body,
+            hidesScroller: true, showsPlaceholder: state.isBlank, accessibilityLabel: "Message", focus: $focused,
+            onReturn: { press in
                 let key = ChatComposerState.key(
                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option))
                 guard key == .send else { return .ignored }
                 if state.canSend { send() }
                 return .handled
             }
-            .accessibilityLabel("Message")
-            // A box that takes no typing does not keep the caret.
-            .onChange(of: state.canType) { focused = state.canType }
-            .task {
-                try? await Task.sleep(for: .milliseconds(40))
-                focused = state.canType
-            }
+        )
+        .frame(height: ChatComposerState.editorHeight(for: state.text))
+        .disabled(!state.canType)
+        .opacity(state.replying ? 0.6 : 1)
+        // A box that takes no typing does not keep the caret.
+        .onChange(of: state.canType) { focused = state.canType }
+        .task {
+            try? await Task.sleep(for: .milliseconds(40))
+            focused = state.canType
+        }
     }
 
     private func send() { Task { await store.sendChat() } }

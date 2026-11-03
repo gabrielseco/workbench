@@ -4,7 +4,7 @@
 # Fails if any appear in code under Sources/. Comments may name them. A deliberate use needs a design
 # discussion, not an exception here.
 set -u
-cd "$(dirname "$0")/.."
+cd "${BANNED_APIS_ROOT:-$(dirname "$0")/..}"
 status=0
 for pattern in 'waitUntilExit' 'readDataToEndOfFile' 'Process()'; do
     hits=$(grep -rnF --include='*.swift' "$pattern" Sources | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//')
@@ -38,6 +38,16 @@ hits=$(grep -rnE --include='*.swift' '(^|[^.A-Za-z0-9_])system\(' Sources/Workbe
 if [ -n "$hits" ]; then
     echo "$hits"
     echo "error: process API 'system(' used in Sources/WorkbenchApp/" >&2
+    status=1
+fi
+# The app's one multi-line text box is PlaceholderTextEditor: a bare TextEditor needs a hand-placed placeholder, which was off the line you
+# type on three times. `PlaceholderTextEditor(` does not match: the pattern wants TextEditor( not preceded by a name character.
+hits=$(grep -rnE --include='*.swift' '(^|[^A-Za-z0-9_])TextEditor\(' Sources/WorkbenchApp 2>/dev/null \
+    | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/PlaceholderTextEditor.swift:' || true)
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: 'TextEditor(' in Sources/WorkbenchApp/: use PlaceholderTextEditor (its placeholder is measured to sit on the line you type on;" >&2
+    echo "       a hand-placed overlay was off three times). See AGENTS.md, Conventions." >&2
     status=1
 fi
 exit $status
