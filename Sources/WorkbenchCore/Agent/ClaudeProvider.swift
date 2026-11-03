@@ -243,7 +243,8 @@ struct ClaudeDecoder: AgentDecoder {
                         toolNames[id] = String(name.prefix(200))
                         let fields = block["input"] as? [String: Any]
                         let remembered = Self.deniedInputKeys.lazy.compactMap { fields?[$0] as? String }.first { !$0.isEmpty }
-                        toolInputs[id] = remembered.map { String($0.prefix(Self.maxDeniedInputCharacters)) }
+                        // One character past the record's limit, so the record can tell a cut command from one that fits.
+                        toolInputs[id] = remembered.map { String($0.prefix(AgentActivityRecord.maxTextCharacters + 1)) }
                     }
                     let input = block["input"] as? [String: Any]
                     let summary = Self.deniedInputKeys.lazy.compactMap { input?[$0] as? String }.first ?? ""

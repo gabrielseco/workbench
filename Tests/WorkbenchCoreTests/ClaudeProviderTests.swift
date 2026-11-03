@@ -179,6 +179,20 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(d.consume(line: #"{"type":"stream_event"}"#).isEmpty, "partial messages are not flooded into activity")
     }
 
+    @Test func aRefusedCommandTooLongForTheLogIsMarkedCut() throws {
+        var d = decoder()
+        let long = String(repeating: "x", count: AgentActivityRecord.maxTextCharacters + 10)
+        _ = d.consume(
+            line: #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","#
+                + #""input":{"command":"\#(long)"}}]}}"#)
+        let refused =
+            #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"#
+            + #""content":"Permission for this tool use was denied. The user did not allow it."}]}}"#
+        let item = try #require(d.consume(line: refused).first)
+        let stored = try #require(AgentActivityRecord.data(for: item, provider: "claude"))
+        #expect(stored["truncated"] == true && stored["input"]?.stringValue?.count == AgentActivityRecord.maxTextCharacters)
+    }
+
     @Test func aRefusedCallBecomesADeniedActivityNamingItsTool() {
         var d = decoder()
         _ = d.consume(
