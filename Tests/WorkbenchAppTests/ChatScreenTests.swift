@@ -41,6 +41,8 @@ import WorkbenchCore
         #expect(state(chat).canSend)
         #expect(!state(chat, text: "").canSend && !state(chat, text: " \n\t ").canSend)
         #expect(!state(chat, replying: true).canSend && !state(chat, drafting: true).canSend)
+        #expect(state(chat).canType)
+        #expect(!state(chat, replying: true).canType && !state(chat, drafting: true).canType, "no typing while something is going")
     }
 
     @Test func aTurnTheLogShowsOpenCountsAsReplyingEvenWhenThisAppHoldsNone() async throws {

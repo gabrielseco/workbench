@@ -25,7 +25,7 @@ struct ChatComposerState: Equatable {
 
     var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var busy: Bool { replying || drafting }
-    var canType: Bool { !ended && !drafting }
+    var canType: Bool { !ended && !busy }
     var canSend: Bool { !ended && !busy && !isBlank }
     var canMakeGoal: Bool { !ended && !busy && hasExchange }
 
