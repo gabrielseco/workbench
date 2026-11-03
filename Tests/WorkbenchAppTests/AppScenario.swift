@@ -26,6 +26,7 @@ enum AppScenario: String, CaseIterable {
     case tasks
     case tasksEmpty = "tasks-empty"
     case threads
+    case chat
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -184,6 +185,15 @@ enum AppScenario: String, CaseIterable {
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
         case .noThread, .draftGoal, .tasksEmpty:
             break
+        case .chat:
+            // A chat thread (P22 slice 6a): no goal file, no worktree; the list says Chat. The chat screen is slice 6c.
+            let chat = "g-2026-10-28-upload-retries"
+            try FileManager.default.createDirectory(at: fixture.project.threadDirectory(chat), withIntermediateDirectories: true)
+            // No `repo`: it is a temporary path, and a committed fixture must be the same bytes on every run.
+            try fixture.append(chat, .threadCreated, data: ["kind": "chat"])
+            try fixture.append(chat, .chatMessage, data: ["role": "user", "text": "Could uploads retry with backoff?"])
+            try fixture.append(chat, .chatMessage, data: ["role": "assistant", "text": "What should happen after the fifth try?"])
+            try fixture.append(chat, .chatEnded, data: ["ok": true, "cost_usd": 0.01])
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")

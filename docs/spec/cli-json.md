@@ -13,7 +13,7 @@ Nothing else is printed on stdout, and the command never asks a question.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress, spine, attention
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress, spine, attention, kind, chat
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -47,7 +47,9 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   something or failed). `reason` and `since` (the `seq` it began at) are null unless `needs_you`; `commit` is the head commit for a reason GitHub
   can change without an event, null otherwise. A draft goal, a running turn and a merged pull request waiting for `clean` are never `needs_you`.
 
-`workbench status --all --json`: `{v, threads}` where each thread is `{thread, status, ended, last_result, turns,
+- `kind`: `goal` or `chat` (a thread made by `workbench chat`, which has no goal file until one is made from it). `chat`: null on a goal thread, else `{messages, turns, last_end, open, cost_usd}`: `last_end` is how the latest ended turn ended (`ok`, `stopped`, `timeout`, `failed`, `interrupted`), `open` is true while a user message has no end, `cost_usd` is null when a turn reported none. On a chat `goal` is null, `turns` is 0 and the spine is the goal thread's, at `goal`.
+
+`workbench status --all --json`: `{v, threads}` where each thread is `{thread, kind, status, ended, last_result, turns,
 cost_usd, parent, root, round}` (the last three null unless it is a review follow-up) (status values as in review), newest first. A read-only view over `.workbench/threads/`; it starts,
 runs and queues nothing.
 

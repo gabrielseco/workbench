@@ -25,6 +25,8 @@ struct FeedDecision: Equatable {
     var more: [FeedAction] = []
     /// Replaces the spine's line under the step when the button is not about what that line says (Merge, on the PR review step).
     var why: String?
+    /// Replaces the spine step's title as the heading (a chat is on no step).
+    var title: String?
 }
 
 /// What the decision depends on, gathered by the store so the function itself reads no state and a test can set each one.
@@ -49,6 +51,11 @@ enum FeedActions {
     static func derive(_ c: FeedActionContext) -> FeedDecision {
         let s = c.snapshot
         guard s.state.decision == nil else { return decided(c) }
+        // A chat has no goal to approve and nothing to run: until the chat screen (P22 slice 6c) it only says what it is.
+        if s.state.isChat, s.approval == nil {
+            let why = "No goal yet. The conversation is in the log; `workbench chat <id>` goes on with it."
+            return FeedDecision(primary: nil, why: why, title: "Chat")
+        }
         var more: [FeedAction] = []
         func worktree() {
             more.append(

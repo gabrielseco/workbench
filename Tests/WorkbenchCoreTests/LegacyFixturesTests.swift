@@ -155,6 +155,9 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                 if command == "status" {
                     let spine = try #require(current.removeValue(forKey: "spine") as? [[String: Any]])
                     #expect(spine.count == 7 && current.removeValue(forKey: "attention") != nil, "\(scenario.name)")
+                    // P22 slice 6 adds `kind` (an older thread is a goal thread) and `chat` (null: it has no conversation).
+                    #expect(current.removeValue(forKey: "kind") as? String == "goal", "\(scenario.name)")
+                    #expect(current.removeValue(forKey: "chat") is NSNull, "\(scenario.name)")
                 } else {
                     #expect(current["spine"] == nil && current["attention"] == nil, "\(scenario.name)")
                 }

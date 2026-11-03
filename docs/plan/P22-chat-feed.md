@@ -196,6 +196,10 @@ thread you can read and discard, never a leftover process.
 *Tests:* a chat turn is bounded and always ends; a stopped, timed-out and crashed chat turn each record how it ended; a chat creates no
 worktree and no branch; an old log with no `chat.*` events opens as before.
 
+*Built as three PRs:* **6a** (core and CLI): `workbench chat`, `chat.message`/`chat.ended`, `ThreadState.chat`, the app tolerating a chat
+thread (the list shows its first words and "Chat"); **6b**: making the chat into a goal; **6c**: the app's chat screen. A chat uses the
+goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread while open, so "one project, one active thread" holds.
+
 ### 7. Flip the default, remove the old window
 
 The flag defaults on for one release, then the old `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `ReviewView` and

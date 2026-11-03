@@ -81,6 +81,18 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 6 | `refused` | nothing was started: no `[agents.goal]`, Codex with `allow_unpriced = false`, no executable, an empty or oversized request, another thread is active, `doctor` is running, or with `--replace` the thread has ended or has a live run |
 | 7 | `not-found` | `--replace` names no thread |
 
+### `chat`
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | the agent answered and the reply was printed (or the conversation was printed) |
+| 1 | `failed` | the turn ran and has no reply: the agent failed or answered nothing. The message and how the turn ended are in the log |
+| 2 | `usage` | wrong command line: no message and no chat to print, a message given twice, an unreadable or oversized `--message-file` |
+| 3 | `stopped` | stopped by Ctrl-C; the turn is recorded as stopped and the chat goes on |
+| 4 | `timed-out` | the agent did not answer within its time |
+| 6 | `refused` | nothing was started: no `[agents.goal]`, a provider that cannot cap dollars with `allow_unpriced = false`, no executable, an empty or oversized message, a conversation over its limits, another thread is active (without `--abandon-active`), the thread is not a chat or has ended, another command holds it, or `doctor` is running |
+| 7 | `not-found` | the thread to print does not exist |
+
 ### `goal approve`
 
 | Code | Kind | When |

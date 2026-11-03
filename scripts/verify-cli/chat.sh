@@ -100,7 +100,7 @@ check "and no worktree and no branch" "worktree or branch exists" \
 wbp "$SCRATCH/log1.out" log
 shown "$SCRATCH/log1.out" 8
 check "the log has the messages and how the turn ended" "log is not as expected" \
-    bash -c 'grep -c "chat.message" "$1" | grep -q 2 && grep -q "chat.ended" "$1"' _ "$SCRATCH/log1.out"
+    bash -c 'grep -q "chat you: could uploads retry" "$1" && grep -q "chat agent: What should happen" "$1" && grep -q "chat turn ended: ok" "$1"' _ "$SCRATCH/log1.out"
 wbp "$SCRATCH/status.json" status "$ID" --json
 check "status --json says it is a chat and counts its turn" "status says otherwise" \
     py "assert d['kind']=='chat' and d['chat']['turns']==1 and d['chat']['last_end']=='ok' and d['chat']['open'] is False, d" <"$SCRATCH/status.json"

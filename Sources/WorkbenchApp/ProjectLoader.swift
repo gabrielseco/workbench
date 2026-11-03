@@ -88,6 +88,8 @@ enum ProjectLoader {
         if let text, let goal = try? GoalFile.parse(text).goal {
             (title, base, approval, budget, timeout) = (goal.title, goal.base, goal.approval, goal.budgetUSD, goal.turnTimeoutMin)
         }
+        // A chat has no goal file: its first words stand in for the title.
+        if title == nil, state.isChat { title = ThreadListLoader.chatTitle(state: state, id: id) }
         let spine = ThreadSpine.derive(state: state, approval: approval)
         let attention = Attention.derive(spine: spine, state: state)
         let alive = store.runnerPID(id: id) != nil
