@@ -45,18 +45,26 @@ struct FeedScreen: View {
         }
     }
 
-    private var eagerRows: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// What the scroll shows: a chat's conversation, or the thread's feed with its foot.
+    @ViewBuilder private var content: some View {
+        if snapshot.showsChat {
+            ChatRows(snapshot: snapshot, store: store)
+        } else {
             ForEach(rows) { row($0) }
             foot
+        }
+    }
+
+    private var eagerRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content
         }
         .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var lazyRows: some View {
         LazyVStack(alignment: .leading, spacing: 10) {
-            ForEach(rows) { row($0) }
-            foot
+            content
         }
         .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -92,6 +100,10 @@ struct FeedScreen: View {
                 ScrollView { lazyRows }
                     // The feed opens at its newest row and stays there while it grows; a person who scrolled up is left where they are.
                     .defaultScrollAnchor(.bottom)
+            }
+            if snapshot.showsChat {
+                Divider()
+                ChatComposer(snapshot: snapshot, store: store)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -130,7 +142,7 @@ struct FeedScreen: View {
                 .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
             // A chat is on no step: it has no goal, no run and nothing to accept.
-            if !(snapshot.state.isChat && snapshot.approval == nil) { PhaseRow(spine: snapshot.spine) }
+            if !snapshot.showsChat { PhaseRow(spine: snapshot.spine) }
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }

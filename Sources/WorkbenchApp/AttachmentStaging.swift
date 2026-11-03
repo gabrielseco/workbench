@@ -21,6 +21,8 @@ import WorkbenchCore
 
     private(set) var items: [Item] = []
     /// Images being read and converted: Create waits for them, so none that was just added is left out.
+    /// Screenshots are taken from a paste only while the card has somewhere to show them (a chat takes none).
+    @ObservationIgnored var takesPastedImages = true
     private(set) var pending = 0
     /// Why the last image was not added.
     private(set) var problem: String?

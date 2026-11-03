@@ -28,6 +28,7 @@ enum AppScenario: String, CaseIterable {
     case threads
     case chat
     case chatGoal = "chat-goal"
+    case chatReplying = "chat-replying"
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -186,8 +187,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
         case .noThread, .draftGoal, .tasksEmpty:
             break
-        case .chat, .chatGoal:
-            try writeChat(in: fixture, withGoal: self == .chatGoal)
+        case .chat, .chatGoal, .chatReplying:
+            try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
@@ -216,7 +217,7 @@ enum AppScenario: String, CaseIterable {
     }
 
     /// A chat thread (P22 slice 6): no goal file, no worktree. With a goal it is a chat that was made into one (6b), a goal thread now.
-    @MainActor private func writeChat(in fixture: AppFixture, withGoal: Bool) throws {
+    @MainActor private func writeChat(in fixture: AppFixture, withGoal: Bool, replying: Bool = false) throws {
         let chat = "g-2026-10-28-upload-retries"
         try FileManager.default.createDirectory(at: fixture.project.threadDirectory(chat), withIntermediateDirectories: true)
         // No `repo`: it is a temporary path, and a committed fixture must be the same bytes on every run.
@@ -224,6 +225,11 @@ enum AppScenario: String, CaseIterable {
         try fixture.append(chat, .chatMessage, data: ["role": "user", "text": "Could uploads retry with backoff?"])
         try fixture.append(chat, .chatMessage, data: ["role": "assistant", "text": "What should happen after the fifth try?"])
         try fixture.append(chat, .chatEnded, data: ["ok": true, "cost_usd": 0.01])
+        if replying {
+            // A second message whose turn has not ended: the agent is replying (no live process in a fixture, so it stays open).
+            let text = "Give up after five tries, with a note in the log."
+            try fixture.append(chat, .chatMessage, data: ["role": "user", "text": .string(text)])
+        }
         guard withGoal else { return }
         try fixture.append(chat, .goalDraftStarted, data: ["provider": "codex", "from_chat": true])
         try fixture.append(chat, .goalSaved, data: ["status": "draft", "hash": .null])
