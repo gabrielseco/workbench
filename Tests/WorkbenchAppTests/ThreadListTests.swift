@@ -294,7 +294,7 @@ import WorkbenchCore
     @Test func theRowsDrawEachMarkAndTheSelection() throws {
         func drawn(_ mark: ThreadMark, selected: Bool) throws -> Data? {
             let row = ThreadRow(id: "t", title: "Paginate the list", mark: mark, line: "Working")
-            let view = ThreadRowView(row: row, selected: selected) {}.frame(width: 190)
+            let view = RailRowView(row: RailRow.thread(row), selected: selected) {}.frame(width: 190)
                 .background(Color(nsColor: .windowBackgroundColor))
             let renderer = ImageRenderer(content: view)
             renderer.scale = 1

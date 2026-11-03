@@ -59,10 +59,14 @@ ships, and the mockup gets fixed.
   draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
   chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
-  keeps the Thread/Tasks switch and, below it, **the thread list**: a row per thread, newest first (at most 50, then "N older
-  threads"), each a mark (a symbol and a tint: working blue, needs you amber, done green, waiting grey, broken red), the title (`.callout`, two
-  lines at most, semibold when selected) and one `.caption` line of state in the toolbar pill's words. A click shows that thread, with its
-  feed and settings, including a finished one; it starts and stops nothing. The spine is not drawn twice.
+  has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, **Threads** with a `+` (the New goal card, until the
+  new-thread screen) and then **Scheduled · N** with the project's tasks. A thread row is newest first (at most 50, then "N older
+  threads"); a task row follows. Each row has a mark at the left (working a spinner, needs you an amber dot with a halo, done a check,
+  idle a hollow ring, broken a cross), the title on one line (`.callout`, semibold) and a `.caption` state line coloured by the same mark
+  (blue running, amber needs you, green done, red broken, `.secondary` for idle); the selected row sits on `Theme.raised`. A click shows
+  that thread, with its feed and settings, or that task: its *Will it run tonight?* card above its runs, until the task page; it starts
+  and stops nothing. A task's line is its schedule, then what keeps it from running (`needs a fix`, `approval stale`, `not approved`) or
+  how its last run ended. The spine is not drawn twice.
 - **Feed.** One scrolling column, newest row at the foot. It is a lazy list that opens at the foot and stays there while it grows,
   so a thousand rows cost what the screen shows. Padding 28 across and 20 above and below, rows 10 apart, a symbol column 16 wide so
   the text beside the marks lines up. It never grows the window and truncates (middle for a path or command) rather than wraps off.
