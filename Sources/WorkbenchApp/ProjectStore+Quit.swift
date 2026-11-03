@@ -3,11 +3,12 @@ import Foundation
 /// What a quit says and does when work of this app is still going.
 enum QuitPrompt {
     /// What would be ended, in a line; nil when nothing is going.
-    static func work(threadRunIn project: String?, taskRun: String?, drafting: Bool = false) -> String? {
+    static func work(threadRunIn project: String?, taskRun: String?, drafting: Bool = false, chatting: Bool = false) -> String? {
         var parts: [String] = []
         if let project { parts.append("a run in \(project)") }
         if let taskRun { parts.append("the task \(taskRun)") }
         if drafting { parts.append("a goal draft") }
+        if chatting { parts.append("a chat turn") }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " and ") + (parts.count > 1 ? " are" : " is") + " still going."
     }
@@ -22,7 +23,7 @@ extension ProjectStore {
     var liveWork: String? {
         QuitPrompt.work(
             threadRunIn: runningProjectPath.map { URL(fileURLWithPath: $0).lastPathComponent }, taskRun: tasks.runningTask,
-            drafting: drafting)
+            drafting: drafting, chatting: chatReplying)
     }
 
     /// Asks everything of this app's that is going (the thread run, the task run, the goal draft) to end, all at once, and waits until
@@ -31,9 +32,10 @@ extension ProjectStore {
         guard liveWork != nil else { return }
         let deadline = ContinuousClock.now + timeout
         async let draft: Void = stopDraftingAndWait(timeout: timeout)
+        async let chat: Void = stopChatAndWait(timeout: timeout)
         async let task: Void = tasks.stopAndWait(timeout: timeout)
         await stopOwnedRun()
         while runningProjectPath != nil, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
-        _ = await (draft, task)
+        _ = await (draft, chat, task)
     }
 }

@@ -193,6 +193,10 @@ bounded like any, on their own role). "Make this a goal" drafts the goal from th
 "Do it now" (artboard G) does the same from one message. `NewGoalPopover` stays as the way in until the flip. New events
 (`chat.message`, `chat.ended`), additive, specified in `docs/spec/event-log.md` in this PR. A chat that is never made a goal is a
 thread you can read and discard, never a leftover process.
+*Slice 6c, in two PRs.* 6c-1 is the store and session side with no screen: `ProjectStore.sendChat`, `startChat`, `stopChat`, `makeChatGoal`
+and `doItNow`, the per-thread `ThreadSession.chatDraft` and `replying`, and two `GoalActions` seams over `ThreadService.chat` and
+`draftGoal(.fromChat)`. "Do it now" is the existing advanced draft from the person's words (artboard G), not a one-message chat followed by
+make-goal: it spends no chat turn. 6c-2 draws the messages, the "replying…" row, the composer, the buttons and the way in beside New goal.
 *Tests:* a chat turn is bounded and always ends; a stopped, timed-out and crashed chat turn each record how it ended; a chat creates no
 worktree and no branch; an old log with no `chat.*` events opens as before.
 

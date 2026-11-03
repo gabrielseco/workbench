@@ -46,6 +46,12 @@ import WorkbenchCore
     /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
     var goalEditSerial = 0
     @ObservationIgnored var goalEdits: Task<Void, Never>?
+    /// What is typed in this chat's composer: kept per thread, so a draft survives a visit to another thread.
+    var chatDraft = ""
+    /// A chat turn is going in this thread (or, under a key with no thread, in a chat the log does not show yet).
+    var replying = false
+    /// What ends the chat turn this session holds.
+    @ObservationIgnored var chatStop: DraftStop?
     /// An approval is going through.
     var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
@@ -68,11 +74,11 @@ import WorkbenchCore
 
     var awaitingRun: Bool { awaitingAfterTurn != nil }
     /// Nothing is going on for the thread: the session can be dropped.
-    var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil }
+    var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil && !replying }
     /// The thread has said something that is still up (an error, a note, a decision's outcome): going back to it shows it again.
     var hasMessages: Bool {
         actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil
     }
     /// Nothing to remember: not working and nothing to show.
-    var isSpent: Bool { isIdle && !hasMessages }
+    var isSpent: Bool { isIdle && !hasMessages && chatDraft.isEmpty }
 }
