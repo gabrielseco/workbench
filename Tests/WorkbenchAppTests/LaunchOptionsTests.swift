@@ -35,6 +35,11 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         }
     }
 
+    var runSettingsChosen: Bool {
+        reads += 1
+        return false
+    }
+
     var chatFeed: Bool {
         get {
             reads += 1

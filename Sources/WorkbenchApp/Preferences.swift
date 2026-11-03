@@ -15,8 +15,11 @@ protocol Preferences: AnyObject, Sendable {
     var announcedAttention: [String] { get set }
     /// The chat feed (P22) in place of the step screens inside a thread, while it is a preview. Off unless a person turns it on.
     var chatFeed: Bool { get set }
-    /// The feed's Run settings inspector is shown (P22). Off until a person turns it on.
+    /// The feed's Run settings inspector is shown (P22). On until a person turns it off: the artboard shows it open beside a draft goal.
     var runSettings: Bool { get set }
+    /// A person has opened or closed it, so a window too narrow to hold it beside the feed may open it over the feed; until then the default
+    /// only shows it where it fits.
+    var runSettingsChosen: Bool { get }
 }
 
 final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
@@ -62,9 +65,11 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     }
 
     var runSettings: Bool {
-        get { defaults.bool(forKey: runSettingsKey) }
+        get { (defaults.object(forKey: runSettingsKey) as? Bool) ?? true }
         set { defaults.set(newValue, forKey: runSettingsKey) }
     }
+
+    var runSettingsChosen: Bool { defaults.object(forKey: runSettingsKey) != nil }
 }
 
 final class MemoryPreferences: Preferences, @unchecked Sendable {
@@ -72,7 +77,8 @@ final class MemoryPreferences: Preferences, @unchecked Sendable {
     var recentProjects: [String]
     var notificationsPaused = false
     var chatFeed = false
-    var runSettings = false
+    var runSettings = true { didSet { runSettingsChosen = true } }
+    private(set) var runSettingsChosen = false
     var seenAttention: [String] = []
     var announcedAttention: [String] = []
     init(projectPath: String? = nil, recentProjects: [String] = []) {

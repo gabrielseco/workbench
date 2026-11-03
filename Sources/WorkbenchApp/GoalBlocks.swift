@@ -5,9 +5,14 @@ import WorkbenchCore
 /// (core's `GoalEditor` writes the file), read-only otherwise. The Goal screen and the feed's goal card both draw these, so neither owns
 /// the editor. `editable` is the caller's to decide, from the same rules the Run settings use (`ProjectStore.goalEditable`).
 struct GoalBlocks: View {
+    /// The Goal screen's form, or the feed's draft goal card (design parity 7): the request in the body face in a bordered box, each
+    /// criterion a bordered row with a ring. Used by the feed only.
+    enum Style { case classic, feed }
+
     var goal: GoalModel
     var store: ProjectStore
     var editable: Bool
+    var style = Style.classic
     /// The edit error under the blocks: the Goal screen draws it lower down, after its other sections.
     var showsError = false
     @State private var addingCriterion = false
@@ -25,7 +30,7 @@ struct GoalBlocks: View {
     private func edit(_ make: @escaping @MainActor (GoalModel) -> GoalEdit?) { Task { await store.editGoal(make) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: style == .feed ? 18 : 26) {
             if !goal.blockers.isEmpty { blockers }
             if goal.placeholdersRemain {
                 Label("Replace every TODO(workbench), then approve.", systemImage: "pencil")
@@ -56,11 +61,16 @@ struct GoalBlocks: View {
 
     private var request: some View {
         section("Request") {
-            GoalCard {
+            GoalCard(style: style) {
                 if editable {
-                    CommitEditor(value: goal.request) { edit(.setRequest($0)) }
+                    if style == .feed {
+                        CommitEditor(value: goal.request, font: .body, lineSpacing: 2) { edit(.setRequest($0)) }
+                    } else {
+                        CommitEditor(value: goal.request) { edit(.setRequest($0)) }
+                    }
                 } else {
-                    Text(goal.request).font(.system(size: 16, design: .serif)).lineSpacing(5).textSelection(.enabled)
+                    Text(goal.request).font(style == .feed ? .body : .system(size: 16, design: .serif))
+                        .lineSpacing(style == .feed ? 2 : 5).textSelection(.enabled)
                         .lineLimit(longRequest && !showAllRequest ? 6 : nil)
                     if longRequest {
                         Button(showAllRequest ? "Show less" : "Show more") { showAllRequest.toggle() }
@@ -82,7 +92,7 @@ struct GoalBlocks: View {
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(goal.rows, id: \.id) { row in
-                    GoalCard { criterion(row) }
+                    GoalCard(style: style) { criterion(row) }
                 }
                 if editable {
                     if addingCriterion {
@@ -101,7 +111,11 @@ struct GoalBlocks: View {
     private func criterion(_ row: GoalModel.Row) -> some View {
         HoverRow { hovering in
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(row.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                if style == .feed {
+                    Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 11, height: 11).accessibilityHidden(true)
+                } else {
+                    Text(row.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     if editable {
                         CommitField(placeholder: "What must hold", value: row.text) {
@@ -138,7 +152,7 @@ struct GoalBlocks: View {
     private var outOfScope: some View {
         section("Out of scope") {
             if !goal.outOfScope.isEmpty || editable {
-                GoalCard {
+                GoalCard(style: style) {
                     ForEach(Array(goal.outOfScope.enumerated()), id: \.offset) { _, item in
                         HoverRow { hovering in
                             HStack(spacing: 10) {

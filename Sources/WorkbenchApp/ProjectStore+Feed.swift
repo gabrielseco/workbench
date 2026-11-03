@@ -16,7 +16,8 @@ extension ProjectStore {
 extension ProjectStore {
     /// Shows or hides the Run settings inspector, and remembers it.
     func setRunSettings(_ on: Bool) {
-        guard on != runSettingsOn else { return }
+        runSettingsChosen = true
+        guard on != runSettingsOn || !preferences.runSettingsChosen else { return }
         preferences.runSettings = on
         runSettingsOn = on
     }

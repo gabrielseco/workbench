@@ -26,13 +26,17 @@ struct FeedScreen: View {
     private var canEditGoal: Bool { store.feedEditsGoal(snapshot) }
 
     private func row(_ item: FeedItem) -> some View {
-        FeedRow(item: item, goal: store.goal, store: store, editable: canEditGoal)
+        FeedRow(
+            item: item, goal: store.goal, store: store, editable: canEditGoal,
+            draft: canEditGoal
+                ? DraftGoalContext(snapshot: snapshot, decision: store.feedDecision(for: snapshot), perform: perform) : nil)
     }
 
     @ViewBuilder private var foot: some View {
         MessageRows(error: store.actionError, note: store.actionNote, notice: store.notice, handoff: store.herdrHandoffOutcome)
         if snapshot.watchesPullRequest, let ci = snapshot.ci { PullRequestCIView(ci: ci, store: store) }
-        if case .next(let step, let why)? = snapshot.feed.last?.kind {
+        let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
+        if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard {
             DecisionCard(step: step, why: why, decision: store.feedDecision(for: snapshot), perform: perform)
         }
     }
@@ -84,7 +88,8 @@ struct FeedScreen: View {
             // Too narrow for it beside the feed, it opens over it.
             .sheet(
                 isPresented: Binding(
-                    get: { store.runSettingsOn && !beside }, set: { if !$0 { store.setRunSettings(false) } })
+                    get: { store.runSettingsOn && store.runSettingsChosen && !beside },
+                    set: { if !$0 { store.setRunSettings(false) } })
             ) {
                 RunSettingsSheet(snapshot: snapshot, store: store)
             }

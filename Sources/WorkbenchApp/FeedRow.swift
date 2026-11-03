@@ -10,9 +10,13 @@ struct FeedRow: View {
     var store: ProjectStore?
     /// The goal may be changed now: its card is the editor.
     var editable: Bool
+    /// What the draft goal card needs of the thread: its footer holds the decision's actions.
+    var draft: DraftGoalContext?
 
-    init(item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false) {
-        (self.item, self.goal, self.store, self.editable) = (item, goal, store, editable)
+    init(
+        item: FeedItem, goal: GoalModel? = nil, store: ProjectStore? = nil, editable: Bool = false, draft: DraftGoalContext? = nil
+    ) {
+        (self.item, self.goal, self.store, self.editable, self.draft) = (item, goal, store, editable, draft)
     }
 
     var body: some View {
@@ -20,7 +24,8 @@ struct FeedRow: View {
         case .userNote(let text): UserNoteRow(text: text)
         case .goalCard(let title, let approval, let count, let hash):
             GoalCardRow(
-                title: title, approval: approval, criteria: count, hash: hash, goal: goal, store: store, editable: editable)
+                title: title, approval: approval, criteria: count, hash: hash, goal: goal, store: store, editable: editable,
+                draft: draft)
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost)
         case .agentText(let text):
@@ -98,6 +103,14 @@ struct UserNoteRow: View {
     }
 }
 
+/// What the draft goal card takes from the thread it is in: the snapshot (the base, the chat behind it), the decision whose actions its
+/// footer holds, and what they do.
+struct DraftGoalContext {
+    var snapshot: ThreadSnapshot
+    var decision: FeedDecision
+    var perform: (FeedAction) -> Void
+}
+
 struct GoalCardRow: View {
     var title: String?
     var approval: ApprovalState?
@@ -106,6 +119,7 @@ struct GoalCardRow: View {
     var goal: GoalModel?
     var store: ProjectStore?
     var editable = false
+    var draft: DraftGoalContext?
     @State private var showAllRequest = false
     /// A read-only request this long is folded, as on the Goal screen.
     static let foldedRequest = 500
@@ -135,12 +149,24 @@ struct GoalCardRow: View {
     }
 
     /// A draft goal: the card is the editor, the Goal screen's blocks changed in place.
-    private func editor(_ goal: GoalModel, _ store: ProjectStore) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            heading
-            GoalBlocks(goal: goal, store: store, editable: true, showsError: true)
+    @ViewBuilder private func editor(_ goal: GoalModel, _ store: ProjectStore) -> some View {
+        if let draft {
+            VStack(alignment: .leading, spacing: 14) {
+                if BrainstormFold.shown(state: draft.snapshot.state) {
+                    BrainstormFoldView(messages: draft.snapshot.state.chat?.messages ?? [])
+                    AgentLineView(text: BrainstormFold.agentLine)
+                }
+                DraftGoalCardView(
+                    goal: goal, store: store, base: draft.snapshot.base, decision: draft.decision, perform: draft.perform)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                heading
+                GoalBlocks(goal: goal, store: store, editable: true, showsError: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var summary: some View {
