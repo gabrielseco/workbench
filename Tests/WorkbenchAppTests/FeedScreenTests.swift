@@ -293,16 +293,8 @@ import WorkbenchCore
         try differs(
             row(.check(result: "passed", command: "swift test", durationMs: 1_000)),
             row(.check(result: "failed", command: "swift test", durationMs: 1_000)), "a check's result")
-        let started = ThreadState.derive(from: [], id: "t")
-        let ended = ThreadState.derive(
-            from: [
-                Event(seq: 1, ts: "2026-11-02T10:00:01.000Z", turn: 0, kind: .threadCreated, data: [:]),
-                Event(seq: 2, ts: "2026-11-02T10:00:02.000Z", turn: 1, kind: .turnStarted, data: [:]),
-                Event(seq: 3, ts: "2026-11-02T10:00:03.000Z", turn: 1, kind: .turnEnded, data: ["result": "succeeded"]),
-            ], id: "t")
         try differs(
-            PhaseRow(spine: ThreadSpine.derive(state: started)),
-            PhaseRow(spine: ThreadSpine.derive(state: ended, approval: .approved)),
+            PhaseRow(snapshot: try thread(.draft)), PhaseRow(snapshot: try thread(.needsYou)),
             "the phase row", width: 800, height: 40)
     }
 

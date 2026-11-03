@@ -55,9 +55,10 @@ Run settings inspector comes in 3c. The
 mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a mockup disagree on a layout value, this file is what
 ships, and the mockup gets fixed.
 
-- **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each a mark
-  (the same symbol and colour as the rail drew it) and its title (`.callout`, semibold from the current step on, `.secondary` while
-  pending), with a chevron between. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
+- **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each an 8 pt dot with a 1.5 pt ring (the colour the rail
+  draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `.secondary` when done, primary when current,
+  `.tertiary` while pending), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
+  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
   keeps the Thread/Tasks switch and, below it, **the thread list**: a row per thread, newest first (at most 50, then "N older
   threads"), each a mark (a symbol and a tint: working blue, needs you amber, done green, waiting grey, broken red), the title (`.callout`, two
   lines at most, semibold when selected) and one `.caption` line of state in the toolbar pill's words. A click shows that thread, with its

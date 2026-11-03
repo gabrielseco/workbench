@@ -143,8 +143,7 @@ struct FeedScreen: View {
                 .buttonStyle(.borderless).font(.callout)
                 .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
-            // A chat is on no step: it has no goal, no run and nothing to accept.
-            if !snapshot.showsChat { PhaseRow(spine: snapshot.spine) }
+            PhaseRow(snapshot: snapshot)
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }
@@ -158,25 +157,66 @@ enum FeedLayout {
     static let agentText: CGFloat = 620
 }
 
-/// The spine as a row under the title: the same seven steps, marks and colours as the rail drew them.
+/// One step of the phase row, as it is drawn and as VoiceOver says it.
+struct PhaseStep: Equatable {
+    var title: String
+    var mark: SpineMark
+    var sublabel: String
+
+    var spoken: String { "\(title), \(mark.rawValue), \(sublabel)" }
+}
+
+/// How a step's dot and label look: the artboards' small dot with a ring, filled when the step is done or current and hollow when it is
+/// still to come, with the label going from quiet to plain as the step is reached.
+struct PhaseDot: Equatable {
+    enum Label: Equatable { case secondary, primary, tertiary }
+    var filled: Bool
+    var label: Label
+
+    static func of(_ mark: SpineMark) -> PhaseDot {
+        switch mark {
+        case .done: PhaseDot(filled: true, label: .secondary)
+        case .current, .needsYou, .failed: PhaseDot(filled: true, label: .primary)
+        case .pending: PhaseDot(filled: false, label: .tertiary)
+        }
+    }
+}
+
+/// The spine as a row under the title: the same steps, marks and colours as the rail drew them, in the artboards' form. A thread that began
+/// as a chat has a Chat step first; a thread that began as a goal never had one.
 struct PhaseRow: View {
-    var spine: ThreadSpine
+    var snapshot: ThreadSnapshot
+
+    /// The steps for a thread: the spine's seven (a chat that has no goal is on none of them), with Chat first when the thread began as a chat.
+    static func steps(for snapshot: ThreadSnapshot) -> [PhaseStep] {
+        let noGoal = snapshot.showsChat
+        var steps = snapshot.spine.entries.map {
+            PhaseStep(title: $0.step.title, mark: noGoal ? .pending : $0.mark, sublabel: noGoal ? "" : $0.sublabel)
+        }
+        if snapshot.state.isChat {
+            let chat = noGoal
+                ? PhaseStep(title: "Chat", mark: .current, sublabel: "talking it through")
+                : PhaseStep(title: "Chat", mark: .done, sublabel: "became the goal")
+            steps.insert(chat, at: 0)
+        }
+        return steps
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(spine.entries.enumerated()), id: \.offset) { index, entry in
-                HStack(spacing: 4) {
-                    Image(systemName: entry.mark.symbol).foregroundStyle(Theme.color(for: entry.mark))
-                    Text(entry.step.title)
-                        .font(.callout.weight(entry.mark == .pending ? .regular : .semibold))
-                        .foregroundStyle(entry.mark == .pending ? Color.secondary : Color.primary)
-                        .lineLimit(1)
+        HStack(spacing: 14) {
+            ForEach(Array(Self.steps(for: snapshot).enumerated()), id: \.offset) { _, step in
+                let dot = PhaseDot.of(step.mark)
+                let tint = Theme.color(for: step.mark)
+                HStack(spacing: 6) {
+                    Circle().fill(dot.filled ? tint : Color.clear)
+                        .overlay(Circle().strokeBorder(tint, lineWidth: 1.5)).frame(width: 8, height: 8)
+                    Text(step.title).font(.callout).lineLimit(1)
+                        .foregroundStyle(
+                            dot.label == .primary ? AnyShapeStyle(.primary)
+                                : dot.label == .secondary ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(entry.step.title), \(entry.mark.rawValue), \(entry.sublabel)")
-                if index < spine.entries.count - 1 {
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                }
+                .accessibilityLabel(step.spoken)
             }
             Spacer(minLength: 0)
         }
