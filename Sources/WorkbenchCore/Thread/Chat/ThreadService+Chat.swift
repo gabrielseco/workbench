@@ -53,6 +53,7 @@ extension ThreadService {
             guard FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else { throw ChatRefusal.noThread(id) }
             let state = ThreadStore(project: project).state(of: id)
             guard state.isChat else { throw ChatRefusal.notAChat(id) }
+            if FileManager.default.fileExists(atPath: project.goalURL(id).path) { throw ChatRefusal.hasGoal(id) }
             if let decision = state.decision { throw ChatRefusal.ended(decision) }
             if let pid = runnerPID(id: id) { throw ChatRefusal.running(pid: pid) }
             history = state.chat?.messages ?? []
@@ -104,6 +105,7 @@ extension ThreadService {
                 // What was checked before is checked again with the log held: another command may have decided, spent or started.
                 let state = ThreadStore(project: self.project).state(of: id)
                 guard state.isChat else { throw ChatRefusal.notAChat(id) }
+                if FileManager.default.fileExists(atPath: self.project.goalURL(id).path) { throw ChatRefusal.hasGoal(id) }
                 if let decision = state.decision { throw ChatRefusal.ended(decision) }
                 let held = state.chat?.messages ?? []
                 let total = state.chat?.costUSD ?? 0

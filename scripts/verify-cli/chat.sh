@@ -7,9 +7,11 @@
 # (no goal file, no worktree, no branch; the log says it is a chat), the reply is printed, a later message with the name or the id
 # continues the conversation (the earlier messages reach the agent as quoted data), and `workbench chat <id>` prints it. A turn whose
 # agent fails ends with exit 1 and the log says how it ended; a chat is the active thread (a second chat is refused, exit 6, until
-# --abandon-active), and `status --json` says `kind: chat`.
+# --abandon-active), and `status --json` says `kind: chat`. `goal draft --from-chat` drafts a goal from the conversation into the same
+# thread (a failed draft leaves the chat as it was; a second one, and a later chat message, are refused), and the goal is approved as any.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 makes the fake agent fail
-# every turn, so the steps that expect a reply, a continued conversation and a chat thread with a reply in its log must FAIL. The frame
+# every turn, so the steps that expect a reply, a continued conversation, a chat thread with a reply in its log and a goal drafted
+# from it must FAIL. The frame
 # and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -131,7 +133,39 @@ wbp "$SCRATCH/status2.json" status "$ID" --json
 check "status: the last turn failed and none is open" "status says otherwise" \
     py "assert d['chat']['last_end']=='failed' and d['chat']['open'] is False and d['ended'] is None, d['chat']" <"$SCRATCH/status2.json"
 
-# --- 5. one active thread -----------------------------------------------------------------------------------
+# --- 5. make the chat into a goal (P22 slice 6b) -------------------------------------------------------------
+
+GOOD='{"title": "Add retry", "request": "Retry uploads with exponential backoff.", "criteria": [{"text": "Delay grows exponentially.", "proof": "cat retry.txt"}, {"text": "It gives up after five tries.", "proof": "cat retry.txt"}], "out_of_scope": ["Changing the request timeout."]}'
+echo "I would rather not." >"$FAKE/answer"
+wbp "$SCRATCH/mg-bad.out" goal draft --from-chat idea
+shown "$SCRATCH/mg-bad.out" 3
+check "an answer that is not a goal: exit 1" "workbench goal draft --from-chat exited $RC" test "$RC" = 1
+check "the failed draft left the chat without a goal" "goal.md exists" test ! -e "$P/.workbench/threads/$ID/goal.md"
+echo "$GOOD" >"$FAKE/answer"
+wbp "$SCRATCH/mg.out" goal draft --from-chat idea
+shown "$SCRATCH/mg.out" 5
+check "goal draft --from-chat: exit 0 and it names the same thread" "exit $RC" \
+    bash -c 'test "$1" = 0 && grep -q "drafted $2 " "$3"' _ "$RC" "$ID" "$SCRATCH/mg.out"
+GOAL="$P/.workbench/threads/$ID/goal.md"
+check "the goal is a draft in the chat's own thread, with the agent's title and criteria" "goal.md is not as expected" \
+    bash -c 'grep -q "^status: draft" "$1" && grep -q "^title: Add retry" "$1" && grep -q "\[c1\] Delay grows" "$1" && grep -q "^id: $2" "$1" && ! grep -q "^approved" "$1"' _ "$GOAL" "$ID"
+check "the drafter was given the conversation, quoted" "the prompt does not hold the conversation" \
+    bash -c 'f=$(ls -t "$1"/args_* | head -1); grep -q "^> The person said:" "$f" && grep -q "^> could uploads retry?" "$f" && grep -q "^> give up and keep the file" "$f"' _ "$FAKE"
+wbp "$SCRATCH/mg-status.json" status "$ID" --json
+check "status: a draft goal, in a thread that began as a chat" "status says otherwise" \
+    py "assert d['goal']['approval']=='draft' and d['goal']['title']=='Add retry' and d['kind']=='chat', d['goal']" <"$SCRATCH/mg-status.json"
+wbp "$SCRATCH/mg-chat.out" chat idea --message "one more thing"
+check "a chat that became a goal takes no more messages: refused, exit 6" "exit $RC" test "$RC" = 6
+check "and says why" "message is not as expected" grep -q "became a goal" "$SCRATCH/mg-chat.out"
+wbp "$SCRATCH/mg-show.out" chat "$ID"
+check "the conversation can still be read" "conversation is gone" bash -c 'test "$(grep -c "^you:" "$1")" -ge 2' _ "$SCRATCH/mg-show.out"
+wbp "$SCRATCH/mg-again.out" goal draft --from-chat "$ID"
+check "a second --from-chat is refused and points at --replace, exit 6" "exit $RC" \
+    bash -c 'test "$1" = 6 && grep -q -e "--replace" "$2"' _ "$RC" "$SCRATCH/mg-again.out"
+wbp "$SCRATCH/mg-approve.out" goal approve "$ID" --allow-unrunnable-proofs
+check "the goal can be approved like any other" "goal approve exited $RC" test "$RC" = 0
+
+# --- 6. one active thread -----------------------------------------------------------------------------------
 
 wbp "$SCRATCH/second-chat.out" chat other --message "a second idea"
 check "a chat is the active thread: another is refused, exit 6" "exit $RC" test "$RC" = 6

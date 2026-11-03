@@ -138,32 +138,10 @@ public struct ThreadService: Sendable {
         } else {
             baseBranch = await defaultBase()
         }
-        let pushToLine = updating.map { "\npush_to: \($0)" } ?? ""
-        // A budget only when the file or the config asks for one: a subscription has no dollars to cap, and Codex cannot enforce any.
-        let config = config ?? (try? Config.load(from: project.configURL))
-        let configured = config?.defaultBudgetConfigured == true ? config?.defaultBudgetUSD : nil
-        let budget = settings.timeoutOnly ? nil : (settings.budgetUSD ?? configured)
-        let spendLine =
-            budget.map { "budget_usd: " + NSDecimalNumber(decimal: $0).stringValue } ?? "spend_policy: timeout_only"
         let title = proposedTitle ?? name.replacingOccurrences(of: "-", with: " ")
-        let modelLine =
-            settings.model.map { "model: \($0)" }
-            ?? "# model: opus   (optional; unset = the config's model, else the claude CLI default)"
-
-        let header = """
-            ---
-            id: \(id)
-            \(FrontMatterLine(key: "title", value: title).rendered)
-            status: draft
-            base: \(baseBranch)\(pushToLine)
-            \(spendLine)
-            turn_timeout_min: \(settings.turnTimeoutMin ?? 30)\(settings.quick ? "\nquick: true" : "")
-            \(modelLine)
-            ---
-
-
-            """
-        let text = header + (body ?? GoalBody.placeholders).rendered
+        let text = goalText(
+            id: id, title: title, base: baseBranch, pushTo: updating, config: config, settings: settings,
+            body: body ?? GoalBody.placeholders)
         try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
 
         let manager = WorktreeManager(repoRoot: project.root, git: git)

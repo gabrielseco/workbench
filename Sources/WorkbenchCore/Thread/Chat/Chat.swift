@@ -47,6 +47,11 @@ public enum Chat {
         return PRBodyBuilder.scrub(parts.joined(separator: "\n\n"))
     }
 
+    /// A conversation as one text, each message labelled by who said it, for a goal drafted from it.
+    public static func transcript(_ messages: [ChatMessage]) -> String {
+        messages.map { "\($0.role == .user ? "The person" : "You") said:\n\($0.text)" }.joined(separator: "\n\n")
+    }
+
     /// Every line quoted, so text that looks like a heading or an instruction is read as what was said.
     static func quote(_ text: String) -> String {
         text.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\0", with: "")
@@ -81,6 +86,7 @@ public enum ChatRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     case doctorRunning
     case noThread(String)
     case notAChat(String)
+    case hasGoal(String)
     case ended(String)
     case running(pid: Int32)
     case busy
@@ -102,6 +108,8 @@ public enum ChatRefusal: Error, Equatable, Sendable, CustomStringConvertible {
         case .doctorRunning: "`workbench doctor` is running; try again when it ends."
         case .noThread(let id): "no thread \(id)."
         case .notAChat(let id): "thread \(id) is not a chat."
+        case .hasGoal(let id):
+            "this chat became a goal: change the goal (`workbench goal draft \(id) --replace`), not the conversation."
         case .ended(let decision): "this chat has ended (\(decision))."
         case .running(let pid): "another command holds this thread (pid \(pid)); try again when it ends."
         case .busy: "another command is using this thread; try again when it ends."
