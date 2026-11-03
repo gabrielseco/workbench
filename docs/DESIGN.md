@@ -94,7 +94,6 @@ ships, and the mockup gets fixed.
   over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.
-
 - **A chat** (a thread with no goal yet) has no phase row, no decision card and no Run settings content: its screen is the conversation and a
   composer. The person's messages are `.quaternary` bubbles on the right, the agent's are plain body text under a quiet `Goal agent`
   label, and both wrap and are selectable. While a turn runs the last row is `Replying…` in blue with a spinner and a borderless Stop,
