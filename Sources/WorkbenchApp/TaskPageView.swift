@@ -1,0 +1,203 @@
+import AppKit
+import SwiftUI
+import WorkbenchCore
+
+/// A task as a page (design parity 5), in the feed's column: its header, its own *Will it run tonight?* card and its runs by day.
+struct TaskPageView: View {
+    var store: ProjectStore
+    var snapshot: TasksSnapshot
+    var entry: TaskEntry
+
+    var body: some View {
+        let header = TaskPage.header(entry, now: snapshot.readAt)
+        let tonight = RunTonight.derive(entry, timer: snapshot.timer, activeThread: snapshot.activeThread)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.summary.name).font(.title3.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                        Text(header.line).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                        Text("Defined in \(header.path). Edit that file to change it.")
+                            .font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.fg3).textSelection(.enabled)
+                    }
+                    Spacer(minLength: 8)
+                    TaskButtons(store: store, entry: entry)
+                }
+                if let note = store.tasks.actionNote {
+                    Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
+                RunTonightCard(tonight: tonight, perform: perform).id(entry.id)
+                if entry.runs.isEmpty {
+                    Text("Never run. It runs at the next tick, or by hand: workbench task run \(entry.summary.name)")
+                        .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                ForEach(Array(RunDay.groups(runs: entry.runs, now: snapshot.readAt).enumerated()), id: \.offset) { _, group in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(group.heading).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.bottom, 6)
+                        ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
+                            Divider()
+                            TaskRunRow(run: run, threadKnown: threadKnown(run.thread), perform: perform)
+                        }
+                        Divider()
+                    }
+                }
+            }
+            .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
+            .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity)
+        }
+        // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
+        .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
+    }
+
+    /// A run's thread is one the rail lists, so the window can show it.
+    private func threadKnown(_ id: String?) -> Bool {
+        id.map { id in store.threads.listing.rows.contains { $0.id == id } } ?? false
+    }
+
+    private func perform(_ action: RunAction) {
+        switch action {
+        case .viewLog:
+            guard let project = store.project else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
+        case .reapprove: store.tasks.beginApprove(store.project, entry.id)
+        case .openThread(let id): Task { await store.select(thread: id) }
+        }
+    }
+}
+
+/// The task's own *Will it run tonight?*: a verdict and, open by default when there is something to read, its warnings with the one button
+/// that deals with each.
+struct RunTonightCard: View {
+    var tonight: RunTonight
+    var perform: (RunAction) -> Void
+    @State private var expanded: Bool?
+
+    private var open: Bool { expanded ?? tonight.openByDefault }
+
+    private var tint: Color {
+        switch tonight.verdict {
+        case .willRun: Theme.green
+        case .checkWarnings: Theme.amber
+        case .willNotRun: Theme.red
+        }
+    }
+
+    private var symbol: String {
+        switch tonight.verdict {
+        case .willRun: "checkmark.circle.fill"
+        case .checkWarnings: "exclamationmark.circle.fill"
+        case .willNotRun: "xmark.circle.fill"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                expanded = !open
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: symbol).foregroundStyle(tint)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("WILL IT RUN TONIGHT?").font(.caption2.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+                        Text(tonight.verdict.text).font(.callout.weight(.semibold))
+                    }
+                    Spacer()
+                    if let count = tonight.countText { Text(count).font(.caption).foregroundStyle(.secondary) }
+                    if !tonight.warnings.isEmpty {
+                        Image(systemName: open ? "chevron.up" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Will it run tonight? \(tonight.verdict.text)\(tonight.countText.map { ", \($0)" } ?? "")")
+            if open {
+                ForEach(Array(tonight.warnings.enumerated()), id: \.offset) { _, warning in
+                    Divider()
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(warning.text).font(.callout)
+                            if let detail = warning.detail {
+                                Text(detail).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                                    .lineLimit(2).textSelection(.enabled)
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        if let action = Self.action(for: warning) {
+                            Button(action.title) { perform(action) }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tonight.verdict == .willRun ? Theme.line : tint.opacity(0.45)))
+    }
+
+    /// The button for a warning: approval, or the active thread.
+    static func action(for warning: RunTonight.Warning) -> RunAction? {
+        switch warning.action {
+        case .approve?, .reapprove?: .reapprove
+        case .openThread(let id)?: .openThread(id)
+        case nil: nil
+        }
+    }
+}
+
+/// One run: a mark, what happened, and at the right the one button that deals with how it ended.
+struct TaskRunRow: View {
+    var run: TaskHistory.Run
+    var threadKnown: Bool
+    var perform: (RunAction) -> Void
+
+    var body: some View {
+        let tone = TaskOutcomeStyle.tone(run.outcome)
+        let action = RunAction.of(run)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: TaskOutcomeStyle.symbol(run.outcome)).foregroundStyle(Theme.color(for: tone)).frame(width: 16)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(TaskOutcomeStyle.word(run.outcome)).font(.callout.weight(.semibold))
+                        .foregroundStyle(tone == .broken || tone == .needsYou ? Theme.color(for: tone) : Color.primary)
+                    Text(run.started.formatted(.dateTime.hour().minute()))
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    Text(run.trigger).font(.caption).foregroundStyle(.secondary)
+                }
+                if let reason = TasksText.reason(run) {
+                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled).help(reason)
+                }
+                if !run.units.isEmpty {
+                    Text(run.units.joined(separator: ", ")).font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled)
+                }
+                if let pr = run.pullRequest {
+                    Text(pr).font(.system(.caption, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+                // A thread the rail does not list (cleaned, or older than the list) is an id to copy.
+                if let thread = run.thread, !(threadKnown && action == .openThread(thread)) {
+                    Text("thread \(thread)").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 8)
+            if let action, !(action.isThread && !threadKnown) {
+                Button(action.title) { perform(action) }.buttonStyle(.bordered).controlSize(.small)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension RunAction {
+    var isThread: Bool {
+        if case .openThread = self { return true }
+        return false
+    }
+}

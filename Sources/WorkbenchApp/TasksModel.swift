@@ -122,6 +122,8 @@ struct TasksSnapshot: Equatable {
     var entries: [TaskEntry]
     var timer: TimerCard
     var readAt: Date
+    /// The project's active thread, if one is open: a task's next run would skip while it is (the task page says so).
+    var activeThread: String?
 }
 
 /// Reads the tasks of a project from the core and nothing else; read only, nothing is written and no thread is touched.
@@ -135,7 +137,8 @@ struct TasksReader: Sendable {
             let entries = try entries(project, now: now)
             let service = timerService(project: project, environment: environment)
             return TasksSnapshot(
-                projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now)
+                projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now,
+                activeThread: ThreadStore(project: project).activeThreadID())
         }
     }
 
