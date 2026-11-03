@@ -45,9 +45,16 @@ extension ProjectStore {
         let held = threadSession(project, nil)
         let shown = current
         shown.actionError = nil
+        // The window follows the new chat; a refusal puts the person back on the thread they were reading.
+        let picked = selectedThread
         selectedThread = nil
         let started = await chatTurn(
             project, .newThread(name: ThreadName.suggest(from: message)), message, in: held, errorsIn: shown)
+        if !started, picked != nil {
+            selectedThread = picked
+            lastWatch = nil
+            await reload()
+        }
         return started
     }
 

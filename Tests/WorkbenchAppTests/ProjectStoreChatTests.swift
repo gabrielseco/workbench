@@ -189,6 +189,18 @@ private final class Seen: @unchecked Sendable {
         #expect(store.actionError == "\(ChatRefusal.activeThread(id))")
     }
 
+    @Test func aRefusedNewChatLeavesThePersonOnTheThreadTheyWereReading() async throws {
+        let a = first
+        let b = second
+        let (store, _) = try await opened(
+            chat: { _, _, _, _ in throw ChatRefusal.activeThread(a) }, chats: [a, b])
+        await store.select(thread: a)
+        #expect(store.currentThread == a)
+        #expect(await store.startChat("a new idea") == false)
+        #expect(store.currentThread == a && store.selectedThread == a)
+        #expect(store.actionError == "\(ChatRefusal.activeThread(a))", "the refusal is on the thread that is shown")
+    }
+
     // MARK: A thread that is no longer on screen
 
     @Test func theAnswerForAThreadThatIsNoLongerOnScreenLandsOnItsOwnSession() async throws {
