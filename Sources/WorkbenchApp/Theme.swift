@@ -14,43 +14,36 @@ enum Theme {
         set { previewFlag.withLock { $0 = newValue } }
     }
 
-    enum Token: CaseIterable { case blue, green, amber, red, grey, rail, canvas }
+    enum Token: CaseIterable { case blue, green, amber, red, grey, rail, canvas, raised, panel, line }
+
+    /// One token: the design's value for each appearance, and the app's own for the old window where it had one. `old: nil` means the
+    /// design's value serves both (the preview's surfaces, which nothing outside the preview draws); `old: []` means the old window sets
+    /// no colour there and the system draws it.
+    private struct Swatch {
+        var light: UInt32
+        var dark: UInt32
+        var old: (light: [Double], dark: [Double])?
+    }
+
+    private static let swatches: [Token: Swatch] = [
+        .blue: Swatch(light: 0x1f5fd1, dark: 0x5b9dff, old: ([0.12, 0.31, 0.86], [0.45, 0.62, 1.0])),
+        .green: Swatch(light: 0x1b7f4e, dark: 0x4cc38a, old: ([0.07, 0.53, 0.31], [0.36, 0.80, 0.55])),
+        .amber: Swatch(light: 0xa35f00, dark: 0xf0b04a, old: ([0.80, 0.50, 0.04], [0.98, 0.72, 0.28])),
+        .red: Swatch(light: 0xc8322a, dark: 0xf2685f, old: ([0.78, 0.16, 0.16], [1.0, 0.47, 0.45])),
+        .grey: Swatch(light: 0x667084, dark: 0x7e8695, old: ([0.56, 0.58, 0.62], [0.62, 0.64, 0.68])),
+        .rail: Swatch(light: 0xeceef2, dark: 0x1b1e24, old: ([0.95, 0.95, 0.97], [0.14, 0.14, 0.14])),
+        .canvas: Swatch(light: 0xf4f5f8, dark: 0x16191e, old: ([], [])),
+        .raised: Swatch(light: 0xe1e5ec, dark: 0x2a2f39, old: nil),
+        .panel: Swatch(light: 0xffffff, dark: 0x21252d, old: nil),
+        .line: Swatch(light: 0xd3d8e0, dark: 0x323844, old: nil),
+    ]
 
     /// A token's value for an appearance, as sRGB 0...1. Pure, so a test can read both palettes without touching the flag.
     static func rgb(_ token: Token, dark: Bool, preview: Bool) -> [Double] {
-        func hex(_ value: UInt32) -> [Double] {
-            [Double((value >> 16) & 0xFF) / 255, Double((value >> 8) & 0xFF) / 255, Double(value & 0xFF) / 255]
-        }
-        switch (token, dark, preview) {
-        case (.blue, false, false): return [0.12, 0.31, 0.86]
-        case (.blue, true, false): return [0.45, 0.62, 1.0]
-        case (.green, false, false): return [0.07, 0.53, 0.31]
-        case (.green, true, false): return [0.36, 0.80, 0.55]
-        case (.amber, false, false): return [0.80, 0.50, 0.04]
-        case (.amber, true, false): return [0.98, 0.72, 0.28]
-        case (.red, false, false): return [0.78, 0.16, 0.16]
-        case (.red, true, false): return [1.0, 0.47, 0.45]
-        case (.grey, false, false): return [0.56, 0.58, 0.62]
-        case (.grey, true, false): return [0.62, 0.64, 0.68]
-        case (.rail, false, false): return [0.95, 0.95, 0.97]
-        case (.rail, true, false): return [0.14, 0.14, 0.14]
-        // The window's own background, which the old window never sets: the system draws it.
-        case (.canvas, _, false): return []
-        case (.blue, false, true): return hex(0x1f5fd1)
-        case (.blue, true, true): return hex(0x5b9dff)
-        case (.green, false, true): return hex(0x1b7f4e)
-        case (.green, true, true): return hex(0x4cc38a)
-        case (.amber, false, true): return hex(0xa35f00)
-        case (.amber, true, true): return hex(0xf0b04a)
-        case (.red, false, true): return hex(0xc8322a)
-        case (.red, true, true): return hex(0xf2685f)
-        case (.grey, false, true): return hex(0x667084)
-        case (.grey, true, true): return hex(0x7e8695)
-        case (.rail, false, true): return hex(0xeceef2)
-        case (.rail, true, true): return hex(0x1b1e24)
-        case (.canvas, false, true): return hex(0xf4f5f8)
-        case (.canvas, true, true): return hex(0x16191e)
-        }
+        guard let swatch = swatches[token] else { return [] }
+        if !preview, let old = swatch.old { return dark ? old.dark : old.light }
+        let value = dark ? swatch.dark : swatch.light
+        return [Double((value >> 16) & 0xFF) / 255, Double((value >> 8) & 0xFF) / 255, Double(value & 0xFF) / 255]
     }
 
     /// One colour for each appearance, so a label is readable on the light rail and on the dark one.
@@ -71,6 +64,12 @@ enum Theme {
     static var grey: Color { adaptive(.grey) }
     /// The rail's background, set here so it is the same in any render.
     static var rail: Color { adaptive(.rail) }
+    /// A raised surface: the person's bubble, the avatar's disc.
+    static var raised: Color { adaptive(.raised) }
+    /// A panel: the chat's composer.
+    static var panel: Color { adaptive(.panel) }
+    /// A hairline border.
+    static var line: Color { adaptive(.line) }
     /// What the thread screens sit on: the design's `--bg` with the preview on, the system's window background without it.
     static var canvas: Color { adaptive(.canvas) }
 

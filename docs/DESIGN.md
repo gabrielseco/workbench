@@ -34,7 +34,7 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - **With the chat feed preview on, the palette is the artboards'** (`Theme.preview`, set by the store; the old window keeps its values
   until P22 slice 7). Dark / light: blue `#5b9dff` / `#1f5fd1`, green `#4cc38a` / `#1b7f4e`, amber `#f0b04a` / `#a35f00`, red `#f2685f` /
   `#c8322a`, grey `#7e8695` / `#667084`; the rail `#1b1e24` / `#eceef2` and the thread screens' content `#16191e` / `#f4f5f8`
-  (`Theme.canvas`; without the preview the window draws its own). The values are in `ThemeTests`, which is what fails if they drift.
+  (`Theme.canvas`; without the preview the window draws its own); the preview's surfaces `raised` `#2a2f39` / `#e1e5ec`, `panel` `#21252d` / `#ffffff` and `line` `#323844` / `#d3d8e0`. The values are in `ThemeTests`, which is what fails if they drift.
 
 ## Layout
 
@@ -98,14 +98,20 @@ ships, and the mockup gets fixed.
   over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.
+- **The feed is a centred column**, at most 680 wide (`FeedLayout.maxColumn`): the rows, what an action said, the decision card and a
+  chat's composer. The title and phase row above it and the Run settings inspector beside it keep their places; at the 900×600 minimum
+  the column simply fills what there is.
 - **A chat** (a thread with no goal yet) has no phase row, no decision card and no Run settings content: its screen is the conversation and a
-  composer. The person's messages are `.quaternary` bubbles on the right, the agent's are plain body text under a quiet `Goal agent`
-  label, and both wrap and are selectable. While a turn runs the last row is `Replying…` in blue with a spinner and a borderless Stop,
-  the text box is dimmed, takes no typing and says `Waiting for the agent…`. The composer is a text box (one line high, up to six),
-  `Make this a goal` (`.bordered`, enabled once the agent has answered and nothing is going) and `Send` (the one `.borderedProminent`).
-  Return sends and Shift- or Option-Return adds a line. What the app says back about a message or a draft (too long, no goal agent,
-  a draft that did not come out) is an amber row above the box: the person has to change something before it can go on, it is not a
-  broken thread. The New goal card's Chat kind says the same in amber.
+  composer. The person's messages are bubbles on the right in `Theme.raised` (radius 14, the bottom-right corner 4, at most 540 wide) with
+  no label; the agent's are plain body text at most 620 wide beside a 22 pt avatar (`sparkle`, a `Theme.raised` disc with a `Theme.line`
+  ring). Both wrap and are selectable, and say who spoke to VoiceOver (`You`, `Goal agent`), since nothing on screen does. While a turn
+  runs the last row is `Replying…` in blue with a spinner and a borderless Stop, and the text box is dimmed, takes no typing and says
+  `Waiting for the agent…`. The composer is a rounded panel (`Theme.panel`, a `Theme.line` hairline, radius 12, 46 high at least) holding
+  the text box (one line, growing to six) and a 30 pt square `arrow.up` Send button; under it a grey ring and `Chat only. No worktree,
+  no run, no cost.` at the left and the one `.borderedProminent` button, `Make this a goal →`, at the right (enabled once the agent has
+  answered and nothing is going). Return sends and Shift- or Option-Return adds a line. What the app says back about a message or a
+  draft (too long, no goal agent, a draft that did not come out) is an amber row above the panel: the person has to change something
+  before it can go on, it is not a broken thread. The New goal card's Chat kind says the same in amber.
 
 ## Tasks screen
 

@@ -65,27 +65,41 @@ struct ChatRows: View {
     }
 }
 
+extension ChatMessage {
+    /// Who said it, for VoiceOver: the bubbles and the avatar carry no label on screen.
+    var speaker: String { role == .user ? "You" : "Goal agent" }
+}
+
+/// One message as the artboard draws it: the person's in a bubble on the right with no label, the agent's as plain text beside a small
+/// avatar. Both wrap, stay selectable, and say who spoke to VoiceOver.
 struct ChatMessageRow: View {
     var message: ChatMessage
 
     var body: some View {
         if message.role == .user {
-            HStack {
-                Spacer(minLength: 60)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("You").font(.caption).foregroundStyle(.secondary)
-                    Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-            }
-            .accessibilityElement(children: .combine)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Goal agent").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
                 Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(
+                        Theme.raised,
+                        in: UnevenRoundedRectangle(
+                            topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 4, topTrailingRadius: 14))
+                    .frame(maxWidth: FeedLayout.userBubble, alignment: .trailing)
             }
+            .accessibilityElement(children: .ignore).accessibilityLabel("\(message.speaker): \(message.text)")
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkle").font(.caption2).foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line))
+                    .padding(.top, 1)
+                Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: FeedLayout.agentText, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore).accessibilityLabel("\(message.speaker): \(message.text)")
         }
     }
 }
@@ -117,7 +131,7 @@ struct ChatComposer: View {
 
     var body: some View {
         let state = state
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             if let said = store.actionError {
                 // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
                 MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: said)
@@ -126,41 +140,69 @@ struct ChatComposer: View {
             if state.ended {
                 Text("This chat has ended.").font(.callout).foregroundStyle(.secondary)
             } else {
-                editor(state)
-                HStack(spacing: 10) {
-                    if store.drafting {
-                        ProgressView().controlSize(.small)
-                        Text("Drafting the goal…").font(.callout).foregroundStyle(Theme.blue)
-                        Button("Stop") { store.stopDrafting() }.buttonStyle(.borderless)
-                    } else {
-                        Button("Make this a goal") { Task { await store.makeChatGoal() } }
-                            .disabled(!state.canMakeGoal)
-                            .help(
-                                state.hasExchange
-                                    ? "The goal agent drafts a goal from this conversation; you read it and approve it next"
-                                    : "Available once the agent has answered")
-                    }
-                    Spacer()
-                    Button("Send") { send() }
-                        .buttonStyle(.borderedProminent).disabled(!state.canSend)
-                        .accessibilityLabel("Send the message")
-                }
+                panel(state)
+                footer(state)
             }
         }
-        .padding(.horizontal, 28).padding(.vertical, 12)
+        .frame(maxWidth: FeedLayout.maxColumn)
+        .padding(.horizontal, 28).padding(.top, 12).padding(.bottom, 16).frame(maxWidth: .infinity)
+    }
+
+    /// The composer: a rounded panel with the text box and a square arrow-up button inside it, as the artboard draws it.
+    private func panel(_ state: ChatComposerState) -> some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            editor(state)
+            Button { send() } label: {
+                Image(systemName: "arrow.up").font(.callout.weight(.semibold)).frame(width: 30, height: 30)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
+                    .opacity(state.canSend ? 1 : 0.45)
+            }
+            .buttonStyle(.plain).disabled(!state.canSend)
+            .accessibilityLabel("Send the message").help("Sends the message (Return)")
+        }
+        .padding(.leading, 14).padding([.vertical, .trailing], 8).frame(minHeight: 46)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+    }
+
+    /// Under the panel: what a chat is, and the one prominent button.
+    private func footer(_ state: ChatComposerState) -> some View {
+        HStack(spacing: 10) {
+            Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
+            Text("Chat only. No worktree, no run, no cost.").font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            if store.drafting {
+                ProgressView().controlSize(.small)
+                Text("Drafting the goal…").font(.callout).foregroundStyle(Theme.blue)
+                Button("Stop") { store.stopDrafting() }.buttonStyle(.borderless)
+            } else {
+                Button { Task { await store.makeChatGoal() } } label: {
+                    HStack(spacing: 6) {
+                        Text("Make this a goal")
+                        Image(systemName: "arrow.right").accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.borderedProminent).disabled(!state.canMakeGoal)
+                .accessibilityLabel("Make this a goal")
+                .help(
+                    state.hasExchange
+                        ? "The goal agent drafts a goal from this conversation; you read it and approve it next"
+                        : "Available once the agent has answered")
+            }
+        }
     }
 
     private func editor(_ state: ChatComposerState) -> some View {
         TextEditor(text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }))
             .font(.body).scrollContentBackground(.hidden).focused($focused)
-            .frame(height: ChatComposerState.editorHeight(for: state.text)).padding(6)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .frame(height: ChatComposerState.editorHeight(for: state.text))
             .disabled(!state.canType)
             .opacity(state.replying ? 0.6 : 1)
             .overlay(alignment: .topLeading) {
                 if state.isBlank {
-                    Text(state.busy ? "Waiting for the agent…" : "Reply…  (Return sends, Shift-Return adds a line)")
-                        .foregroundStyle(.tertiary).padding(.leading, 11).padding(.top, 6).allowsHitTesting(false)
+                    Text(state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…")
+                        .foregroundStyle(.tertiary).padding(.leading, 5).padding(.top, 6).allowsHitTesting(false)
                 }
             }
             .onKeyPress(.return, phases: .down) { press in
