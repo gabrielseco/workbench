@@ -1,0 +1,9 @@
+{"v":1,"seq":1,"ts":"2026-10-26T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"45d4344506c609f51e3df3257abc743a5f16c810dbe12a552706c0514cf481d6"}}
+{"v":1,"seq":2,"ts":"2026-10-28T04:00:02.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-28T04:00:02.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"invoice-pagination","units":["ROU","TUR","CZE"]}}
+{"v":1,"seq":4,"ts":"2026-10-28T04:14:02.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"pr-opened","pr":"https://github.com/example/remote-flows/pull/412","thread":"invoice-pagination","units":["ROU","TUR","CZE"]}}
+{"v":1,"seq":5,"ts":"2026-10-29T04:00:03.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":6,"ts":"2026-10-29T04:00:03.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"bump-pol-esp","units":["POL","ESP"]}}
+{"v":1,"seq":7,"ts":"2026-10-29T04:11:03.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"pr-opened","pr":"https://github.com/example/remote-flows/pull/415","thread":"bump-pol-esp","units":["POL","ESP"]}}
+{"v":1,"seq":8,"ts":"2026-10-30T04:00:01.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":9,"ts":"2026-10-30T04:00:01.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"skipped-too-many-open","reason":"3 of its own pull requests are open (max_open 3): #412, #415, #409","units":[]}}

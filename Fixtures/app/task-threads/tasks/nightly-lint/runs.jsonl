@@ -1,0 +1,5 @@
+{"v":1,"seq":1,"ts":"2026-10-30T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"1e283d491e1b259fe9ed9adf20a5c075a409141f850c29b4725b617fe4384813"}}
+{"v":1,"seq":2,"ts":"2026-10-31T02:00:05.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-31T02:00:05.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"interrupted","reason":"the process died","units":[]}}
+{"v":1,"seq":4,"ts":"2026-11-01T02:00:02.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":5,"ts":"2026-11-01T02:00:02.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"nightly-lint-3","units":["lint-3"]}}
