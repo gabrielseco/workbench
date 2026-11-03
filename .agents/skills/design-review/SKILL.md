@@ -68,9 +68,9 @@ and always `stop`). Never call anything else that launches or kills. Name captur
   "not captured", reviewed from the code, and a new scenario if the change is worth one.
 - **Two sizes.** The minimum and a roomy one: `VERIFY_WINDOW_SIZE=900x600 scripts/verify-app.sh start <scenario>` and again with
   `1600x1000`. `start` sets the size through Accessibility; if it says the window stayed at its launch size, say so in the report.
-- **Appearance.** The app follows the system and `verify-app.sh` has no switch for it, so captures are in whatever the machine is
-  set to. Say which in the report, and review the other from `Theme.swift`'s values and the static pass. Do not change System
-  Settings for a review.
+- **Appearance.** Shoot both: `VERIFY_APPEARANCE=light scripts/verify-app.sh start <scenario>` and again with `dark`. The switch is for that
+  launch only (the app's own appearance, via `WORKBENCH_APPEARANCE`); without it the app follows the system. Do not change System
+  Settings for a review. Say in the report which appearances and sizes each screenshot is.
 - **Before.** For a changed screen, the same shots from `origin/main` in a throwaway worktree (`git worktree add ../wb-main
   origin/main`, remove it after), named `before-…`.
 
