@@ -54,21 +54,39 @@ import Testing
         #expect(state(d, id).isChat && state(d, id).decision == nil, "it began as a chat and is still open")
     }
 
-    @Test func theConversationIsTheRequestQuotedLineByLineWithoutBeingCut() async throws {
+    @Test func aConversationLongerThanARoughRequestReachesTheDrafterWholeAndQuoted() async throws {
         let d = try await drafting(answer: "Anything else?")
-        let long = String(repeating: "word ", count: 1_800) + "\n## A heading the person typed"
-        let first = try await chat(d, .newThread(name: "idea"), long)
-        _ = try await chat(d, .existing(id: first.id), long)
-        _ = try await chat(d, .existing(id: first.id), long)
+        func padded(_ marker: String) -> String {
+            String(repeating: "word ", count: 1_800) + "\n## heading-\(marker)\nEND-\(marker)"
+        }
+        let first = try await chat(d, .newThread(name: "idea"), padded("one"))
+        _ = try await chat(d, .existing(id: first.id), padded("two"))
+        _ = try await chat(d, .existing(id: first.id), padded("three"))
         try d.codex?.put("answer", proposalJSON)
         _ = try await draft(d, first.id)
-        let prompt = (d.codex?.calls ?? []).joined(separator: "\n")
-        #expect(prompt.contains("The conversation"), "headed as the conversation, not a rough request")
-        #expect(prompt.contains("> ## A heading the person typed"), "quoted: a heading in it is not structure")
-        #expect(prompt.contains("> The person said:") && prompt.contains("> You said:"), "who said what is quoted with the words")
-        #expect(prompt.contains("> Anything else?"), "the agent's own reply is in it")
-        #expect(prompt.contains("past the limit") == false)
-        #expect(long.utf8.count * 3 > GoalDraft.requestLimit, "longer than a rough request may be")
+        // Only the drafter's prompt: what follows the heading no chat prompt has.
+        let all = (d.codex?.calls ?? []).joined(separator: "\n")
+        let after = try #require(all.range(of: "drafting the goal they are converging on", options: .backwards)).upperBound
+        let drafted = String(all[after...])
+        #expect(drafted.utf8.count > GoalDraft.requestLimit, "longer than a rough request may be, and not cut")
+        for marker in ["one", "two", "three"] {
+            #expect(drafted.contains("> END-\(marker)"), "the end of message \(marker) is there")
+            #expect(drafted.contains("> ## heading-\(marker)"), "a heading in it is quoted, not structure")
+        }
+        #expect(drafted.contains("> Anything else?"), "the agent's own reply is in it")
+        #expect(drafted.contains("> The person said:") && drafted.contains("> You said:"), "who said what is quoted")
+    }
+
+    @Test func aGoalSomeoneElseWroteWhileTheAgentDraftedIsLeftAsItIs() async throws {
+        let (d, id) = try await conversation()
+        let theirs = "---\nid: \(id)\ntitle: Mine\n---\nwritten by hand\n"
+        let result = try await d.fx.service.draftGoal(
+            target: .fromChat(id: id, base: "main"), request: "", config: d.config, environment: d.environment, timeout: 30,
+            attach: { _ in try? theirs.write(to: d.fx.project.goalURL(id), atomically: true, encoding: .utf8) })
+        #expect(result.id == nil && result.failure?.contains("left as it is") == true, "\(result)")
+        #expect(try String(contentsOf: d.fx.project.goalURL(id), encoding: .utf8) == theirs, "their file is untouched")
+        let finished = try EventLogReader.read(at: d.fx.project.eventsURL(id)).events.last { $0.kind == .goalDraftFinished }
+        #expect(finished?.data["ok"] == false)
     }
 
     @Test func theAgentWorksInAnEmptyFolderOutsideTheCheckoutThatIsRemoved() async throws {

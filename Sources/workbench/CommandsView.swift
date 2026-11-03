@@ -253,7 +253,9 @@ extension Commands {
         }
         for state in states {
             // How it ended: the decision once there is one, else where the thread stands.
-            var line = state.decision ?? (state.isChat ? "chat" : statusString(state.review.status))
+            // A chat with a goal is a goal thread: "chat" is only for one that has none yet.
+            let chatOnly = state.isChat && !FileManager.default.fileExists(atPath: ctx.project.goalURL(state.id).path)
+            var line = state.decision ?? (chatOnly ? "chat" : statusString(state.review.status))
             if let result = state.lastResult { line += " (last turn \(result))" }
             let follows = state.lineage.map { "  (follows \($0.parent), round \($0.round))" } ?? ""
             out("\(state.id)  \(line)  \(listCost(state))\(follows)")

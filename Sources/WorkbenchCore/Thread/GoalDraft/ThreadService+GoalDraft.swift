@@ -496,18 +496,26 @@ extension ThreadService {
             result.failure = run.failure
             return result
         }
+        // Nothing else may have written this thread's goal while the agent ran: if someone did, it is theirs, and is left as it is.
+        if FileManager.default.fileExists(atPath: project.goalURL(id).path) {
+            let why = "a goal was written for this thread while the agent drafted; it was left as it is"
+            try await finish(["ok": false, "reason": .string(why)])
+            result.failure = why
+            return result
+        }
+        var wrote = false
         do {
-            // Nothing else may have written this thread's goal while the agent ran.
-            if FileManager.default.fileExists(atPath: project.goalURL(id).path) { throw GoalDraftRefusal.chatHasGoal(id) }
             let reference = try keepProposal(proposal, id: id)
             let text = goalText(id: id, title: proposal.title, base: prepared.base, config: config, body: proposal.body)
             try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
+            wrote = true
             try await log.append(.goalSaved, data: ["status": "draft", "hash": .null])
             try await finish(["ok": true, "proposal_ref": .string(reference)])
         } catch let error as EventLogError {
             throw error
         } catch {
-            try? FileManager.default.removeItem(at: project.goalURL(id))
+            // Only what this draft wrote.
+            if wrote { try? FileManager.default.removeItem(at: project.goalURL(id)) }
             let why = "the goal could not be written: \(error)"
             try await finish(["ok": false, "reason": .string(why)])
             result.failure = why

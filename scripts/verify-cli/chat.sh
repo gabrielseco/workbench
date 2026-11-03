@@ -154,6 +154,9 @@ check "the drafter was given the conversation, quoted" "the prompt does not hold
 wbp "$SCRATCH/mg-status.json" status "$ID" --json
 check "status: a draft goal, in a thread that began as a chat" "status says otherwise" \
     py "assert d['goal']['approval']=='draft' and d['goal']['title']=='Add retry' and d['kind']=='chat', d['goal']" <"$SCRATCH/mg-status.json"
+wbp "$SCRATCH/mg-all.out" status --all
+check "status --all no longer calls a chat that has a goal a chat" "the listing says chat: $(grep "$ID" "$SCRATCH/mg-all.out")" \
+    bash -c '! grep "$1" "$2" | grep -q " chat "' _ "$ID" "$SCRATCH/mg-all.out"
 wbp "$SCRATCH/mg-chat.out" chat idea --message "one more thing"
 check "a chat that became a goal takes no more messages: refused, exit 6" "exit $RC" test "$RC" = 6
 check "and says why" "message is not as expected" grep -q "became a goal" "$SCRATCH/mg-chat.out"
