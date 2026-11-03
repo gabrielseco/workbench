@@ -108,6 +108,8 @@ struct RecentProject: Equatable, Identifiable {
     var runSettingsOn: Bool
     /// A person has chosen (open or closed): only then may a narrow window open the inspector over the feed.
     var runSettingsChosen: Bool
+    /// The feed's centre is wide enough to hold the inspector beside it (set by the feed from its layout).
+    var runSettingsFits = false
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.

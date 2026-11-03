@@ -62,6 +62,21 @@ import Testing
         #expect(sets(false, true, true) && sets(false, true, false), "closed: the click opens it")
     }
 
+    @Test func theHeaderAndTheMenuShortcutShareOneToggleSoThePressThatShowsNothingOpensIt() {
+        let narrow = ProjectStore(preferences: MemoryPreferences())
+        narrow.runSettingsFits = false
+        #expect(!narrow.runSettingsShowing, "the default shows nothing in a narrow window")
+        narrow.toggleRunSettings()
+        #expect(narrow.runSettingsShowing && narrow.runSettingsChosen, "the first press opens it")
+        narrow.toggleRunSettings()
+        #expect(!narrow.runSettingsShowing)
+        let wide = ProjectStore(preferences: MemoryPreferences())
+        wide.runSettingsFits = true
+        #expect(wide.runSettingsShowing, "the default is open where it fits")
+        wide.toggleRunSettings()
+        #expect(!wide.runSettingsShowing && wide.runSettingsChosen, "the first press closes it")
+    }
+
     @Test func theDefaultOpensItOnlyBesideTheFeedNeverOverItUntilAPersonHasChosen() {
         let store = ProjectStore(preferences: MemoryPreferences())
         #expect(store.runSettingsOn && !store.runSettingsChosen, "on by default, not chosen: a narrow window shows no sheet")
