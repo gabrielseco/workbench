@@ -63,7 +63,8 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
     public var seq: Int
     public var turn: Int
     public var kind: Kind
-    /// For a tool group: the labels of its last few calls (`kind` keeps the first few), so a live view shows what is happening now.
+    /// For a turn: the labels of its last few calls, every call (an edit the feed shows once counts again when repeated), so a live
+    /// view shows what is happening now.
     public var latest: [String]
 
     public init(id: String, seq: Int, turn: Int, kind: Kind, latest: [String] = []) {

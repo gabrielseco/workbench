@@ -47,6 +47,7 @@ struct RunCardModel: Equatable {
         var tasks: [FeedItem.PlanTask] = []
         var tail: [String] = []
         var consumed: Set<String> = [snapshot.feed[index].id]
+        let latest = snapshot.feed[index].latest
         for item in snapshot.feed[(index + 1)...] where item.turn == number {
             switch item.kind {
             case .plan(let list):
@@ -54,7 +55,7 @@ struct RunCardModel: Equatable {
                 consumed.insert(item.id)
             case .toolGroup(_, let summaries):
                 // The group's last calls when it has them (its first few are what the group row shows).
-                tail += item.latest.isEmpty ? summaries : item.latest
+                tail += summaries
                 consumed.insert(item.id)
             case .edit(let file, let tool):
                 tail.append("\(tool) \(file)")
@@ -65,7 +66,7 @@ struct RunCardModel: Equatable {
         let stop = ([decision.primary].compactMap { $0 } + decision.more).first { $0.kind == .stopTurn }
         return RunCardModel(
             number: number, progress: snapshot.state.progress, limit: snapshot.turnTimeoutMin.map { TimeInterval($0 * 60) },
-            tasks: tasks, tail: Array(tail.suffix(tailLines)), stop: stop, consumed: consumed)
+            tasks: tasks, tail: Array((latest.isEmpty ? tail : latest).suffix(tailLines)), stop: stop, consumed: consumed)
     }
 }
 

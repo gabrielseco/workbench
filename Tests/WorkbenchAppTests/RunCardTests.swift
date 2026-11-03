@@ -128,10 +128,9 @@ import WorkbenchCore
     }
 
     @Test func theLiveTailTakesAGroupsLatestCallsNotItsFirst() throws {
-        let group = FeedItem(
-            id: "3", seq: 3, turn: 1, kind: .toolGroup(count: 10, summaries: ["Read 1", "Read 2", "Read 3"]),
-            latest: ["Read 8", "Read 9", "Read 10"])
-        let shown = try snapshot(.running, feed: [item(2, working), group])
+        let group = item(3, .toolGroup(count: 10, summaries: ["Read 1", "Read 2", "Read 3"]))
+        let turn = FeedItem(id: "2", seq: 2, turn: 1, kind: working, latest: ["Read 8", "Read 9", "Read 10"])
+        let shown = try snapshot(.running, feed: [turn, group])
         let model = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision()))
         #expect(model.tail == ["Read 8", "Read 9", "Read 10"])
     }

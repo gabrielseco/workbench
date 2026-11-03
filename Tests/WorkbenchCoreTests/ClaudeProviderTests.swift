@@ -128,11 +128,24 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
                 ]),
             ], "empty and malformed tasks are dropped")
         let none = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[]}}]}}"#
-        #expect(d.consume(line: none) == [.tool(name: "TodoWrite", summary: "")], "an empty list says nothing")
+        #expect(d.consume(line: none) == [.tool(name: "TodoWrite", summary: ""), .plan([])], "empty: the tasks are cleared")
         let other =
             #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","#
             + #""input":{"todos":[{"content":"x"}]}}]}}"#
         #expect(d.consume(line: other) == [.tool(name: "Bash", summary: "")], "only TodoWrite carries a task list")
+    }
+
+    @Test func aCredentialThatStraddlesTheCutIsStillScrubbed() throws {
+        var d = decoder()
+        let padding = String(repeating: "z", count: 200)
+        let task = "https://user:\(padding)@example.com/x"
+        let head = #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","#
+        let items = d.consume(line: head + #""input":{"todos":[{"content":"\#(task)","status":"pending"}]}}]}}"#)
+        guard case .plan(let plan)? = items.last else {
+            Issue.record("no plan")
+            return
+        }
+        #expect(!plan[0].text.contains("zzzz"), "the userinfo is removed before the text is cut")
     }
 
     @Test func anOversizedTodoListReachesTheRecorderWithRoomToSayItWasCut() throws {

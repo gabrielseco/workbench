@@ -66,13 +66,35 @@ import Testing
     @Test func aLongRunOfCallsKeepsItsLatestThreeBesideTheFirstThree() {
         var events = [created, ev(2, 1, .turnStarted)]
         for n in 1...10 { events.append(activity(2 + n, "tool", ["name": "Read", "summary": .string("f\(n).swift")])) }
-        let group = feed(events).first { if case .toolGroup = $0.kind { true } else { false } }
+        let items = feed(events)
+        let group = items.first { if case .toolGroup = $0.kind { true } else { false } }
         guard case .toolGroup(let count, let first)? = group?.kind else {
             Issue.record("no group")
             return
         }
         #expect(count == 10 && first == ["Read f1.swift", "Read f2.swift", "Read f3.swift"])
-        #expect(group?.latest == ["Read f8.swift", "Read f9.swift", "Read f10.swift"], "what is happening now")
+        let turn = items.first { if case .turn = $0.kind { true } else { false } }
+        #expect(turn?.latest == ["Read f8.swift", "Read f9.swift", "Read f10.swift"], "what is happening now")
+    }
+
+    @Test func aRepeatedEditIsStillTheLatestCallEvenThoughItsRowIsShownOnce() {
+        let events = [
+            created, ev(2, 1, .turnStarted), activity(3, "tool", ["name": "Edit", "summary": "a.swift"]),
+            activity(4, "tool", ["name": "Bash", "summary": "swift test"]),
+            activity(5, "tool", ["name": "Edit", "summary": "a.swift"]),
+        ]
+        let items = feed(events)
+        #expect(items.filter { if case .edit = $0.kind { true } else { false } }.count == 1, "one row for the file")
+        let turn = items.first { if case .turn = $0.kind { true } else { false } }
+        #expect(turn?.latest == ["Edit a.swift", "Bash swift test", "Edit a.swift"])
+    }
+
+    @Test func anEmptyTaskListClearsTheOneBefore() {
+        let items = feed([
+            created, ev(2, 1, .turnStarted), plan(3, [("Add rows", "in_progress")]),
+            activity(4, "plan", ["items": .array([])]),
+        ])
+        #expect(!items.contains { if case .plan = $0.kind { true } else { false } }, "the agent dropped its tasks")
     }
 
     @Test func aJudgeThatDisagreesIsARowNotAHiddenOne() {

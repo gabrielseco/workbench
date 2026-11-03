@@ -248,7 +248,8 @@ struct ClaudeDecoder: AgentDecoder {
         return items
     }
 
-    /// The task list a `TodoWrite` call carries: `todos` of `content` and `status`. Anything else in it is not read.
+    /// The task list a `TodoWrite` call carries: `todos` of `content` and `status`. Anything else in it is not read; nil when the call has
+    /// no `todos` at all.
     static func plan(from input: [String: Any]?) -> [AgentPlanItem]? {
         guard let todos = input?["todos"] as? [[String: Any]] else { return nil }
         // One more item and one more character than the log keeps, so the recorder can tell a list was cut and say so.
@@ -260,9 +261,12 @@ struct ClaudeDecoder: AgentDecoder {
                 case "in_progress": .inProgress
                 default: .pending
                 }
-            return AgentPlanItem(text: String(text.prefix(AgentActivityRecord.maxPlanItemCharacters + 1)), status: status)
+            // Scrubbed whole, then cut: a credential must not straddle the cut and slip past the scrub.
+            let clean = ThreadService.withoutCredentials(PRBodyBuilder.scrub(String(text.prefix(2_000))))
+            return AgentPlanItem(text: String(clean.prefix(AgentActivityRecord.maxPlanItemCharacters + 1)), status: status)
         }
-        return items.isEmpty ? nil : items
+        // An empty list is the agent clearing its tasks; it is reported so the feed can clear them too.
+        return items
     }
 
     /// A refused call is a `tool_result` flagged as an error that carries the permission layer's sentence; a command
