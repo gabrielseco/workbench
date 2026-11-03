@@ -68,6 +68,8 @@ struct ChatRows: View {
 extension ChatMessage {
     /// Who said it, for VoiceOver: the bubbles and the avatar carry no label on screen.
     var speaker: String { role == .user ? "You" : "Goal agent" }
+    /// What VoiceOver reads for the message: the speaker, then the words.
+    var spoken: String { "\(speaker): \(text)" }
 }
 
 /// One message as the artboard draws it: the person's in a bubble on the right with no label, the agent's as plain text beside a small
@@ -87,7 +89,7 @@ struct ChatMessageRow: View {
                             topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 4, topTrailingRadius: 14))
                     .frame(maxWidth: FeedLayout.userBubble, alignment: .trailing)
             }
-            .accessibilityElement(children: .ignore).accessibilityLabel("\(message.speaker): \(message.text)")
+            .accessibilityElement(children: .ignore).accessibilityLabel(message.spoken)
         } else {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "sparkle").font(.caption2).foregroundStyle(.secondary)
@@ -99,7 +101,7 @@ struct ChatMessageRow: View {
             }
             .frame(maxWidth: FeedLayout.agentText, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .ignore).accessibilityLabel("\(message.speaker): \(message.text)")
+            .accessibilityElement(children: .ignore).accessibilityLabel(message.spoken)
         }
     }
 }
@@ -119,6 +121,23 @@ struct ReplyingRow: View {
 }
 
 /// The foot of a chat: what the last action said, the text box, and the two buttons.
+/// The composer's Send button: a 30 pt rounded square with an up arrow, dimmed while there is nothing to send.
+struct ComposerSendButton: View {
+    var enabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.up").font(.callout.weight(.semibold)).frame(width: 30, height: 30)
+                .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
+                .opacity(enabled ? 1 : 0.45)
+        }
+        .buttonStyle(.plain).disabled(!enabled)
+        .accessibilityLabel("Send the message").help("Sends the message (Return)")
+    }
+}
+
 struct ChatComposer: View {
     var snapshot: ThreadSnapshot
     var store: ProjectStore
@@ -152,14 +171,7 @@ struct ChatComposer: View {
     private func panel(_ state: ChatComposerState) -> some View {
         HStack(alignment: .bottom, spacing: 10) {
             editor(state)
-            Button { send() } label: {
-                Image(systemName: "arrow.up").font(.callout.weight(.semibold)).frame(width: 30, height: 30)
-                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
-                    .opacity(state.canSend ? 1 : 0.45)
-            }
-            .buttonStyle(.plain).disabled(!state.canSend)
-            .accessibilityLabel("Send the message").help("Sends the message (Return)")
+            ComposerSendButton(enabled: state.canSend) { send() }
         }
         .padding(.leading, 14).padding([.vertical, .trailing], 8).frame(minHeight: 46)
         .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
