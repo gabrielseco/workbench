@@ -128,6 +128,8 @@ struct ClaudeDecoder: AgentDecoder {
     private var session: AgentSessionHandle?
     /// `tool_use` ids to tool names, so a refusal in a later `user` line can say which tool was refused.
     private var toolNames: [String: String] = [:]
+    /// The same ids to the call's command or path, so the refusal can say what was refused while the turn is still running.
+    private var toolInputs: [String: String] = [:]
     /// The one fixed sentence the permission layer gives the model when it refuses a call.
     private static let denialText = "Permission for this tool use was denied"
 
@@ -234,8 +236,14 @@ struct ClaudeDecoder: AgentDecoder {
             case "tool_use":
                 if let name = block["name"] as? String {
                     if let id = block["id"] as? String {
-                        if toolNames.count >= Self.maxRememberedTools { toolNames.removeAll() }
+                        if toolNames.count >= Self.maxRememberedTools {
+                            toolNames.removeAll()
+                            toolInputs.removeAll()
+                        }
                         toolNames[id] = String(name.prefix(200))
+                        let fields = block["input"] as? [String: Any]
+                        let remembered = Self.deniedInputKeys.lazy.compactMap { fields?[$0] as? String }.first { !$0.isEmpty }
+                        toolInputs[id] = remembered.map { String($0.prefix(Self.maxDeniedInputCharacters)) }
                     }
                     let input = block["input"] as? [String: Any]
                     let summary = Self.deniedInputKeys.lazy.compactMap { input?[$0] as? String }.first ?? ""
@@ -277,8 +285,8 @@ struct ClaudeDecoder: AgentDecoder {
             guard block["type"] as? String == "tool_result", block["is_error"] as? Bool == true,
                 (block["content"] as? String)?.hasPrefix(Self.denialText) == true
             else { return nil }
-            let name = (block["tool_use_id"] as? String).flatMap { toolNames[$0] }
-            return .permissionDenied(tool: name ?? "tool")
+            let id = block["tool_use_id"] as? String
+            return .permissionDenied(tool: id.flatMap { toolNames[$0] } ?? "tool", input: id.flatMap { toolInputs[$0] })
         }
     }
 

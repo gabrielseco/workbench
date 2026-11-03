@@ -187,7 +187,7 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         let refused =
             #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"#
             + #""content":"Permission for this tool use was denied. The user did not allow it."}]}}"#
-        #expect(d.consume(line: refused) == [.permissionDenied(tool: "Bash")])
+        #expect(d.consume(line: refused) == [.permissionDenied(tool: "Bash", input: "git push")], "says what was refused")
         let failed =
             #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","#
             + #""is_error":true,"content":"exit 1"}]}}"#

@@ -41,9 +41,10 @@ public enum AgentActivityRecord {
                     return .object(["text": .string(text), "status": .string($0.status.rawValue)])
                 })
             if items.count > maxPlanItems || items.contains(where: { $0.text.count > maxPlanItemCharacters }) { truncated = true }
-        case .permissionDenied(let tool):
+        case .permissionDenied(let tool, let input):
             out["type"] = "permission_denied"
             out["tool"] = bounded(tool)
+            if let input, !input.isEmpty { out["input"] = bounded(input) }
         case .usage(let usage):
             out["type"] = "usage"
             if let n = usage.inputTokens { out["input_tokens"] = .int(n) }

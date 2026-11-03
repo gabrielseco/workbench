@@ -55,6 +55,8 @@ private func activity(_ type: String, _ fields: [String: JSONValue] = [:]) -> JS
         #expect(data(.text("hi")) == activity("text", ["text": "hi"]))
         #expect(data(.tool(name: "shell", summary: "ls")) == activity("tool", ["name": "shell", "summary": "ls"]))
         #expect(data(.permissionDenied(tool: "Bash")) == activity("permission_denied", ["tool": "Bash"]))
+        let refused = activity("permission_denied", ["tool": "Bash", "input": "git push"])
+        #expect(data(.permissionDenied(tool: "Bash", input: "git push")) == refused)
         #expect(data(.diagnostic("slow")) == activity("diagnostic", ["text": "slow"]))
         let first: JSONValue = .object(["text": "Add rows", "status": "done"])
         let second: JSONValue = .object(["text": "Wire", "status": "in_progress"])
