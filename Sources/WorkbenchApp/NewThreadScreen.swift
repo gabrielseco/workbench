@@ -67,8 +67,11 @@ struct NewThreadCaption: View {
             row("Discuss first", "Talk it through with the agent; the goal comes after. Free.")
             row("Draft the goal", "The agent writes the goal from your words, with criteria. You approve it.")
             GridRow {
-                Button("Use my text as the goal", action: useText).buttonStyle(.link).font(.caption.weight(.semibold))
-                    .disabled(!canUseText)
+                // Blue with an arrow, and only faded while the box is empty, so it reads as a link in every state.
+                Button(action: useText) { Text("Use my text as the goal \(Image(systemName: "arrow.right"))") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.blue).opacity(canUseText ? 1 : 0.5)
+                    .font(.caption.weight(.semibold)).disabled(!canUseText)
+                    .accessibilityLabel("Use my text as the goal")
                     .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
                 Text("Your words become the goal as typed. No agent, no criteria. Free.")
             }
