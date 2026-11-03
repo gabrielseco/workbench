@@ -84,7 +84,10 @@ extension ProjectStore {
             let cost = result.costUSD.map { String(format: " ($%.4f spent)", $0) } ?? ""
             home.actionError = "No reply\(cost): \(result.failure ?? result.end)."
         }
-        if case .newThread = target { (currentThread, lastWatch) = (nil, nil) }
+        if case .newThread = target {
+            (currentThread, lastWatch) = (nil, nil)
+            showCreatedThread()
+        }
         await reload()
         return true
     }

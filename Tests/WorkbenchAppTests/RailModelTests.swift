@@ -114,6 +114,34 @@ import WorkbenchCore
         #expect(store.mode == .thread)
     }
 
+    @Test func makingAThreadWhileATaskIsShownShowsTheNewThreadWithThePreviewOnAndLeavesTheOldWindowAlone() async throws {
+        for preview in [true, false] {
+            let fixture = try await AppFixture()
+            keptRailFixtures.append(fixture)
+            try await fixture.addThread("t1")
+            let preferences = MemoryPreferences(projectPath: nil)
+            preferences.chatFeed = preview
+            let actions = GoalActions(quickGoal: { _, name, _, _ in name })
+            let store = ProjectStore(preferences: preferences, actions: actions)
+            #expect(await store.open(fixture.root))
+            store.selectTask("nightly-lint")
+            #expect(store.mode == .tasks)
+            #expect(await store.quickGoal(request: "Fix it"))
+            #expect(store.mode == (preview ? .thread : .tasks), "preview \(preview)")
+        }
+    }
+
+    @Test func theEmptyTasksPageCanBeOpenedFromTheRail() async throws {
+        let fixture = try await AppFixture()
+        keptRailFixtures.append(fixture)
+        try await fixture.addThread("t1")
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil))
+        #expect(await store.open(fixture.root))
+        #expect(store.mode == .thread)
+        store.showTasks()
+        #expect(store.mode == .tasks)
+    }
+
     // MARK: Width
 
     @Test func theRailIsTheDesignsWidthAndTheInspectorStillGoesOverTheFeedWhenTheCentreIsNarrow() {

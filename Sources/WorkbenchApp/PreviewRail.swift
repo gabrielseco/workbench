@@ -29,6 +29,12 @@ struct PreviewRail: View {
                 header(model.scheduledHeader).padding(.top, 10)
                 if let note = model.scheduledNote {
                     Text(note).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+                    if model.tasksRead {
+                        // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
+                        Button("Open the Tasks page") { store.showTasks() }
+                            .buttonStyle(.link).font(.caption).padding(.horizontal, 8)
+                            .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
+                    }
                 }
                 let shownTask = shownTaskName
                 ForEach(model.tasks) { row in

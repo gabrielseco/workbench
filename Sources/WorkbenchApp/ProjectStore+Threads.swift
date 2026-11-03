@@ -13,6 +13,14 @@ extension ProjectStore {
         await reload()
     }
 
+    /// A thread was just made (a quick goal, a draft, a chat): with the preview on it is what the rail shows next, even when a task was on
+    /// screen. Without the preview the window is as it always was.
+    func showCreatedThread() { if chatFeedOn { mode = .thread } }
+
+    /// Shows the Tasks page itself (the empty one, which says where tasks are made): the rail has no switch to reach it by, and a project with no
+    /// task has no row to choose.
+    func showTasks() { mode = .tasks }
+
     /// Shows a scheduled task in the main area (the rail's Scheduled section): the thread stays loaded behind it.
     func selectTask(_ name: String) {
         tasks.selection = name
