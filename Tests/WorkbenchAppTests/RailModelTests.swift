@@ -102,6 +102,15 @@ import WorkbenchCore
         #expect(model.threads.map(\.key) == ["bump-contract-details", "update-docs"] && model.taskThreads.isEmpty)
     }
 
+    @Test func theGroupHoldingAThreadIsFoundSoTheRailCanOpenIt() async throws {
+        let shown = ThreadListing(rows: [thread("mine", .idle), thread("t-done", .done)])
+        let before = RailModel.derive(listing: shown, tasks: nil)
+        #expect(before.group(holding: "t-done") == nil, "not read yet: the thread is in Threads")
+        let after = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["t-done"]))
+        #expect(after.group(holding: "t-done") == "bump-contract-details")
+        #expect(after.group(holding: "mine") == nil && after.group(holding: nil) == nil)
+    }
+
     @Test func nothingIsHiddenWhileTheTasksAreNotRead() {
         let shown = ThreadListing(rows: [thread("a", .done), thread("b", .idle)])
         let model = RailModel.derive(listing: shown, tasks: nil)

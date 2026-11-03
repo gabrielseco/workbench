@@ -93,6 +93,12 @@ struct RailModel: Equatable {
         return (own, grouped)
     }
 
+    /// The task whose group holds this thread, if one does: what the rail opens so a chosen thread is never hidden in a closed group.
+    func group(holding thread: String?) -> String? {
+        guard let thread else { return nil }
+        return taskThreads.first { $0.value.contains { $0.key == thread } }?.key
+    }
+
     var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }
 
     /// What the Scheduled section says when it has no rows.
