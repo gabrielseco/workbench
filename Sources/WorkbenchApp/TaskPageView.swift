@@ -127,7 +127,7 @@ struct RunTonightCard: View {
                         }
                         Spacer(minLength: 8)
                         if let action = Self.action(for: warning) {
-                            Button(action.title) { perform(action) }.buttonStyle(.bordered).controlSize(.small)
+                            Button(action.title) { perform(action) }.plainButton().controlSize(.small)
                         }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
@@ -189,7 +189,7 @@ struct TaskRunRow: View {
             }
             Spacer(minLength: 8)
             if let action, !(action.isThread && !threadKnown) {
-                Button(action.title) { perform(action) }.buttonStyle(.bordered).controlSize(.small)
+                Button(action.title) { perform(action) }.plainButton().controlSize(.small)
             }
         }
         .padding(.vertical, 8)

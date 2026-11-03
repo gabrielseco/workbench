@@ -204,7 +204,7 @@ struct NewThreadScreen: View {
                     .buttonStyle(.borderless)
                 } else {
                     Button { Task { await doItNow() } } label: { Self.labelled("Do it now", "⌘↵") }
-                        .keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
+                        .plainButton().keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
                         .help("Skips the conversation: the goal agent drafts a goal from your words for you to approve")
                     Button { Task { await send() } } label: { Self.labelled("Send", "↵") }
                         .primaryButton().disabled(!state.canSend).help(state.sendHelp)

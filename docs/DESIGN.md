@@ -140,9 +140,9 @@ ships, and the mockup gets fixed.
   themselves after a passing turn ("Run the judge and review stages by themselves", a line saying what a run will do, "Runs: judge,
   design" or "Off", and whether that is the goal's own setting or the project's; disabled, with the project's `[review] auto` named, when
   that list decides), the limits (model, budget, timeout: read-only, "Change these
-  in the goal file"), the allowed tools (ten, then "and N more", granted ones marked), the reference folders (the config's, and the
+  in the goal file"), the allowed tools (chips: ten, then `+N more`, granted ones marked), the reference folders (the config's, and the
   goal's, added and removed here) and Open (editor, Herdr, Run in Herdr instead). Everything is read-only unless the goal is a draft that no turn has run, and
-  while an approval, a run or another action is going; it says why when the reason lasts ("A goal that has run is not edited."). In a window whose centre column is narrower than 880 (a window under about 1100 wide, the 900 minimum included) it opens
+  while an approval, a run or another action is going; it says why when the reason lasts ("A goal that has run is not edited."). In a window whose centre column is narrower than 900 (a window under about 1100 wide, the 900 minimum included) it opens
   over the feed as a sheet, so the feed keeps its width. It writes the goal's edits and runs the actions the Goal screen does.
 - **Notices** (activity folded, a damaged log, a cut last line, a changed goal, earlier rows not shown) say what the feed left out and
   send the person to the event log; a damaged log is red and first.

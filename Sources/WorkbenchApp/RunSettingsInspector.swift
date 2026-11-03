@@ -302,6 +302,6 @@ struct RunSettingsSheet: View {
             Divider()
             RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
         }
-        .frame(width: 420, height: 560)
+        .frame(width: 420, height: 560).background(Theme.rail)
     }
 }
