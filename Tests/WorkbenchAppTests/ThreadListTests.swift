@@ -104,7 +104,6 @@ import WorkbenchCore
 
     private func open(_ fixture: AppFixture) async throws -> ProjectStore {
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(preferences: preferences)
         #expect(await store.open(fixture.root))
         return store
@@ -170,14 +169,6 @@ import WorkbenchCore
         #expect(store.threads.listing.rows.map(\.id) == ["b", "a"])
     }
 
-    @Test func withThePreviewOffNothingIsListed() async throws {
-        let fixture = try await fixture()
-        try await fixture.addThread("a")
-        let store = ProjectStore(preferences: MemoryPreferences())
-        #expect(await store.open(fixture.root))
-        #expect(store.threads.listing.rows.isEmpty)
-    }
-
     @Test func theArrowKeysStepToTheNeighbourAndStopAtTheEnds() {
         let ids = ["a", "b", "c"]
         #expect(ThreadListView.neighbour(of: "b", in: ids, up: true) == "a")
@@ -185,19 +176,6 @@ import WorkbenchCore
         #expect(ThreadListView.neighbour(of: "a", in: ids, up: true) == nil)
         #expect(ThreadListView.neighbour(of: "c", in: ids, up: false) == nil)
         #expect(ThreadListView.neighbour(of: nil, in: ids, up: false) == nil)
-    }
-
-    @Test func aPreviewRoundTripListsAnUnchangedProjectAgain() async throws {
-        let fixture = try await fixture()
-        try await fixture.addThread("a")
-        let store = try await open(fixture)
-        #expect(store.threads.listing.rows.count == 1)
-        await store.setChatFeed(false)
-        await store.refreshThreadList()
-        #expect(store.threads.listing.rows.isEmpty)
-        await store.setChatFeed(true)
-        await store.refreshThreadList()
-        #expect(store.threads.listing.rows.count == 1, "nothing changed on disk, and the list is back")
     }
 
     @Test func whatWasReadForOneProjectIsNotUsedForAnother() async throws {
@@ -218,7 +196,6 @@ import WorkbenchCore
         try await fixture.addThread("b", title: "B")
         try await fixture.addThread("a", title: "A")
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(
             preferences: preferences,
             actions: GoalActions(approve: { _, _ in
@@ -234,19 +211,6 @@ import WorkbenchCore
         let key = ThreadSession.Key(project: fixture.project, thread: "a")
         #expect(store.sessions[key]?.actionError == "refused")
         #expect(store.actionError == nil, "the thread on screen is not told about another's approval")
-    }
-
-    @Test func turningThePreviewOffDropsThePickSoTheWindowFollowsTheActiveThreadAgain() async throws {
-        let fixture = try await fixture()
-        try await fixture.addThread("old", approved: true, title: "Old")
-        try fixture.turn("old", 1)
-        try fixture.decide("old", "accepted")
-        try await fixture.addThread("live", title: "Live")
-        let store = try await open(fixture)
-        await store.select(thread: "old")
-        #expect(store.currentThread == "old")
-        await store.setChatFeed(false)
-        #expect(store.currentThread == "live" && store.selectedThread == nil)
     }
 
     @Test func anApprovedGoalTooLongToParseWholeIsStillApprovedInItsRow() async throws {
@@ -270,7 +234,6 @@ import WorkbenchCore
         try await fixture.addThread("b", title: "B")
         try await fixture.addThread("a", approved: false, title: "A")
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(
             preferences: preferences,
             actions: GoalActions(

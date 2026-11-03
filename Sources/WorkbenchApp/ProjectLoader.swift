@@ -49,7 +49,7 @@ enum ProjectLoader {
     /// write would be missed for good.
     /// `afterRead` runs right after the log was read: a test writes to the log there, as a runner would in that instant.
     static func load(
-        project: Project, feed: Bool = false, selected: String? = nil, afterRead: @Sendable () -> Void = {}
+        project: Project, selected: String? = nil, afterRead: @Sendable () -> Void = {}
     ) -> Loaded {
         let folders = watch(project: project, thread: nil)
         var isDirectory: ObjCBool = false
@@ -62,12 +62,12 @@ enum ProjectLoader {
         }
         var seen = watch(project: project, thread: id)
         seen.threadsDirectory = folders.threadsDirectory
-        let screen = snapshot(project: project, store: store, id: id, feed: feed)
+        let screen = snapshot(project: project, store: store, id: id)
         afterRead()
         return Loaded(screen: screen, thread: id, watch: seen)
     }
 
-    static func snapshot(project: Project, store: ThreadStore, id: String, feed: Bool = false) -> ProjectScreen {
+    static func snapshot(project: Project, store: ThreadStore, id: String) -> ProjectScreen {
         let log = project.eventsURL(id)
         let contents: EventLogContents
         do { contents = try EventLogReader.read(at: log) } catch {
@@ -95,12 +95,8 @@ enum ProjectLoader {
         let alive = store.runnerPID(id: id) != nil
         let run = RunModel.derive(
             events: contents.events, state: state, runnerAlive: alive, budgetUSD: budget, turnTimeoutMin: timeout)
-        var items: [FeedItem] = []
-        if feed {
-            let summary = goalSummary(text)
-            items = Feed.items(
-                contents: contents, goal: summary, state: state, spine: spine, attention: attention, runnerAlive: alive)
-        }
+        let items = Feed.items(
+            contents: contents, goal: goalSummary(text), state: state, spine: spine, attention: attention, runnerAlive: alive)
         return .thread(
             ThreadSnapshot(
                 id: id, title: title, base: base, approval: approval, budgetUSD: budget, turnTimeoutMin: timeout,

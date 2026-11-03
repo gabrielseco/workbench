@@ -51,26 +51,9 @@ struct TasksView: View {
             if let snapshot {
                 if snapshot.entries.isEmpty {
                     NoTasks(timer: snapshot.timer)
-                } else if store.chatFeedOn {
+                } else if let entry = store.tasks.selected(in: snapshot) {
                     // The rail lists the tasks; the main area is the selected task's page (design parity 5).
-                    if let entry = store.tasks.selected(in: snapshot) {
-                        TaskPageView(store: store, snapshot: snapshot, entry: entry)
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 0) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 12) {
-                                TimerCardView(card: snapshot.timer)
-                                TaskList(store: store, snapshot: snapshot)
-                            }
-                            .padding(14)
-                        }
-                        .frame(width: 300)
-                        Divider()
-                        if let entry = store.tasks.selected(in: snapshot) {
-                            Timeline(store: store, entry: entry, now: snapshot.readAt)
-                        }
-                    }
+                    TaskPageView(store: store, snapshot: snapshot, entry: entry)
                 }
             } else {
                 VStack(spacing: 8) {

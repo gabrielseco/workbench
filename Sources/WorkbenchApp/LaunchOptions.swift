@@ -9,9 +9,6 @@ struct LaunchOptions: Equatable {
     /// `WORKBENCH_SKIP_LOGIN_PATH` set: keep the `PATH` the app was given instead of asking the login shell. Only for a test that
     /// must not read a profile; a fixture launch does ask, so verification sees what a person's launch sees.
     var skipsLoginPath = false
-    /// `WORKBENCH_CHAT_FEED` set: this launch shows the chat feed (P22 preview) without touching the preference, so a check can show
-    /// either window on the same fixture.
-    var chatFeed = false
     /// `WORKBENCH_APPEARANCE` set to `light` or `dark`: this launch draws in that appearance whatever the system is set to, so a check can
     /// show both. Nothing outside the process changes and no preference is written; unset or anything else is the system's.
     var appearance: Appearance?
@@ -32,22 +29,19 @@ struct LaunchOptions: Equatable {
 
     static func from(environment: [String: String]) -> LaunchOptions {
         let skips = environment["WORKBENCH_SKIP_LOGIN_PATH"].map { !$0.isEmpty } ?? false
-        let feed = environment["WORKBENCH_CHAT_FEED"].map { !$0.isEmpty } ?? false
         let appearance = Appearance(environment["WORKBENCH_APPEARANCE"])
         guard let path = environment["WORKBENCH_APP_PROJECT"], !path.isEmpty else {
-            return LaunchOptions(project: nil, skipsLoginPath: skips, chatFeed: feed, appearance: appearance)
+            return LaunchOptions(project: nil, skipsLoginPath: skips, appearance: appearance)
         }
         return LaunchOptions(
-            project: URL(fileURLWithPath: path), skipsLoginPath: skips, chatFeed: feed, appearance: appearance)
+            project: URL(fileURLWithPath: path), skipsLoginPath: skips, appearance: appearance)
     }
 
     /// The store for these options: the real preferences normally, a throwaway set when a project was named.
     @MainActor func makeStore(preferences: Preferences, notifier: Notifier = NullNotifier()) -> ProjectStore {
         // A fixture launch (a project named) posts nothing and asks for no permission.
         if project == nil { return ProjectStore(preferences: preferences, notifier: notifier) }
-        let throwaway = MemoryPreferences()
-        throwaway.chatFeed = chatFeed
-        return ProjectStore(preferences: throwaway)
+        return ProjectStore(preferences: MemoryPreferences())
     }
 
     /// What the window does when it appears: open the named project, else restore the remembered one. The `PATH` comes first, so

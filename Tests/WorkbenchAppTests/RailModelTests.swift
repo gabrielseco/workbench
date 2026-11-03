@@ -7,7 +7,7 @@ import WorkbenchCore
 
 @MainActor private var keptRailFixtures: [AppFixture] = []
 
-/// The rail with the preview on (design parity 4): what it lists, how a row says its state, and what choosing a row does.
+/// The rail (design parity 4): what it lists, how a row says its state, and what choosing a row does.
 @MainActor @Suite struct RailModelTests {
     private func tasksSnapshot(_ scenario: AppScenario = .tasks) async throws -> TasksSnapshot {
         let fixture = try await AppFixture(git: false)
@@ -178,27 +178,23 @@ import WorkbenchCore
         #expect(store.mode == .thread)
     }
 
-    @Test func makingAThreadWhileATaskIsShownShowsTheNewThreadWithThePreviewOnAndLeavesTheOldWindowAlone() async throws {
-        for preview in [true, false] {
-            let fixture = try await AppFixture()
-            keptRailFixtures.append(fixture)
-            try await fixture.addThread("t1")
-            let preferences = MemoryPreferences(projectPath: nil)
-            preferences.chatFeed = preview
-            let actions = GoalActions(
-                draftGoal: { _, name, _, _, _ in GoalDraftResult(id: "g-\(name)", provider: .claude) },
-                quickGoal: { _, name, _, _ in name })
-            let store = ProjectStore(preferences: preferences, actions: actions)
-            #expect(await store.open(fixture.root))
-            store.selectTask("nightly-lint")
-            #expect(store.mode == .tasks)
-            #expect(await store.quickGoal(request: "Fix it"))
-            #expect(store.mode == (preview ? .thread : .tasks), "preview \(preview)")
-            // The same with a drafted goal (Do it now, the popover's Advanced).
-            store.selectTask("nightly-lint")
-            #expect(await store.draftGoal(request: "Fix it again"))
-            #expect(store.mode == (preview ? .thread : .tasks), "a drafted goal, preview \(preview)")
-        }
+    @Test func makingAThreadWhileATaskIsShownShowsTheNewThread() async throws {
+        let fixture = try await AppFixture()
+        keptRailFixtures.append(fixture)
+        try await fixture.addThread("t1")
+        let actions = GoalActions(
+            draftGoal: { _, name, _, _, _ in GoalDraftResult(id: "g-\(name)", provider: .claude) },
+            quickGoal: { _, name, _, _ in name })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+        store.selectTask("nightly-lint")
+        #expect(store.mode == .tasks)
+        #expect(await store.quickGoal(request: "Fix it"))
+        #expect(store.mode == .thread)
+        // The same with a drafted goal (Do it now, the new-thread screen's Advanced).
+        store.selectTask("nightly-lint")
+        #expect(await store.draftGoal(request: "Fix it again"))
+        #expect(store.mode == .thread, "a drafted goal")
     }
 
     @Test func theEmptyTasksPageCanBeOpenedFromTheRail() async throws {

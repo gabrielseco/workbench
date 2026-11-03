@@ -110,7 +110,6 @@ import Testing
         let seen = Seen()
         let actions = GoalActions(editGoal: { _, _, edit in seen.lock.withLock { seen.edits.append(edit) } })
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(preferences: preferences, actions: actions)
         #expect(await store.open(fixture.root))
         await store.toggleAdvice()

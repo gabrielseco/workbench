@@ -13,7 +13,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptChatScreenFixtures.append(fixture)
         try await scenario.build(in: fixture)
-        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else {
             throw Failure.notAThread
         }
         return shown
@@ -84,9 +84,8 @@ import WorkbenchCore
 
     // MARK: The way in
 
-    @Test func theCardOffersChatOnlyWithThePreviewOn() {
-        #expect(NewGoalForm.Mode.offered(chatFeed: false) == [.quick, .advanced])
-        #expect(NewGoalForm.Mode.offered(chatFeed: true) == [.quick, .advanced, .chat])
+    @Test func theCardOffersChat() {
+        #expect(NewGoalForm.Mode.offered == [.quick, .advanced, .chat])
         var form = NewGoalForm()
         form.mode = .chat
         #expect(form.action == "Send" && form.busyText == "Waiting for the reply…")
@@ -126,7 +125,6 @@ import WorkbenchCore
 
     private func window(_ snapshot: ThreadSnapshot, store base: ProjectStore) throws -> CGImage {
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: base.project)
         let view = RootView(store: store).frame(width: 1100, height: 700)
             .background(Color(nsColor: .windowBackgroundColor)).environment(\.feedDrawsEagerly, true)

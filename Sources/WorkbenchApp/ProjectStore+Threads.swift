@@ -14,13 +14,10 @@ extension ProjectStore {
         await reload()
     }
 
-    /// A thread was just made (a quick goal, a draft, a chat): with the preview on it is what the rail shows next, even when a task was on
-    /// screen. Without the preview the window is as it always was.
+    /// A thread was just made (a quick goal, a draft, a chat): it is what the rail shows next, even when a task was on screen.
     func showCreatedThread() {
-        if chatFeedOn {
-            mode = .thread
-            newThread = false
-        }
+        mode = .thread
+        newThread = false
     }
 
     /// Shows the Tasks page itself (the empty one, which says where tasks are made): the rail has no switch to reach it by, and a project with no
@@ -37,9 +34,9 @@ extension ProjectStore {
         newThread = false
     }
 
-    /// Reads the list again, off the main actor, when the chat feed preview is on and something in it moved (or `force`).
+    /// Reads the list again, off the main actor, when something in it moved (or `force`).
     func refreshThreadList(force: Bool = false) async {
-        guard chatFeedOn, let project else {
+        guard let project else {
             (threads.listing, threads.signature) = (ThreadListing(), nil)
             return
         }

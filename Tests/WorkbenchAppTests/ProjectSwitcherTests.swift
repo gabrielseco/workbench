@@ -32,12 +32,12 @@ import Testing
         let (a, b) = (try await project("a"), try await project("b"))
         let store = store()
         await store.open(a.root)
-        store.namingGoal = true
+        store.newThread = true
         await store.open(b.root)
-        #expect(!store.namingGoal, "the request typed in one project is never drafted into another")
-        store.namingGoal = true
+        #expect(!store.newThread, "the request typed in one project is never drafted into another")
+        store.newThread = true
         await store.open(URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)"))
-        #expect(!store.namingGoal, "also when the project does not open")
+        #expect(!store.newThread, "also when the project does not open")
     }
 
     @Test func theListKeepsTheNewestTenAndSurvivesARelaunch() async throws {
@@ -111,7 +111,7 @@ import Testing
         let target = b.project.root.path
         let store = ProjectStore(
             preferences: MemoryPreferences(), intervals: (.milliseconds(20), .milliseconds(20)),
-            loader: { project, _, _ in
+            loader: { project, _ in
                 if project.root.path == target { release.wait() }
                 return ProjectLoader.load(project: project)
             })

@@ -3,14 +3,11 @@ import WorkbenchCore
 
 /// The new-thread screen's side of the store (design parity 6): how it opens and closes, and what its three buttons do.
 extension ProjectStore {
-    /// Every "new goal" button: the screen with the preview on, the popover as it always was without it.
-    func beginNewGoal() {
-        guard project != nil else { return }
-        if chatFeedOn { openNewThread() } else { namingGoal = true }
-    }
+    /// Every "new goal" button opens the new-thread screen.
+    func beginNewGoal() { openNewThread() }
 
     func openNewThread() {
-        guard project != nil, chatFeedOn else { return }
+        guard project != nil else { return }
         actionError = nil
         goalAgentOff = false
         newThread = true

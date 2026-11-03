@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkbenchCore
 
-/// The rail with the chat feed preview on (design parity 4): one list, *Threads* with a `+`, then *Scheduled* with the project's tasks.
+/// The rail (design parity 4): one list, *Threads* with a `+`, then *Scheduled* with the project's tasks.
 /// There is no Thread/Tasks switch: choosing a row shows that thread or that task.
 struct PreviewRail: View {
     var store: ProjectStore
@@ -20,7 +20,7 @@ struct PreviewRail: View {
                         Image(systemName: "plus").font(.callout.weight(.semibold)).frame(width: 24, height: 24)
                             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
                     }
-                    .buttonStyle(.plain).disabled(store.project == nil || store.namingGoal)
+                    .buttonStyle(.plain).disabled(store.project == nil)
                     .accessibilityLabel("New goal").help("New goal…")
                 }
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }

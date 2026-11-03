@@ -8,7 +8,7 @@ would confirm the tables below). Prompted by #388: after a run, Run settings off
 
 Two UIs draw actions, and they overlap:
 
-- **The feed** (`chatFeedOn`): one decision card per thread. `FeedActions.derive` (`FeedAction.swift`) is the single place that
+- **The feed** (the only window now): one decision card per thread. `FeedActions.derive` (`FeedAction.swift`) is the single place that
   picks the next press (`primary`, at most one) and the rest (`more`, the "…" menu). This is already the right model.
 - **The step screens** (the older UI): each hand-draws its own row. `ReviewView.actions` (Discard, Open worktree, Open in Herdr,
   Open diff, Refresh, Send back, Accept), `RunView` (Open worktree, Open in Herdr, Run again), `GoalView` (Open in editor,

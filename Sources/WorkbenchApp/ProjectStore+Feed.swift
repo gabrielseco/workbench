@@ -1,18 +1,5 @@
 import Foundation
 
-/// The chat feed preview (P22): one switch, kept as an app preference, that swaps the thread screen for the feed.
-extension ProjectStore {
-    /// Turns the preview on or off, remembers it, and reads the thread again so the feed's items are there (or gone) at once.
-    func setChatFeed(_ on: Bool) async {
-        guard on != chatFeedOn else { return }
-        preferences.chatFeed = on
-        chatFeedOn = on
-        // The pick is made in the list, which only the preview has: without it the window follows the active thread again.
-        if !on { selectedThread = nil }
-        await reload()
-    }
-}
-
 extension ProjectStore {
     /// What is on screen: on, and either a person has chosen or there is room beside the feed (a narrow window shows the default nowhere).
     var runSettingsShowing: Bool { runSettingsOn && (runSettingsChosen || runSettingsFits) }

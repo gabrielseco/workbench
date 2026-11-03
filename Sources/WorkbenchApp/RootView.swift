@@ -10,24 +10,19 @@ struct RootView: View {
             ToolbarBar(store: store)
             Divider()
             HStack(spacing: 0) {
-                Rail(store: store).frame(width: store.chatFeedOn ? PreviewRail.width : 220).background(Theme.rail)
+                Rail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
                 Divider()
-                // The design's content colour while the preview is on; without it the window draws its own, as before.
-                Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background { if store.chatFeedOn { Theme.canvas } }
+                Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity).background { Theme.canvas }
             }
             Divider()
             FooterBar(store: store)
         }
-        // The palette is read when a colour is drawn, so a window already on screen is rebuilt when the preview is switched.
-        .id(store.chatFeedOn)
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
         .disabled(
-            store.namingGoal || store.sendingBack || store.pickingProject || store.tasks.approving != nil
+            store.sendingBack || store.pickingProject || store.tasks.approving != nil
                 || store.tasks.confirmingRun != nil)
         .frame(minWidth: 900, minHeight: 600)
         .overlay(alignment: .topLeading) { ProjectPickerLayer(store: store) }
-        .overlay { OverlayLayer(shown: store.namingGoal) { NewGoalPopover(store: store) } }
         .overlay { OverlayLayer(shown: store.sendingBack) { SendBackPopover(store: store) } }
         .overlay {
             OverlayLayer(shown: store.tasks.approving != nil) {
@@ -58,7 +53,7 @@ struct ToolbarBar: View {
         HStack(spacing: 12) {
             ProjectPill(store: store)
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
-            if store.chatFeedOn, store.newThread {
+            if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
                 Spacer()
                 Text("$0.00").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
@@ -68,7 +63,7 @@ struct ToolbarBar: View {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
                 Text(snapshot.spendText).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                StatePill(snapshot: snapshot, short: store.chatFeedOn)
+                StatePill(snapshot: snapshot)
             } else {
                 Spacer()
             }
@@ -104,11 +99,9 @@ struct ProjectPill: View {
 
 struct StatePill: View {
     var snapshot: ThreadSnapshot
-    /// Only the head of the state (`Needs you`): the reason is in the thread's row and the decision card.
-    var short = false
 
-    /// What the pill says: the whole state, or in the feed preview only its head.
-    static func text(_ snapshot: ThreadSnapshot, short: Bool) -> String { short ? snapshot.stateHead : snapshot.stateText }
+    /// What the pill says: only the head of the state (`Needs you`); the reason is in the thread's row and the decision card.
+    static func text(_ snapshot: ThreadSnapshot) -> String { snapshot.stateHead }
 
     var body: some View {
         let tint: Color = {
@@ -116,7 +109,7 @@ struct StatePill: View {
             if snapshot.attention == .working { return Theme.blue }
             return Theme.grey
         }()
-        Text(Self.text(snapshot, short: short))
+        Text(Self.text(snapshot))
             .font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
             .foregroundStyle(tint).background(tint.opacity(0.12), in: Capsule())
     }
@@ -125,39 +118,7 @@ struct StatePill: View {
 struct Rail: View {
     var store: ProjectStore
 
-    var body: some View {
-        if store.chatFeedOn { PreviewRail(store: store) } else { oldRail }
-    }
-
-    private var oldRail: some View {
-        VStack(alignment: .leading) {
-            Picker("View", selection: Binding(get: { store.mode }, set: { store.mode = $0 })) {
-                ForEach(WindowMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(.bottom, 8)
-            .disabled(store.project == nil)
-            if store.mode == .tasks {
-                TasksRailSummary(store: store)
-            } else if store.chatFeedOn, store.project != nil, !store.threads.listing.rows.isEmpty {
-                // The spine is the feed's phase row now; the rail lists the project's threads (P22 slice 5).
-                Text("THREADS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                ThreadListView(
-                    store: store, rows: store.threads.listing.rows.map(RailRow.thread), older: store.threads.listing.older)
-            } else if case .thread(let snapshot) = store.screen, store.chatFeedOn {
-                Text("THREAD").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(snapshot.title ?? snapshot.id).font(.headline).lineLimit(3)
-            } else if case .thread(let snapshot) = store.screen {
-                SpineRail(snapshot: snapshot)
-            } else {
-                Text("THREAD").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text("None").font(.headline)
-            }
-            Spacer()
-            // With the preview on, Doctor is in the footer, as the design has it.
-            if !store.chatFeedOn { DoctorButton(store: store) }
-        }
-        .padding(16)
-    }
+    var body: some View { PreviewRail(store: store) }
 }
 
 struct DoctorButton: View {
@@ -198,16 +159,12 @@ struct Centre: View {
     var store: ProjectStore
 
     var body: some View {
-        if store.chatFeedOn, store.newThread, store.project != nil {
+        if store.newThread, store.project != nil {
             NewThreadScreen(store: store)
         } else if store.mode == .tasks, store.project != nil {
             TasksView(store: store)
         } else if case .thread(let snapshot) = store.screen {
-            if store.chatFeedOn {
-                FeedScreen(snapshot: snapshot, store: store)
-            } else {
-                ThreadPane(snapshot: snapshot, goal: store.goal, store: store)
-            }
+            FeedScreen(snapshot: snapshot, store: store)
         } else if let message = store.screen.message {
             EmptyState(title: message.title, next: message.next, store: store)
         }
@@ -441,7 +398,7 @@ struct FooterBar: View {
 
     var body: some View {
         HStack {
-            if let url = store.logURL, !(store.chatFeedOn && store.newThread) {
+            if let url = store.logURL, !store.newThread {
                 Button {
                     // A .jsonl may have no app to open it: show it in Finder rather than do nothing.
                     if !NSWorkspace.shared.open(url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -453,14 +410,10 @@ struct FooterBar: View {
             } else {
                 Text("Nothing is running.").foregroundStyle(.secondary)
             }
-            if store.chatFeedOn {
-                DoctorButton(store: store, compact: true).font(.callout)
-                Spacer()
-                if let limit = FooterBar.limitText(store.screen, mode: store.mode, composing: store.newThread) {
-                    Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
-                }
-            } else {
-                Spacer()
+            DoctorButton(store: store, compact: true).font(.callout)
+            Spacer()
+            if let limit = FooterBar.limitText(store.screen, mode: store.mode, composing: store.newThread) {
+                Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)

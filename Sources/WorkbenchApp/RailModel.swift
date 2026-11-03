@@ -48,7 +48,7 @@ struct RailRow: Equatable, Identifiable {
     }
 }
 
-/// What the rail lists with the chat feed preview on: the project's threads, then its scheduled tasks. Pure, so the sections are tested
+/// What the rail lists: the project's threads, then its scheduled tasks. Pure, so the sections are tested
 /// without a window.
 struct RailModel: Equatable {
     /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.

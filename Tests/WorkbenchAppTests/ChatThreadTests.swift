@@ -68,7 +68,7 @@ import WorkbenchCore
         let decision = FeedActions.derive(FeedActionContext(snapshot: shown))
         #expect(decision.primary == nil && decision.more.isEmpty, "a chat has nothing to approve or run")
         #expect(decision.title == "Chat")
-        let withFeed = ProjectStore(preferences: { let p = MemoryPreferences(); p.chatFeed = true; return p }())
+        let withFeed = ProjectStore(preferences: MemoryPreferences())
         #expect(await withFeed.open(fixture.root))
         if case .thread = withFeed.screen {} else { Issue.record("the feed does not show a chat thread: \(withFeed.screen)") }
     }

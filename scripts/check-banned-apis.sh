@@ -50,8 +50,7 @@ if [ -n "$hits" ]; then
     echo "       a hand-placed overlay was off three times). See AGENTS.md, Conventions." >&2
     status=1
 fi
-# The app's primary button is `.primaryButton()` (ButtonStyles.swift): the artboards' inverse pill with the preview on, the system's without
-# it. A bare `.borderedProminent` is the system accent again, which collides with the five state colours.
+# The app's primary button is `.primaryButton()` (ButtonStyles.swift): the artboards' inverse pill. A bare `.borderedProminent` is the system accent again, which collides with the five state colours.
 hits=$(grep -rnF --include='*.swift' '.borderedProminent' Sources/WorkbenchApp 2>/dev/null \
     | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/ButtonStyles.swift:' || true)
 if [ -n "$hits" ]; then

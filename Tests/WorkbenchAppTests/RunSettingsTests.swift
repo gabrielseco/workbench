@@ -23,7 +23,6 @@ import Testing
         if turn { try fixture.turn("t1", 1) }
         let actions = GoalActions(editGoal: { _, _, edit in edits.add(edit) })
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let store = ProjectStore(preferences: preferences, actions: actions)
         #expect(await store.open(fixture.root))
         return (store, edits)
@@ -274,10 +273,8 @@ import Testing
         var feed = shown
         feed.feed = [FeedItem(id: "n", seq: 1, turn: 0, kind: .next(step: .goal, why: "Writing"))]
         let on = MemoryPreferences()
-        on.chatFeed = true
         on.runSettings = true
         let off = MemoryPreferences()
-        off.chatFeed = true
         off.runSettings = false
         let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
         let showing = ProjectStore(preferences: on, screen: .thread(feed), project: project)
