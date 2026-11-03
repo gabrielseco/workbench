@@ -56,6 +56,8 @@ struct ChatRows: View {
             Text("Say what you are thinking about. Nothing runs and nothing is written to the repository.")
                 .font(.callout).foregroundStyle(.secondary)
         }
+        // What the log says about itself (a damaged line, a cut tail) is part of the conversation too.
+        ForEach(snapshot.feed.filter(\.isNotice)) { FeedRow(item: $0) }
         ForEach(messages, id: \.seq) { ChatMessageRow(message: $0) }
         if ChatComposerState(snapshot: snapshot, replying: store.replyingHere, drafting: store.drafting, text: "").replying {
             ReplyingRow(store: store)
@@ -176,4 +178,11 @@ struct ChatComposer: View {
     }
 
     private func send() { Task { await store.sendChat() } }
+}
+
+extension FeedItem {
+    var isNotice: Bool {
+        if case .notice = kind { return true }
+        return false
+    }
 }

@@ -152,5 +152,45 @@ import WorkbenchCore
         }
     }
 
+    private func drawn(_ view: some View, height: CGFloat = 400) throws -> Data? {
+        let framed = view.frame(width: 700, height: height).background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: framed)
+        renderer.scale = 1
+        return try #require(renderer.cgImage).dataProvider?.data as Data?
+    }
+
+    /// Each part on its own, so a part that goes missing is not hidden by another one that is still there.
+    @Test func eachPartOfTheChatIsDrawnOnItsOwn() async throws {
+        let chat = try await snapshot(.chat)
+        let fixture = try await AppFixture()
+        keptChatScreenFixtures.append(fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(), project: fixture.project)
+        var other = chat
+        let count = other.state.chat?.messages.count ?? 0
+        for index in 0..<count { other.state.chat?.messages[index].text = "Different words entirely." }
+        let wording = try (drawn(ChatRows(snapshot: chat, store: store)), drawn(ChatRows(snapshot: other, store: store)))
+        #expect(wording.0 != wording.1, "the messages")
+        var unanswered = chat
+        let asked = unanswered.state.chat?.messages.filter { $0.role == .user } ?? []
+        unanswered.state.chat?.messages = asked
+        let whole = try drawn(ChatComposer(snapshot: chat, store: store), height: 200)
+        #expect(whole != (try drawn(ChatComposer(snapshot: unanswered, store: store), height: 200)), "the buttons")
+        var ended = chat
+        ended.state.decision = "abandoned"
+        #expect(whole != (try drawn(ChatComposer(snapshot: ended, store: store), height: 200)), "the composer")
+    }
+
+    @Test func aDamagedLogIsSaidOnTheChatScreen() async throws {
+        let chat = try await snapshot(.chat)
+        let fixture = try await AppFixture()
+        keptChatScreenFixtures.append(fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(), project: fixture.project)
+        var damaged = chat
+        damaged.feed = [FeedItem(id: "damage", seq: 0, turn: 0, kind: .notice(.logTailCut))]
+        #expect(damaged.feed.allSatisfy { $0.isNotice })
+        let (said, plain) = try (drawn(ChatRows(snapshot: damaged, store: store)), drawn(ChatRows(snapshot: chat, store: store)))
+        #expect(said != plain)
+    }
+
     private enum Failure: Error { case notAThread }
 }
