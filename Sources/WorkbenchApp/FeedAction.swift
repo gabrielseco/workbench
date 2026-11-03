@@ -53,7 +53,7 @@ enum FeedActions {
         guard s.state.decision == nil else { return decided(c) }
         // A chat has no goal to approve and nothing to run: until the chat screen (P22 slice 6c) it only says what it is.
         if s.state.isChat, s.approval == nil {
-            let why = "No goal yet. The conversation is in the log; `workbench chat <id>` goes on with it."
+            let why = "No goal yet. The conversation is in the log; run workbench chat <id> to go on with it."
             return FeedDecision(primary: nil, why: why, title: "Chat")
         }
         var more: [FeedAction] = []
