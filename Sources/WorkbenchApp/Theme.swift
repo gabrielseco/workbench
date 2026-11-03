@@ -14,7 +14,7 @@ enum Theme {
         set { previewFlag.withLock { $0 = newValue } }
     }
 
-    enum Token: CaseIterable { case blue, green, amber, red, grey, rail, canvas, raised, panel, line }
+    enum Token: CaseIterable { case blue, green, amber, red, grey, rail, canvas, raised, panel, line, fg2, fg3 }
 
     /// One token: the design's value for each appearance, and the app's own for the old window where it had one. `old: nil` means the
     /// design's value serves both (the preview's surfaces, which nothing outside the preview draws); `old: []` means the old window sets
@@ -36,6 +36,8 @@ enum Theme {
         .raised: Swatch(light: 0xe1e5ec, dark: 0x2a2f39, old: nil),
         .panel: Swatch(light: 0xffffff, dark: 0x21252d, old: nil),
         .line: Swatch(light: 0xd3d8e0, dark: 0x323844, old: nil),
+        .fg2: Swatch(light: 0x454d5d, dark: 0xb0b7c4, old: nil),
+        .fg3: Swatch(light: 0x5d667a, dark: 0x919aaa, old: nil),
     ]
 
     /// A token's value for an appearance, as sRGB 0...1. Pure, so a test can read both palettes without touching the flag.
@@ -70,6 +72,10 @@ enum Theme {
     static var panel: Color { adaptive(.panel) }
     /// A hairline border.
     static var line: Color { adaptive(.line) }
+    /// The artboards' second and third text colours: a step that is done, and one still to come. Readable on the canvas in both appearances,
+    /// which the system's `.tertiary` is not on the light one.
+    static var fg2: Color { adaptive(.fg2) }
+    static var fg3: Color { adaptive(.fg3) }
     /// What the thread screens sit on: the design's `--bg` with the preview on, the system's window background without it.
     static var canvas: Color { adaptive(.canvas) }
 
