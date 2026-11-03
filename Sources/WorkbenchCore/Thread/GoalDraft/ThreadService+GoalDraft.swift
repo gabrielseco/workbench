@@ -1,9 +1,26 @@
+// The drafter, its three targets (a new thread, a replacement, a chat made into a goal) and their refusals share this file's private types.
+// swiftlint:disable file_length
 import Foundation
 
 /// Where a drafted goal goes: a new thread, or over the goal of an existing one (explicitly).
 public enum GoalDraftTarget: Sendable, Equatable {
     case newThread(name: String, base: String?)
     case replace(id: String)
+    /// The goal is drafted from a chat thread's conversation and written into that same thread (P22 slice 6b).
+    case fromChat(id: String, base: String?)
+}
+
+extension GoalDraftTarget {
+    /// The thread an existing-thread draft works in; nil for a new one.
+    var threadID: String? {
+        switch self {
+        case .replace(let id), .fromChat(let id, _): id
+        case .newThread: nil
+        }
+    }
+
+    /// The draft happens in a thread that already exists, so its folder is stable and a leftover is found by it.
+    var draftsInPlace: Bool { threadID != nil }
 }
 
 /// What `workbench goal draft` came to. A draft that fails is a result, not a thrown error: it has already spent
@@ -48,6 +65,9 @@ public enum GoalDraftRefusal: Error, Equatable, Sendable, CustomStringConvertibl
     case busy
     case imagesNeedANewThread
     case attachment(String)
+    case notAChat(String)
+    case chatHasGoal(String)
+    case chatNotStarted(String)
 
     public var description: String {
         switch self {
@@ -65,6 +85,11 @@ public enum GoalDraftRefusal: Error, Equatable, Sendable, CustomStringConvertibl
         case .goalUnreadable(let why): "the goal could not be read: \(why)"
         case .ended(let decision): "this thread has ended (\(decision)); its goal cannot be replaced."
         case .running(let pid): "a run is live on this thread (pid \(pid)); stop it first."
+        case .notAChat(let id): "thread \(id) is not a chat: --from-chat drafts a goal from a conversation."
+        case .chatHasGoal(let id):
+            "chat \(id) has a goal already: redraft it with `workbench goal draft \(id) --replace --request \"...\"`."
+        case .chatNotStarted(let id):
+            "chat \(id) has no finished exchange to draft from: say something with `workbench chat` first."
         case .imagesNeedANewThread: "images can be attached to a new goal, not to a redrafted one."
         case .attachment(let why): why
         case .busy: "another command is using this thread (a run, a judge or another draft); try again when it ends."
@@ -112,6 +137,22 @@ extension ThreadService {
         environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = GoalDraft.timeout,
         attach: @Sendable (AgentExecution) -> Void = { _ in }
     ) async throws -> GoalDraftResult {
+        if case .fromChat(let id, _) = target {
+            // Refused before the log is touched: no goal agent, nothing to draft from.
+            guard config?.resolvedGoalAgent != nil else { throw GoalDraftRefusal.noGoalAgent }
+            _ = try chatTranscript(id)
+            do {
+                return try await withLog(id) { log in
+                    // The folder is taken with the log held: a refused second command never reaches it to clear the first one's.
+                    let prepared = try await self.prepareDraft(
+                        target: target, request: request, config: config, attachments: attachments,
+                        abandonActive: abandonActive, environment: environment, timeout: timeout)
+                    defer { prepared.scratch.map { try? FileManager.default.removeItem(at: $0) } }
+                    return try await self.chatGoalLocked(
+                        id: id, prepared: prepared, config: config, log: log, attach: attach)
+                }
+            } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
+        }
         let prepared = try await prepareDraft(
             target: target, request: request, config: config, attachments: attachments, abandonActive: abandonActive,
             environment: environment, timeout: timeout)
@@ -123,6 +164,9 @@ extension ThreadService {
                     try await self.replaceLocked(id: id, prepared: prepared, log: log, attach: attach)
                 }
             } catch EventLogError.alreadyOpen { throw GoalDraftRefusal.busy }
+        case .fromChat:
+            // Handled above, with the log held before the folder is made.
+            throw GoalDraftRefusal.busy
         case .newThread(let name, _):
             return try await newDraft(
                 name: name, prepared: prepared, config: config, abandonActive: abandonActive, attach: attach)
@@ -131,14 +175,22 @@ extension ThreadService {
 
     // MARK: Before anything is spent
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func prepareDraft(
         target: GoalDraftTarget, request rough: String, config: Config?, attachments urls: [URL],
         abandonActive: Bool, environment: [String: String], timeout: TimeInterval
     ) async throws -> PreparedDraft {
         guard let config, let agent = config.resolvedGoalAgent else { throw GoalDraftRefusal.noGoalAgent }
-        let text = rough.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw GoalDraftRefusal.emptyRequest }
-        guard text.utf8.count <= GoalDraft.requestLimit, !text.contains("\0") else { throw GoalDraftRefusal.requestTooLong }
+        var text = rough.trimmingCharacters(in: .whitespacesAndNewlines)
+        var conversation = false
+        if case .fromChat(let id, _) = target {
+            // The request is the conversation, bounded by the chat's own limits, not the 16 KiB of a rough request.
+            text = try chatTranscript(id)
+            conversation = true
+        } else {
+            guard !text.isEmpty else { throw GoalDraftRefusal.emptyRequest }
+            guard text.utf8.count <= GoalDraft.requestLimit, !text.contains("\0") else { throw GoalDraftRefusal.requestTooLong }
+        }
         guard let provider = config.agentProvider(agent.provider) else {
             throw GoalDraftRefusal.unavailable("there is no adapter for \(agent.provider)")
         }
@@ -167,6 +219,12 @@ extension ThreadService {
             if !abandonActive, let active = activeAtStart { throw GoalDraftRefusal.activeThread(active) }
             do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
             if let named { base = named } else { base = await defaultBase() }
+        case .fromChat(let id, let named):
+            // Everything is checked before anything is spent; the log lock is taken after, and the goal file is checked again then.
+            if let decision = ThreadStore(project: project).state(of: id).decision { throw GoalDraftRefusal.ended(decision) }
+            if let pid = runnerPID(id: id) { throw GoalDraftRefusal.running(pid: pid) }
+            do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
+            if let named { base = named } else { base = await defaultBase() }
         case .replace(let id):
             guard SafeNames.isThreadID(id) else { throw GoalDraftRefusal.invalidName(id) }
             guard FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
@@ -193,7 +251,7 @@ extension ThreadService {
         let root = draftScratch(for: target)
         // A drafter a killed process left behind is found by where it works, and ended, before another starts. A
         // replacement has a folder of its own per thread for that; a new draft has no thread yet, so no stable place.
-        if case .replace = target {
+        if target.draftsInPlace {
             OrphanSweeper.sweep(inside: root)
             try? FileManager.default.removeItem(at: root)
         }
@@ -212,7 +270,7 @@ extension ThreadService {
         let names = GoalAttachments.names(images)
         let prompt = GoalDraft.prompt(
             request: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
-            attachments: images.count, readFiles: sends ? [] : names)
+            attachments: images.count, readFiles: sends ? [] : names, conversation: conversation)
         let shown: [URL]
         do {
             shown = try GoalAttachments.write(images, into: sends ? root.appendingPathComponent("images") : work)
@@ -254,7 +312,7 @@ extension ThreadService {
     /// The drafter's folder outside the checkout: stable for a replacement (so a leftover can be found), fresh for a new draft.
     func draftScratch(for target: GoalDraftTarget) -> URL {
         let temp = FileManager.default.temporaryDirectory
-        guard case .replace(let id) = target else {
+        guard let id = target.threadID else {
             return temp.appendingPathComponent("workbench-goal-draft-\(UUID().uuidString)")
         }
         let digest = SHA256.hash(data: Data(project.root.path.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
@@ -284,7 +342,7 @@ extension ThreadService {
     /// before anything is spent; without one (a new thread, which has no log yet) the caller records them afterwards.
     private func runDrafter(
         _ prepared: PreparedDraft, id: String?, log: EventLogWriter?, timeout: TimeInterval,
-        attach: @Sendable (AgentExecution) -> Void
+        attach: @Sendable (AgentExecution) -> Void, fromChat: Bool = false
     ) async throws -> DraftRun {
         var attempts: AttemptLog?
         var run = DraftRun()
@@ -294,8 +352,9 @@ extension ThreadService {
             OrphanSweeper.sweep(inside: prepared.work)
             do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
             run.attempt = try await writer.start()
-            try await log.append(
-                .goalDraftStarted, data: .object(Self.agentFields(prepared.agent, ["attempt": .string(run.attempt ?? "")])))
+            var started = Self.agentFields(prepared.agent, ["attempt": .string(run.attempt ?? "")])
+            if fromChat { started["from_chat"] = true }
+            try await log.append(.goalDraftStarted, data: .object(started))
             _ = id
         }
         let execution: AgentExecution
@@ -387,6 +446,84 @@ extension ThreadService {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try proposal.json.write(to: folder.appendingPathComponent("proposal.json"), atomically: true, encoding: .utf8)
         return "goal-draft/proposal.json"
+    }
+
+    // MARK: A chat made into a goal
+
+    /// What a chat said, as the request: each message labelled by who said it, in order. Refuses what cannot be drafted from.
+    func chatTranscript(_ id: String) throws -> String {
+        guard SafeNames.isThreadID(id) else { throw GoalDraftRefusal.invalidName(id) }
+        guard FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
+            throw GoalDraftRefusal.noThread(id)
+        }
+        let state = ThreadStore(project: project).state(of: id)
+        guard state.isChat else { throw GoalDraftRefusal.notAChat(id) }
+        guard !FileManager.default.fileExists(atPath: project.goalURL(id).path) else { throw GoalDraftRefusal.chatHasGoal(id) }
+        guard let chat = state.chat, chat.messages.contains(where: { $0.role == .assistant }) else {
+            throw GoalDraftRefusal.chatNotStarted(id)
+        }
+        return Chat.transcript(chat.messages)
+    }
+
+    private func chatGoalLocked(
+        id: String, prepared: PreparedDraft, config: Config?, log: EventLogWriter, attach: @Sendable (AgentExecution) -> Void
+    ) async throws -> GoalDraftResult {
+        // A draft or a chat turn a killed process left open ends here, before another is started.
+        try await log.recoverOrphanedEvaluations()
+        // A chat turn a killed process left open may have left its agent running: it ends before the drafter starts.
+        Self.clearChatScratch(chatScratch(id))
+        let agent = prepared.agent
+        // What was checked before is checked again with the log held: another command may have written the goal or decided.
+        if let decision = ThreadStore(project: project).state(of: id).decision { throw GoalDraftRefusal.ended(decision) }
+        if FileManager.default.fileExists(atPath: project.goalURL(id).path) { throw GoalDraftRefusal.chatHasGoal(id) }
+        try? writeHolderMarker(id)
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(id)) }
+        let run = try await runDrafter(
+            prepared, id: id, log: log, timeout: prepared.request.limits.timeout, attach: attach, fromChat: true)
+
+        func finish(_ extra: [String: JSONValue]) async throws {
+            var data = Self.agentFields(agent, extra)
+            data["attempt"] = run.attempt.map { .string($0) } ?? .null
+            data["from_chat"] = true
+            if let cost = run.cost { data["cost_usd"] = .double(cost) }
+            try await log.append(.goalDraftFinished, data: .object(data))
+        }
+        var result = GoalDraftResult(
+            id: nil, replaced: false, wasApproved: false, proposal: nil, provider: agent.provider, model: agent.model,
+            costUSD: run.cost, failure: nil)
+        guard let proposal = run.proposal else {
+            try await finish(["ok": false, "reason": .string(run.failure ?? "no proposal")])
+            result.failure = run.failure
+            return result
+        }
+        // Nothing else may have written this thread's goal while the agent ran: if someone did, it is theirs, and is left as it is.
+        if FileManager.default.fileExists(atPath: project.goalURL(id).path) {
+            let why = "a goal was written for this thread while the agent drafted; it was left as it is"
+            try await finish(["ok": false, "reason": .string(why)])
+            result.failure = why
+            return result
+        }
+        var wrote = false
+        do {
+            let reference = try keepProposal(proposal, id: id)
+            let text = goalText(id: id, title: proposal.title, base: prepared.base, config: config, body: proposal.body)
+            try text.write(to: project.goalURL(id), atomically: true, encoding: .utf8)
+            wrote = true
+            try await log.append(.goalSaved, data: ["status": "draft", "hash": .null])
+            try await finish(["ok": true, "proposal_ref": .string(reference)])
+        } catch let error as EventLogError {
+            throw error
+        } catch {
+            // Only what this draft wrote.
+            if wrote { try? FileManager.default.removeItem(at: project.goalURL(id)) }
+            let why = "the goal could not be written: \(error)"
+            try await finish(["ok": false, "reason": .string(why)])
+            result.failure = why
+            return result
+        }
+        result.id = id
+        result.proposal = proposal
+        return result
     }
 
     // MARK: A new thread

@@ -31,6 +31,9 @@ let workbenchUsage = """
                                  bounded (300 s; $0.50 on Claude; Codex has no dollar cap, allow_unpriced = false
                                  refuses it); creates a draft
                                  thread, approves nothing, runs nothing; a failed draft leaves nothing behind
+                                 --from-chat <name-or-id> (instead of <name> and --request): draft from a chat's
+                                 conversation into the same thread; refused if it is not a chat, has a goal already,
+                                 or has no finished exchange
                                  --replace: <name> is an existing thread (default: the active one); its title, request,
                                  criteria and out of scope are redrafted and an approved goal returns to draft
                                  refused (exit 6) with no [agents.goal]: write the goal by hand with goal new

@@ -11,11 +11,19 @@ extension Commands {
         let path = try a.value("--request-file")
         let base = try a.value("--base")
         let replace = a.flag("--replace")
+        let fromChat = a.flag("--from-chat")
         let named = a.positional()
         try a.requireEmpty()
         let usage =
             "usage: workbench goal draft <name> (--request \"<text>\" | --request-file <path>) [--base <branch>] [--replace]"
-        guard (text == nil) != (path == nil) else {
+                + "   or: workbench goal draft --from-chat <name-or-id> [--base <branch>]"
+        if fromChat {
+            if text != nil || path != nil || replace {
+                let why = "--from-chat drafts from the conversation: no --request, --request-file or --replace. "
+                throw CLIError.usage(why + usage)
+            }
+            guard named != nil else { throw CLIError.usage(usage) }
+        } else if (text == nil) == (path == nil) {
             throw CLIError.usage("give the rough request once, as --request or --request-file. " + usage)
         }
         if replace && base != nil { throw CLIError.usage("--replace keeps the goal's base: drop --base") }
@@ -29,7 +37,11 @@ extension Commands {
             FileManager.default.fileExists(atPath: ctx.project.configURL.path)
             ? try Config.load(from: ctx.project.configURL) : nil
         let target: GoalDraftTarget
-        if replace {
+        if fromChat, let named {
+            // The id, or the name the chat was started under.
+            guard case .existing(let id) = resolve(named, in: ctx) else { throw CLIError.notFound("no chat '\(named)'") }
+            target = .fromChat(id: id, base: base)
+        } else if replace {
             target = .replace(id: try ctx.threadID(named))
         } else if let named {
             target = .newThread(name: named, base: base)

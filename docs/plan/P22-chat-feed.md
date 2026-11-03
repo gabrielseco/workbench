@@ -197,7 +197,7 @@ thread you can read and discard, never a leftover process.
 worktree and no branch; an old log with no `chat.*` events opens as before.
 
 *Built as three PRs:* **6a** (core and CLI): `workbench chat`, `chat.message`/`chat.ended`, `ThreadState.chat`, the app tolerating a chat
-thread (the list shows its first words and "Chat"); **6b**: making the chat into a goal; **6c**: the app's chat screen. A chat uses the
+thread (the list shows its first words and "Chat"); **6b**: `workbench goal draft --from-chat` makes the chat into a goal in the same thread (built); **6c**: the app's chat screen. A chat uses the
 goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread while open, so "one project, one active thread" holds.
 
 ### 7. Flip the default, remove the old window

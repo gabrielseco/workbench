@@ -39,6 +39,22 @@ import WorkbenchCore
         #expect(row.line == "Abandoned" && row.mark == .idle)
     }
 
+    @Test func aChatThatBecameAGoalIsAGoalThreadInTheListAndTheWindow() async throws {
+        let fixture = try await chatFixture()
+        let id = "g-2026-11-03-idea"
+        try fixture.goalText(id: id, approved: false, title: "Retry uploads with backoff", proofs: nil, request: "Do it.")
+            .write(to: fixture.project.goalURL(id), atomically: true, encoding: .utf8)
+        try fixture.append(id, .goalSaved, data: ["status": "draft", "hash": .null])
+        let row = try #require(ThreadListLoader.load(project: fixture.project, cache: .init()).rows.first)
+        #expect(row.title == "Retry uploads with backoff" && row.line == "Draft · not approved", "\(row)")
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(await store.open(fixture.root))
+        guard case .thread(let shown) = store.screen else { throw Failure.notAThread }
+        #expect(shown.title == "Retry uploads with backoff" && shown.stateText == "Draft · not approved")
+        let decision = FeedActions.derive(FeedActionContext(snapshot: shown))
+        #expect(decision.title == nil, "the chat placeholder is gone")
+    }
+
     @Test func theWindowOpensAChatThreadWithoutAGoalAndDoesNotBreak() async throws {
         let fixture = try await chatFixture()
         let store = ProjectStore(preferences: MemoryPreferences())
@@ -56,4 +72,6 @@ import WorkbenchCore
         #expect(await withFeed.open(fixture.root))
         if case .thread = withFeed.screen {} else { Issue.record("the feed does not show a chat thread: \(withFeed.screen)") }
     }
+
+    private enum Failure: Error { case notAThread }
 }

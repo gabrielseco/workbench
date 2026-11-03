@@ -27,6 +27,7 @@ enum AppScenario: String, CaseIterable {
     case tasksEmpty = "tasks-empty"
     case threads
     case chat
+    case chatGoal = "chat-goal"
 
     private static let title = "Paginate the contractor invoice list"
 
@@ -185,15 +186,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
         case .noThread, .draftGoal, .tasksEmpty:
             break
-        case .chat:
-            // A chat thread (P22 slice 6a): no goal file, no worktree; the list says Chat. The chat screen is slice 6c.
-            let chat = "g-2026-10-28-upload-retries"
-            try FileManager.default.createDirectory(at: fixture.project.threadDirectory(chat), withIntermediateDirectories: true)
-            // No `repo`: it is a temporary path, and a committed fixture must be the same bytes on every run.
-            try fixture.append(chat, .threadCreated, data: ["kind": "chat"])
-            try fixture.append(chat, .chatMessage, data: ["role": "user", "text": "Could uploads retry with backoff?"])
-            try fixture.append(chat, .chatMessage, data: ["role": "assistant", "text": "What should happen after the fifth try?"])
-            try fixture.append(chat, .chatEnded, data: ["ok": true, "cost_usd": 0.01])
+        case .chat, .chatGoal:
+            try writeChat(in: fixture, withGoal: self == .chatGoal)
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
@@ -219,6 +213,24 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-29T04:09:12.000Z")
             try await buildTasks(in: fixture)
         }
+    }
+
+    /// A chat thread (P22 slice 6): no goal file, no worktree. With a goal it is a chat that was made into one (6b), a goal thread now.
+    @MainActor private func writeChat(in fixture: AppFixture, withGoal: Bool) throws {
+        let chat = "g-2026-10-28-upload-retries"
+        try FileManager.default.createDirectory(at: fixture.project.threadDirectory(chat), withIntermediateDirectories: true)
+        // No `repo`: it is a temporary path, and a committed fixture must be the same bytes on every run.
+        try fixture.append(chat, .threadCreated, data: ["kind": "chat"])
+        try fixture.append(chat, .chatMessage, data: ["role": "user", "text": "Could uploads retry with backoff?"])
+        try fixture.append(chat, .chatMessage, data: ["role": "assistant", "text": "What should happen after the fifth try?"])
+        try fixture.append(chat, .chatEnded, data: ["ok": true, "cost_usd": 0.01])
+        guard withGoal else { return }
+        try fixture.append(chat, .goalDraftStarted, data: ["provider": "codex", "from_chat": true])
+        try fixture.append(chat, .goalSaved, data: ["status": "draft", "hash": .null])
+        try fixture.append(chat, .goalDraftFinished, data: ["ok": true, "from_chat": true])
+        let title = "Retry uploads with backoff"
+        let text = try fixture.goalText(id: chat, approved: false, title: title, request: "Retry failed uploads.")
+        try text.write(to: fixture.project.goalURL(chat), atomically: true, encoding: .utf8)
     }
 
     private static func parse(_ iso: String) -> Date {
