@@ -5,6 +5,8 @@ import WorkbenchCore
 /// There is no Thread/Tasks switch: choosing a row shows that thread or that task.
 struct PreviewRail: View {
     var store: ProjectStore
+    /// The tasks whose threads are listed under them. Not kept between launches.
+    @State private var expanded: Set<String> = []
 
     static let width: CGFloat = 288
 
@@ -26,7 +28,7 @@ struct PreviewRail: View {
                     Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
                         .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
                 } else if !model.threads.isEmpty {
-                    ThreadListView(store: store)
+                    ThreadListView(store: store, rows: model.threads, older: model.older)
                 }
                 header(model.scheduledHeader).padding(.top, 10)
                 if let note = model.scheduledNote {
@@ -41,9 +43,15 @@ struct PreviewRail: View {
                 let shownTask = shownTaskName
                 ForEach(model.tasks) { row in
                     RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
+                    taskThreads(model.taskThreads[row.key] ?? [], task: row.key)
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 12)
+        }
+        // The group holding the thread on screen opens when that changes: the thread is chosen, it ends and moves under its task, or the
+        // tasks are read after it. After that the group can be closed.
+        .onChange(of: model.group(holding: shownThreadID), initial: true) { _, task in
+            if let task { expanded.insert(task) }
         }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.
         .task(id: store.project?.root.path) {
@@ -54,6 +62,38 @@ struct PreviewRail: View {
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+    }
+
+    /// A task's finished threads: one line with their count, which opens them under the task. The one on screen opens it by itself.
+    @ViewBuilder private func taskThreads(_ rows: [RailRow], task: String) -> some View {
+        if !rows.isEmpty {
+            let shown = shownThreadID
+            let open = expanded.contains(task)
+            let count = rows.count == 1 ? "1 thread" : "\(rows.count) threads"
+            Button {
+                if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
+                    Text(count).font(.caption)
+                }
+                .foregroundStyle(.secondary).padding(.leading, 30).padding(.vertical, 2)
+            }
+            .buttonStyle(.plain).accessibilityLabel("\(task): \(count), \(open ? "shown" : "hidden")")
+            if open {
+                ForEach(rows) { row in
+                    RailRowView(row: row, selected: store.mode == .thread && !store.newThread && row.key == shown) {
+                        Task { await store.select(thread: row.key) }
+                    }
+                    .padding(.leading, 16)
+                }
+            }
+        }
+    }
+
+    private var shownThreadID: String? {
+        if case .thread(let snapshot) = store.screen { return snapshot.id }
+        return nil
     }
 
     /// The task on screen, when a task is: the highlighted row. The first one the Tasks screen would pick when none was chosen.

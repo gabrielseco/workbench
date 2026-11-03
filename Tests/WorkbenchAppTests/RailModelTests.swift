@@ -59,6 +59,70 @@ import WorkbenchCore
         #expect(unread.scheduledNote == "Reading…", "not read yet is not the same as none")
     }
 
+    // MARK: A task's threads
+
+    private func thread(_ id: String, _ mark: ThreadMark) -> ThreadRow { ThreadRow(id: id, title: id, mark: mark, line: "x") }
+
+    private func run(thread: String?) -> TaskHistory.Run {
+        TaskHistory.Run(
+            started: Date(timeIntervalSince1970: 1), ended: nil, pullRequest: nil, trigger: "tick", outcome: .prOpened,
+            reason: nil, units: [], thread: thread)
+    }
+
+    /// The `tasks` fixture with `bump-contract-details` having started `threads`.
+    private func snapshot(naming threads: [String]) async throws -> TasksSnapshot {
+        var snapshot = try await tasksSnapshot()
+        let at = try #require(snapshot.entries.firstIndex { $0.id == "bump-contract-details" })
+        snapshot.entries[at].runs = threads.map { run(thread: $0) } + [run(thread: nil)]
+        return snapshot
+    }
+
+    @Test func aFinishedThreadATaskStartedMovesUnderItsTask() async throws {
+        let shown = ThreadListing(rows: [thread("mine", .idle), thread("t-done", .done), thread("t-gone", .idle)], older: 3)
+        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["t-done", "t-gone"]))
+        #expect(model.threads.map(\.key) == ["mine"] && model.older == 3)
+        #expect(model.taskThreads["bump-contract-details"]?.map(\.key) == ["t-done", "t-gone"], "newest first, as listed")
+        #expect(model.taskThreads["bump-contract-details"]?.allSatisfy { $0.kind == .thread } == true)
+    }
+
+    @Test func aTaskThreadThatIsWorkingNeedsYouOrIsBrokenStaysInThreads() async throws {
+        let marks: [ThreadMark] = [.working, .needsYou, .broken]
+        let shown = ThreadListing(rows: marks.map { thread("t-\($0.rawValue)", $0) })
+        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: shown.rows.map(\.id)))
+        #expect(model.threads.map(\.key) == shown.rows.map(\.id) && model.taskThreads.isEmpty)
+        // Once it ends, the same thread goes under its task.
+        let ended = ThreadListing(rows: [thread("t-working", .done)])
+        let later = RailModel.derive(listing: ended, tasks: try await snapshot(naming: ["t-working"]))
+        #expect(later.threads.isEmpty && later.taskThreads["bump-contract-details"]?.map(\.key) == ["t-working"])
+    }
+
+    @Test func aThreadYouStartedStaysEvenWhenItIsNamedLikeATask() async throws {
+        let shown = ThreadListing(rows: [thread("bump-contract-details", .done), thread("update-docs", .idle)])
+        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["some-other-thread"]))
+        #expect(model.threads.map(\.key) == ["bump-contract-details", "update-docs"] && model.taskThreads.isEmpty)
+    }
+
+    @Test func theGroupHoldingAThreadIsFoundSoTheRailCanOpenIt() async throws {
+        let shown = ThreadListing(rows: [thread("mine", .idle), thread("t-done", .done)])
+        let before = RailModel.derive(listing: shown, tasks: nil)
+        #expect(before.group(holding: "t-done") == nil, "not read yet: the thread is in Threads")
+        let after = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["t-done"]))
+        #expect(after.group(holding: "t-done") == "bump-contract-details")
+        #expect(after.group(holding: "mine") == nil && after.group(holding: nil) == nil)
+    }
+
+    @Test func nothingIsHiddenWhileTheTasksAreNotRead() {
+        let shown = ThreadListing(rows: [thread("a", .done), thread("b", .idle)])
+        let model = RailModel.derive(listing: shown, tasks: nil)
+        #expect(model.threads.map(\.key) == ["a", "b"] && model.taskThreads.isEmpty)
+    }
+
+    @Test func theThreadsListIsEmptyWhenEveryThreadBelongsToATask() async throws {
+        let shown = ThreadListing(rows: [thread("a", .done)])
+        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["a"]))
+        #expect(model.threads.isEmpty, "the rail then says No threads yet. rather than listing none")
+    }
+
     // MARK: Rows
 
     @Test func aThreadRowKeepsItsTitleMarkAndLineInTheRail() async throws {

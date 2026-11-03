@@ -3,6 +3,9 @@ import SwiftUI
 /// The project's threads in the rail (P22 slice 5): one row each, newest first. A click shows that thread; it starts and stops nothing.
 struct ThreadListView: View {
     var store: ProjectStore
+    /// The rows of THREADS (the listing without the finished threads a task started) and how many older ones the listing left out.
+    var rows: [RailRow]
+    var older: Int
 
     /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
     private var shownThread: String? {
@@ -18,17 +21,16 @@ struct ThreadListView: View {
     }
 
     var body: some View {
-        let listing = store.threads.listing
         let shown = shownThread
         let selectedHere = store.mode == .thread && !store.newThread
         LazyVStack(alignment: .leading, spacing: 2) {
-            ForEach(listing.rows) { row in
-                RailRowView(row: RailRow.thread(row), selected: selectedHere && row.id == shown) {
-                    Task { await store.select(thread: row.id) }
+            ForEach(rows) { row in
+                RailRowView(row: row, selected: selectedHere && row.key == shown) {
+                    Task { await store.select(thread: row.key) }
                 }
             }
-            if listing.older > 0 {
-                Text(listing.older == 1 ? "1 older thread" : "\(listing.older) older threads")
+            if older > 0 {
+                Text(older == 1 ? "1 older thread" : "\(older) older threads")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.top, 4)
                     .help("The log and the workbench command still reach them")
             }
@@ -37,7 +39,7 @@ struct ThreadListView: View {
         .focusable()
         .onMoveCommand { direction in
             guard direction == .up || direction == .down,
-                let next = ThreadListView.neighbour(of: shown, in: listing.rows.map(\.id), up: direction == .up)
+                let next = ThreadListView.neighbour(of: shown, in: rows.map(\.key), up: direction == .up)
             else { return }
             Task { await store.select(thread: next) }
         }

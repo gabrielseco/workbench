@@ -66,7 +66,9 @@ ships, and the mockup gets fixed.
   (blue running, amber needs you, green done, red broken, `.secondary` for idle); the selected row sits on `Theme.raised`. A click shows
   that thread, with its feed and settings, or that task's page; it starts
   and stops nothing. A task's line is its schedule, then what keeps it from running (`needs a fix`, `approval stale`, `not approved`) or
-  how its last run ended. The spine is not drawn twice.
+  how its last run ended. The spine is not drawn twice. A thread a task started (its run log names it) is not in Threads once it is over
+  (done or idle: accepted, shipped, abandoned): a line under its task, `N threads`, opens them, indented, newest first, and choosing one
+  opens its group once (it can be closed again). While such a thread is working, needs you or is broken it stays in Threads. Until the tasks are read nothing moves.
 - **The new-thread screen** is what the rail's `+` and ⌘N open with the preview on (the popover is the old window's): in the feed's 680 column
   under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged

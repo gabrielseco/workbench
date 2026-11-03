@@ -56,6 +56,8 @@ struct RailModel: Equatable {
     var threads: [RailRow]
     var older: Int
     var tasks: [RailRow]
+    /// A task's finished threads (done or idle), newest first, by task name: they are listed under it, not in `threads`.
+    var taskThreads: [String: [RailRow]] = [:]
     /// The tasks have been read; until then the section says so rather than claiming there are none.
     var tasksRead: Bool
 
@@ -63,9 +65,38 @@ struct RailModel: Equatable {
         kind: .thread, key: "new-thread", title: "New thread", mark: .idle, line: "Type to start · free")
 
     static func derive(listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false) -> RailModel {
-        RailModel(
-            composing: composing ? composingRow : nil, threads: listing.rows.map(RailRow.thread), older: listing.older,
-            tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
+        let (own, grouped) = split(listing.rows, tasks: tasks)
+        return RailModel(
+            composing: composing ? composingRow : nil, threads: own.map(RailRow.thread), older: listing.older,
+            tasks: tasks?.entries.map(RailRow.task) ?? [], taskThreads: grouped.mapValues { $0.map(RailRow.thread) },
+            tasksRead: tasks != nil)
+    }
+
+    /// The thread's rows that stay in THREADS, and the finished ones a task started, by task. A thread is a task's when a task's run log
+    /// names it, so threads from before this existed qualify too. One that is working, needs you or is broken stays where it is seen,
+    /// and goes under its task once it ends. Until the tasks are read nothing moves.
+    static func split(_ rows: [ThreadRow], tasks: TasksSnapshot?) -> (own: [ThreadRow], grouped: [String: [ThreadRow]]) {
+        guard let tasks else { return (rows, [:]) }
+        var owner: [String: String] = [:]
+        for entry in tasks.entries {
+            for thread in entry.runs.compactMap(\.thread) where owner[thread] == nil { owner[thread] = entry.id }
+        }
+        var own: [ThreadRow] = []
+        var grouped: [String: [ThreadRow]] = [:]
+        for row in rows {
+            if let task = owner[row.id], row.mark == .done || row.mark == .idle {
+                grouped[task, default: []].append(row)
+            } else {
+                own.append(row)
+            }
+        }
+        return (own, grouped)
+    }
+
+    /// The task whose group holds this thread, if one does: what the rail opens so a chosen thread is never hidden in a closed group.
+    func group(holding thread: String?) -> String? {
+        guard let thread else { return nil }
+        return taskThreads.first { $0.value.contains { $0.key == thread } }?.key
     }
 
     var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }

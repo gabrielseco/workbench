@@ -141,7 +141,8 @@ struct Rail: View {
             } else if store.chatFeedOn, store.project != nil, !store.threads.listing.rows.isEmpty {
                 // The spine is the feed's phase row now; the rail lists the project's threads (P22 slice 5).
                 Text("THREADS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                ThreadListView(store: store)
+                ThreadListView(
+                    store: store, rows: store.threads.listing.rows.map(RailRow.thread), older: store.threads.listing.older)
             } else if case .thread(let snapshot) = store.screen, store.chatFeedOn {
                 Text("THREAD").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Text(snapshot.title ?? snapshot.id).font(.headline).lineLimit(3)

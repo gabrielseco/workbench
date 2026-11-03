@@ -25,6 +25,7 @@ enum AppScenario: String, CaseIterable {
     case draftGoal = "draft-goal"
     case tasks
     case tasksEmpty = "tasks-empty"
+    case taskThreads = "task-threads"
     case threads
     case chat
     case chatGoal = "chat-goal"
@@ -207,6 +208,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b"], "tests_failed": []])
             try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
+        case .taskThreads:
+            try await buildTaskThreads(in: fixture)
         case .tasks:
             // The thread a task's run made, so that run's link can be pressed; the tasks themselves are written by `buildTasks`.
             try await fixture.addThread(id, approved: true, title: Self.title)
@@ -377,5 +380,28 @@ private final class ClockBox: @unchecked Sendable {
     var date: Date {
         get { lock.withLock { value } }
         set { lock.withLock { value = newValue } }
+    }
+}
+
+extension AppScenario {
+    /// The rail's grouping: two threads of your own, and the threads the tasks' runs made. Finished ones (shipped, discarded) are listed
+    /// under their task; the one that needs you (`invoice-pagination`) stays in Threads.
+    @MainActor private func buildTaskThreads(in fixture: AppFixture) async throws {
+        try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
+        // Over: your own (discarded), and two a task's runs made (shipped as #415, discarded).
+        for (thread, title, decision) in [
+            ("retry-uploads", "Retry failed uploads with backoff", "discarded"),
+            ("bump-pol-esp", "bump-contract-details: POL, ESP", "accepted"), ("sync-fixtures-1", "sync-fixtures", "discarded"),
+        ] {
+            try await fixture.addThread(thread, approved: true, title: title)
+            try fixture.turn(thread, 1, cost: 0.92)
+            try fixture.decide(thread, decision)
+        }
+        try fixture.ship("bump-pol-esp", number: 415)
+        let open = "invoice-pagination"
+        try await fixture.addThread(open, approved: true, title: Self.title)
+        try fixture.append(open, .turnStarted, turn: 1, data: ["session_id": "s1"])
+        try fixture.append(open, .turnEnded, turn: 1, data: ["result": "succeeded"], ts: "2026-10-29T04:09:12.000Z")
+        try await buildTasks(in: fixture)
     }
 }

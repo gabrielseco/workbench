@@ -1,0 +1,5 @@
+{"v":1,"seq":1,"ts":"2026-10-02T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"dedd2dc8107e3e48795cd91b8cd2b3a7fe3ae0fe5037756655ad6643fed6bf19"}}
+{"v":1,"seq":2,"ts":"2026-10-03T09:00:00.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-03T09:09:00.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"budget-exceeded","reason":"the turn went over its budget of $1.00; the agent said: still reading the metrics","units":["report"]}}
+{"v":1,"seq":4,"ts":"2026-10-26T09:10:00.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"manual"}}
+{"v":1,"seq":5,"ts":"2026-10-26T09:13:00.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"reported","reason":"would take 1 unit: report","units":["report"]}}
