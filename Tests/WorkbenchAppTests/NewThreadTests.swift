@@ -174,6 +174,8 @@ import WorkbenchCore
         #expect(await store.draftNewThread(attachments: []) == false)
         #expect(store.goalAgentOff && store.newThread && store.newThreadText == "Fix it")
         #expect(seen.all == ["draft fix-it|Fix it|0"])
+        _ = await store.draftNewThread(naming: .codex, attachments: [])
+        #expect(seen.all == ["draft fix-it|Fix it|0", "enable codex", "draft fix-it|Fix it|0"], "it names the agent, then drafts")
     }
 
     // MARK: What is drawn
@@ -185,10 +187,35 @@ import WorkbenchCore
         return try #require(renderer.cgImage).dataProvider?.data as Data?
     }
 
-    @Test func theHeadingAndTheChipsAreDrawn() throws {
+    @Test func eachPartOfTheScreenIsDrawnOnItsOwn() throws {
         let blank = try drawn(Color.clear)
         #expect(try drawn(NewThreadHeading()) != blank)
         #expect(try drawn(NewThreadChips(brainstorm: {}, screenshot: {})) != blank)
+        #expect(try drawn(NewThreadCaption()) != blank)
+        #expect(try drawn(NewThreadHint()) != blank)
+    }
+
+    @Test func theBoxGrowsWithTheLinesATextWrapsIntoNotOnlyItsNewlines() {
+        let long = String(repeating: "a long line that wraps ", count: 20)
+        #expect(NewThreadState.lineCount("", width: 300) == 1 && NewThreadState.lineCount("one line", width: 300) == 1)
+        #expect(NewThreadState.lineCount("a\nb\nc", width: 300) == 3)
+        #expect(NewThreadState.lineCount("a\n", width: 300) == 2, "a trailing newline is a line to type on")
+        #expect(NewThreadState.lineCount(long, width: 300) > 5, "a paragraph wraps")
+        #expect(NewThreadState.lineCount(long, width: 600) < NewThreadState.lineCount(long, width: 300), "a wider box wraps less")
+        #expect(NewThreadState.editorHeight(lines: 1) == NewThreadState.editorHeight(lines: 2), "roomy when empty")
+        #expect(NewThreadState.editorHeight(lines: 5) > NewThreadState.editorHeight(lines: 3))
+        #expect(NewThreadState.editorHeight(lines: 50) == NewThreadState.editorHeight(lines: 8), "it stops at eight and scrolls")
+    }
+
+    @Test func whatWasTypedInOneProjectIsNotOfferedToAnother() async throws {
+        let (store, _) = try await store()
+        store.beginNewGoal()
+        store.newThreadText = "A request for project A"
+        let other = try await AppFixture()
+        keptNewThreadFixtures.append(other)
+        try await other.addThread("o1")
+        #expect(await store.open(other.root))
+        #expect(store.newThreadText.isEmpty && !store.newThread)
     }
 
     @Test func theNewThreadRowOfThePhaseRowHasChatCurrentAndTheRestPending() {

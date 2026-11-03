@@ -202,6 +202,7 @@ struct RecentProject: Equatable, Identifiable {
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
             (namingGoal, pickingProject, newThread) = (false, false, false)
+            newThreadText = ""
             cancelSendBack()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
             (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
@@ -213,6 +214,8 @@ struct RecentProject: Equatable, Identifiable {
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
         (namingGoal, pickingProject, newThread) = (false, false, false)
+        // What was typed was for the project it was typed in: never offered to another.
+        newThreadText = ""
         cancelSendBack()
         current.pendingDiscard = nil
         prReviewShown = nil

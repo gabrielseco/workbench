@@ -23,6 +23,20 @@ struct NewThreadState: Equatable {
             : "Starts a free chat. Nothing runs and nothing costs until you say so."
     }
 
+    /// How many lines `text` takes in a box `width` points wide: its own lines and the ones a long line wraps into, at the body size.
+    static func lineCount(_ text: String, width: CGFloat) -> Int {
+        guard width > 0, !text.isEmpty else { return 1 }
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+        let box = (text as NSString).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
+            attributes: [.font: font])
+        return max(1, Int((box.height / lineHeight).rounded()))
+    }
+
+    /// The box's height for that many lines: roomy when empty (the artboard's composer is two lines tall), growing a line at a time to eight.
+    static func editorHeight(lines: Int) -> CGFloat { 36 + CGFloat(min(8, max(2, lines))) * 18 }
+
     enum Key: Equatable { case send, doItNow, newline }
 
     /// Return sends, ⌘-Return is Do it now, Shift- or Option-Return a new line.
@@ -40,6 +54,21 @@ struct NewThreadHeading: View {
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
                 .font(.callout).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// What Send and Do it now each do, with the two names bold: a `LocalizedStringKey`, since two string literals joined with `+` would show
+/// the asterisks.
+struct NewThreadCaption: View {
+    private static let text = LocalizedStringKey(
+        "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words for you to approve.")
+
+    var body: some View { Text(Self.text).font(.caption).foregroundStyle(.secondary) }
+}
+
+struct NewThreadHint: View {
+    var body: some View {
+        Text("Drop a screenshot on the window to start one").font(.caption).foregroundStyle(Theme.fg3)
     }
 }
 
@@ -71,6 +100,9 @@ struct NewThreadScreen: View {
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
 
+    /// The text box's width inside the column, for sizing it to the lines the text wraps into.
+    private var composerWidth: CGFloat { FeedLayout.maxColumn - 2 * 14 - 12 }
+
     private var busy: Bool { store.drafting || store.chatReplying }
 
     private var state: NewThreadState {
@@ -88,8 +120,7 @@ struct NewThreadScreen: View {
                     composer
                     caption
                     NewThreadChips(brainstorm: { focused = true }, screenshot: chooseImages).disabled(busy)
-                    Text("Drop a screenshot on the window to start one").font(.caption).foregroundStyle(Theme.fg3)
-                        .padding(.top, 12)
+                    NewThreadHint().padding(.top, 12)
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
                 .padding(.horizontal, 28).padding(.vertical, 36).frame(maxWidth: .infinity)
@@ -170,10 +201,10 @@ struct NewThreadScreen: View {
                     }
                     .buttonStyle(.borderless)
                 } else {
-                    Button("Do it now") { Task { await doItNow() } }
+                    Button { Task { await doItNow() } } label: { Self.labelled("Do it now", "⌘↵") }
                         .keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
                         .help("Skips the conversation: the goal agent drafts a goal from your words for you to approve")
-                    Button("Send") { Task { await send() } }
+                    Button { Task { await send() } } label: { Self.labelled("Send", "↵") }
                         .buttonStyle(.borderedProminent).disabled(!state.canSend).help(state.sendHelp)
                 }
             }
@@ -188,7 +219,7 @@ struct NewThreadScreen: View {
     private func editor(_ state: NewThreadState) -> some View {
         TextEditor(text: Binding(get: { store.newThreadText }, set: { store.newThreadText = $0 }))
             .font(.body).scrollContentBackground(.hidden).focused($focused)
-            .frame(height: max(60, ChatComposerState.editorHeight(for: state.text) + 30))
+            .frame(height: NewThreadState.editorHeight(lines: NewThreadState.lineCount(state.text, width: composerWidth)))
             .background(TextScrollerHider())
             .disabled(busy)
             .overlay(alignment: .topLeading) {
@@ -229,7 +260,7 @@ struct NewThreadScreen: View {
 
     private var caption: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(Self.captionText).font(.caption).foregroundStyle(.secondary)
+            NewThreadCaption()
             Spacer(minLength: 12)
             Button("Write it as the goal") { Task { await writeAsGoal() } }
                 .buttonStyle(.link).font(.caption).disabled(!state.canWriteAsGoal)
@@ -237,10 +268,16 @@ struct NewThreadScreen: View {
         }
     }
 
-    /// A `LocalizedStringKey`, so the two names are bold: two string literals joined with `+` would show the asterisks.
-    private static let captionText = LocalizedStringKey(
-        "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words for you to approve.")
+    /// A button's name and its key, as the artboard draws them.
+    private static func labelled(_ title: String, _ key: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Text(key).font(.caption).opacity(0.7)
+        }
+        .accessibilityElement(children: .ignore).accessibilityLabel(title)
+    }
 
+    /// A `LocalizedStringKey`, so the two names are bold: two string literals joined with `+` would show the asterisks.
     private func send() async {
         if await store.sendNewThread() { staging.clear() }
     }
