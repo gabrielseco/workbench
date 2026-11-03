@@ -61,7 +61,7 @@ import WorkbenchCore
 
         let start = EventLogReadCount.reads(of: log)
         guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else { throw LoadError.notAThread }
-        #expect(EventLogReadCount.reads(of: log) - start >= 1)
+        #expect(EventLogReadCount.reads(of: log) - start <= 2, "the feed is derived from the read the load already did")
         #expect(!shown.feed.isEmpty)
         #expect(shown.feed.contains { if case .goalCard = $0.kind { true } else { false } })
         #expect(shown.feed.contains { if case .turn = $0.kind { true } else { false } })

@@ -207,7 +207,7 @@ goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread 
 
 ### 7. Flip the default, remove the old window
 
-*Built:* the flag, the View ▸ Chat feed (preview) toggle, the stored preference, `WORKBENCH_CHAT_FEED`, the old palette and the system button styles are gone: the feed is the only window. The old `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `ReviewView` and
+*Built (7a, #391):* the flag, the View ▸ Chat feed (preview) toggle, the stored preference, `WORKBENCH_CHAT_FEED`, the old palette and the system button styles are gone: the feed is the only window. *Pending (7b):* the old `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `ReviewView` and
 `FinishedBanner` are deleted along with their fixtures' old-mode screenshots. `DESIGN.md`, `docs/mac-app/` (replaced by
 `docs/design/chat-feed/`) and the scope rule in `plan/README.md` are updated in the same PR.
 
