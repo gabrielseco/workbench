@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import WorkbenchApp
@@ -66,6 +68,29 @@ import Testing
         #expect(Theme.preview, "a launch with the preview remembered starts with the design's palette")
     }
 
+    /// The colour a view actually draws, resolved for an appearance: this is what the toolbar, rail and rows get from `Theme.blue`.
+    private func drawn(_ colour: Color, dark: Bool) -> String {
+        var result = ""
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
+        appearance.performAsCurrentDrawingAppearance {
+            let rgb = NSColor(colour).usingColorSpace(.sRGB)!
+            result = hex([rgb.redComponent, rgb.greenComponent, rgb.blueComponent].map { Double($0) })
+        }
+        return result
+    }
+
+    @Test func aDrawnColourSwitchesWithThePreviewAtOnce() {
+        let before = Theme.preview
+        defer { Theme.preview = before }
+        Theme.preview = false
+        #expect(drawn(Theme.blue, dark: true) == "#739eff" && drawn(Theme.rail, dark: true) == "#242424")
+        Theme.preview = true
+        #expect(drawn(Theme.blue, dark: true) == "#5b9dff" && drawn(Theme.rail, dark: true) == "#1b1e24")
+        #expect(drawn(Theme.amber, dark: false) == "#a35f00" && drawn(Theme.canvas, dark: false) == "#f4f5f8")
+        Theme.preview = false
+        #expect(drawn(Theme.blue, dark: true) == "#739eff", "off again: the old window's colour")
+    }
+
     // MARK: Chrome
 
     @Test func theStatePillSaysTheHeadAndTheRowKeepsTheReason() {
@@ -84,10 +109,13 @@ import Testing
             Issue.record("no thread")
             return
         }
-        #expect(FooterBar.limitText(.thread(shown)) == shown.turnTimeoutMin.map { "\($0) min per turn" })
+        #expect(FooterBar.limitText(.thread(shown), mode: .thread) == shown.turnTimeoutMin.map { "\($0) min per turn" })
+        #expect(FooterBar.limitText(.thread(shown), mode: .tasks) == nil, "the thread is still loaded behind Tasks")
         var none = shown
         none.turnTimeoutMin = nil
-        #expect(FooterBar.limitText(.thread(none)) == nil)
-        #expect(FooterBar.limitText(.noThread) == nil)
+        #expect(FooterBar.limitText(.thread(none), mode: .thread) == nil)
+        #expect(FooterBar.limitText(.noThread, mode: .thread) == nil)
+        #expect(StatePill.text(shown, short: true) == shown.stateHead)
+        #expect(StatePill.text(shown, short: false) == shown.stateText)
     }
 }

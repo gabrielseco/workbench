@@ -99,13 +99,16 @@ struct StatePill: View {
     /// Only the head of the state (`Needs you`): the reason is in the thread's row and the decision card.
     var short = false
 
+    /// What the pill says: the whole state, or in the feed preview only its head.
+    static func text(_ snapshot: ThreadSnapshot, short: Bool) -> String { short ? snapshot.stateHead : snapshot.stateText }
+
     var body: some View {
         let tint: Color = {
             if case .needsYou = snapshot.attention { return Theme.amber }
             if snapshot.attention == .working { return Theme.blue }
             return Theme.grey
         }()
-        Text(short ? snapshot.stateHead : snapshot.stateText)
+        Text(Self.text(snapshot, short: short))
             .font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
             .foregroundStyle(tint).background(tint.opacity(0.12), in: Capsule())
     }
@@ -438,7 +441,7 @@ struct FooterBar: View {
             if store.chatFeedOn {
                 DoctorButton(store: store, compact: true).font(.callout)
                 Spacer()
-                if let limit = FooterBar.limitText(store.screen) {
+                if let limit = FooterBar.limitText(store.screen, mode: store.mode) {
                     Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                 }
             } else {
@@ -449,8 +452,9 @@ struct FooterBar: View {
     }
 
     /// The thread's per-turn limit, as the design's footer says it; nil when the thread has none or is not on screen.
-    static func limitText(_ screen: ProjectScreen) -> String? {
-        guard case .thread(let snapshot) = screen, let minutes = snapshot.turnTimeoutMin else { return nil }
+    static func limitText(_ screen: ProjectScreen, mode: WindowMode) -> String? {
+        // The thread stays loaded behind the Tasks screen, which has limits of its own: it says nothing there.
+        guard mode == .thread, case .thread(let snapshot) = screen, let minutes = snapshot.turnTimeoutMin else { return nil }
         return "\(minutes) min per turn"
     }
 
