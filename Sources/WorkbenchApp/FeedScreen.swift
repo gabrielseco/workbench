@@ -128,6 +128,9 @@ struct FeedScreen: View {
         }
     }
 
+    /// The row is under every thread's title, a chat's too: a chat is the first step of the thread, not outside it.
+    static func showsPhaseRow(_ snapshot: ThreadSnapshot) -> Bool { true }
+
     private var mergeTitle: String { snapshot.state.pullRequest.map { "Merge PR #\($0.number)?" } ?? "Merge?" }
 
     private var header: some View {
@@ -143,7 +146,7 @@ struct FeedScreen: View {
                 .buttonStyle(.borderless).font(.callout)
                 .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
-            PhaseRow(snapshot: snapshot)
+            if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
         }
         .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
     }

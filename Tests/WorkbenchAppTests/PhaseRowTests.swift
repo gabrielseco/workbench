@@ -37,6 +37,12 @@ import WorkbenchCore
         }
     }
 
+    @Test func everyThreadShowsTheRowAChatToo() async throws {
+        for scenario in [AppScenario.chat, .chatReplying, .chatGoal, .draft, .needsYou] {
+            #expect(FeedScreen.showsPhaseRow(try await snapshot(scenario)), "\(scenario)")
+        }
+    }
+
     @Test func aChatThatBecameAGoalHasChatDoneAndTheSpineAsItIs() async throws {
         let shown = try await snapshot(.chatGoal)
         let steps = PhaseRow.steps(for: shown)
@@ -57,6 +63,8 @@ import WorkbenchCore
     @Test func eachStepSaysItsTitleMarkAndSublabelToVoiceOver() async throws {
         let steps = PhaseRow.steps(for: try await snapshot(.chatGoal))
         #expect(steps.first?.spoken == "Chat, done, became the goal")
+        let chat = PhaseRow.steps(for: try await snapshot(.chat))
+        #expect(chat.first?.spoken == "Chat, current, talking it through")
         let spine = try await snapshot(.needsYou).spine
         for (step, entry) in zip(PhaseRow.steps(for: try await snapshot(.needsYou)), spine.entries) {
             #expect(step.spoken == "\(entry.step.title), \(entry.mark.rawValue), \(entry.sublabel)")

@@ -102,7 +102,7 @@ ships, and the mockup gets fixed.
 - **The feed is a centred column**, at most 680 wide (`FeedLayout.maxColumn`): the rows, what an action said, the decision card and a
   chat's composer. The title and phase row above it and the Run settings inspector beside it keep their places; at the 900×600 minimum
   the column simply fills what there is.
-- **A chat** (a thread with no goal yet) has no phase row, no decision card and no Run settings content: its screen is the conversation and a
+- **A chat** (a thread with no goal yet) has the phase row (Chat the only step reached) but no decision card and no Run settings content: its screen is the conversation and a
   composer. The person's messages are bubbles on the right in `Theme.raised` (radius 14, the bottom-right corner 4, at most 540 wide) with
   no label; the agent's are plain body text at most 620 wide beside a 22 pt avatar (`sparkle`, a `Theme.raised` disc with a `Theme.line`
   ring). Both wrap and are selectable, and say who spoke to VoiceOver (`You`, `Goal agent`), since nothing on screen does. While a turn
