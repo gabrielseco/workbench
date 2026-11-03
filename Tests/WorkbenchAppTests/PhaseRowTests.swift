@@ -12,7 +12,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptPhaseFixtures.append(fixture)
         try await scenario.build(in: fixture)
-        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else {
             throw Failure.notAThread
         }
         return shown

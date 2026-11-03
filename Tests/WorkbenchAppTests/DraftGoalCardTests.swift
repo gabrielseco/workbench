@@ -75,7 +75,7 @@ import WorkbenchCore
             let fixture = try await AppFixture()
             keptDraftCardFixtures.append(fixture)
             try await scenario.build(in: fixture)
-            guard case .thread(let thread) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+            guard case .thread(let thread) = ProjectLoader.load(project: fixture.project).screen else {
                 Issue.record("no thread: \(scenario)")
                 continue
             }
@@ -99,7 +99,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptDraftCardFixtures.append(fixture)
         try await scenario.build(in: fixture)
-        guard case .thread(let thread) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let thread) = ProjectLoader.load(project: fixture.project).screen else {
             Issue.record("no thread")
             return
         }
@@ -132,7 +132,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptDraftCardFixtures.append(fixture)
         try await AppScenario.chatGoal.build(in: fixture)
-        guard case .thread(let thread) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let thread) = ProjectLoader.load(project: fixture.project).screen else {
             Issue.record("no thread")
             return
         }

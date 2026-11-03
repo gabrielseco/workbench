@@ -17,13 +17,12 @@ import WorkbenchCore
     }
 
     private func store(
-        preview: Bool = true, seen: Seen = Seen(), refuse: Error? = nil
+        seen: Seen = Seen(), refuse: Error? = nil
     ) async throws -> (ProjectStore, AppFixture) {
         let fixture = try await AppFixture()
         keptNewThreadFixtures.append(fixture)
         try await fixture.addThread("t1")
         let preferences = MemoryPreferences(projectPath: nil)
-        preferences.chatFeed = preview
         let actions = GoalActions(
             draftGoal: { _, name, request, attachments, _ in
                 seen.add("draft \(name)|\(request)|\(attachments.count)")
@@ -71,15 +70,10 @@ import WorkbenchCore
 
     // MARK: Opening and closing
 
-    @Test func everyNewGoalButtonOpensTheScreenWithThePreviewAndThePopoverWithout() async throws {
-        let (on, _) = try await store(preview: true)
-        on.beginNewGoal()
-        #expect(on.newThread && !on.namingGoal)
-        let (off, _) = try await store(preview: false)
-        off.beginNewGoal()
-        #expect(off.namingGoal && !off.newThread)
-        off.openNewThread()
-        #expect(!off.newThread, "the screen is the preview's")
+    @Test func everyNewGoalButtonOpensTheScreen() async throws {
+        let (store, _) = try await store()
+        store.beginNewGoal()
+        #expect(store.newThread)
     }
 
     @Test func choosingARowEscapeAndMakingAThreadAllCloseIt() async throws {
@@ -111,7 +105,7 @@ import WorkbenchCore
         let fixture = try await AppFixture()
         keptNewThreadFixtures.append(fixture)
         try await fixture.addThread("t1", approved: true)
-        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else {
             Issue.record("no thread")
             return
         }

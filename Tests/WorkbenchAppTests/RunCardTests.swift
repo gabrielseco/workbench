@@ -17,7 +17,7 @@ import WorkbenchCore
         let source = repositoryRoot.appendingPathComponent("Fixtures/app/\(scenario.rawValue)/threads")
         try FileManager.default.copyItem(at: source, to: root.appendingPathComponent(".workbench/threads"))
         defer { try? FileManager.default.removeItem(at: root) }
-        guard case .thread(var shown) = ProjectLoader.load(project: Project(root: root), feed: true).screen else {
+        guard case .thread(var shown) = ProjectLoader.load(project: Project(root: root)).screen else {
             throw CocoaError(.fileReadUnknown)
         }
         shown.feed = feed

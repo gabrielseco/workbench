@@ -5,11 +5,10 @@ import WorkbenchCore
 
 @testable import WorkbenchApp
 
-/// The chat feed preview (P22 slice 3a): the switch, what the loader derives for it, and that every row and every fixture scenario draws.
+/// The chat feed (P22): what the loader derives, and that every row and every fixture scenario draws.
 @MainActor private var keptFeedFixtures: [AppFixture] = []
 
 // One suite for the feed's drawing: its helpers (render, compare, save) are shared by every test in it.
-// swiftlint:disable:next type_body_length
 @MainActor @Suite struct FeedScreenTests {
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -52,68 +51,21 @@ import WorkbenchCore
         try #require(png).write(to: Self.outputDirectory.appendingPathComponent("\(name).png"))
     }
 
-    // MARK: The switch
-
-    @Test func theFeedIsOffUntilAPersonTurnsItOnAndItIsRemembered() {
-        let suite = "feed-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = UserDefaultsPreferences(defaults: defaults)
-        #expect(!preferences.chatFeed)
-        preferences.chatFeed = true
-        #expect(UserDefaultsPreferences(defaults: defaults).chatFeed)
-        #expect(!MemoryPreferences().chatFeed)
-    }
-
-    @Test func aLaunchCanShowTheFeedWithoutTouchingThePreference() {
-        let on = LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": "/tmp/p", "WORKBENCH_CHAT_FEED": "1"])
-        #expect(on.chatFeed && on.project != nil)
-        #expect(!LaunchOptions.from(environment: ["WORKBENCH_APP_PROJECT": "/tmp/p"]).chatFeed)
-        #expect(on.makeStore(preferences: MemoryPreferences()).chatFeedOn)
-        #expect(!LaunchOptions.from(environment: [:]).makeStore(preferences: MemoryPreferences()).chatFeedOn)
-    }
-
     // MARK: What the loader derives
 
-    @Test func theLoaderDerivesTheFeedOnlyWhenAskedAndReadsTheLogOnce() async throws {
+    @Test func theLoaderDerivesTheFeedFromTheOneReadOfTheLog() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
         try fixture.turn("t1", 1)
         let log = fixture.project.eventsURL("t1")
 
         let start = EventLogReadCount.reads(of: log)
-        guard case .thread(let plain) = ProjectLoader.load(project: fixture.project).screen else { throw LoadError.notAThread }
-        let plainReads = EventLogReadCount.reads(of: log) - start
-        #expect(plain.feed.isEmpty && plainReads >= 1)
-
-        let middle = EventLogReadCount.reads(of: log)
-        guard case .thread(let withFeed) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
-            throw LoadError.notAThread
-        }
-        #expect(!withFeed.feed.isEmpty)
-        #expect(EventLogReadCount.reads(of: log) - middle == plainReads, "the feed is derived from the read the load already did")
-        #expect(withFeed.feed.contains { if case .goalCard = $0.kind { true } else { false } })
-        #expect(withFeed.feed.contains { if case .turn = $0.kind { true } else { false } })
-        #expect(withFeed.feed.last.map { if case .next = $0.kind { true } else { false } } == true)
-    }
-
-    @Test func turningTheFeedOnReadsTheThreadAgainAndOffPutsTheStepScreensBack() async throws {
-        let fixture = try await AppFixture()
-        try await fixture.addThread("t1", approved: true)
-        let preferences = MemoryPreferences()
-        let store = ProjectStore(preferences: preferences)
-        #expect(await store.open(fixture.root))
-        guard case .thread(let off) = store.screen else { throw LoadError.notAThread }
-        #expect(off.feed.isEmpty && !store.chatFeedOn)
-
-        await store.setChatFeed(true)
-        #expect(preferences.chatFeed && store.chatFeedOn)
-        guard case .thread(let on) = store.screen else { throw LoadError.notAThread }
-        #expect(!on.feed.isEmpty)
-
-        await store.setChatFeed(false)
-        guard case .thread(let again) = store.screen else { throw LoadError.notAThread }
-        #expect(again.feed.isEmpty && !preferences.chatFeed)
+        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else { throw LoadError.notAThread }
+        #expect(EventLogReadCount.reads(of: log) - start >= 1)
+        #expect(!shown.feed.isEmpty)
+        #expect(shown.feed.contains { if case .goalCard = $0.kind { true } else { false } })
+        #expect(shown.feed.contains { if case .turn = $0.kind { true } else { false } })
+        #expect(shown.feed.last.map { if case .next = $0.kind { true } else { false } } == true)
     }
 
     // MARK: Every row draws
@@ -195,9 +147,8 @@ import WorkbenchCore
         for scenario in AppScenario.allCases {
             let project = try project(for: scenario)
             defer { try? FileManager.default.removeItem(at: project.root) }
-            let loaded = ProjectLoader.load(project: project, feed: true)
+            let loaded = ProjectLoader.load(project: project)
             let preferences = MemoryPreferences()
-            preferences.chatFeed = true
             let store = ProjectStore(preferences: preferences, screen: loaded.screen, project: project)
             for (width, height) in [(900.0, 600.0), (1100.0, 700.0)] {
                 for dark in [false, true] {
@@ -218,7 +169,6 @@ import WorkbenchCore
         var snapshot = try thread(.needsYou)
         snapshot.feed = fixtureItems
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
         let store = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
         // The real list, not the eager one the other renders use.
@@ -230,49 +180,14 @@ import WorkbenchCore
     private func thread(_ scenario: AppScenario) throws -> ThreadSnapshot {
         let project = try project(for: scenario)
         defer { try? FileManager.default.removeItem(at: project.root) }
-        let screen = ProjectLoader.load(project: project, feed: true).screen
+        let screen = ProjectLoader.load(project: project).screen
         guard case .thread(let shown) = screen else { throw LoadError.notAThread }
         return shown
     }
 
     private enum LoadError: Error { case notAThread }
 
-    // MARK: A late answer, and content that is really drawn
-
-    private final class Calls: @unchecked Sendable {
-        private let lock = NSLock()
-        private var count = 0
-        func next() -> Int { lock.withLock { count += 1; return count } }
-    }
-
-    /// A read that began with the preview off and answers after it was turned on is for the other window, and is dropped. The stale
-    /// read turns the preview on itself, then answers with a screen nothing else could show; nothing here waits on a thread.
-    @Test func aReadThatBeganBeforeTheFeedWasTurnedOnDoesNotReplaceTheScreen() async throws {
-        let fixture = try await AppFixture()
-        try await fixture.addThread("t1", approved: true)
-        let calls = Calls()
-        let box = StoreBox()
-        let store = ProjectStore(
-            preferences: MemoryPreferences(),
-            loader: { project, feed, _ in
-                guard calls.next() == 2 else { return ProjectLoader.load(project: project, feed: feed) }
-                DispatchQueue.main.sync { box.store?.chatFeedOn = true }
-                return ProjectLoader.Loaded(screen: .noThread, thread: nil, watch: ProjectLoader.Watch())
-            })
-        box.store = store
-        #expect(await store.open(fixture.root))
-        guard case .thread = store.screen else { throw LoadError.notAThread }
-        await store.reload()
-        #expect(store.chatFeedOn)
-        guard case .thread = store.screen else {
-            Issue.record("the answer of the read that began with the preview off replaced the screen: \(store.screen)")
-            return
-        }
-    }
-
-    @MainActor private final class StoreBox: @unchecked Sendable {
-        weak var store: ProjectStore?
-    }
+    // MARK: Content that is really drawn
 
     private func differs(
         _ first: some View, _ second: some View, _ what: String, width: CGFloat = 700, height: CGFloat = 160
@@ -303,7 +218,6 @@ import WorkbenchCore
         var snapshot = try thread(.needsYou)
         let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let withRows = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
         snapshot.feed = []
         let without = ProjectStore(preferences: preferences, screen: .thread(snapshot), project: project)
@@ -431,7 +345,6 @@ import WorkbenchCore
         try await fixture.addThread("t1", approved: true)
         try fixture.turn("t1", 1)
         let preferences = MemoryPreferences()
-        preferences.chatFeed = true
         let reviewing = ProjectStore(preferences: preferences)
         #expect(await reviewing.open(fixture.root))
         guard case .thread(let shown) = reviewing.screen else { throw LoadError.notAThread }

@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The artboards' buttons (design parity 9): the primary one is the inverse pill, the plain one a raised bordered button. With the chat
-/// feed preview off both are the system's, so the old window does not change; P22 slice 7 deletes the fallback.
+/// The artboards' buttons (design parity 9): the primary one is the inverse pill, the plain one a raised bordered button.
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
 
@@ -36,34 +35,13 @@ struct PlainButtonStyle: ButtonStyle {
     }
 }
 
-/// Which style a modifier hands out: ours with the preview on, the system's without. Pure, so a test can read both.
-enum ButtonChoice: Equatable {
-    case ours, system
-
-    static func pick(preview: Bool) -> ButtonChoice { preview ? .ours : .system }
-}
-
 extension View {
     /// The button the screen's one main action uses.
-    @ViewBuilder func primaryButton() -> some View {
-        if ButtonChoice.pick(preview: Theme.preview) == .ours {
-            buttonStyle(PrimaryButtonStyle())
-        } else {
-            buttonStyle(.borderedProminent)
-        }
-    }
+    func primaryButton() -> some View { buttonStyle(PrimaryButtonStyle()) }
 
     /// Any other button that is a button (not an icon or a link).
-    @ViewBuilder func plainButton(fill: Bool = false) -> some View {
-        if ButtonChoice.pick(preview: Theme.preview) == .ours {
-            buttonStyle(PlainButtonStyle(fill: fill))
-        } else {
-            buttonStyle(.bordered)
-        }
-    }
+    func plainButton(fill: Bool = false) -> some View { buttonStyle(PlainButtonStyle(fill: fill)) }
 
     /// A native switch in the artboards' neutral inverse instead of the person's system accent, which collides with the state colours.
-    @ViewBuilder func switchTint() -> some View {
-        if ButtonChoice.pick(preview: Theme.preview) == .ours { tint(Theme.inv) } else { self }
-    }
+    func switchTint() -> some View { tint(Theme.inv) }
 }

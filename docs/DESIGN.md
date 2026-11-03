@@ -31,10 +31,9 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - Both appearances are supported. A tinted label has to be readable on the rail in light and in dark (the amber and green
   text is the one that fails first).
 - Neutral surfaces use the system fills (`.quaternary`, the rail's own `Theme.rail`), not a new grey.
-- **With the chat feed preview on, the palette is the artboards'** (`Theme.preview`, set by the store; the old window keeps its values
-  until P22 slice 7). Dark / light: blue `#5b9dff` / `#1f5fd1`, green `#4cc38a` / `#1b7f4e`, amber `#f0b04a` / `#a35f00`, red `#f2685f` /
+- **The palette is the artboards'.** Dark / light: blue `#5b9dff` / `#1f5fd1`, green `#4cc38a` / `#1b7f4e`, amber `#f0b04a` / `#a35f00`, red `#f2685f` /
   `#c8322a`, grey `#7e8695` / `#667084`; the rail `#1b1e24` / `#eceef2` and the thread screens' content `#16191e` / `#f4f5f8`
-  (`Theme.canvas`; without the preview the window draws its own); the preview's surfaces `raised` `#2a2f39` / `#e1e5ec`, `panel` `#21252d` / `#ffffff` and `line` `#323844` / `#d3d8e0`. The values are in `ThemeTests`, which is what fails if they drift.
+  (`Theme.canvas`); the surfaces `raised` `#2a2f39` / `#e1e5ec`, `panel` `#21252d` / `#ffffff` and `line` `#323844` / `#d3d8e0`. The values are in `ThemeTests`, which is what fails if they drift.
 
 ## Layout
 
@@ -46,10 +45,9 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 - One primary action per screen state (`.borderedProminent`); the others are `.bordered`, `.borderless` or `.link`. A second
   prominent button in the same state is a finding.
 
-## Chat feed (preview)
+## Chat feed
 
-The thread as one conversation ([P22](plan/P22-chat-feed.md)), behind View ▸ Chat feed (preview) and off by default: with it on, the
-thread screen is `FeedScreen` instead of the per-step screens, with it off nothing here applies. It draws `snapshot.feed` (the core's
+The thread as one conversation ([P22](plan/P22-chat-feed.md)): the thread screen is `FeedScreen`. It draws `snapshot.feed` (the core's
 `Feed.items`), what the last action said, and a decision card whose buttons run the actions the step screens run (slice 3b); the
 Run settings inspector comes in 3c. The
 mockups are in [`design/chat-feed/`](design/chat-feed/); where this file and a mockup disagree on a layout value, this file is what
@@ -69,7 +67,7 @@ ships, and the mockup gets fixed.
   how its last run ended. The spine is not drawn twice. A thread a task started (its run log names it) is not in Threads once it is over
   (done or idle: accepted, shipped, abandoned): a line under its task, `N threads`, opens them, indented, newest first, and choosing one
   opens its group once (it can be closed again). While such a thread is working, needs you or is broken it stays in Threads. Until the tasks are read nothing moves.
-- **The new-thread screen** is what the rail's `+` and ⌘N open with the preview on (the popover is the old window's): in the feed's 680 column
+- **The new-thread screen** is what the rail's `+` and ⌘N open: in the feed's 680 column
   under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
   screenshots as small thumbnails with a remove button, a `+` to choose screenshots and `Paste or drop screenshots.`, and two buttons,
@@ -129,12 +127,11 @@ ships, and the mockup gets fixed.
   `Verify passed` is a card with up to three screenshot thumbnails and their names; when the next press is Ship the foot is `Ready to ship`
   (the branch and base, then `Request changes` where a send-back is allowed, and `Ship`). Not in the artboard and not built: the steer
   input, the verify card's command chips.
-- **Buttons and switches** (preview on): the screen's main action is `.primaryButton()`, the artboards' inverse pill (`inv` fill, `invfg`
+- **Buttons and switches:** the screen's main action is `.primaryButton()`, the artboards' inverse pill (`inv` fill, `invfg`
   label, radius 7, 34 high; 40 % when disabled), and every other plain button is `.plainButton()` (raised fill, hairline border, radius 7,
   30 high). Neutral on purpose: the system accent follows the person's macOS setting and the five state colours already mean something, so a
   setting that is on takes none of them. Native switches are tinted `inv` (`.switchTint()`); macOS softens a near-white or near-black tint to a
-  mid grey, so an on switch reads as a grey track with the knob at the right, not the artboard's crisp pill. With the preview off the
-  modifiers return the system styles, and `scripts/check-banned-apis.sh` refuses a bare `.borderedProminent`.
+  mid grey, so an on switch reads as a grey track with the knob at the right, not the artboard's crisp pill. `scripts/check-banned-apis.sh` refuses a bare `.borderedProminent`.
 - **Run settings** is a column (300 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
   open by default until a person closes it, and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by

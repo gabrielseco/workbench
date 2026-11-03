@@ -5,14 +5,14 @@ import Testing
 
 @testable import WorkbenchApp
 
-/// The design's palette applies only while the chat feed preview is on (P22 rule 2); without it the app's own colours are unchanged.
+/// The design's palette (docs/design/chat-feed) is the app's only palette.
 @MainActor @Suite struct ThemeTests {
     private func hex(_ rgb: [Double]) -> String {
         "#" + rgb.map { String(format: "%02x", Int(($0 * 255).rounded())) }.joined()
     }
 
     /// The artboards' palette: the `TH` table of docs/design/chat-feed/*.dc.html (dark and light), and its `--side` and `--bg`.
-    @Test func thePreviewPaletteIsTheArtboards() {
+    @Test func thePaletteIsTheArtboards() {
         struct Row {
             var token: Theme.Token
             var dark: String
@@ -28,8 +28,8 @@ import Testing
             Row(token: .inv, dark: "#eef0f4", light: "#1b1f27"), Row(token: .invfg, dark: "#14171c", light: "#f4f5f8"),
         ]
         for row in artboards {
-            #expect(hex(Theme.rgb(row.token, dark: true, preview: true)) == row.dark, "\(row.token) dark")
-            #expect(hex(Theme.rgb(row.token, dark: false, preview: true)) == row.light, "\(row.token) light")
+            #expect(hex(Theme.rgb(row.token, dark: true)) == row.dark, "\(row.token) dark")
+            #expect(hex(Theme.rgb(row.token, dark: false)) == row.light, "\(row.token) light")
         }
     }
 
@@ -40,58 +40,11 @@ import Testing
             return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
         }
         for dark in [true, false] {
-            let a = luminance(Theme.rgb(.inv, dark: dark, preview: true))
-            let b = luminance(Theme.rgb(.invfg, dark: dark, preview: true))
+            let a = luminance(Theme.rgb(.inv, dark: dark))
+            let b = luminance(Theme.rgb(.invfg, dark: dark))
             let ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
             #expect(ratio >= 7, "\(dark ? "dark" : "light") contrast \(ratio)")
         }
-    }
-
-    /// The preview's surfaces have no old-window value: nothing outside the preview draws them, so the flag does not change them.
-    @Test func theSurfacesAreTheSameWhateverTheFlagSays() {
-        for token in [Theme.Token.raised, .panel, .line, .fg2, .fg3] {
-            for dark in [true, false] {
-                #expect(Theme.rgb(token, dark: dark, preview: true) == Theme.rgb(token, dark: dark, preview: false), "\(token)")
-            }
-        }
-    }
-
-    /// What the app drew before the preview palette: these are the values that were in `Theme.swift`, and they stay for the old window.
-    @Test func withoutThePreviewTheOldWindowKeepsItsColours() {
-        struct Row {
-            var token: Theme.Token
-            var dark: [Double]
-            var light: [Double]
-        }
-        let before = [
-            Row(token: .blue, dark: [0.45, 0.62, 1.0], light: [0.12, 0.31, 0.86]),
-            Row(token: .green, dark: [0.36, 0.80, 0.55], light: [0.07, 0.53, 0.31]),
-            Row(token: .amber, dark: [0.98, 0.72, 0.28], light: [0.80, 0.50, 0.04]),
-            Row(token: .red, dark: [1.0, 0.47, 0.45], light: [0.78, 0.16, 0.16]),
-            Row(token: .grey, dark: [0.62, 0.64, 0.68], light: [0.56, 0.58, 0.62]),
-            Row(token: .rail, dark: [0.14, 0.14, 0.14], light: [0.95, 0.95, 0.97]),
-        ]
-        for row in before {
-            #expect(Theme.rgb(row.token, dark: true, preview: false) == row.dark, "\(row.token) dark")
-            #expect(Theme.rgb(row.token, dark: false, preview: false) == row.light, "\(row.token) light")
-        }
-        #expect(Theme.rgb(.canvas, dark: true, preview: false).isEmpty, "the old window sets no content colour")
-        #expect(Theme.rgb(.canvas, dark: false, preview: false).isEmpty)
-    }
-
-    @Test func theStoreFollowsThePreviewSwitchAndThemeReadsIt() async {
-        let before = Theme.preview
-        defer { Theme.preview = before }
-        let preferences = MemoryPreferences()
-        let store = ProjectStore(preferences: preferences)
-        #expect(!Theme.preview && !store.chatFeedOn)
-        await store.setChatFeed(true)
-        #expect(Theme.preview)
-        await store.setChatFeed(false)
-        #expect(!Theme.preview)
-        preferences.chatFeed = true
-        _ = ProjectStore(preferences: preferences)
-        #expect(Theme.preview, "a launch with the preview remembered starts with the design's palette")
     }
 
     /// The colour a view actually draws, resolved for an appearance: this is what the toolbar, rail and rows get from `Theme.blue`.
@@ -105,16 +58,9 @@ import Testing
         return result
     }
 
-    @Test func aDrawnColourSwitchesWithThePreviewAtOnce() {
-        let before = Theme.preview
-        defer { Theme.preview = before }
-        Theme.preview = false
-        #expect(drawn(Theme.blue, dark: true) == "#739eff" && drawn(Theme.rail, dark: true) == "#242424")
-        Theme.preview = true
+    @Test func aDrawnColourIsTheDesignsInEachAppearance() {
         #expect(drawn(Theme.blue, dark: true) == "#5b9dff" && drawn(Theme.rail, dark: true) == "#1b1e24")
         #expect(drawn(Theme.amber, dark: false) == "#a35f00" && drawn(Theme.canvas, dark: false) == "#f4f5f8")
-        Theme.preview = false
-        #expect(drawn(Theme.blue, dark: true) == "#739eff", "off again: the old window's colour")
     }
 
     // MARK: Chrome
@@ -131,7 +77,7 @@ import Testing
     @Test func theFooterSaysThePerTurnLimitOnlyForAThreadThatHasOne() async throws {
         let fixture = try await AppFixture()
         try await fixture.addThread("t1", approved: true)
-        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project, feed: true).screen else {
+        guard case .thread(let shown) = ProjectLoader.load(project: fixture.project).screen else {
             Issue.record("no thread")
             return
         }
@@ -141,7 +87,6 @@ import Testing
         none.turnTimeoutMin = nil
         #expect(FooterBar.limitText(.thread(none), mode: .thread) == nil)
         #expect(FooterBar.limitText(.noThread, mode: .thread) == nil)
-        #expect(StatePill.text(shown, short: true) == shown.stateHead)
-        #expect(StatePill.text(shown, short: false) == shown.stateText)
+        #expect(StatePill.text(shown) == shown.stateHead)
     }
 }

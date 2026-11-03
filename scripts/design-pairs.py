@@ -2,7 +2,7 @@
 """Side-by-side images of each design artboard and the app's screenshot of the matching scenario, for docs/design/chat-feed/PARITY.md.
 
   scripts/render-artboards.sh <artboard-dir>                  the artboards, rendered with docs/design/chat-feed/support.js
-  WORKBENCH_CHAT_FEED=1 VERIFY_WINDOW_SIZE=1240x800 scripts/verify-app.sh start <scenario>   then `shot <pid> <name>` for each pair below
+  VERIFY_WINDOW_SIZE=1240x800 scripts/verify-app.sh start <scenario>   then `shot <pid> <name>` for each pair below
   scripts/design-pairs.py <artboard-dir> <app-shot-dir> <out-dir>
 
 Needs Pillow. The app screenshot is scaled to the artboard's width; the app's own title bar makes it a few points taller.

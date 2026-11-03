@@ -3,33 +3,17 @@ import Testing
 
 @testable import WorkbenchApp
 
-/// The artboards' buttons and the chip layout (design parity 9). The style modifiers are the system's with the preview off.
+/// The artboards' buttons and the chip layout (design parity 9).
 @MainActor @Suite(.serialized) struct ButtonStyleTests {
-    /// `ImageRenderer` draws a native button as a placeholder, so the look is checked in the app's own shots; what is checked here is the
-    /// choice each modifier makes, which is what keeps the old window unchanged.
-    @Test func thePreviewChoosesOurStylesAndWithoutItTheSystemOnes() {
-        #expect(ButtonChoice.pick(preview: true) == .ours)
-        #expect(ButtonChoice.pick(preview: false) == .system, "preview off: the old window's buttons are the system's")
-    }
-
     /// What each modifier actually applies, read from the value of the view it returns: a view's description names the style it carries
-    /// (`style: <Type>`), and the two branches of a conditional carry different ones.
-    @Test func theModifiersApplyOurStylesOnlyWithThePreviewOn() {
-        let before = Theme.preview
-        defer { Theme.preview = before }
-        func primary() -> String { String(describing: Button("x") {}.primaryButton()) }
-        func plain() -> String { String(describing: Button("x") {}.plainButton()) }
-        func tint() -> String { String(describing: Toggle("x", isOn: .constant(true)).switchTint()) }
-        Theme.preview = true
-        #expect(primary().contains("style: WorkbenchApp.PrimaryButtonStyle"))
-        #expect(!primary().contains("style: SwiftUI.BorderedProminent"))
-        #expect(plain().contains("style: WorkbenchApp.PlainButtonStyle"))
-        #expect(!plain().contains("style: SwiftUI.BorderedButtonStyle"))
-        let on = tint()
-        Theme.preview = false
-        #expect(primary().contains("style: SwiftUI.BorderedProminentButtonStyle") && !primary().contains("style: WorkbenchApp"))
-        #expect(plain().contains("style: SwiftUI.BorderedButtonStyle") && !plain().contains("style: WorkbenchApp"))
-        #expect(on != tint(), "the tint is applied with the preview on and absent without it")
+    /// (`style: <Type>`). `ImageRenderer` draws a native button as a placeholder, so the look is checked in the app's own shots.
+    @Test func theModifiersApplyOurStyles() {
+        let primary = String(describing: Button("x") {}.primaryButton())
+        let plain = String(describing: Button("x") {}.plainButton())
+        let bare = String(describing: Toggle("x", isOn: .constant(true)))
+        #expect(primary.contains("style: WorkbenchApp.PrimaryButtonStyle"))
+        #expect(plain.contains("style: WorkbenchApp.PlainButtonStyle"))
+        #expect(bare != String(describing: Toggle("x", isOn: .constant(true)).switchTint()), "the switch is tinted")
     }
 
     // MARK: Chips

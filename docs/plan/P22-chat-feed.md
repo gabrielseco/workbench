@@ -75,8 +75,7 @@ in the canvas, not worked around in the code.
 
 1. **One data layer, two views, until the flip.** The new feed reads the same models and calls the same actions as the old screens
    (`GoalActions`, `ThreadService`). A bug fixed in an action is fixed for both. No second copy of a rule.
-2. **A preference flag, off by default** (`Preferences`: "Chat feed (preview)"). The old window is the default until slice 7. One switch
-   puts a person back.
+2. **A preference flag, off by default** (`Preferences`: "Chat feed (preview)"), until slice 7 removed it and the old window.
 3. **Core changes are additive and default to today's behaviour.** New event kinds and new optional config keys only; a new key's
    default reproduces what happens now (`auto_advance = false` is today's "press Continue"). An old thread's log opens in the new
    view with no migration. Nothing here needs `BREAKING CHANGE:`; if a slice would, it stops and comes back here.
@@ -208,7 +207,7 @@ goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread 
 
 ### 7. Flip the default, remove the old window
 
-The flag defaults on for one release, then the old `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `ReviewView` and
+*Built:* the flag, the View ▸ Chat feed (preview) toggle, the stored preference, `WORKBENCH_CHAT_FEED`, the old palette and the system button styles are gone: the feed is the only window. The old `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `ReviewView` and
 `FinishedBanner` are deleted along with their fixtures' old-mode screenshots. `DESIGN.md`, `docs/mac-app/` (replaced by
 `docs/design/chat-feed/`) and the scope rule in `plan/README.md` are updated in the same PR.
 
@@ -224,7 +223,7 @@ and 5 exist so that P23 is mostly deleting a guard and adding a budget, not resh
 - A thread that ended badly (crash, timeout, killed runner) shows how it ended in the feed, never an empty or spinning row.
 - A damaged log shows what could be read and says what is damaged; Workbench never rewrites a log.
 - An answer for a thread that is no longer on screen is dropped by construction (slice 1), not by a string compare.
-- The flag off means the old window, exactly. A test opens every fixture with the flag off after each slice.
+- (Slices 0 to 6 only, while the flag existed: the flag off meant the old window, exactly.)
 - Auto-advance never skips an approval: a goal whose hash changed is `stale` and the feed stops there.
 - Every chat and every advance is bounded (turns, time, budget, lines, log size), as everything else.
 

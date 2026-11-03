@@ -118,7 +118,7 @@ import Testing
         let calls = Calls()
         let store = try await store(calls)
         await store.perform(.newGoal)
-        #expect(store.namingGoal)
+        #expect(store.newThread)
         await store.perform(.sendBack)
         #expect(store.sendingBack && store.actionError == nil, "the popover opens; nothing is sent")
         await store.perform(.reviewDetails)

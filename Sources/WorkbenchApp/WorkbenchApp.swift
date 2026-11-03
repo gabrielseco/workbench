@@ -30,16 +30,11 @@ import WorkbenchCore
             CommandGroup(replacing: .newItem) {
                 Button("New goal…") { store.beginNewGoal() }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(store.project == nil || store.namingGoal)
+                    .disabled(store.project == nil)
             }
-            // A preview of the P22 feed: off until a person turns it on, and one click puts the step screens back.
             CommandGroup(after: .toolbar) {
-                Toggle(
-                    "Chat feed (preview)",
-                    isOn: Binding(get: { store.chatFeedOn }, set: { on in Task { await store.setChatFeed(on) } }))
                 Toggle("Run settings", isOn: Binding(get: { store.runSettingsShowing }, set: { _ in store.toggleRunSettings() }))
                     .keyboardShortcut("r", modifiers: [.option, .command])
-                    .disabled(!store.chatFeedOn)
             }
         }
 

@@ -65,9 +65,7 @@ struct RecentProject: Equatable, Identifiable {
         waiting.forEach { $0.resume() }
     }
     /// The goal agent is drafting a goal from a request.
-    /// Whether the New goal popover is up; every "New goal…" button sets it and `RootView` shows the popover over the window.
-    var namingGoal = false
-    /// The new-thread screen is up (preview only): the main area asks what to work on, and nothing is on screen as a thread.
+    /// The new-thread screen is up: the main area asks what to work on, and nothing is on screen as a thread.
     var newThread = false
     /// What is typed on it: kept while another row is looked at, cleared when a thread is made.
     var newThreadText = ""
@@ -102,8 +100,6 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false { didSet { resumeIdleWaiters() } }
     @ObservationIgnored let preferences: Preferences
-    /// The chat feed preview is on: the thread screen is the feed, and the loader derives its items. Set by `setChatFeed`.
-    var chatFeedOn: Bool { didSet { Theme.preview = chatFeedOn } }
     /// The Run settings inspector is shown beside the feed (or over it, in a narrow window). Set by `setRunSettings`.
     var runSettingsOn: Bool
     /// A person has chosen (open or closed): only then may a narrow window open the inspector over the feed.
@@ -119,7 +115,7 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var currentThread: String? { didSet { rebindSession() } }
     /// The thread the person picked in the list; nil follows the active thread, else the newest. Cleared by a project change and by a new goal.
     @ObservationIgnored var selectedThread: String?
-    /// The project's threads as the list shows them, kept current while the chat feed preview is on.
+    /// The project's threads as the list shows them, kept current by the store.
     let threads = ThreadListModel()
     @ObservationIgnored var threadRowCache = ThreadListLoader.Cache()
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
@@ -129,7 +125,7 @@ struct RecentProject: Equatable, Identifiable {
     /// in flight) is dropped, never shown under the new project.
     @ObservationIgnored var generation = 0
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
-    @ObservationIgnored private let loader: @Sendable (Project, Bool, String?) -> ProjectLoader.Loaded
+    @ObservationIgnored private let loader: @Sendable (Project, String?) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
     @ObservationIgnored private let goalLoader: @Sendable (Project, String) async -> GoalModel
     @ObservationIgnored let actions: GoalActions
@@ -141,8 +137,8 @@ struct RecentProject: Equatable, Identifiable {
         preferences: Preferences, screen: ProjectScreen = .noProject, project: Project? = nil,
         intervals: (working: Duration, idle: Duration) = (.milliseconds(250), .seconds(2)),
         ciIntervals: (pending: Duration, settled: Duration) = (.seconds(10), .seconds(60)),
-        loader: @escaping @Sendable (Project, Bool, String?) -> ProjectLoader.Loaded = {
-            ProjectLoader.load(project: $0, feed: $1, selected: $2)
+        loader: @escaping @Sendable (Project, String?) -> ProjectLoader.Loaded = {
+            ProjectLoader.load(project: $0, selected: $1)
         },
         doctorRunner: @escaping @Sendable (Project, String?) async -> DoctorChip = {
             await ProjectStore.runCoreDoctor($0, base: $1)
@@ -166,8 +162,6 @@ struct RecentProject: Equatable, Identifiable {
         self.intervals = intervals
         self.prCI = PullRequestCIState(intervals: ciIntervals)
         self.loader = loader
-        self.chatFeedOn = preferences.chatFeed
-        Theme.preview = preferences.chatFeed
         self.runSettingsOn = preferences.runSettings
         self.runSettingsChosen = preferences.runSettingsChosen
         self.doctorRunner = doctorRunner
@@ -206,7 +200,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (namingGoal, pickingProject, newThread) = (false, false, false)
+            (pickingProject, newThread) = (false, false)
             newThreadText = ""
             cancelSendBack()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
@@ -218,7 +212,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        (namingGoal, pickingProject, newThread) = (false, false, false)
+        (pickingProject, newThread) = (false, false)
         // What was typed was for the project it was typed in: never offered to another.
         newThreadText = ""
         cancelSendBack()
@@ -249,8 +243,8 @@ struct RecentProject: Equatable, Identifiable {
 
     func reload() async {
         guard let project else { return }
-        let (mine, loader, feed, selected) = (generation, self.loader, chatFeedOn, selectedThread)
-        let result = await Task.detached { loader(project, feed, selected) }.value
+        let (mine, loader, selected) = (generation, self.loader, selectedThread)
+        let result = await Task.detached { loader(project, selected) }.value
         guard mine == generation else { return }
         var model: GoalModel?
         if let thread = result.thread, case .thread = result.screen {
@@ -264,8 +258,6 @@ struct RecentProject: Equatable, Identifiable {
             reviewed = await Task.detached { await load(project, thread) }.value.map(ReviewModel.derive)
             guard mine == generation else { return }
         }
-        // A read that began before the preview was turned on or off is for the other window: the read `setChatFeed` started is the one that counts.
-        guard feed == chatFeedOn else { return }
         // Likewise a read that began before another thread was picked: the read `select` started is the one that counts.
         guard selected == selectedThread else { return }
         (screen, currentThread, lastWatch) = (result.screen, result.thread, result.watch)

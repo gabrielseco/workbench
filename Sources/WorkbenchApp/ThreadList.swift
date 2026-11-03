@@ -21,7 +21,7 @@ struct ThreadListing: Equatable, Sendable {
     var older = 0
 }
 
-/// The list's data, kept current by the store while the chat feed preview is on.
+/// The list's data, kept current by the store.
 @MainActor @Observable final class ThreadListModel {
     var listing = ThreadListing()
     /// What the files looked like when `listing` was read, so a poll rebuilds only when something moved.

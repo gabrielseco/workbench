@@ -1,6 +1,6 @@
 # Design parity: the chat-feed artboards against the app
 
-Checked 2026-11-03 against `main` at `a46c4b7` (P22 slices 0 to 6c merged), preview on (`WORKBENCH_CHAT_FEED=1`).
+Checked 2026-11-03 against `main` at `a46c4b7` (P22 slices 0 to 6c merged). (The preview flag has since been removed: the feed is the only window.)
 Each image below is the artboard on the left and the app on the right, at the artboards' own size (1240×800, the rail 288×720), in
 the dark appearance. [`docs/DESIGN.md`](../../DESIGN.md) says that where it and an artboard disagree on a layout value, DESIGN.md is
 what ships and the artboard gets fixed; so every row below ends in a decision for you: **App** (change the app to match), **Artboard**
@@ -13,7 +13,7 @@ what ships and the artboard gets fixed; so every row below ends in a decision fo
    `<dc-import>`, `<helmet>`, `Component.renderVals()`), so they now render in any browser. It is a reconstruction: if the canvas draws
    something it does not, the canvas is right.
 2. `scripts/render-artboards.sh <dir>` screenshots every board with Chrome headless.
-3. `scripts/verify-app.sh` shot each matching fixture scenario at 1240×800 (`WORKBENCH_CHAT_FEED=1 VERIFY_WINDOW_SIZE=1240x800`).
+3. `scripts/verify-app.sh` shot each matching fixture scenario at 1240×800 (`VERIFY_WINDOW_SIZE=1240x800`).
 4. `scripts/design-pairs.py <artboards> <app shots> <out>` makes the pairs in [`parity/`](parity/).
 
 The pairs for the answered chat, the approved goal and the review with files are linked but were not gone through line by line. Not covered: **light appearance** (the live app follows the system, which was dark; the light renders in the test suite draw native

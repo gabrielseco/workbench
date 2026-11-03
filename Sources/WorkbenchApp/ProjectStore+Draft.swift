@@ -8,7 +8,7 @@ struct NewGoalForm: Equatable {
         case quick
         /// The goal agent drafts a title, criteria with proofs and out of scope from the request.
         case advanced
-        /// A read-only conversation with the goal agent first (P22 slice 6c); offered only while the chat feed preview is on.
+        /// A read-only conversation with the goal agent first (P22 slice 6c).
         case chat
 
         var id: String { rawValue }
@@ -20,8 +20,8 @@ struct NewGoalForm: Equatable {
             }
         }
 
-        /// The kinds the card offers: Chat only with the preview on, so the card is as it was without it.
-        static func offered(chatFeed: Bool) -> [Mode] { chatFeed ? [.quick, .advanced, .chat] : [.quick, .advanced] }
+        /// The kinds the new-thread screen offers.
+        static let offered: [Mode] = [.quick, .advanced, .chat]
     }
 
     var request = ""
