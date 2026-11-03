@@ -134,12 +134,14 @@ enum RunDay {
 /// The one button a run has: what deals with how it ended.
 enum RunAction: Equatable {
     case viewLog
+    case approve
     case reapprove
     case openThread(String)
 
     var title: String {
         switch self {
         case .viewLog: "View log"
+        case .approve: "Approve…"
         case .reapprove: "Re-approve"
         case .openThread: "Open thread"
         }

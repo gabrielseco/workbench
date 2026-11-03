@@ -51,9 +51,10 @@ struct TaskPageView: View {
         .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
     }
 
-    /// A run's thread is one the rail lists, so the window can show it.
+    /// A run's thread is one the window can show: its folder is still there (cleaned ones are not), however old it is.
     private func threadKnown(_ id: String?) -> Bool {
-        id.map { id in store.threads.listing.rows.contains { $0.id == id } } ?? false
+        guard let id, let project = store.project else { return false }
+        return ThreadStore(project: project).threadIDs().contains(id)
     }
 
     private func perform(_ action: RunAction) {
@@ -61,7 +62,7 @@ struct TaskPageView: View {
         case .viewLog:
             guard let project = store.project else { return }
             NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
-        case .reapprove: store.tasks.beginApprove(store.project, entry.id)
+        case .approve, .reapprove: store.tasks.beginApprove(store.project, entry.id)
         case .openThread(let id): Task { await store.select(thread: id) }
         }
     }
@@ -141,7 +142,8 @@ struct RunTonightCard: View {
     /// The button for a warning: approval, or the active thread.
     static func action(for warning: RunTonight.Warning) -> RunAction? {
         switch warning.action {
-        case .approve?, .reapprove?: .reapprove
+        case .approve?: .approve
+        case .reapprove?: .reapprove
         case .openThread(let id)?: .openThread(id)
         case nil: nil
         }

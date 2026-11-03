@@ -42,6 +42,9 @@ import WorkbenchCore
         #expect(header.line.hasPrefix("weekdays 04:00 · ") && header.line.contains("· \(bump.runs.count) run"))
         #expect(header.line.contains("opens a PR") || header.line.contains("reports"))
         #expect(header.path == ".workbench/tasks/bump-contract-details/task.md")
+        let report = TaskPage.header(try await entry("weekly-report"), now: now)
+        #expect(report.line.hasPrefix("every 30d · ") && report.line.contains("next "), "\(report.line)")
+        #expect(TaskPage.header(try await entry("broken-task"), now: now).line.hasPrefix("manual · "), "no schedule is manual")
         var one = bump
         one.runs = Array(bump.runs.prefix(1))
         #expect(TaskPage.header(one, now: now).line.contains("· 1 run ·"), "one run is not runs")
@@ -82,6 +85,22 @@ import WorkbenchCore
         #expect(tonight.countText == "3 warnings" && tonight.openByDefault)
         let one = RunTonight.derive(weekly, timer: TimerCard.lines([TimerStatusLine(level: .warn, text: "w")]), activeThread: nil)
         #expect(one.verdict == .checkWarnings && one.countText == "1 warning")
+    }
+
+    @Test func aTaskThatWaitsForReviewSaysSo() async throws {
+        let bump = try await entry("bump-contract-details")
+        #expect(bump.runs.first?.outcome == .skippedTooManyOpen)
+        let tonight = RunTonight.derive(bump, timer: clean, activeThread: nil)
+        #expect(tonight.verdict == .checkWarnings)
+        #expect(tonight.warnings.map(\.text) == ["It has as many pull requests open as it allows: it waits for review."])
+    }
+
+    @Test func theCardsButtonsAreTheOnesTheWarningsAskFor() {
+        func button(_ action: RunTonight.Action?) -> RunAction? {
+            RunTonightCard.action(for: RunTonight.Warning(fails: true, text: "w", detail: nil, action: action))
+        }
+        #expect(button(.approve) == .approve && button(.approve)?.title == "Approve…", "first approval is not a re-approval")
+        #expect(button(.reapprove) == .reapprove && button(.openThread("t")) == .openThread("t") && button(nil) == nil)
     }
 
     @Test func theTimersLinesAboutTasksAreNotAnotherTasksWarnings() async throws {
