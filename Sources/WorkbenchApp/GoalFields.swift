@@ -42,6 +42,9 @@ struct CommitField: View {
 /// The request: several lines in the serif face, changed on leaving the field.
 struct CommitEditor: View {
     var value: String
+    /// The serif face of the Goal screen, or the feed's body face.
+    var font: Font = .system(size: 16, design: .serif)
+    var lineSpacing: CGFloat = 5
     var commit: (String) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -49,7 +52,7 @@ struct CommitEditor: View {
 
     var body: some View {
         PlaceholderTextEditor(
-            text: $text, font: .system(size: 16, design: .serif), lineSpacing: 5, scrollDisabled: true, focus: $focused
+            text: $text, font: font, lineSpacing: lineSpacing, scrollDisabled: true, focus: $focused
         )
         .frame(minHeight: 30)
             .onAppear { text = value }
@@ -66,13 +69,22 @@ struct CommitEditor: View {
 
 /// A block of the goal: one rounded card around everything in it (not one card per child), the same whether it can be changed or not.
 struct GoalCard<Content: View>: View {
+    var style = GoalBlocks.Style.classic
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) { content }
-            .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+        if style == .feed {
+            // The artboards' bordered box: a panel with a hairline.
+            VStack(alignment: .leading, spacing: 8) { content }
+                .padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line))
+        } else {
+            VStack(alignment: .leading, spacing: 10) { content }
+                .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+        }
     }
 }
 

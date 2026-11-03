@@ -111,8 +111,17 @@ ships, and the mockup gets fixed.
   why) and the out-of-scope list are changed in place, as on the Goal screen (they are the same blocks, `GoalBlocks`), a refused edit
   said under them. Once the goal is approved, run or decided, or while an action is going, the card is its summary: the criteria with
   their proofs (six at most, then "and N more"), read-only.
+- **A draft goal's card** (the editable one) is the artboard's *Draft goal*: `DRAFT GOAL` (caption), a pill (`Needs approval` amber, `Can't approve
+  yet` red, `Approved` green) and `Every field is editable` at the right; then `REQUEST` (the text in a bordered box, in the body face), `CRITERIA ·
+  N` (each a bordered row with a ring, its proof as the quiet second line) and `OUT OF SCOPE`; and one footer: what Approve starts (`Starts a
+  worktree from main with Verifier and Judge on.`) at the left, the `…` menu and `Approve and run` at the right, so the *Next* card is not drawn
+  for it. The button stays `Approve and run`, not the artboard's `Approve goal`: it runs the goal straight after approving it. A goal made from a
+  chat has, above the card, a collapsed `Brainstorm · N messages` row that opens in place to the conversation and the agent's line `I drafted a
+  goal from this chat. Edit anything below, then approve. Nothing runs until you do.`; there is no `Back to chat` (a chat that became a goal takes
+  no more messages). The Run settings panel is open by default beside the feed until a person closes it (a narrow window shows it over the feed
+  only once they have chosen).
 - **Run settings** is a column (260 wide) beside the feed, shown by the header's "Run settings" button or View ▸ Run settings (⌥⌘R),
-  hidden by default and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
+  open by default until a person closes it, and remembered. It holds what this run is allowed to do: the steps after a turn as switches (Verifier, Judge, the
   project's review stages; a step that cannot run for the goal says why) and, under them, one switch for whether they run by
   themselves after a passing turn ("Run the judge and review stages by themselves", a line saying what a run will do, "Runs: judge,
   design" or "Off", and whether that is the goal's own setting or the project's; disabled, with the project's `[review] auto` named, when

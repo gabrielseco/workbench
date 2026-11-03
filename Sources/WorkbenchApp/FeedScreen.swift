@@ -26,13 +26,18 @@ struct FeedScreen: View {
     private var canEditGoal: Bool { store.feedEditsGoal(snapshot) }
 
     private func row(_ item: FeedItem) -> some View {
-        FeedRow(item: item, goal: store.goal, store: store, editable: canEditGoal)
+        FeedRow(
+            item: item, goal: store.goal, store: store, editable: canEditGoal,
+            draft: canEditGoal
+                ? DraftGoalContext(snapshot: snapshot, decision: store.feedDecision(for: snapshot), perform: perform) : nil,
+            brainstorm: BrainstormFold.shown(state: snapshot.state) ? snapshot.state.chat?.messages ?? [] : [])
     }
 
     @ViewBuilder private var foot: some View {
         MessageRows(error: store.actionError, note: store.actionNote, notice: store.notice, handoff: store.herdrHandoffOutcome)
         if snapshot.watchesPullRequest, let ci = snapshot.ci { PullRequestCIView(ci: ci, store: store) }
-        if case .next(let step, let why)? = snapshot.feed.last?.kind {
+        let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
+        if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard {
             DecisionCard(step: step, why: why, decision: store.feedDecision(for: snapshot), perform: perform)
         }
     }
@@ -81,10 +86,14 @@ struct FeedScreen: View {
                     RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store).frame(width: RunSettingsLayout.width)
                 }
             }
+            .onChange(of: proxy.size.width, initial: true) { _, width in
+                store.runSettingsFits = RunSettingsLayout.placement(centreWidth: width) == .beside
+            }
             // Too narrow for it beside the feed, it opens over it.
             .sheet(
                 isPresented: Binding(
-                    get: { store.runSettingsOn && !beside }, set: { if !$0 { store.setRunSettings(false) } })
+                    get: { store.runSettingsOn && store.runSettingsChosen && !beside },
+                    set: { if !$0 { store.setRunSettings(false) } })
             ) {
                 RunSettingsSheet(snapshot: snapshot, store: store)
             }
@@ -138,13 +147,14 @@ struct FeedScreen: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.title ?? snapshot.id).font(.title3.weight(.semibold)).lineLimit(2)
                 Spacer(minLength: 12)
+                let showing = store.runSettingsShowing
                 Button {
-                    store.setRunSettings(!store.runSettingsOn)
+                    store.toggleRunSettings()
                 } label: {
                     Label("Run settings", systemImage: "sidebar.right")
                 }
                 .buttonStyle(.borderless).font(.callout)
-                .help(store.runSettingsOn ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
+                .help(showing ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
             if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
         }

@@ -31,20 +31,57 @@ import Testing
 
     // MARK: The switch and the layout
 
-    @Test func theInspectorIsHiddenUntilAskedForAndRememberedWhenItIs() {
+    @Test func theInspectorIsOpenUntilAPersonClosesItAndTheirChoiceIsRemembered() {
         let suite = "runsettings-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = UserDefaultsPreferences(defaults: defaults)
-        #expect(!preferences.runSettings && !MemoryPreferences().runSettings)
+        #expect(preferences.runSettings && MemoryPreferences().runSettings, "unset is on: the artboard shows it open")
+        #expect(!preferences.runSettingsChosen && !MemoryPreferences().runSettingsChosen)
         let store = ProjectStore(preferences: preferences)
-        #expect(!store.runSettingsOn)
-        store.setRunSettings(true)
-        #expect(store.runSettingsOn && UserDefaultsPreferences(defaults: defaults).runSettings)
-        let next = ProjectStore(preferences: UserDefaultsPreferences(defaults: defaults))
-        #expect(next.runSettingsOn, "it comes back at the next launch")
+        #expect(store.runSettingsOn && !store.runSettingsChosen)
         store.setRunSettings(false)
-        #expect(!UserDefaultsPreferences(defaults: defaults).runSettings)
+        #expect(!store.runSettingsOn && store.runSettingsChosen && !UserDefaultsPreferences(defaults: defaults).runSettings)
+        let next = ProjectStore(preferences: UserDefaultsPreferences(defaults: defaults))
+        #expect(!next.runSettingsOn && next.runSettingsChosen, "closed stays closed at the next launch")
+        store.setRunSettings(true)
+        #expect(UserDefaultsPreferences(defaults: defaults).runSettings)
+        #expect(ProjectStore(preferences: UserDefaultsPreferences(defaults: defaults)).runSettingsOn)
+        let memory = MemoryPreferences()
+        memory.runSettings = false
+        #expect(!memory.runSettings && memory.runSettingsChosen)
+    }
+
+    @Test func theHeadersButtonOpensWhatIsNotShownAndClosesWhatIs() {
+        func sets(_ on: Bool, _ chosen: Bool, _ fits: Bool) -> Bool {
+            RunSettingsLayout.toggled(on: on, chosen: chosen, fits: fits)
+        }
+        #expect(!sets(true, false, true), "the default shown beside the feed: the click closes it")
+        #expect(sets(true, false, false), "the default in a narrow window shows nothing: the first click opens it")
+        #expect(!sets(true, true, false), "chosen and shown over the feed: the click closes it")
+        #expect(sets(false, true, true) && sets(false, true, false), "closed: the click opens it")
+    }
+
+    @Test func theHeaderAndTheMenuShortcutShareOneToggleSoThePressThatShowsNothingOpensIt() {
+        let narrow = ProjectStore(preferences: MemoryPreferences())
+        narrow.runSettingsFits = false
+        #expect(!narrow.runSettingsShowing, "the default shows nothing in a narrow window")
+        narrow.toggleRunSettings()
+        #expect(narrow.runSettingsShowing && narrow.runSettingsChosen, "the first press opens it")
+        narrow.toggleRunSettings()
+        #expect(!narrow.runSettingsShowing)
+        let wide = ProjectStore(preferences: MemoryPreferences())
+        wide.runSettingsFits = true
+        #expect(wide.runSettingsShowing, "the default is open where it fits")
+        wide.toggleRunSettings()
+        #expect(!wide.runSettingsShowing && wide.runSettingsChosen, "the first press closes it")
+    }
+
+    @Test func theDefaultOpensItOnlyBesideTheFeedNeverOverItUntilAPersonHasChosen() {
+        let store = ProjectStore(preferences: MemoryPreferences())
+        #expect(store.runSettingsOn && !store.runSettingsChosen, "on by default, not chosen: a narrow window shows no sheet")
+        store.setRunSettings(true)
+        #expect(store.runSettingsChosen, "choosing it, even to keep it open, lets a narrow window show it")
     }
 
     @Test func aNarrowWindowOpensItOverTheFeedAndAWideOneBesideIt() {
@@ -228,6 +265,7 @@ import Testing
         on.runSettings = true
         let off = MemoryPreferences()
         off.chatFeed = true
+        off.runSettings = false
         let project = Project(root: URL(fileURLWithPath: "/tmp/x"))
         let showing = ProjectStore(preferences: on, screen: .thread(feed), project: project)
         let hidden = ProjectStore(preferences: off, screen: .thread(feed), project: project)

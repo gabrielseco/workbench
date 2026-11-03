@@ -14,9 +14,18 @@ extension ProjectStore {
 }
 
 extension ProjectStore {
+    /// What is on screen: on, and either a person has chosen or there is room beside the feed (a narrow window shows the default nowhere).
+    var runSettingsShowing: Bool { runSettingsOn && (runSettingsChosen || runSettingsFits) }
+
+    /// The header's button and View ▸ Run settings: closes what is shown, opens what is not, so the first press in a narrow window opens it.
+    func toggleRunSettings() {
+        setRunSettings(RunSettingsLayout.toggled(on: runSettingsOn, chosen: runSettingsChosen, fits: runSettingsFits))
+    }
+
     /// Shows or hides the Run settings inspector, and remembers it.
     func setRunSettings(_ on: Bool) {
-        guard on != runSettingsOn else { return }
+        runSettingsChosen = true
+        guard on != runSettingsOn || !preferences.runSettingsChosen else { return }
         preferences.runSettings = on
         runSettingsOn = on
     }

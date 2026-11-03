@@ -26,6 +26,22 @@ struct DecisionCard: View {
                 Text(shownWhy).font(.callout).foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
+            DecisionActions(decision: decision, perform: perform)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)))
+        .padding(.top, 6)
+    }
+}
+
+/// The decision's buttons: the `…` menu with the other actions and the one prominent button. The decision card and the draft goal card's
+/// footer both draw these, so the same actions are disabled for the same reasons in both.
+struct DecisionActions: View {
+    var decision: FeedDecision
+    var perform: (FeedAction) -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
             if !decision.more.isEmpty {
                 Menu {
                     ForEach(decision.more) { action in
@@ -46,9 +62,6 @@ struct DecisionCard: View {
                     .help(primary.help ?? primary.title)
             }
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)))
-        .padding(.top, 6)
     }
 }
 

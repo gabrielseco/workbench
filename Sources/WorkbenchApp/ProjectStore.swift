@@ -106,6 +106,10 @@ struct RecentProject: Equatable, Identifiable {
     var chatFeedOn: Bool { didSet { Theme.preview = chatFeedOn } }
     /// The Run settings inspector is shown beside the feed (or over it, in a narrow window). Set by `setRunSettings`.
     var runSettingsOn: Bool
+    /// A person has chosen (open or closed): only then may a narrow window open the inspector over the feed.
+    var runSettingsChosen: Bool
+    /// The feed's centre is wide enough to hold the inspector beside it (set by the feed from its layout).
+    var runSettingsFits = false
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
@@ -165,6 +169,7 @@ struct RecentProject: Equatable, Identifiable {
         self.chatFeedOn = preferences.chatFeed
         Theme.preview = preferences.chatFeed
         self.runSettingsOn = preferences.runSettings
+        self.runSettingsChosen = preferences.runSettingsChosen
         self.doctorRunner = doctorRunner
         current.onSaid = { [weak self] in self?.adopt($0) }
     }

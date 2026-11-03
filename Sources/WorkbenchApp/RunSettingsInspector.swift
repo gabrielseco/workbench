@@ -12,6 +12,10 @@ enum RunSettingsLayout {
 
     static func placement(centreWidth: CGFloat) -> Placement { centreWidth >= besideFrom ? .beside : .sheet }
 
+    /// What the header's button sets: what is on screen is turned off, what is not is turned on. The default is on, but in a window too
+    /// narrow to hold it beside the feed it shows nothing until a person has chosen, so the first click there opens it.
+    static func toggled(on: Bool, chosen: Bool, fits: Bool) -> Bool { !(on && (chosen || fits)) }
+
     /// The tools the inspector lists, and how many more there are.
     static let shownTools = 10
 
