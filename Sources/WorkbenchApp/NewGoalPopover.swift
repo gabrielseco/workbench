@@ -15,20 +15,22 @@ struct NewGoalPopover: View {
     private var project: String { store.project?.root.lastPathComponent ?? "this project" }
     /// The goal agent is asked for only in Advanced: a quick goal needs none.
     private var agentOff: Bool { form.mode == .advanced && store.goalAgentOff }
+    /// Something is going for this card: a draft, or the first turn of a chat it started.
+    private var working: Bool { store.drafting || (form.mode == .chat && store.chatReplying) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             modes.padding(.top, 14)
             writing.padding(.top, 12)
-            attachments.padding(.top, 20)
+            if form.mode != .chat { attachments.padding(.top, 20) }
             messages
             footer.padding(.top, 26)
         }
         .overlayCard()
-        .onExitCommand { if !store.drafting { close() } }
+        .onExitCommand { if !working { close() } }
         .dropDestination(for: URL.self) { urls, _ in
-            guard !store.drafting else { return false }
+            guard !working else { return false }
             Task { await staging.add(files: urls) }
             return true
         }
@@ -56,7 +58,7 @@ struct NewGoalPopover: View {
                 .font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
             Spacer()
             Button(action: close) { Image(systemName: "xmark").font(.caption.weight(.semibold)) }
-                .buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.drafting)
+                .buttonStyle(.plain).foregroundStyle(.secondary).disabled(working)
                 .accessibilityLabel("Close the new goal panel")
         }
     }
@@ -64,15 +66,18 @@ struct NewGoalPopover: View {
     /// Quick or Advanced. The text stays as it is either way.
     private var modes: some View {
         Picker("Kind of goal", selection: $form.mode) {
-            ForEach(NewGoalForm.Mode.allCases) { Text($0.label).tag($0) }
+            ForEach(NewGoalForm.Mode.offered(chatFeed: store.chatFeedOn)) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented).labelsHidden().fixedSize()
-        .disabled(store.drafting)
-        .help("Quick keeps your words as the goal. Advanced has the goal agent draft criteria that the judge can check.")
+        .disabled(working)
+        .help(
+            "Quick keeps your words as the goal. Advanced has the goal agent draft criteria that the judge can check. "
+                + "Chat talks it through first.")
     }
 
     private var placeholder: String {
-        form.mode == .quick
+        if form.mode == .chat { return "What are you thinking about? Ask, or describe the idea; the agent asks back." }
+        return form.mode == .quick
             ? "What needs to be done? A sentence or two is enough."
             : "What needs to be done? Describe the change, the bug or the idea, and say how you will know it worked."
     }
@@ -82,7 +87,7 @@ struct NewGoalPopover: View {
             .font(.system(size: 17, design: .serif)).lineSpacing(6)
             .focused($focused).scrollContentBackground(.hidden)
             .frame(height: 170)
-            .disabled(store.drafting)
+            .disabled(working)
             .overlay(alignment: .topLeading) {
                 if form.request.isEmpty {
                     Text(placeholder)
@@ -105,13 +110,13 @@ struct NewGoalPopover: View {
                         }
                     }
                     .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
-                    if !store.drafting {
+                    if !working {
                         Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(3)
                     }
                 }
             }
-            if !store.drafting, staging.items.count < GoalAttachments.maxCount {
+            if !working, staging.items.count < GoalAttachments.maxCount {
                 Button { chooseImages() } label: {
                     Text("+ screenshot").font(.system(.caption, design: .monospaced))
                         .padding(.horizontal, 11).padding(.vertical, 6)
@@ -142,7 +147,7 @@ struct NewGoalPopover: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            if store.drafting {
+            if working {
                 ProgressView().controlSize(.small)
                 Text(form.busyText).font(.callout).foregroundStyle(.secondary)
             } else {
@@ -150,8 +155,9 @@ struct NewGoalPopover: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
-            if store.drafting {
+            if working {
                 if form.mode == .advanced { Button("Stop") { store.stopDrafting() } }
+                if form.mode == .chat { Button("Stop") { store.stopChat() } }
             } else {
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)
                 if agentOff {
@@ -165,7 +171,7 @@ struct NewGoalPopover: View {
                         .disabled(staging.pending > 0)
                     }
                 } else {
-                    Button("Create") {
+                    Button(form.action) {
                         Task {
                             let made = await store.createGoal(form, attachments: staging.urls)
                             if made { close() }
@@ -184,7 +190,7 @@ struct NewGoalPopover: View {
         guard pasteMonitor == nil else { return }
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [staging, store] event in
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == .command, event.charactersIgnoringModifiers == "v", !store.drafting,
+            guard flags == .command, event.charactersIgnoringModifiers == "v", !working,
                 AttachmentStaging.wantsImages(.general)
             else { return event }
             Task { await staging.add(from: .general) }
