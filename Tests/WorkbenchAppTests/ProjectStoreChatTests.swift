@@ -139,6 +139,40 @@ private final class Seen: @unchecked Sendable {
         #expect(seen.all == ["one"])
     }
 
+    @Test func whatWasTypedWhileCoreDecidedStaysWhenItRefuses() async throws {
+        let gate = Gate()
+        let (store, _) = try await opened(chat: { _, _, _, _ in
+            await gate.wait()
+            throw ChatRefusal.busy
+        })
+        store.chatDraft = "first message"
+        let sending = Task { await store.sendChat() }
+        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        store.chatDraft = "second, typed meanwhile"
+        await gate.open()
+        #expect(await sending.value == false)
+        #expect(store.chatDraft == "first message\nsecond, typed meanwhile")
+    }
+
+    @Test func aNewChatCountsAsReplyingOnceTheWindowIsOnItsThread() async throws {
+        let gate = Gate()
+        let (store, fixture) = try await opened(
+            chat: { _, _, _, _ in
+                await gate.wait()
+                return ChatResult(id: "g-2026-11-03-new", reply: "Yes.", end: "ok", provider: .claude)
+            }, chats: [])
+        #expect(!store.replyingHere)
+        let starting = Task { await store.startChat("a new idea") }
+        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        // Core made the thread and wrote the message; the window follows the active chat.
+        try addChat(fixture, "g-2026-11-03-new", ended: false)
+        await store.reload()
+        #expect(store.currentThread == "g-2026-11-03-new" && store.replyingHere)
+        await gate.open()
+        #expect(await starting.value)
+        #expect(!store.chatReplying && !store.replyingHere)
+    }
+
     // MARK: Starting
 
     @Test func startingAChatNamesItFromItsFirstWordsAndNeverAbandonsAnotherThread() async throws {
@@ -251,7 +285,8 @@ private final class Seen: @unchecked Sendable {
         #expect(shown.state.isChat && shown.state.chat?.messages.count == 2, "the conversation is intact")
 
         let (refused, _) = try await opened(draftFromChat: { _, _, _ in throw GoalDraftRefusal.noGoalAgent })
-        #expect(await refused.makeChatGoal() == false && refused.goalAgentOff && refused.actionError == nil)
+        #expect(await refused.makeChatGoal() == false)
+        #expect(refused.actionError == "\(GoalDraftRefusal.noGoalAgent)" && !refused.goalAgentOff)
         let (busy, _) = try await opened(draftFromChat: { _, _, _ in throw GoalDraftRefusal.busy })
         #expect(await busy.makeChatGoal() == false && busy.actionError == "\(GoalDraftRefusal.busy)")
     }

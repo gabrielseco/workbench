@@ -10,6 +10,16 @@ extension ProjectStore {
         set { current.chatDraft = newValue }
     }
 
+    /// A chat turn is going in the thread on screen. A chat just started is held under no thread until its turn ends, so it counts
+    /// once the window is on the thread the log shows with its turn open.
+    var replyingHere: Bool {
+        if current.replying { return true }
+        guard let project, sessions[ThreadSession.Key(project: project, thread: nil)]?.replying == true,
+            case .thread(let shown) = screen
+        else { return false }
+        return shown.state.chat?.open == true
+    }
+
     /// A chat turn is going, in any thread: core allows one at a time.
     var chatReplying: Bool { sessions.values.contains(where: \.replying) }
 
@@ -22,7 +32,8 @@ extension ProjectStore {
         mine.chatDraft = ""
         mine.actionError = nil
         let started = await chatTurn(project, .existing(id: thread), text, in: mine)
-        if !started, mine.chatDraft.isEmpty { mine.chatDraft = text }
+        // What was typed while core was deciding stays, after what came back: a refusal loses neither.
+        if !started { mine.chatDraft = mine.chatDraft.isEmpty ? text : text + "\n" + mine.chatDraft }
         return started
     }
 
@@ -90,7 +101,6 @@ extension ProjectStore {
         guard let project, let thread = currentThread, !drafting, !chatReplying else { return false }
         let held = threadSession(project, thread)
         held.actionError = nil
-        goalAgentOff = false
         let stop = DraftStop()
         (drafting, draftStop) = (true, stop)
         defer { (drafting, draftStop) = (false, nil) }
@@ -103,10 +113,8 @@ extension ProjectStore {
                 return false
             }
         } catch {
-            if mine == generation {
-                goalAgentOff = (error as? GoalDraftRefusal) == .noGoalAgent
-                held.actionError = goalAgentOff ? nil : "\(error)"
-            }
+            // The reason stays on the chat it is about: the New goal card's "name a goal agent" offer is not this screen's.
+            if mine == generation { held.actionError = "\(error)" }
             return false
         }
         await reload()
