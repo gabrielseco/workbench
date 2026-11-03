@@ -37,17 +37,6 @@ struct NewThreadState: Equatable {
     /// The box's height for that many lines: roomy when empty (the artboard's composer is two lines tall), growing a line at a time to eight.
     static func editorHeight(lines: Int) -> CGFloat { 36 + CGFloat(min(8, max(2, lines))) * 18 }
 
-    /// What a starter chip puts in the box.
-    enum Starter: Equatable {
-        case idea, bug
-        var stub: String { self == .idea ? "I have an idea: " : "Fix this bug: " }
-    }
-
-    /// A starter fills an empty box and leaves words the person already typed alone.
-    static func applying(_ starter: Starter, to text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? starter.stub : text
-    }
-
     enum Key: Equatable { case send, doItNow, newline }
 
     /// Return sends, ⌘-Return is Do it now, Shift- or Option-Return a new line.
@@ -78,33 +67,6 @@ struct NewThreadCaption: View {
     var body: some View { Text(Self.text).font(.caption).foregroundStyle(.secondary) }
 }
 
-struct NewThreadHint: View {
-    var body: some View {
-        Text("Drop a screenshot on the window to start one").font(.caption).foregroundStyle(Theme.fg3)
-    }
-}
-
-/// The two starters that have something behind them.
-struct NewThreadChips: View {
-    var brainstorm: () -> Void
-    var screenshot: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            chip("Brainstorm an idea", brainstorm)
-            chip("Fix a bug from a screenshot", screenshot)
-        }
-    }
-
-    private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.callout).padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 /// The new-thread screen (P22 design parity 6): what to work on, a composer, and three ways to go on, in the feed's column.
 struct NewThreadScreen: View {
     var store: ProjectStore
@@ -133,8 +95,6 @@ struct NewThreadScreen: View {
                     messages
                     composer
                     caption
-                    NewThreadChips(brainstorm: { start(.idea) }, screenshot: { start(.bug); chooseImages() }).disabled(busy)
-                    NewThreadHint().padding(.top, 12)
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
                 .padding(.horizontal, 28).padding(.vertical, 36).frame(maxWidth: .infinity)
@@ -303,11 +263,6 @@ struct NewThreadScreen: View {
 
     private func writeAsGoal() async {
         if await store.quickNewThread(attachments: staging.urls) { staging.clear() }
-    }
-
-    private func start(_ starter: NewThreadState.Starter) {
-        store.newThreadText = NewThreadState.applying(starter, to: store.newThreadText)
-        focused = true
     }
 
     private func chooseImages() {

@@ -47,12 +47,6 @@ import WorkbenchCore
 
     // MARK: Rules
 
-    @Test func aStarterFillsAnEmptyBoxAndNeverReplacesTypedWords() {
-        #expect(NewThreadState.applying(.idea, to: "") == "I have an idea: ")
-        #expect(NewThreadState.applying(.bug, to: " \n") == "Fix this bug: ")
-        #expect(NewThreadState.applying(.bug, to: "The header jumps") == "The header jumps")
-    }
-
     @Test func sendNeedsTextNoScreenshotsAndNothingGoing() {
         var state = NewThreadState(text: "Fix the header")
         #expect(state.canSend && state.canDoItNow && state.canWriteAsGoal)
@@ -196,9 +190,7 @@ import WorkbenchCore
     @Test func eachPartOfTheScreenIsDrawnOnItsOwn() throws {
         let blank = try drawn(Color.clear)
         #expect(try drawn(NewThreadHeading()) != blank)
-        #expect(try drawn(NewThreadChips(brainstorm: {}, screenshot: {})) != blank)
         #expect(try drawn(NewThreadCaption()) != blank)
-        #expect(try drawn(NewThreadHint()) != blank)
     }
 
     @Test func theBoxGrowsWithTheLinesATextWrapsIntoNotOnlyItsNewlines() {

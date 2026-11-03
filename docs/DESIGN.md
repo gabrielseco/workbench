@@ -72,8 +72,7 @@ ships, and the mockup gets fixed.
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
   screenshots as small thumbnails with a remove button, a `+` to choose screenshots and `Paste or drop screenshots.`, and two buttons,
   `Draft the goal` (⌘↵) and `Discuss first` (↵, the one prominent button). Under it one caption saying what each does and a small `Use my text as the goal`
-  (a quick goal, no agent), the two starters that have something behind them (`Brainstorm an idea` puts `I have an idea: ` in an empty box,
-  `Fix a bug from a screenshot` puts `Fix this bug: ` there and opens the screenshot picker; typed words are never replaced) and `Drop a screenshot on the window to start one`. Send needs text and no
+  (a quick goal, no agent). There are no starter chips: `+`, paste and drop already add screenshots, and typing already starts a chat. Discuss first needs text and no
   screenshots (a chat takes none); a refusal is an amber row above the panel with the text kept; a project with no goal agent offers `Draft
   with Claude` / `Draft with Codex`. While it is open the rail's first row is `New thread · Type to start · free`, selected; the toolbar says
   `$0.00` and `No run`; the footer has no Event log.
