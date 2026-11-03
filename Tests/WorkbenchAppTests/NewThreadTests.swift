@@ -47,12 +47,18 @@ import WorkbenchCore
 
     // MARK: Rules
 
+    @Test func aStarterFillsAnEmptyBoxAndNeverReplacesTypedWords() {
+        #expect(NewThreadState.applying(.idea, to: "") == "I have an idea: ")
+        #expect(NewThreadState.applying(.bug, to: " \n") == "Fix this bug: ")
+        #expect(NewThreadState.applying(.bug, to: "The header jumps") == "The header jumps")
+    }
+
     @Test func sendNeedsTextNoScreenshotsAndNothingGoing() {
         var state = NewThreadState(text: "Fix the header")
         #expect(state.canSend && state.canDoItNow && state.canWriteAsGoal)
         state.screenshots = 1
         #expect(!state.canSend && state.canDoItNow, "a chat takes no screenshots; Do it now does")
-        #expect(state.sendHelp == "A chat takes no screenshots: use Do it now.")
+        #expect(state.sendHelp == "A chat takes no screenshots: use Draft the goal.")
         state.screenshots = 0
         state.pending = 1
         #expect(!state.canSend && !state.canDoItNow, "an image still being read is not left out")

@@ -19,7 +19,7 @@ struct NewThreadState: Equatable {
 
     var sendHelp: String {
         screenshots > 0
-            ? "A chat takes no screenshots: use Do it now."
+            ? "A chat takes no screenshots: use Draft the goal."
             : "Starts a free chat. Nothing runs and nothing costs until you say so."
     }
 
@@ -36,6 +36,17 @@ struct NewThreadState: Equatable {
 
     /// The box's height for that many lines: roomy when empty (the artboard's composer is two lines tall), growing a line at a time to eight.
     static func editorHeight(lines: Int) -> CGFloat { 36 + CGFloat(min(8, max(2, lines))) * 18 }
+
+    /// What a starter chip puts in the box.
+    enum Starter: Equatable {
+        case idea, bug
+        var stub: String { self == .idea ? "I have an idea: " : "Fix this bug: " }
+    }
+
+    /// A starter fills an empty box and leaves words the person already typed alone.
+    static func applying(_ starter: Starter, to text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? starter.stub : text
+    }
 
     enum Key: Equatable { case send, doItNow, newline }
 
@@ -61,7 +72,8 @@ struct NewThreadHeading: View {
 /// the asterisks.
 struct NewThreadCaption: View {
     private static let text = LocalizedStringKey(
-        "**Send** starts a free chat. **Do it now** skips brainstorming and drafts the goal from your words for you to approve.")
+        "**Discuss first** opens a free chat; the goal is written after. **Draft the goal** skips the chat: "
+            + "the goal agent drafts it from your words and you approve it. Nothing runs until you do.")
 
     var body: some View { Text(Self.text).font(.caption).foregroundStyle(.secondary) }
 }
@@ -121,7 +133,7 @@ struct NewThreadScreen: View {
                     messages
                     composer
                     caption
-                    NewThreadChips(brainstorm: { focused = true }, screenshot: chooseImages).disabled(busy)
+                    NewThreadChips(brainstorm: { start(.idea) }, screenshot: { start(.bug); chooseImages() }).disabled(busy)
                     NewThreadHint().padding(.top, 12)
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
@@ -203,10 +215,10 @@ struct NewThreadScreen: View {
                     }
                     .buttonStyle(.borderless)
                 } else {
-                    Button { Task { await doItNow() } } label: { Self.labelled("Do it now", "⌘↵") }
+                    Button { Task { await doItNow() } } label: { Self.labelled("Draft the goal", "⌘↵") }
                         .plainButton().keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)
                         .help("Skips the conversation: the goal agent drafts a goal from your words for you to approve")
-                    Button { Task { await send() } } label: { Self.labelled("Send", "↵") }
+                    Button { Task { await send() } } label: { Self.labelled("Discuss first", "↵") }
                         .primaryButton().disabled(!state.canSend).help(state.sendHelp)
                 }
             }
@@ -265,7 +277,7 @@ struct NewThreadScreen: View {
         HStack(alignment: .firstTextBaseline) {
             NewThreadCaption()
             Spacer(minLength: 12)
-            Button("Write it as the goal") { Task { await writeAsGoal() } }
+            Button("Use my text as the goal") { Task { await writeAsGoal() } }
                 .buttonStyle(.link).font(.caption).disabled(!state.canWriteAsGoal)
                 .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
         }
@@ -291,6 +303,11 @@ struct NewThreadScreen: View {
 
     private func writeAsGoal() async {
         if await store.quickNewThread(attachments: staging.urls) { staging.clear() }
+    }
+
+    private func start(_ starter: NewThreadState.Starter) {
+        store.newThreadText = NewThreadState.applying(starter, to: store.newThreadText)
+        focused = true
     }
 
     private func chooseImages() {
