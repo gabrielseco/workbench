@@ -10,7 +10,7 @@ struct RootView: View {
             ToolbarBar(store: store)
             Divider()
             HStack(spacing: 0) {
-                Rail(store: store).frame(width: 220).background(Theme.rail)
+                Rail(store: store).frame(width: store.chatFeedOn ? PreviewRail.width : 220).background(Theme.rail)
                 Divider()
                 // The design's content colour while the preview is on; without it the window draws its own, as before.
                 Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -120,6 +120,10 @@ struct Rail: View {
     var store: ProjectStore
 
     var body: some View {
+        if store.chatFeedOn { PreviewRail(store: store) } else { oldRail }
+    }
+
+    private var oldRail: some View {
         VStack(alignment: .leading) {
             Picker("View", selection: Binding(get: { store.mode }, set: { store.mode = $0 })) {
                 ForEach(WindowMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }

@@ -20,18 +20,17 @@ struct ThreadListView: View {
     var body: some View {
         let listing = store.threads.listing
         let shown = shownThread
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 4) {
-                ForEach(listing.rows) { row in
-                    ThreadRowView(row: row, selected: row.id == shown) {
-                        Task { await store.select(thread: row.id) }
-                    }
+        let selectedHere = store.mode == .thread
+        LazyVStack(alignment: .leading, spacing: 2) {
+            ForEach(listing.rows) { row in
+                RailRowView(row: RailRow.thread(row), selected: selectedHere && row.id == shown) {
+                    Task { await store.select(thread: row.id) }
                 }
-                if listing.older > 0 {
-                    Text(listing.older == 1 ? "1 older thread" : "\(listing.older) older threads")
-                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.top, 4)
-                        .help("The log and the workbench command still reach them")
-                }
+            }
+            if listing.older > 0 {
+                Text(listing.older == 1 ? "1 older thread" : "\(listing.older) older threads")
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.top, 4)
+                    .help("The log and the workbench command still reach them")
             }
         }
         .accessibilityLabel("Threads")
@@ -45,30 +44,50 @@ struct ThreadListView: View {
     }
 }
 
-struct ThreadRowView: View {
-    var row: ThreadRow
+/// A row of the rail as the artboards draw it: the mark at the left, the title on one line, and the state line under it, coloured by the
+/// mark. The selected row sits on a raised surface.
+struct RailRowView: View {
+    var row: RailRow
     var selected: Bool
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: row.mark.symbol).foregroundStyle(row.mark.tint).frame(width: 14).padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title).font(.callout.weight(selected ? .semibold : .regular)).lineLimit(2)
-                    Text(row.line).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(alignment: .center, spacing: 10) {
+                RailMark(mark: row.mark).frame(width: 16, height: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.title).font(.callout.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                    Text(row.line).font(.caption).lineLimit(1)
+                        .foregroundStyle(row.mark.lineTint == .quiet ? Color.secondary : row.mark.tint)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Theme.blue.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("\(row.title): \(row.line)")
         .accessibilityLabel("\(row.title), \(row.mark.word), \(row.line)")
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The artboards' marks: working a spinner, needs you a dot with a halo, done a check, idle a hollow ring, broken a cross.
+struct RailMark: View {
+    var mark: ThreadMark
+
+    var body: some View {
+        switch mark {
+        case .working: ProgressView().controlSize(.small).scaleEffect(0.7).tint(Theme.blue)
+        case .needsYou:
+            Circle().fill(Theme.amber).frame(width: 9, height: 9)
+                .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))
+        case .done: Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Theme.green)
+        case .idle: Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9)
+        case .broken: Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.red)
+        }
     }
 }
 
