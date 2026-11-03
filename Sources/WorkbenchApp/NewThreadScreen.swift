@@ -228,7 +228,7 @@ struct NewThreadScreen: View {
         PlaceholderTextEditor(
             text: Binding(get: { store.newThreadText }, set: { store.newThreadText = $0 }),
             placeholder: "Describe the change, the bug or the idea.", font: .body, hidesScroller: true,
-            accessibilityLabel: "What do you want to work on?", focus: $focused,
+            showsPlaceholder: state.isBlank, accessibilityLabel: "What do you want to work on?", focus: $focused,
             onReturn: { press in
                 let key = NewThreadState.key(
                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option),

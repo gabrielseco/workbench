@@ -36,7 +36,9 @@ matters; say which file and line):
 Then, for each screenshot, in this order:
 
 1. **Hierarchy.** In one second, is it clear which step the thread is on and what to do? One primary action?
-2. **Alignment and rhythm.** Leading edges line up across rows and sections; spacing is larger between groups than within.
+2. **Alignment and rhythm.** Leading edges line up across rows and sections; spacing is larger between groups than within. A text box
+   with a placeholder: the placeholder is on the line you type on, measured with `scripts/check-text-alignment.py` (empty shot, typed shot),
+   not judged by eye: the caret looks wrong when it is not.
 3. **Typography.** The DESIGN.md styles, at most three sizes in a component.
 4. **Colour and contrast.** Each colour means one thing; readable in the appearance shown.
 5. **Fit at 900×600.** Truncates with an ellipsis; nothing important is pushed off screen or under the footer.
