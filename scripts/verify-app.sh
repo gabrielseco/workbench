@@ -163,10 +163,10 @@ abort_start() {
 
 start() {
   local scenario="${1:-needs-you}" size="${VERIFY_WINDOW_SIZE:-1100x700}" dir id pid window
+  [[ -z "${VERIFY_APPEARANCE:-}" || "${VERIFY_APPEARANCE:-}" =~ ^(light|dark)$ ]] || fail "bad VERIFY_APPEARANCE: $VERIFY_APPEARANCE (want light or dark)"
   [[ "$scenario" =~ ^[a-z][a-z-]*$ ]] || fail "not a scenario name: $scenario (lower-case letters and dashes)"
   [[ -d "$ROOT/Fixtures/app/$scenario" ]] || fail "no such scenario: $scenario (have: $(scenarios | tr '\n' ' '))"
   [[ "$size" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] || fail "bad VERIFY_WINDOW_SIZE: $size (want <width>x<height>)"
-  [[ -z "${VERIFY_APPEARANCE:-}" || "${VERIFY_APPEARANCE:-}" =~ ^(light|dark)$ ]] || fail "bad VERIFY_APPEARANCE: $VERIFY_APPEARANCE (want light or dark)"
 
   # Without Screen Recording, screencapture saves a wallpaper-only image instead of failing.
   swift - <<'SWIFT' || fail "this terminal has no Screen Recording permission (System Settings, Privacy & Security): a screenshot would show only the wallpaper"

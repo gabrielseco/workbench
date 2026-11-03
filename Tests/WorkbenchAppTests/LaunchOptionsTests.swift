@@ -112,10 +112,10 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
             var environment = ["WORKBENCH_SKIP_LOGIN_PATH": "1"]
             environment["WORKBENCH_APPEARANCE"] = value
             let options = LaunchOptions.from(environment: environment)
-            let preferences = MemoryPreferences()
+            let preferences = SpyPreferences()
             let store = ProjectStore(preferences: preferences)
             await options.start(store, applyLoginPath: {}, setAppearance: { seen.names.append($0?.name) })
-            #expect(preferences.projectPath == nil && !preferences.chatFeed, "no preference is written for it")
+            #expect(preferences.writes == 0, "no preference is written for it, not even with the same value")
         }
         #expect(seen.names == [.aqua, .darkAqua], "light, dark, and nothing at all when it is not asked for")
     }
