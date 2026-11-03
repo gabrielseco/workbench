@@ -131,7 +131,7 @@ struct FeedScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(snapshot.title ?? snapshot.id).font(.title2.weight(.bold)).lineLimit(2)
+                Text(snapshot.title ?? snapshot.id).font(.title3.weight(.semibold)).lineLimit(2)
                 Spacer(minLength: 12)
                 Button {
                     store.setRunSettings(!store.runSettingsOn)
