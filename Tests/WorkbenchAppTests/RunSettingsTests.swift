@@ -284,4 +284,17 @@ import Testing
         let hidden = ProjectStore(preferences: off, screen: .thread(feed), project: project)
         try differs(RootView(store: showing), RootView(store: hidden), "the inspector at 1400 wide", width: 1_400, height: 800)
     }
+
+    @Test func openInEditorOpensTheWorktreeOnceTheThreadHasRun() {
+        var state = ThreadState.derive(from: [], id: "t1")
+        #expect(!RunSettingsLayout.opensWorktree(state), "no turn yet: the goal file is all there is")
+        state.lastTurn = 1
+        #expect(RunSettingsLayout.opensWorktree(state))
+        state.decision = "discarded"
+        #expect(!RunSettingsLayout.opensWorktree(state), "the worktree is gone")
+        state.decision = "accepted"
+        #expect(RunSettingsLayout.opensWorktree(state))
+        state.cleaned = true
+        #expect(!RunSettingsLayout.opensWorktree(state))
+    }
 }

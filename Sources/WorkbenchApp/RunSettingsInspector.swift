@@ -10,6 +10,12 @@ enum RunSettingsLayout {
 
     enum Placement: Equatable { case beside, sheet }
 
+    /// What "Open in editor" opens: the worktree once the thread has run (that is where the changes are) until it is discarded or
+    /// cleaned, otherwise the goal file.
+    static func opensWorktree(_ state: ThreadState) -> Bool {
+        state.lastTurn > 0 && state.decision != "discarded" && !state.cleaned
+    }
+
     static func placement(centreWidth: CGFloat) -> Placement { centreWidth >= besideFrom ? .beside : .sheet }
 
     /// What the header's button sets: what is on screen is turned off, what is not is turned on. The default is on, but in a window too
@@ -266,8 +272,13 @@ struct RunSettingsInspector: View {
 
     private func openers(_ goal: GoalModel) -> some View {
         section("OPEN") {
-            Button("Open in editor") { Task { await store.openGoalFile() } }
-                .help("Opens the goal file in your editor")
+            if RunSettingsLayout.opensWorktree(snapshot.state) {
+                Button("Open in editor") { Task { await store.openWorktree() } }
+                    .help("Opens the worktree, where the run's changes are, in your editor")
+            } else {
+                Button("Open in editor") { Task { await store.openGoalFile() } }
+                    .help("Opens the goal file in your editor")
+            }
             if store.herdrFound {
                 Button("Open in Herdr") { Task { await store.openInHerdr() } }
                     .disabled(store.busy != nil)
