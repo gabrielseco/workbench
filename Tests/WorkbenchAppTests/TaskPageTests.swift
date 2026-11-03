@@ -84,6 +84,17 @@ import WorkbenchCore
         #expect(one.verdict == .checkWarnings && one.countText == "1 warning")
     }
 
+    @Test func theTimersLinesAboutTasksAreNotAnotherTasksWarnings() async throws {
+        let timer = TimerCard.lines([
+            TimerStatusLine(level: .fail, text: "task broken-task: cannot be loaded: line 3"),
+            TimerStatusLine(level: .warn, text: "task weekly-report: STALE: workbench task approve weekly-report"),
+            TimerStatusLine(level: .warn, text: "wake: no repeating wake is set"),
+        ])
+        let tonight = RunTonight.derive(try await entry("weekly-report"), timer: timer, activeThread: nil)
+        #expect(tonight.warnings.map(\.text) == ["wake: no repeating wake is set"], "only the machine's line")
+        #expect(tonight.verdict == .checkWarnings)
+    }
+
     @Test func aTaskThatIsRunningDoesNotWarnAboutTheThreadItIsRunningIn() async throws {
         let running = try await entry("nightly-lint")
         #expect(running.isRunning)

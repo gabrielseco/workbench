@@ -89,7 +89,9 @@ struct RunTonight: Equatable {
         }
         switch timer {
         case .lines(let lines):
-            for line in lines where line.level != .ok {
+            // The timer's lines about tasks (`task cleanup-branches: not approved`, this task's own too) are each task's own reasons, which are
+            // listed above from the task itself: only what is about the machine is the machine's.
+            for line in lines where line.level != .ok && !line.text.hasPrefix("task ") {
                 found.append(Warning(fails: line.level == .fail, text: line.text, detail: nil))
             }
         case .unknown(let why):
