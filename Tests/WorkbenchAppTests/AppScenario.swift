@@ -113,7 +113,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.activity(id, ["type": "text", "text": "Reading the invoice list and its tests"])
             try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
-            try fixture.activity(id, ["type": "permission_denied", "tool": "Bash"])
+            try fixture.activity(id, ["type": "permission_denied", "tool": "Bash", "input": "git push origin main"])
         case .needsYou, .reviewChanges:
             try await fixture.addThread(id, approved: true, title: Self.title)
             if self == .reviewChanges {
