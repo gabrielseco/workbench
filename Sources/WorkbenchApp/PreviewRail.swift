@@ -48,6 +48,12 @@ struct PreviewRail: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 12)
         }
+        // The thread on screen opens its task's group once, when it is chosen; after that the group can be closed.
+        .onChange(of: shownThreadID, initial: true) {
+            if let task = model.taskThreads.first(where: { $0.value.contains { $0.key == shownThreadID } })?.key {
+                expanded.insert(task)
+            }
+        }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.
         .task(id: store.project?.root.path) {
             var first = true
@@ -63,7 +69,7 @@ struct PreviewRail: View {
     @ViewBuilder private func taskThreads(_ rows: [RailRow], task: String) -> some View {
         if !rows.isEmpty {
             let shown = shownThreadID
-            let open = expanded.contains(task) || rows.contains { $0.key == shown }
+            let open = expanded.contains(task)
             Button {
                 if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
             } label: {
