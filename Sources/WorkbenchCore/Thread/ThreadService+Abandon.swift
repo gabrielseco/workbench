@@ -56,7 +56,10 @@ extension ThreadService {
                 }
             }
             // A chat has no worktree; what its killed turn left running is in its own folder.
-            if ThreadStore(project: project).state(of: id).isChat { Self.clearChatScratch(chatScratch(id)) }
+            if ThreadStore(project: project).state(of: id).isChat {
+                Self.clearChatScratch(chatScratch(id))
+                try? FileManager.default.removeItem(at: project.threadDirectory(id).appendingPathComponent(Chat.imagesFolder))
+            }
             _ = try await log.recoverOrphanedTurn()
             _ = try await log.recoverOrphanedCheck()
             _ = try await log.recoverOrphanedEvaluations()

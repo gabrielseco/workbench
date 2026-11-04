@@ -50,6 +50,8 @@ import WorkbenchCore
     @ObservationIgnored var goalEditsInFlight = 0
     /// What is typed in this chat's composer: kept per thread, so a draft survives a visit to another thread.
     var chatDraft = ""
+    /// The screenshots staged for this chat's next message: kept per thread like the text, and cleared when the message is sent.
+    @ObservationIgnored let chatStaging = AttachmentStaging()
     /// A chat turn is going in this thread (or, under a key with no thread, in a chat the log does not show yet).
     var replying = false
     /// What ends the chat turn this session holds.
@@ -82,5 +84,5 @@ import WorkbenchCore
         actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil
     }
     /// Nothing to remember: not working and nothing to show.
-    var isSpent: Bool { isIdle && !hasMessages && chatDraft.isEmpty }
+    var isSpent: Bool { isIdle && !hasMessages && chatDraft.isEmpty && chatStaging.items.isEmpty && chatStaging.pending == 0 }
 }

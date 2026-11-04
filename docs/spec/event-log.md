@@ -61,7 +61,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `agent.attempt.started` | a provider process is about to be started (a coding turn, the judge, a review round; a capacity retry is another) | `attempt`, `role`, `stage`, `round`, `provider`, `model`, `spawned` |
 | `agent.attempt.ended` | that attempt ended; exactly one per start | `attempt`, `outcome`, `reason`, `synthetic` |
 | `goal.draft.started` | `workbench goal draft` asked the goal agent for a draft (P9 PR 14); thread-level (`turn` 0), no coding turn | `provider`, `model`, `attempt` |
-| `chat.message` | a message of a chat (P22 slice 6): the person's (before anything is spent) or the agent's reply; thread-level (`turn` 0) | `role` (`user`, `assistant`), `text` |
+| `chat.message` | a message of a chat (P22 slice 6): the person's (before anything is spent) or the agent's reply; thread-level (`turn` 0) | `role` (`user`, `assistant`), `text`; on a `user` message that sent screenshots, `images`: their names in the chat's `chat-attachments/` folder (`<n>.<png\|jpg\|gif\|webp>`, n counting up across the whole chat), in the order sent. Absent when there were none, so an older log replays as it was; a name that is not of that shape is ignored |
 | `chat.ended` | a chat turn ended; exactly one per `user` `chat.message`, whatever came of it, after the reply when there is one | `ok`, `reason` (`stopped`, `timeout`, `interrupted` or the failure; absent when `ok`), `attempt`, `provider`, `model`, `cost_usd`, `synthetic` |
 | `goal.draft.finished` | the draft ended; one per start. `ok: true` carries the proposal's place, `ok: false` the failure | `ok`, `proposal_ref`, `provider`, `model`, `attempt`, `reason`, `cost_usd`, `synthetic` |
 
@@ -386,10 +386,18 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   thread stays a chat. The thread's `thread.created` still says `kind: "chat"` (it began as one), so a chat has a goal exactly when `goal.md`
   exists, and then takes no more messages (`chat` is refused). The drafter is given the conversation, quoted line by line with who said each
   message, in place of the rough request (up to the chat's own 128 KiB, not the 16 KiB of a rough request).
+- **Screenshots:** `workbench chat --attach <image>` (the app's `+`, paste or drop) sends images with a message. Each is checked as a goal's are
+  (`GoalAttachments`: real PNG, JPEG, GIF or WebP bytes, at most 5 per message, 5 MiB and 40 million pixels each) before anything starts,
+  kept in the thread's `chat-attachments/` folder (not `attachments/`, which is the goal's and which a run copies into the worktree) and named
+  on the user's `chat.message` (`images`). The agent sees **every** screenshot of the chat on every turn, in the order sent, and the prompt
+  says which message sent which: a Codex agent is sent them as images, a Claude agent finds them by name in its folder and opens them with `Read`. A chat
+  holds at most 10 in all; a message that would pass that is refused (nothing spent or written). A screenshot of the chat that can no longer
+  be read refuses the turn. The agent's folder, with its copies, is removed after every turn as before; `abandon` removes `chat-attachments/`.
 - **The reply** is stored in the log (a chat has no transcript file), scrubbed of credentials and cut at 16 KiB.
-- **Limits** (a message over 16 KiB, a 31st message from the person, a conversation over 128 KiB or a known cost of $5 or more) are refused
+- **Limits** (a message over 16 KiB, a 31st message from the person, a conversation over 128 KiB, a known cost of $5 or more, a bad image, or
+  more than 10 screenshots in the chat) are refused
   before anything is spent or written.
-- `ThreadState.chat` (messages, turns, `lastEnd`, `costUSD`, `costUnknown`, `open`) and `isChat` derive from these; both are nil/false for
+- `ThreadState.chat` (messages, each with the `images` it sent, turns, `lastEnd`, `costUSD`, `costUnknown`, `open`) and `isChat` derive from these; both are nil/false for
   every other thread.
 
 ## Run results

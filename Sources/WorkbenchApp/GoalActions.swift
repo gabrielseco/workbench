@@ -100,7 +100,7 @@ struct GoalActions: Sendable {
             RunHandle(run: {}, stop: {})
         },
         draftGoal: @escaping DraftGoal = { _, _, _, _, _ in throw Unset() },
-        chat: @escaping Chat = { _, _, _, _ in throw Unset() },
+        chat: @escaping Chat = { _, _, _, _, _ in throw Unset() },
         draftFromChat: @escaping DraftFromChat = { _, _, _ in throw Unset() },
         quickGoal: @escaping @Sendable (Project, String, String, [URL]) async throws -> String = { _, _, _, _ in throw Unset() },
         enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },

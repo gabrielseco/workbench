@@ -44,7 +44,8 @@ extension Commands {
     static func chatJSON(_ state: ThreadState) -> JSONValue {
         guard let chat = state.chat else { return .null }
         return [
-            "messages": .int(chat.messages.count), "turns": .int(chat.turns),
+            "messages": .int(chat.messages.count), "images": .int(chat.messages.reduce(0) { $0 + $1.images.count }),
+            "turns": .int(chat.turns),
             "last_end": chat.lastEnd.map { .string($0) } ?? .null, "open": .bool(chat.open),
             "cost_usd": chat.costUnknown ? .null : .double(chat.costUSD),
         ]

@@ -37,13 +37,15 @@ let workbenchUsage = """
                                  --replace: <name> is an existing thread (default: the active one); its title, request,
                                  criteria and out of scope are redrafted and an approved goal returns to draft
                                  refused (exit 6) with no [agents.goal]: write the goal by hand with goal new
-      chat [<name-or-id>] [--message "<text>" | --message-file <path>] [--abandon-active]
+      chat [<name-or-id>] [--message "<text>" | --message-file <path>] [--attach <image>]... [--abandon-active]
                                  talk with the goal agent ([agents.goal]) before there is a goal, read-only: a name that is
                                  not a thread starts a chat thread (no goal, no worktree, no branch); its id, or the name it
                                  was started under, continues it; without a message it prints the conversation.
                                  Each turn is bounded (300 s; $0.50 on Claude; Codex has no dollar cap), the conversation
                                  is (30 messages, 128 KiB, $5 of known cost), and
                                  every message and how its turn ended (ok, stopped, timeout, failed) is in the log
+                                 --attach: a screenshot (PNG, JPEG, GIF or WebP; at most 5 per message, 5 MiB each) sent with
+                                 the message and shown to the agent again on every later turn; a chat holds 10 in all
                                  a chat is the active thread: one at a time, --abandon-active ends the active one first
                                  refused (exit 6) with no [agents.goal]; exit 3 stopped, 4 timed out, 1 failed
       goal approve [id]          approve the goal; any later edit returns it to draft

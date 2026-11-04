@@ -61,7 +61,9 @@ public enum LogFormatter {
             return head + describeAgent(event)
         case .chatMessage:
             let who = event.data["role"]?.stringValue == "user" ? "you" : "agent"
-            return head + "chat \(who): " + ThreadState.safeLine(event.data["text"]?.stringValue ?? "", limit: 100)
+            var shots = ""
+            if case .array(let names)? = event.data["images"], !names.isEmpty { shots = " [+\(names.count) screenshot(s)]" }
+            return head + "chat \(who)\(shots): " + ThreadState.safeLine(event.data["text"]?.stringValue ?? "", limit: 100)
         case .chatEnded:
             let reason = ThreadState.safeLine(event.data["reason"]?.stringValue ?? "failed", limit: 100)
             let how = event.data["ok"] == true ? "ok" : reason

@@ -2,19 +2,29 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    /// `chat [<name-or-id>] [--message "<text>" | --message-file <path>] [--abandon-active]`: a read-only conversation with the goal
-    /// agent in a thread that has no goal. A name that is not a thread starts one; an id continues it; no message prints it.
+    /// `chat [<name-or-id>] [--message "<text>" | --message-file <path>] [--attach <image>]... [--abandon-active]`: a read-only
+    /// conversation with the goal agent in a thread that has no goal. A name that is not a thread starts one; an id continues it; no
+    /// message prints it. Each `--attach` is a screenshot sent with the message and shown to the agent again on every later turn.
     static func chat(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let text = try a.value("--message")
         let path = try a.value("--message-file")
         let abandonActive = a.flag("--abandon-active")
+        var attachments: [URL] = []
+        while let path = try a.value("--attach") { attachments.append(URL(fileURLWithPath: path)) }
         let named = a.positional()
         try a.requireEmpty()
-        let usage = "usage: workbench chat [<name-or-id>] [--message \"<text>\" | --message-file <path>] [--abandon-active]"
+        let usage =
+            "usage: workbench chat [<name-or-id>] [--message \"<text>\" | --message-file <path>] "
+            + "[--attach <image>]... [--abandon-active]"
         if text != nil && path != nil { throw CLIError.usage("give the message once, as --message or --message-file. " + usage) }
         let ctx = try await Context.load()
-        guard text != nil || path != nil else { return try showChat(ctx, named) }
+        guard text != nil || path != nil else {
+            if !attachments.isEmpty {
+                throw CLIError.usage("--attach goes with a message (--message or --message-file). " + usage)
+            }
+            return try showChat(ctx, named)
+        }
         guard let named else { throw CLIError.usage("say which chat, or the name of a new one. " + usage) }
         let message: String
         if let text { message = text } else if let path { message = try readMessageFile(path) } else { message = "" }
@@ -34,7 +44,8 @@ extension Commands {
         let result: ChatResult
         do {
             result = try await ctx.service.chat(
-                target: target, message: message, config: config, abandonActive: abandonActive, attach: { holder.attach($0) })
+                target: target, message: message, config: config, attachments: attachments, abandonActive: abandonActive,
+                attach: { holder.attach($0) })
         } catch let error as ChatRefusal {
             throw CLIError.refused("\(error)")
         }
@@ -72,7 +83,8 @@ extension Commands {
             throw CLIError.refused("thread \(id) is not a chat: use `workbench chat <name> --message \"...\"` to start one.")
         }
         for message in chat.messages {
-            out(message.role == .user ? "you:" : "agent:")
+            let shots = message.images.isEmpty ? "" : " [+\(message.images.count) screenshot(s)]"
+            out(message.role == .user ? "you\(shots):" : "agent:")
             out(message.text.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)" }.joined(separator: "\n"))
             out("")
         }

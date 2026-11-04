@@ -42,7 +42,8 @@ enum Help {
         "chat": Extra(
             changes:
                 "starts a chat thread on a new name (a folder and a log, no goal, worktree or branch) and appends the "
-                + "messages and each turn's end to its log; runs the goal agent read-only in an empty folder",
+                + "messages and each turn's end to its log, keeps --attach screenshots in the thread's chat-attachments folder; "
+                + "runs the goal agent read-only in an empty folder",
             example: "workbench chat idea --message \"could uploads retry?\""),
         "run": Extra(
             changes: "creates the thread's worktree and branch, runs Claude and the project's check there, appends to the log",
