@@ -56,12 +56,12 @@ struct ToolbarBar: View {
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
                 Spacer()
-                Text("$0.00").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                Text("$0.00").role(.monoDetail)
                 Text("No run").pill(Theme.grey, size: .regular)
             } else if store.mode == .thread, case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
-                Text(snapshot.spendText).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                Text(snapshot.spendText).role(.monoDetail)
                 StatePill(snapshot: snapshot)
             } else {
                 Spacer()
@@ -169,7 +169,7 @@ struct BusyBar: View {
     var body: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text(text).font(.callout).foregroundStyle(.secondary)
+            Text(text).role(.detail)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .callout()
@@ -195,7 +195,7 @@ struct PullRequestCIView: View {
                 rows
             }
             if !ci.canMerge, let blocker = ci.mergeBlocker, ci.unavailableReason == nil {
-                Text("Merge waits: \(blocker)").font(.callout).foregroundStyle(.secondary)
+                Text("Merge waits: \(blocker)").role(.detail)
             }
         }
     }
@@ -208,7 +208,7 @@ struct PullRequestCIView: View {
                 HStack(spacing: 6) {
                     Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
                     Text(row.name).font(.system(.callout, design: .monospaced))
-                    Text(row.word).font(.callout).foregroundStyle(.secondary)
+                    Text(row.word).role(.detail)
                 }
                 .padding(.leading, 20)
             }
@@ -269,7 +269,7 @@ struct EmptyState: View {
                 if store.screen == .noThread { Button("New goal…") { store.beginNewGoal() } }
             }
             .padding(.top, 6)
-            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let error = store.actionError { Text(error).role(.error) }
         }
         .padding(40)
     }
@@ -295,7 +295,7 @@ struct FooterBar: View {
             DoctorButton(store: store, compact: true).font(.callout)
             Spacer()
             if let limit = FooterBar.limitText(store.screen, mode: store.mode, composing: store.newThread) {
-                Text(limit).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                Text(limit).role(.mono)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)

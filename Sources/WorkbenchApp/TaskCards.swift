@@ -22,15 +22,15 @@ struct TaskApproveCard: View {
                 "Approving lets this run unattended, on its schedule, with nobody watching. It is bound to what is shown here: "
                     + "editing any of it takes the approval back."
             )
-            .font(.callout).foregroundStyle(.secondary).padding(.top, 4)
+            .role(.detail).padding(.top, 4)
             if stale {
                 Label("Edited since it was last approved.", systemImage: "exclamationmark.circle.fill")
-                    .font(.callout).foregroundStyle(Theme.amber).padding(.top, 8)
+                    .textRole(.warning).padding(.top, 8)
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(card.settings, id: \.label) { line in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(line.label).font(.caption).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
+                        Text(line.label).role(.caption).frame(width: 70, alignment: .leading)
                         Text(line.value).font(.callout).textSelection(.enabled)
                     }
                 }
@@ -43,7 +43,7 @@ struct TaskApproveCard: View {
             }
             .frame(height: 150).callout(.neutral)
             if let error = store.tasks.approveError {
-                Text(error).font(.callout).foregroundStyle(Theme.red).textSelection(.enabled).padding(.top, 10)
+                Text(error).role(.error).textSelection(.enabled).padding(.top, 10)
             }
             HStack {
                 Spacer()

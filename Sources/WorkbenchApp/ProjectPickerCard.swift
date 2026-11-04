@@ -35,7 +35,7 @@ struct ProjectPickerCard: View {
             search.padding(.top, 12)
             list.padding(.top, 10)
             if let error = store.actionError {
-                Text(error).font(.callout).foregroundStyle(Theme.red)
+                Text(error).role(.error)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
             }
             Divider().padding(.top, 10)
@@ -107,7 +107,7 @@ struct ProjectPickerCard: View {
     @ViewBuilder private var list: some View {
         if rows.isEmpty {
             Text(store.recentPaths.isEmpty ? "No recent projects yet." : "No project matches \"\(query)\".")
-                .font(.callout).foregroundStyle(.secondary).padding(.vertical, 10).padding(.horizontal, 4)
+                .role(.detail).padding(.vertical, 10).padding(.horizontal, 4)
         } else {
             ScrollViewReader { scroller in
                 ScrollView {

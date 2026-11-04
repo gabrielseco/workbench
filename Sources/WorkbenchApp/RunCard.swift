@@ -141,7 +141,7 @@ struct RunCardView: View {
             Text("Claude is working").font(.callout.weight(.semibold))
             Spacer(minLength: 8)
             if let clock = RunCardModel.clock(elapsed: elapsed, limit: model.limit) {
-                Text(clock).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                Text(clock).role(.monoDetail)
             }
         }
         .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
@@ -173,7 +173,7 @@ struct RunCardView: View {
     private var tail: some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(model.tail.enumerated()), id: \.offset) { _, line in
-                Text(line).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                Text(line).role(.mono).lineLimit(1)
                     .truncationMode(.middle)
             }
         }
@@ -203,7 +203,7 @@ struct PendingStepRow: View {
         IconRow(symbol: "circle", tint: Theme.fg3) {
             Text(step.name).font(.callout.weight(.semibold))
             Spacer(minLength: 8)
-            Text(step.detail).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            Text(step.detail).role(.detail).lineLimit(1)
         }
         .accessibilityElement(children: .combine)
     }
@@ -267,7 +267,7 @@ struct ProofThumbnail: View {
                 }
             }
             .thumbnail(outlined: true)
-            Text(shot.caption).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(shot.caption).role(.caption).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine).accessibilityLabel("Screenshot: \(shot.caption)")

@@ -54,7 +54,7 @@ struct SendBackGrants: View {
                 } else {
                     rows
                 }
-                Text("A decision is saved when you make it and stays if you cancel.").font(.caption).foregroundStyle(.secondary)
+                Text("A decision is saved when you make it and stays if you cancel.").role(.caption)
             }
         }
     }
@@ -73,7 +73,7 @@ private struct GrantRowView: View {
                     Text(row.level == .unsafe ? "unsafe" : "caution").font(.caption)
                         .foregroundStyle(row.level == .unsafe ? Theme.red : Theme.amber)
                 }
-                if let reason = row.reasons.first { Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                if let reason = row.reasons.first { Text(reason).role(.caption).lineLimit(1) }
                 Spacer(minLength: 8)
                 if let decided = row.decided { Text(decided).font(.caption).foregroundStyle(Theme.green) }
                 choices

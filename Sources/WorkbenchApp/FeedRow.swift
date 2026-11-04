@@ -111,7 +111,7 @@ struct UserNoteRow: View {
         HStack {
             Spacer(minLength: 60)
             VStack(alignment: .leading, spacing: 2) {
-                Text("You · sent back").font(.caption).foregroundStyle(.secondary)
+                Text("You · sent back").role(.caption)
                 Text(text).font(.body).textSelection(.enabled)
             }
             .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.quiet))
@@ -162,7 +162,7 @@ struct GoalCardRow: View {
                 Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
                 Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
                 if let hash, !hash.isEmpty {
-                    Text(String(hash.prefix(7))).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    Text(String(hash.prefix(7))).role(.monoDetail)
                 }
             }
             .font(.callout)
@@ -223,11 +223,11 @@ struct GoalCardRow: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(rows.prefix(Self.shownCriteria)), id: \.id) { row in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(row.id).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                    Text(row.id).role(.mono)
                         .frame(width: 28, alignment: .leading)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.text).font(.callout).textSelection(.enabled)
-                        Text(row.proof).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                        Text(row.proof).role(.mono)
                             .lineLimit(1).truncationMode(.middle)
                         if let warning = row.warning { Text(warning).font(.caption).foregroundStyle(Theme.amber) }
                     }
@@ -235,7 +235,7 @@ struct GoalCardRow: View {
                 .accessibilityElement(children: .combine)
             }
             if rows.count > Self.shownCriteria {
-                Text("and \(rows.count - Self.shownCriteria) more").font(.caption).foregroundStyle(.secondary)
+                Text("and \(rows.count - Self.shownCriteria) more").role(.caption)
             }
         }
         .padding(.top, 4)
@@ -281,7 +281,7 @@ struct TurnRow: View {
             default: Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
             }
             Text(title).font(.callout.weight(.semibold))
-            if let detail { Text(detail).font(.callout).foregroundStyle(.secondary) }
+            if let detail { Text(detail).role(.detail) }
             Spacer(minLength: 0)
             if let finish, case .ended(let result) = phase, result == "succeeded" {
                 Button("View diff", action: finish.viewDiff).controlSize(.small)
@@ -351,7 +351,7 @@ struct ToolGroupRow: View {
         IconRow(symbol: "wrench.and.screwdriver", tint: Theme.grey) {
             Text("\(count) tool \(count == 1 ? "call" : "calls")").font(.callout)
             Text(summaries.joined(separator: " · ") + (count > summaries.count ? " …" : ""))
-                .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                .role(.monoDetail).lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
@@ -456,7 +456,7 @@ struct NextCard: View {
         VStack(alignment: .leading, spacing: 4) {
             SectionLabel("NEXT")
             Text(step?.title ?? "Nothing left to do").font(.headline)
-            Text(why).font(.callout).foregroundStyle(.secondary)
+            Text(why).role(.detail)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.outlined)

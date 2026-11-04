@@ -77,7 +77,7 @@ struct RunSettingsInspector: View {
             if showsTitle { heading }
             if let goal {
                 if let note = RunSettingsLayout.note(goal: goal, lastTurn: snapshot.state.lastTurn) {
-                    Text(note).font(.callout).foregroundStyle(.secondary)
+                    Text(note).role(.detail)
                 }
                 let editable = store.goalEditable(snapshot, goal: goal)
                 afterTheTurn(goal, editable: editable)
@@ -87,14 +87,14 @@ struct RunSettingsInspector: View {
                 openers(goal)
                 Text(RunSettingsLayout.savedTo(goal)).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.fg3)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                if let error = store.goalEditError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+                if let error = store.goalEditError { Text(error).role(.error) }
                 if showsMessages {
                     MessageRows(
                         error: store.actionError, note: store.actionNote, notice: store.notice,
                         handoff: store.herdrHandoffOutcome)
                 }
             } else {
-                Text("There is no goal to show settings for.").font(.callout).foregroundStyle(.secondary)
+                Text("There is no goal to show settings for.").role(.detail)
             }
         }
         .padding(Spacing.inset).frame(maxWidth: .infinity, alignment: .leading)
@@ -151,7 +151,7 @@ struct RunSettingsInspector: View {
             adviceSwitch(goal.advice, editable: editable)
             ForEach(goal.steps.filter { $0.unavailable != nil }, id: \.name) { step in
                 Text("\(step.label) not available: \(step.unavailable ?? "")")
-                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .role(.caption).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -188,7 +188,7 @@ struct RunSettingsInspector: View {
                 limit("Budget", goal.budget)
                 limit("Timeout", goal.turnTimeout)
             }
-            Text("Change these in the goal file.").font(.caption).foregroundStyle(.secondary)
+            Text("Change these in the goal file.").role(.caption)
         }
     }
 
@@ -218,7 +218,7 @@ struct RunSettingsInspector: View {
     @ViewBuilder private func folders(_ goal: GoalModel, editable: Bool) -> some View {
         if !goal.readAlso.isEmpty || !goal.goalReadAlso.isEmpty || editable {
             section("REFERENCE FOLDERS") {
-                Text("Read-only for the run").font(.caption).foregroundStyle(.secondary)
+                Text("Read-only for the run").role(.caption)
                 ForEach(goal.readAlso, id: \.self) { folder in
                     folderLine(folder, note: "from project config", removable: false)
                 }
@@ -234,7 +234,7 @@ struct RunSettingsInspector: View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
                 mono(folder)
-                Text(note).font(.caption).foregroundStyle(.secondary)
+                Text(note).role(.caption)
             }
             Spacer(minLength: 0)
             if removable {
@@ -255,7 +255,7 @@ struct RunSettingsInspector: View {
                     .disabled(folderText.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Cancel") { (addingFolder, folderText) = (false, "") }.plainButton()
             }
-            Text("A git checkout: ../backend, ~/shared or an absolute path").font(.caption).foregroundStyle(.secondary)
+            Text("A git checkout: ../backend, ~/shared or an absolute path").role(.caption)
         } else {
             Button("+ reference folder") { addingFolder = true }.plainButton(fill: true)
         }

@@ -15,7 +15,7 @@ struct SendBackPopover: View {
             writing.padding(.top, 16)
             SendBackGrants(store: store).padding(.top, 14)
             if let error = store.actionError {
-                Text(error).font(.callout).foregroundStyle(Theme.red).padding(.top, 14)
+                Text(error).role(.error).padding(.top, 14)
             }
             footer.padding(.top, 26)
         }
@@ -53,7 +53,7 @@ struct SendBackPopover: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Text("The next turn also gets the failed check's output.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .role(.caption).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 12)
             Button("Cancel", action: close).plainButton().keyboardShortcut(.cancelAction)
             Button("Send back") { store.sendBack() }

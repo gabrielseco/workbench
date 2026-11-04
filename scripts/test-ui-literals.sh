@@ -10,7 +10,7 @@ fail() { echo "FAIL: $*" >&2; status=1; }
 tree() { # file-name content baseline-radius
   local dir; dir=$(mktemp -d); mkdir -p "$dir/Sources/WorkbenchApp" "$dir/scripts"
   printf '%s\n' "$2" > "$dir/Sources/WorkbenchApp/$1"
-  printf 'radius %s\nfontsize 0\ncapsule 0\npadding 0\n' "$3" > "$dir/scripts/ui-literals.baseline"
+  printf 'radius %s\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\n' "$3" > "$dir/scripts/ui-literals.baseline"
   echo "$dir"
 }
 run() { UI_LITERALS_ROOT="$1" sh "$script" 2>&1; }
@@ -45,10 +45,10 @@ rm -rf "$dir"
 tree2() { # file-name content (baseline all zero)
   local dir; dir=$(mktemp -d); mkdir -p "$dir/Sources/WorkbenchApp" "$dir/scripts"
   printf '%s\n' "$2" > "$dir/Sources/WorkbenchApp/$1"
-  printf 'radius 0\nfontsize 0\ncapsule 0\npadding 0\n' > "$dir/scripts/ui-literals.baseline"
+  printf 'radius 0\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\n' > "$dir/scripts/ui-literals.baseline"
   echo "$dir"
 }
-for case in 'fontsize|Text("x").font(.system(size: 11))' 'capsule|Color.red.clipShape(Capsule())' 'padding|Text("x").padding(.horizontal, 8)'; do
+for case in 'fontsize|Text("x").font(.system(size: 11))' 'capsule|Color.red.clipShape(Capsule())' 'padding|Text("x").padding(.horizontal, 8)' 'textstyle|Text("x").font(.caption).foregroundStyle(.secondary)'; do
   name=${case%%|*}; code=${case#*|}
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
   out=$(run "$dir"); rc=$?
@@ -81,7 +81,7 @@ for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, M
 done
 
 # a malformed baseline fails instead of comparing as "not greater"
-for bl in 'radius 46x\nfontsize 0\ncapsule 0\npadding 0' 'radius 1\nfontsize 0\ncapsule 0' 'radius 1\nradius 1\nfontsize 0\ncapsule 0\npadding 0' 'radius -1\nfontsize 0\ncapsule 0\npadding 0' 'radius 1\nfontsize 0\ncapsule 0\npadding 0\nextra 1'; do
+for bl in 'radius 46x\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0' 'radius 1\nfontsize 0\ncapsule 0' 'radius 1\nradius 1\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0' 'radius -1\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0' 'radius 1\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\nextra 1'; do
   dir=$(tree2 View.swift 'struct A {}')
   printf "$bl\n" > "$dir/scripts/ui-literals.baseline"
   run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a malformed baseline passed: [$bl]"
@@ -90,13 +90,17 @@ done
 
 # --against: the baseline may not be higher than the base branch's
 repo=$(mktemp -d); mkdir -p "$repo/scripts" "$repo/Sources/WorkbenchApp"
-printf 'radius 5\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+printf 'radius 5\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\n' > "$repo/scripts/ui-literals.baseline"
 git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.email=t@t -c user.name=t commit -qm base && git -C "$repo" branch -q base
-printf 'radius 6\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+printf 'radius 6\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\n' > "$repo/scripts/ui-literals.baseline"
 out=$(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base 2>&1); rc=$?
 [ "$rc" = 1 ] && echo "$out" | grep -q "went up from 5" || fail "a raised baseline passed against its base ($rc): $out"
-printf 'radius 4\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+printf 'radius 4\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 0\n' > "$repo/scripts/ui-literals.baseline"
 (cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base >/dev/null 2>&1); [ "$?" = 0 ] || fail "a lowered baseline was refused against its base"
+# a base from before a name was added (four names against five) is compared on the names it has
+printf 'radius 5\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"; git -C "$repo" add -A; git -C "$repo" -c user.email=t@t -c user.name=t commit -qm four; git -C "$repo" branch -q four
+printf 'radius 4\nfontsize 0\ncapsule 0\npadding 0\ntextstyle 9\n' > "$repo/scripts/ui-literals.baseline"
+(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against four >/dev/null 2>&1); [ "$?" = 0 ] || fail "a base with four names was refused"
 (cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nosuchref >/dev/null 2>&1); [ "$?" = 1 ] || fail "a ref that is not there passed: a shallow checkout would skip the comparison"
 git -C "$repo" checkout -q --orphan fresh && git -C "$repo" rm -rfq --cached scripts && git -C "$repo" -c user.email=t@t -c user.name=t commit -qm nobaseline --allow-empty && git -C "$repo" branch -q nobaseline
 (cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nobaseline >/dev/null 2>&1); [ "$?" = 0 ] || fail "a base that has no baseline yet was refused"

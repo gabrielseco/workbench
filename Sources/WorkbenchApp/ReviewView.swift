@@ -55,20 +55,20 @@ struct ReviewView: View {
             } else if review.criteria.isEmpty, !review.unavailable.isEmpty {
                 Text("None: a quick goal. Check the work against the request.").font(.callout)
                 ForEach(review.unavailable, id: \.self) {
-                    Text($0).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text($0).role(.caption).fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                Text("\(review.assessed) · \(review.criteriaSummary)").font(.callout).foregroundStyle(.secondary)
+                Text("\(review.assessed) · \(review.criteriaSummary)").role(.detail)
                 ForEach(review.criteria) { criterion in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text(criterion.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                            Text(criterion.id).role(.monoDetail)
                             Text(criterion.text)
                             Spacer()
                             Text(criterion.label).font(.callout).foregroundStyle(color(criterion))
                         }
-                        Text(criterion.proof).font(.callout).foregroundStyle(.secondary)
-                        if let note = criterion.note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                        Text(criterion.proof).role(.detail)
+                        if let note = criterion.note { Text(note).role(.caption) }
                         ForEach(criterion.evidence, id: \.self) { Text($0).font(.system(.caption, design: .monospaced)) }
                     }
                 }
@@ -86,13 +86,13 @@ struct ReviewView: View {
             if let problem = review.diffProblem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.red).font(.callout)
             } else if review.files.isEmpty {
-                Text("No changes.").font(.callout).foregroundStyle(.secondary)
+                Text("No changes.").role(.detail)
             }
             ForEach(review.files) { file in
                 Button { diffPath = file.path } label: { mono(file.text) }.buttonStyle(.plain)
                     .help("View diff")
             }
-            if let note = review.filesNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+            if let note = review.filesNote { Text(note).role(.caption) }
         }
     }
 
@@ -116,10 +116,10 @@ struct ReviewView: View {
                 ForEach(review.due) { item in
                     VStack(alignment: .leading, spacing: 2) {
                         mono(item.command).textSelection(.enabled)
-                        Text(item.why).font(.caption).foregroundStyle(.secondary)
+                        Text(item.why).role(.caption)
                     }
                 }
-                Text("Run these in a terminal. None of them blocks Accept.").font(.caption).foregroundStyle(.secondary)
+                Text("Run these in a terminal. None of them blocks Accept.").role(.caption)
             }
         }
     }
@@ -132,7 +132,7 @@ struct ReviewView: View {
                         .font(.system(.callout, design: .monospaced)).foregroundStyle(Theme.amber)
                 }
                 Text("Decide each one in Send back before you send the work back.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .role(.caption)
             }
         }
     }
@@ -159,10 +159,10 @@ struct ReviewView: View {
             if review.undecided > 0 {
                 let verb = review.undecided == 1 ? "criterion is" : "criteria are"
                 Text("\(review.undecided) \(verb) for you to check. Accept does not wait.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .role(.caption)
             }
-            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
-            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+            if let error = store.actionError { Text(error).role(.error) }
+            if let note = store.actionNote { Text(note).role(.caption) }
         }
     }
 
@@ -198,8 +198,8 @@ struct DiffSheet: View {
                 Button("Close") { dismiss() }
             }
             // The sheet covers the Review screen, where these are shown otherwise.
-            if let error = store.actionError { Text(error).font(.callout).foregroundStyle(Theme.red) }
-            if let note = store.actionNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+            if let error = store.actionError { Text(error).role(.error) }
+            if let note = store.actionNote { Text(note).role(.caption) }
             ScrollView {
                 Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -223,7 +223,7 @@ struct DiscardSheet: View {
                 }
                 .frame(height: 200)
                 if !plan.fullyShown {
-                    Text("Not everything that would be lost could be listed.").font(.callout).foregroundStyle(Theme.amber)
+                    Text("Not everything that would be lost could be listed.").role(.warning)
                 }
             }
             HStack {

@@ -22,7 +22,7 @@ struct TasksView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let error = store.tasks.error {
                 Label("Could not read the tasks: \(error). Showing the last read.", systemImage: "xmark.octagon.fill")
-                    .font(.callout).foregroundStyle(Theme.red).padding(.horizontal, 20).padding(.vertical, 8)
+                    .textRole(.error).padding(.horizontal, 20).padding(.vertical, 8)
                 Divider()
             }
             if let snapshot {
@@ -35,7 +35,7 @@ struct TasksView: View {
             } else {
                 VStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Reading the tasks…").font(.callout).foregroundStyle(.secondary)
+                    Text("Reading the tasks…").role(.detail)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -63,10 +63,10 @@ struct NoTasks: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("No scheduled tasks").font(.title.weight(.bold))
             Text("A task is work Workbench does on a schedule, with nobody at the keyboard, and hands back as a pull request.")
-                .font(.callout).foregroundStyle(.secondary)
+                .role(.detail)
             Text("workbench task new <name>").font(.system(.callout, design: .monospaced)).textSelection(.enabled)
             Text("Run it in this project's folder, edit .workbench/tasks/<name>/task.md, then approve it. They show up here.")
-                .font(.callout).foregroundStyle(.secondary)
+                .role(.detail)
             TimerCardView(card: timer).frame(maxWidth: 420)
         }
         .padding(28).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -90,10 +90,10 @@ struct TimerCardView: View {
                     Image(systemName: card.worst.map(TaskOutcomeStyle.symbol) ?? "questionmark.circle")
                         .foregroundStyle(Theme.color(for: tone))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Will it run tonight?").font(.caption).foregroundStyle(.secondary)
+                        Text("Will it run tonight?").role(.caption)
                         Text(card.headline).font(.callout.weight(.semibold))
                         if let counts = card.counts {
-                            Text(counts).font(.caption).foregroundStyle(.secondary)
+                            Text(counts).role(.caption)
                         }
                     }
                     Spacer()
@@ -116,7 +116,7 @@ struct TimerCardView: View {
                         }
                     }
                 case .unknown(let why):
-                    Text("unknown: \(why)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text("unknown: \(why)").role(.caption).textSelection(.enabled)
                 }
             }
         }
@@ -175,15 +175,15 @@ struct ResultLine: View {
             Label(TaskOutcomeStyle.word(result.outcome), systemImage: TaskOutcomeStyle.symbol(result.outcome))
                 .font(.callout.weight(.semibold)).foregroundStyle(Theme.color(for: tone))
             if let reason = result.reason, !reason.isEmpty {
-                Text(TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)).font(.caption).foregroundStyle(.secondary)
+                Text(TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)).role(.caption)
                     .textSelection(.enabled)
             }
             if !result.units.isEmpty {
                 Text(result.units.joined(separator: ", "))
-                    .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                    .role(.mono)
             }
             if let thread = result.thread {
-                Text("thread \(thread)").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                Text("thread \(thread)").role(.mono)
                     .textSelection(.enabled)
             }
             if let pr = result.pullRequest { Text(pr).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }

@@ -131,3 +131,14 @@ The rule already exists, so the number cannot grow while this list is worked thr
 - Whether `Card`, `Callout` and `Pill` take a `Tone` (the five state colours) or a `Color`. Tone is the safer default: the design says colour
   carries meaning, and a `Color` parameter lets a view invent a sixth.
 - Whether the tokens are enums on `Theme` or a separate `Metrics.swift`. `Theme.swift` is colour today.
+
+## Second sweep: text roles
+
+After the ten items above, a grep for what still repeats found the same `.font(...).foregroundStyle(...)` pair about 100 times: secondary
+caption 40, secondary callout 27, error 11, monospaced secondary 16, warning 5. They are `TextRole` (`caption`, `detail`, `error`, `warning`,
+`mono`, `monoDetail`) with `Text.role(_:)` and, for a `Label` or a row, `View.textRole(_:)`. The ratchet has a fifth count, `textstyle`
+(a `.font(...)` followed by `.foregroundStyle(`), baseline 41: the one-off pairs that are not a role yet; a pair that starts to repeat gets a
+case in `TextRole` and the baseline goes down.
+
+Looked at and left: the 19 `Divider()`s are the system divider and need nothing; `Toggle` rows (the inspector's two) and the criteria and
+settings label-and-value rows are two or three each, below the point where a component pays for itself.
