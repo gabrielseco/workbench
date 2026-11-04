@@ -1,0 +1,123 @@
+# UI audit: what is hand-copied instead of a component
+
+A read-only audit of `Sources/WorkbenchApp` (about 10,500 lines) as of the merge of #394, which turned the two button styles into one
+`WorkbenchButtonStyle(kind:size:)` and made `scripts/check-banned-apis.sh` refuse a second button look. Buttons were the easy case. This
+lists the same problem everywhere else, so the next PRs have a worklist and the "ratchet" check at the end has a baseline.
+
+The rule it is measured against (said once, in `AGENTS.md` after the follow-up lands): **anything visible that repeats is one component in
+one file, with its variations as props (`kind`, `size`, `tone`, state); a new variant is a new case, never a copy; search before writing a
+view.** Measurements (radius, padding, type size, tint strength) are tokens in `Theme`, not literals in a view.
+
+Method: grep for the recipes below, then read each hit. Line numbers are from `main` at the time of writing and will drift; the file is
+the thing to look at.
+
+## Numbers (the baseline)
+
+| What | Count | Where it should live |
+|---|---|---|
+| `RoundedRectangle(cornerRadius: <literal>)` | 44 lines in 16 files, 7 different radii (6, 7, 8, 10, 12, 14, 18) | a `Radius` token set; surfaces take it from a component |
+| `.font(.system(size: <literal>)`, outside `ButtonStyles.swift` | 8, all in `RunSettingsInspector.swift` | text styles in `Theme` (or system text styles) |
+| `.padding(<literal>)` and the like | 113 | spacing tokens, mostly inside components |
+| tint strengths for a tinted fill | 0.04, 0.08, 0.1, 0.12, 0.14, 0.2 | one per role |
+| `Capsule()` backgrounds | 9 sites, 6 views | one `Pill` |
+| caps section labels | 6 sites, 3 variants | one `SectionLabel` |
+| `struct …: View` | about 80 | |
+
+## Findings, biggest first
+
+### 1. The card: panel fill, radius 12, line stroke (7 copies)
+
+`Theme.panel` + `RoundedRectangle(cornerRadius: 12)` + `.stroke(Theme.line)`, written out each time:
+`ChatScreen.swift:178`, `DraftGoalCard.swift:130`, `FeedDecisionCard.swift:53`, `FeedRow.swift:416` (the goal card),
+`NewThreadScreen.swift:207`, `RunCard.swift:134` (it also clips), `TaskPageView.swift:138` (its stroke changes with state).
+Two more cards are the same idea with different numbers: `OverlayCard.swift:27` (radius 18, `controlBackgroundColor`, 0.1 white stroke)
+and `ProjectPickerCard.swift:46` (radius 14, the same colours). Three radii and two fill colours for "a card".
+
+**Component:** `Card(style: .panel | .overlay, stroke: .line | .tone(Color), clips: Bool) { content }`. One radius per style, from `Radius`.
+
+### 2. The tinted note box: a tone at low opacity, radius 8 (7 copies)
+
+`FeedRow.swift:205`, `MenuBarView.swift:150`, `ProjectPickerCard.swift:95`, `RootView.swift:178`, `TasksView.swift:124` and `:193`,
+`TaskCards.swift:44`. Fill strength is 0.08, 0.1, 0.12 or `.quaternary.opacity(0.5)` for what reads as the same thing.
+
+**Component:** `Callout(tone: Tone, content)`, with `Theme.color(for:)` choosing the colour and one strength. `.quaternary` ones become the
+`.neutral` tone.
+
+### 3. The outlined box: grey stroke at 0.4, radius 8 (3 copies)
+
+`FeedDecisionCard.swift:69`, `FeedRow.swift:465`, `RootView.swift:139` (conditional). Likely the `Callout` with `outlined: true`.
+
+### 4. Pills and chips (9 capsule sites, 4 components)
+
+A tinted pill: `Badge` (`ProjectPickerCard.swift:207`, 0.12), `StatePill` (`RootView.swift:100`, 0.12), `KindChip` (`GoalFields.swift:154`, 0.14),
+plus inline copies at `DraftGoalCard.swift:115` (0.14), `MenuBarView.swift:58` (0.14), `RootView.swift:61` (0.12). An outlined pill:
+`Chip` (`RunSettingsChips.swift:4`) and an inline copy at `DraftGoalCard.swift:69`. The 0.12 vs 0.14 is not a decision, it is drift.
+
+**Component:** `Pill(tone:, style: .tinted | .outlined, size:)`. `Badge`, `StatePill`, `KindChip` and `Chip` become call sites of it (or
+thin wrappers that only decide the text).
+
+### 5. Section labels in caps (6 copies, 3 variants)
+
+`Text("NEXT")`, `"GOAL"`, `"DRAFT GOAL"`, `"DENIED CALLS"`, `"INSTRUCTIONS"`: `FeedDecisionCard.swift:61`, `FeedRow.swift:160` and `:460`,
+`DraftGoalCard.swift:113`, `SendBackGrants.swift:47`, `TaskCards.swift:39`. `.caption` vs `.caption2`, tracking 0, 0.6 or 0.9.
+`FeedRow.swift:160` and `:460` are the same label twice in one file.
+
+**Component:** `SectionLabel(_ text)`, one style.
+
+### 6. Rows with a symbol, a title and a detail
+
+`FeedLine` (`FeedRow.swift`) is the good example and does this once for the feed. Look-alikes that do it by hand: `PendingStepRow`,
+`CheckRow`, `TaskRunRow`, `RailRowView`, `ProjectRow`, `GrantRowView`, `ProofThumbnail`'s caption. Not confirmed row by row; the
+`firstTextBaseline` HStack with an `Image(systemName:)` appears 12 times. Needs a read of each before deciding which really are `FeedLine`
+with a different `symbol`/`tint`.
+
+### 7. Message rows
+
+`ChatMessageRow`, `MessageRow`, `MessageRows`, `UserNoteRow`, `AgentLineView`: the chat and the feed both show "you said / it said". Check
+whether `UserNoteRow` (`FeedRow.swift:118`, radius 10 on `.quaternary`) and the chat's user bubble are the same bubble with a different
+`role`.
+
+### 8. Surfaces at radius 6 and 7 that are really buttons or thumbnails
+
+`ChatScreen.swift:133`, `NewThreadScreen.swift:183`, `PreviewRail.swift:21`: a raised, stroked rounded rect around a label or icon (radius 7 is
+`WorkbenchButtonStyle`'s radius). They are almost certainly icon buttons: a `ButtonKind.icon` (or `.plain` at `.small`) instead.
+Thumbnails at radius 6 (`NewThreadScreen.swift:247`, `RunCard.swift:273`) are one `Thumbnail` component.
+
+### 9. Type sizes outside the text styles
+
+All 8 are `RunSettingsInspector.swift` (10.5, 11, 11.5, 13 and 13 semibold, by hand). The rest of the app uses `.callout`, `.caption` and
+friends. The inspector should too, or `Theme` should name the two it needs.
+
+### 10. Spacing
+
+113 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and
+screens, so most of them disappear once 1 to 5 are components. Do this last, on what remains, and only name values that are used three or more
+times.
+
+## What is already right
+
+- `WorkbenchButtonStyle` (kind and size as props), `PlaceholderTextEditor`, `FeedLine`, `Theme` for colour (no `Color(red:)` outside it).
+- `OverlayCard` as a layer, though it hand-writes its own surface (finding 1).
+
+## Order of work
+
+Each is one PR, each shows before and after shots of the screens it touches, each lowers the baseline above.
+
+1. **`Radius` and `Card` (1).** Biggest and the least ambiguous: 7 copies, 3 radii. Add the numbers to `Theme`.
+2. **`Callout` (2, 3).**
+3. **`Pill` (4)** and **`SectionLabel` (5)**: small, and they fix visible drift (0.12 against 0.14, caption against caption2).
+4. **Rows and messages (6, 7)**, after reading each; may turn out to be fewer.
+5. **Icon buttons and `Thumbnail` (8)**, the inspector's type sizes (9).
+6. **The check.** `scripts/check-banned-apis.sh` (or a sibling script) counts the literals in the table above outside `Theme.swift` and the
+   component files, against a committed baseline, and fails when a PR raises a count. A PR that lowers one lowers the baseline in the same
+   change. It does not ask anyone to fix old code at once, and it stops the number growing meanwhile. Written last, so its baseline is the
+   state after 1 to 5, not today's.
+
+Also in 6: a line in the `pr-review` and `design-review` skills, "does a new view duplicate an existing component?", so the reviewer reads for
+what a count cannot.
+
+## Not decided here
+
+- Whether `Card`, `Callout` and `Pill` take a `Tone` (the five state colours) or a `Color`. Tone is the safer default: the design says colour
+  carries meaning, and a `Color` parameter lets a view invent a sixth.
+- Whether the tokens are enums on `Theme` or a separate `Metrics.swift`. `Theme.swift` is colour today.
