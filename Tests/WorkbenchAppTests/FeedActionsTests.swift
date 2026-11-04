@@ -44,6 +44,15 @@ import Testing
         #expect(blocked.primary?.enabled == false, "the goal says it cannot be approved yet")
     }
 
+    @Test func aDraftGoalCannotBeApprovedAgainWhileItsEditsAreBeingSaved() throws {
+        let decision = decide(try snapshot(.draft)) {
+            $0.goalPill = .draft
+            $0.goalCanApprove = true
+            $0.busy = true
+        }
+        #expect(decision.primary?.kind == .approveAndRun && decision.primary?.enabled == false)
+    }
+
     @Test func anApprovedGoalWithNothingRunIsRun() throws {
         let decision = decide(try snapshot(.goalApproved)) { $0.goalPill = .approved; $0.goalCanApprove = true }
         #expect(decision.primary?.kind == .run && decision.primary?.enabled == true)

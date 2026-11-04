@@ -29,6 +29,12 @@ private actor EditGate {
 
 /// The store hands an edit to core's `editGoal` for the thread on screen, says why a refusal was one, and reads the file again.
 @MainActor @Suite struct GoalEditStoreTests {
+    /// Waits for what a test needs to have happened instead of sleeping a guessed time, so a loaded runner cannot fail it.
+    private func until(_ what: String, _ condition: () -> Bool) async throws {
+        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(condition(), "never: \(what)")
+    }
+
     private func store(_ actions: GoalActions) async throws -> ProjectStore {
         let fixture = try await AppFixture()
         keptEditFixtures.append(fixture)
@@ -145,5 +151,57 @@ private actor EditGate {
         await editing.value
         await approving.value
         #expect(order.all.map(\.0) == ["edit", "approve"])
+    }
+
+    @Test func approvalSaysItIsWaitingForEditsAndGivesUpWithAnErrorWhenTheyNeverFinish() async throws {
+        let order = Seen()
+        let never = EditGate()
+        let actions = GoalActions(
+            approve: { _, _ in order.add("approve", .setSkip([])) },
+            editGoal: { _, _, _ in await never.wait() })
+        let store = try await store(actions)
+        store.goalEditWait = .seconds(1)
+        _ = Task { await store.editGoal(.setSkip(["judge"])) }
+        try await until("the edit is under way") { store.current.goalEditsInFlight == 1 }
+        let approving = Task { await store.approveAndRun() }
+        try await until("the click is answered while it waits") { store.busy == "Saving your edits to the goal…" }
+        await approving.value
+        #expect(order.all.isEmpty, "nothing was approved on a goal that may not match the window")
+        #expect(store.busy == nil && store.starting == false)
+        #expect(store.actionError?.contains("did not finish saving") == true)
+        await never.open()
+    }
+
+    @Test func runInHerdrSaysItIsWaitingForEditsAndGivesUpWithAnErrorWhenTheyNeverFinish() async throws {
+        let sent = Seen()
+        let never = EditGate()
+        let actions = GoalActions(
+            editGoal: { _, _, _ in await never.wait() },
+            runGoalInHerdr: { _, thread in
+                sent.add(thread, .setSkip([]))
+                throw GoalActions.RefusalText("not reached")
+            })
+        let store = try await store(actions)
+        store.goalEditWait = .seconds(1)
+        _ = Task { await store.editGoal(.setSkip(["judge"])) }
+        try await until("the edit is under way") { store.current.goalEditsInFlight == 1 }
+        let handing = Task { await store.runGoalInHerdr() }
+        try await until("the click is answered while it waits") { store.busy == "Saving your edits to the goal…" }
+        await handing.value
+        #expect(sent.all.isEmpty && store.busy == nil)
+        #expect(store.actionError?.contains("did not finish saving") == true)
+        await never.open()
+    }
+
+    @Test func aSecondClickWhileApprovingSaysWhyItDidNothing() async throws {
+        let gate = EditGate()
+        let actions = GoalActions(approve: { _, _ in await gate.wait() })
+        let store = try await store(actions)
+        let first = Task { await store.approveAndRun() }
+        try await Task.sleep(for: .milliseconds(50))
+        await store.approveAndRun()
+        #expect(store.actionError == "The goal is already being approved.")
+        await gate.open()
+        await first.value
     }
 }

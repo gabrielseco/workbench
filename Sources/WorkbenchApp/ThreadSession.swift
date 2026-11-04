@@ -46,6 +46,8 @@ import WorkbenchCore
     /// Counts the edits that have ended, so a field whose edit was refused can show what the file has.
     var goalEditSerial = 0
     @ObservationIgnored var goalEdits: Task<Void, Never>?
+    /// Edits made and not yet ended: what an action polls while it waits, so a stuck edit leaves no waiter behind.
+    @ObservationIgnored var goalEditsInFlight = 0
     /// What is typed in this chat's composer: kept per thread, so a draft survives a visit to another thread.
     var chatDraft = ""
     /// A chat turn is going in this thread (or, under a key with no thread, in a chat the log does not show yet).

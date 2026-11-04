@@ -13,8 +13,10 @@ extension ProjectStore {
         // The goal an edit is for is the one on screen when it was made: if the window has moved to another project or thread by
         // the time its turn comes, it is dropped.
         let target = (generation, currentThread)
-        let previous = goalEdits
+        let (previous, session) = (goalEdits, current)
+        session.goalEditsInFlight += 1
         let task = Task { @MainActor in
+            defer { session.goalEditsInFlight -= 1 }
             await previous?.value
             guard target == (generation, currentThread) else { return }
             await perform(make)
