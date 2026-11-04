@@ -146,4 +146,58 @@ private actor EditGate {
         await approving.value
         #expect(order.all.map(\.0) == ["edit", "approve"])
     }
+
+    @Test func approvalSaysItIsWaitingForEditsAndGivesUpWithAnErrorWhenTheyNeverFinish() async throws {
+        let order = Seen()
+        let never = EditGate()
+        let actions = GoalActions(
+            approve: { _, _ in order.add("approve", .setSkip([])) },
+            editGoal: { _, _, _ in await never.wait() })
+        let store = try await store(actions)
+        store.goalEditWait = .milliseconds(150)
+        _ = Task { await store.editGoal(.setSkip(["judge"])) }
+        try await Task.sleep(for: .milliseconds(30))
+        let approving = Task { await store.approveAndRun() }
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(store.busy == "Saving your edits to the goal…", "the click is answered while it waits")
+        await approving.value
+        #expect(order.all.isEmpty, "nothing was approved on a goal that may not match the window")
+        #expect(store.busy == nil && store.starting == false)
+        #expect(store.actionError?.contains("did not finish saving") == true)
+        await never.open()
+    }
+
+    @Test func runInHerdrSaysItIsWaitingForEditsAndGivesUpWithAnErrorWhenTheyNeverFinish() async throws {
+        let sent = Seen()
+        let never = EditGate()
+        let actions = GoalActions(
+            editGoal: { _, _, _ in await never.wait() },
+            runGoalInHerdr: { _, thread in
+                sent.add(thread, .setSkip([]))
+                throw GoalActions.RefusalText("not reached")
+            })
+        let store = try await store(actions)
+        store.goalEditWait = .milliseconds(150)
+        _ = Task { await store.editGoal(.setSkip(["judge"])) }
+        try await Task.sleep(for: .milliseconds(30))
+        let handing = Task { await store.runGoalInHerdr() }
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(store.busy == "Saving your edits to the goal…")
+        await handing.value
+        #expect(sent.all.isEmpty && store.busy == nil)
+        #expect(store.actionError?.contains("did not finish saving") == true)
+        await never.open()
+    }
+
+    @Test func aSecondClickWhileApprovingSaysWhyItDidNothing() async throws {
+        let gate = EditGate()
+        let actions = GoalActions(approve: { _, _ in await gate.wait() })
+        let store = try await store(actions)
+        let first = Task { await store.approveAndRun() }
+        try await Task.sleep(for: .milliseconds(50))
+        await store.approveAndRun()
+        #expect(store.actionError == "The goal is already being approved.")
+        await gate.open()
+        await first.value
+    }
 }

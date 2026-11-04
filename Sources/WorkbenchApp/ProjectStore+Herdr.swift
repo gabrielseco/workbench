@@ -68,12 +68,17 @@ extension ProjectStore {
 
     /// "Run in Herdr" on the goal screen: the goal goes to a Claude session in Herdr instead of a run of this app.
     func runGoalInHerdr() async {
-        guard let project, let thread = currentThread, !starting, !runningHere else { return }
-        // Changes already made to the goal are written first, so what is approved is what the window shows.
-        await goalEdits?.value
+        guard let project, let thread = currentThread else { return }
+        if starting || runningHere {
+            actionError = "A run is already going."
+            return
+        }
         (actionError, actionNote, herdrHandoff) = (nil, nil, nil)
         let (mine, scope) = (generation, currentScope)
-        await working("Handing the goal to Herdr…") {
+        await working("Saving your edits to the goal…") {
+            // Changes already made to the goal are written first, so what is approved is what the window shows.
+            guard await goalEditsSettled(in: current) else { return }
+            nowWorking("Handing the goal to Herdr…")
             let outcome: HerdrHandoffOutcome
             do {
                 let handoff = try await actions.runGoalInHerdr(project, thread)

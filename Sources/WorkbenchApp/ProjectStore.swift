@@ -49,6 +49,8 @@ struct RecentProject: Equatable, Identifiable {
     /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
     fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
     /// Opens an address in the browser; a test replaces it so none opens.
+    /// How long an action waits for goal edits already made before it says they did not finish; tests make it short.
+    @ObservationIgnored var goalEditWait: Duration = .seconds(10)
     @ObservationIgnored var openExternal: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -291,7 +293,9 @@ struct RecentProject: Equatable, Identifiable {
     /// One at a time: a second click while the first is still working is ignored, so the first one's end cannot take the line
     /// down while the second is still going.
     func working(_ text: String, _ body: () async -> Void) async {
-        guard !anyBusy, let project else { return }
+        guard let project else { return }
+        let doing = busy ?? sessions.values.lazy.compactMap(\.busyText).first
+        if let doing { return actionError = "Still busy: \(doing)" }
         let mine = session(project, currentThread)
         setBusy(text, in: mine)
         defer { if !mine.awaitingRun { setBusy(nil, in: mine) } }
@@ -308,22 +312,23 @@ struct RecentProject: Equatable, Identifiable {
     /// Approves the goal, and only when that worked starts the run: a failed approve starts nothing. The run is core's, started
     /// here and left to the log to report.
     func approveAndRun() async {
-        guard let project, let thread = currentThread, !starting else { return }
-        if ownedRun != nil {
-            actionError = "A run is already going."
+        guard let project, let thread = currentThread else { return }
+        if starting || ownedRun != nil {
+            actionError = starting ? "The goal is already being approved." : "A run is already going."
             return
         }
-        // Changes already made to the goal are written first, so what is approved is what the window shows.
-        await goalEdits?.value
         let mine = generation
         let mineSession = session(project, thread)
         mineSession.starting = true
-        setBusy("Approving the goal…", in: mineSession)
+        setBusy("Saving your edits to the goal…", in: mineSession)
         actionError = nil
         defer {
             mineSession.starting = false
             if !mineSession.awaitingRun { setBusy(nil, in: mineSession) }
         }
+        // Changes already made to the goal are written first, so what is approved is what the window shows.
+        guard await goalEditsSettled(in: mineSession) else { return }
+        setBusy("Approving the goal…", in: mineSession)
         do {
             try await actions.approve(project, thread)
         } catch {
