@@ -65,7 +65,7 @@ struct DecisionCard: View {
             DecisionActions(decision: decision, perform: perform)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)))
+        .callout(.outlined)
         .padding(.top, 6)
     }
 }

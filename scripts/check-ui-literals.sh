@@ -9,7 +9,7 @@
 set -u
 cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
 baseline=${UI_LITERALS_BASELINE:-scripts/ui-literals.baseline}
-COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift'
+COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift'
 
 # Counted per occurrence on the whole file with its // comments dropped (a `//` that starts one, not the one in `https://`) and its lines joined, so `cornerRadius:12` and a `.padding(`
 # whose number is on the next line count like the usual spelling. Only a number counts: a Theme token or a constant is the fix.

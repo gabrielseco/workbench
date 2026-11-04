@@ -147,7 +147,7 @@ private struct RowCard: View {
             .padding(.top, 4)
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.color(for: tone).opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .callout(.tinted(Theme.color(for: tone)))
         .accessibilityElement(children: .contain)
     }
 }

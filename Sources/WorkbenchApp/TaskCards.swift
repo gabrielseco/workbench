@@ -41,7 +41,7 @@ struct TaskApproveCard: View {
                 Text(card.instructions).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
-            .frame(height: 150).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .frame(height: 150).callout(.neutral)
             if let error = store.tasks.approveError {
                 Text(error).font(.callout).foregroundStyle(Theme.red).textSelection(.enabled).padding(.top, 10)
             }
