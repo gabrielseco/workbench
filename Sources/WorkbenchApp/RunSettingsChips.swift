@@ -13,7 +13,7 @@ struct Chip: View {
 
 /// Children laid out left to right and wrapped to the next line when the width runs out, as the artboard's tool chips are.
 struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
+    var spacing: CGFloat = Space.s
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         layout(in: proposal.width ?? .infinity, subviews: subviews).size

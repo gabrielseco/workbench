@@ -6,7 +6,7 @@ struct PRReviewSheet: View {
     var store: ProjectStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             if let shown = store.prReviewShown {
                 Label(shown.headline, systemImage: icon(shown)).textStyle(.heading).foregroundStyle(color(shown))
                 ForEach(shown.notes, id: \.self) { Text($0).role(.warning) }
@@ -36,7 +36,7 @@ struct PRReviewSheet: View {
                 Button("Close") { store.closePRReview() }.keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20).frame(width: 680)
+        .padding(Space.xl).frame(width: 680)
     }
 
     private func icon(_ shown: PRReviewShown) -> String {

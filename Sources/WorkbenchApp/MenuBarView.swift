@@ -9,7 +9,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         let model = MenuBarLabelModel.make(items: store.attention.items)
-        HStack(spacing: 3) {
+        HStack(spacing: Space.xs) {
             Image(systemName: "wrench.and.screwdriver")
             if model.total > 0 { Text("\(model.total)").monospacedDigit() }
         }
@@ -30,7 +30,7 @@ struct MenuBarPopover: View {
             project: store.project, screen: store.screen, items: store.attention.items, review: store.review,
             denied: store.attention.notificationsDenied, deniedShown: store.attention.deniedWasShown,
             taskReadError: store.attention.taskReadError)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             header(model)
             content(model)
             if let note = model.tasksNote {
@@ -71,7 +71,7 @@ struct MenuBarPopover: View {
         case .needsYou:
             // Many items scroll rather than grow the popover off the screen.
             ScrollView {
-                VStack(spacing: 8) {
+                VStack(spacing: Space.s) {
                     ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
                         RowCard(store: store, row: row, first: index == 0, open: open)
                     }
@@ -96,7 +96,7 @@ struct MenuBarPopover: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             HStack {
                 if let url = store.logURL {
                     Button("Event log") {
@@ -127,24 +127,24 @@ private struct RowCard: View {
 
     var body: some View {
         let tone = row.item.tone
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            HStack(spacing: Space.s) {
                 Image(systemName: tone == .broken ? "xmark.circle.fill" : "exclamationmark.circle.fill")
                     .foregroundStyle(Theme.color(for: tone))
                 Text(row.item.title).textStyle(.heading).lineLimit(1).truncationMode(.middle)
             }
             Text(row.detail).role(.caption).lineLimit(3)
             if let criteria = row.criteria {
-                Text(criteria).textStyle(.captionStrong).padding(.top, 2)
+                Text(criteria).textStyle(.captionStrong).padding(.top, Space.xxs)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 Button(row.item.route.isThread ? "Open review" : "Open task") { open(row.item.route, false) }
                     .modifier(PrimaryWhen(first, size: .small))
                 if row.canSendBack { Button("Send back…") { open(row.item.route, true) }.plainButton(size: .small) }
             }
-            .padding(.top, 4)
+            .padding(.top, Space.xs)
         }
-        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.tinted(Theme.color(for: tone)))
         .accessibilityElement(children: .contain)
     }

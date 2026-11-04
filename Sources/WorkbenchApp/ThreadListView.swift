@@ -23,7 +23,7 @@ struct ThreadListView: View {
     var body: some View {
         let shown = shownThread
         let selectedHere = store.mode == .thread && !store.newThread
-        LazyVStack(alignment: .leading, spacing: 2) {
+        LazyVStack(alignment: .leading, spacing: Space.xxs) {
             ForEach(rows) { row in
                 RailRowView(row: row, selected: selectedHere && row.key == shown) {
                     Task { await store.select(thread: row.key) }
@@ -31,7 +31,7 @@ struct ThreadListView: View {
             }
             if older > 0 {
                 Text(older == 1 ? "1 older thread" : "\(older) older threads")
-                    .role(.caption).padding(.horizontal, 8).padding(.top, 4)
+                    .role(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
                     .help("The log and the workbench command still reach them")
             }
         }
@@ -55,16 +55,16 @@ struct RailRowView: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: Space.m) {
                 RailMark(mark: row.mark).frame(width: 16, height: 16)
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: Space.xxs) {
                     Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
                     Text(row.line).textStyle(.caption).lineLimit(1)
                         .foregroundStyle(row.mark.lineTint == .quiet ? Color.secondary : row.mark.tint)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
+            .padding(.horizontal, Space.s).padding(.vertical, Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
             .contentShape(Rectangle())

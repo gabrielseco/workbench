@@ -73,7 +73,7 @@ struct RunSettingsInspector: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.l) {
             if showsTitle { heading }
             if let goal {
                 if let note = RunSettingsLayout.note(goal: goal, lastTurn: snapshot.state.lastTurn) {
@@ -115,7 +115,7 @@ struct RunSettingsInspector: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text(title).textStyle(.captionStrong, .secondary)
             content()
         }
@@ -128,7 +128,7 @@ struct RunSettingsInspector: View {
             ForEach(goal.steps, id: \.name) { step in
                 let on = !step.skipped && step.unavailable == nil
                 // The switch at the left, the label and what it does beside it, as the artboard has them.
-                HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: Space.m) {
                     Toggle(
                         step.label,
                         isOn: Binding(
@@ -136,7 +136,7 @@ struct RunSettingsInspector: View {
                     )
                     .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
                     .disabled(!editable || step.unavailable != nil)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         Text(step.label).textStyle(.bodyMedium)
                         if let line = RunSettingsLayout.description(forStep: step.name) {
                             Text(line).textStyle(.subheadline, .subtle)
@@ -159,14 +159,14 @@ struct RunSettingsInspector: View {
     /// One switch for the advice: the steps themselves are the switches above, this says whether they run by themselves after a turn.
     private func adviceSwitch(_ advice: AutoAdviceSetting, editable: Bool) -> some View {
         // The switch at the left and everything it says beside it, one column, as the steps above.
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             Toggle(
                 AutoAdviceSetting.label,
                 isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
             )
             .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
             .disabled(!advice.switchEnabled(editable: editable))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.xxs) {
                 Text(AutoAdviceSetting.label).textStyle(.bodyMedium)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(advice.line).textStyle(.subheadline, .subtle)
@@ -174,7 +174,7 @@ struct RunSettingsInspector: View {
                 Text(advice.source).textStyle(.subheadline, .subtle)
             }
         }
-        .padding(.top, 10)
+        .padding(.top, Space.m)
         .help("Runs the judge and the review stages after a turn that passed, unasked. Each costs what its agent costs.")
     }
 
@@ -205,7 +205,7 @@ struct RunSettingsInspector: View {
         let tools = RunSettingsLayout.tools(allowed: goal.allowedTools, granted: goal.grantedTools)
         if !tools.shown.isEmpty {
             section("ALLOWED TOOLS · \(goal.allowedTools.count + goal.grantedTools.count)") {
-                FlowLayout(spacing: 5) {
+                FlowLayout(spacing: Space.xs) {
                     ForEach(tools.shown, id: \.self) { Chip(text: $0, mono: true) }
                     if tools.more > 0 { Chip(text: "+\(tools.more) more", mono: false) }
                 }
@@ -231,8 +231,8 @@ struct RunSettingsInspector: View {
     }
 
     private func folderLine(_ folder: String, note: String, removable: Bool) -> some View {
-        HStack(spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: Space.s) {
+            VStack(alignment: .leading, spacing: Space.xxs) {
                 mono(folder)
                 Text(note).role(.caption)
             }
@@ -248,7 +248,7 @@ struct RunSettingsInspector: View {
 
     @ViewBuilder private var addFolder: some View {
         if addingFolder {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TextField("../backend", text: $folderText).textFieldStyle(.roundedBorder).textStyle(.callout)
                     .onSubmit(commitFolder)
                 Button("Add", action: commitFolder).plainButton()
@@ -306,7 +306,7 @@ struct RunSettingsSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction).plainButton()
             }
-            .padding(.horizontal, 20).padding(.vertical, 12)
+            .padding(.horizontal, Space.xl).padding(.vertical, Space.m)
             Divider()
             RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
         }

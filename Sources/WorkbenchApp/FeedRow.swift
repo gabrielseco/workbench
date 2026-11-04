@@ -81,7 +81,7 @@ struct FeedLine: View {
                 Text(title).textStyle(.callout, .primary).lineLimit(1).layoutPriority(1)
                 if let detail, !detail.isEmpty { detailText(detail).lineLimit(1) }
             } else {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.xxs) {
                     Text(title).textStyle(.callout, .primary)
                     if let detail, !detail.isEmpty { detailText(detail).lineLimit(2) }
                 }
@@ -110,11 +110,11 @@ struct UserNoteRow: View {
     var body: some View {
         HStack {
             Spacer(minLength: 60)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.xxs) {
                 Text("You · sent back").role(.caption)
                 Text(text).textStyle(.body).textSelection(.enabled)
             }
-            .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.quiet))
+            .padding(Space.m).background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.quiet))
         }
     }
 }
@@ -146,7 +146,7 @@ struct GoalCardRow: View {
     private var rows: [GoalModel.Row] { goal?.rows ?? [] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.l) {
             // The conversation a goal made from a chat came from stays to read, whatever has become of the goal.
             if !brainstorm.isEmpty { BrainstormFoldView(messages: brainstorm) }
             if editable, let goal, let store { editor(goal, store) } else { summary }
@@ -155,10 +155,10 @@ struct GoalCardRow: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             SectionLabel("GOAL")
             Text(title ?? "Goal").textStyle(.heading).lineLimit(2)
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
                 Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
                 if let hash, !hash.isEmpty {
@@ -173,14 +173,14 @@ struct GoalCardRow: View {
     /// A draft goal: the card is the editor, the Goal screen's blocks changed in place.
     @ViewBuilder private func editor(_ goal: GoalModel, _ store: ProjectStore) -> some View {
         if let draft {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 if !brainstorm.isEmpty { AgentLineView(text: BrainstormFold.agentLine) }
                 DraftGoalCardView(
                     goal: goal, store: store, base: draft.snapshot.base, decision: draft.decision, perform: draft.perform)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 heading
                 GoalBlocks(goal: goal, store: store, editable: true, showsError: true)
             }
@@ -189,7 +189,7 @@ struct GoalCardRow: View {
     }
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             heading
             // Why approval is blocked is said whether or not the goal can be edited: a goal that does not parse has no editor.
             if let blockers = goal?.blockers, !blockers.isEmpty {
@@ -200,14 +200,14 @@ struct GoalCardRow: View {
             if let request = goal?.request, !request.isEmpty { requestText(request) }
             if !rows.isEmpty { criteriaList }
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout()
     }
 
     /// What was asked, so a goal with no criteria still says what it is for; a long one is folded.
     private func requestText(_ request: String) -> some View {
         let long = request.count > Self.foldedRequest
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: Space.xs) {
             Text(request).textStyle(.callout).textSelection(.enabled).lineLimit(long && !showAllRequest ? 6 : nil)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if long {
@@ -215,17 +215,17 @@ struct GoalCardRow: View {
                     .buttonStyle(.borderless).textStyle(.callout)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, Space.xxs)
     }
 
     /// What approving means: each criterion and the proof that will check it, and why a proof cannot be checked when it cannot.
     private var criteriaList: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             ForEach(Array(rows.prefix(Self.shownCriteria)), id: \.id) { row in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     Text(row.id).role(.mono)
                         .frame(width: 28, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         Text(row.text).textStyle(.callout).textSelection(.enabled)
                         Text(row.proof).role(.mono)
                             .lineLimit(1).truncationMode(.middle)
@@ -238,7 +238,7 @@ struct GoalCardRow: View {
                 Text("and \(rows.count - Self.shownCriteria) more").role(.caption)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, Space.xs)
     }
 
     private var approvalText: String {
@@ -275,7 +275,7 @@ struct TurnRow: View {
     var finish: FinishContext?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             switch phase {
             case .working: ProgressView().controlSize(.small).frame(width: 16)
             default: Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
@@ -287,7 +287,7 @@ struct TurnRow: View {
                 Button("View diff", action: finish.viewDiff).controlSize(.small)
             }
         }
-        .padding(.top, 6)
+        .padding(.top, Space.s)
         .accessibilityElement(children: .combine)
     }
 
@@ -404,13 +404,13 @@ struct VerifyRow: View {
 
     var body: some View {
         if ok, !shots.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.m) {
                 FeedLine(symbol: "checkmark.circle.fill", tint: Theme.green, title: "Verify passed", detail: nil)
-                HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: Space.m) {
                     ForEach(shots) { ProofThumbnail(shot: $0) }
                 }
             }
-            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
             .card()
         } else {
             line
@@ -453,14 +453,14 @@ struct NextCard: View {
     var why: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             SectionLabel("NEXT")
             Text(step?.title ?? "Nothing left to do").textStyle(.heading)
             Text(why).role(.detail)
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.outlined)
-        .padding(.top, 6)
+        .padding(.top, Space.s)
         .accessibilityElement(children: .combine)
     }
 }

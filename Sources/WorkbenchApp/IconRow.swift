@@ -8,7 +8,7 @@ struct IconRow<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
             content
         }

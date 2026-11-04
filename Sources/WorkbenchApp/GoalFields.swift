@@ -75,12 +75,12 @@ struct GoalCard<Content: View>: View {
     var body: some View {
         if style == .feed {
             // The artboards' bordered box: a panel with a hairline.
-            VStack(alignment: .leading, spacing: 8) { content }
-                .padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: Space.s) { content }
+                .padding(.horizontal, Space.m).padding(.vertical, Space.m).frame(maxWidth: .infinity, alignment: .leading)
                 .callout(.panel)
         } else {
-            VStack(alignment: .leading, spacing: 10) { content }
-                .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: Space.m) { content }
+                .padding(.horizontal, Space.l).padding(.vertical, Space.l).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Radius.quiet))
                 .overlay(RoundedRectangle(cornerRadius: Radius.quiet).strokeBorder(Color.primary.opacity(0.08)))
         }

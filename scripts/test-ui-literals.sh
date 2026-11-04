@@ -60,7 +60,7 @@ for code in 'RoundedRectangle(cornerRadius:12)' 'RoundedRectangle(cornerRadius: 
     .horizontal,
     8
 )' 'Text("x").font(.system(
-    size: 11))' 'Text("x").padding(.top, -2)' 'Text("x").padding(-4)'; do
+    size: 11))' 'Text("x").padding(.top, -2)' 'Text("x").padding(-4)' 'padding(.horizontal, 28)' 'VStack(spacing: 6) { Text("x") }' 'HStack(alignment: .top, spacing: 10) { Text("x") }' 'Text("x").padding([.vertical, .trailing], 8)' 'Text("x").padding(.top, wide ? 8 : 4)' 'VStack(spacing: wide ? 8 : 4) { Text("x") }'; do
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
   out=$(run "$dir"); rc=$?
   [ "$rc" = 1 ] || fail "a literal written as [$code] was not caught ($rc)"
@@ -81,7 +81,7 @@ dir=$(tree2 View.swift 'struct A: View { var body: some View { Text("x").textSty
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a textStyle was counted"
 rm -rf "$dir"
 # and what is not one: a token or a constant is the fix
-for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Metrics.inset2)' 'RoundedRectangle(cornerRadius: Radius.card)'; do
+for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Space.m)' 'VStack(spacing: Space.s) { Text("x") }' 'VStack(spacing: 0) { Text("x") }' 'Text("x").lineSpacing(6)' 'RoundedRectangle(cornerRadius: Radius.card)'; do
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
   run "$dir" >/dev/null; [ "$?" = 0 ] || fail "[$code] was counted as a literal"
   rm -rf "$dir"

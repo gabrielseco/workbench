@@ -12,12 +12,12 @@ struct SendBackPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            writing.padding(.top, 16)
-            SendBackGrants(store: store).padding(.top, 14)
+            writing.padding(.top, Space.l)
+            SendBackGrants(store: store).padding(.top, Space.l)
             if let error = store.actionError {
-                Text(error).role(.error).padding(.top, 14)
+                Text(error).role(.error).padding(.top, Space.l)
             }
-            footer.padding(.top, 26)
+            footer.padding(.top, Space.xxl)
         }
         .overlayCard()
         .onExitCommand(perform: close)
@@ -51,7 +51,7 @@ struct SendBackPopover: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             Text("The next turn also gets the failed check's output.")
                 .role(.caption).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 12)

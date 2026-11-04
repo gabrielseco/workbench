@@ -94,14 +94,12 @@ The inspector's eight hand-set sizes are system text styles now (`.body`, `.subh
 All 8 are `RunSettingsInspector.swift` (10.5, 11, 11.5, 13 and 13 semibold, by hand). The rest of the app uses `.callout`, `.caption` and
 friends. The inspector should too, or `Theme` should name the two it needs.
 
-### 10. Spacing (done for what repeats)
+### 10. Spacing (done: the `Space` scale)
 
-`Spacing.gutter` (28) and `Spacing.inset` (14, horizontal or all round) name the two values that repeat as design constants. The remaining padding literals are mostly one-off gaps (a label and its field, a row's top margin) and stay where they are: a token for each would only rename them; a value that starts repeating as a constant gets a name here. `scripts/ui-literals.baseline` keeps the count from growing.
-
-
-163 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and
-screens, so most of them disappear once 1 to 5 are components. Do this last, on what remains, and only name values that are used three or more
-times.
+Every padding and stack gap is a step of `Space` on a 4 pt grid (2, 4, 8, 12, 16, 20, 24, 32, 40, 48). The app had 32 distinct values (6, 10
+and 14 were the common off-grid ones); each moved to the nearest step, a tie going up (so 6 became 8, 10 became 12, 14 became 16, 28 became
+32), with no case-by-case judgement, so the change is one rule applied mechanically. `Spacing.gutter` (32) and `Spacing.inset` (16) are
+aliases of steps. The ratchet's `padding` baseline (numeric `.padding(` and `spacing:`) is **0**.
 
 ## What is already right
 

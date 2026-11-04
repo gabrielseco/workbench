@@ -49,7 +49,7 @@ struct NewThreadState: Equatable {
 /// The heading and what it promises.
 struct NewThreadHeading: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text("What do you want to work on?").textStyle(.title)
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
                 .role(.detail)
@@ -110,14 +110,14 @@ struct NewThreadScreen: View {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: Space.xl) {
                     NewThreadHeading()
                     messages
                     composer
                     caption
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-                .padding(.horizontal, Spacing.gutter).padding(.vertical, 36).frame(maxWidth: .infinity)
+                .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.huge).frame(maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -140,19 +140,19 @@ struct NewThreadScreen: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text("New thread").textStyle(.section)
             PhaseRow(steps: PhaseRow.newThreadSteps)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Spacing.gutter).padding(.top, 14).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.gutter).padding(.top, Space.l).padding(.bottom, Space.m)
     }
 
     /// A refusal asks the person to change something: amber, with their text kept. A project with no goal agent can name one.
     @ViewBuilder private var messages: some View {
         if let problem = staging.problem { MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: problem) }
         if store.goalAgentOff {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 MessageRow(
                     symbol: "exclamationmark.triangle.fill", tint: Theme.amber,
                     text: "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
@@ -174,10 +174,10 @@ struct NewThreadScreen: View {
     private var composer: some View {
         let state = state
         return VStack(alignment: .leading, spacing: 0) {
-            editor(state).padding(.horizontal, Spacing.inset).padding(.top, 12)
-            if !staging.items.isEmpty { thumbnails.padding(.horizontal, Spacing.inset).padding(.top, 8) }
-            Divider().padding(.top, 10)
-            HStack(spacing: 10) {
+            editor(state).padding(.horizontal, Spacing.inset).padding(.top, Space.m)
+            if !staging.items.isEmpty { thumbnails.padding(.horizontal, Spacing.inset).padding(.top, Space.s) }
+            Divider().padding(.top, Space.m)
+            HStack(spacing: Space.m) {
                 Button(action: chooseImages) { Image(systemName: "plus") }
                     .iconButton(size: .small).disabled(busy).accessibilityLabel("Add screenshots…").help("Add screenshots")
                 Text("Paste or drop screenshots.").role(.caption)
@@ -199,7 +199,7 @@ struct NewThreadScreen: View {
                         .primaryButton().disabled(!state.canSend).help(state.sendHelp)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.m)
         }
         .card(stroke: focused ? Theme.blue.opacity(0.6) : Theme.line, strokeWidth: focused ? 1.5 : 1)
         .background {
@@ -230,7 +230,7 @@ struct NewThreadScreen: View {
     }
 
     private var thumbnails: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             ForEach(Array(staging.items.enumerated()), id: \.element.id) { index, item in
                 ZStack(alignment: .topTrailing) {
                     Group {
@@ -240,7 +240,7 @@ struct NewThreadScreen: View {
                     }
                     .frame(width: 44, height: 44).thumbnail()
                     Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(2)
+                        .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(Space.xxs)
                 }
             }
             Spacer()
@@ -253,7 +253,7 @@ struct NewThreadScreen: View {
 
     /// A button's name and its key, as the artboard draws them.
     private static func labelled(_ title: String, _ key: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Text(title)
             Text(key).textStyle(.caption).opacity(0.7)
         }
