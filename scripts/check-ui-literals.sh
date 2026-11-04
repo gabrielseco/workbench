@@ -21,7 +21,7 @@ current() {
     echo "radius $(count radius 'cornerRadius:[[:space:]]*[0-9]')"
     echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
-    echo "padding $(count padding '\.padding\([^)]*[0-9]|[^a-zA-Z]spacing:[^,)]*[1-9]')"
+    echo "padding $(count padding '(^|[^A-Za-z])padding\([^)]*[0-9]|[^a-zA-Z]spacing:[^,)]*[1-9]')"
     echo "textstyle $(count textstyle '\.font\(')"
 }
 

@@ -22,7 +22,7 @@ struct OverlayLayer<Card: View>: View {
 extension View {
     /// The card's frame: width, rounded background, hairline and shadow.
     func overlayCard() -> some View {
-        padding(.horizontal, 28).padding(.top, Space.xxl).padding(.bottom, Space.xxl)
+        padding(.horizontal, Spacing.gutter).padding(.top, Space.xxl).padding(.bottom, Space.xxl)
             .frame(width: 600)
             .card(.overlay)
             .shadow(color: .black.opacity(0.35), radius: 32, y: 14)
