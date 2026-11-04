@@ -201,8 +201,7 @@ struct PendingStepRow: View {
     var step: PendingStep
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "circle").foregroundStyle(Theme.fg3).frame(width: 16)
+        IconRow(symbol: "circle", tint: Theme.fg3) {
             Text(step.name).font(.callout.weight(.semibold))
             Spacer(minLength: 8)
             Text(step.detail).font(.callout).foregroundStyle(.secondary).lineLimit(1)
