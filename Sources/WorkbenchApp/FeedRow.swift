@@ -76,8 +76,7 @@ struct FeedLine: View {
     var link = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
+        IconRow(symbol: symbol, tint: tint) {
             if inline {
                 Text(title).font(.callout).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
                 if let detail, !detail.isEmpty { detailText(detail).lineLimit(1) }
@@ -349,8 +348,7 @@ struct ToolGroupRow: View {
     var summaries: [String]
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "wrench.and.screwdriver").foregroundStyle(Theme.grey).frame(width: 16)
+        IconRow(symbol: "wrench.and.screwdriver", tint: Theme.grey) {
             Text("\(count) tool \(count == 1 ? "call" : "calls")").font(.callout)
             Text(summaries.joined(separator: " · ") + (count > summaries.count ? " …" : ""))
                 .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)

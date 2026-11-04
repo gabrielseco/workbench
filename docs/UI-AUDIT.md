@@ -64,18 +64,18 @@ thin wrappers that only decide the text).
 
 **Component:** `SectionLabel(_ text)`, one style.
 
-### 6. Rows with a symbol, a title and a detail
+### 6. Rows with a symbol, a title and a detail (done: `IconRow`)
 
-`FeedLine` (`FeedRow.swift`) is the good example and does this once for the feed. Look-alikes that do it by hand: `PendingStepRow`,
-`CheckRow`, `TaskRunRow`, `RailRowView`, `ProjectRow`, `GrantRowView`, `ProofThumbnail`'s caption. Not confirmed row by row; the
-`firstTextBaseline` HStack with an `Image(systemName:)` appears 12 times. Needs a read of each before deciding which really are `FeedLine`
-with a different `symbol`/`tint`.
+`FeedLine` (`FeedRow.swift`), `ToolGroupRow`, `PendingStepRow` and `MessageRow` each wrote the same leading symbol in a 16 wide column, an
+8 pt gap and the first-text-baseline alignment. They now sit on `IconRow(symbol:tint:) { content }`; what follows the symbol is theirs.
+The criteria list (`c1` in a 28 wide column) and the task settings (a 70 wide label column) are label-and-value rows, not symbol rows:
+a different component if a third appears, not forced into this one.
 
-### 7. Message rows
+### 7. Message rows (concluded: different by design, no change)
 
-`ChatMessageRow`, `MessageRow`, `MessageRows`, `UserNoteRow`, `AgentLineView`: the chat and the feed both show "you said / it said". Check
-whether `UserNoteRow` (`FeedRow.swift:118`, radius 10 on `.quaternary`) and the chat's user bubble are the same bubble with a different
-`role`.
+The chat's user bubble (`ChatMessageRow`: raised fill, uneven corners, 14/4) and the feed's `UserNoteRow` ("You · sent back": a quiet
+`.quaternary` well, radius 10) look alike in a list of rows but are two designs for two situations, and the agent's text is not a bubble at
+all. Merging them would change a design, not remove a copy.
 
 ### 8. Surfaces at radius 6 and 7 that are really buttons or thumbnails
 
