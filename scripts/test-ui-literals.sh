@@ -66,6 +66,13 @@ for code in 'RoundedRectangle(cornerRadius:12)' 'RoundedRectangle(cornerRadius: 
   [ "$rc" = 1 ] || fail "a literal written as [$code] was not caught ($rc)"
   rm -rf "$dir"
 done
+# a URL's // is not a comment: a literal after it on the line still counts
+dir=$(tree2 View.swift 'struct A: View { var body: some View { Link("https://example.test", destination: u).clipShape(RoundedRectangle(cornerRadius: 12)) } }')
+run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a literal after a URL on the same line was hidden by its //"
+rm -rf "$dir"
+dir=$(tree2 View.swift 'struct A: View { var body: some View { A() } } // RoundedRectangle(cornerRadius: 12) is gone')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a trailing comment was counted"
+rm -rf "$dir"
 # and what is not one: a token or a constant is the fix
 for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Metrics.inset2)' 'Text("x").font(.system(size: Theme.inspectorSize))' 'RoundedRectangle(cornerRadius: Radius.card)'; do
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
