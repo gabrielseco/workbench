@@ -175,6 +175,9 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   - `scripts/check-ui-literals.sh` counts the hand-written ones (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`) against
     `scripts/ui-literals.baseline` and fails a PR that raises a count; one that lowers a count runs `--update` in the same change (CI refuses a baseline higher than the base branch's). A new
     component file is added to `COMPONENTS` in that script. `docs/UI-AUDIT.md` lists what is still copied and the order to fix it.
+  - Spacing: every padding and every stack gap is a step of `Space` (`.padding(.horizontal, Space.m)`, `VStack(spacing: Space.s)`; a 4 pt
+    grid, `Space.swift`), never a number; `Spacing.gutter` and `Spacing.inset` name the two screen-level insets. The ratchet's `padding`
+    count (numeric `.padding(` and `spacing:`) has a baseline of 0. A step the scale lacks is a new `Space` case, decided once.
   - Text: a view never sets a font. It picks a step of the type scale and a tone, `.textStyle(.caption, .secondary)`, or a named
     combination that recurs, `Text(..).role(.error)` (`TextStyle`, `TextTone` and `TextRole` in `TextStyle.swift` and `TextRole.swift`).
     A step the scale lacks is a new case there, decided once. `.font(` outside those files is counted by the ratchet, whose baseline for it is 0.

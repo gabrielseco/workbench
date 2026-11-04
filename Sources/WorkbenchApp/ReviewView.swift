@@ -11,7 +11,7 @@ struct ReviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text("Review · \(headline(now: context.date))").textStyle(.title)
                 }
@@ -27,7 +27,7 @@ struct ReviewView: View {
                 }
                 actions
             }
-            .padding(28).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.xxxl).frame(maxWidth: .infinity, alignment: .leading)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.refreshReview() }
@@ -60,7 +60,7 @@ struct ReviewView: View {
             } else {
                 Text("\(review.assessed) · \(review.criteriaSummary)").role(.detail)
                 ForEach(review.criteria) { criterion in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(criterion.id).role(.monoDetail)
                             Text(criterion.text)
@@ -100,7 +100,7 @@ struct ReviewView: View {
     /// it be stopped from the screen that is showing (the Run screen, which has the other Stop, is not).
     @ViewBuilder private var advice: some View {
         if store.runningHere {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 ProgressView().controlSize(.small)
                 Text("Running the advice the project's config asks for (judge, review stages)…").textStyle(.callout)
                 Spacer()
@@ -114,7 +114,7 @@ struct ReviewView: View {
         if !review.due.isEmpty {
             section("Still due") {
                 ForEach(review.due) { item in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         mono(item.command).textSelection(.enabled)
                         Text(item.why).role(.caption)
                     }
@@ -138,7 +138,7 @@ struct ReviewView: View {
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             HStack {
                 Button("Discard…") { Task { await store.prepareDiscard() } }.disabled(store.busy != nil)
                 Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
@@ -167,7 +167,7 @@ struct ReviewView: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             Text(title.uppercased()).textStyle(.captionStrong, .secondary)
             content()
         }
@@ -205,7 +205,7 @@ struct DiffSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(20).frame(width: 760, height: 520)
+        .padding(Space.xl).frame(width: 760, height: 520)
         .task { text = await store.patchText(path) }
     }
 }
@@ -214,7 +214,7 @@ struct DiscardSheet: View {
     var store: ProjectStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             Text("Discard this work").textStyle(.heading)
             if let plan = store.pendingDiscard {
                 ScrollView {
@@ -232,6 +232,6 @@ struct DiscardSheet: View {
                 Button("Discard", role: .destructive) { Task { await store.confirmDiscard() } }
             }
         }
-        .padding(20).frame(width: 560)
+        .padding(Space.xl).frame(width: 560)
     }
 }

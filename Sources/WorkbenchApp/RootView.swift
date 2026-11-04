@@ -50,7 +50,7 @@ struct ToolbarBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             ProjectPill(store: store)
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
             if store.newThread {
@@ -67,7 +67,7 @@ struct ToolbarBar: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
+        .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
     }
 }
 
@@ -80,12 +80,12 @@ struct ProjectPill: View {
         Button {
             store.pickingProject.toggle()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Image(systemName: "folder.fill").foregroundStyle(Theme.blue)
                 Text(store.project?.root.lastPathComponent ?? "Choose project").textStyle(.bodyStrong)
                 Image(systemName: "chevron.down").textStyle(.captionStrong, .secondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.xs)
             .background(Theme.grey.opacity(store.pickingProject ? 0.2 : hovered ? 0.14 : 0.08), in: Capsule())
             .contentShape(Capsule())
         }
@@ -167,11 +167,11 @@ struct BusyBar: View {
     var text: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             ProgressView().controlSize(.small)
             Text(text).role(.detail)
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
         .callout()
         .accessibilityElement(children: .combine)
     }
@@ -183,8 +183,8 @@ struct PullRequestCIView: View {
     var store: ProjectStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            HStack(spacing: Space.s) {
                 Label(ci.summary, systemImage: icon).foregroundStyle(color).textStyle(.callout)
                 Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).textStyle(.callout)
             }
@@ -203,14 +203,14 @@ struct PullRequestCIView: View {
     static let unscrolledRows = 6
 
     private var rows: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             ForEach(ci.rows, id: \.self) { row in
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
                     Text(row.name).textStyle(.monoCallout)
                     Text(row.word).role(.detail)
                 }
-                .padding(.leading, 20)
+                .padding(.leading, Space.xl)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -261,17 +261,17 @@ struct EmptyState: View {
     var store: ProjectStore
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Space.m) {
             Text(title).textStyle(.title)
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             HStack {
                 Button("Choose project…") { Task { await store.chooseFolder() } }
                 if store.screen == .noThread { Button("New goal…") { store.beginNewGoal() } }
             }
-            .padding(.top, 6)
+            .padding(.top, Space.s)
             if let error = store.actionError { Text(error).role(.error) }
         }
-        .padding(40)
+        .padding(Space.huge)
     }
 }
 
@@ -298,7 +298,7 @@ struct FooterBar: View {
                 Text(limit).role(.mono)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, Space.l).padding(.vertical, Space.m)
     }
 
     /// The thread's per-turn limit, as the design's footer says it; nil when the thread has none or is not on screen.

@@ -57,11 +57,11 @@ struct BrainstormFoldView: View {
     @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
             Button {
                 open.toggle()
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Image(systemName: open ? "chevron.down" : "chevron.right").textStyle(.captionStrong)
                     Text(BrainstormFold.title(count: messages.count)).textStyle(.callout)
                 }
@@ -79,9 +79,9 @@ struct AgentLineView: View {
     var text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.m) {
             Image(systemName: "sparkle").textStyle(.captionMedium, .secondary).frame(width: 22, height: 22)
-                .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line)).padding(.top, 1)
+                .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line)).padding(.top, Space.xxs)
             Text(text).textStyle(.body).fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
@@ -108,22 +108,22 @@ struct DraftGoalCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 SectionLabel("DRAFT GOAL")
                 Text(header.pill).pill(tint)
                 Spacer(minLength: 8)
                 if let hint = header.hint { Text(hint).role(.caption) }
             }
-            .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
+            .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
             Divider()
             GoalBlocks(goal: goal, store: store, editable: true, style: .feed, showsError: true).padding(Spacing.inset)
             Divider()
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 Text(DraftGoalCard.footer(goal: goal, base: base)).role(.caption)
                 Spacer(minLength: 8)
                 DecisionActions(decision: decision, perform: perform)
             }
-            .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
+            .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
         }
         .card()
     }

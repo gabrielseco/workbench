@@ -123,7 +123,7 @@ struct RunCardView: View {
                 }
             }
             if !model.tasks.isEmpty || !model.tail.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Space.m) {
                     if !model.tasks.isEmpty { tasks }
                     if !model.tail.isEmpty { tail }
                 }
@@ -136,7 +136,7 @@ struct RunCardView: View {
     }
 
     private func header(elapsed: TimeInterval?) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             ProgressView().controlSize(.small).frame(width: 16)
             Text("Claude is working").textStyle(.calloutStrong)
             Spacer(minLength: 8)
@@ -144,14 +144,14 @@ struct RunCardView: View {
                 Text(clock).role(.monoDetail)
             }
         }
-        .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
+        .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
     }
 
     private var tasks: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text(model.tasksTitle).textStyle(.captionStrong, .secondary)
             ForEach(Array(model.tasks.enumerated()), id: \.offset) { _, task in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     mark(task.state)
                     Text(task.text).textStyle(.callout).fontWeight(task.state == .working ? .semibold : .regular)
                         .foregroundStyle(task.state == .pending ? .secondary : .primary).lineLimit(2)
@@ -171,13 +171,13 @@ struct RunCardView: View {
     }
 
     private var tail: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             ForEach(Array(model.tail.enumerated()), id: \.offset) { _, line in
                 Text(line).role(.mono).lineLimit(1)
                     .truncationMode(.middle)
             }
         }
-        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.well)
     }
 
@@ -189,7 +189,7 @@ struct RunCardView: View {
             }
             ActionButton(action: stop, size: .compact, symbol: "stop.fill", perform: perform)
         }
-        .padding(.horizontal, Spacing.inset).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.inset).padding(.bottom, Space.m)
     }
 }
 
@@ -254,7 +254,7 @@ struct ProofThumbnail: View {
     @State private var missing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Group {
                 if let image {
                     Image(decorative: image, scale: 1).resizable().scaledToFit()

@@ -22,7 +22,7 @@ struct TasksView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let error = store.tasks.error {
                 Label("Could not read the tasks: \(error). Showing the last read.", systemImage: "xmark.octagon.fill")
-                    .textRole(.error).padding(.horizontal, 20).padding(.vertical, 8)
+                    .textRole(.error).padding(.horizontal, Space.xl).padding(.vertical, Space.s)
                 Divider()
             }
             if let snapshot {
@@ -33,7 +33,7 @@ struct TasksView: View {
                     TaskPageView(store: store, snapshot: snapshot, entry: entry)
                 }
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: Space.s) {
                     ProgressView().controlSize(.small)
                     Text("Reading the tasks…").role(.detail)
                 }
@@ -60,7 +60,7 @@ struct NoTasks: View {
     var timer: TimerCard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
             Text("No scheduled tasks").textStyle(.display)
             Text("A task is work Workbench does on a schedule, with nobody at the keyboard, and hands back as a pull request.")
                 .role(.detail)
@@ -69,7 +69,7 @@ struct NoTasks: View {
                 .role(.detail)
             TimerCardView(card: timer).frame(maxWidth: 420)
         }
-        .padding(28).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(Space.xxxl).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -82,14 +82,14 @@ struct TimerCardView: View {
 
     var body: some View {
         let tone: TaskTone = card.worst.map(TaskOutcomeStyle.tone) ?? .idle
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Button {
                 expanded = !open
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Image(systemName: card.worst.map(TaskOutcomeStyle.symbol) ?? "questionmark.circle")
                         .foregroundStyle(Theme.color(for: tone))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         Text("Will it run tonight?").role(.caption)
                         Text(card.headline).textStyle(.calloutStrong)
                         if let counts = card.counts {
@@ -108,7 +108,7 @@ struct TimerCardView: View {
                 switch card {
                 case .lines(let lines):
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                             Image(systemName: TaskOutcomeStyle.symbol(line.level))
                                 .foregroundStyle(Theme.color(for: TaskOutcomeStyle.tone(line.level))).textStyle(.caption)
                             Text(line.text).textStyle(.caption).textSelection(.enabled)
@@ -120,7 +120,7 @@ struct TimerCardView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(Space.m)
         .callout(.neutral)
     }
 }
@@ -135,7 +135,7 @@ struct TaskButtons: View {
         let tasks = store.tasks
         let needsApproval = entry.summary.problem == nil && entry.summary.approval != .approved
         let off = tasks.runUnavailable(entry, threadRunGoing: store.runningProjectPath != nil)
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             if tasks.isRunning(entry.id, in: store.project) {
                 Button("Stop") { Task { await tasks.stopRun() } }
                     .help("Ends the agent's turn; the run records how it ended")
@@ -171,7 +171,7 @@ struct ResultLine: View {
 
     var body: some View {
         let tone = TaskOutcomeStyle.tone(result.outcome)
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             Label(TaskOutcomeStyle.word(result.outcome), systemImage: TaskOutcomeStyle.symbol(result.outcome))
                 .textStyle(.calloutStrong).foregroundStyle(Theme.color(for: tone))
             if let reason = result.reason, !reason.isEmpty {
@@ -189,7 +189,7 @@ struct ResultLine: View {
             if let pr = result.pullRequest { Text(pr).textStyle(.mono).textSelection(.enabled) }
             if !result.recorded { Text("not recorded in the task's run log").textStyle(.caption, .amber) }
         }
-        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.tinted(Theme.color(for: tone)))
         .accessibilityElement(children: .combine)
     }

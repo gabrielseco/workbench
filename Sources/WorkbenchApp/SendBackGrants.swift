@@ -43,10 +43,10 @@ struct SendBackGrants: View {
 
     var body: some View {
         if !store.sendBackGrants.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 SectionLabel("DENIED CALLS")
                 // A scroll view takes all the height it is allowed, so a short list is not put in one.
-                let rows = VStack(alignment: .leading, spacing: 10) {
+                let rows = VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(store.sendBackGrants) { GrantRowView(store: store, row: $0) }
                 }
                 if store.sendBackGrants.count > 3 {
@@ -66,9 +66,9 @@ private struct GrantRowView: View {
     @State private var confirming = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             Text(row.command).textStyle(.monoCallout).lineLimit(2).textSelection(.enabled)
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 if row.level != .safe {
                     Text(row.level == .unsafe ? "unsafe" : "caution").textStyle(.caption)
                         .foregroundStyle(row.level == .unsafe ? Theme.red : Theme.amber)
@@ -95,7 +95,7 @@ private struct GrantRowView: View {
     }
 
     @ViewBuilder private var choices: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             if row.onlyOnce {
                 Button("Once…") { confirming = true }
             } else {

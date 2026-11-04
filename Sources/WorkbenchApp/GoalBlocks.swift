@@ -50,7 +50,7 @@ struct GoalBlocks: View {
     }
 
     private var blockers: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Space.xxs) {
             ForEach(goal.blockers, id: \.self) {
                 Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).textStyle(.callout)
             }
@@ -81,7 +81,7 @@ struct GoalBlocks: View {
 
     private var criteria: some View {
         section(criteriaHeading) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 if goal.rows.isEmpty && goal.quick {
                     Text(
                         "The request is the goal. With no criteria the judge does not run, the verifier drives the app from the "
@@ -116,18 +116,18 @@ struct GoalBlocks: View {
 
     private func criterion(_ row: GoalModel.Row) -> some View {
         HoverRow { hovering in
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                 if style == .feed {
                     Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 11, height: 11).accessibilityHidden(true)
                 } else {
                     Text(row.id).role(.monoDetail)
                 }
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Space.s) {
                     if editable {
                         CommitField(placeholder: "What must hold", value: row.text) {
                             edit(.updateCriterion(id: row.id, text: $0, proof: nil))
                         }
-                        HStack(spacing: 8) {
+                        HStack(spacing: Space.s) {
                             KindChip(kind: row.kind)
                             CommitField(
                                 placeholder: "How it will be shown", value: row.proof,
@@ -136,7 +136,7 @@ struct GoalBlocks: View {
                         }
                     } else {
                         Text(row.text)
-                        HStack(spacing: 8) {
+                        HStack(spacing: Space.s) {
                             KindChip(kind: row.kind)
                             Text(row.proof).textStyle(row.isCommand ? .monoCallout : .callout, .secondary)
                         }
@@ -162,7 +162,7 @@ struct GoalBlocks: View {
                 GoalCard(style: style) {
                     ForEach(Array(goal.outOfScope.enumerated()), id: \.offset) { _, item in
                         HoverRow { hovering in
-                            HStack(spacing: 10) {
+                            HStack(spacing: Space.m) {
                                 if editable {
                                     Text("•")
                                     CommitField(placeholder: "What must not change", value: item) { new in
@@ -202,7 +202,7 @@ struct GoalSection<Content: View>: View {
     init(title: String, @ViewBuilder content: () -> Content) { (self.title, self.content) = (title, content()) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             Text(title.uppercased()).textStyle(.captionStrong, .secondary)
             content
         }

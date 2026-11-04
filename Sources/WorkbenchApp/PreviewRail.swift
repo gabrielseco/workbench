@@ -14,7 +14,7 @@ struct PreviewRail: View {
         let model = RailModel.derive(
             listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project), composing: store.newThread)
         ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.xxs) {
                 header("THREADS") {
                     Button { store.beginNewGoal() } label: { Image(systemName: "plus") }
                         .iconButton(size: .small).disabled(store.project == nil)
@@ -23,17 +23,17 @@ struct PreviewRail: View {
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
                 if model.threads.isEmpty && model.composing == nil {
                     Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
-                        .role(.caption).padding(.horizontal, 8).padding(.vertical, 4)
+                        .role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                 } else if !model.threads.isEmpty {
                     ThreadListView(store: store, rows: model.threads, older: model.older)
                 }
-                header(model.scheduledHeader).padding(.top, 10)
+                header(model.scheduledHeader).padding(.top, Space.m)
                 if let note = model.scheduledNote {
-                    Text(note).role(.caption).padding(.horizontal, 8).padding(.vertical, 4)
+                    Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                     if model.tasksRead {
                         // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
                         Button("Open the Tasks page") { store.showTasks() }
-                            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, 8)
+                            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s)
                             .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
                     }
                 }
@@ -43,7 +43,7 @@ struct PreviewRail: View {
                     taskThreads(model.taskThreads[row.key] ?? [], task: row.key)
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 12)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.m)
         }
         // The group holding the thread on screen opens when that changes: the thread is chosen, it ends and moves under its task, or the
         // tasks are read after it. After that the group can be closed.
@@ -70,11 +70,11 @@ struct PreviewRail: View {
             Button {
                 if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Space.xs) {
                     Image(systemName: open ? "chevron.down" : "chevron.right").textStyle(.captionStrong)
                     Text(count).textStyle(.caption)
                 }
-                .foregroundStyle(.secondary).padding(.leading, 30).padding(.vertical, 2)
+                .foregroundStyle(.secondary).padding(.leading, Space.xxxl).padding(.vertical, Space.xxs)
             }
             .buttonStyle(.plain).accessibilityLabel("\(task): \(count), \(open ? "shown" : "hidden")")
             if open {
@@ -82,7 +82,7 @@ struct PreviewRail: View {
                     RailRowView(row: row, selected: store.mode == .thread && !store.newThread && row.key == shown) {
                         Task { await store.select(thread: row.key) }
                     }
-                    .padding(.leading, 16)
+                    .padding(.leading, Space.l)
                 }
             }
         }
@@ -105,6 +105,6 @@ struct PreviewRail: View {
             Spacer()
             trailing()
         }
-        .padding(.horizontal, 8).padding(.bottom, 4)
+        .padding(.horizontal, Space.s).padding(.bottom, Space.xs)
     }
 }

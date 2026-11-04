@@ -10,7 +10,7 @@ struct ProjectPickerLayer: View {
             if store.pickingProject {
                 Color.black.opacity(0.12).contentShape(Rectangle())
                     .onTapGesture { store.pickingProject = false }.transition(.opacity)
-                ProjectPickerCard(store: store).padding(.top, 44).padding(.leading, 10)
+                ProjectPickerCard(store: store).padding(.top, Space.giant).padding(.leading, Space.m)
                     .transition(.opacity.combined(with: .offset(y: -6)))
             }
         }
@@ -32,16 +32,16 @@ struct ProjectPickerCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            search.padding(.top, 12)
-            list.padding(.top, 10)
+            search.padding(.top, Space.m)
+            list.padding(.top, Space.m)
             if let error = store.actionError {
                 Text(error).role(.error)
-                    .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, Space.s)
             }
-            Divider().padding(.top, 10)
-            footer.padding(.top, 10)
+            Divider().padding(.top, Space.m)
+            footer.padding(.top, Space.m)
         }
-        .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
+        .padding(.horizontal, Space.l).padding(.top, Space.l).padding(.bottom, Space.l)
         .frame(width: 420)
         .card(.popover)
         .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
@@ -78,7 +78,7 @@ struct ProjectPickerCard: View {
     }
 
     private var search: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Find a project", text: $query)
                 .textFieldStyle(.plain).focused($focused)
@@ -90,7 +90,7 @@ struct ProjectPickerCard: View {
                     return .handled
                 }
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
+        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
         .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
@@ -107,11 +107,11 @@ struct ProjectPickerCard: View {
     @ViewBuilder private var list: some View {
         if rows.isEmpty {
             Text(store.recentPaths.isEmpty ? "No recent projects yet." : "No project matches \"\(query)\".")
-                .role(.detail).padding(.vertical, 10).padding(.horizontal, 4)
+                .role(.detail).padding(.vertical, Space.m).padding(.horizontal, Space.xs)
         } else {
             ScrollViewReader { scroller in
                 ScrollView {
-                    VStack(spacing: 2) {
+                    VStack(spacing: Space.xxs) {
                         ForEach(rows) { entry in
                             ProjectRow(entry: entry, highlighted: entry.path == selected, pick: pick) { store.forget(entry.path) }
                                 .id(entry.path)
@@ -166,14 +166,14 @@ private struct ProjectRow: View {
     private var available: Bool { entry.unavailable == nil }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             Button {
                 pick(entry.path)
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: Space.m) {
                     Image(systemName: entry.isCurrent ? "folder.fill" : "folder")
                         .foregroundStyle(entry.isCurrent ? Theme.blue : .secondary).frame(width: 18)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         Text(entry.name).textStyle(entry.isCurrent ? .bodyStrong : .body)
                             .foregroundStyle(available ? .primary : .secondary)
                         Text(entry.unavailable ?? (entry.path as NSString).abbreviatingWithTildeInPath)
@@ -195,7 +195,7 @@ private struct ProjectRow: View {
                     .accessibilityLabel("Remove \(entry.name) from the list")
             }
         }
-        .padding(.horizontal, 8).padding(.vertical, 6)
+        .padding(.horizontal, Space.s).padding(.vertical, Space.s)
         .background(
             RoundedRectangle(cornerRadius: Radius.box).fill(
                 highlighted ? Theme.blue.opacity(0.14) : (hovered && available ? Theme.grey.opacity(0.12) : .clear)))

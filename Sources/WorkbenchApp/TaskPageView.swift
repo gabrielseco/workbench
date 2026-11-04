@@ -12,10 +12,10 @@ struct TaskPageView: View {
         let header = TaskPage.header(entry, now: snapshot.readAt)
         let tonight = RunTonight.derive(entry, timer: snapshot.timer, activeThread: snapshot.activeThread)
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Space.xl) {
                 if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .top, spacing: Space.m) {
+                    VStack(alignment: .leading, spacing: Space.xs) {
                         Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
                         Text(header.line).role(.detail).lineLimit(2)
                         Text("Defined in \(header.path). Edit that file to change it.")
@@ -35,7 +35,7 @@ struct TaskPageView: View {
                 }
                 ForEach(Array(RunDay.groups(runs: entry.runs, now: snapshot.readAt).enumerated()), id: \.offset) { _, group in
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, 6)
+                        Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, Space.s)
                         ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
                             Divider()
                             TaskRunRow(run: run, threadKnown: threadKnown(run.thread), perform: perform)
@@ -45,7 +45,7 @@ struct TaskPageView: View {
                 }
             }
             .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-            .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity)
+            .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.xl).frame(maxWidth: .infinity)
         }
         // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
         .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
@@ -98,9 +98,9 @@ struct RunTonightCard: View {
             Button {
                 expanded = !open
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: Space.m) {
                     Image(systemName: symbol).foregroundStyle(tint)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: Space.xxs) {
                         Text("WILL IT RUN TONIGHT?").textStyle(.captionStrong).tracking(0.6).foregroundStyle(.secondary)
                         Text(tonight.verdict.text).textStyle(.calloutStrong)
                     }
@@ -110,15 +110,15 @@ struct RunTonightCard: View {
                         Image(systemName: open ? "chevron.up" : "chevron.down").textStyle(.captionMedium, .secondary)
                     }
                 }
-                .padding(12).contentShape(Rectangle())
+                .padding(Space.m).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Will it run tonight? \(tonight.verdict.text)\(tonight.countText.map { ", \($0)" } ?? "")")
             if open {
                 ForEach(Array(tonight.warnings.enumerated()), id: \.offset) { _, warning in
                     Divider()
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                        VStack(alignment: .leading, spacing: Space.xxs) {
                             Text(warning.text).textStyle(.callout)
                             if let detail = warning.detail {
                                 Text(detail).role(.mono)
@@ -130,7 +130,7 @@ struct RunTonightCard: View {
                             Button(action.title) { perform(action) }.plainButton().controlSize(.small)
                         }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .padding(.horizontal, Space.m).padding(.vertical, Space.s)
                     .accessibilityElement(children: .combine)
                 }
             }
@@ -158,11 +158,11 @@ struct TaskRunRow: View {
     var body: some View {
         let tone = TaskOutcomeStyle.tone(run.outcome)
         let action = RunAction.of(run)
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Space.m) {
             Image(systemName: TaskOutcomeStyle.symbol(run.outcome)).foregroundStyle(Theme.color(for: tone)).frame(width: 16)
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+                .padding(.top, Space.xxs)
+            VStack(alignment: .leading, spacing: Space.xxs) {
+                HStack(spacing: Space.s) {
                     Text(TaskOutcomeStyle.word(run.outcome)).textStyle(.calloutStrong)
                         .foregroundStyle(tone == .broken || tone == .needsYou ? Theme.color(for: tone) : Color.primary)
                     Text(run.started.formatted(.dateTime.hour().minute()))
@@ -193,7 +193,7 @@ struct TaskRunRow: View {
                 Button(action.title) { perform(action) }.plainButton().controlSize(.small)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

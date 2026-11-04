@@ -83,7 +83,7 @@ struct ChatMessageRow: View {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
                 Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
+                    .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
                     .background(
                         Theme.raised,
                         in: UnevenRoundedRectangle(
@@ -92,11 +92,11 @@ struct ChatMessageRow: View {
             }
             .accessibilityElement(children: .ignore).accessibilityLabel(message.spoken)
         } else {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: Space.m) {
                 Image(systemName: "sparkle").textStyle(.captionMedium, .secondary)
                     .frame(width: 22, height: 22)
                     .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line))
-                    .padding(.top, 1)
+                    .padding(.top, Space.xxs)
                 Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -111,7 +111,7 @@ struct ReplyingRow: View {
     var store: ProjectStore
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             ProgressView().controlSize(.small)
             Text("Replying…").textStyle(.callout, .blue)
             Spacer()
@@ -148,7 +148,7 @@ struct ChatComposer: View {
 
     var body: some View {
         let state = state
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
             if let said = store.actionError {
                 // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
                 MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: said)
@@ -162,22 +162,22 @@ struct ChatComposer: View {
             }
         }
         .frame(maxWidth: FeedLayout.maxColumn)
-        .padding(.horizontal, Spacing.gutter).padding(.top, 12).padding(.bottom, 16).frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.gutter).padding(.top, Space.m).padding(.bottom, Space.l).frame(maxWidth: .infinity)
     }
 
     /// The composer: a rounded panel with the text box and a square arrow-up button inside it, as the artboard draws it.
     private func panel(_ state: ChatComposerState) -> some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .bottom, spacing: Space.m) {
             editor(state)
             ComposerSendButton(enabled: state.canSend) { send() }
         }
-        .padding(.leading, 14).padding([.vertical, .trailing], 8).frame(minHeight: 46)
+        .padding(.leading, Space.l).padding([.vertical, .trailing], Space.s).frame(minHeight: 46)
         .card()
     }
 
     /// Under the panel: what a chat is, and the one prominent button.
     private func footer(_ state: ChatComposerState) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.m) {
             Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
             Text("Chat only. No worktree, no run, no cost.").role(.caption)
             Spacer(minLength: 12)
@@ -187,7 +187,7 @@ struct ChatComposer: View {
                 Button("Stop") { store.stopDrafting() }.buttonStyle(.borderless)
             } else {
                 Button { Task { await store.makeChatGoal() } } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Space.s) {
                         Text("Make this a goal")
                         Image(systemName: "arrow.right").accessibilityHidden(true)
                     }

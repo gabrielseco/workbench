@@ -17,33 +17,33 @@ struct TaskApproveCard: View {
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Close without approving")
                     .accessibilityLabel("Close the approve panel")
             }
-            Text(card.name).textStyle(.title).padding(.top, 8)
+            Text(card.name).textStyle(.title).padding(.top, Space.s)
             Text(
                 "Approving lets this run unattended, on its schedule, with nobody watching. It is bound to what is shown here: "
                     + "editing any of it takes the approval back."
             )
-            .role(.detail).padding(.top, 4)
+            .role(.detail).padding(.top, Space.xs)
             if stale {
                 Label("Edited since it was last approved.", systemImage: "exclamationmark.circle.fill")
-                    .textRole(.warning).padding(.top, 8)
+                    .textRole(.warning).padding(.top, Space.s)
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 ForEach(card.settings, id: \.label) { line in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Text(line.label).role(.caption).frame(width: 70, alignment: .leading)
                         Text(line.value).textStyle(.callout).textSelection(.enabled)
                     }
                 }
             }
-            .padding(.top, 12)
-            SectionLabel("INSTRUCTIONS").padding(.top, 12)
+            .padding(.top, Space.m)
+            SectionLabel("INSTRUCTIONS").padding(.top, Space.m)
             ScrollView {
                 Text(card.instructions).textStyle(.monoCallout).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(Space.s)
             }
             .frame(height: 150).callout(.neutral)
             if let error = store.tasks.approveError {
-                Text(error).role(.error).textSelection(.enabled).padding(.top, 10)
+                Text(error).role(.error).textSelection(.enabled).padding(.top, Space.m)
             }
             HStack {
                 Spacer()
@@ -51,7 +51,7 @@ struct TaskApproveCard: View {
                 Button("Approve") { Task { await store.tasks.confirmApprove(store.project) } }
                     .primaryButton().keyboardShortcut(.return, modifiers: .command)
             }
-            .padding(.top, 16)
+            .padding(.top, Space.l)
         }
         .overlayCard()
         .onExitCommand { store.tasks.cancelApprove() }
@@ -66,8 +66,8 @@ struct TaskRunCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Run now".uppercased()).textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
-            Text(card.name).textStyle(.title).padding(.top, 8)
-            VStack(alignment: .leading, spacing: 6) {
+            Text(card.name).textStyle(.title).padding(.top, Space.s)
+            VStack(alignment: .leading, spacing: Space.s) {
                 Text(
                     card.fix == .pr
                         ? "It starts a coding turn, and when the check passes it opens a pull request. Nothing merges."
@@ -76,14 +76,14 @@ struct TaskRunCard: View {
                 Text("Quitting the app while it runs ends the run as interrupted. Stop ends the turn and records how.")
                     .foregroundStyle(.secondary)
             }
-            .textStyle(.callout).padding(.top, 8)
+            .textStyle(.callout).padding(.top, Space.s)
             HStack {
                 Spacer()
                 Button("Cancel") { store.tasks.cancelRun() }.plainButton(size: .regular).keyboardShortcut(.cancelAction)
                 Button("Run now") { Task { await store.tasks.confirmRun(store.project) } }
                     .primaryButton().keyboardShortcut(.return, modifiers: .command)
             }
-            .padding(.top, 16)
+            .padding(.top, Space.l)
         }
         .overlayCard()
         .onExitCommand { store.tasks.cancelRun() }

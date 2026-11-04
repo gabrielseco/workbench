@@ -99,19 +99,19 @@ struct FeedScreen: View {
     }
 
     private var eagerRows: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             content
         }
         .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-        .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.xl).frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var lazyRows: some View {
-        LazyVStack(alignment: .leading, spacing: 10) {
+        LazyVStack(alignment: .leading, spacing: Space.m) {
             content
         }
         .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-        .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.xl).frame(maxWidth: .infinity, alignment: .center)
     }
 
     var body: some View {
@@ -141,7 +141,7 @@ struct FeedScreen: View {
 
     private var column: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let busy = store.busy { BusyBar(text: busy).padding(.horizontal, Spacing.gutter).padding(.top, 12) }
+            if let busy = store.busy { BusyBar(text: busy).padding(.horizontal, Spacing.gutter).padding(.top, Space.m) }
             header
             Divider()
             if drawsEagerly {
@@ -182,7 +182,7 @@ struct FeedScreen: View {
     private var mergeTitle: String { snapshot.state.pullRequest.map { "Merge PR #\($0.number)?" } ?? "Merge?" }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.title ?? snapshot.id).textStyle(.section).lineLimit(2)
                 Spacer(minLength: 12)
@@ -197,7 +197,7 @@ struct FeedScreen: View {
             }
             if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
         }
-        .padding(.horizontal, Spacing.gutter).padding(.top, 14).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.gutter).padding(.top, Space.l).padding(.bottom, Space.m)
     }
 }
 
@@ -264,11 +264,11 @@ struct PhaseRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Space.l) {
             ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                 let dot = PhaseDot.of(step.mark)
                 let tint = Theme.color(for: step.mark)
-                HStack(spacing: 6) {
+                HStack(spacing: Space.s) {
                     Circle().fill(dot.filled ? tint : Color.clear)
                         .overlay(Circle().strokeBorder(tint, lineWidth: 1.5)).frame(width: 8, height: 8)
                     Text(step.title).textStyle(.callout).lineLimit(1)
@@ -297,12 +297,12 @@ struct ReviewDetailsSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, 20).padding(.vertical, 12)
+            .padding(.horizontal, Space.xl).padding(.vertical, Space.m)
             Divider()
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else {
-                Text("There is nothing to review now.").foregroundStyle(.secondary).padding(20)
+                Text("There is nothing to review now.").foregroundStyle(.secondary).padding(Space.xl)
             }
         }
         .frame(minWidth: 760, minHeight: 560)

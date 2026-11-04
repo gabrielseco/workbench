@@ -9,7 +9,7 @@
 set -u
 cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
 baseline=${UI_LITERALS_BASELINE:-scripts/ui-literals.baseline}
-COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift'
+COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift Space.swift'
 
 # Counted per occurrence on the whole file with its // comments dropped (a `//` that starts one, not the one in `https://`) and its lines joined, so `cornerRadius:12` and a `.padding(`
 # whose number is on the next line count like the usual spelling. Only a number counts: a Theme token or a constant is the fix.
@@ -21,7 +21,7 @@ current() {
     echo "radius $(count radius 'cornerRadius:[[:space:]]*[0-9]')"
     echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
-    echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?-?[[:space:]]*[0-9][0-9.]*[[:space:]]*\)')"
+    echo "padding $(count padding '\.padding\([[:space:]]*(\[[^]]*\]|\.[a-z]+)?[[:space:]]*,?[[:space:]]*-?[0-9][0-9.]*[[:space:]]*\)|[^a-zA-Z]spacing:[[:space:]]*[1-9]')"
     echo "textstyle $(count textstyle '\.font\(')"
 }
 

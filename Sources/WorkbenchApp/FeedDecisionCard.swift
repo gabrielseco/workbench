@@ -32,8 +32,8 @@ struct DecisionCard: View {
     }
 
     private var readyToShip: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: Space.m) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 Text("Ready to ship").textStyle(.heading)
                 Text([route, "PR review comes back to this chat"].compactMap { $0 }.joined(separator: " · "))
                     .role(.mono).lineLimit(1).truncationMode(.middle)
@@ -47,14 +47,14 @@ struct DecisionCard: View {
                 ActionButton(action: ship, kind: .primary, perform: perform)
             }
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .card()
-        .padding(.top, 6)
+        .padding(.top, Space.s)
     }
 
     private var next: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: Space.m) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 SectionLabel("NEXT")
                 Text(decision.title ?? step?.title ?? "Nothing left to do").textStyle(.heading)
                 Text(shownWhy).role(.detail)
@@ -62,9 +62,9 @@ struct DecisionCard: View {
             Spacer(minLength: 12)
             DecisionActions(decision: decision, perform: perform)
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.outlined)
-        .padding(.top, 6)
+        .padding(.top, Space.s)
     }
 }
 
@@ -75,7 +75,7 @@ struct DecisionActions: View {
     var perform: (FeedAction) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             MoreActionsMenu(actions: decision.more, perform: perform)
             if let side = decision.secondary {
                 ActionButton(action: side, perform: perform)
@@ -117,7 +117,7 @@ struct MessageRows: View {
     var handoff: HerdrHandoffOutcome?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             if let error { MessageRow(symbol: "xmark.octagon.fill", tint: Theme.red, text: error) }
             if let note { MessageRow(symbol: "info.circle", tint: Theme.grey, text: note) }
             if let notice { MessageRow(symbol: "checkmark.circle.fill", tint: Theme.green, text: notice) }
