@@ -172,15 +172,15 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   variations are props (`kind`, `size`, `tone`, state): a variant that does not exist is a new case on the existing component, never a copy
   beside it. Search for one before writing a view. A view takes its radius, type, fill and spacing from a component or `Theme`, not from
   literals. Two things are enforced, so a PR cannot get past them:
-  - `scripts/check-ui-literals.sh` counts the hand-written ones (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`) against
-    `scripts/ui-literals.baseline` and fails a PR that raises a count; one that lowers a count runs `--update` in the same change (CI refuses a baseline higher than the base branch's). A new
-    component file is added to `COMPONENTS` in that script. `docs/UI-AUDIT.md` lists what is still copied and the order to fix it.
+  - `scripts/check-ui-tokens.sh` is a plain ban: a radius, a `.font(`, a `Capsule()` or a number in `.padding(` or `spacing:` outside the
+    component files fails CI and names the file. A new component file is added to `COMPONENTS` in that script, in the PR that adds it.
+    `docs/UI-AUDIT.md` records how the scales were chosen.
   - Spacing: every padding and every stack gap is a step of `Space` (`.padding(.horizontal, Space.m)`, `VStack(spacing: Space.s)`; a 4 pt
-    grid, `Space.swift`), never a number; `Spacing.gutter` and `Spacing.inset` name the two screen-level insets. The ratchet's `padding`
-    count (numeric `.padding(` and `spacing:`) has a baseline of 0. A step the scale lacks is a new `Space` case, decided once.
+    grid, `Space.swift`), never a number; `Spacing.gutter` and `Spacing.inset` name the two screen-level insets. The check bans a number in
+    `.padding(` and `spacing:`. A step the scale lacks is a new `Space` case, decided once.
   - Text: a view never sets a font. It picks a step of the type scale and a tone, `.textStyle(.caption, .secondary)`, or a named
     combination that recurs, `Text(..).role(.error)` (`TextStyle`, `TextTone` and `TextRole` in `TextStyle.swift` and `TextRole.swift`).
-    A step the scale lacks is a new case there, decided once. `.font(` outside those files is counted by the ratchet, whose baseline for it is 0.
+    A step the scale lacks is a new case there, decided once. `.font(` outside those files is banned by the same check.
   - Buttons, the first component made this way: `.primaryButton(size:)` or `.plainButton(size:)` (`WorkbenchButtonStyle` in
     `ButtonStyles.swift`, `kind` and `size` as props), never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
     (`scripts/check-banned-apis.sh` fails one). Buttons side by side pass the same `size`. `.plain`, `.borderless` and `.link` are for icons,

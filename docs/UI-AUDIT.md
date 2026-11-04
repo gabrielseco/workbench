@@ -2,7 +2,7 @@
 
 A read-only audit of `Sources/WorkbenchApp` (about 10,500 lines) as of the merge of #394, which turned the two button styles into one
 `WorkbenchButtonStyle(kind:size:)` and made `scripts/check-banned-apis.sh` refuse a second button look. Buttons were the easy case. This
-lists the same problem everywhere else, so the next PRs have a worklist and the "ratchet" check at the end has a baseline.
+lists the same problem everywhere else, so the next PRs have a worklist. It ended as a plain ban (`scripts/check-ui-tokens.sh`).
 
 The rule it is measured against (in `AGENTS.md`, Conventions): **anything visible that repeats is one component in
 one file, with its variations as props (`kind`, `size`, `tone`, state); a new variant is a new case, never a copy; search before writing a
@@ -11,7 +11,7 @@ view.** Measurements (radius, padding, type size, tint strength) are tokens in `
 Method: grep for the recipes below, then read each hit. Line numbers are from `main` at the time of writing and will drift; the file is
 the thing to look at.
 
-## Numbers (the baseline)
+## Numbers (at the start of the audit)
 
 | What | Count | Where it should live |
 |---|---|---|
@@ -88,7 +88,7 @@ Thumbnails at radius 6 (`NewThreadScreen.swift:247`, `RunCard.swift:273`) are on
 
 ### 9. Type sizes outside the text styles (done)
 
-The inspector's eight hand-set sizes are system text styles now (`.body`, `.subheadline`, monospaced `.caption`); each moved by at most half a point. The UI-literals baseline for `fontsize` is 0.
+The inspector's eight hand-set sizes are system text styles now (`.body`, `.subheadline`, monospaced `.caption`); each moved by at most half a point. A raw `.font(` is now banned.
 
 
 All 8 are `RunSettingsInspector.swift` (10.5, 11, 11.5, 13 and 13 semibold, by hand). The rest of the app uses `.callout`, `.caption` and
@@ -99,7 +99,7 @@ friends. The inspector should too, or `Theme` should name the two it needs.
 Every padding and stack gap is a step of `Space` on a 4 pt grid (2, 4, 8, 12, 16, 20, 24, 32, 40, 48). The app had 32 distinct values (6, 10
 and 14 were the common off-grid ones); each moved to the nearest step, a tie going up (so 6 became 8, 10 became 12, 14 became 16, 28 became
 32), with no case-by-case judgement, so the change is one rule applied mechanically. `Spacing.gutter` (32) and `Spacing.inset` (16) are
-aliases of steps. The ratchet's `padding` baseline (numeric `.padding(` and `spacing:`) is **0**.
+aliases of steps. The check bans a number in `.padding(` and `spacing:`.
 
 ## What is already right
 
@@ -118,10 +118,10 @@ Each is one PR, each shows before and after shots of the screens it touches, eac
 The rule already exists, so the number cannot grow while this list is worked through:
 
 - `AGENTS.md`, Conventions: a look that appears twice is a component with props.
-- `scripts/check-ui-literals.sh` counts the literals in the table above (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`)
-  outside `Theme.swift`, `ButtonStyles.swift` and `PlaceholderTextEditor.swift` against `scripts/ui-literals.baseline`. A PR that raises a
-  count fails; one that lowers a count runs `scripts/check-ui-literals.sh --update` in the same change, so it stays down. CI and
-  `scripts/check.sh` run it, and `scripts/test-ui-literals.sh` tests it. Each component file added by 1 to 5 goes into its `COMPONENTS` list.
+- `scripts/check-ui-tokens.sh` bans the literals in the table above (radius, `.font(`, `Capsule()`, a number in `.padding(` or `spacing:`)
+  outside the component files, and names the offender. It started as a ratchet with a baseline; once every count reached 0 the baseline
+  had nothing left to say, so it became a plain ban (no baseline file, no `--update`). CI and `scripts/check.sh` run it and
+  `scripts/test-ui-tokens.sh` tests it. A component file goes into its `COMPONENTS` list in the PR that adds it.
 - A line in `pr-review` and `design-review`, "does a new view duplicate an existing component?", for what a count cannot see.
 
 ## Not decided here
@@ -137,7 +137,7 @@ After the ten items above, a grep for what still repeats found the same `.font(.
 set with `.textStyle(style, tone)`; `TextRole` (`caption`, `detail`, `error`, `warning`, `mono`, `monoDetail`) is named combinations of the
 two that recur. `micro` and `microStrong` drew exactly the same as `captionMedium` and `captionStrong`, so the scale has one of each.
 
-The ratchet's `textstyle` count is any `.font(` outside the component files, and its baseline is **0**: a view does not set a font. A step the
+The check bans any `.font(` outside the component files: a view does not set a font. A step the
 scale lacks is a new `TextStyle` case, decided once.
 
 Looked at and left: the 19 `Divider()`s are the system divider and need nothing; `Toggle` rows (the inspector's two) and the criteria and

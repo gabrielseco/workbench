@@ -85,9 +85,7 @@ struct ProjectPill: View {
                 Text(store.project?.root.lastPathComponent ?? "Choose project").textStyle(.bodyStrong)
                 Image(systemName: "chevron.down").textStyle(.captionStrong, .secondary)
             }
-            .padding(.horizontal, Space.m).padding(.vertical, Space.xs)
-            .background(Theme.grey.opacity(store.pickingProject ? 0.2 : hovered ? 0.14 : 0.08), in: Capsule())
-            .contentShape(Capsule())
+            .pill(style: .control(hovered: hovered, selected: store.pickingProject), size: .large)
         }
         .buttonStyle(.plain).fixedSize()
         .onHover { hovered = $0 }
