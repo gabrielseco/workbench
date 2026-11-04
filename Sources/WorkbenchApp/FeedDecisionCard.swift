@@ -34,7 +34,7 @@ struct DecisionCard: View {
     private var readyToShip: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ready to ship").font(.headline)
+                Text("Ready to ship").textStyle(.heading)
                 Text([route, "PR review comes back to this chat"].compactMap { $0 }.joined(separator: " · "))
                     .role(.mono).lineLimit(1).truncationMode(.middle)
             }
@@ -56,7 +56,7 @@ struct DecisionCard: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 SectionLabel("NEXT")
-                Text(decision.title ?? step?.title ?? "Nothing left to do").font(.headline)
+                Text(decision.title ?? step?.title ?? "Nothing left to do").textStyle(.heading)
                 Text(shownWhy).role(.detail)
             }
             Spacer(minLength: 12)
@@ -137,7 +137,7 @@ struct MessageRow: View {
 
     var body: some View {
         IconRow(symbol: symbol, tint: tint) {
-            Text(text).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            Text(text).textStyle(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

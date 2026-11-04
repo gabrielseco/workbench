@@ -34,9 +34,9 @@ struct SendBackPopover: View {
     private var header: some View {
         HStack {
             Text("Send back".uppercased())
-                .font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
+                .textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
             Spacer()
-            Button(action: close) { Image(systemName: "xmark").font(.caption.weight(.semibold)) }
+            Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .accessibilityLabel("Close the send back panel")
         }
@@ -45,7 +45,7 @@ struct SendBackPopover: View {
     private var writing: some View {
         PlaceholderTextEditor(
             text: $store.sendBackNote, placeholder: "What should change? Say what is wrong and what you expect instead.",
-            font: .system(size: 17, design: .serif), lineSpacing: 6, focus: $focused
+            style: .serifLarge, lineSpacing: 6, focus: $focused
         )
         .frame(height: 170)
     }

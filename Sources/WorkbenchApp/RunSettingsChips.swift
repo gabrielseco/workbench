@@ -6,7 +6,7 @@ struct Chip: View {
     var mono: Bool
 
     var body: some View {
-        Text(text).font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 11.5)).foregroundStyle(Theme.fg2)
+        Text(text).textStyle(mono ? .chipMono : .chip, .muted)
             .lineLimit(1).truncationMode(.middle).pill(style: .outlined)
     }
 }

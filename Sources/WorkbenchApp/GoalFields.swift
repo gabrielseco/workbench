@@ -15,7 +15,7 @@ extension EnvironmentValues {
 struct CommitField: View {
     var placeholder: String
     var value: String
-    var font: Font = .body
+    var style: TextStyle = .body
     var commit: (String) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -23,7 +23,7 @@ struct CommitField: View {
 
     var body: some View {
         TextField(placeholder, text: $text)
-            .textFieldStyle(.plain).font(font)
+            .textFieldStyle(.plain).textStyle(style)
             .focused($focused)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
@@ -43,7 +43,7 @@ struct CommitField: View {
 struct CommitEditor: View {
     var value: String
     /// The serif face of the Goal screen, or the feed's body face.
-    var font: Font = .system(size: 16, design: .serif)
+    var style: TextStyle = .serifBody
     var lineSpacing: CGFloat = 5
     var commit: (String) -> Void
     @State private var text = ""
@@ -52,7 +52,7 @@ struct CommitEditor: View {
 
     var body: some View {
         PlaceholderTextEditor(
-            text: $text, font: font, lineSpacing: lineSpacing, scrollDisabled: true, focus: $focused
+            text: $text, style: style, lineSpacing: lineSpacing, scrollDisabled: true, focus: $focused
         )
         .frame(minHeight: 30)
             .onAppear { text = value }

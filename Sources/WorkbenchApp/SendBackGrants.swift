@@ -67,20 +67,20 @@ private struct GrantRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(row.command).font(.system(.callout, design: .monospaced)).lineLimit(2).textSelection(.enabled)
+            Text(row.command).textStyle(.monoCallout).lineLimit(2).textSelection(.enabled)
             HStack(spacing: 8) {
                 if row.level != .safe {
-                    Text(row.level == .unsafe ? "unsafe" : "caution").font(.caption)
+                    Text(row.level == .unsafe ? "unsafe" : "caution").textStyle(.caption)
                         .foregroundStyle(row.level == .unsafe ? Theme.red : Theme.amber)
                 }
                 if let reason = row.reasons.first { Text(reason).role(.caption).lineLimit(1) }
                 Spacer(minLength: 8)
-                if let decided = row.decided { Text(decided).font(.caption).foregroundStyle(Theme.green) }
+                if let decided = row.decided { Text(decided).textStyle(.caption, .green) }
                 choices
             }
             if confirming {
                 HStack {
-                    Text("This is rated unsafe. Allow it for the next turn only?").font(.caption).foregroundStyle(Theme.red)
+                    Text("This is rated unsafe. Allow it for the next turn only?").textStyle(.caption, .red)
                     Spacer()
                     Button("Cancel") { confirming = false }.plainButton()
                     Button("Allow once") {
@@ -90,7 +90,7 @@ private struct GrantRowView: View {
                 }
                 .controlSize(.small)
             }
-            if let refusal = row.refusal { Text(refusal).font(.caption).foregroundStyle(Theme.red) }
+            if let refusal = row.refusal { Text(refusal).textStyle(.caption, .red) }
         }
     }
 

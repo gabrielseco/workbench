@@ -6,11 +6,9 @@ import Testing
 /// A text role is one font and one colour; the roles that look alike (caption and mono) differ, and each reaches both Text and any view.
 @MainActor @Suite struct TextRoleTests {
     @Test func eachRoleHasItsOwnFontAndColour() {
-        #expect(TextRole.caption.font == .caption && TextRole.caption.color == .secondary)
-        #expect(TextRole.detail.font == .callout && TextRole.detail.color == .secondary)
-        #expect(TextRole.error.font == .callout && TextRole.warning.font == .callout)
-        #expect(TextRole.mono.font == .system(.caption, design: .monospaced))
-        #expect(TextRole.monoDetail.font == .system(.callout, design: .monospaced))
+        #expect(TextRole.caption.style == .caption && TextRole.detail.style == .callout)
+        #expect(TextRole.error.style == .callout && TextRole.warning.style == .callout)
+        #expect(TextRole.mono.style == .mono && TextRole.monoDetail.style == .monoCallout)
     }
 
     /// The colour of the boldest pixel of a big glyph drawn in the role, as (red, green, blue).
@@ -44,6 +42,6 @@ import Testing
         let text: Text = Text("x").role(.error)
         let label = String(describing: Label("x", systemImage: "bell").textRole(.error))
         #expect(String(describing: text).contains("Text"))
-        #expect(label.contains("font") || label.contains("Font"))
+        #expect(label.contains("TextStyling"))
     }
 }

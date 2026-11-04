@@ -61,10 +61,10 @@ struct NoTasks: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("No scheduled tasks").font(.title.weight(.bold))
+            Text("No scheduled tasks").textStyle(.display)
             Text("A task is work Workbench does on a schedule, with nobody at the keyboard, and hands back as a pull request.")
                 .role(.detail)
-            Text("workbench task new <name>").font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+            Text("workbench task new <name>").textStyle(.monoCallout).textSelection(.enabled)
             Text("Run it in this project's folder, edit .workbench/tasks/<name>/task.md, then approve it. They show up here.")
                 .role(.detail)
             TimerCardView(card: timer).frame(maxWidth: 420)
@@ -91,13 +91,13 @@ struct TimerCardView: View {
                         .foregroundStyle(Theme.color(for: tone))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Will it run tonight?").role(.caption)
-                        Text(card.headline).font(.callout.weight(.semibold))
+                        Text(card.headline).textStyle(.calloutStrong)
                         if let counts = card.counts {
                             Text(counts).role(.caption)
                         }
                     }
                     Spacer()
-                    Image(systemName: open ? "chevron.up" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                    Image(systemName: open ? "chevron.up" : "chevron.down").textStyle(.captionMedium, .secondary)
                 }
                 .contentShape(Rectangle())
             }
@@ -110,8 +110,8 @@ struct TimerCardView: View {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Image(systemName: TaskOutcomeStyle.symbol(line.level))
-                                .foregroundStyle(Theme.color(for: TaskOutcomeStyle.tone(line.level))).font(.caption)
-                            Text(line.text).font(.caption).textSelection(.enabled)
+                                .foregroundStyle(Theme.color(for: TaskOutcomeStyle.tone(line.level))).textStyle(.caption)
+                            Text(line.text).textStyle(.caption).textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -173,7 +173,7 @@ struct ResultLine: View {
         let tone = TaskOutcomeStyle.tone(result.outcome)
         VStack(alignment: .leading, spacing: 3) {
             Label(TaskOutcomeStyle.word(result.outcome), systemImage: TaskOutcomeStyle.symbol(result.outcome))
-                .font(.callout.weight(.semibold)).foregroundStyle(Theme.color(for: tone))
+                .textStyle(.calloutStrong).foregroundStyle(Theme.color(for: tone))
             if let reason = result.reason, !reason.isEmpty {
                 Text(TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)).role(.caption)
                     .textSelection(.enabled)
@@ -186,8 +186,8 @@ struct ResultLine: View {
                 Text("thread \(thread)").role(.mono)
                     .textSelection(.enabled)
             }
-            if let pr = result.pullRequest { Text(pr).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
-            if !result.recorded { Text("not recorded in the task's run log").font(.caption).foregroundStyle(Theme.amber) }
+            if let pr = result.pullRequest { Text(pr).textStyle(.mono).textSelection(.enabled) }
+            if !result.recorded { Text("not recorded in the task's run log").textStyle(.caption, .amber) }
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
         .callout(.tinted(Theme.color(for: tone)))

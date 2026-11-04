@@ -69,9 +69,9 @@ struct ProjectPickerCard: View {
     private var header: some View {
         HStack {
             Text("Projects".uppercased())
-                .font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
+                .textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
             Spacer()
-            Button(action: close) { Image(systemName: "xmark").font(.caption.weight(.semibold)) }
+            Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .accessibilityLabel("Close the projects panel")
         }
@@ -138,7 +138,7 @@ struct ProjectPickerCard: View {
             }
             .accessibilityLabel("Choose folder…")
             Spacer()
-            Text("↑↓ move  ·  ↵ open  ·  esc close").font(.caption).foregroundStyle(.tertiary)
+            Text("↑↓ move  ·  ↵ open  ·  esc close").textStyle(.caption, .tertiary)
         }
     }
 
@@ -174,10 +174,10 @@ private struct ProjectRow: View {
                     Image(systemName: entry.isCurrent ? "folder.fill" : "folder")
                         .foregroundStyle(entry.isCurrent ? Theme.blue : .secondary).frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(entry.name).font(.body.weight(entry.isCurrent ? .semibold : .regular))
+                        Text(entry.name).textStyle(entry.isCurrent ? .bodyStrong : .body)
                             .foregroundStyle(available ? .primary : .secondary)
                         Text(entry.unavailable ?? (entry.path as NSString).abbreviatingWithTildeInPath)
-                            .font(.system(.caption, design: .monospaced))
+                            .textStyle(.mono)
                             .foregroundStyle(available ? Color.secondary : Theme.red)
                             .lineLimit(1).truncationMode(.middle)
                     }

@@ -13,17 +13,17 @@ struct ReviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text("Review · \(headline(now: context.date))").font(.title2.weight(.semibold))
+                    Text("Review · \(headline(now: context.date))").textStyle(.title)
                 }
                 advice
                 criteria
                 files
                 if !review.commits.isEmpty { section("Commits") { ForEach(review.commits, id: \.self) { mono($0) } } }
-                section("Check") { Text(review.check).font(.callout) }
+                section("Check") { Text(review.check).textStyle(.callout) }
                 denied
                 due
                 if !review.notes.isEmpty {
-                    section("Sent back") { ForEach(review.notes, id: \.self) { Text($0).font(.callout) } }
+                    section("Sent back") { ForEach(review.notes, id: \.self) { Text($0).textStyle(.callout) } }
                 }
                 actions
             }
@@ -51,9 +51,9 @@ struct ReviewView: View {
         section("Criteria") {
             if let problem = review.goalProblem {
                 Label("The goal file is not valid, so the criteria are unknown: \(problem)", systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(Theme.red).font(.callout)
+                    .foregroundStyle(Theme.red).textStyle(.callout)
             } else if review.criteria.isEmpty, !review.unavailable.isEmpty {
-                Text("None: a quick goal. Check the work against the request.").font(.callout)
+                Text("None: a quick goal. Check the work against the request.").textStyle(.callout)
                 ForEach(review.unavailable, id: \.self) {
                     Text($0).role(.caption).fixedSize(horizontal: false, vertical: true)
                 }
@@ -65,11 +65,11 @@ struct ReviewView: View {
                             Text(criterion.id).role(.monoDetail)
                             Text(criterion.text)
                             Spacer()
-                            Text(criterion.label).font(.callout).foregroundStyle(color(criterion))
+                            Text(criterion.label).textStyle(.callout).foregroundStyle(color(criterion))
                         }
                         Text(criterion.proof).role(.detail)
                         if let note = criterion.note { Text(note).role(.caption) }
-                        ForEach(criterion.evidence, id: \.self) { Text($0).font(.system(.caption, design: .monospaced)) }
+                        ForEach(criterion.evidence, id: \.self) { Text($0).textStyle(.mono) }
                     }
                 }
             }
@@ -84,7 +84,7 @@ struct ReviewView: View {
     private var files: some View {
         section("Changed files") {
             if let problem = review.diffProblem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.red).font(.callout)
+                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.red).textStyle(.callout)
             } else if review.files.isEmpty {
                 Text("No changes.").role(.detail)
             }
@@ -102,7 +102,7 @@ struct ReviewView: View {
         if store.runningHere {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Running the advice the project's config asks for (judge, review stages)…").font(.callout)
+                Text("Running the advice the project's config asks for (judge, review stages)…").textStyle(.callout)
                 Spacer()
                 Button(store.stopping ? "Stopping…" : "Stop advice") { Task { await store.stopTurn() } }
                     .disabled(store.stopping)
@@ -129,7 +129,7 @@ struct ReviewView: View {
             section("Denied calls") {
                 ForEach(review.denied) { item in
                     Text("\(item.text) ×\(item.count)")
-                        .font(.system(.callout, design: .monospaced)).foregroundStyle(Theme.amber)
+                        .textStyle(.monoCallout, .amber)
                 }
                 Text("Decide each one in Send back before you send the work back.")
                     .role(.caption)
@@ -168,13 +168,13 @@ struct ReviewView: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title.uppercased()).textStyle(.captionStrong, .secondary)
             content()
         }
     }
 
     private func mono(_ text: String) -> some View {
-        Text(text).font(.system(.callout, design: .monospaced)).lineLimit(2)
+        Text(text).textStyle(.monoCallout).lineLimit(2)
     }
 }
 
@@ -192,7 +192,7 @@ struct DiffSheet: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(path).font(.headline)
+                Text(path).textStyle(.heading)
                 Spacer()
                 Button("Open in editor") { Task { await store.openDiff(path: path) } }.disabled(store.busy != nil)
                 Button("Close") { dismiss() }
@@ -201,7 +201,7 @@ struct DiffSheet: View {
             if let error = store.actionError { Text(error).role(.error) }
             if let note = store.actionNote { Text(note).role(.caption) }
             ScrollView {
-                Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                Text(text).textStyle(.monoCallout).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -215,10 +215,10 @@ struct DiscardSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Discard this work").font(.headline)
+            Text("Discard this work").textStyle(.heading)
             if let plan = store.pendingDiscard {
                 ScrollView {
-                    Text(plan.render().joined(separator: "\n")).font(.system(.callout, design: .monospaced))
+                    Text(plan.render().joined(separator: "\n")).textStyle(.monoCallout)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: 200)

@@ -50,7 +50,7 @@ struct NewThreadState: Equatable {
 struct NewThreadHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("What do you want to work on?").font(.title2.weight(.semibold))
+            Text("What do you want to work on?").textStyle(.title)
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
                 .role(.detail)
         }
@@ -70,7 +70,7 @@ struct NewThreadCaption: View {
                 // Blue with an arrow, and only faded while the box is empty, so it reads as a link in every state.
                 Button(action: useText) { Text("Use my text as the goal \(Image(systemName: "arrow.right"))") }
                     .buttonStyle(.plain).foregroundStyle(Theme.blue).opacity(canUseText ? 1 : 0.5)
-                    .font(.caption.weight(.semibold)).disabled(!canUseText)
+                    .textStyle(.captionStrong).disabled(!canUseText)
                     .accessibilityLabel("Use my text as the goal")
                     .help("Keeps your words as the goal, with no criteria and no agent; you approve it next")
                 Text("Your words become the goal as typed. No agent, no criteria. Free.")
@@ -141,7 +141,7 @@ struct NewThreadScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("New thread").font(.title3.weight(.semibold))
+            Text("New thread").textStyle(.section)
             PhaseRow(steps: PhaseRow.newThreadSteps)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -185,7 +185,7 @@ struct NewThreadScreen: View {
                 Spacer(minLength: 8)
                 if busy {
                     ProgressView().controlSize(.small)
-                    Text(store.drafting ? "Drafting the goal…" : "Waiting for the reply…").font(.callout)
+                    Text(store.drafting ? "Drafting the goal…" : "Waiting for the reply…").textStyle(.callout)
                         .foregroundStyle(Theme.blue)
                     Button("Stop") {
                         if store.drafting { store.stopDrafting() } else { store.stopChat() }
@@ -213,7 +213,7 @@ struct NewThreadScreen: View {
     private func editor(_ state: NewThreadState) -> some View {
         PlaceholderTextEditor(
             text: Binding(get: { store.newThreadText }, set: { store.newThreadText = $0 }),
-            placeholder: "Describe the change, the bug or the idea.", font: .body, hidesScroller: true,
+            placeholder: "Describe the change, the bug or the idea.", style: .body, hidesScroller: true,
             showsPlaceholder: state.isBlank, accessibilityLabel: "What do you want to work on?", focus: $focused,
             onReturn: { press in
                 let key = NewThreadState.key(
@@ -255,7 +255,7 @@ struct NewThreadScreen: View {
     private static func labelled(_ title: String, _ key: String) -> some View {
         HStack(spacing: 6) {
             Text(title)
-            Text(key).font(.caption).opacity(0.7)
+            Text(key).textStyle(.caption).opacity(0.7)
         }
         .accessibilityElement(children: .ignore).accessibilityLabel(title)
     }

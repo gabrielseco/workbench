@@ -8,11 +8,11 @@ struct PRReviewSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let shown = store.prReviewShown {
-                Label(shown.headline, systemImage: icon(shown)).font(.headline).foregroundStyle(color(shown))
+                Label(shown.headline, systemImage: icon(shown)).textStyle(.heading).foregroundStyle(color(shown))
                 ForEach(shown.notes, id: \.self) { Text($0).role(.warning) }
                 ScrollView {
                     Text(shown.findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Codex wrote nothing.")
-                        .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                        .textStyle(.monoCallout).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: 320)

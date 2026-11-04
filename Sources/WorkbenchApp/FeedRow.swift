@@ -36,7 +36,7 @@ struct FeedRow: View {
         case .turn(let number, let phase, let durationMs, let cost):
             TurnRow(number: number, phase: phase, durationMs: durationMs, cost: cost, finish: finish)
         case .agentText(let text):
-            Text(text).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            Text(text).textStyle(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         case .toolGroup(let count, let summaries): ToolGroupRow(count: count, summaries: summaries)
         case .edit(let file, let tool):
             FeedLine(symbol: "pencil", tint: Theme.grey, title: tool, detail: file, mono: true, inline: true)
@@ -78,11 +78,11 @@ struct FeedLine: View {
     var body: some View {
         IconRow(symbol: symbol, tint: tint) {
             if inline {
-                Text(title).font(.callout).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
+                Text(title).textStyle(.callout, .primary).lineLimit(1).layoutPriority(1)
                 if let detail, !detail.isEmpty { detailText(detail).lineLimit(1) }
             } else {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.callout).foregroundStyle(.primary)
+                    Text(title).textStyle(.callout, .primary)
                     if let detail, !detail.isEmpty { detailText(detail).lineLimit(2) }
                 }
             }
@@ -93,13 +93,13 @@ struct FeedLine: View {
 
     @ViewBuilder private func detailText(_ detail: String) -> some View {
         if link, let url = URL(string: detail), ["https", "http"].contains(url.scheme?.lowercased()) {
-            Link(destination: url) { Text(detail).font(.callout).foregroundStyle(Theme.blue).truncationMode(.middle) }
+            Link(destination: url) { Text(detail).textStyle(.callout, .blue).truncationMode(.middle) }
                 .help("Opens it in your browser")
         } else { plainDetail(detail) }
     }
 
     private func plainDetail(_ detail: String) -> some View {
-        Text(detail).font(mono ? .system(.callout, design: .monospaced) : .callout).foregroundStyle(.secondary)
+        Text(detail).textStyle(mono ? .monoCallout : .callout, .secondary)
             .truncationMode(.middle).textSelection(.enabled)
     }
 }
@@ -112,7 +112,7 @@ struct UserNoteRow: View {
             Spacer(minLength: 60)
             VStack(alignment: .leading, spacing: 2) {
                 Text("You · sent back").role(.caption)
-                Text(text).font(.body).textSelection(.enabled)
+                Text(text).textStyle(.body).textSelection(.enabled)
             }
             .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.quiet))
         }
@@ -157,7 +157,7 @@ struct GoalCardRow: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel("GOAL")
-            Text(title ?? "Goal").font(.headline).lineLimit(2)
+            Text(title ?? "Goal").textStyle(.heading).lineLimit(2)
             HStack(spacing: 10) {
                 Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
                 Text("\(criteria) \(criteria == 1 ? "criterion" : "criteria")").foregroundStyle(.secondary)
@@ -165,7 +165,7 @@ struct GoalCardRow: View {
                     Text(String(hash.prefix(7))).role(.monoDetail)
                 }
             }
-            .font(.callout)
+            .textStyle(.callout)
         }
         .accessibilityElement(children: .combine)
     }
@@ -194,7 +194,7 @@ struct GoalCardRow: View {
             // Why approval is blocked is said whether or not the goal can be edited: a goal that does not parse has no editor.
             if let blockers = goal?.blockers, !blockers.isEmpty {
                 ForEach(blockers, id: \.self) {
-                    Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).font(.callout)
+                    Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).textStyle(.callout)
                 }
             }
             if let request = goal?.request, !request.isEmpty { requestText(request) }
@@ -208,11 +208,11 @@ struct GoalCardRow: View {
     private func requestText(_ request: String) -> some View {
         let long = request.count > Self.foldedRequest
         return VStack(alignment: .leading, spacing: 4) {
-            Text(request).font(.callout).textSelection(.enabled).lineLimit(long && !showAllRequest ? 6 : nil)
+            Text(request).textStyle(.callout).textSelection(.enabled).lineLimit(long && !showAllRequest ? 6 : nil)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if long {
                 Button(showAllRequest ? "Show less" : "Show more") { showAllRequest.toggle() }
-                    .buttonStyle(.borderless).font(.callout)
+                    .buttonStyle(.borderless).textStyle(.callout)
             }
         }
         .padding(.top, 2)
@@ -226,10 +226,10 @@ struct GoalCardRow: View {
                     Text(row.id).role(.mono)
                         .frame(width: 28, alignment: .leading)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(row.text).font(.callout).textSelection(.enabled)
+                        Text(row.text).textStyle(.callout).textSelection(.enabled)
                         Text(row.proof).role(.mono)
                             .lineLimit(1).truncationMode(.middle)
-                        if let warning = row.warning { Text(warning).font(.caption).foregroundStyle(Theme.amber) }
+                        if let warning = row.warning { Text(warning).textStyle(.caption, .amber) }
                     }
                 }
                 .accessibilityElement(children: .combine)
@@ -280,7 +280,7 @@ struct TurnRow: View {
             case .working: ProgressView().controlSize(.small).frame(width: 16)
             default: Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
             }
-            Text(title).font(.callout.weight(.semibold))
+            Text(title).textStyle(.calloutStrong)
             if let detail { Text(detail).role(.detail) }
             Spacer(minLength: 0)
             if let finish, case .ended(let result) = phase, result == "succeeded" {
@@ -349,7 +349,7 @@ struct ToolGroupRow: View {
 
     var body: some View {
         IconRow(symbol: "wrench.and.screwdriver", tint: Theme.grey) {
-            Text("\(count) tool \(count == 1 ? "call" : "calls")").font(.callout)
+            Text("\(count) tool \(count == 1 ? "call" : "calls")").textStyle(.callout)
             Text(summaries.joined(separator: " · ") + (count > summaries.count ? " …" : ""))
                 .role(.monoDetail).lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)
@@ -455,7 +455,7 @@ struct NextCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             SectionLabel("NEXT")
-            Text(step?.title ?? "Nothing left to do").font(.headline)
+            Text(step?.title ?? "Nothing left to do").textStyle(.heading)
             Text(why).role(.detail)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)

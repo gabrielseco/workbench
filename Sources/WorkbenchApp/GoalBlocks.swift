@@ -19,8 +19,6 @@ struct GoalBlocks: View {
     @State private var addingScope = false
     @State private var showAllRequest = false
 
-    private var mono: Font { .system(.callout, design: .monospaced) }
-
     /// A read-only request this long is folded; while editing it is shown whole.
     private var longRequest: Bool { goal.request.count > 500 }
 
@@ -54,7 +52,7 @@ struct GoalBlocks: View {
     private var blockers: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(goal.blockers, id: \.self) {
-                Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).font(.callout)
+                Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).textStyle(.callout)
             }
         }
     }
@@ -64,17 +62,17 @@ struct GoalBlocks: View {
             GoalCard(style: style) {
                 if editable {
                     if style == .feed {
-                        CommitEditor(value: goal.request, font: .body, lineSpacing: 2) { edit(.setRequest($0)) }
+                        CommitEditor(value: goal.request, style: .body, lineSpacing: 2) { edit(.setRequest($0)) }
                     } else {
                         CommitEditor(value: goal.request) { edit(.setRequest($0)) }
                     }
                 } else {
-                    Text(goal.request).font(style == .feed ? .body : .system(size: 16, design: .serif))
+                    Text(goal.request).textStyle(style == .feed ? .body : .serifBody)
                         .lineSpacing(style == .feed ? 2 : 5).textSelection(.enabled)
                         .lineLimit(longRequest && !showAllRequest ? 6 : nil)
                     if longRequest {
                         Button(showAllRequest ? "Show less" : "Show more") { showAllRequest.toggle() }
-                            .buttonStyle(.borderless).font(.callout)
+                            .buttonStyle(.borderless).textStyle(.callout)
                     }
                 }
             }
@@ -132,14 +130,15 @@ struct GoalBlocks: View {
                         HStack(spacing: 8) {
                             KindChip(kind: row.kind)
                             CommitField(
-                                placeholder: "How it will be shown", value: row.proof, font: row.isCommand ? mono : .callout
+                                placeholder: "How it will be shown", value: row.proof,
+                                style: row.isCommand ? .monoCallout : .callout
                             ) { edit(.updateCriterion(id: row.id, text: nil, proof: $0)) }
                         }
                     } else {
                         Text(row.text)
                         HStack(spacing: 8) {
                             KindChip(kind: row.kind)
-                            Text(row.proof).font(row.isCommand ? mono : .callout).foregroundStyle(.secondary)
+                            Text(row.proof).textStyle(row.isCommand ? .monoCallout : .callout, .secondary)
                         }
                     }
                     if let warning = row.warning {
@@ -204,7 +203,7 @@ struct GoalSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title.uppercased()).textStyle(.captionStrong, .secondary)
             content
         }
     }

@@ -82,7 +82,7 @@ struct ChatMessageRow: View {
         if message.role == .user {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
                     .background(
                         Theme.raised,
@@ -93,11 +93,11 @@ struct ChatMessageRow: View {
             .accessibilityElement(children: .ignore).accessibilityLabel(message.spoken)
         } else {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "sparkle").font(.caption2).foregroundStyle(.secondary)
+                Image(systemName: "sparkle").textStyle(.captionMedium, .secondary)
                     .frame(width: 22, height: 22)
                     .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line))
                     .padding(.top, 1)
-                Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: FeedLayout.agentText, alignment: .leading)
@@ -113,7 +113,7 @@ struct ReplyingRow: View {
     var body: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text("Replying…").font(.callout).foregroundStyle(Theme.blue)
+            Text("Replying…").textStyle(.callout, .blue)
             Spacer()
             Button("Stop") { store.stopChat() }.buttonStyle(.borderless).accessibilityLabel("Stop the reply")
         }
@@ -183,7 +183,7 @@ struct ChatComposer: View {
             Spacer(minLength: 12)
             if store.drafting {
                 ProgressView().controlSize(.small)
-                Text("Drafting the goal…").font(.callout).foregroundStyle(Theme.blue)
+                Text("Drafting the goal…").textStyle(.callout, .blue)
                 Button("Stop") { store.stopDrafting() }.buttonStyle(.borderless)
             } else {
                 Button { Task { await store.makeChatGoal() } } label: {
@@ -205,7 +205,7 @@ struct ChatComposer: View {
     private func editor(_ state: ChatComposerState) -> some View {
         PlaceholderTextEditor(
             text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }),
-            placeholder: state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…", font: .body,
+            placeholder: state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…", style: .body,
             hidesScroller: true, showsPlaceholder: state.isBlank, accessibilityLabel: "Message", focus: $focused,
             onReturn: { press in
                 let key = ChatComposerState.key(

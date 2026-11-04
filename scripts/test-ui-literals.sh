@@ -73,8 +73,15 @@ rm -rf "$dir"
 dir=$(tree2 View.swift 'struct A: View { var body: some View { A() } } // RoundedRectangle(cornerRadius: 12) is gone')
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a trailing comment was counted"
 rm -rf "$dir"
+# a font is a TextStyle: any raw .font( counts, a token inside it too
+dir=$(tree2 View.swift 'struct A: View { var body: some View { Text("x").font(Theme.big) } }')
+run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a raw .font( with a token was not counted"
+rm -rf "$dir"
+dir=$(tree2 View.swift 'struct A: View { var body: some View { Text("x").textStyle(.caption, .secondary) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a textStyle was counted"
+rm -rf "$dir"
 # and what is not one: a token or a constant is the fix
-for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Metrics.inset2)' 'Text("x").font(.system(size: Theme.inspectorSize))' 'RoundedRectangle(cornerRadius: Radius.card)'; do
+for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Metrics.inset2)' 'RoundedRectangle(cornerRadius: Radius.card)'; do
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
   run "$dir" >/dev/null; [ "$?" = 0 ] || fail "[$code] was counted as a literal"
   rm -rf "$dir"

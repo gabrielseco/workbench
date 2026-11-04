@@ -59,7 +59,7 @@ struct ToolbarBar: View {
                 Text("$0.00").role(.monoDetail)
                 Text("No run").pill(Theme.grey, size: .regular)
             } else if store.mode == .thread, case .thread(let snapshot) = store.screen {
-                if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
+                if let base = snapshot.base { Text("base: \(base)").textStyle(.monoCallout) }
                 Spacer()
                 Text(snapshot.spendText).role(.monoDetail)
                 StatePill(snapshot: snapshot)
@@ -82,8 +82,8 @@ struct ProjectPill: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill").foregroundStyle(Theme.blue)
-                Text(store.project?.root.lastPathComponent ?? "Choose project").font(.body.weight(.semibold))
-                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Text(store.project?.root.lastPathComponent ?? "Choose project").textStyle(.bodyStrong)
+                Image(systemName: "chevron.down").textStyle(.captionStrong, .secondary)
             }
             .padding(.horizontal, 10).padding(.vertical, 4)
             .background(Theme.grey.opacity(store.pickingProject ? 0.2 : hovered ? 0.14 : 0.08), in: Capsule())
@@ -185,8 +185,8 @@ struct PullRequestCIView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Label(ci.summary, systemImage: icon).foregroundStyle(color).font(.callout)
-                Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).font(.callout)
+                Label(ci.summary, systemImage: icon).foregroundStyle(color).textStyle(.callout)
+                Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).textStyle(.callout)
             }
             // The banner sits outside the scrolling content, so a long list scrolls in its own box instead of pushing the window.
             if ci.rows.count > Self.unscrolledRows {
@@ -207,7 +207,7 @@ struct PullRequestCIView: View {
             ForEach(ci.rows, id: \.self) { row in
                 HStack(spacing: 6) {
                     Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
-                    Text(row.name).font(.system(.callout, design: .monospaced))
+                    Text(row.name).textStyle(.monoCallout)
                     Text(row.word).role(.detail)
                 }
                 .padding(.leading, 20)
@@ -262,7 +262,7 @@ struct EmptyState: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text(title).font(.title2.weight(.semibold))
+            Text(title).textStyle(.title)
             Text(next).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
             HStack {
                 Button("Choose project…") { Task { await store.chooseFolder() } }
@@ -292,7 +292,7 @@ struct FooterBar: View {
             } else {
                 Text("Nothing is running.").foregroundStyle(.secondary)
             }
-            DoctorButton(store: store, compact: true).font(.callout)
+            DoctorButton(store: store, compact: true).textStyle(.callout)
             Spacer()
             if let limit = FooterBar.limitText(store.screen, mode: store.mode, composing: store.newThread) {
                 Text(limit).role(.mono)

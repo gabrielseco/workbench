@@ -8,7 +8,7 @@ import SwiftUI
 struct PlaceholderTextEditor: View {
     @Binding var text: String
     var placeholder = ""
-    var font: Font = .body
+    var style: TextStyle = .body
     var lineSpacing: CGFloat = 0
     /// The box is one or two lines and grows with its text: its scroll bar would sit in the panel as a stray pill, so it is taken off.
     /// A tall box that scrolls keeps its own.
@@ -29,7 +29,7 @@ struct PlaceholderTextEditor: View {
         optional(
             optional(
                 optional(
-                    TextEditor(text: $text).font(font).lineSpacing(lineSpacing).scrollContentBackground(.hidden)
+                    TextEditor(text: $text).textStyle(style).lineSpacing(lineSpacing).scrollContentBackground(.hidden)
                         .scrollDisabled(scrollDisabled), focus
                 ) { $0.focused($1) }, onReturn
             ) { view, handler in view.onKeyPress(.return, phases: .down, action: handler) }, accessibilityLabel
@@ -37,7 +37,7 @@ struct PlaceholderTextEditor: View {
         .background { if hidesScroller { TextScrollerHider() } }
         .overlay(alignment: .topLeading) {
             if showsPlaceholder ?? text.isEmpty, !placeholder.isEmpty {
-                Text(placeholder).font(font).lineSpacing(lineSpacing).foregroundStyle(.tertiary)
+                Text(placeholder).textStyle(style).lineSpacing(lineSpacing).foregroundStyle(.tertiary)
                     .padding(.leading, Self.placeholderInset.leading).padding(.top, Self.placeholderInset.top)
                     .allowsHitTesting(false)
             }

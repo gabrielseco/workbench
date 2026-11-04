@@ -62,8 +62,8 @@ struct BrainstormFoldView: View {
                 open.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
-                    Text(BrainstormFold.title(count: messages.count)).font(.callout)
+                    Image(systemName: open ? "chevron.down" : "chevron.right").textStyle(.captionStrong)
+                    Text(BrainstormFold.title(count: messages.count)).textStyle(.callout)
                 }
                 .foregroundStyle(.secondary).pill(style: .outlined, size: .regular)
             }
@@ -80,9 +80,9 @@ struct AgentLineView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkle").font(.caption2).foregroundStyle(.secondary).frame(width: 22, height: 22)
+            Image(systemName: "sparkle").textStyle(.captionMedium, .secondary).frame(width: 22, height: 22)
                 .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line)).padding(.top, 1)
-            Text(text).font(.body).fixedSize(horizontal: false, vertical: true)
+            Text(text).textStyle(.body).fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
     }

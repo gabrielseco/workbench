@@ -11,13 +11,13 @@ struct TaskApproveCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Approve task".uppercased()).font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
+                Text("Approve task".uppercased()).textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
                 Spacer()
-                Button { store.tasks.cancelApprove() } label: { Image(systemName: "xmark").font(.caption.weight(.semibold)) }
+                Button { store.tasks.cancelApprove() } label: { Image(systemName: "xmark").textStyle(.captionStrong) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Close without approving")
                     .accessibilityLabel("Close the approve panel")
             }
-            Text(card.name).font(.title2.weight(.semibold)).padding(.top, 8)
+            Text(card.name).textStyle(.title).padding(.top, 8)
             Text(
                 "Approving lets this run unattended, on its schedule, with nobody watching. It is bound to what is shown here: "
                     + "editing any of it takes the approval back."
@@ -31,14 +31,14 @@ struct TaskApproveCard: View {
                 ForEach(card.settings, id: \.label) { line in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(line.label).role(.caption).frame(width: 70, alignment: .leading)
-                        Text(line.value).font(.callout).textSelection(.enabled)
+                        Text(line.value).textStyle(.callout).textSelection(.enabled)
                     }
                 }
             }
             .padding(.top, 12)
             SectionLabel("INSTRUCTIONS").padding(.top, 12)
             ScrollView {
-                Text(card.instructions).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                Text(card.instructions).textStyle(.monoCallout).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .frame(height: 150).callout(.neutral)
@@ -65,8 +65,8 @@ struct TaskRunCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Run now".uppercased()).font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
-            Text(card.name).font(.title2.weight(.semibold)).padding(.top, 8)
+            Text("Run now".uppercased()).textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
+            Text(card.name).textStyle(.title).padding(.top, 8)
             VStack(alignment: .leading, spacing: 6) {
                 Text(
                     card.fix == .pr
@@ -76,7 +76,7 @@ struct TaskRunCard: View {
                 Text("Quitting the app while it runs ends the run as interrupted. Stop ends the turn and records how.")
                     .foregroundStyle(.secondary)
             }
-            .font(.callout).padding(.top, 8)
+            .textStyle(.callout).padding(.top, 8)
             HStack {
                 Spacer()
                 Button("Cancel") { store.tasks.cancelRun() }.plainButton(size: .regular).keyboardShortcut(.cancelAction)

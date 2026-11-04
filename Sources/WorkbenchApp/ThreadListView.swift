@@ -58,8 +58,8 @@ struct RailRowView: View {
             HStack(alignment: .center, spacing: 10) {
                 RailMark(mark: row.mark).frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(row.title).font(.callout.weight(.semibold)).lineLimit(1).truncationMode(.middle)
-                    Text(row.line).font(.caption).lineLimit(1)
+                    Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
+                    Text(row.line).textStyle(.caption).lineLimit(1)
                         .foregroundStyle(row.mark.lineTint == .quiet ? Color.secondary : row.mark.tint)
                 }
                 Spacer(minLength: 0)
@@ -86,7 +86,7 @@ struct RailMark: View {
         case .needsYou:
             Circle().fill(Theme.amber).frame(width: 9, height: 9)
                 .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))
-        case .done: Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Theme.green)
+        case .done: Image(systemName: "checkmark").textStyle(.captionBold, .green)
         case .idle: Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9)
         case .broken: Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.red)
         }

@@ -85,7 +85,7 @@ struct RunSettingsInspector: View {
                 tools(goal)
                 folders(goal, editable: editable)
                 openers(goal)
-                Text(RunSettingsLayout.savedTo(goal)).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.fg3)
+                Text(RunSettingsLayout.savedTo(goal)).textStyle(.mono, .subtle)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 if let error = store.goalEditError { Text(error).role(.error) }
                 if showsMessages {
@@ -103,20 +103,20 @@ struct RunSettingsInspector: View {
     /// The artboard's heading: the name and an X that closes the panel (the header's button does the same).
     private var heading: some View {
         HStack {
-            Text("Run settings").font(.body.weight(.semibold))
+            Text("Run settings").textStyle(.bodyStrong)
             Spacer(minLength: 8)
-            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").font(.subheadline) }
+            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").textStyle(.subheadline) }
                 .buttonStyle(.borderless).help("Close Run settings").accessibilityLabel("Close Run settings")
         }
     }
 
     private func mono(_ text: String) -> some View {
-        Text(text).font(.system(.callout, design: .monospaced)).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+        Text(text).textStyle(.monoCallout).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title).textStyle(.captionStrong, .secondary)
             content()
         }
     }
@@ -137,9 +137,9 @@ struct RunSettingsInspector: View {
                     .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
                     .disabled(!editable || step.unavailable != nil)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(step.label).font(.body.weight(.medium))
+                        Text(step.label).textStyle(.bodyMedium)
                         if let line = RunSettingsLayout.description(forStep: step.name) {
-                            Text(line).font(.subheadline).foregroundStyle(Theme.fg3)
+                            Text(line).textStyle(.subheadline, .subtle)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -167,11 +167,11 @@ struct RunSettingsInspector: View {
             .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
             .disabled(!advice.switchEnabled(editable: editable))
             VStack(alignment: .leading, spacing: 2) {
-                Text(AutoAdviceSetting.label).font(.body.weight(.medium))
+                Text(AutoAdviceSetting.label).textStyle(.bodyMedium)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(advice.line).font(.subheadline).foregroundStyle(Theme.fg3)
+                Text(advice.line).textStyle(.subheadline, .subtle)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(advice.source).font(.subheadline).foregroundStyle(Theme.fg3)
+                Text(advice.source).textStyle(.subheadline, .subtle)
             }
         }
         .padding(.top, 10)
@@ -195,10 +195,10 @@ struct RunSettingsInspector: View {
     private func limit(_ label: String, _ value: String) -> some View {
         GridRow {
             Text(label).foregroundStyle(Theme.fg2)
-            Text(value).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: false, vertical: true)
+            Text(value).textStyle(.monoCallout).fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .font(.callout)
+        .textStyle(.callout)
     }
 
     @ViewBuilder private func tools(_ goal: GoalModel) -> some View {
@@ -249,7 +249,7 @@ struct RunSettingsInspector: View {
     @ViewBuilder private var addFolder: some View {
         if addingFolder {
             HStack(spacing: 6) {
-                TextField("../backend", text: $folderText).textFieldStyle(.roundedBorder).font(.callout)
+                TextField("../backend", text: $folderText).textFieldStyle(.roundedBorder).textStyle(.callout)
                     .onSubmit(commitFolder)
                 Button("Add", action: commitFolder).plainButton()
                     .disabled(folderText.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -302,7 +302,7 @@ struct RunSettingsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Run settings").font(.headline)
+                Text("Run settings").textStyle(.heading)
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction).plainButton()
             }
