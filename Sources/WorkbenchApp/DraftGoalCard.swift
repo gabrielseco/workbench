@@ -114,7 +114,7 @@ struct DraftGoalCardView: View {
                 Spacer(minLength: 8)
                 if let hint = header.hint { Text(hint).font(.caption).foregroundStyle(.secondary) }
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
             Divider()
             GoalBlocks(goal: goal, store: store, editable: true, style: .feed, showsError: true).padding(14)
             Divider()
@@ -123,7 +123,7 @@ struct DraftGoalCardView: View {
                 Spacer(minLength: 8)
                 DecisionActions(decision: decision, perform: perform)
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
         }
         .card()
     }

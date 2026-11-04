@@ -83,7 +83,7 @@ struct ChatMessageRow: View {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
                 Text(message.text).font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
                     .background(
                         Theme.raised,
                         in: UnevenRoundedRectangle(
@@ -162,7 +162,7 @@ struct ChatComposer: View {
             }
         }
         .frame(maxWidth: FeedLayout.maxColumn)
-        .padding(.horizontal, 28).padding(.top, 12).padding(.bottom, 16).frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.gutter).padding(.top, 12).padding(.bottom, 16).frame(maxWidth: .infinity)
     }
 
     /// The composer: a rounded panel with the text box and a square arrow-up button inside it, as the artboard draws it.

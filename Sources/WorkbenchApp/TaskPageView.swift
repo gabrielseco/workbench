@@ -45,7 +45,7 @@ struct TaskPageView: View {
                 }
             }
             .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-            .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity)
+            .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity)
         }
         // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
         .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }

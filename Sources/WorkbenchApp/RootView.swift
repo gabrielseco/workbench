@@ -67,7 +67,7 @@ struct ToolbarBar: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
     }
 }
 

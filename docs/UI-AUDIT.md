@@ -94,7 +94,10 @@ The inspector's eight hand-set sizes are system text styles now (`.body`, `.subh
 All 8 are `RunSettingsInspector.swift` (10.5, 11, 11.5, 13 and 13 semibold, by hand). The rest of the app uses `.callout`, `.caption` and
 friends. The inspector should too, or `Theme` should name the two it needs.
 
-### 10. Spacing
+### 10. Spacing (done for what repeats)
+
+`Spacing.gutter` (28) and `Spacing.inset` (14) name the two values that repeat as design constants (16 sites). The remaining padding literals are one-off gaps between a label and its field, and stay where they are: a token for each would only rename them. `scripts/ui-literals.baseline` keeps the count from growing.
+
 
 163 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and
 screens, so most of them disappear once 1 to 5 are components. Do this last, on what remains, and only name values that are used three or more

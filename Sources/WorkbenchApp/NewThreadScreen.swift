@@ -117,7 +117,7 @@ struct NewThreadScreen: View {
                     caption
                 }
                 .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-                .padding(.horizontal, 28).padding(.vertical, 36).frame(maxWidth: .infinity)
+                .padding(.horizontal, Spacing.gutter).padding(.vertical, 36).frame(maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -145,7 +145,7 @@ struct NewThreadScreen: View {
             PhaseRow(steps: PhaseRow.newThreadSteps)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.gutter).padding(.top, 14).padding(.bottom, 12)
     }
 
     /// A refusal asks the person to change something: amber, with their text kept. A project with no goal agent can name one.
@@ -174,8 +174,8 @@ struct NewThreadScreen: View {
     private var composer: some View {
         let state = state
         return VStack(alignment: .leading, spacing: 0) {
-            editor(state).padding(.horizontal, 14).padding(.top, 12)
-            if !staging.items.isEmpty { thumbnails.padding(.horizontal, 14).padding(.top, 8) }
+            editor(state).padding(.horizontal, Spacing.inset).padding(.top, 12)
+            if !staging.items.isEmpty { thumbnails.padding(.horizontal, Spacing.inset).padding(.top, 8) }
             Divider().padding(.top, 10)
             HStack(spacing: 10) {
                 Button(action: chooseImages) { Image(systemName: "plus") }
