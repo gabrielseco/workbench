@@ -144,8 +144,7 @@ struct MessageRow: View {
     var text: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
+        IconRow(symbol: symbol, tint: tint) {
             Text(text).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
