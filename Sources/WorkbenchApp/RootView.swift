@@ -136,7 +136,7 @@ struct DoctorButton: View {
                 }
             }
             .padding(compact ? 0 : 8)
-            .overlay { if !compact { RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)) } }
+            .callout(.outlined, enabled: !compact)
         }
         .buttonStyle(.plain)
         .disabled(store.project == nil)
@@ -175,7 +175,7 @@ struct BusyBar: View {
             Text(text).font(.callout).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .callout()
         .accessibilityElement(children: .combine)
     }
 }

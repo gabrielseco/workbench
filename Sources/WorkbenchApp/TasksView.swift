@@ -121,7 +121,7 @@ struct TimerCardView: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .callout(.neutral)
     }
 }
 
@@ -190,7 +190,7 @@ struct ResultLine: View {
             if !result.recorded { Text("not recorded in the task's run log").font(.caption).foregroundStyle(Theme.amber) }
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.color(for: tone).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .callout(.tinted(Theme.color(for: tone)))
         .accessibilityElement(children: .combine)
     }
 }
