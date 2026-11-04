@@ -11,9 +11,17 @@ import Testing
         let primary = String(describing: Button("x") {}.primaryButton())
         let plain = String(describing: Button("x") {}.plainButton())
         let bare = String(describing: Toggle("x", isOn: .constant(true)))
-        #expect(primary.contains("style: WorkbenchApp.PrimaryButtonStyle"))
-        #expect(plain.contains("style: WorkbenchApp.PlainButtonStyle"))
+        #expect(primary.contains("WorkbenchButtonStyle") && primary.contains("kind: WorkbenchApp.ButtonKind.primary"))
+        #expect(plain.contains("WorkbenchButtonStyle") && plain.contains("kind: WorkbenchApp.ButtonKind.plain"))
         #expect(bare != String(describing: Toggle("x", isOn: .constant(true)).switchTint()), "the switch is tinted")
+    }
+
+    @Test func aButtonsSizeIsAPropAndTheTwoKindsShareTheMeasurements() {
+        #expect(String(describing: Button("x") {}.plainButton(size: .regular)).contains("size: WorkbenchApp.ButtonSize.regular"))
+        #expect(String(describing: Button("x") {}.plainButton()).contains("size: WorkbenchApp.ButtonSize.compact"))
+        #expect(String(describing: Button("x") {}.primaryButton()).contains("size: WorkbenchApp.ButtonSize.regular"))
+        // A pair is the same height when it passes the same size, whichever kind each is.
+        #expect(ButtonSize.regular.minHeight > ButtonSize.compact.minHeight)
     }
 
     // MARK: Chips

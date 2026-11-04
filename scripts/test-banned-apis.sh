@@ -50,6 +50,24 @@ struct A: View { var body: some View { Button("x") {}.primaryButton() } }')
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail ".primaryButton() or a comment was refused"
 rm -rf "$dir"
 
+dir=$(tree bordered Bad.swift 'struct A: View { var body: some View { Button("x") {}.buttonStyle(.bordered) } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a bare .bordered passed ($code)"
+echo "$out" | grep -q "use .primaryButton(size:) or .plainButton(size:)" || fail "the message does not say what to use: $out"
+rm -rf "$dir"
+
+dir=$(tree ownstyle Bad.swift 'struct Mine: ButtonStyle { func makeBody(configuration: Configuration) -> some View { configuration.label } }')
+run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a ButtonStyle declared in a view file passed"
+rm -rf "$dir"
+
+dir=$(tree ownstylefile ButtonStyles.swift 'struct WorkbenchButtonStyle: ButtonStyle { func makeBody(configuration: Configuration) -> some View { configuration.label } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the style file's own ButtonStyle was refused"
+rm -rf "$dir"
+
+dir=$(tree iconlink Good.swift 'struct A: View { var body: some View { Button("x") {}.buttonStyle(.plain); Button("y") {}.buttonStyle(.link) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail ".plain or .link was refused"
+rm -rf "$dir"
+
 # and the real tree is clean
 sh "$script" >/dev/null 2>&1 || fail "the repository itself fails the check"
 [ "$status" = 0 ] && echo "banned-apis check: ok"

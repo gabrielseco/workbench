@@ -290,7 +290,7 @@ struct FooterBar: View {
                 } label: {
                     Label(label, systemImage: "doc.text").foregroundStyle(Theme.blue)
                 }
-                .buttonStyle(.bordered).controlSize(.small)
+                .plainButton(size: .small)
                 .help("Opens the raw log file")
             } else {
                 Text("Nothing is running.").foregroundStyle(.secondary)

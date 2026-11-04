@@ -50,6 +50,18 @@ if [ -n "$hits" ]; then
     echo "       a hand-placed overlay was off three times). See AGENTS.md, Conventions." >&2
     status=1
 fi
+# Every button that looks like a button is `WorkbenchButtonStyle` (ButtonStyles.swift), reached through `.primaryButton(size:)` and
+# `.plainButton(size:)`: kind and size are props, the radius, type and states live in that one file. The system `.bordered` is a second
+# look for the same thing, and a `ButtonStyle` type declared anywhere else is a third. `.plain`, `.borderless` and `.link` stay: they are
+# for icons, rows and links, which are not boxes.
+hits=$(grep -rnE --include='*.swift' '\.buttonStyle\(\.bordered\)|:[[:space:]]*(Prominent)?ButtonStyle[[:space:]]*\{' Sources/WorkbenchApp 2>/dev/null \
+    | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/ButtonStyles.swift:' || true)
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: a second button look in Sources/WorkbenchApp/: use .primaryButton(size:) or .plainButton(size:); a new look or size is" >&2
+    echo "       a new kind or size in ButtonStyles.swift, not a style declared in a view. See AGENTS.md, Conventions." >&2
+    status=1
+fi
 # The app's primary button is `.primaryButton()` (ButtonStyles.swift): the artboards' inverse pill. A bare `.borderedProminent` is the system accent again, which collides with the five state colours.
 hits=$(grep -rnF --include='*.swift' '.borderedProminent' Sources/WorkbenchApp 2>/dev/null \
     | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/ButtonStyles.swift:' || true)

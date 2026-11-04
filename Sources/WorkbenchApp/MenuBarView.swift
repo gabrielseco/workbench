@@ -141,8 +141,8 @@ private struct RowCard: View {
             }
             HStack(spacing: 8) {
                 Button(row.item.route.isThread ? "Open review" : "Open task") { open(row.item.route, false) }
-                    .modifier(PrimaryWhen(first))
-                if row.canSendBack { Button("Send back…") { open(row.item.route, true) }.buttonStyle(.bordered) }
+                    .modifier(PrimaryWhen(first, size: .small))
+                if row.canSendBack { Button("Send back…") { open(row.item.route, true) }.plainButton(size: .small) }
             }
             .padding(.top, 4)
         }
