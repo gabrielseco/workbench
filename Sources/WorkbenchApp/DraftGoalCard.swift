@@ -65,8 +65,7 @@ struct BrainstormFoldView: View {
                     Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
                     Text(BrainstormFold.title(count: messages.count)).font(.callout)
                 }
-                .foregroundStyle(.secondary).padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
+                .foregroundStyle(.secondary).pill(style: .outlined, size: .regular)
             }
             .buttonStyle(.plain).accessibilityLabel(BrainstormFold.title(count: messages.count))
             .accessibilityValue(open ? "open" : "closed")
@@ -110,9 +109,8 @@ struct DraftGoalCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Text("DRAFT GOAL").font(.caption2.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
-                Text(header.pill).font(.caption.weight(.medium)).foregroundStyle(tint)
-                    .padding(.horizontal, 8).padding(.vertical, 2).background(tint.opacity(0.14), in: Capsule())
+                SectionLabel("DRAFT GOAL")
+                Text(header.pill).pill(tint)
                 Spacer(minLength: 8)
                 if let hint = header.hint { Text(hint).font(.caption).foregroundStyle(.secondary) }
             }

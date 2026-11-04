@@ -36,7 +36,7 @@ struct TaskApproveCard: View {
                 }
             }
             .padding(.top, 12)
-            Text("INSTRUCTIONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 12)
+            SectionLabel("INSTRUCTIONS").padding(.top, 12)
             ScrollView {
                 Text(card.instructions).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)

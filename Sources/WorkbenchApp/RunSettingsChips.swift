@@ -7,8 +7,7 @@ struct Chip: View {
 
     var body: some View {
         Text(text).font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 11.5)).foregroundStyle(Theme.fg2)
-            .lineLimit(1).truncationMode(.middle).padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
+            .lineLimit(1).truncationMode(.middle).pill(style: .outlined)
     }
 }
 

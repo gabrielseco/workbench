@@ -157,7 +157,7 @@ struct GoalCardRow: View {
 
     private var heading: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("GOAL").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            SectionLabel("GOAL")
             Text(title ?? "Goal").font(.headline).lineLimit(2)
             HStack(spacing: 10) {
                 Label(approvalText, systemImage: approvalSymbol).foregroundStyle(approvalTint)
@@ -456,7 +456,7 @@ struct NextCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("NEXT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            SectionLabel("NEXT")
             Text(step?.title ?? "Nothing left to do").font(.headline)
             Text(why).font(.callout).foregroundStyle(.secondary)
         }

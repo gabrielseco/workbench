@@ -57,8 +57,7 @@ struct ToolbarBar: View {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
                 Spacer()
                 Text("$0.00").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
-                Text("No run").font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
-                    .foregroundStyle(Theme.grey).background(Theme.grey.opacity(0.12), in: Capsule())
+                Text("No run").pill(Theme.grey, size: .regular)
             } else if store.mode == .thread, case .thread(let snapshot) = store.screen {
                 if let base = snapshot.base { Text("base: \(base)").font(.system(.callout, design: .monospaced)) }
                 Spacer()
@@ -109,9 +108,7 @@ struct StatePill: View {
             if snapshot.attention == .working { return Theme.blue }
             return Theme.grey
         }()
-        Text(Self.text(snapshot))
-            .font(.callout).padding(.horizontal, 10).padding(.vertical, 3)
-            .foregroundStyle(tint).background(tint.opacity(0.12), in: Capsule())
+        Text(Self.text(snapshot)).pill(tint, size: .regular)
     }
 }
 

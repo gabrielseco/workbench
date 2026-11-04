@@ -44,7 +44,7 @@ struct SendBackGrants: View {
     var body: some View {
         if !store.sendBackGrants.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("DENIED CALLS").font(.caption2.weight(.semibold)).tracking(0.9).foregroundStyle(.secondary)
+                SectionLabel("DENIED CALLS")
                 // A scroll view takes all the height it is allowed, so a short list is not put in one.
                 let rows = VStack(alignment: .leading, spacing: 10) {
                     ForEach(store.sendBackGrants) { GrantRowView(store: store, row: $0) }
