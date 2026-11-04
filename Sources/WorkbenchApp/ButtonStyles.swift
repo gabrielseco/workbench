@@ -27,20 +27,26 @@ enum ButtonSize {
 /// The artboards' buttons (design parity 9) as one component: `kind` and `size` in, the same shape, radius and states out.
 struct WorkbenchButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.controlSize) private var controlSize
     var kind: ButtonKind
     var size: ButtonSize
     /// Fills the width and puts the label at the left, as the panel's Open buttons do.
     var fill = false
+    /// The app's default style (a `Button` nobody styled) follows `.controlSize(.small)`; one asked for by name keeps the size it was given.
+    var followsControlSize = false
+
+    /// The size drawn: `.small` for a default button in a small control, else the one given.
+    private var drawnSize: ButtonSize { followsControlSize && (controlSize == .small || controlSize == .mini) ? .small : size }
 
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control)
         configuration.label
-            .font(.system(size: size.fontSize, weight: kind == .primary ? .semibold : (kind == .icon ? .semibold : .medium)))
+            .font(.system(size: drawnSize.fontSize, weight: kind == .primary ? .semibold : (kind == .icon ? .semibold : .medium)))
             .foregroundStyle(kind == .primary ? AnyShapeStyle(Theme.invfg) : AnyShapeStyle(.primary))
-            .padding(.horizontal, kind == .icon ? 0 : size.horizontalPadding)
-            .frame(width: kind == .icon ? size.minHeight : nil, height: kind == .icon ? size.minHeight : nil)
+            .padding(.horizontal, kind == .icon ? 0 : drawnSize.horizontalPadding)
+            .frame(width: kind == .icon ? drawnSize.minHeight : nil, height: kind == .icon ? drawnSize.minHeight : nil)
             .frame(
-                maxWidth: fill ? .infinity : nil, minHeight: kind == .icon ? nil : size.minHeight,
+                maxWidth: fill ? .infinity : nil, minHeight: kind == .icon ? nil : drawnSize.minHeight,
                 alignment: fill ? .leading : .center)
             .background { background(configuration, shape) }
             .overlay { if kind != .primary { shape.stroke(Theme.line) } }
@@ -73,6 +79,11 @@ extension View {
     /// A symbol-only button: a raised square, `size` its side (a composer's Send, a "+" beside a title).
     func iconButton(size: ButtonSize = .compact) -> some View {
         buttonStyle(WorkbenchButtonStyle(kind: .icon, size: size))
+    }
+
+    /// The look of a `Button` nobody styled, for the whole window: a plain button, small where the control size says so. Set once at the root.
+    func defaultButtonStyle() -> some View {
+        buttonStyle(WorkbenchButtonStyle(kind: .plain, size: .compact, followsControlSize: true))
     }
 
     /// A native switch in the artboards' neutral inverse instead of the person's system accent, which collides with the state colours.

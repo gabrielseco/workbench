@@ -13,6 +13,7 @@ import WorkbenchCore
         // One window: a second would restore the same project into the same store.
         Window("Workbench", id: "main") {
             RootView(store: store)
+                .defaultButtonStyle()
                 .task {
                     delegate.liveWork = { store.liveWork }
                     delegate.stopWork = { await store.stopWorkAndWait() }
@@ -40,7 +41,7 @@ import WorkbenchCore
 
         // The app stays resident when the window is closed, and this says when it needs you.
         MenuBarExtra {
-            MenuBarPopover(store: store)
+            MenuBarPopover(store: store).defaultButtonStyle()
         } label: {
             MenuBarLabel(store: store)
         }
