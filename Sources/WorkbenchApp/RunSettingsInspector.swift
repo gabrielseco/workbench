@@ -85,7 +85,7 @@ struct RunSettingsInspector: View {
                 tools(goal)
                 folders(goal, editable: editable)
                 openers(goal)
-                Text(RunSettingsLayout.savedTo(goal)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.fg3)
+                Text(RunSettingsLayout.savedTo(goal)).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.fg3)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 if let error = store.goalEditError { Text(error).font(.callout).foregroundStyle(Theme.red) }
                 if showsMessages {
@@ -103,9 +103,9 @@ struct RunSettingsInspector: View {
     /// The artboard's heading: the name and an X that closes the panel (the header's button does the same).
     private var heading: some View {
         HStack {
-            Text("Run settings").font(.system(size: 13, weight: .semibold))
+            Text("Run settings").font(.body.weight(.semibold))
             Spacer(minLength: 8)
-            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").font(.system(size: 11)) }
+            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").font(.subheadline) }
                 .buttonStyle(.borderless).help("Close Run settings").accessibilityLabel("Close Run settings")
         }
     }
@@ -137,9 +137,9 @@ struct RunSettingsInspector: View {
                     .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
                     .disabled(!editable || step.unavailable != nil)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(step.label).font(.system(size: 13, weight: .medium))
+                        Text(step.label).font(.body.weight(.medium))
                         if let line = RunSettingsLayout.description(forStep: step.name) {
-                            Text(line).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
+                            Text(line).font(.subheadline).foregroundStyle(Theme.fg3)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -167,11 +167,11 @@ struct RunSettingsInspector: View {
             .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
             .disabled(!advice.switchEnabled(editable: editable))
             VStack(alignment: .leading, spacing: 2) {
-                Text(AutoAdviceSetting.label).font(.system(size: 13, weight: .medium))
+                Text(AutoAdviceSetting.label).font(.body.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
-                Text(advice.line).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
+                Text(advice.line).font(.subheadline).foregroundStyle(Theme.fg3)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(advice.source).font(.system(size: 11.5)).foregroundStyle(Theme.fg3)
+                Text(advice.source).font(.subheadline).foregroundStyle(Theme.fg3)
             }
         }
         .padding(.top, 10)
