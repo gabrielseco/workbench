@@ -67,6 +67,11 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 - A test for a bug fix fails without the fix. Stream-handling changes are checked against the real
   fixtures in `docs/plan/P1-spikes/fixtures/`.
 
+**UI components** (`AGENTS.md`, Conventions; `docs/UI-AUDIT.md`)
+- A new or changed view that writes out a card, callout, pill, label, row or button look that already exists as a component (or as the
+  same recipe in two other views) is a finding: name the component to use, or the one to extract. A variant is a prop or a case.
+- `scripts/ui-literals.baseline` goes down in a PR that removes literals and never up.
+
 **Docs**
 - Spec and plan change in the same PR as the behaviour. Acceptance boxes are ticked only for what is
   demonstrated.
