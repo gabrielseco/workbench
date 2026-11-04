@@ -55,14 +55,17 @@ extension View {
     }
 
     /// ⌘V while this view is up takes a screenshot off the clipboard when `allowed` says so; text on the clipboard still goes to the
-    /// text box.
-    func pastesScreenshots(_ staging: AttachmentStaging, allowed: @escaping @MainActor () -> Bool) -> some View {
+    /// text box. `staging` is asked at the paste, not when the view appeared: a composer kept while the window moves to another thread
+    /// stages into that thread's screenshots.
+    func pastesScreenshots(
+        _ staging: @escaping @MainActor () -> AttachmentStaging, allowed: @escaping @MainActor () -> Bool
+    ) -> some View {
         modifier(PastesScreenshots(staging: staging, allowed: allowed))
     }
 }
 
 private struct PastesScreenshots: ViewModifier {
-    var staging: AttachmentStaging
+    var staging: @MainActor () -> AttachmentStaging
     var allowed: @MainActor () -> Bool
     @State private var monitor: Any?
 
@@ -82,7 +85,7 @@ private struct PastesScreenshots: ViewModifier {
             guard flags == .command, event.charactersIgnoringModifiers == "v", MainActor.assumeIsolated({ allowed() }),
                 AttachmentStaging.wantsImages(.general)
             else { return event }
-            Task { await staging.add(from: .general) }
+            Task { @MainActor in await staging().add(from: .general) }
             return nil
         }
     }

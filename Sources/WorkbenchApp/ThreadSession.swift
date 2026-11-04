@@ -84,5 +84,5 @@ import WorkbenchCore
         actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil
     }
     /// Nothing to remember: not working and nothing to show.
-    var isSpent: Bool { isIdle && !hasMessages && chatDraft.isEmpty }
+    var isSpent: Bool { isIdle && !hasMessages && chatDraft.isEmpty && chatStaging.items.isEmpty && chatStaging.pending == 0 }
 }

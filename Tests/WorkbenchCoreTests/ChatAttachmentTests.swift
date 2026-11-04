@@ -122,7 +122,6 @@ import Testing
         let last = try #require(calls.range(of: "images/1.png", options: .backwards))
         let second = try #require(calls.range(of: "images/2.png"))
         #expect(last.lowerBound < second.lowerBound, "in the order they were sent")
-        #expect(calls.contains("said (with screenshot 1.png)") && calls.contains("says now (with screenshot 2.png)"))
         // Turn 3 sends nothing new and still shows both.
         _ = try await chat(d, .existing(id: first.id), "any other thoughts?")
         let again = try #require(d.codex?.read("calls"))
@@ -144,9 +143,27 @@ import Testing
         #expect(!argv.contains("one.png") && !argv.contains("two.jpg"), "the files' own names never reach the agent")
     }
 
-    @Test func aChatWithoutImagesPromptsAsBefore() {
+    @Test func aChatWithoutImagesNamesNoneAndEachMessageNamesItsOwn() throws {
         let plain = Chat.prompt(history: [], message: "hello", instructions: nil, paths: [], pathsCut: false)
-        #expect(!plain.contains("Screenshots") && plain.contains("You can read nothing and run nothing: everything"))
+        #expect(!plain.contains(".png"), "no screenshot is mentioned when there is none")
+
+        let history = [
+            ChatMessage(role: .user, text: "alpha", seq: 1, images: ["1.png"]),
+            ChatMessage(role: .assistant, text: "beta", seq: 2),
+        ]
+        let prompt = Chat.prompt(
+            history: history, message: "gamma", instructions: nil, paths: [], pathsCut: false,
+            images: ["1.png", "2.jpg"], newImages: ["2.jpg"])
+        // Each message is quoted under a line that says who spoke (or a heading, for the latest): that line names the screenshots that message sent, and no others.
+        let lines = prompt.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        func above(_ quoted: String) throws -> String {
+            let at = try #require(lines.firstIndex(of: "> \(quoted)"))
+            return try #require(lines[..<at].last { !$0.isEmpty })
+        }
+        let (alpha, beta, gamma) = (try above("alpha"), try above("beta"), try above("gamma"))
+        #expect(alpha.contains("1.png") && !alpha.contains("2.jpg"))
+        #expect(!beta.contains(".png") && !beta.contains(".jpg"))
+        #expect(gamma.contains("2.jpg") && !gamma.contains("1.png"))
     }
 
     // MARK: Ends and clean-up
@@ -168,6 +185,23 @@ import Testing
         #expect(state(d, id).chat?.messages.flatMap(\.images) == ["1.png", "2.png"], "what was sent stays on record")
         #expect(!FileManager.default.fileExists(atPath: d.fx.service.chatScratch(id).path), "the agent's folder is gone")
         #expect(FileManager.default.fileExists(atPath: folder(d, id).appendingPathComponent("2.png").path))
+    }
+
+    @Test func aCrashWithScreenshotsStillEndsTheTurnOnceAndKeepsWhatWasSent() async throws {
+        let d = try await drafting()
+        try d.codex?.put("crash", "")
+        let result = try await chat(d, attachments: [try d.image("a.png"), try d.image("b.png")])
+        #expect(result.end == "failed")
+        let id = result.id
+        let kinds = try events(d, id).map(\.kind)
+        #expect(kinds.filter { $0 == .chatMessage }.count == 1 && kinds.filter { $0 == .chatEnded }.count == 1)
+        #expect(state(d, id).chat?.open == false && state(d, id).chat?.messages.first?.images == ["1.png", "2.png"])
+        #expect(!FileManager.default.fileExists(atPath: d.fx.service.chatScratch(id).path), "the agent's folder is gone")
+        // The chat goes on, and the next turn shows the agent both again.
+        try FileManager.default.removeItem(at: d.codex!.dir.appendingPathComponent("crash"))
+        _ = try await chat(d, .existing(id: id), "try again")
+        let calls = try #require(d.codex?.read("calls"))
+        #expect(calls.components(separatedBy: "images/2.png").count - 1 == 2)
     }
 
     @Test func abandonRemovesImages() async throws {

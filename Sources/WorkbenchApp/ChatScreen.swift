@@ -182,10 +182,12 @@ struct ChatComposer: View {
         .frame(maxWidth: FeedLayout.maxColumn)
         .padding(.horizontal, Spacing.gutter).padding(.top, Space.m).padding(.bottom, Space.l).frame(maxWidth: .infinity)
         .screenshotDrop(staging, allowed: state.canType)
-        .pastesScreenshots(staging) { [store] in
-            if case .thread = store.screen { return !store.replyingHere && !store.drafting }
-            return false
-        }
+        .pastesScreenshots(
+            { [store] in store.chatStaging },
+            allowed: { [store] in
+                if case .thread = store.screen { return !store.replyingHere && !store.drafting }
+                return false
+            })
     }
 
     /// The composer: a rounded panel with the text box and a square arrow-up button inside it, as the artboard draws it.

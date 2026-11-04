@@ -422,6 +422,17 @@ extension ProjectStoreChatTests {
         store.chatStaging.clear()
     }
 
+    @Test func aStagedScreenshotSurvivesAVisitToAnotherThread() async throws {
+        let (store, _) = try await opened(chats: [first, second])
+        await store.select(thread: first)
+        let staged = try await stagedPicture(store)
+        await store.select(thread: second)
+        #expect(store.chatStaging.urls.isEmpty, "the other chat has its own")
+        await store.select(thread: first)
+        #expect(store.chatStaging.urls == [staged], "and the first one's is still there, with no text typed")
+        store.chatStaging.clear()
+    }
+
     @Test func aNewChatTakesTheScreenshotsToo() async throws {
         let seen = Seen()
         let id = first

@@ -121,7 +121,7 @@ struct NewThreadScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onExitCommand { if !busy { store.closeNewThread() } }
         .screenshotDrop(staging, allowed: !busy)
-        .pastesScreenshots(staging) { [store] in !store.drafting && !store.chatReplying }
+        .pastesScreenshots({ staging }, allowed: { [store] in !store.drafting && !store.chatReplying })
         .onDisappear { staging.clear() }
         .task {
             try? await Task.sleep(for: .milliseconds(40))
