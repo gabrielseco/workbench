@@ -9,19 +9,19 @@ cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
 baseline=${UI_LITERALS_BASELINE:-scripts/ui-literals.baseline}
 COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift'
 
+# Counted per occurrence on the whole file with its // comments dropped and its lines joined, so `cornerRadius:12` and a `.padding(`
+# whose number is on the next line count like the usual spelling. Only a number counts: a Theme token or a constant is the fix.
 count() { # name pattern
-    grep -rnE --include='*.swift' "$2" Sources/WorkbenchApp 2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' \
-        | grep -Ev "^Sources/WorkbenchApp/($(echo "$COMPONENTS" | sed 's/ /|/g' | sed 's/\./\\./g')):" | wc -l | tr -d ' '
+    find Sources/WorkbenchApp -name '*.swift' 2>/dev/null | sort | grep -Ev "/($(echo "$COMPONENTS" | sed 's/ /|/g; s/\./\\./g'))\$" \
+        | while read -r f; do sed 's#//.*$##' "$f" | tr '\n' ' '; echo; done | grep -oE "$2" | wc -l | tr -d ' '
 }
 current() {
-    echo "radius $(count radius 'cornerRadius: [0-9]')"
-    echo "fontsize $(count fontsize '\.font\(\.system\(size:')"
+    echo "radius $(count radius 'cornerRadius:[[:space:]]*[0-9]')"
+    echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
-    echo "padding $(count padding '\.padding\([^)]*[0-9]')"
+    echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?[0-9][0-9.]*[[:space:]]*\)')"
 }
 
-# --against <ref>: the baseline may not be higher than the one on that ref (the PR's base). Without it a PR could add a literal and
-# raise the baseline in the same change, which is the one way past the count.
 if [ "${1:-}" = "--against" ]; then
     ref=${2:?usage: check-ui-literals.sh --against <ref>}
     old=$(git show "$ref:scripts/ui-literals.baseline" 2>/dev/null) || { echo "note: $ref has no UI-literals baseline yet; nothing to compare"; exit 0; }

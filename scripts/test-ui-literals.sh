@@ -55,9 +55,23 @@ for case in 'fontsize|Text("x").font(.system(size: 11))' 'capsule|Color.red.clip
   [ "$rc" = 1 ] && echo "$out" | grep -q "$name literals.*went from 0 to 1" || fail "a $name literal over the baseline was not caught ($rc): $out"
   rm -rf "$dir"
 done
-dir=$(tree2 View.swift 'struct A: View { var body: some View { Text("x").padding(.horizontal, spacing) } }')
-run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a padding from a token was counted"
-rm -rf "$dir"
+# spellings that are still a literal
+for code in 'RoundedRectangle(cornerRadius:12)' 'RoundedRectangle(cornerRadius:   12)' 'Text("x").padding(
+    .horizontal,
+    8
+)' 'Text("x").font(.system(
+    size: 11))'; do
+  dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
+  out=$(run "$dir"); rc=$?
+  [ "$rc" = 1 ] || fail "a literal written as [$code] was not caught ($rc)"
+  rm -rf "$dir"
+done
+# and what is not one: a token or a constant is the fix
+for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, Metrics.inset2)' 'Text("x").font(.system(size: Theme.inspectorSize))' 'RoundedRectangle(cornerRadius: Radius.card)'; do
+  dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
+  run "$dir" >/dev/null; [ "$?" = 0 ] || fail "[$code] was counted as a literal"
+  rm -rf "$dir"
+done
 
 # --against: the baseline may not be higher than the base branch's
 repo=$(mktemp -d); mkdir -p "$repo/scripts" "$repo/Sources/WorkbenchApp"

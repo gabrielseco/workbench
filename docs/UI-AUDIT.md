@@ -15,11 +15,11 @@ the thing to look at.
 
 | What | Count | Where it should live |
 |---|---|---|
-| `RoundedRectangle(cornerRadius: <literal>)` | 44 lines in 16 files, 7 different radii (6, 7, 8, 10, 12, 14, 18) | a `Radius` token set; surfaces take it from a component |
+| `cornerRadius: <number>` | 45 in 16 files, 7 different radii (6, 7, 8, 10, 12, 14, 18) | a `Radius` token set; surfaces take it from a component |
 | `.font(.system(size: <literal>)`, outside `ButtonStyles.swift` | 8, all in `RunSettingsInspector.swift` | text styles in `Theme` (or system text styles) |
-| `.padding(<literal>)` and the like | 113 | spacing tokens, mostly inside components |
+| `.padding(<number>)` and `.padding(.edge, <number>)` | 163 | spacing tokens, mostly inside components |
 | tint strengths for a tinted fill | 0.04, 0.08, 0.1, 0.12, 0.14, 0.2 | one per role |
-| `Capsule()` lines | 10 in 6 views | one `Pill` |
+| `Capsule()` | 12 in 6 views | one `Pill` |
 | caps section labels | 6 sites, 3 variants | one `SectionLabel` |
 | `struct …: View` | about 80 | |
 
@@ -47,7 +47,7 @@ and `ProjectPickerCard.swift:46` (radius 14, the same colours). Three radii and 
 
 `FeedDecisionCard.swift:69`, `FeedRow.swift:465`, `RootView.swift:139` (conditional). Likely the `Callout` with `outlined: true`.
 
-### 4. Pills and chips (10 `Capsule()` lines, 4 components)
+### 4. Pills and chips (12 `Capsule()`, 4 components)
 
 A tinted pill: `Badge` (`ProjectPickerCard.swift:207`, 0.12), `StatePill` (`RootView.swift:100`, 0.12), `KindChip` (`GoalFields.swift:154`, 0.14),
 plus inline copies at `DraftGoalCard.swift:115` (0.14), `MenuBarView.swift:58` (0.14), `RootView.swift:61` (0.12). An outlined pill:
@@ -90,7 +90,7 @@ friends. The inspector should too, or `Theme` should name the two it needs.
 
 ### 10. Spacing
 
-113 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and
+163 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and
 screens, so most of them disappear once 1 to 5 are components. Do this last, on what remains, and only name values that are used three or more
 times.
 
