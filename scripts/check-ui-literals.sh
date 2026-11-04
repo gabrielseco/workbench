@@ -24,6 +24,8 @@ current() {
 
 if [ "${1:-}" = "--against" ]; then
     ref=${2:?usage: check-ui-literals.sh --against <ref>}
+    # A ref that does not exist is an error, not "no baseline": a shallow checkout without the base branch must not pass this.
+    git rev-parse --verify -q "$ref^{commit}" >/dev/null || { echo "error: $ref is not a commit here; fetch the base branch first" >&2; exit 1; }
     old=$(git show "$ref:scripts/ui-literals.baseline" 2>/dev/null) || { echo "note: $ref has no UI-literals baseline yet; nothing to compare"; exit 0; }
     bad=0
     while read -r name was; do

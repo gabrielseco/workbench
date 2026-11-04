@@ -89,7 +89,9 @@ out=$(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base 2>&1); 
 [ "$rc" = 1 ] && echo "$out" | grep -q "went up from 5" || fail "a raised baseline passed against its base ($rc): $out"
 printf 'radius 4\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
 (cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base >/dev/null 2>&1); [ "$?" = 0 ] || fail "a lowered baseline was refused against its base"
-(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nosuchref >/dev/null 2>&1); [ "$?" = 0 ] || fail "a base with no baseline yet was refused"
+(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nosuchref >/dev/null 2>&1); [ "$?" = 1 ] || fail "a ref that is not there passed: a shallow checkout would skip the comparison"
+git -C "$repo" checkout -q --orphan fresh && git -C "$repo" rm -rfq --cached scripts && git -C "$repo" -c user.email=t@t -c user.name=t commit -qm nobaseline --allow-empty && git -C "$repo" branch -q nobaseline
+(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nobaseline >/dev/null 2>&1); [ "$?" = 0 ] || fail "a base that has no baseline yet was refused"
 rm -rf "$repo"
 
 # and the real tree matches its baseline
