@@ -108,9 +108,9 @@ struct ChatMessageRow: View {
                 Image(systemName: "sparkle").textStyle(.captionMedium, .secondary)
                     .frame(width: 22, height: 22)
                     .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line))
-                    .padding(.top, Space.xxs)
+                // As tall as the avatar, centred: a one-line reply sits level with the disc, a longer one starts level with it.
                 Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
             }
             .frame(maxWidth: FeedLayout.agentText, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,7 +195,7 @@ struct ChatComposer: View {
         VStack(alignment: .leading, spacing: Space.s) {
             if !staging.items.isEmpty { StagedThumbnails(staging: staging) }
             HStack(alignment: .bottom, spacing: Space.m) {
-                AddScreenshotsButton(staging: staging, disabled: !state.canType)
+                AddScreenshotsButton(staging: staging, disabled: !state.canType, size: .compact)
                 editor(state)
                 if staging.pending > 0 { ProgressView().controlSize(.small) }
                 ComposerSendButton(enabled: state.canSend) { send() }
@@ -245,7 +245,10 @@ struct ChatComposer: View {
                 return .handled
             }
         )
-        .frame(height: ChatComposerState.editorHeight(for: state.text))
+        // The text view starts its text at the top edge, so the box is pushed down by Space.s and shortened by as much: one line then sits
+        // level with the + and Send squares beside it, and the row keeps its height.
+        .frame(height: ChatComposerState.editorHeight(for: state.text) - Space.s)
+        .padding(.top, Space.s)
         .disabled(!state.canType)
         .opacity(state.replying ? 0.6 : 1)
         // A box that takes no typing does not keep the caret.
