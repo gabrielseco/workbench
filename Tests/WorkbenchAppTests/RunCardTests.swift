@@ -62,10 +62,10 @@ import WorkbenchCore
         let model = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision(primary: stop)))
         #expect(model.tasks == tasks && model.done == 1 && model.tasksTitle == "TASKS · 1 OF 3")
         #expect(model.tail == ["Grep b", "Edit c.swift", "Bash build"], "the last three, oldest first")
-        #expect(model.stop == stop && model.diff == nil)
-        let diff = FeedAction(kind: .openDiff, title: "Open diff")
-        let withDiff = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision(primary: stop, secondary: diff)))
-        #expect(withDiff.diff == diff, "Open diff sits beside Stop on the card")
+        #expect(model.stop == stop && model.worktree == nil)
+        let open = FeedAction(kind: .openWorktree, title: "Open worktree")
+        let withOpen = try #require(RunCardModel.make(snapshot: shown, decision: FeedDecision(primary: stop, secondary: open)))
+        #expect(withOpen.worktree == open, "Open worktree sits beside Stop on the card")
         #expect(model.consumed == ["2", "3", "4", "5", "6"], "a refusal and the agent's words stay rows of their own")
     }
 
@@ -229,7 +229,7 @@ import WorkbenchCore
         let progress = ThreadState.derive(from: [started], id: "t").progress
         let model = RunCardModel(
             number: 1, progress: progress, limit: 1800, tasks: tasks, tail: ["Read a.swift", "Edit b.swift"], stop: stop,
-            diff: FeedAction(kind: .openDiff, title: "Open diff"), consumed: [])
+            worktree: FeedAction(kind: .openWorktree, title: "Open worktree"), consumed: [])
         let decision = FeedDecision(
             primary: FeedAction(kind: .ship, title: "Ship"), more: [FeedAction(kind: .sendBack, title: "Send back…")])
         let ship = DecisionCard(step: .ship, why: "", decision: decision, perform: { _ in }, route: "wb/g-1 → main")

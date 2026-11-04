@@ -11,8 +11,8 @@ struct RunCardModel: Equatable {
     var tail: [String]
     /// The decision's stop button, when it has one: the card is then the only place a running turn is stopped from.
     var stop: FeedAction?
-    /// Open diff, beside Stop: what the turn has changed so far.
-    var diff: FeedAction?
+    /// Open worktree, beside Stop: the files are still changing, so the card offers the folder, not a diff (Review has the diff).
+    var worktree: FeedAction?
     /// The feed's items the card stands for; they are not drawn again.
     var consumed: Set<String>
 
@@ -69,7 +69,7 @@ struct RunCardModel: Equatable {
         return RunCardModel(
             number: number, progress: snapshot.state.progress, limit: snapshot.turnTimeoutMin.map { TimeInterval($0 * 60) },
             tasks: tasks, tail: Array((latest.isEmpty ? tail : latest).suffix(tailLines)), stop: stop,
-            diff: decision.secondary?.kind == .openDiff ? decision.secondary : nil, consumed: consumed)
+            worktree: decision.secondary?.kind == .openWorktree ? decision.secondary : nil, consumed: consumed)
     }
 }
 
@@ -129,7 +129,7 @@ struct RunCardView: View {
                 }
                 .padding(Spacing.inset)
             }
-            if let stop = model.stop { footer(stop, diff: model.diff) }
+            if let stop = model.stop { footer(stop, worktree: model.worktree) }
         }
         .card(clips: true)
         .accessibilityElement(children: .contain)
@@ -181,11 +181,11 @@ struct RunCardView: View {
         .callout(.well)
     }
 
-    private func footer(_ stop: FeedAction, diff: FeedAction?) -> some View {
+    private func footer(_ stop: FeedAction, worktree: FeedAction?) -> some View {
         HStack {
             Spacer()
-            if let diff {
-                ActionButton(action: diff, size: .compact, symbol: "doc.text.magnifyingglass", perform: perform)
+            if let worktree {
+                ActionButton(action: worktree, size: .compact, symbol: "folder", perform: perform)
             }
             ActionButton(action: stop, size: .compact, symbol: "stop.fill", perform: perform)
         }

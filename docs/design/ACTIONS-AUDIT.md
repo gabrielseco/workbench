@@ -53,7 +53,7 @@ Several "Stop" buttons exist too (feed, chat, new-goal popover, tasks), but they
 |---|---|---|
 | Draft goal | Approve and run | Open in Herdr, New goal |
 | Approved goal | Run | Open in Herdr, New goal |
-| Running | Stop turn | Open worktree, Open in Herdr |
+| Running | Stop turn, plus Open worktree beside it (not Open diff: the files are still changing) | Open in Herdr |
 | Run ended badly | Run again | Open worktree, Open in Herdr |
 | Review | Accept work, plus Open diff beside it | Send back, Discard, Review details, Open worktree, Open in Herdr, Refresh |
 | Accepted | Ship | Open worktree, Open in Herdr, New goal |
