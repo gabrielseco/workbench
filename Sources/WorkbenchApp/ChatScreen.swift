@@ -129,12 +129,9 @@ struct ComposerSendButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "arrow.up").font(.callout.weight(.semibold)).frame(width: 30, height: 30)
-                .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7))
-                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
-                .opacity(enabled ? 1 : 0.45)
+            Image(systemName: "arrow.up")
         }
-        .buttonStyle(.plain).disabled(!enabled)
+        .iconButton().disabled(!enabled)
         .accessibilityLabel("Send the message").help("Sends the message (Return)")
     }
 }
