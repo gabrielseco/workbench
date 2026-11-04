@@ -3,6 +3,8 @@
 # component or a Theme token; the literals counted below are what is still written out by hand (docs/UI-AUDIT.md lists them).
 # The count of each may not go up: a PR that adds one fails, and a PR that removes some lowers scripts/ui-literals.baseline in the same
 # change (`scripts/check-ui-literals.sh --update`), so it cannot creep back. Files that ARE the components are not counted.
+# Known limit: it reads text, not Swift, so a string literal holding ` //` hides what follows it on that line from the count. Rare in view
+# code; a real fix is a parser, and not worth one for a ratchet.
 # A new component file is added to COMPONENTS below, in the PR that adds it.
 set -u
 cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
