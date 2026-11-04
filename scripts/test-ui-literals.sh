@@ -80,6 +80,14 @@ for code in 'Text("x").padding(.horizontal, spacing)' 'Text("x").padding(.top, M
   rm -rf "$dir"
 done
 
+# a malformed baseline fails instead of comparing as "not greater"
+for bl in 'radius 46x\nfontsize 0\ncapsule 0\npadding 0' 'radius 1\nfontsize 0\ncapsule 0' 'radius 1\nradius 1\nfontsize 0\ncapsule 0\npadding 0' 'radius -1\nfontsize 0\ncapsule 0\npadding 0' 'radius 1\nfontsize 0\ncapsule 0\npadding 0\nextra 1'; do
+  dir=$(tree2 View.swift 'struct A {}')
+  printf "$bl\n" > "$dir/scripts/ui-literals.baseline"
+  run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a malformed baseline passed: [$bl]"
+  rm -rf "$dir"
+done
+
 # --against: the baseline may not be higher than the base branch's
 repo=$(mktemp -d); mkdir -p "$repo/scripts" "$repo/Sources/WorkbenchApp"
 printf 'radius 5\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
