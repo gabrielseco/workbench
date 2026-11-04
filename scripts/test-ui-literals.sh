@@ -41,6 +41,36 @@ dir=$(tree View.swift "// RoundedRectangle(cornerRadius: 12) was here" 0)
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a comment was counted"
 rm -rf "$dir"
 
+# each literal it counts is found, not only radius
+tree2() { # file-name content (baseline all zero)
+  local dir; dir=$(mktemp -d); mkdir -p "$dir/Sources/WorkbenchApp" "$dir/scripts"
+  printf '%s\n' "$2" > "$dir/Sources/WorkbenchApp/$1"
+  printf 'radius 0\nfontsize 0\ncapsule 0\npadding 0\n' > "$dir/scripts/ui-literals.baseline"
+  echo "$dir"
+}
+for case in 'fontsize|Text("x").font(.system(size: 11))' 'capsule|Color.red.clipShape(Capsule())' 'padding|Text("x").padding(.horizontal, 8)'; do
+  name=${case%%|*}; code=${case#*|}
+  dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
+  out=$(run "$dir"); rc=$?
+  [ "$rc" = 1 ] && echo "$out" | grep -q "$name literals.*went from 0 to 1" || fail "a $name literal over the baseline was not caught ($rc): $out"
+  rm -rf "$dir"
+done
+dir=$(tree2 View.swift 'struct A: View { var body: some View { Text("x").padding(.horizontal, spacing) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a padding from a token was counted"
+rm -rf "$dir"
+
+# --against: the baseline may not be higher than the base branch's
+repo=$(mktemp -d); mkdir -p "$repo/scripts" "$repo/Sources/WorkbenchApp"
+printf 'radius 5\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.email=t@t -c user.name=t commit -qm base && git -C "$repo" branch -q base
+printf 'radius 6\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+out=$(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base 2>&1); rc=$?
+[ "$rc" = 1 ] && echo "$out" | grep -q "went up from 5" || fail "a raised baseline passed against its base ($rc): $out"
+printf 'radius 4\nfontsize 0\ncapsule 0\npadding 0\n' > "$repo/scripts/ui-literals.baseline"
+(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against base >/dev/null 2>&1); [ "$?" = 0 ] || fail "a lowered baseline was refused against its base"
+(cd "$repo" && UI_LITERALS_ROOT="$repo" sh "$script" --against nosuchref >/dev/null 2>&1); [ "$?" = 0 ] || fail "a base with no baseline yet was refused"
+rm -rf "$repo"
+
 # and the real tree matches its baseline
 sh "$script" >/dev/null 2>&1 || fail "the repository does not match scripts/ui-literals.baseline"
 [ "$status" = 0 ] && echo "ui-literals check: ok"

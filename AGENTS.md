@@ -173,7 +173,7 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   beside it. Search for one before writing a view. A view takes its radius, type, fill and spacing from a component or `Theme`, not from
   literals. Two things are enforced, so a PR cannot get past them:
   - `scripts/check-ui-literals.sh` counts the hand-written ones (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`) against
-    `scripts/ui-literals.baseline` and fails a PR that raises a count; one that lowers a count runs `--update` in the same change. A new
+    `scripts/ui-literals.baseline` and fails a PR that raises a count; one that lowers a count runs `--update` in the same change (CI refuses a baseline higher than the base branch's). A new
     component file is added to `COMPONENTS` in that script. `docs/UI-AUDIT.md` lists what is still copied and the order to fix it.
   - Buttons, the first component made this way: `.primaryButton(size:)` or `.plainButton(size:)` (`WorkbenchButtonStyle` in
     `ButtonStyles.swift`, `kind` and `size` as props), never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view

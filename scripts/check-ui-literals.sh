@@ -20,6 +20,24 @@ current() {
     echo "padding $(count padding '\.padding\([^)]*[0-9]')"
 }
 
+# --against <ref>: the baseline may not be higher than the one on that ref (the PR's base). Without it a PR could add a literal and
+# raise the baseline in the same change, which is the one way past the count.
+if [ "${1:-}" = "--against" ]; then
+    ref=${2:?usage: check-ui-literals.sh --against <ref>}
+    old=$(git show "$ref:scripts/ui-literals.baseline" 2>/dev/null) || { echo "note: $ref has no UI-literals baseline yet; nothing to compare"; exit 0; }
+    bad=0
+    while read -r name was; do
+        now=$(awk -v n="$name" '$1==n {print $2}' "$baseline"); now=${now:-0}
+        if [ "$now" -gt "$was" ]; then
+            echo "error: the baseline for $name went up from $was ($ref) to $now: a PR lowers it, never raises it" >&2
+            bad=1
+        fi
+    done <<EOB
+$old
+EOB
+    exit $bad
+fi
+
 if [ "${1:-}" = "--update" ]; then current > "$baseline"; echo "wrote $baseline"; exit 0; fi
 [ -f "$baseline" ] || { echo "error: $baseline is missing; run scripts/check-ui-literals.sh --update" >&2; exit 1; }
 
