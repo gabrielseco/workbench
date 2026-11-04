@@ -4,7 +4,7 @@ A read-only audit of `Sources/WorkbenchApp` (about 10,500 lines) as of the merge
 `WorkbenchButtonStyle(kind:size:)` and made `scripts/check-banned-apis.sh` refuse a second button look. Buttons were the easy case. This
 lists the same problem everywhere else, so the next PRs have a worklist and the "ratchet" check at the end has a baseline.
 
-The rule it is measured against (said once, in `AGENTS.md` after the follow-up lands): **anything visible that repeats is one component in
+The rule it is measured against (in `AGENTS.md`, Conventions): **anything visible that repeats is one component in
 one file, with its variations as props (`kind`, `size`, `tone`, state); a new variant is a new case, never a copy; search before writing a
 view.** Measurements (radius, padding, type size, tint strength) are tokens in `Theme`, not literals in a view.
 
@@ -19,7 +19,7 @@ the thing to look at.
 | `.font(.system(size: <literal>)`, outside `ButtonStyles.swift` | 8, all in `RunSettingsInspector.swift` | text styles in `Theme` (or system text styles) |
 | `.padding(<literal>)` and the like | 113 | spacing tokens, mostly inside components |
 | tint strengths for a tinted fill | 0.04, 0.08, 0.1, 0.12, 0.14, 0.2 | one per role |
-| `Capsule()` backgrounds | 9 sites, 6 views | one `Pill` |
+| `Capsule()` lines | 10 in 6 views | one `Pill` |
 | caps section labels | 6 sites, 3 variants | one `SectionLabel` |
 | `struct …: View` | about 80 | |
 
@@ -47,7 +47,7 @@ and `ProjectPickerCard.swift:46` (radius 14, the same colours). Three radii and 
 
 `FeedDecisionCard.swift:69`, `FeedRow.swift:465`, `RootView.swift:139` (conditional). Likely the `Callout` with `outlined: true`.
 
-### 4. Pills and chips (9 capsule sites, 4 components)
+### 4. Pills and chips (10 `Capsule()` lines, 4 components)
 
 A tinted pill: `Badge` (`ProjectPickerCard.swift:207`, 0.12), `StatePill` (`RootView.swift:100`, 0.12), `KindChip` (`GoalFields.swift:154`, 0.14),
 plus inline copies at `DraftGoalCard.swift:115` (0.14), `MenuBarView.swift:58` (0.14), `RootView.swift:61` (0.12). An outlined pill:
@@ -108,13 +108,14 @@ Each is one PR, each shows before and after shots of the screens it touches, eac
 3. **`Pill` (4)** and **`SectionLabel` (5)**: small, and they fix visible drift (0.12 against 0.14, caption against caption2).
 4. **Rows and messages (6, 7)**, after reading each; may turn out to be fewer.
 5. **Icon buttons and `Thumbnail` (8)**, the inspector's type sizes (9).
-6. **The check.** `scripts/check-banned-apis.sh` (or a sibling script) counts the literals in the table above outside `Theme.swift` and the
-   component files, against a committed baseline, and fails when a PR raises a count. A PR that lowers one lowers the baseline in the same
-   change. It does not ask anyone to fix old code at once, and it stops the number growing meanwhile. Written last, so its baseline is the
-   state after 1 to 5, not today's.
+The rule already exists, so the number cannot grow while this list is worked through:
 
-Also in 6: a line in the `pr-review` and `design-review` skills, "does a new view duplicate an existing component?", so the reviewer reads for
-what a count cannot.
+- `AGENTS.md`, Conventions: a look that appears twice is a component with props.
+- `scripts/check-ui-literals.sh` counts the literals in the table above (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`)
+  outside `Theme.swift`, `ButtonStyles.swift` and `PlaceholderTextEditor.swift` against `scripts/ui-literals.baseline`. A PR that raises a
+  count fails; one that lowers a count runs `scripts/check-ui-literals.sh --update` in the same change, so it stays down. CI and
+  `scripts/check.sh` run it, and `scripts/test-ui-literals.sh` tests it. Each component file added by 1 to 5 goes into its `COMPONENTS` list.
+- A line in `pr-review` and `design-review`, "does a new view duplicate an existing component?", for what a count cannot see.
 
 ## Not decided here
 

@@ -168,10 +168,17 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   A change that adds or moves a text box, or changes what the component does, shows `scripts/check-text-alignment.py` in its PR: shoot the
   empty box, `typekeys` some letters without descenders, shoot again, and the tool measures the two (it exits 1 above 3 px; the caret is not
   used, it blinks). The `design-review` skill asks for it.
-- **A button is `.primaryButton(size:)` or `.plainButton(size:)`**, never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
-  (`scripts/check-banned-apis.sh` fails one). They are one component, `WorkbenchButtonStyle` in `ButtonStyles.swift`, with `kind` and `size` as
-  props: a new look or size is a new `ButtonKind` or `ButtonSize` case there, and buttons side by side pass the same `size`. `.plain`,
-  `.borderless` and `.link` are for icons, rows and links.
+- **UI is components with props, reused, never copied.** Anything visible that appears twice is one component in its own file, and its
+  variations are props (`kind`, `size`, `tone`, state): a variant that does not exist is a new case on the existing component, never a copy
+  beside it. Search for one before writing a view. A view takes its radius, type, fill and spacing from a component or `Theme`, not from
+  literals. Two things are enforced, so a PR cannot get past them:
+  - `scripts/check-ui-literals.sh` counts the hand-written ones (radius, `.font(.system(size:`, `Capsule()`, `.padding(<number>)`) against
+    `scripts/ui-literals.baseline` and fails a PR that raises a count; one that lowers a count runs `--update` in the same change. A new
+    component file is added to `COMPONENTS` in that script. `docs/UI-AUDIT.md` lists what is still copied and the order to fix it.
+  - Buttons, the first component made this way: `.primaryButton(size:)` or `.plainButton(size:)` (`WorkbenchButtonStyle` in
+    `ButtonStyles.swift`, `kind` and `size` as props), never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
+    (`scripts/check-banned-apis.sh` fails one). Buttons side by side pass the same `size`. `.plain`, `.borderless` and `.link` are for icons,
+    rows and links.
 - **Comments say why**, in one line, and are not added to restate code.
 
 ## Using Workbench on this repo

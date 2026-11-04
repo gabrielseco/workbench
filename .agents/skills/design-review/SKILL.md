@@ -25,6 +25,7 @@ matters; say which file and line):
 - `Color(red:`, `Color(#`, `NSColor(` literals in a view → a `Theme` colour (DESIGN.md, Colour).
 - A colour used for a meaning it does not have: amber for an error, red for "needs you", green for "good" in general.
 - Colour as the only signal: a state told apart only by its tint, with no symbol or word.
+- A new view that repeats a look an existing component already has (a card, a tinted callout, a pill, a caps label, an icon button) → that component with a prop, not a copy (AGENTS.md, Conventions; `docs/UI-AUDIT.md`).
 - `.padding(` and `spacing:` values outside DESIGN.md's set; two `.borderedProminent` buttons in one state.
 - A `Text` in a row or header with no `lineLimit` or a fixed frame that clips it at 900 wide.
 - An icon-only `Button` or `Image` with no `.help(`.

@@ -19,6 +19,8 @@ step() {
 
 step 'Banned process APIs' scripts/check-banned-apis.sh
 step 'Banned APIs check' scripts/test-banned-apis.sh
+step 'UI literals' scripts/check-ui-literals.sh
+step 'UI literals check' scripts/test-ui-literals.sh
 if ! command -v swiftlint >/dev/null 2>&1; then
     echo "error: SwiftLint is missing (brew install swiftlint)" >&2
     exit 1

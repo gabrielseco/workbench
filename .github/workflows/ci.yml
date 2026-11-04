@@ -25,6 +25,11 @@ jobs:
       - name: The banned-APIs check refuses what it must
         # The bare TextEditor( rule, on trees of its own: no build and no screen.
         run: scripts/test-banned-apis.sh
+      - name: UI literals do not grow
+        # Hand-written radius, type size, capsule and padding in a view may not go up (docs/UI-AUDIT.md); the baseline is committed.
+        run: scripts/check-ui-literals.sh
+      - name: The UI-literals check refuses what it must
+        run: scripts/test-ui-literals.sh
       - name: SwiftLint
         # Pinned to the version developers run locally; the static Linux binary needs no Swift toolchain.
         run: |
