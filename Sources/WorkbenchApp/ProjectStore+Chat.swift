@@ -42,8 +42,8 @@ extension ProjectStore {
         return started
     }
 
-    /// Starts a new chat with `message`, named from its first words, and opens it. Never ends another thread: while one is active core
-    /// refuses and the refusal is shown. A refusal returns false, so the card keeps the text. `attachments` are the screenshots sent
+    /// Starts a new chat with `message`, named from its first words, and opens it. Ends the active thread, as a drafted goal does (core's abandon keeps
+    /// the branch and saves uncommitted work); a thread that is running refuses and the refusal is shown. A refusal returns false, so the card keeps the text. `attachments` are the screenshots sent
     /// with it; the caller clears what it staged when this returns true.
     @discardableResult func startChat(_ message: String, attachments: [URL] = []) async -> Bool {
         guard let project, !chatReplying, !drafting else { return false }
