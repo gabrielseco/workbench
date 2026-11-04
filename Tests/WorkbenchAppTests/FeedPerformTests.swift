@@ -114,6 +114,34 @@ import Testing
         }
     }
 
+    @Test func openPROpensTheThreadsPullRequestAndNothingElse() async throws {
+        let calls = Calls()
+        let store = try await store(calls)
+        var opened: [URL] = []
+        store.openExternal = { opened.append($0) }
+        await store.perform(.openPR)
+        #expect(opened.isEmpty, "a thread with no pull request opens nothing")
+
+        let fixture = try await AppFixture()
+        keptPerformFixtures.append(fixture)
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        try fixture.decide("t1", "accepted")
+        try fixture.ship("t1", number: 7)
+        guard case .thread(var shipped) = ProjectLoader.load(project: Project(root: fixture.root)).screen,
+            let record = shipped.state.pullRequest
+        else { Issue.record("no shipped thread"); return }
+        store.screen = .thread(shipped)
+        await store.perform(.openPR)
+        #expect(opened == [URL(string: record.url)!])
+
+        opened = []
+        shipped.state.pullRequest?.url = "file:///etc/passwd"
+        store.screen = .thread(shipped)
+        await store.perform(.openPR)
+        #expect(opened.isEmpty, "only a web address is opened")
+    }
+
     @Test func theCardOnlyOpensWhatNeedsAViewToOpen() async throws {
         let calls = Calls()
         let store = try await store(calls)

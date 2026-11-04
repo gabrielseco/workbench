@@ -7,7 +7,7 @@ struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
         case discard, sendBack, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
-        case showFindings, refreshCI
+        case showFindings, refreshCI, openPR
     }
 
     var kind: Kind
@@ -180,10 +180,13 @@ enum FeedActions {
                 FeedAction(kind: .refreshCI, title: "Refresh CI", help: "Reads the pull request's checks from GitHub again"))
         }
         more.append(newGoal)
+        // The pull request is where the review and the merge happen: one press from here, whatever the next step is.
+        let open = FeedAction(kind: .openPR, title: "Open PR", help: "Opens the pull request on GitHub in your browser")
         // Merge is the next press once GitHub says it can go; until then the review is.
         if s.canMerge {
-            return FeedDecision(primary: merge, more: [review] + more, why: "CI is green: the pull request can be merged")
+            return FeedDecision(
+                primary: merge, secondary: open, more: [review] + more, why: "CI is green: the pull request can be merged")
         }
-        return FeedDecision(primary: review, more: [merge] + more)
+        return FeedDecision(primary: review, secondary: open, more: [merge] + more)
     }
 }

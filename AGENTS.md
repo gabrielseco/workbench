@@ -168,6 +168,10 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   A change that adds or moves a text box, or changes what the component does, shows `scripts/check-text-alignment.py` in its PR: shoot the
   empty box, `typekeys` some letters without descenders, shoot again, and the tool measures the two (it exits 1 above 3 px; the caret is not
   used, it blinks). The `design-review` skill asks for it.
+- **A button is `.primaryButton(size:)` or `.plainButton(size:)`**, never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
+  (`scripts/check-banned-apis.sh` fails one). They are one component, `WorkbenchButtonStyle` in `ButtonStyles.swift`, with `kind` and `size` as
+  props: a new look or size is a new `ButtonKind` or `ButtonSize` case there, and buttons side by side pass the same `size`. `.plain`,
+  `.borderless` and `.link` are for icons, rows and links.
 - **Comments say why**, in one line, and are not added to restate code.
 
 ## Using Workbench on this repo

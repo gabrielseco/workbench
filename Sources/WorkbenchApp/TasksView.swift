@@ -156,10 +156,12 @@ struct TaskButtons: View {
 
 struct PrimaryWhen: ViewModifier {
     var primary: Bool
-    init(_ primary: Bool) { self.primary = primary }
+    /// Both kinds in one size, so the primary and the plain button beside it are a pair; nil is each kind's own default.
+    var size: ButtonSize?
+    init(_ primary: Bool, size: ButtonSize? = nil) { (self.primary, self.size) = (primary, size) }
 
     func body(content: Content) -> some View {
-        if primary { content.primaryButton() } else { content.plainButton() }
+        if primary { content.primaryButton(size: size ?? .regular) } else { content.plainButton(size: size ?? .compact) }
     }
 }
 

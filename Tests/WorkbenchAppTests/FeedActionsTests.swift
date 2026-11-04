@@ -114,6 +114,18 @@ import Testing
         #expect(noFiles.secondary?.enabled == false)
     }
 
+    @Test func theShippedPullRequestIsOnePlainButtonAwayWhateverTheNextStepIs() throws {
+        var shipped = try snapshot(.prOpen)
+        #expect(decide(shipped).secondary?.kind == .openPR && decide(shipped).secondary?.enabled == true)
+        #expect(!decide(shipped).more.contains { $0.kind == .openPR })
+        let green = PRStatus(
+            number: 482, state: .open, head: String(repeating: "a", count: 40),
+            checks: PRChecksSummary(checks: [PRCheck(name: "test", bucket: "pass")]), checksError: nil)
+        shipped.ci = .known(green)
+        #expect(decide(shipped).primary?.kind == .merge && decide(shipped).secondary?.kind == .openPR)
+        #expect(decide(try snapshot(.accepted)).secondary == nil, "nothing is shipped yet")
+    }
+
     @Test func anAcceptedThreadIsShippedAndAShippedOneIsReviewedThenMerged() throws {
         let accepted = try snapshot(.accepted)
         #expect(decide(accepted).primary?.kind == .ship && decide(accepted) { $0.deciding = true }.primary?.enabled == false)
