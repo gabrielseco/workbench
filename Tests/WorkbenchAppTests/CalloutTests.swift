@@ -28,11 +28,26 @@ import Testing
         #expect(edge > 0.1, "the hairline is on the edge: \(edge)")
     }
 
+    private func rgb(_ style: CalloutStyle, x: Int, y: Int) -> [UInt8]? {
+        let renderer = ImageRenderer(content: Color.clear.frame(width: 60, height: 60).callout(style))
+        renderer.scale = 1
+        guard let image = renderer.cgImage, let data = image.dataProvider?.data else { return nil }
+        let bytes = Array(UnsafeBufferPointer(start: CFDataGetBytePtr(data), count: CFDataGetLength(data)))
+        let start = (y * image.width + x) * 4
+        return Array(bytes[start..<start + 3])
+    }
+
     @Test func aPanelAndAWellAreOpaqueBoxesWithAHairlineAtTheEdge() throws {
         for style in [CalloutStyle.panel, .well] {
-            #expect(try #require(alpha(style, x: 30, y: 30)) > 0.9, "the fill is the screen's own colour, opaque")
+            #expect(try #require(alpha(style, x: 30, y: 30)) > 0.9, "the fill is opaque")
             #expect(try #require(alpha(style, x: 0, y: 0)) < 0.05, "the corner is rounded off")
+            let middle = try #require(rgb(style, x: 30, y: 30))
+            let edge = [try #require(rgb(style, x: 30, y: 0)), try #require(rgb(style, x: 30, y: 1))]
+            #expect(edge.contains { $0 != middle }, "the hairline is drawn on the edge, in a colour the fill is not")
         }
+        let panel = try #require(rgb(.panel, x: 30, y: 30))
+        let well = try #require(rgb(.well, x: 30, y: 30))
+        #expect(panel != well, "a panel and a well are two fills")
     }
 
     @Test func aNeutralWellFills() throws {
