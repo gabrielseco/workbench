@@ -127,7 +127,7 @@ struct RunCardView: View {
                     if !model.tasks.isEmpty { tasks }
                     if !model.tail.isEmpty { tail }
                 }
-                .padding(14)
+                .padding(Spacing.inset)
             }
             if let stop = model.stop { footer(stop, diff: model.diff) }
         }

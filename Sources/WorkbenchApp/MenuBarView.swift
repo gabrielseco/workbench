@@ -44,7 +44,7 @@ struct MenuBarPopover: View {
             Divider()
             footer
         }
-        .padding(14).frame(width: 320)
+        .padding(Spacing.inset).frame(width: 320)
         .onDisappear { if model.deniedNote != nil { store.attention.sayDeniedOnce() } }
     }
 

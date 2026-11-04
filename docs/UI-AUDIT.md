@@ -96,7 +96,7 @@ friends. The inspector should too, or `Theme` should name the two it needs.
 
 ### 10. Spacing (done for what repeats)
 
-`Spacing.gutter` (28) and `Spacing.inset` (14) name the two values that repeat as design constants (16 sites). The remaining padding literals are one-off gaps between a label and its field, and stay where they are: a token for each would only rename them. `scripts/ui-literals.baseline` keeps the count from growing.
+`Spacing.gutter` (28) and `Spacing.inset` (14, horizontal or all round) name the two values that repeat as design constants. The remaining padding literals are mostly one-off gaps (a label and its field, a row's top margin) and stay where they are: a token for each would only rename them; a value that starts repeating as a constant gets a name here. `scripts/ui-literals.baseline` keeps the count from growing.
 
 
 163 padding literals; the most common (`.horizontal, 8`, `.vertical, 10`, `.horizontal, 28`, `.horizontal, 14`) are the insets of cards and

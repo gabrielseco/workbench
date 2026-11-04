@@ -116,7 +116,7 @@ struct DraftGoalCardView: View {
             }
             .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
             Divider()
-            GoalBlocks(goal: goal, store: store, editable: true, style: .feed, showsError: true).padding(14)
+            GoalBlocks(goal: goal, store: store, editable: true, style: .feed, showsError: true).padding(Spacing.inset)
             Divider()
             HStack(spacing: 12) {
                 Text(DraftGoalCard.footer(goal: goal, base: base)).font(.caption).foregroundStyle(.secondary)
