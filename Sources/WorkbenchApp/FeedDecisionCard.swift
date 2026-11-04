@@ -57,7 +57,7 @@ struct DecisionCard: View {
     private var next: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("NEXT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                SectionLabel("NEXT")
                 Text(decision.title ?? step?.title ?? "Nothing left to do").font(.headline)
                 Text(shownWhy).font(.callout).foregroundStyle(.secondary)
             }

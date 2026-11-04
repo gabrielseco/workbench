@@ -155,8 +155,6 @@ struct KindChip: View {
     var kind: String
 
     var body: some View {
-        Text(kind).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(Theme.grey.opacity(0.14), in: Capsule())
+        Text(kind).foregroundStyle(.secondary).pill()
     }
 }
