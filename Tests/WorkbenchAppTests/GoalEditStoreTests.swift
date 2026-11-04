@@ -29,6 +29,12 @@ private actor EditGate {
 
 /// The store hands an edit to core's `editGoal` for the thread on screen, says why a refusal was one, and reads the file again.
 @MainActor @Suite struct GoalEditStoreTests {
+    /// Waits for what a test needs to have happened instead of sleeping a guessed time, so a loaded runner cannot fail it.
+    private func until(_ what: String, _ condition: () -> Bool) async throws {
+        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(condition(), "never: \(what)")
+    }
+
     private func store(_ actions: GoalActions) async throws -> ProjectStore {
         let fixture = try await AppFixture()
         keptEditFixtures.append(fixture)
@@ -154,12 +160,11 @@ private actor EditGate {
             approve: { _, _ in order.add("approve", .setSkip([])) },
             editGoal: { _, _, _ in await never.wait() })
         let store = try await store(actions)
-        store.goalEditWait = .milliseconds(150)
+        store.goalEditWait = .seconds(1)
         _ = Task { await store.editGoal(.setSkip(["judge"])) }
-        try await Task.sleep(for: .milliseconds(30))
+        try await until("the edit is under way") { store.current.goalEditsInFlight == 1 }
         let approving = Task { await store.approveAndRun() }
-        try await Task.sleep(for: .milliseconds(60))
-        #expect(store.busy == "Saving your edits to the goal…", "the click is answered while it waits")
+        try await until("the click is answered while it waits") { store.busy == "Saving your edits to the goal…" }
         await approving.value
         #expect(order.all.isEmpty, "nothing was approved on a goal that may not match the window")
         #expect(store.busy == nil && store.starting == false)
@@ -177,12 +182,11 @@ private actor EditGate {
                 throw GoalActions.RefusalText("not reached")
             })
         let store = try await store(actions)
-        store.goalEditWait = .milliseconds(150)
+        store.goalEditWait = .seconds(1)
         _ = Task { await store.editGoal(.setSkip(["judge"])) }
-        try await Task.sleep(for: .milliseconds(30))
+        try await until("the edit is under way") { store.current.goalEditsInFlight == 1 }
         let handing = Task { await store.runGoalInHerdr() }
-        try await Task.sleep(for: .milliseconds(60))
-        #expect(store.busy == "Saving your edits to the goal…")
+        try await until("the click is answered while it waits") { store.busy == "Saving your edits to the goal…" }
         await handing.value
         #expect(sent.all.isEmpty && store.busy == nil)
         #expect(store.actionError?.contains("did not finish saving") == true)
