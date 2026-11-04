@@ -204,10 +204,7 @@ struct NewThreadScreen: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(focused ? Theme.blue.opacity(0.6) : Theme.line, lineWidth: focused ? 1.5 : 1))
+        .card(stroke: focused ? Theme.blue.opacity(0.6) : Theme.line, strokeWidth: focused ? 1.5 : 1)
         .background {
             GeometryReader { proxy in
                 Color.clear.onAppear { panelWidth = proxy.size.width }

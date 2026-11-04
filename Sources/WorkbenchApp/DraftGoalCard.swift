@@ -127,7 +127,6 @@ struct DraftGoalCardView: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        .card()
     }
 }

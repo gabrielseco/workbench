@@ -135,8 +135,7 @@ struct RunTonightCard: View {
                 }
             }
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tonight.verdict == .willRun ? Theme.line : tint.opacity(0.45)))
+        .card(stroke: tonight.verdict == .willRun ? Theme.line : tint.opacity(0.45))
     }
 
     /// The button for a warning: approval, or the active thread.
