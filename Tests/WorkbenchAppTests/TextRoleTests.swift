@@ -14,8 +14,11 @@ import Testing
     }
 
     /// The colour of the boldest pixel of a big glyph drawn in the role, as (red, green, blue).
-    private func ink(_ role: TextRole) -> [Int]? {
-        let renderer = ImageRenderer(content: Text("\u{2588}\u{2588}\u{2588}").font(.system(size: 60)).role(role).padding(4))
+    private func ink(_ role: TextRole, onAView: Bool = false) -> [Int]? {
+        let glyphs = Text("\u{2588}\u{2588}\u{2588}").font(.system(size: 60))
+        let renderer = onAView
+            ? ImageRenderer(content: HStack { glyphs }.textRole(role).padding(4))
+            : ImageRenderer(content: glyphs.role(role).padding(4))
         renderer.scale = 1
         guard let image = renderer.cgImage, let data = image.dataProvider?.data else { return nil }
         let bytes = Array(UnsafeBufferPointer(start: CFDataGetBytePtr(data), count: CFDataGetLength(data)))
@@ -32,6 +35,8 @@ import Testing
         let warning = try #require(ink(.warning))
         #expect(error[0] > error[1] + 60 && error[0] > error[2] + 60, "red: \(error)")
         #expect(warning[0] > warning[2] + 60 && warning[1] > warning[2] + 30, "amber: \(warning)")
+        let viewError = try #require(ink(.error, onAView: true))
+        #expect(viewError[0] > viewError[1] + 60 && viewError[0] > viewError[2] + 60, "the view form reaches the text inside: \(viewError)")
     }
 
     @Test func aRoleKeepsATextATextAndOtherViewsGetTheSame() {
