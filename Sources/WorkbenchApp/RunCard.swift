@@ -127,7 +127,7 @@ struct RunCardView: View {
                     if !model.tasks.isEmpty { tasks }
                     if !model.tail.isEmpty { tail }
                 }
-                .padding(14)
+                .padding(Spacing.inset)
             }
             if let stop = model.stop { footer(stop, diff: model.diff) }
         }
@@ -144,7 +144,7 @@ struct RunCardView: View {
                 Text(clock).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
     }
 
     private var tasks: some View {
@@ -191,7 +191,7 @@ struct RunCardView: View {
             Button { perform(stop) } label: { Label(stop.title, systemImage: "stop.fill") }
                 .plainButton().disabled(!stop.enabled).help(stop.help ?? stop.title)
         }
-        .padding(.horizontal, 14).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.inset).padding(.bottom, 12)
     }
 }
 

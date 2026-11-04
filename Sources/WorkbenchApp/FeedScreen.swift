@@ -103,7 +103,7 @@ struct FeedScreen: View {
             content
         }
         .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var lazyRows: some View {
@@ -111,7 +111,7 @@ struct FeedScreen: View {
             content
         }
         .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-        .padding(.horizontal, 28).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, Spacing.gutter).padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .center)
     }
 
     var body: some View {
@@ -141,7 +141,7 @@ struct FeedScreen: View {
 
     private var column: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let busy = store.busy { BusyBar(text: busy).padding(.horizontal, 28).padding(.top, 12) }
+            if let busy = store.busy { BusyBar(text: busy).padding(.horizontal, Spacing.gutter).padding(.top, 12) }
             header
             Divider()
             if drawsEagerly {
@@ -197,7 +197,7 @@ struct FeedScreen: View {
             }
             if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
         }
-        .padding(.horizontal, 28).padding(.top, 14).padding(.bottom, 12)
+        .padding(.horizontal, Spacing.gutter).padding(.top, 14).padding(.bottom, 12)
     }
 }
 

@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// The two insets that repeat as design constants: the gutter a screen's column keeps from the window's edge, and the inset inside a card's rows.
+/// Other gaps are one-off and stay where they are used.
+enum Spacing {
+    static let gutter: CGFloat = 28
+    static let inset: CGFloat = 14
+}
+
 /// The corner radii the app uses, by what they round. A view names one of these (or takes a component that does) instead of a number.
 enum Radius {
     /// A box inside a screen: a callout, an outlined control.

@@ -97,7 +97,7 @@ struct RunSettingsInspector: View {
                 Text("There is no goal to show settings for.").font(.callout).foregroundStyle(.secondary)
             }
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.inset).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The artboard's heading: the name and an X that closes the panel (the header's button does the same).
