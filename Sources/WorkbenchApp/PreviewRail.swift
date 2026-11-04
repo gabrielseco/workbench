@@ -16,11 +16,8 @@ struct PreviewRail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 header("THREADS") {
-                    Button { store.beginNewGoal() } label: {
-                        Image(systemName: "plus").font(.callout.weight(.semibold)).frame(width: 24, height: 24)
-                            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
-                    }
-                    .buttonStyle(.plain).disabled(store.project == nil)
+                    Button { store.beginNewGoal() } label: { Image(systemName: "plus") }
+                        .iconButton(size: .small).disabled(store.project == nil)
                     .accessibilityLabel("New goal").help("New goal…")
                 }
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }

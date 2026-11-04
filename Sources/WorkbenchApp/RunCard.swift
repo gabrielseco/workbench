@@ -267,7 +267,7 @@ struct ProofThumbnail: View {
                         .aspectRatio(16 / 10, contentMode: .fit)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6)).overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line))
+            .thumbnail(outlined: true)
             Text(shot.caption).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
