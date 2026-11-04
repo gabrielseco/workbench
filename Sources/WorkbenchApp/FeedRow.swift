@@ -202,7 +202,7 @@ struct GoalCardRow: View {
             if !rows.isEmpty { criteriaList }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.grey.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .callout()
     }
 
     /// What was asked, so a goal with no criteria still says what it is for; a long one is folded.
@@ -461,7 +461,7 @@ struct NextCard: View {
             Text(why).font(.callout).foregroundStyle(.secondary)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.grey.opacity(0.4)))
+        .callout(.outlined)
         .padding(.top, 6)
         .accessibilityElement(children: .combine)
     }

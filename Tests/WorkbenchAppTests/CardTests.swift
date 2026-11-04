@@ -21,8 +21,8 @@ import Testing
         let view = Color.red.frame(width: 60, height: 60).card(.panel, clips: clips)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
-        guard let image = renderer.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data)
-        else { return nil }
+        guard let image = renderer.cgImage, let data = image.dataProvider?.data else { return nil }
+        let bytes = Array(UnsafeBufferPointer(start: CFDataGetBytePtr(data), count: CFDataGetLength(data)))
         let offset = y * image.bytesPerRow + x * (image.bitsPerPixel / 8)
         let alphaFirst = [CGImageAlphaInfo.premultipliedFirst, .first, .noneSkipFirst].contains(image.alphaInfo)
         return Double(bytes[offset + (alphaFirst ? 0 : 3)]) / 255

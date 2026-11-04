@@ -2,6 +2,8 @@ import SwiftUI
 
 /// The corner radii the app uses, by what they round. A view names one of these (or takes a component that does) instead of a number.
 enum Radius {
+    /// A box inside a screen: a callout, an outlined control.
+    static let box: CGFloat = 8
     static let card: CGFloat = 12
     static let popover: CGFloat = 14
     static let overlay: CGFloat = 18
