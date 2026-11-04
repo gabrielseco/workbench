@@ -21,10 +21,10 @@ extension ProjectStore {
 
     private var newThreadRequest: String { newThreadText.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    /// Send: a free chat from what is typed. The text stays when core refuses.
-    @discardableResult func sendNewThread() async -> Bool {
+    /// Send: a free chat from what is typed, with the staged screenshots. The text stays when core refuses.
+    @discardableResult func sendNewThread(attachments: [URL] = []) async -> Bool {
         guard !newThreadRequest.isEmpty else { return false }
-        let made = await startChat(newThreadText)
+        let made = await startChat(newThreadText, attachments: attachments)
         if made { newThreadText = "" }
         return made
     }

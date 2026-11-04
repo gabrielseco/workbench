@@ -72,8 +72,8 @@ ships, and the mockup gets fixed.
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
   screenshots as small thumbnails with a remove button, a `+` to choose screenshots and `Paste or drop screenshots.`, and two buttons,
   `Draft the goal` (⌘↵) and `Discuss first` (↵, the one prominent button). Under it a three-line legend in the buttons' order, name then what it does: `Discuss first`, `Draft the goal`, and `Use my text as the goal` (a link: a quick
-  goal from the words, no agent, no criteria, free). There are no starter chips: `+`, paste and drop already add screenshots, and typing already starts a chat. Discuss first needs text and no
-  screenshots (a chat takes none); a refusal is an amber row above the panel with the text kept; a project with no goal agent offers `Draft
+  goal from the words, no agent, no criteria, free). There are no starter chips: `+`, paste and drop already add screenshots, and typing already starts a chat. Discuss first needs text, and takes the staged screenshots with it
+  (a chat keeps them for every later turn); a refusal is an amber row above the panel with the text kept; a project with no goal agent offers `Draft
   with Claude` / `Draft with Codex`. While it is open the rail's first row is `New thread · Type to start · free`, selected; the toolbar says
   `$0.00` and `No run`; the footer has no Event log.
 - **A task's page** is in the feed's 680 column: the name (`.title3`, semibold), one line `schedule · opens a PR · N runs · next …`, and
@@ -153,7 +153,7 @@ ships, and the mockup gets fixed.
   ring). Both wrap and are selectable, and say who spoke to VoiceOver (`You`, `Goal agent`), since nothing on screen does. While a turn
   runs the last row is `Replying…` in blue with a spinner and a borderless Stop, and the text box is dimmed, takes no typing and says
   `Waiting for the agent…`. The composer is a rounded panel (`Theme.panel`, a `Theme.line` hairline, radius 12, 46 high at least) holding
-  the text box (one line, growing to six) and a 30 pt square `arrow.up` Send button; under it a grey ring and `Chat only. No worktree,
+  a `+` that adds screenshots (paste and drop work too; staged ones show as thumbnails above the text box, as on the new-thread screen), the text box (one line, growing to six) and a 30 pt square `arrow.up` Send button; a message that sent screenshots shows `N screenshots` under its words; under it a grey ring and `Chat only. No worktree,
   no run, no cost.` at the left and the one `.borderedProminent` button, `Make this a goal →`, at the right (enabled once the agent has
   answered and nothing is going). Return sends and Shift- or Option-Return adds a line. What the app says back about a message or a
   draft (too long, no goal agent, a draft that did not come out) is an amber row above the panel: the person has to change something

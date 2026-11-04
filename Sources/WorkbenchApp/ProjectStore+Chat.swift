@@ -10,6 +10,9 @@ extension ProjectStore {
         set { current.chatDraft = newValue }
     }
 
+    /// The screenshots staged for the next message of the chat on screen.
+    var chatStaging: AttachmentStaging { current.chatStaging }
+
     /// A chat turn is going in the thread on screen. A chat just started is held under no thread until its turn ends, so it counts
     /// once the window is on the thread the log shows with its turn open.
     var replyingHere: Bool {
@@ -24,22 +27,25 @@ extension ProjectStore {
     var chatReplying: Bool { sessions.values.contains(where: \.replying) }
 
     /// Says what is in the composer in the chat on screen. The text leaves the composer at once and comes back if core refuses the
-    /// message (empty, too long, over a limit, no goal agent, the thread held, ended), so a refusal never loses what was typed.
+    /// message (empty, too long, over a limit, no goal agent, the thread held, ended), so a refusal never loses what was typed. The
+    /// screenshots staged for the chat go with it, and stay staged when it is refused.
     @discardableResult func sendChat() async -> Bool {
         guard let project, let thread = currentThread, !chatReplying, !drafting else { return false }
         let mine = threadSession(project, thread)
         let text = mine.chatDraft
         mine.chatDraft = ""
         mine.actionError = nil
-        let started = await chatTurn(project, .existing(id: thread), text, in: mine)
+        let started = await chatTurn(project, .existing(id: thread), text, attachments: mine.chatStaging.urls, in: mine)
+        if started { mine.chatStaging.clear() }
         // What was typed while core was deciding stays, after what came back: a refusal loses neither.
         if !started { mine.chatDraft = mine.chatDraft.isEmpty ? text : text + "\n" + mine.chatDraft }
         return started
     }
 
     /// Starts a new chat with `message`, named from its first words, and opens it. Never ends another thread: while one is active core
-    /// refuses and the refusal is shown. A refusal returns false, so the card keeps the text.
-    @discardableResult func startChat(_ message: String) async -> Bool {
+    /// refuses and the refusal is shown. A refusal returns false, so the card keeps the text. `attachments` are the screenshots sent
+    /// with it; the caller clears what it staged when this returns true.
+    @discardableResult func startChat(_ message: String, attachments: [URL] = []) async -> Bool {
         guard let project, !chatReplying, !drafting else { return false }
         // A chat with no thread yet is held under no thread; its errors are shown where the person is.
         let held = threadSession(project, nil)
@@ -49,7 +55,8 @@ extension ProjectStore {
         let picked = selectedThread
         selectedThread = nil
         let started = await chatTurn(
-            project, .newThread(name: ThreadName.suggest(from: message)), message, in: held, errorsIn: shown)
+            project, .newThread(name: ThreadName.suggest(from: message)), message, attachments: attachments, in: held,
+            errorsIn: shown)
         if !started, picked != nil {
             selectedThread = picked
             lastWatch = nil
@@ -61,7 +68,8 @@ extension ProjectStore {
     /// One turn through core, holding `session` as replying until it ends. True when core started the turn (it may still have ended
     /// badly: that is said on the thread); false when core refused it, with core's words in the session's `actionError`.
     private func chatTurn(
-        _ project: Project, _ target: ChatTarget, _ message: String, in held: ThreadSession, errorsIn shown: ThreadSession? = nil
+        _ project: Project, _ target: ChatTarget, _ message: String, attachments: [URL] = [], in held: ThreadSession,
+        errorsIn shown: ThreadSession? = nil
     ) async -> Bool {
         let stop = DraftStop()
         setReplying(true, in: held, stop: stop)
@@ -69,7 +77,7 @@ extension ProjectStore {
         let mine = generation
         let result: ChatResult
         do {
-            result = try await actions.chat(project, target, message, stop)
+            result = try await actions.chat(project, target, message, attachments, stop)
         } catch {
             if mine == generation { (shown ?? held).actionError = "\(error)" }
             return false

@@ -6,6 +6,12 @@ public struct ChatMessage: Sendable, Equatable {
     public var role: Role
     public var text: String
     public var seq: Int
+    /// The screenshots the person sent with it, by the names they are kept under (`3.png`), in the order sent. Empty for the agent's.
+    public var images: [String] = []
+
+    public init(role: Role, text: String, seq: Int, images: [String] = []) {
+        (self.role, self.text, self.seq, self.images) = (role, text, seq, images)
+    }
 }
 
 /// A chat thread as its log says it (P22 slice 6): the conversation, how many turns it had and what they cost. Nil on a thread
@@ -40,7 +46,12 @@ public struct ChatState: Sendable, Equatable {
             guard let role = event.data["role"]?.stringValue.flatMap(ChatMessage.Role.init(rawValue:)),
                 let text = event.data["text"]?.stringValue
             else { return }
-            messages.append(ChatMessage(role: role, text: text, seq: event.seq))
+            // A name that is not one this feature writes is dropped: a log edited by hand cannot point a read at another file.
+            var images: [String] = []
+            if role == .user, case .array(let names)? = event.data["images"] {
+                images = names.compactMap { $0.stringValue }.filter { GoalAttachments.number(inStoredName: $0) != nil }
+            }
+            messages.append(ChatMessage(role: role, text: text, seq: event.seq, images: images))
             if role == .user { open = true }
         case .chatEnded:
             open = false

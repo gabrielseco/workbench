@@ -12,14 +12,13 @@ struct NewThreadState: Equatable {
     var busy = false
 
     var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    /// A chat takes no screenshots: with any staged, Send waits and Do it now is the way.
-    var canSend: Bool { !isBlank && !busy && screenshots == 0 && pending == 0 }
+    var canSend: Bool { !isBlank && !busy && pending == 0 }
     var canDoItNow: Bool { !isBlank && !busy && pending == 0 }
     var canWriteAsGoal: Bool { canDoItNow }
 
     var sendHelp: String {
         screenshots > 0
-            ? "A chat takes no screenshots: use Draft the goal."
+            ? "Starts a free chat. The agent sees your screenshots. Nothing runs and nothing costs until you say so."
             : "Starts a free chat. Nothing runs and nothing costs until you say so."
     }
 
@@ -91,7 +90,6 @@ struct NewThreadCaption: View {
 struct NewThreadScreen: View {
     var store: ProjectStore
     @State private var staging = AttachmentStaging()
-    @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
 
     /// The panel's width as it is drawn (the column, or less at a narrow window): the text box is that less its padding and inset, and
@@ -122,17 +120,9 @@ struct NewThreadScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onExitCommand { if !busy { store.closeNewThread() } }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard !busy else { return false }
-            Task { await staging.add(files: urls) }
-            return true
-        }
-        .onAppear { watchPaste() }
-        .onDisappear {
-            pasteMonitor.map(NSEvent.removeMonitor)
-            pasteMonitor = nil
-            staging.clear()
-        }
+        .screenshotDrop(staging, allowed: !busy)
+        .pastesScreenshots(staging) { [store] in !store.drafting && !store.chatReplying }
+        .onDisappear { staging.clear() }
         .task {
             try? await Task.sleep(for: .milliseconds(40))
             focused = true
@@ -175,11 +165,12 @@ struct NewThreadScreen: View {
         let state = state
         return VStack(alignment: .leading, spacing: 0) {
             editor(state).padding(.horizontal, Spacing.inset).padding(.top, Space.m)
-            if !staging.items.isEmpty { thumbnails.padding(.horizontal, Spacing.inset).padding(.top, Space.s) }
+            if !staging.items.isEmpty {
+                StagedThumbnails(staging: staging).padding(.horizontal, Spacing.inset).padding(.top, Space.s)
+            }
             Divider().padding(.top, Space.m)
             HStack(spacing: Space.m) {
-                Button(action: chooseImages) { Image(systemName: "plus") }
-                    .iconButton(size: .small).disabled(busy).accessibilityLabel("Add screenshots…").help("Add screenshots")
+                AddScreenshotsButton(staging: staging, disabled: busy)
                 Text("Paste or drop screenshots.").role(.caption)
                 if staging.pending > 0 { ProgressView().controlSize(.small) }
                 Spacer(minLength: 8)
@@ -229,24 +220,6 @@ struct NewThreadScreen: View {
         .disabled(busy)
     }
 
-    private var thumbnails: some View {
-        HStack(spacing: Space.s) {
-            ForEach(Array(staging.items.enumerated()), id: \.element.id) { index, item in
-                ZStack(alignment: .topTrailing) {
-                    Group {
-                        if let image = item.thumbnail { Image(nsImage: image).resizable().scaledToFill() } else {
-                            Theme.grey.opacity(0.3)
-                        }
-                    }
-                    .frame(width: 44, height: 44).thumbnail()
-                    Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(Space.xxs)
-                }
-            }
-            Spacer()
-        }
-    }
-
     private var caption: some View {
         NewThreadCaption(canUseText: state.canWriteAsGoal) { Task { await writeAsGoal() } }
     }
@@ -262,7 +235,7 @@ struct NewThreadScreen: View {
 
     /// A `LocalizedStringKey`, so the two names are bold: two string literals joined with `+` would show the asterisks.
     private func send() async {
-        if await store.sendNewThread() { staging.clear() }
+        if await store.sendNewThread(attachments: staging.urls) { staging.clear() }
     }
 
     private func doItNow() async {
@@ -271,26 +244,5 @@ struct NewThreadScreen: View {
 
     private func writeAsGoal() async {
         if await store.quickNewThread(attachments: staging.urls) { staging.clear() }
-    }
-
-    private func chooseImages() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK { Task { await staging.add(files: panel.urls) } }
-    }
-
-    /// ⌘V while the screen is up takes a screenshot off the clipboard; text on the clipboard still goes to the text box.
-    private func watchPaste() {
-        guard pasteMonitor == nil else { return }
-        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [staging, store] event in
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == .command, event.charactersIgnoringModifiers == "v", !store.drafting, !store.chatReplying,
-                AttachmentStaging.wantsImages(.general)
-            else { return event }
-            Task { await staging.add(from: .general) }
-            return nil
-        }
     }
 }

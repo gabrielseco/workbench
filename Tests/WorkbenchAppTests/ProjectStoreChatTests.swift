@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import WorkbenchCore
@@ -47,7 +48,7 @@ private final class Seen: @unchecked Sendable {
     }
 
     private func opened(
-        chat: @escaping GoalActions.Chat = { _, _, _, _ in throw GoalActions.Unset() },
+        chat: @escaping GoalActions.Chat = { _, _, _, _, _ in throw GoalActions.Unset() },
         draftFromChat: @escaping GoalActions.DraftFromChat = { _, _, _ in throw GoalActions.Unset() },
         draftGoal: @escaping GoalActions.DraftGoal = { _, _, _, _, _ in throw GoalActions.Unset() },
         chats: [String] = ["g-2026-11-03-first"]
@@ -70,7 +71,7 @@ private final class Seen: @unchecked Sendable {
         let gate = Gate()
         let seen = Seen()
         let id = first
-        let (store, _) = try await opened(chat: { _, target, message, _ in
+        let (store, _) = try await opened(chat: { _, target, message, _, _ in
             seen.add("\(target)|\(message)")
             await gate.wait()
             return ChatResult(id: id, reply: "Yes.", end: "ok", costUSD: 0.01, provider: .claude)
@@ -90,10 +91,11 @@ private final class Seen: @unchecked Sendable {
     @Test func everyRefusalKeepsTheTextAndShowsCoresOwnWords() async throws {
         let refusals: [ChatRefusal] = [
             .emptyMessage, .messageTooLong, .tooManyTurns, .conversationTooLong, .overBudget, .noGoalAgent, .busy,
+            .tooManyImages, .attachment("a.png is not an image"),
             .ended("accepted"), .running(pid: 7), .doctorRunning, .spend("cap"), .hasGoal("x"),
         ]
         for refusal in refusals {
-            let (store, _) = try await opened(chat: { _, _, _, _ in throw refusal })
+            let (store, _) = try await opened(chat: { _, _, _, _, _ in throw refusal })
             store.chatDraft = "typed words"
             #expect(await store.sendChat() == false)
             #expect(store.chatDraft == "typed words", "\(refusal)")
@@ -111,7 +113,7 @@ private final class Seen: @unchecked Sendable {
         ]
         for ending in endings {
             let (end, failure, said) = (ending.end, ending.failure, ending.said)
-            let (store, _) = try await opened(chat: { _, _, _, _ in Self.ok(id, end: end, failure: failure) })
+            let (store, _) = try await opened(chat: { _, _, _, _, _ in Self.ok(id, end: end, failure: failure) })
             store.chatDraft = "hello"
             #expect(await store.sendChat())
             #expect(store.chatDraft.isEmpty && store.actionError == said, "\(end): \(store.actionError ?? "nil")")
@@ -122,7 +124,7 @@ private final class Seen: @unchecked Sendable {
         let gate = Gate()
         let seen = Seen()
         let id = first
-        let (store, _) = try await opened(chat: { _, _, message, _ in
+        let (store, _) = try await opened(chat: { _, _, message, _, _ in
             seen.add(message)
             await gate.wait()
             return ChatResult(id: id, reply: "Yes.", end: "ok", provider: .claude)
@@ -141,7 +143,7 @@ private final class Seen: @unchecked Sendable {
 
     @Test func whatWasTypedWhileCoreDecidedStaysWhenItRefuses() async throws {
         let gate = Gate()
-        let (store, _) = try await opened(chat: { _, _, _, _ in
+        let (store, _) = try await opened(chat: { _, _, _, _, _ in
             await gate.wait()
             throw ChatRefusal.busy
         })
@@ -157,7 +159,7 @@ private final class Seen: @unchecked Sendable {
     @Test func aNewChatCountsAsReplyingOnceTheWindowIsOnItsThread() async throws {
         let gate = Gate()
         let (store, fixture) = try await opened(
-            chat: { _, _, _, _ in
+            chat: { _, _, _, _, _ in
                 await gate.wait()
                 return ChatResult(id: "g-2026-11-03-new", reply: "Yes.", end: "ok", provider: .claude)
             }, chats: [])
@@ -178,7 +180,7 @@ private final class Seen: @unchecked Sendable {
     @Test func startingAChatNamesItFromItsFirstWordsAndNeverAbandonsAnotherThread() async throws {
         let seen = Seen()
         let id = first
-        let (store, _) = try await opened(chat: { _, target, message, _ in
+        let (store, _) = try await opened(chat: { _, target, message, _, _ in
             seen.add("\(target)|\(message)")
             if case .newThread = target, message.hasPrefix("refuse") { throw ChatRefusal.activeThread(id) }
             return ChatResult(id: id, reply: "Yes.", end: "ok", provider: .claude)
@@ -193,7 +195,7 @@ private final class Seen: @unchecked Sendable {
         let a = first
         let b = second
         let (store, _) = try await opened(
-            chat: { _, _, _, _ in throw ChatRefusal.activeThread(a) }, chats: [a, b])
+            chat: { _, _, _, _, _ in throw ChatRefusal.activeThread(a) }, chats: [a, b])
         await store.select(thread: a)
         #expect(store.currentThread == a)
         #expect(await store.startChat("a new idea") == false)
@@ -208,7 +210,7 @@ private final class Seen: @unchecked Sendable {
         let a = first
         let b = second
         let (store, _) = try await opened(
-            chat: { _, _, _, _ in
+            chat: { _, _, _, _, _ in
                 await gate.wait()
                 return ChatResult(id: a, reply: nil, end: "timeout", failure: "slow", provider: .claude)
             }, chats: [a, b])
@@ -235,7 +237,7 @@ private final class Seen: @unchecked Sendable {
         let id = first
         let gates = [Gate(), Gate()]
         let turn = Seen()
-        let (store, _) = try await opened(chat: { _, _, _, stop in
+        let (store, _) = try await opened(chat: { _, _, _, _, stop in
             turn.add("t")
             let gate = gates[turn.all.count - 1]
             stop.attach { Task { await gate.open() } }
@@ -321,7 +323,7 @@ private final class Seen: @unchecked Sendable {
     @Test func doItNowIsTheAdvancedDraftFromTheWordsAndRunsNoChatTurn() async throws {
         let seen = Seen()
         let (store, _) = try await opened(
-            chat: { _, _, _, _ in
+            chat: { _, _, _, _, _ in
                 seen.add("chat")
                 throw GoalActions.Unset()
             },
@@ -356,7 +358,7 @@ private final class Seen: @unchecked Sendable {
         try "[agents.goal\n".write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
         let stop = DraftStop()
         for call in [
-            { _ = try await GoalActions.core.chat(fixture.project, .existing(id: first), "hi", stop) },
+            { _ = try await GoalActions.core.chat(fixture.project, .existing(id: first), "hi", [], stop) },
             { _ = try await GoalActions.core.draftFromChat(fixture.project, first, stop) },
         ] as [() async throws -> Void] {
             do {
@@ -368,7 +370,7 @@ private final class Seen: @unchecked Sendable {
         }
         try FileManager.default.removeItem(at: fixture.project.configURL)
         await #expect(throws: ChatRefusal.noGoalAgent) {
-            _ = try await GoalActions.core.chat(fixture.project, .existing(id: first), "hi", stop)
+            _ = try await GoalActions.core.chat(fixture.project, .existing(id: first), "hi", [], stop)
         }
         await #expect(throws: GoalDraftRefusal.noGoalAgent) {
             _ = try await GoalActions.core.draftFromChat(fixture.project, first, stop)
@@ -376,4 +378,58 @@ private final class Seen: @unchecked Sendable {
     }
 
     private enum Failure: Error { case notAThread }
+}
+
+/// Screenshots sent with a chat message.
+extension ProjectStoreChatTests {
+    private func stagedPicture(_ store: ProjectStore) async throws -> URL {
+        let image = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+            NSColor.systemBlue.setFill()
+            rect.fill()
+            return true
+        }
+        let tiff = try #require(image.tiffRepresentation)
+        let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("chat-shot-\(UUID().uuidString).png")
+        try png.write(to: file)
+        await store.chatStaging.add(files: [file])
+        return try #require(store.chatStaging.urls.first)
+    }
+
+    @Test func stagedScreenshotsGoWithTheMessageAndLeaveWhenItStarts() async throws {
+        let seen = Seen()
+        let id = first
+        let (store, _) = try await opened(chat: { _, _, message, attachments, _ in
+            seen.add("\(message)|\(attachments.map { FileManager.default.fileExists(atPath: $0.path) })")
+            return ChatResult(id: id, reply: "Yes.", end: "ok", provider: .claude)
+        })
+        _ = try await stagedPicture(store)
+        store.chatDraft = "what is this?"
+        #expect(await store.sendChat())
+        #expect(seen.all == ["what is this?|[true]"], "the file was there when core was asked")
+        #expect(store.chatStaging.items.isEmpty, "and is cleared once the turn started")
+    }
+
+    @Test func refusalKeepsScreenshots() async throws {
+        let (store, _) = try await opened(chat: { _, _, _, _, _ in throw ChatRefusal.tooManyImages })
+        let staged = try await stagedPicture(store)
+        store.chatDraft = "one more picture"
+        #expect(await store.sendChat() == false)
+        #expect(store.chatDraft == "one more picture", "the text came back")
+        #expect(store.chatStaging.urls == [staged], "and so did the screenshot")
+        #expect(FileManager.default.fileExists(atPath: staged.path))
+        #expect(store.actionError == "\(ChatRefusal.tooManyImages)")
+        store.chatStaging.clear()
+    }
+
+    @Test func aNewChatTakesTheScreenshotsToo() async throws {
+        let seen = Seen()
+        let id = first
+        let (store, _) = try await opened(chat: { _, target, _, attachments, _ in
+            seen.add("\(target)|\(attachments.count)")
+            return ChatResult(id: id, reply: "Yes.", end: "ok", provider: .claude)
+        }, chats: [])
+        #expect(await store.startChat("Could uploads retry?", attachments: [URL(fileURLWithPath: "/tmp/a.png")]))
+        #expect(seen.all.count == 1 && seen.all[0].hasSuffix("|1"), "\(seen.all)")
+    }
 }

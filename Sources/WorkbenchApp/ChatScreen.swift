@@ -14,8 +14,11 @@ struct ChatComposerState: Equatable {
     var hasExchange = false
     /// The chat was ended (abandoned or discarded): it takes nothing more.
     var ended = false
+    /// Staged screenshots still being read: Send waits for them, so none that was just added is left out.
+    var pending = 0
 
-    init(snapshot: ThreadSnapshot, replying: Bool, drafting: Bool, text: String) {
+    init(snapshot: ThreadSnapshot, replying: Bool, drafting: Bool, text: String, pending: Int = 0) {
+        self.pending = pending
         let chat = snapshot.state.chat
         self.text = text
         self.replying = replying || chat?.open == true
@@ -27,7 +30,7 @@ struct ChatComposerState: Equatable {
     var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var busy: Bool { replying || drafting }
     var canType: Bool { !ended && !busy }
-    var canSend: Bool { !ended && !busy && !isBlank }
+    var canSend: Bool { !ended && !busy && !isBlank && pending == 0 }
     var canMakeGoal: Bool { !ended && !busy && hasExchange }
 
     /// One line of text high, growing a line at a time to six: the text box is not left to take what it is given.
@@ -70,7 +73,7 @@ extension ChatMessage {
     /// Who said it, for VoiceOver: the bubbles and the avatar carry no label on screen.
     var speaker: String { role == .user ? "You" : "Goal agent" }
     /// What VoiceOver reads for the message: the speaker, then the words.
-    var spoken: String { "\(speaker): \(text)" }
+    var spoken: String { "\(speaker): \(text)" + (images.isEmpty ? "" : " (with \(images.count) screenshot(s))") }
 }
 
 /// One message as the artboard draws it: the person's in a bubble on the right with no label, the agent's as plain text beside a small
@@ -82,9 +85,18 @@ struct ChatMessageRow: View {
         if message.role == .user {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
-                    .background(
+                VStack(alignment: .trailing, spacing: Space.xs) {
+                    Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    if !message.images.isEmpty {
+                        Label(
+                            message.images.count == 1 ? "1 screenshot" : "\(message.images.count) screenshots",
+                            systemImage: "photo"
+                        )
+                        .textStyle(.caption, .secondary)
+                    }
+                }
+                .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
+                .background(
                         Theme.raised,
                         in: UnevenRoundedRectangle(
                             topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 4, topTrailingRadius: 14))
@@ -143,8 +155,11 @@ struct ChatComposer: View {
 
     private var state: ChatComposerState {
         ChatComposerState(
-            snapshot: snapshot, replying: store.replyingHere, drafting: store.drafting, text: store.chatDraft)
+            snapshot: snapshot, replying: store.replyingHere, drafting: store.drafting, text: store.chatDraft,
+            pending: staging.pending)
     }
+
+    private var staging: AttachmentStaging { store.chatStaging }
 
     var body: some View {
         let state = state
@@ -152,6 +167,9 @@ struct ChatComposer: View {
             if let said = store.actionError {
                 // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
                 MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: said)
+            }
+            if let problem = staging.problem {
+                MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: problem)
             }
             MessageRows(error: nil, note: store.actionNote, notice: store.notice, handoff: nil)
             if state.ended {
@@ -163,13 +181,23 @@ struct ChatComposer: View {
         }
         .frame(maxWidth: FeedLayout.maxColumn)
         .padding(.horizontal, Spacing.gutter).padding(.top, Space.m).padding(.bottom, Space.l).frame(maxWidth: .infinity)
+        .screenshotDrop(staging, allowed: state.canType)
+        .pastesScreenshots(staging) { [store] in
+            if case .thread = store.screen { return !store.replyingHere && !store.drafting }
+            return false
+        }
     }
 
     /// The composer: a rounded panel with the text box and a square arrow-up button inside it, as the artboard draws it.
     private func panel(_ state: ChatComposerState) -> some View {
-        HStack(alignment: .bottom, spacing: Space.m) {
-            editor(state)
-            ComposerSendButton(enabled: state.canSend) { send() }
+        VStack(alignment: .leading, spacing: Space.s) {
+            if !staging.items.isEmpty { StagedThumbnails(staging: staging) }
+            HStack(alignment: .bottom, spacing: Space.m) {
+                AddScreenshotsButton(staging: staging, disabled: !state.canType)
+                editor(state)
+                if staging.pending > 0 { ProgressView().controlSize(.small) }
+                ComposerSendButton(enabled: state.canSend) { send() }
+            }
         }
         .padding(.leading, Space.l).padding([.vertical, .trailing], Space.s).frame(minHeight: 46)
         .card()

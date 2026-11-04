@@ -37,6 +37,18 @@ import WorkbenchCore
 
     // MARK: The composer
 
+    @Test func sendWaitsForAScreenshotStillBeingRead() async throws {
+        let chat = try await snapshot(.chat)
+        #expect(state(chat).canSend)
+        #expect(ChatComposerState(snapshot: chat, replying: false, drafting: false, text: "hi", pending: 1).canSend == false)
+    }
+
+    @Test func aMessageWithScreenshotsSaysSoToVoiceOver() {
+        let plain = ChatMessage(role: .user, text: "hello", seq: 1)
+        let shown = ChatMessage(role: .user, text: "hello", seq: 2, images: ["1.png", "2.png"])
+        #expect(plain.spoken == "You: hello" && shown.spoken == "You: hello (with 2 screenshot(s))")
+    }
+
     @Test func sendNeedsTextAndNoTurnAndNoDraft() async throws {
         let chat = try await snapshot(.chat)
         #expect(state(chat).canSend)
@@ -98,7 +110,7 @@ import WorkbenchCore
                 seen.add("draft \(name)")
                 return GoalDraftResult(id: "g-\(name)", provider: .claude)
             },
-            chat: { _, target, message, _ in
+            chat: { _, target, message, _, _ in
                 seen.add("chat \(target)|\(message)")
                 return ChatResult(id: "g-2026-11-03-x", reply: "ok", end: "ok", provider: .claude)
             })

@@ -29,7 +29,7 @@ import WorkbenchCore
                 if let refuse { throw refuse }
                 return GoalDraftResult(id: "g-\(name)", provider: .claude)
             },
-            chat: { _, target, message, _ in
+            chat: { _, target, message, _, _ in
                 seen.add("chat \(target)|\(message)")
                 if let refuse { throw refuse }
                 return ChatResult(id: "g-2026-11-03-x", reply: "ok", end: "ok", provider: .claude)
@@ -46,12 +46,21 @@ import WorkbenchCore
 
     // MARK: Rules
 
-    @Test func sendNeedsTextNoScreenshotsAndNothingGoing() {
+    @Test func sendAllowsScreenshots() {
+        var state = NewThreadState(text: "what is this?")
+        state.screenshots = 3
+        #expect(state.canSend, "Discuss first is enabled with screenshots staged")
+        #expect(!state.sendHelp.contains("no screenshots"), "\(state.sendHelp)")
+        #expect(!NewThreadState(text: "", screenshots: 3).canSend, "text is still needed")
+        state.pending = 1
+        #expect(!state.canSend, "an image still being read is not left out")
+    }
+
+    @Test func sendNeedsTextAndNothingGoing() {
         var state = NewThreadState(text: "Fix the header")
         #expect(state.canSend && state.canDoItNow && state.canWriteAsGoal)
         state.screenshots = 1
-        #expect(!state.canSend && state.canDoItNow, "a chat takes no screenshots; Do it now does")
-        #expect(state.sendHelp == "A chat takes no screenshots: use Draft the goal.")
+        #expect(state.canSend && state.canDoItNow, "a chat takes screenshots as a draft does")
         state.screenshots = 0
         state.pending = 1
         #expect(!state.canSend && !state.canDoItNow, "an image still being read is not left out")
