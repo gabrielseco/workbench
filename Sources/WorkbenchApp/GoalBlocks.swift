@@ -28,7 +28,7 @@ struct GoalBlocks: View {
     private func edit(_ make: @escaping @MainActor (GoalModel) -> GoalEdit?) { Task { await store.editGoal(make) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style == .feed ? 18 : 26) {
+        VStack(alignment: .leading, spacing: style == .feed ? Space.xl : Space.xxl) {
             if !goal.blockers.isEmpty { blockers }
             if goal.placeholdersRemain {
                 Label("Replace every TODO(workbench), then approve.", systemImage: "pencil")

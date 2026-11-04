@@ -121,7 +121,7 @@ struct DoctorButton: View {
         Button {
             Task { await store.runDoctor() }
         } label: {
-            HStack(spacing: compact ? 6 : nil) {
+            HStack(spacing: compact ? Space.s : nil) {
                 Text("Doctor")
                 if !compact { Spacer() }
                 switch store.doctor {
@@ -132,7 +132,7 @@ struct DoctorButton: View {
                 case .problem: Text("Problem").foregroundStyle(Theme.red)
                 }
             }
-            .padding(compact ? 0 : 8)
+            .padding(compact ? Space.none : Space.s)
             .callout(.outlined, enabled: !compact)
         }
         .buttonStyle(.plain)
