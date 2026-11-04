@@ -18,7 +18,7 @@ import Testing
 
     @Test func aTintedNoteFillsItsBoxAtOneLowStrength() throws {
         let inside = try #require(alpha(.tinted(.red), x: 30, y: 30))
-        #expect(inside > 0.04 && inside < 0.14, "a wash, not a block: \(inside)")
+        #expect(inside > 0.06 && inside < 0.09, "the one strength, 0.08: \(inside)")
         #expect(try #require(alpha(.tinted(.red), x: 0, y: 0)) < 0.05, "the corner is rounded off")
     }
 
