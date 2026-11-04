@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkbenchCore
 
-/// The turn's work, as core reports it, and the three decisions. Nothing on this screen marks a criterion as met.
+/// The turn's work, as core reports it. Nothing on this screen marks a criterion as met.
 struct ReviewView: View {
     var review: ReviewModel
     var finishedAt: Date?
@@ -137,32 +137,12 @@ struct ReviewView: View {
         }
     }
 
-    private var actions: some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            HStack {
-                Button("Discard…") { Task { await store.prepareDiscard() } }.disabled(store.busy != nil)
-                Button("Open worktree") { Task { await store.openWorktree() } }.disabled(store.busy != nil)
-                if store.herdrFound {
-                    Button("Open in Herdr") { Task { await store.openInHerdr() } }.disabled(store.busy != nil)
-                        .help("Herdr opens this worktree as a workspace and brings it forward")
-                }
-                Button("Open diff") { Task { await store.openDiff() } }.disabled(store.busy != nil || review.files.isEmpty)
-                    .help("Each changed file against the base, in your editor")
-                Button("Refresh") { Task { await store.refreshReview() } }
-                    .help("Read the worktree again after editing it")
-                Spacer()
-                Button("Send back…") { (store.actionError, store.sendingBack) = (nil, true) }.disabled(store.busy != nil)
-                Button("Accept work") { Task { await store.accept() } }
-                    .primaryButton()
-                    .disabled(!review.canDecide || store.deciding || store.busy != nil)
-            }
-            if review.undecided > 0 {
-                let verb = review.undecided == 1 ? "criterion is" : "criteria are"
-                Text("\(review.undecided) \(verb) for you to check. Accept does not wait.")
-                    .role(.caption)
-            }
-            if let error = store.actionError { Text(error).role(.error) }
-            if let note = store.actionNote { Text(note).role(.caption) }
+    /// Only what the decision card cannot say. Its buttons (Accept, Send back, Discard, Open diff, worktree, Refresh) live on the card and its menu.
+    @ViewBuilder private var actions: some View {
+        if review.undecided > 0 {
+            let verb = review.undecided == 1 ? "criterion is" : "criteria are"
+            Text("\(review.undecided) \(verb) for you to check. Accept does not wait.")
+                .role(.caption)
         }
     }
 

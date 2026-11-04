@@ -114,6 +114,7 @@ import Testing
         #expect(kinds(decision.more).prefix(3) == [.reviewDetails, .sendBack, .discard])
         #expect(decision.secondary?.kind == .openDiff, "what changed is one plain button beside Accept, not in the menu")
         #expect(!kinds(decision.more).contains(.openDiff))
+        #expect(decision.title == "Accept the work", "under NEXT the heading is the press, not the step's name")
         #expect(decision.more.first { $0.kind == .discard }?.destructive == true)
         let open = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = false }
         #expect(open.primary?.enabled == false, "criteria are still open")
