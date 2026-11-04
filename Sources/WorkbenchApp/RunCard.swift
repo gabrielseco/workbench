@@ -131,9 +131,7 @@ struct RunCardView: View {
             }
             if let stop = model.stop { footer(stop, diff: model.diff) }
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .card(clips: true)
         .accessibilityElement(children: .contain)
     }
 

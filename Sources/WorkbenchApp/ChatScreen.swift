@@ -175,8 +175,7 @@ struct ChatComposer: View {
             ComposerSendButton(enabled: state.canSend) { send() }
         }
         .padding(.leading, 14).padding([.vertical, .trailing], 8).frame(minHeight: 46)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        .card()
     }
 
     /// Under the panel: what a chat is, and the one prominent button.

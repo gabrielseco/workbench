@@ -24,8 +24,7 @@ extension View {
     func overlayCard() -> some View {
         padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 22)
             .frame(width: 600)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.1)))
+            .card(.overlay)
             .shadow(color: .black.opacity(0.35), radius: 32, y: 14)
     }
 }
