@@ -44,7 +44,7 @@ struct FeedScreen: View {
             if case .plan(let list) = entry.kind, entry.turn == item.turn { list.count } else { nil }
         }.first
         let totals = store.review.map(\.totals).flatMap { $0.isEmpty ? nil : $0 }
-        return FinishContext(tasks: tasks, totals: totals, viewDiff: { reviewingDetails = true })
+        return FinishContext(tasks: tasks, totals: totals)
     }
 
     private func shots(for item: FeedItem) -> [ProofShot] {

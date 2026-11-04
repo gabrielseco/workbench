@@ -104,7 +104,7 @@ enum FeedActions {
                 enabled: !c.busy && c.reviewHasFiles)
             worktree()
             more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
-            return FeedDecision(primary: accept, secondary: diff, more: more)
+            return FeedDecision(primary: accept, secondary: diff, more: more, title: "Accept the work")
         }
         if let run = s.run {
             worktree()
