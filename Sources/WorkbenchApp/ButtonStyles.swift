@@ -22,12 +22,16 @@ struct PlainButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     /// Fills the width and puts the label at the left, as the panel's Open buttons do.
     var fill = false
+    /// Beside a primary button: the same height, padding and type size, so the two read as a pair.
+    var pairedWithPrimary = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .medium))
+            .font(.system(size: pairedWithPrimary ? 13 : 12.5, weight: .medium))
             .foregroundStyle(.primary)
-            .padding(.horizontal, 12).frame(maxWidth: fill ? .infinity : nil, minHeight: 30, alignment: fill ? .leading : .center)
+            .padding(.horizontal, pairedWithPrimary ? 16 : 12)
+            .frame(
+                maxWidth: fill ? .infinity : nil, minHeight: pairedWithPrimary ? 34 : 30, alignment: fill ? .leading : .center)
             .background(Theme.raised.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
             .opacity(enabled ? 1 : 0.5)
@@ -40,7 +44,9 @@ extension View {
     func primaryButton() -> some View { buttonStyle(PrimaryButtonStyle()) }
 
     /// Any other button that is a button (not an icon or a link).
-    func plainButton(fill: Bool = false) -> some View { buttonStyle(PlainButtonStyle(fill: fill)) }
+    func plainButton(fill: Bool = false, pairedWithPrimary: Bool = false) -> some View {
+        buttonStyle(PlainButtonStyle(fill: fill, pairedWithPrimary: pairedWithPrimary))
+    }
 
     /// A native switch in the artboards' neutral inverse instead of the person's system accent, which collides with the state colours.
     func switchTint() -> some View { tint(Theme.inv) }
