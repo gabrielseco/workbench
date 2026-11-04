@@ -70,7 +70,7 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 **UI components** (`AGENTS.md`, Conventions; `docs/UI-AUDIT.md`)
 - A new or changed view that writes out a card, callout, pill, label, row or button look that already exists as a component (or as the
   same recipe in two other views) is a finding: name the component to use, or the one to extract. A variant is a prop or a case.
-- `scripts/ui-literals.baseline` goes down in a PR that removes literals and never up.
+- `scripts/check-ui-tokens.sh` passes without an exception: a PR that adds a file to its `COMPONENTS` list is adding a component, and says which.
 - Text: a font is a `TextStyle` step and a colour a `TextTone` (or a `TextRole`); a `.font(` in a view, or an invented size or weight, is a finding. Spacing and radii likewise come from a component or a token.
 
 **Docs**

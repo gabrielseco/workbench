@@ -19,9 +19,8 @@ step() {
 
 step 'Banned process APIs' scripts/check-banned-apis.sh
 step 'Banned APIs check' scripts/test-banned-apis.sh
-step 'UI literals' scripts/check-ui-literals.sh
-if git rev-parse --verify -q origin/main >/dev/null; then step 'UI-literals baseline' scripts/check-ui-literals.sh --against origin/main; fi
-step 'UI literals check' scripts/test-ui-literals.sh
+step 'UI tokens' scripts/check-ui-tokens.sh
+step 'UI tokens check' scripts/test-ui-tokens.sh
 if ! command -v swiftlint >/dev/null 2>&1; then
     echo "error: SwiftLint is missing (brew install swiftlint)" >&2
     exit 1

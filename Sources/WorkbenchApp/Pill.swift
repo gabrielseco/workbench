@@ -1,19 +1,41 @@
 import SwiftUI
 
-/// How a pill is filled: a wash of its tone, or a raised panel with a hairline.
+/// How a pill is filled: a wash of its tone, a raised panel with a hairline, or a grey control that answers the pointer.
 enum PillStyle {
     case tinted
     case outlined
+    /// A button shaped as a pill: grey, a step darker under the pointer and darker again while what it opens is open.
+    case control(hovered: Bool, selected: Bool)
 }
 
 /// A pill's measurements: `small` sits in a row of text or a header, `regular` stands in a toolbar.
 enum PillSize {
     case small
     case regular
+    case large
 
-    var style: TextStyle { self == .small ? .captionMedium : .callout }
-    var horizontalPadding: CGFloat { self == .small ? 8 : 10 }
-    var verticalPadding: CGFloat { self == .small ? 2 : 3 }
+    var style: TextStyle {
+        switch self {
+        case .small: .captionMedium
+        case .regular: .callout
+        case .large: .body
+        }
+    }
+    var horizontalPadding: CGFloat {
+        switch self {
+        case .small: Space.s
+        case .regular: Space.m
+        case .large: Space.m
+        }
+    }
+
+    var verticalPadding: CGFloat {
+        switch self {
+        case .small: Space.xxs
+        case .regular: Space.xs
+        case .large: Space.xs
+        }
+    }
 }
 
 extension View {
@@ -33,6 +55,8 @@ private struct PillFill: ViewModifier {
         switch style {
         case .tinted: content.foregroundStyle(tone).background(tone.opacity(0.12), in: Capsule())
         case .outlined: content.background(Theme.panel, in: Capsule()).overlay(Capsule().stroke(Theme.line))
+        case .control(let hovered, let selected):
+            content.background(Theme.grey.opacity(selected ? 0.2 : hovered ? 0.14 : 0.08), in: Capsule()).contentShape(Capsule())
         }
     }
 }
