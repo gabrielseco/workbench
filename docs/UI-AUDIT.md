@@ -77,7 +77,10 @@ The chat's user bubble (`ChatMessageRow`: raised fill, uneven corners, 14/4) and
 `.quaternary` well, radius 10) look alike in a list of rows but are two designs for two situations, and the agent's text is not a bubble at
 all. Merging them would change a design, not remove a copy.
 
-### 8. Surfaces at radius 6 and 7 that are really buttons or thumbnails
+### 8. Surfaces at radius 6 and 7 that are really buttons or thumbnails (done: `ButtonKind.icon`, `.thumbnail()`)
+
+The three icon buttons (composer Send 30, composer "+" 26, rail "+" 24) are `.iconButton(size:)`, a kind of `WorkbenchButtonStyle`; the two thumbnails are `.thumbnail(outlined:)`; `Radius.control` (7) and `Radius.thumbnail` (6) name the numbers.
+
 
 `ChatScreen.swift:133`, `NewThreadScreen.swift:183`, `PreviewRail.swift:21`: a raised, stroked rounded rect around a label or icon (radius 7 is
 `WorkbenchButtonStyle`'s radius). They are almost certainly icon buttons: a `ButtonKind.icon` (or `.plain` at `.small`) instead.

@@ -6,6 +6,8 @@ enum ButtonKind {
     case primary
     /// Anything else that is a button: a raised, bordered button.
     case plain
+    /// A symbol alone in a raised, bordered square: the size's height is its side.
+    case icon
 }
 
 /// A button's measurements. Two buttons side by side are the same size by passing the same `ButtonSize`.
@@ -30,17 +32,18 @@ struct WorkbenchButtonStyle: ButtonStyle {
     /// Fills the width and puts the label at the left, as the panel's Open buttons do.
     var fill = false
 
-    private static let radius: CGFloat = 7
-
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Self.radius)
+        let shape = RoundedRectangle(cornerRadius: Radius.control)
         configuration.label
-            .font(.system(size: size.fontSize, weight: kind == .primary ? .semibold : .medium))
+            .font(.system(size: size.fontSize, weight: kind == .primary ? .semibold : (kind == .icon ? .semibold : .medium)))
             .foregroundStyle(kind == .primary ? AnyShapeStyle(Theme.invfg) : AnyShapeStyle(.primary))
-            .padding(.horizontal, size.horizontalPadding)
-            .frame(maxWidth: fill ? .infinity : nil, minHeight: size.minHeight, alignment: fill ? .leading : .center)
+            .padding(.horizontal, kind == .icon ? 0 : size.horizontalPadding)
+            .frame(width: kind == .icon ? size.minHeight : nil, height: kind == .icon ? size.minHeight : nil)
+            .frame(
+                maxWidth: fill ? .infinity : nil, minHeight: kind == .icon ? nil : size.minHeight,
+                alignment: fill ? .leading : .center)
             .background { background(configuration, shape) }
-            .overlay { if kind == .plain { shape.stroke(Theme.line) } }
+            .overlay { if kind != .primary { shape.stroke(Theme.line) } }
             .opacity(enabled ? 1 : (kind == .primary ? 0.4 : 0.5))
             .contentShape(shape)
     }
@@ -50,7 +53,7 @@ struct WorkbenchButtonStyle: ButtonStyle {
         case .primary:
             // Pressed is darker in both appearances (a lower opacity would fade toward the canvas, lighter on the light one).
             shape.fill(Theme.inv).brightness(configuration.isPressed ? -0.2 : 0)
-        case .plain:
+        case .plain, .icon:
             shape.fill(Theme.raised.opacity(configuration.isPressed ? 0.7 : 1))
         }
     }
@@ -65,6 +68,11 @@ extension View {
     /// Any other button that is a button (not an icon or a link).
     func plainButton(fill: Bool = false, size: ButtonSize = .compact) -> some View {
         buttonStyle(WorkbenchButtonStyle(kind: .plain, size: size, fill: fill))
+    }
+
+    /// A symbol-only button: a raised square, `size` its side (a composer's Send, a "+" beside a title).
+    func iconButton(size: ButtonSize = .compact) -> some View {
+        buttonStyle(WorkbenchButtonStyle(kind: .icon, size: size))
     }
 
     /// A native switch in the artboards' neutral inverse instead of the person's system accent, which collides with the state colours.

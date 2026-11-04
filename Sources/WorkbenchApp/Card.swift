@@ -4,6 +4,10 @@ import SwiftUI
 enum Radius {
     /// A box inside a screen: a callout, an outlined control.
     static let box: CGFloat = 8
+    /// A control: a button, an icon button.
+    static let control: CGFloat = 7
+    /// A picture cut to a rounded rectangle.
+    static let thumbnail: CGFloat = 6
     static let card: CGFloat = 12
     static let popover: CGFloat = 14
     static let overlay: CGFloat = 18

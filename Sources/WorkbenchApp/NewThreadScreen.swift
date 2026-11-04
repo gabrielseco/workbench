@@ -178,11 +178,8 @@ struct NewThreadScreen: View {
             if !staging.items.isEmpty { thumbnails.padding(.horizontal, 14).padding(.top, 8) }
             Divider().padding(.top, 10)
             HStack(spacing: 10) {
-                Button(action: chooseImages) {
-                    Image(systemName: "plus").frame(width: 26, height: 26)
-                        .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7))
-                }
-                .buttonStyle(.plain).disabled(busy).accessibilityLabel("Add screenshots…").help("Add screenshots")
+                Button(action: chooseImages) { Image(systemName: "plus") }
+                    .iconButton(size: .small).disabled(busy).accessibilityLabel("Add screenshots…").help("Add screenshots")
                 Text("Paste or drop screenshots.").font(.caption).foregroundStyle(.secondary)
                 if staging.pending > 0 { ProgressView().controlSize(.small) }
                 Spacer(minLength: 8)
@@ -241,7 +238,7 @@ struct NewThreadScreen: View {
                             Theme.grey.opacity(0.3)
                         }
                     }
-                    .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 6))
+                    .frame(width: 44, height: 44).thumbnail()
                     Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(2)
                 }

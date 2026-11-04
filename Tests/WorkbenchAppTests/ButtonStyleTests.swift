@@ -24,6 +24,13 @@ import Testing
         #expect(ButtonSize.regular.minHeight > ButtonSize.compact.minHeight)
     }
 
+    @Test func anIconButtonIsTheIconKindInTheSizeItIsGiven() {
+        let icon = String(describing: Button("x") {}.iconButton())
+        let small = String(describing: Button("x") {}.iconButton(size: .small))
+        #expect(icon.contains("kind: WorkbenchApp.ButtonKind.icon") && icon.contains("size: WorkbenchApp.ButtonSize.compact"))
+        #expect(small.contains("size: WorkbenchApp.ButtonSize.small"))
+    }
+
     // MARK: Chips
 
     @Test func chipsFlowLeftToRightAndWrapWhenTheWidthRunsOut() {
