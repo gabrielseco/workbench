@@ -75,6 +75,7 @@ extension ProjectStore {
         case .refreshReview: await refreshReview()
         case .showFindings: await showPRReview()
         case .refreshCI: await refreshPullRequestCI()
+        case .openPR: openPullRequest()
         case .reviewDetails: break
         }
     }

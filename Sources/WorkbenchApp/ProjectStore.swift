@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import WorkbenchCore
@@ -47,6 +48,8 @@ struct RecentProject: Equatable, Identifiable {
     fileprivate(set) var current: ThreadSession
     /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
     fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
+    /// Opens an address in the browser; a test replaces it so none opens.
+    @ObservationIgnored var openExternal: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 

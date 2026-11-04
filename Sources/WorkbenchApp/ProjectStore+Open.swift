@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import WorkbenchCore
 
 extension ProjectStore {
@@ -19,5 +20,13 @@ extension ProjectStore {
         let session = current
         session.actionError = nil
         do { try await actions.openGoal(project, thread) } catch { session.actionError = "\(error)" }
+    }
+
+    /// The thread's pull request in the browser. Only an http(s) address is opened: the URL came out of the event log.
+    func openPullRequest() {
+        guard case .thread(let snapshot) = screen, let text = snapshot.state.pullRequest?.url,
+            let url = URL(string: text), ["https", "http"].contains(url.scheme?.lowercased())
+        else { return }
+        openExternal(url)
     }
 }

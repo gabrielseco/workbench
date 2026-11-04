@@ -55,7 +55,7 @@ struct FeedRow: View {
         case .pullRequest(let number, let url):
             FeedLine(
                 symbol: "arrow.up.right.circle.fill", tint: Theme.green,
-                title: number.map { "Shipped as PR #\($0)" } ?? "Shipped", detail: url, inline: true)
+                title: number.map { "Shipped as PR #\($0)" } ?? "Shipped", detail: url, inline: true, link: true)
         case .prReview(let round, let verdict, let ok): PRReviewRow(round: round, verdict: verdict, ok: ok)
         case .next(let step, let why): NextCard(step: step, why: why)
         case .notice(let notice): NoticeRow(notice: notice)
@@ -72,6 +72,8 @@ struct FeedLine: View {
     var mono = false
     /// The detail follows the title on one line (a file, a command) instead of sitting under it (a sentence of explanation).
     var inline = false
+    /// The detail is an address: a click opens it instead of only selecting it.
+    var link = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -90,7 +92,14 @@ struct FeedLine: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func detailText(_ detail: String) -> some View {
+    @ViewBuilder private func detailText(_ detail: String) -> some View {
+        if link, let url = URL(string: detail), ["https", "http"].contains(url.scheme?.lowercased()) {
+            Link(destination: url) { Text(detail).font(.callout).foregroundStyle(Theme.blue).truncationMode(.middle) }
+                .help("Opens it in your browser")
+        } else { plainDetail(detail) }
+    }
+
+    private func plainDetail(_ detail: String) -> some View {
         Text(detail).font(mono ? .system(.callout, design: .monospaced) : .callout).foregroundStyle(.secondary)
             .truncationMode(.middle).textSelection(.enabled)
     }
