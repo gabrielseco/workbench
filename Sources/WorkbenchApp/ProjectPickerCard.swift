@@ -43,8 +43,7 @@ struct ProjectPickerCard: View {
         }
         .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 14)
         .frame(width: 420)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.1)))
+        .card(.popover)
         .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
         .onExitCommand(perform: close)
         .onAppear {
