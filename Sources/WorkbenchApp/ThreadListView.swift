@@ -31,7 +31,7 @@ struct ThreadListView: View {
             }
             if older > 0 {
                 Text(older == 1 ? "1 older thread" : "\(older) older threads")
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.top, 4)
+                    .role(.caption).padding(.horizontal, 8).padding(.top, 4)
                     .help("The log and the workbench command still reach them")
             }
         }

@@ -112,14 +112,14 @@ struct DraftGoalCardView: View {
                 SectionLabel("DRAFT GOAL")
                 Text(header.pill).pill(tint)
                 Spacer(minLength: 8)
-                if let hint = header.hint { Text(hint).font(.caption).foregroundStyle(.secondary) }
+                if let hint = header.hint { Text(hint).role(.caption) }
             }
             .padding(.horizontal, Spacing.inset).padding(.vertical, 10)
             Divider()
             GoalBlocks(goal: goal, store: store, editable: true, style: .feed, showsError: true).padding(Spacing.inset)
             Divider()
             HStack(spacing: 12) {
-                Text(DraftGoalCard.footer(goal: goal, base: base)).font(.caption).foregroundStyle(.secondary)
+                Text(DraftGoalCard.footer(goal: goal, base: base)).role(.caption)
                 Spacer(minLength: 8)
                 DecisionActions(decision: decision, perform: perform)
             }

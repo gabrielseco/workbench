@@ -38,7 +38,7 @@ struct MenuBarPopover: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let note = model.deniedNote {
-                Label(note, systemImage: "bell.slash").font(.caption).foregroundStyle(.secondary)
+                Label(note, systemImage: "bell.slash").textRole(.caption)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Divider()
@@ -80,18 +80,18 @@ struct MenuBarPopover: View {
             .frame(maxHeight: 380).fixedSize(horizontal: false, vertical: true)
         case .noProject:
             Text("No project open").font(.headline)
-            Text("Open Workbench and choose a project.").font(.callout).foregroundStyle(.secondary)
+            Text("Open Workbench and choose a project.").role(.detail)
         case .opening(let name):
             Text("Opening \(name)…").font(.headline)
         case .broken(let why):
-            Label(why, systemImage: "xmark.octagon.fill").font(.callout).foregroundStyle(Theme.red)
+            Label(why, systemImage: "xmark.octagon.fill").textRole(.error)
                 .fixedSize(horizontal: false, vertical: true)
         case .working(let title):
             Text("Nothing needs you").font(.headline)
             Text("Working: \(title)").font(.callout).foregroundStyle(Theme.blue).lineLimit(2)
         case .nothing(let state):
             Text("Nothing needs you").font(.headline)
-            if !state.isEmpty { Text(state).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
+            if !state.isEmpty { Text(state).role(.detail).lineLimit(2) }
         }
     }
 
@@ -133,7 +133,7 @@ private struct RowCard: View {
                     .foregroundStyle(Theme.color(for: tone))
                 Text(row.item.title).font(.headline).lineLimit(1).truncationMode(.middle)
             }
-            Text(row.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+            Text(row.detail).role(.caption).lineLimit(3)
             if let criteria = row.criteria {
                 Text(criteria).font(.caption.weight(.semibold)).padding(.top, 2)
             }

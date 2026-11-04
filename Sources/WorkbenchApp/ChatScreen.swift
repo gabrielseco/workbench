@@ -55,7 +55,7 @@ struct ChatRows: View {
         let messages = snapshot.state.chat?.messages ?? []
         if messages.isEmpty {
             Text("Say what you are thinking about. Nothing runs and nothing is written to the repository.")
-                .font(.callout).foregroundStyle(.secondary)
+                .role(.detail)
         }
         // What the log says about itself (a damaged line, a cut tail) is part of the conversation too.
         ForEach(snapshot.feed.filter(\.isNotice)) { FeedRow(item: $0) }
@@ -155,7 +155,7 @@ struct ChatComposer: View {
             }
             MessageRows(error: nil, note: store.actionNote, notice: store.notice, handoff: nil)
             if state.ended {
-                Text("This chat has ended.").font(.callout).foregroundStyle(.secondary)
+                Text("This chat has ended.").role(.detail)
             } else {
                 panel(state)
                 footer(state)
@@ -179,7 +179,7 @@ struct ChatComposer: View {
     private func footer(_ state: ChatComposerState) -> some View {
         HStack(spacing: 10) {
             Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
-            Text("Chat only. No worktree, no run, no cost.").font(.caption).foregroundStyle(.secondary)
+            Text("Chat only. No worktree, no run, no cost.").role(.caption)
             Spacer(minLength: 12)
             if store.drafting {
                 ProgressView().controlSize(.small)

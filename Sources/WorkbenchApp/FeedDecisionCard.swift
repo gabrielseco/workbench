@@ -36,7 +36,7 @@ struct DecisionCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Ready to ship").font(.headline)
                 Text([route, "PR review comes back to this chat"].compactMap { $0 }.joined(separator: " · "))
-                    .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .role(.mono).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 12)
             MoreActionsMenu(actions: Self.shipMenu(decision), perform: perform)
@@ -59,7 +59,7 @@ struct DecisionCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 SectionLabel("NEXT")
                 Text(decision.title ?? step?.title ?? "Nothing left to do").font(.headline)
-                Text(shownWhy).font(.callout).foregroundStyle(.secondary)
+                Text(shownWhy).role(.detail)
             }
             Spacer(minLength: 12)
             DecisionActions(decision: decision, perform: perform)

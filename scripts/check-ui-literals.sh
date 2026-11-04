@@ -9,7 +9,7 @@
 set -u
 cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
 baseline=${UI_LITERALS_BASELINE:-scripts/ui-literals.baseline}
-COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift'
+COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift'
 
 # Counted per occurrence on the whole file with its // comments dropped (a `//` that starts one, not the one in `https://`) and its lines joined, so `cornerRadius:12` and a `.padding(`
 # whose number is on the next line count like the usual spelling. Only a number counts: a Theme token or a constant is the fix.
@@ -22,16 +22,17 @@ current() {
     echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
     echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?-?[[:space:]]*[0-9][0-9.]*[[:space:]]*\)')"
+    echo "textstyle $(count textstyle '\.font\([^)]*\)+[[:space:]]*\.foregroundStyle\(')"
 }
 
-# A baseline is the four names, each once, with a whole number. A comparison on anything else errors out and reads as "not greater", which
+# A baseline is the five names, each once, with a whole number. A comparison on anything else errors out and reads as "not greater", which
 # would pass: so a malformed one fails here first.
-valid() { # text
-    printf '%s\n' "$1" | awk '
+valid() { # text [partial]: with `partial` a name may be missing (the base branch's older baseline), nothing may be malformed
+    printf '%s\n' "$1" | awk -v partial="${2:-}" '
         NF != 2 || $2 !~ /^[0-9]+$/ || !($1 in want) || ($1 in seen) { bad = 1 }
         { seen[$1] = 1 }
-        BEGIN { want["radius"]; want["fontsize"]; want["capsule"]; want["padding"] }
-        END { for (k in want) if (!(k in seen)) bad = 1; exit bad }'
+        BEGIN { want["radius"]; want["fontsize"]; want["capsule"]; want["padding"]; want["textstyle"] }
+        END { if (partial == "") for (k in want) if (!(k in seen)) bad = 1; exit bad }'
 }
 
 # --against <ref>: the baseline may not be higher than the one on that ref (the PR's base). Without it a PR could add a literal and
@@ -42,7 +43,7 @@ if [ "${1:-}" = "--against" ]; then
     git rev-parse --verify -q "$ref^{commit}" >/dev/null || { echo "error: $ref is not a commit here; fetch the base branch first" >&2; exit 1; }
     old=$(git show "$ref:scripts/ui-literals.baseline" 2>/dev/null) || { echo "note: $ref has no UI-literals baseline yet; nothing to compare"; exit 0; }
     valid "$(cat "$baseline")" || { echo "error: $baseline is malformed (four names, each with a whole number)" >&2; exit 1; }
-    valid "$old" || { echo "error: the baseline on $ref is malformed" >&2; exit 1; }
+    valid "$old" partial || { echo "error: the baseline on $ref is malformed" >&2; exit 1; }
     bad=0
     while read -r name was; do
         now=$(awk -v n="$name" '$1==n {print $2}' "$baseline"); now=${now:-0}

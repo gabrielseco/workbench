@@ -34,13 +34,13 @@ struct GoalBlocks: View {
             if !goal.blockers.isEmpty { blockers }
             if goal.placeholdersRemain {
                 Label("Replace every TODO(workbench), then approve.", systemImage: "pencil")
-                    .font(.callout).foregroundStyle(Theme.amber)
+                    .textRole(.warning)
             }
             request
             criteria
             outOfScope
             if showsError, let error = store.goalEditError {
-                Label(error, systemImage: "xmark.octagon.fill").font(.callout).foregroundStyle(Theme.red)
+                Label(error, systemImage: "xmark.octagon.fill").textRole(.error)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -89,7 +89,7 @@ struct GoalBlocks: View {
                         "The request is the goal. With no criteria the judge does not run, the verifier drives the app from the "
                             + "request, and you check the work against it. Add a criterion to have the judge check it."
                     )
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .role(.detail).fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(goal.rows, id: \.id) { row in
                     GoalCard(style: style) { criterion(row) }
@@ -122,7 +122,7 @@ struct GoalBlocks: View {
                 if style == .feed {
                     Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 11, height: 11).accessibilityHidden(true)
                 } else {
-                    Text(row.id).font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    Text(row.id).role(.monoDetail)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     if editable {
@@ -144,7 +144,7 @@ struct GoalBlocks: View {
                     }
                     if let warning = row.warning {
                         Label("Heads up: \(warning)", systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout).foregroundStyle(Theme.amber)
+                            .textRole(.warning)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

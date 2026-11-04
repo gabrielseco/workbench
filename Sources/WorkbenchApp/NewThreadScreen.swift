@@ -52,7 +52,7 @@ struct NewThreadHeading: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("What do you want to work on?").font(.title2.weight(.semibold))
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
-                .font(.callout).foregroundStyle(.secondary)
+                .role(.detail)
         }
     }
 }
@@ -76,7 +76,7 @@ struct NewThreadCaption: View {
                 Text("Your words become the goal as typed. No agent, no criteria. Free.")
             }
         }
-        .font(.caption).foregroundStyle(.secondary)
+        .textRole(.caption)
     }
 
     private func row(_ name: String, _ what: String) -> some View {
@@ -180,7 +180,7 @@ struct NewThreadScreen: View {
             HStack(spacing: 10) {
                 Button(action: chooseImages) { Image(systemName: "plus") }
                     .iconButton(size: .small).disabled(busy).accessibilityLabel("Add screenshots…").help("Add screenshots")
-                Text("Paste or drop screenshots.").font(.caption).foregroundStyle(.secondary)
+                Text("Paste or drop screenshots.").role(.caption)
                 if staging.pending > 0 { ProgressView().controlSize(.small) }
                 Spacer(minLength: 8)
                 if busy {

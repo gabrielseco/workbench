@@ -9,7 +9,7 @@ struct PRReviewSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             if let shown = store.prReviewShown {
                 Label(shown.headline, systemImage: icon(shown)).font(.headline).foregroundStyle(color(shown))
-                ForEach(shown.notes, id: \.self) { Text($0).font(.callout).foregroundStyle(Theme.amber) }
+                ForEach(shown.notes, id: \.self) { Text($0).role(.warning) }
                 ScrollView {
                     Text(shown.findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Codex wrote nothing.")
                         .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
@@ -20,14 +20,14 @@ struct PRReviewSheet: View {
                     "A review reads the code and cannot run tests, so CI has to be green as well. "
                         + "Nothing was posted to the pull request."
                 )
-                    .font(.callout).foregroundStyle(.secondary)
+                    .role(.detail)
             }
-            if let error = store.followUpError { Text(error).font(.callout).foregroundStyle(Theme.red) }
+            if let error = store.followUpError { Text(error).role(.error) }
             HStack {
                 // The sheet covers the window's own busy line, so a click on "Fix these findings" shows here that it was taken.
                 if let busy = store.busy {
                     ProgressView().controlSize(.small)
-                    Text(busy).font(.callout).foregroundStyle(.secondary)
+                    Text(busy).role(.detail)
                 }
                 Spacer()
                 if let shown = store.prReviewShown, shown.canFix {

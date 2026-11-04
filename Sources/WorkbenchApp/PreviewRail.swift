@@ -23,13 +23,13 @@ struct PreviewRail: View {
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
                 if model.threads.isEmpty && model.composing == nil {
                     Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
-                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+                        .role(.caption).padding(.horizontal, 8).padding(.vertical, 4)
                 } else if !model.threads.isEmpty {
                     ThreadListView(store: store, rows: model.threads, older: model.older)
                 }
                 header(model.scheduledHeader).padding(.top, 10)
                 if let note = model.scheduledNote {
-                    Text(note).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+                    Text(note).role(.caption).padding(.horizontal, 8).padding(.vertical, 4)
                     if model.tasksRead {
                         // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
                         Button("Open the Tasks page") { store.showTasks() }
