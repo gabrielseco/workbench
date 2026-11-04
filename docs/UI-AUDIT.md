@@ -86,7 +86,10 @@ The three icon buttons (composer Send 30, composer "+" 26, rail "+" 24) are `.ic
 `WorkbenchButtonStyle`'s radius). They are almost certainly icon buttons: a `ButtonKind.icon` (or `.plain` at `.small`) instead.
 Thumbnails at radius 6 (`NewThreadScreen.swift:247`, `RunCard.swift:273`) are one `Thumbnail` component.
 
-### 9. Type sizes outside the text styles
+### 9. Type sizes outside the text styles (done)
+
+The inspector's eight hand-set sizes are system text styles now (`.body`, `.subheadline`, monospaced `.caption`); each moved by at most half a point. The UI-literals baseline for `fontsize` is 0.
+
 
 All 8 are `RunSettingsInspector.swift` (10.5, 11, 11.5, 13 and 13 semibold, by hand). The rest of the app uses `.callout`, `.caption` and
 friends. The inspector should too, or `Theme` should name the two it needs.
