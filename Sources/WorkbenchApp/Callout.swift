@@ -8,6 +8,10 @@ enum CalloutStyle {
     case neutral
     /// A hairline box with no fill, for a step and what comes next.
     case outlined
+    /// A box on the panel colour with a hairline: a block of the goal.
+    case panel
+    /// A recessed box on the screen's own colour with a hairline: a log or a transcript.
+    case well
 }
 
 private struct CalloutSurface: ViewModifier {
@@ -19,6 +23,8 @@ private struct CalloutSurface: ViewModifier {
         case .tinted(let tone): content.background(tone.opacity(0.08), in: shape)
         case .neutral: content.background(.quaternary.opacity(0.5), in: shape)
         case .outlined: content.overlay(shape.stroke(Theme.grey.opacity(0.4)))
+        case .panel: content.background(Theme.panel, in: shape).overlay(shape.strokeBorder(Theme.line))
+        case .well: content.background(Theme.canvas, in: shape).overlay(shape.stroke(Theme.line))
         }
     }
 }

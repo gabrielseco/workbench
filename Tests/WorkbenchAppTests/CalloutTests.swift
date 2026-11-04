@@ -28,6 +28,13 @@ import Testing
         #expect(edge > 0.1, "the hairline is on the edge: \(edge)")
     }
 
+    @Test func aPanelAndAWellAreOpaqueBoxesWithAHairlineAtTheEdge() throws {
+        for style in [CalloutStyle.panel, .well] {
+            #expect(try #require(alpha(style, x: 30, y: 30)) > 0.9, "the fill is the screen's own colour, opaque")
+            #expect(try #require(alpha(style, x: 0, y: 0)) < 0.05, "the corner is rounded off")
+        }
+    }
+
     @Test func aNeutralWellFills() throws {
         #expect(try #require(alpha(.neutral, x: 30, y: 30)) > 0.02)
     }

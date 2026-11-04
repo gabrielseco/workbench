@@ -91,7 +91,7 @@ struct ProjectPickerCard: View {
                 }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     private func move(_ step: Int) -> KeyPress.Result {
@@ -197,7 +197,7 @@ private struct ProjectRow: View {
         }
         .padding(.horizontal, 8).padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 8).fill(
+            RoundedRectangle(cornerRadius: Radius.box).fill(
                 highlighted ? Theme.blue.opacity(0.14) : (hovered && available ? Theme.grey.opacity(0.12) : .clear)))
         .onHover { hovered = $0 }
     }
