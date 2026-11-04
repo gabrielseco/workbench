@@ -185,11 +185,9 @@ struct RunCardView: View {
         HStack {
             Spacer()
             if let diff {
-                Button { perform(diff) } label: { Label(diff.title, systemImage: "doc.text.magnifyingglass") }
-                    .plainButton().disabled(!diff.enabled).help(diff.help ?? diff.title)
+                ActionButton(action: diff, size: .compact, symbol: "doc.text.magnifyingglass", perform: perform)
             }
-            Button { perform(stop) } label: { Label(stop.title, systemImage: "stop.fill") }
-                .plainButton().disabled(!stop.enabled).help(stop.help ?? stop.title)
+            ActionButton(action: stop, size: .compact, symbol: "stop.fill", perform: perform)
         }
         .padding(.horizontal, Spacing.inset).padding(.bottom, 12)
     }
