@@ -60,7 +60,7 @@ for code in 'RoundedRectangle(cornerRadius:12)' 'RoundedRectangle(cornerRadius: 
     .horizontal,
     8
 )' 'Text("x").font(.system(
-    size: 11))'; do
+    size: 11))' 'Text("x").padding(.top, -2)' 'Text("x").padding(-4)'; do
   dir=$(tree2 View.swift "struct A: View { var body: some View { $code } }")
   out=$(run "$dir"); rc=$?
   [ "$rc" = 1 ] || fail "a literal written as [$code] was not caught ($rc)"

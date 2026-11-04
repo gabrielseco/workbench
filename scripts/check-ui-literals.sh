@@ -19,7 +19,7 @@ current() {
     echo "radius $(count radius 'cornerRadius:[[:space:]]*[0-9]')"
     echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
-    echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?[0-9][0-9.]*[[:space:]]*\)')"
+    echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?-?[[:space:]]*[0-9][0-9.]*[[:space:]]*\)')"
 }
 
 if [ "${1:-}" = "--against" ]; then
