@@ -16,10 +16,10 @@ struct TaskPageView: View {
                 if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.summary.name).font(.title3.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                        Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
                         Text(header.line).role(.detail).lineLimit(2)
                         Text("Defined in \(header.path). Edit that file to change it.")
-                            .font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.fg3).textSelection(.enabled)
+                            .textStyle(.mono, .subtle).textSelection(.enabled)
                     }
                     Spacer(minLength: 8)
                     TaskButtons(store: store, entry: entry)
@@ -35,7 +35,7 @@ struct TaskPageView: View {
                 }
                 ForEach(Array(RunDay.groups(runs: entry.runs, now: snapshot.readAt).enumerated()), id: \.offset) { _, group in
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(group.heading).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.bottom, 6)
+                        Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, 6)
                         ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
                             Divider()
                             TaskRunRow(run: run, threadKnown: threadKnown(run.thread), perform: perform)
@@ -101,13 +101,13 @@ struct RunTonightCard: View {
                 HStack(spacing: 10) {
                     Image(systemName: symbol).foregroundStyle(tint)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("WILL IT RUN TONIGHT?").font(.caption2.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
-                        Text(tonight.verdict.text).font(.callout.weight(.semibold))
+                        Text("WILL IT RUN TONIGHT?").textStyle(.captionStrong).tracking(0.6).foregroundStyle(.secondary)
+                        Text(tonight.verdict.text).textStyle(.calloutStrong)
                     }
                     Spacer()
                     if let count = tonight.countText { Text(count).role(.caption) }
                     if !tonight.warnings.isEmpty {
-                        Image(systemName: open ? "chevron.up" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                        Image(systemName: open ? "chevron.up" : "chevron.down").textStyle(.captionMedium, .secondary)
                     }
                 }
                 .padding(12).contentShape(Rectangle())
@@ -119,7 +119,7 @@ struct RunTonightCard: View {
                     Divider()
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(warning.text).font(.callout)
+                            Text(warning.text).textStyle(.callout)
                             if let detail = warning.detail {
                                 Text(detail).role(.mono)
                                     .lineLimit(2).textSelection(.enabled)
@@ -163,7 +163,7 @@ struct TaskRunRow: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(TaskOutcomeStyle.word(run.outcome)).font(.callout.weight(.semibold))
+                    Text(TaskOutcomeStyle.word(run.outcome)).textStyle(.calloutStrong)
                         .foregroundStyle(tone == .broken || tone == .needsYou ? Theme.color(for: tone) : Color.primary)
                     Text(run.started.formatted(.dateTime.hour().minute()))
                         .role(.caption).monospacedDigit()
@@ -175,11 +175,11 @@ struct TaskRunRow: View {
                         .fixedSize(horizontal: false, vertical: true).help(reason)
                 }
                 if !run.units.isEmpty {
-                    Text(run.units.joined(separator: ", ")).font(.system(.caption, design: .monospaced))
+                    Text(run.units.joined(separator: ", ")).textStyle(.mono)
                         .foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled)
                 }
                 if let pr = run.pullRequest {
-                    Text(pr).font(.system(.caption, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                    Text(pr).textStyle(.mono).lineLimit(1).truncationMode(.middle)
                         .textSelection(.enabled)
                 }
                 // A thread the rail does not list (cleaned, or older than the list) is an id to copy.

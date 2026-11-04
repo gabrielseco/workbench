@@ -138,7 +138,7 @@ struct RunCardView: View {
     private func header(elapsed: TimeInterval?) -> some View {
         HStack(spacing: 10) {
             ProgressView().controlSize(.small).frame(width: 16)
-            Text("Claude is working").font(.callout.weight(.semibold))
+            Text("Claude is working").textStyle(.calloutStrong)
             Spacer(minLength: 8)
             if let clock = RunCardModel.clock(elapsed: elapsed, limit: model.limit) {
                 Text(clock).role(.monoDetail)
@@ -149,11 +149,11 @@ struct RunCardView: View {
 
     private var tasks: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(model.tasksTitle).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(model.tasksTitle).textStyle(.captionStrong, .secondary)
             ForEach(Array(model.tasks.enumerated()), id: \.offset) { _, task in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     mark(task.state)
-                    Text(task.text).font(.callout).fontWeight(task.state == .working ? .semibold : .regular)
+                    Text(task.text).textStyle(.callout).fontWeight(task.state == .working ? .semibold : .regular)
                         .foregroundStyle(task.state == .pending ? .secondary : .primary).lineLimit(2)
                 }
                 .accessibilityElement(children: .combine)
@@ -199,7 +199,7 @@ struct PendingStepRow: View {
 
     var body: some View {
         IconRow(symbol: "circle", tint: Theme.fg3) {
-            Text(step.name).font(.callout.weight(.semibold))
+            Text(step.name).textStyle(.calloutStrong)
             Spacer(minLength: 8)
             Text(step.detail).role(.detail).lineLimit(1)
         }

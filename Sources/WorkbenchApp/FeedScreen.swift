@@ -184,7 +184,7 @@ struct FeedScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(snapshot.title ?? snapshot.id).font(.title3.weight(.semibold)).lineLimit(2)
+                Text(snapshot.title ?? snapshot.id).textStyle(.section).lineLimit(2)
                 Spacer(minLength: 12)
                 let showing = store.runSettingsShowing
                 Button {
@@ -192,7 +192,7 @@ struct FeedScreen: View {
                 } label: {
                     Label("Run settings", systemImage: "sidebar.right")
                 }
-                .buttonStyle(.borderless).font(.callout)
+                .buttonStyle(.borderless).textStyle(.callout)
                 .help(showing ? "Hides what this run is allowed to do" : "Shows what this run is allowed to do")
             }
             if Self.showsPhaseRow(snapshot) { PhaseRow(snapshot: snapshot) }
@@ -271,7 +271,7 @@ struct PhaseRow: View {
                 HStack(spacing: 6) {
                     Circle().fill(dot.filled ? tint : Color.clear)
                         .overlay(Circle().strokeBorder(tint, lineWidth: 1.5)).frame(width: 8, height: 8)
-                    Text(step.title).font(.callout).lineLimit(1)
+                    Text(step.title).textStyle(.callout).lineLimit(1)
                         .foregroundStyle(
                             dot.label == .primary ? Color.primary : dot.label == .secondary ? Theme.fg2 : Theme.fg3)
                 }
@@ -293,7 +293,7 @@ struct ReviewDetailsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Review").font(.headline)
+                Text("Review").textStyle(.heading)
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }

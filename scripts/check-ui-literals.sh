@@ -1,6 +1,6 @@
 #!/bin/sh
 # The UI ratchet: hand-written styling in a view is a component that was not made. A view takes its radius, type, fill and spacing from a
-# component or a Theme token; the literals counted below are what is still written out by hand (docs/UI-AUDIT.md lists them).
+# component or a Theme token (a font is a `TextStyle`, not `.font(`); the literals counted below are what is still written out by hand (docs/UI-AUDIT.md lists them).
 # The count of each may not go up: a PR that adds one fails, and a PR that removes some lowers scripts/ui-literals.baseline in the same
 # change (`scripts/check-ui-literals.sh --update`), so it cannot creep back. Files that ARE the components are not counted.
 # Known limit: it reads text, not Swift, so a string literal holding ` //` hides what follows it on that line from the count. Rare in view
@@ -9,7 +9,7 @@
 set -u
 cd "${UI_LITERALS_ROOT:-$(dirname "$0")/..}"
 baseline=${UI_LITERALS_BASELINE:-scripts/ui-literals.baseline}
-COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift ActionButton.swift'
+COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift'
 
 # Counted per occurrence on the whole file with its // comments dropped (a `//` that starts one, not the one in `https://`) and its lines joined, so `cornerRadius:12` and a `.padding(`
 # whose number is on the next line count like the usual spelling. Only a number counts: a Theme token or a constant is the fix.
@@ -22,7 +22,7 @@ current() {
     echo "fontsize $(count fontsize '\.font\([[:space:]]*\.system\([[:space:]]*size:[[:space:]]*[0-9]')"
     echo "capsule $(count capsule 'Capsule\(\)')"
     echo "padding $(count padding '\.padding\([[:space:]]*(\.[a-z]+,[[:space:]]*)?-?[[:space:]]*[0-9][0-9.]*[[:space:]]*\)')"
-    echo "textstyle $(count textstyle '\.font\([^)]*\)+[[:space:]]*\.foregroundStyle\(')"
+    echo "textstyle $(count textstyle '\.font\(')"
 }
 
 # A baseline is the five names, each once, with a whole number. A comparison on anything else errors out and reads as "not greater", which

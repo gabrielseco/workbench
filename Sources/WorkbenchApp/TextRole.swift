@@ -17,32 +17,30 @@ enum TextRole {
 }
 
 extension TextRole {
-    var font: Font {
+    var style: TextStyle {
         switch self {
         case .caption: .caption
         case .detail, .error, .warning: .callout
-        case .mono: .system(.caption, design: .monospaced)
-        case .monoDetail: .system(.callout, design: .monospaced)
+        case .mono: .mono
+        case .monoDetail: .monoCallout
         }
     }
 
-    var color: Color {
+    var tone: TextTone {
         switch self {
-        case .error: Theme.red
-        case .warning: Theme.amber
-        default: Color.secondary
+        case .error: .red
+        case .warning: .amber
+        default: .secondary
         }
     }
 }
 
 extension View {
     /// The same roles for a view that is not a `Text` (a `Label`, a row): its font and colour reach the text inside it.
-    func textRole(_ role: TextRole) -> some View { font(role.font).foregroundStyle(role.color) }
+    func textRole(_ role: TextRole) -> some View { textStyle(role.style, role.tone) }
 }
 
 extension Text {
-    /// The text in its role's font and colour. A new look is a new `TextRole`, not a font and a colour written beside the text.
-    func role(_ role: TextRole) -> Text {
-        font(role.font).foregroundStyle(role.color)
-    }
+    /// The text in its role's style and tone. A role is a name for a combination that recurs; the scale itself is `TextStyle` and `TextTone`.
+    func role(_ role: TextRole) -> Text { font(role.style.font).foregroundStyle(role.tone.color) }
 }

@@ -34,7 +34,7 @@ struct MenuBarPopover: View {
             header(model)
             content(model)
             if let note = model.tasksNote {
-                Label(note, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(Theme.amber)
+                Label(note, systemImage: "exclamationmark.triangle").textStyle(.caption, .amber)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let note = model.deniedNote {
@@ -79,18 +79,18 @@ struct MenuBarPopover: View {
             }
             .frame(maxHeight: 380).fixedSize(horizontal: false, vertical: true)
         case .noProject:
-            Text("No project open").font(.headline)
+            Text("No project open").textStyle(.heading)
             Text("Open Workbench and choose a project.").role(.detail)
         case .opening(let name):
-            Text("Opening \(name)…").font(.headline)
+            Text("Opening \(name)…").textStyle(.heading)
         case .broken(let why):
             Label(why, systemImage: "xmark.octagon.fill").textRole(.error)
                 .fixedSize(horizontal: false, vertical: true)
         case .working(let title):
-            Text("Nothing needs you").font(.headline)
-            Text("Working: \(title)").font(.callout).foregroundStyle(Theme.blue).lineLimit(2)
+            Text("Nothing needs you").textStyle(.heading)
+            Text("Working: \(title)").textStyle(.callout, .blue).lineLimit(2)
         case .nothing(let state):
-            Text("Nothing needs you").font(.headline)
+            Text("Nothing needs you").textStyle(.heading)
             if !state.isEmpty { Text(state).role(.detail).lineLimit(2) }
         }
     }
@@ -108,7 +108,7 @@ struct MenuBarPopover: View {
                 Button("Quit") { NSApplication.shared.terminate(nil) }.buttonStyle(.link).keyboardShortcut("q")
             }
             Toggle("Pause notifications", isOn: Binding(get: { store.attention.paused }, set: { store.attention.paused = $0 }))
-                .toggleStyle(.switch).controlSize(.small).font(.callout)
+                .toggleStyle(.switch).controlSize(.small).textStyle(.callout)
         }
     }
 
@@ -131,11 +131,11 @@ private struct RowCard: View {
             HStack(spacing: 6) {
                 Image(systemName: tone == .broken ? "xmark.circle.fill" : "exclamationmark.circle.fill")
                     .foregroundStyle(Theme.color(for: tone))
-                Text(row.item.title).font(.headline).lineLimit(1).truncationMode(.middle)
+                Text(row.item.title).textStyle(.heading).lineLimit(1).truncationMode(.middle)
             }
             Text(row.detail).role(.caption).lineLimit(3)
             if let criteria = row.criteria {
-                Text(criteria).font(.caption.weight(.semibold)).padding(.top, 2)
+                Text(criteria).textStyle(.captionStrong).padding(.top, 2)
             }
             HStack(spacing: 8) {
                 Button(row.item.route.isThread ? "Open review" : "Open task") { open(row.item.route, false) }

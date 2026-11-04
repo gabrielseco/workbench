@@ -7,6 +7,6 @@ struct SectionLabel: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).font(.caption.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+        Text(text).textStyle(.captionStrong).tracking(0.6).foregroundStyle(.secondary)
     }
 }

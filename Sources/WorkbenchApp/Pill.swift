@@ -11,7 +11,7 @@ enum PillSize {
     case small
     case regular
 
-    var font: Font { self == .small ? .caption.weight(.medium) : .callout }
+    var style: TextStyle { self == .small ? .captionMedium : .callout }
     var horizontalPadding: CGFloat { self == .small ? 8 : 10 }
     var verticalPadding: CGFloat { self == .small ? 2 : 3 }
 }
@@ -20,7 +20,7 @@ extension View {
     /// A capsule around a short label. A tinted pill takes its text and wash from `tone` (one strength, 0.12); an outlined one leaves the text
     /// colour to the caller. A font set on the content wins over the size's. A new look is a new `PillStyle` or `PillSize`, not a copy.
     func pill(_ tone: Color = Theme.grey, style: PillStyle = .tinted, size: PillSize = .small) -> some View {
-        font(size.font).padding(.horizontal, size.horizontalPadding).padding(.vertical, size.verticalPadding)
+        textStyle(size.style).padding(.horizontal, size.horizontalPadding).padding(.vertical, size.verticalPadding)
             .modifier(PillFill(tone: tone, style: style))
     }
 }

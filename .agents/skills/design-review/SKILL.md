@@ -21,7 +21,7 @@ The reviewer is read-only: it builds and runs nothing and judges the diff, the g
 Static pass over the added lines in `Sources/WorkbenchApp/**` (each hit is a finding only if the context or a screenshot shows it
 matters; say which file and line):
 
-- `.font(.system(size:` outside the serif goal text, or `.font(.custom(` → a text style (DESIGN.md, Typography).
+- Any `.font(` in a view (outside `TextStyle.swift`, `TextRole.swift`, `ButtonStyles.swift`), or `.font(.custom(` → a `TextStyle` and `TextTone` (`.textStyle(.caption, .secondary)`) or a `TextRole` (DESIGN.md, Typography; AGENTS.md, Conventions). A step the scale lacks is a new case, not a font in the view.
 - `Color(red:`, `Color(#`, `NSColor(` literals in a view → a `Theme` colour (DESIGN.md, Colour).
 - A colour used for a meaning it does not have: amber for an error, red for "needs you", green for "good" in general.
 - Colour as the only signal: a state told apart only by its tint, with no symbol or word.

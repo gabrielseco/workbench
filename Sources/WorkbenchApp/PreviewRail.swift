@@ -33,7 +33,7 @@ struct PreviewRail: View {
                     if model.tasksRead {
                         // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
                         Button("Open the Tasks page") { store.showTasks() }
-                            .buttonStyle(.link).font(.caption).padding(.horizontal, 8)
+                            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, 8)
                             .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
                     }
                 }
@@ -71,8 +71,8 @@ struct PreviewRail: View {
                 if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
-                    Text(count).font(.caption)
+                    Image(systemName: open ? "chevron.down" : "chevron.right").textStyle(.captionStrong)
+                    Text(count).textStyle(.caption)
                 }
                 .foregroundStyle(.secondary).padding(.leading, 30).padding(.vertical, 2)
             }
@@ -101,7 +101,7 @@ struct PreviewRail: View {
 
     private func header<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) -> some View {
         HStack {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title).textStyle(.captionStrong, .secondary)
             Spacer()
             trailing()
         }
