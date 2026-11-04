@@ -83,11 +83,13 @@ import Testing
         #expect(decide(shown) { $0.stopping = true }.primary?.enabled == false)
     }
 
-    @Test func aTurnThatIsGoingOnCanShowWhatItChangedSoFar() throws {
+    @Test func aTurnThatIsGoingOnOpensTheWorktreeNotADiff() throws {
         var shown = try snapshot(.running)
         shown.run?.phase = .working
-        let diff = try #require(decide(shown).secondary)
-        #expect(diff.kind == .openDiff && diff.enabled, "the worktree is there while the turn works")
+        let open = try #require(decide(shown).secondary)
+        #expect(open.kind == .openWorktree && open.enabled, "the worktree is there while the turn works")
+        let menu = kinds(decide(shown).more)
+        #expect(!menu.contains(.openDiff) && !menu.contains(.openWorktree), "no copy in the menu")
         #expect(decide(shown) { $0.busy = true }.secondary?.enabled == false)
         // A thread that has not started a turn has no worktree to read.
         var fresh = shown

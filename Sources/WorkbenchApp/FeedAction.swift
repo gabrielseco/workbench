@@ -59,10 +59,12 @@ enum FeedActions {
             return FeedDecision(primary: nil, why: why, title: "Chat")
         }
         var more: [FeedAction] = []
-        func worktree() {
-            more.append(
-                FeedAction(
-                    kind: .openWorktree, title: "Open worktree", help: "Opens the worktree in your editor", enabled: !c.busy))
+        func worktree(opens: Bool = true) {
+            if opens {
+                more.append(
+                    FeedAction(
+                        kind: .openWorktree, title: "Open worktree", help: "Opens the worktree in your editor", enabled: !c.busy))
+            }
             if c.herdrFound {
                 more.append(
                     FeedAction(
@@ -71,17 +73,17 @@ enum FeedActions {
             }
         }
         if let run = s.run, let stoppable = RunModel.stoppable(phase: run.phase, runningHere: c.runningHere) {
-            worktree()
+            worktree(opens: false)
             let title = c.stopping ? "Stopping…" : (stoppable == .advice ? "Stop advice" : "Stop turn")
-            // What the agent has changed so far is readable in the worktree while it works: no need to wait for Review to look at it.
-            let diff = FeedAction(
-                kind: .openDiff, title: "Open diff", help: "What changed so far, against the base, in your editor",
+            // The files change while it works, so a diff is stale at once: open the worktree. Open diff is Review's.
+            let open = FeedAction(
+                kind: .openWorktree, title: "Open worktree", help: "Opens the worktree in your editor, where it is working",
                 enabled: !c.busy && RunSettingsLayout.hasWorktree(s.state))
             return FeedDecision(
                 primary: FeedAction(
                     kind: stoppable == .advice ? .stopAdvice : .stopTurn, title: title,
                     help: "Asks it to end; it still ends with a recorded stop", enabled: !c.stopping),
-                secondary: diff, more: more)
+                secondary: open, more: more)
         }
         if c.reviewShown {
             let accept = FeedAction(
