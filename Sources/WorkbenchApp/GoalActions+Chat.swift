@@ -16,10 +16,10 @@ extension GoalActions {
 
     static let chatThroughCore: Chat = { project, target, message, attachments, stop in
         let git = try GitRunner.discover()
-        // Never abandons another thread unasked: core's refusal names the one that is open.
+        // A new chat replaces the active thread, as a drafted goal does: abandon keeps the branch and saves uncommitted work.
         return try await ThreadService(project: project, git: git).chat(
             target: target, message: message, config: try loadConfigIfPresent(project), attachments: attachments,
-            abandonActive: false, attach: { stop.attach($0) })
+            abandonActive: true, attach: { stop.attach($0) })
     }
 
     static let draftFromChatThroughCore: DraftFromChat = { project, thread, stop in
