@@ -93,7 +93,7 @@ struct FeedLine: View {
 
     @ViewBuilder private func detailText(_ detail: String) -> some View {
         if link, let url = URL(string: detail), ["https", "http"].contains(url.scheme?.lowercased()) {
-            Link(destination: url) { Text(detail).textStyle(.callout, .blue).truncationMode(.middle) }
+            Link(destination: url) { Text(detail).textStyle(.callout, .blue).truncationMode(.middle) }.buttonStyle(.link)
                 .help("Opens it in your browser")
         } else { plainDetail(detail) }
     }

@@ -36,11 +36,16 @@ struct WorkbenchButtonStyle: ButtonStyle {
     var followsControlSize = false
 
     /// The size drawn: `.small` for a default button in a small control, else the one given.
-    private var drawnSize: ButtonSize { followsControlSize && (controlSize == .small || controlSize == .mini) ? .small : size }
+    private var drawnSize: ButtonSize { Self.drawn(size, follows: followsControlSize, controlSize: controlSize) }
+
+    static func drawn(_ size: ButtonSize, follows: Bool, controlSize: ControlSize) -> ButtonSize {
+        follows && (controlSize == .small || controlSize == .mini) ? .small : size
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control)
         configuration.label
+            .lineLimit(1).fixedSize(horizontal: !fill, vertical: false)
             .font(.system(size: drawnSize.fontSize, weight: kind == .primary ? .semibold : (kind == .icon ? .semibold : .medium)))
             .foregroundStyle(kind == .primary ? AnyShapeStyle(Theme.invfg) : AnyShapeStyle(.primary))
             .padding(.horizontal, kind == .icon ? 0 : drawnSize.horizontalPadding)

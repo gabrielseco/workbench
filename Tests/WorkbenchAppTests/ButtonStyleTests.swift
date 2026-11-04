@@ -31,6 +31,16 @@ import Testing
         #expect(small.contains("size: WorkbenchApp.ButtonSize.small"))
     }
 
+    @Test func theDefaultButtonFollowsTheControlSizeAndANamedOneKeepsItsSize() {
+        let follows = { (control: ControlSize) in WorkbenchButtonStyle.drawn(.compact, follows: true, controlSize: control) }
+        #expect(follows(.regular) == .compact && follows(.large) == .compact)
+        #expect(follows(.small) == .small && follows(.mini) == .small)
+        let named = WorkbenchButtonStyle.drawn(.regular, follows: false, controlSize: .small)
+        #expect(named == .regular, "asked for by name: its size")
+        let applied = String(describing: Button("x") {}.defaultButtonStyle())
+        #expect(applied.contains("ButtonKind.plain") && applied.contains("followsControlSize: true"))
+    }
+
     // MARK: Chips
 
     @Test func chipsFlowLeftToRightAndWrapWhenTheWidthRunsOut() {
