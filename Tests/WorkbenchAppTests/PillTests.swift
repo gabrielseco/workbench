@@ -24,7 +24,7 @@ import Testing
         let alpha = { (x: Int, y: Int) in Double(picture.bytes[(y * picture.width + x) * 4 + 3]) / 255 }
         #expect(picture.width > 80 && picture.height > 20, "padding is the component's")
         let middle = alpha(picture.width / 2, picture.height / 2)
-        #expect(middle > 0.09 && middle < 0.15, "0.12: \(middle)")
+        #expect(middle > 0.10 && middle < 0.13, "0.12, not the old 0.14: \(middle)")
         #expect(alpha(0, 0) < 0.03, "a capsule's corner is empty")
     }
 
@@ -34,6 +34,13 @@ import Testing
         #expect(tinted.bytes != outlined.bytes)
         let middle = (outlined.height / 2 * outlined.width + outlined.width / 2) * 4 + 3
         #expect(outlined.bytes[middle] > 200, "the panel is opaque")
+        // The edge is the hairline's colour, not the panel's: with no stroke the edge matches the middle.
+        let colour = { (x: Int, y: Int) in
+            let start = (y * outlined.width + x) * 4
+            return Array(outlined.bytes[start..<start + 3])
+        }
+        let edge = [colour(outlined.width / 2, 0), colour(outlined.width / 2, 1)]
+        #expect(edge.contains { $0 != colour(outlined.width / 2, outlined.height / 2) }, "the hairline is drawn")
     }
 
     @Test func regularIsLargerThanSmall() throws {
