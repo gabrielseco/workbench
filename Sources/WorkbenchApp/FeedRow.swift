@@ -283,9 +283,6 @@ struct TurnRow: View {
             Text(title).textStyle(.calloutStrong)
             if let detail { Text(detail).role(.detail) }
             Spacer(minLength: 0)
-            if let finish, case .ended(let result) = phase, result == "succeeded" {
-                Button("View diff", action: finish.viewDiff).controlSize(.small)
-            }
         }
         .padding(.top, Space.s)
         .accessibilityElement(children: .combine)

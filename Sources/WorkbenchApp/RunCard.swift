@@ -207,11 +207,10 @@ struct PendingStepRow: View {
     }
 }
 
-/// What the latest finished turn adds to its row: how many tasks the agent listed, the diff's files and lines, and what View diff does.
+/// What the latest finished turn adds to its row: how many tasks the agent listed, and the diff's files and lines.
 struct FinishContext {
     var tasks: Int?
     var totals: String?
-    var viewDiff: () -> Void
 }
 
 /// The agent's task list in a turn that is no longer working: the same list, as one row.
