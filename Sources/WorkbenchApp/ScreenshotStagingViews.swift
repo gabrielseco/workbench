@@ -29,10 +29,11 @@ struct StagedThumbnails: View {
 struct AddScreenshotsButton: View {
     var staging: AttachmentStaging
     var disabled = false
+    var size: ButtonSize = .small
 
     var body: some View {
         Button(action: choose) { Image(systemName: "plus") }
-            .iconButton(size: .small).disabled(disabled).accessibilityLabel("Add screenshots…").help("Add screenshots")
+            .iconButton(size: size).disabled(disabled).accessibilityLabel("Add screenshots…").help("Add screenshots")
     }
 
     private func choose() {
