@@ -182,8 +182,8 @@ private struct ProjectRow: View {
                             .lineLimit(1).truncationMode(.middle)
                     }
                     Spacer(minLength: 8)
-                    if entry.isRunning { Badge(text: "Running", tint: Theme.blue) }
-                    if entry.isCurrent { Badge(text: "Current", tint: Theme.blue) }
+                    if entry.isRunning { Text("Running").pill(Theme.blue) }
+                    if entry.isCurrent { Text("Current").pill(Theme.blue) }
                 }
                 .contentShape(Rectangle())
             }
@@ -200,15 +200,5 @@ private struct ProjectRow: View {
             RoundedRectangle(cornerRadius: 8).fill(
                 highlighted ? Theme.blue.opacity(0.14) : (hovered && available ? Theme.grey.opacity(0.12) : .clear)))
         .onHover { hovered = $0 }
-    }
-}
-
-private struct Badge: View {
-    var text: String
-    var tint: Color
-
-    var body: some View {
-        Text(text).font(.caption.weight(.medium)).padding(.horizontal, 8).padding(.vertical, 2)
-            .foregroundStyle(tint).background(tint.opacity(0.12), in: Capsule())
     }
 }

@@ -50,12 +50,10 @@ struct MenuBarPopover: View {
 
     private func header(_ model: MenuBarPopoverModel) -> some View {
         HStack {
-            Text((model.project ?? "Workbench").uppercased()).font(.caption.weight(.semibold)).tracking(0.9)
-                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            SectionLabel((model.project ?? "Workbench").uppercased()).lineLimit(1).truncationMode(.middle)
             Spacer()
             let (word, tone) = pill(model.status)
-            Text(word).font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 2)
-                .foregroundStyle(Theme.color(for: tone)).background(Theme.color(for: tone).opacity(0.14), in: Capsule())
+            Text(word).pill(Theme.color(for: tone))
         }
     }
 
