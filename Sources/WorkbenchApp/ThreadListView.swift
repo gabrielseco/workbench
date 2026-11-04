@@ -66,7 +66,7 @@ struct RailRowView: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

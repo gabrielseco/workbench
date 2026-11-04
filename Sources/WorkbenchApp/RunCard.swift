@@ -178,8 +178,7 @@ struct RunCardView: View {
             }
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line))
+        .callout(.well)
     }
 
     private func footer(_ stop: FeedAction, diff: FeedAction?) -> some View {

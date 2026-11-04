@@ -77,13 +77,12 @@ struct GoalCard<Content: View>: View {
             // The artboards' bordered box: a panel with a hairline.
             VStack(alignment: .leading, spacing: 8) { content }
                 .padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line))
+                .callout(.panel)
         } else {
             VStack(alignment: .leading, spacing: 10) { content }
                 .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Radius.quiet))
+                .overlay(RoundedRectangle(cornerRadius: Radius.quiet).strokeBorder(Color.primary.opacity(0.08)))
         }
     }
 }

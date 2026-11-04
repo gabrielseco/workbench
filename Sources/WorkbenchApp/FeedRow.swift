@@ -114,7 +114,7 @@ struct UserNoteRow: View {
                 Text("You · sent back").font(.caption).foregroundStyle(.secondary)
                 Text(text).font(.body).textSelection(.enabled)
             }
-            .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+            .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.quiet))
         }
     }
 }
