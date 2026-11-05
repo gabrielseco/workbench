@@ -192,7 +192,7 @@ enum FeedActions {
         // A clean review leaves nothing but the merge: it stays the button, disabled and saying what it waits for.
         if reviewIsClean(s), s.ci?.ended != true {
             return FeedDecision(
-                primary: merge, secondary: open, more: [review] + more, why: "Review is clean: " + waiting(s).lowercasedFirst)
+                primary: merge, secondary: open, more: [review] + more, why: "Review is clean. " + waiting(s))
         }
         return FeedDecision(primary: review, secondary: open, more: [merge] + more)
     }
@@ -209,10 +209,6 @@ enum FeedActions {
 
     /// What the merge waits for, in words.
     private static func waiting(_ s: ThreadSnapshot) -> String {
-        s.canMerge ? "the pull request can be merged." : (s.ci?.mergeBlocker ?? "CI is not known.")
+        s.ci?.mergeBlocker ?? "CI is not known."
     }
-}
-
-private extension String {
-    var lowercasedFirst: String { prefix(1).lowercased() + dropFirst() }
 }
