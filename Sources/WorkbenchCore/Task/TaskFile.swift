@@ -28,8 +28,10 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
         "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base", "labels",
-        "mcp_tools",
+        "mcp_tools", "history",
     ]
+    /// How many earlier reports `history` may hand to a report turn.
+    public static let maxHistory = 6
     /// How many of its own pull requests a `fix: pr` task leaves open before it waits for review.
     public static let defaultMaxOpen = 2
     public static let maxMaxOpen = 50
@@ -61,6 +63,9 @@ public struct TaskDefinition: Sendable, Equatable {
     /// MCP tools (`mcp__<server>__<tool>`) the task's runs may call; their servers come from `[mcp_servers.*]` in the config.
     /// Empty when the file sets none, and then nothing about the run differs (the approval does not mention it).
     public var mcpTools: [String] = []
+    /// How many earlier reports of this task a `fix: report` turn is shown (their `data` blocks), nil when the file sets none
+    /// (nothing about the run differs and the approval does not mention it).
+    public var history: Int?
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -176,6 +181,7 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.mcpTools = items
             }
         }
+        if let e = entry("history") { definition.history = history(e, fix: definition.fix, add: add) }
         if let e = entry("budget") {
             if let budget = GoalFile.budgetValue(e.value) {
                 definition.budgetUSD = budget
@@ -201,6 +207,19 @@ public struct TaskDefinition: Sendable, Equatable {
         }
         guard problems.isEmpty else { throw TaskParseError(problems: problems.sorted { ($0.line ?? 0) < ($1.line ?? 0) }) }
         return definition
+    }
+
+    /// `history: N`, 1 to `maxHistory`, for a report task only: a pr task writes no reports, so the key would do nothing.
+    private static func history(_ e: FrontMatterLine, fix: TaskFix, add: (Int?, String) -> Void) -> Int? {
+        guard fix == .report else {
+            add(e.lineNumber, "'history' is for 'fix: report': a 'fix: pr' task writes no reports to compare with")
+            return nil
+        }
+        guard let n = Int(e.value), (1...maxHistory).contains(n) else {
+            add(e.lineNumber, "'history' must be a whole number from 1 to \(maxHistory), found '\(e.value)'")
+            return nil
+        }
+        return n
     }
 
     /// `[a, b]`, `a, b` or `"a"`: the items, trimmed, with surrounding quotes removed.

@@ -20,7 +20,12 @@ extension TaskRunner {
         let prompt: String
         do {
             let inputs = try TaskFiles(project: project).inputs(task.inputs)
-            prompt = try TaskPrompt.build(task: loaded, inputs: inputs, units: units, deliverable: .report)
+            // The reports of earlier days: the turn runs in a checkout of the base and cannot read `reports/` itself.
+            let history = task.history.map {
+                ReportHistory.load(count: $0, task: name, project: project, now: now(), calendar: calendar)
+            }
+            prompt = try TaskPrompt.build(
+                task: loaded, inputs: inputs, units: units, deliverable: .report, history: history, calendar: calendar)
         } catch { return failed("\(error)") }
         if let why = await freshBase(task) { return failed(why) }
 

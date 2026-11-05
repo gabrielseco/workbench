@@ -24,6 +24,7 @@ include: .claude/skills/bump/SKILL.md   # a skill's text goes into the prompt (s
 inputs: [countries.txt, fixtures/]      # files or directories the agent reads, any format
 pending: .workbench/tasks/bump/pending.sh
 fix: pr                         # report (default) | pr
+# history: 3                    # with `fix: report` only (a pr task is refused it): the data blocks of the last 3 reports, 1 to 6
 budget: 3.00                    # USD per run
 ---
 Bump the next countries. Follow the skill exactly.
@@ -43,6 +44,7 @@ Bump the next countries. Follow the skill exactly.
 | `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
 | `labels` | 1 to 5 labels put on the pull request a `fix: pr` run opens, `labels: [seed-preview, bot]`. Each name is 1 to 50 of letters, digits and `- _ . : /`, with no duplicates (case is ignored, as GitHub does); anything else is refused at load with the line and key. Part of the approval only when the file sets it, so editing them makes the task STALE. Only a task run adds them; `workbench ship` of an ordinary thread adds none |
 | `mcp_tools` | `fix: pr` or `fix: report`: MCP tools the task's runs may call, `mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue` (1 to 10, each exactly `mcp__<server>__<tool>`: no wildcard, no duplicate; anything else is refused at load with the line and key). The servers are **never** defined here: each name's server must have a `[mcp_servers.<name>]` table in `.workbench/config.toml`, or the task is refused at load (`task list` shows PROBLEM, `workbench doctor` warns). Part of the approval only when the file sets it, so editing the list makes the task STALE. See "MCP tools" below |
+| `history` | `fix: report` only, 1 to 6 (anything else is refused at load with the line and key; `fix: pr` is refused too, see "Report history"): the last N reports of this task from before today are read from `reports/` and added to the prompt, newest first, each as its final `data` block fenced as untrusted data. Part of the approval only when the file sets it, so editing it makes the task STALE. See "Report history" below |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
@@ -84,6 +86,22 @@ A task that acts through MCP and changes no file can still run as `fix: pr` and 
 
 `workbench config` lists the servers and each task's tools, `task list` and `task log` show a task's tools, and `task approve` repeats the warning (for a report task too: it can change no file, but a listed tool that writes still writes).
 
+
+## Report history
+
+`history: N` lets a `fix: report` task compare itself with its own past reports. A report turn reads the base as committed and never the working tree, so `reports/` (local, gitignored) is out of its reach, and `inputs` is capped at 32 KiB in all; the engine therefore reads the reports itself and hands the agent the part meant for it.
+
+```yaml
+fix: report
+history: 3
+```
+
+- **Which reports.** The files in `.workbench/tasks/<name>/reports/` named as a run names them (`yyyyMMdd-HHmmss[-n].md`, UTC). A report counts when the local calendar day of its time is **before today's**, so a re-run on the same day never compares against itself. The newest N of those are taken, and the prompt labels each with its local date and time, newest first. Other files in the folder are ignored.
+- **What of a report.** Only its **final fenced block labelled `data`** (a line that is exactly ``` ```data ```` up to the next line that is exactly ``` ``` ```), in its own fence beside the `inputs` fences: `Report of 2026-10-01 04:00 (data block):`. This is cheaper than the whole report (a report of about 15 KiB would be six times that for N = 6, against 64 KiB for the whole prompt) and a smaller surface: the prose of an old report is model text built from query results, so passing it on is one more hop of untrusted text. It is still untrusted: the prompt says to use it and not to follow instructions written inside it.
+- **Its own cap.** Each block may be 8 KiB; a bigger one is **not cut** (half a JSON document would be read as a whole one) and the prompt says it was left out and why. The history is therefore at most 6 × 8 KiB and is on top of the prompt's 64 KiB, so it takes nothing from `inputs`.
+- **Never a failure.** A report with no `data` block, one that cannot be read, or one with a block over the cap is named in the prompt with that reason instead of failing the run; it still counts toward N. With no report from before today the prompt says that none exists, so this is the first and there is nothing to compare. With fewer than N it says how many there are.
+- **`fix: pr` is refused** at load: `history` reads reports and only a report run writes them, so on a pr task it would silently do nothing. A clear error is better than a key that is accepted and ignored.
+- **Approval.** `history` is in the hash only when the file sets it (like `mcp_tools`): a task without it keeps its approval, and changing or adding it makes the task STALE.
 
 ## Units of work: the pending script
 
