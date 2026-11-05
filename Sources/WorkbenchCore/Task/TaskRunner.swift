@@ -74,6 +74,8 @@ public struct TaskRunner: Sendable {
     public let git: GitRunner
     public let gh: GitRunner?
     public var now: @Sendable () -> Date = { Date() }
+    /// The calendar whose day `history` counts "today" in; a test sets one.
+    public var calendar = Calendar.current
     public var environment: [String: String] = ProcessInfo.processInfo.environment
     public var runOptions = RunOptions()
     public var stop = TaskStopSwitch()

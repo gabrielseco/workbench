@@ -129,6 +129,7 @@ public enum TaskScaffold {
             # timeout: 30           # minutes the agent's turn may run, 5 to 240 (default 30)
             # base: origin/main     # cut the thread from a freshly fetched origin/main, not from a local main that may be behind
             # labels: [bot, bump]   # 1 to 5 labels for the pull request a pr task opens; one that fails is only noted
+            # history: 3            # a report task sees the data block of its last 3 earlier reports, 1 to 6
             # mcp_tools: mcp__linear__get_issue   # MCP tools this task may call, unattended (see docs/spec/tasks.md)
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.

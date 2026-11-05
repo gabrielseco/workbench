@@ -31,6 +31,8 @@ public enum TaskApproval {
         if !task.labels.isEmpty { fields.append("labels=\(task.labels.map { $0.lowercased() }.sorted().joined(separator: ","))") }
         // Each tool is a write capability for an unattended run, so adding or changing one needs a new approval.
         if !task.mcpTools.isEmpty { fields.append("mcp_tools=\(task.mcpTools.sorted().joined(separator: ","))") }
+        // The earlier reports are part of what steers an unattended report, so how many of them it sees is approved.
+        if let history = task.history { fields.append("history=\(history)") }
         fields += ["---", GoalHash.canonicalBody(task.instructions)]
         return SHA256.hash(data: Data(fields.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
     }

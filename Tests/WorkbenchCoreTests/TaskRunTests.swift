@@ -444,6 +444,41 @@ private final class SaidLines: @unchecked Sendable {
     func add(_ line: String) { lock.withLock { all.append(line) } }
 }
 
+@Suite(.processGate) struct TaskRunHistoryTests {
+    @Test func aReportWithHistoryGetsTheDataBlocksOfEarlierDaysAndNeverTodays() async throws {
+        let run = try await Run(front: "fix: report\nhistory: 2")
+        func keep(_ name: String, _ data: String) throws {
+            let text = "# Report\n\nProse only the first time.\n\n```data\n\(data)\n```\n"
+            try run.task.write(".workbench/tasks/bump/reports/\(name).md", text)
+        }
+        try keep("20261001-040000", #"{"month":"2026-09"}"#)
+        try keep("20260901-040000", #"{"month":"2026-08"}"#)
+        try keep("20260801-040000", #"{"month":"2026-07"}"#)
+        try keep("20261105-030000", #"{"month":"today"}"#)
+        let agent = ReportAgent(answer: "# Compared")
+        var runner = run.reporter(agent: agent)
+        runner.now = { Date(timeIntervalSince1970: 1_793_880_000) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        runner.calendar = utc
+        let result = await runner.run("bump", trigger: .manual)
+        #expect(result.outcome == .reported, "\(result.reason ?? "")")
+        let prompt = try #require(agent.requests.first).prompt
+        #expect(prompt.contains(#"{"month":"2026-09"}"#) && prompt.contains(#"{"month":"2026-08"}"#))
+        #expect(!prompt.contains("2026-07") && !prompt.contains("today"), "N is 2 and today's report is not its own history")
+        #expect(!prompt.contains("Prose only the first time"), "the prose of an old report is not passed on")
+    }
+
+    @Test func aFirstReportWithHistoryRunsAndSaysThereIsNothingToCompareWith() async throws {
+        let run = try await Run(front: "fix: report\nhistory: 3")
+        let agent = ReportAgent(answer: "# First")
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported, "\(result.reason ?? "")")
+        #expect(try #require(agent.requests.first).prompt.contains("nothing to compare with"))
+        #expect(run.reportFiles().count == 1)
+    }
+}
+
 /// A read-only agent that answers a report turn from a stub, and writes down what it was asked and what it could see.
 private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
     private let lock = NSLock()
