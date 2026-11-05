@@ -17,6 +17,7 @@ enum AppScenario: String, CaseIterable {
     case accepted
     case prOpen = "pr-open"
     case prFindings = "pr-findings"
+    case prClean = "pr-clean"
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
@@ -144,6 +145,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.turn(id, 1, cost: 1.88)
             try fixture.decide(id, "accepted")
             try fixture.ship(id, number: 482)
+        case .prClean:
+            try await writePRClean(in: fixture, id: id)
         case .prFindings:
             // A shipped thread whose pull request review found things to fix: the findings sheet offers a fix round.
             try await fixture.addThread(id, approved: true, title: Self.title)
@@ -441,5 +444,21 @@ extension AppScenario {
             .taskRunEnded,
             data: ["outcome": "nothing-to-do", "units": [], "thread": .string(thread), "reason": .string(reason)])
         await writer.close()
+    }
+}
+
+extension AppScenario {
+    /// A shipped thread whose review is clean at the head the stand-in gh reports: Merge is the button, disabled while CI runs.
+    @MainActor fileprivate func writePRClean(in fixture: AppFixture, id: String) async throws {
+        try await fixture.addThread(id, approved: true, title: "Paginate the contractor invoice list")
+        try fixture.turn(id, 1, cost: 1.88)
+        try fixture.decide(id, "accepted")
+        try fixture.ship(id, number: 482)
+        let round: [String: JSONValue] = ["round": 1, "pr": 482, "head_sha": "0123456789abcdef0123456789abcdef01234567"]
+        try fixture.append(id, .prReviewStarted, data: .object(round))
+        var finished = round
+        finished["ok"] = true
+        finished["verdict"] = "clean"
+        try fixture.append(id, .prReviewFinished, data: .object(finished))
     }
 }
