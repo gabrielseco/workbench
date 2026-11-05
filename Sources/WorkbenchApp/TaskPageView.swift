@@ -203,10 +203,6 @@ struct TaskRunRow: View {
             if let action, !(action.isThread && !threadKnown) {
                 Button(action.title) { perform(action) }.plainButton().controlSize(.small)
             }
-            // A report run has no thread: its log is how to see what really happened.
-            if run.report.map(RunAction.isReportPath) == true {
-                Button(RunAction.viewLog.title) { perform(.viewLog) }.plainButton().controlSize(.small)
-            }
         }
         .padding(.vertical, Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
