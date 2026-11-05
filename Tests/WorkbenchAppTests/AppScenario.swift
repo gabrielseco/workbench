@@ -21,6 +21,7 @@ enum AppScenario: String, CaseIterable {
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
+    case verifyShots = "verify-shots"
     case corrupt
     case noThread = "no-thread"
     case draftGoal = "draft-goal"
@@ -136,6 +137,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .checkStarted, turn: 1)
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
+        case .verifyShots:
+            try await writeVerifyShots(in: fixture, id: id)
         case .accepted:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.turn(id, 1, cost: 1.88)
@@ -444,6 +447,26 @@ extension AppScenario {
             .taskRunEnded,
             data: ["outcome": "nothing-to-do", "units": [], "thread": .string(thread), "reason": .string(reason)])
         await writer.close()
+    }
+}
+
+extension AppScenario {
+    /// A turn whose verifier passed with three screenshots: the Verify card shows them, and each opens in the gallery.
+    @MainActor fileprivate func writeVerifyShots(in fixture: AppFixture, id: String) async throws {
+        try await fixture.addThread(id, approved: true, title: Self.title)
+        try fixture.turn(id, 1, cost: 1.88)
+        try fixture.append(id, .verifierStarted, turn: 1)
+        let folder = fixture.project.threadDirectory(id).appendingPathComponent("proof/turn-1")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for shot in AppScenarioShots.all {
+            try shot.png.write(to: folder.appendingPathComponent("\(shot.name).png"))
+            let recorded: JSONValue = [
+                "source": "verifier", "name": .string("\(shot.name).png"), "path": .string("proof/turn-1/\(shot.name).png"),
+                "sha256": "0", "bytes": .int(shot.png.count),
+            ]
+            try fixture.append(id, .proofAdded, turn: 1, data: recorded)
+        }
+        try fixture.append(id, .verifierEnded, turn: 1, data: ["ok": true, "report": "All three criteria hold."])
     }
 }
 

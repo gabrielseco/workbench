@@ -108,6 +108,8 @@ struct ScreenshotPreview: View {
             (decoded, missing, actualSize) = (nil, false, false)
             let url = url
             let loaded = await Task.detached(priority: .userInitiated) { StagedScreenshotImage.decode(url) }.value
+            // Paging cancels this task, but the detached decode still finishes: a superseded one must not replace the current picture.
+            guard !Task.isCancelled else { return }
             (decoded, missing) = (loaded, loaded == nil)
         }
     }
