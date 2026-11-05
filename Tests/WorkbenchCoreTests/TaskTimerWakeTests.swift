@@ -41,6 +41,17 @@ struct TaskTimerWakeTests {
         guard case .none = TimerWake.plan(for: [try task("fix: report")]) else { Issue.record("expected none"); return }
     }
 
+    @Test func aMonthlyTaskHasNoWakeAndSaysWhy() throws {
+        let monthly = try task("at: 06:00\ndays: monthly")
+        guard case .none(let reason) = TimerWake.plan(for: [monthly]) else { Issue.record("expected none"); return }
+        #expect(reason.contains("monthly") && reason.contains("day of the month"))
+        // Next to a weekday task the wake stays that task's alone, and the note is there to be shown.
+        let both = [monthly, try task("at: 04:00\ndays: weekdays")]
+        #expect(TimerWake.plan(for: both) == .wake(time: TimeOfDay(hour: 3, minute: 55), days: Set(2...6)))
+        #expect(TimerWake.monthlyNote(for: both)?.contains("monthly") == true)
+        #expect(TimerWake.monthlyNote(for: [try task("at: 04:00")]) == nil)
+    }
+
     @Test func theRepeatingWakeIsReadFromPmsetsOwnWords() {
         let text = """
             Repeating power events:

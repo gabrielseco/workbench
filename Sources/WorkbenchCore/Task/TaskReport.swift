@@ -35,15 +35,28 @@ extension TaskRunner {
         }
 
         let agent = config.resolvedPlanAgent()
+        if !task.mcpTools.isEmpty, agent.provider != .claude {
+            return failed("\(McpError.unsupportedProvider.description) ([agents.plan])")
+        }
         let budget = task.budgetUSD ?? config.defaultBudgetUSD
         let folder = project.taskDirectory(name).appendingPathComponent("report", isDirectory: true)
         let checkout = folder.appendingPathComponent("checkout", isDirectory: true)
         let key = Plan.sha256(folder.standardizedFileURL.path).prefix(16)
         let scratch = TurnScratch(url: FileManager.default.temporaryDirectory.appendingPathComponent("workbench-report-\(key)"))
-        let request = ReadOnlyRequest(
+        // The servers behind the task's tools, in a file for this turn alone; removed however the turn ends.
+        var access: McpAccess?
+        if !task.mcpTools.isEmpty {
+            do {
+                access = try McpAccess.write(
+                    tools: task.mcpTools, servers: config.mcpServers, in: FileManager.default.temporaryDirectory)
+            } catch { return failed("the task's MCP tools could not be loaded: \(error)") }
+        }
+        defer { access?.remove() }
+        var request = ReadOnlyRequest(
             prompt: prompt, workingDirectory: checkout, model: agent.model, budget: budget,
             timeout: TimeInterval((task.timeoutMin ?? Self.defaultReportTimeoutMinutes) * 60),
             reasoningEffort: agent.reasoningEffort, tools: .read, scratch: scratch, turn: "report")
+        request.mcp = access
         let chosen: any ReadOnlyAgent
         if let given = readOnlyAgent {
             chosen = given

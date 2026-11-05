@@ -192,7 +192,7 @@ extension Commands {
                 "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
                     + "next: \(due)  last: \(last)\(waiting)")
             if !summary.mcpTools.isEmpty {
-                out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a write capability, unattended)")
+                out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a capability for an unattended run)")
             }
             printWhy(summary)
         }
@@ -280,7 +280,11 @@ extension Commands {
         if !loaded.definition.mcpTools.isEmpty {
             out(
                 "mcp_tools: every run may call \(loaded.definition.mcpTools.joined(separator: ", ")) with nobody watching, "
-                    + "and runs without --safe-mode (the CLI turns MCP off under it).")
+                    + "and runs without --safe-mode (the CLI turns MCP off under it), so your settings and hooks load.")
+            out(
+                "each listed tool is a capability for an unattended run: a read tool and a write tool are two entries."
+                    + (loaded.definition.fix == .report
+                        ? " fix: report can change no file, but a listed tool that writes still writes." : ""))
         }
         if loaded.definition.fix == .pr {
             out(

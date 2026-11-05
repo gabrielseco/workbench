@@ -145,6 +145,9 @@ public struct TimerService: Sendable {
         case .none(let reason):
             lines.append("no wake schedule: \(reason)")
         }
+        if case .wake = TimerWake.plan(for: tasks()), let note = TimerWake.monthlyNote(for: tasks()) {
+            lines.append("not covered by that: \(note)")
+        }
         lines.append("also: keep the Mac plugged in and logged in (a restart with FileVault waits for your password)")
         lines.append("check it any time with: workbench task timer status")
         return lines

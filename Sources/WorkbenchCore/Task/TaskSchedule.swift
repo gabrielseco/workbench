@@ -11,11 +11,14 @@ public struct TimeOfDay: Equatable, Sendable {
 public enum TaskSchedule: Equatable, Sendable {
     /// At a time of day on some days. `days` are `Calendar` weekday numbers, 1 = Sunday.
     case daily(at: TimeOfDay, days: Set<Int>)
+    /// At a time of day on one day of the month: the first tick on or after it (1 to 28, so every month has it).
+    case monthly(at: TimeOfDay, day: Int)
     /// Every so many seconds after the last run.
     case every(seconds: Int)
 
     public static let minimumInterval = 300
     public static let maximumInterval = 30 * 86_400
+    public static let lastMonthDay = 28
 
     /// The first moment after `since` the task is due. `since` is the start of its last run, or the moment it was
     /// approved when it never ran. A moment that is already past means the task is due now: a machine that was
@@ -24,6 +27,19 @@ public enum TaskSchedule: Equatable, Sendable {
         switch self {
         case .every(let seconds):
             return since.addingTimeInterval(TimeInterval(seconds))
+        case .monthly(let time, let day):
+            // This month's slot may already be before `since`; a year of months is far more than needed to find the next.
+            guard let month = calendar.date(from: calendar.dateComponents([.year, .month], from: since)) else { return nil }
+            for step in 0..<3 {
+                guard let first = calendar.date(byAdding: .month, value: step, to: month),
+                    let slot = calendar.date(
+                        bySettingHour: time.hour, minute: time.minute, second: 0,
+                        of: calendar.date(byAdding: .day, value: day - 1, to: first) ?? first),
+                    slot > since
+                else { continue }
+                return slot
+            }
+            return nil
         case .daily(let time, let days):
             guard !days.isEmpty else { return nil }
             var day = calendar.startOfDay(for: since)
@@ -56,6 +72,8 @@ public enum TaskSchedule: Equatable, Sendable {
             if seconds % 86_400 == 0 { return "every \(seconds / 86_400)d" }
             if seconds % 3600 == 0 { return "every \(seconds / 3600)h" }
             return "every \(seconds / 60)m"
+        case .monthly(let time, let day):
+            return day == 1 ? "monthly \(time.text)" : "monthly on day \(day) \(time.text)"
         case .daily(let time, let days):
             let label: String
             if days == Set(1...7) {

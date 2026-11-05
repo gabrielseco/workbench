@@ -35,10 +35,12 @@ public enum TimerWake {
         }
         guard let first = earliest, !days.isEmpty else {
             let hasInterval = tasks.contains { if case .every? = $0.schedule { true } else { false } }
-            return .none(
-                reason: hasInterval
-                    ? "tasks that run every so often have no time of day to wake for; the machine must be awake when they are due"
-                    : "no task has a time of day (at:), so there is nothing to wake for")
+            if hasInterval {
+                let why = "tasks that run every so often have no time of day to wake for; "
+                return .none(reason: why + "the machine must be awake when they are due")
+            }
+            if monthlyNote(for: tasks) != nil { return .none(reason: monthlyNote(for: tasks) ?? "") }
+            return .none(reason: "no task has a time of day (at:), so there is nothing to wake for")
         }
         var minutes = first.hour * 60 + first.minute - leadMinutes
         var wakeDays = days
@@ -48,6 +50,14 @@ public enum TimerWake {
             wakeDays = Set(days.map { $0 == 1 ? 7 : $0 - 1 })
         }
         return .wake(time: TimeOfDay(hour: minutes / 60, minute: minutes % 60), days: wakeDays)
+    }
+
+    /// Said when a task runs on a day of the month: `pmset repeat` names weekdays, never a day of the month, so no wake covers it.
+    public static func monthlyNote(for tasks: [TaskDefinition]) -> String? {
+        guard tasks.contains(where: { if case .monthly? = $0.schedule { true } else { false } }) else { return nil }
+        return "a monthly task runs on a day of the month and pmset repeat only knows weekdays, so no wake covers it; "
+            + "the machine must be awake and logged in on or after that day, "
+            + "and a run missed while it was off happens once on the next tick"
     }
 
     /// What `pmset -g sched` says about the repeating wake: its time and its days as pmset words them.

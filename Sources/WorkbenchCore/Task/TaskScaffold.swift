@@ -117,7 +117,7 @@ public enum TaskScaffold {
             ---
             # When it runs. A task with neither is run by hand only (workbench task run \(name)).
             # at: 04:00             # a time of day...
-            # days: weekdays        # ...on these days: daily | weekdays | mon,wed,fri
+            # days: weekdays        # ...on these days: daily | weekdays | mon,wed,fri | monthly | monthly:15
             # every: 1h             # or an interval, 5m to 30d (not together with at)
             batch: 1                # units of work one run takes, 1 to 20
             \(includeLine)
@@ -129,7 +129,7 @@ public enum TaskScaffold {
             # timeout: 30           # minutes the agent's turn may run, 5 to 240 (default 30)
             # base: origin/main     # cut the thread from a freshly fetched origin/main, not from a local main that may be behind
             # labels: [bot, bump]   # 1 to 5 labels for the pull request a pr task opens; one that fails is only noted
-            # mcp_tools: mcp__linear__get_issue   # pr only: MCP tools this task may call, unattended (see docs/spec/tasks.md)
+            # mcp_tools: mcp__linear__get_issue   # MCP tools this task may call, unattended (see docs/spec/tasks.md)
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.
             Delete this line when you have.
