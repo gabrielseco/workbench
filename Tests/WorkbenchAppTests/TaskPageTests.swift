@@ -120,7 +120,7 @@ import WorkbenchCore
         func button(_ action: RunTonight.Action?) -> RunAction? {
             RunTonightCard.action(for: RunTonight.Warning(fails: true, text: "w", detail: nil, action: action))
         }
-        #expect(button(.approve) == .approve && button(.approve)?.title == "Approve…", "first approval is not a re-approval")
+        #expect(button(.approve) == .approve && button(.approve)?.title == "Approve", "first approval is not a re-approval")
         #expect(button(.reapprove) == .reapprove && button(.openThread("t")) == .openThread("t") && button(nil) == nil)
     }
 

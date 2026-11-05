@@ -16,12 +16,6 @@ extension TasksModel {
         return nil
     }
 
-    /// Whether the task the approve card is for was approved before (so the card says it was edited since).
-    func selectedIsStale(_ project: Project?) -> Bool {
-        guard let card = approving, let shown = snapshot(for: project) else { return false }
-        return shown.entries.first { $0.id == card.name }?.summary.approval == .stale
-    }
-
     var isRunning: Bool { runningTask != nil }
 
     /// Whether the run started here is for this project's task `name` (a task of the same name in another project is not it).
@@ -37,27 +31,16 @@ extension TasksModel {
 
     // MARK: approve
 
-    /// Opens the approve card with what is on disk now (so what is approved is what is shown).
-    func beginApprove(_ project: Project?, _ name: String) {
+    /// Approves the task as it is on disk now: the hash read here is the one recorded, and core refuses it if the file changes between.
+    func approve(_ project: Project?, _ name: String) async {
         guard let project, runningTask == nil else { return }
-        approveError = nil
-        do { approving = try actions.inspect(project, name) } catch {
-            approving = nil
-            actionNote = "\(name) cannot be approved: \(error)"
-        }
-    }
-
-    func cancelApprove() { (approving, approveError) = (nil, nil) }
-
-    /// Records the approval. A refusal leaves the card open with core's words; nothing is recorded.
-    func confirmApprove(_ project: Project?) async {
-        guard let project, let card = approving else { return }
         do {
-            try await actions.approve(project, card.name, card.hash)
-            (approving, approveError, actionNote) = (nil, nil, nil)
+            let shown = try actions.inspect(project, name)
+            try await actions.approve(project, name, shown.hash)
+            actionNote = nil
             await refresh(project)
         } catch {
-            approveError = "\(error)"
+            actionNote = "\(name) cannot be approved: \(error)"
         }
     }
 

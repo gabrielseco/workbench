@@ -18,16 +18,9 @@ struct RootView: View {
             FooterBar(store: store)
         }
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
-        .disabled(store.pickingProject || store.tasks.approving != nil)
+        .disabled(store.pickingProject)
         .frame(minWidth: 900, minHeight: 600)
         .overlay(alignment: .topLeading) { ProjectPickerLayer(store: store) }
-        .overlay {
-            OverlayLayer(shown: store.tasks.approving != nil) {
-                if let card = store.tasks.approving {
-                    TaskApproveCard(store: store, card: card, stale: store.tasks.selectedIsStale(store.project))
-                }
-            }
-        }
     }
 }
 
