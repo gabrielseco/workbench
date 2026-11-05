@@ -53,6 +53,8 @@ extension ProjectStore {
         switch route {
         case .thread:
             mode = .thread
+            // The new-thread screen is drawn before a thread: leaving it up would hide what the route is for. What was typed stays.
+            newThread = false
         case .task(let name):
             mode = .tasks
             tasks.selection = name

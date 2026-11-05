@@ -141,6 +141,11 @@ import WorkbenchCore
         #expect(store.guidanceFocus == 0, "a task has nothing to send back")
         store.openFromPopover(.thread("invoice-pagination"), sendBack: true)
         #expect((store.guidanceFocus == 1) == (store.review != nil))
+        // With the new-thread screen up, the route still brings the thread (and its field) forward; what was typed stays.
+        store.beginNewGoal()
+        store.newThreadText = "half a goal"
+        store.openFromPopover(.thread("invoice-pagination"), sendBack: true)
+        #expect(!store.newThread && store.newThreadText == "half a goal")
     }
 
     @Test func pausingIsAPreferenceTheToggleRedraws() {
