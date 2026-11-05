@@ -25,6 +25,9 @@ public struct ReadOnlyRequest: Sendable, Equatable {
     public var turn = "plan"
     /// Claude's `--session-id`, the same in the logged command and the one that runs.
     public var sessionID = UUID()
+    /// A report task's MCP tools: the turn loads their servers from the access file and may call exactly those, besides reading.
+    /// Only with `.read` on Claude; the caller refuses any other agent.
+    public var mcp: McpAccess?
 }
 
 /// What came back. `text` is set when the agent answered; `failure` says why it did not (never both).
@@ -137,11 +140,21 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
             "--session-id", sessionID.uuidString.lowercased(),
             "--max-budget-usd", NSDecimalNumber(decimal: request.budget).stringValue,
         ]
-        // Always: `safe_mode = false` lets a project's hooks and plugins into a run, and this turn is read-only.
-        args += ["--safe-mode", "--disable-slash-commands"]
+        // `safe_mode = false` lets a project's hooks and plugins into a run, and this turn is read-only, so it is always on, except
+        // for a turn with MCP tools: the CLI turns MCP off under it. Then the user's settings and hooks load; the tools stay Read,
+        // Grep and Glob plus exactly the listed ones, and skills and commands stay off.
+        if let mcp = request.mcp {
+            args += ["--disable-slash-commands", "--mcp-config", mcp.configFile.path, "--strict-mcp-config"]
+        } else {
+            args += ["--safe-mode", "--disable-slash-commands"]
+        }
         if let model = request.model { args += ["--model", model] }
         if let effort = request.reasoningEffort { args += ["--effort", effort] }
-        args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools
+        // A tool the project denies is never allowed here and is denied outright, as in a coding turn: the deny list wins.
+        let denied = config.tools.denied
+        let mcpTools = (request.mcp?.tools ?? []).filter { !denied.contains($0) }
+        args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools + mcpTools
+        if request.mcp != nil, !denied.isEmpty { args += ["--disallowedTools"] + denied }
         args += ["--", request.prompt]
         return args
     }

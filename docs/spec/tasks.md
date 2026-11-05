@@ -18,7 +18,7 @@ Unknown keys, bad values and paths outside the project are refused, all at once,
 ```markdown
 ---
 at: 04:00                       # a time of day (with days), or `every:`
-days: weekdays                  # daily | weekdays | mon,wed,fri; default daily
+days: weekdays                  # daily | weekdays | mon,wed,fri | monthly | monthly:15; default daily
 batch: 2                        # units per run, 1 to 20; default 1
 include: .claude/skills/bump/SKILL.md   # a skill's text goes into the prompt (skills are not loaded in safe mode)
 inputs: [countries.txt, fixtures/]      # files or directories the agent reads, any format
@@ -31,18 +31,18 @@ Bump the next countries. Follow the skill exactly.
 
 | key | meaning |
 |---|---|
-| `at`, `days` | due at that time on those days. A run missed while the machine was off happens once on the next tick, not once per missed slot |
+| `at`, `days` | due at that time on those days. A run missed while the machine was off happens once on the next tick, not once per missed slot. `days: monthly` is the 1st of the month, `days: monthly:15` the 15th (1 to 28, so every month has the day; anything else is refused with the line and key): due on the first tick on or after that day at `at`, counted from the start of the last run (or the approval), so a month missed is run once and the next slot is the following month's, with no drift |
 | `every` | `5m` to `30d`, counted from the start of the last run. `at` and `every` together are refused |
 | `batch` | how many pending units one run takes |
 | `include` | one file, up to 16 KiB, whose text is added to the prompt |
 | `inputs` | up to 20 paths, 200 files and 32 KiB in all (across every path), regular files only, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
 | `pending` | the script that names the units (below) |
-| `fix` | `report`: one read-only turn, in a checkout of the base as committed (the agent of `[agents.plan]`, with Read, Glob and Grep, never the working tree), whose answer is kept as `.workbench/tasks/<name>/reports/<time>.md` (cut at 256 KiB) and whose first line is the run's reason. It starts no thread, changes and opens nothing, and costs at most the task's `budget` (the project's default budget when it sets none). `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
+| `fix` | `report`: one read-only turn, in a checkout of the base as committed (the agent of `[agents.plan]`, with Read, Glob and Grep and, when the task sets `mcp_tools`, exactly those MCP tools; never the working tree), whose answer is kept as `.workbench/tasks/<name>/reports/<time>.md` (cut at 256 KiB) and whose first line is the run's reason. It starts no thread, changes and opens nothing, and costs at most the task's `budget` (the project's default budget when it sets none). `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
 | `max_open` | 1 to 50, default 2 for `fix: pr` (a `fix: report` run is not limited): the task starts no run while this many of its own pull requests are open, because the pull requests of one task tend to touch the same files and pile up. The run ends `skipped-too-many-open` with the addresses; merged and closed ones do not count. It is part of the approval only when the file sets it |
 | `timeout` | minutes the agent's turn may run, 5 to 240. Without it the goal's default of 30 stands. Part of the approval only when the file sets it |
 | `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
 | `labels` | 1 to 5 labels put on the pull request a `fix: pr` run opens, `labels: [seed-preview, bot]`. Each name is 1 to 50 of letters, digits and `- _ . : /`, with no duplicates (case is ignored, as GitHub does); anything else is refused at load with the line and key. Part of the approval only when the file sets it, so editing them makes the task STALE. Only a task run adds them; `workbench ship` of an ordinary thread adds none |
-| `mcp_tools` | `fix: pr` only: MCP tools the task's runs may call, `mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue` (1 to 10, each exactly `mcp__<server>__<tool>`: no wildcard, no duplicate; anything else is refused at load with the line and key). The servers are **never** defined here: each name's server must have a `[mcp_servers.<name>]` table in `.workbench/config.toml`, or the task is refused at load (`task list` shows PROBLEM, `workbench doctor` warns). Part of the approval only when the file sets it, so editing the list makes the task STALE. See "MCP tools" below |
+| `mcp_tools` | `fix: pr` or `fix: report`: MCP tools the task's runs may call, `mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue` (1 to 10, each exactly `mcp__<server>__<tool>`: no wildcard, no duplicate; anything else is refused at load with the line and key). The servers are **never** defined here: each name's server must have a `[mcp_servers.<name>]` table in `.workbench/config.toml`, or the task is refused at load (`task list` shows PROBLEM, `workbench doctor` warns). Part of the approval only when the file sets it, so editing the list makes the task STALE. See "MCP tools" below |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
@@ -65,18 +65,24 @@ fix: pr
 mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue
 ```
 
-For that task's turns only, Workbench writes a temporary file (mode 600) holding just the servers the listed tools belong to, starts `claude` with `--mcp-config <file> --strict-mcp-config`, appends exactly the listed tools to `--allowedTools` (`--disallowedTools` still wins); any other `mcp__` entry in `[tools].allowed` or a thread grant (a different tool, or a whole server) is left out of that turn, and deletes the file when the turn ends, however it ends. Goal runs, other tasks, the verifier and the read-only turns (plan, PR description, report) never get a server. A `[mcp_servers.*]` table alone loads nothing.
+For that task's turns only (for `fix: report`, its one report turn), Workbench writes a temporary file (mode 600) holding just the servers the listed tools belong to, starts `claude` with `--mcp-config <file> --strict-mcp-config`, appends exactly the listed tools to `--allowedTools` (`--disallowedTools` still wins); any other `mcp__` entry in `[tools].allowed` or a thread grant (a different tool, or a whole server) is left out of that turn, and deletes the file when the turn ends, however it ends. Goal runs, other tasks, the verifier and the read-only turns (plan, PR description, and a report without `mcp_tools`) never get a server. A `[mcp_servers.*]` table alone loads nothing.
 
 **What was measured** (claude 2.1.316): `--safe-mode` turns MCP servers off even with `--mcp-config --strict-mcp-config`, so a task with `mcp_tools` runs **without `--safe-mode`**; `--disable-slash-commands` stays, so skills and commands stay off. That means the user's settings and hooks, and the worktree's `CLAUDE.md` and project settings, load for that task's runs. `--allowedTools mcp__linear__get_issue` allowed that tool and refused `save_issue` of the same server.
 
 **Warnings.**
-- Each listed tool is a **write capability for an unattended run**. List only what the task needs; a read tool and a write tool are two entries.
+- Each listed tool is a **capability for an unattended run** (a write one if the tool writes). List only what the task needs; a read tool and a write tool are two entries.
 - A remote server needs the login you did in your own `claude` (`/mcp`). Workbench passes no new variable: the run finds it through `HOME` and `CLAUDE_CONFIG_DIR`, which it already passes. Without it the tools are simply not there and the task says it could not call them.
 - Only Claude as the coding agent: with `[agents.run]` on Codex a task with `mcp_tools` is refused before any turn.
 
-**Why `fix: pr` only.** A `fix: report` turn is `Read`, `Grep` and `Glob` in a checkout of the base, always with `--safe-mode`: it has no Bash and cannot call MCP. `mcp_tools` with `fix: report` is refused at load rather than ignored. A task that only acts through MCP and changes no file runs as `fix: pr` and ends `nothing-to-do` (the thread is discarded, no pull request); it still needs `check_command`, and a worktree. A mode without those (`fix: act`: no worktree changes, no pull request, outcome recorded) is proposed, not built.
+**`fix: report` with MCP tools.** A report turn is `Read`, `Grep` and `Glob` in a checkout of the base, no Bash, no file changes. With `mcp_tools` it also gets the temporary `--mcp-config <file> --strict-mcp-config` file (mode 600, deleted when the turn ends) and `--allowedTools` for exactly the listed tools, and nothing else from MCP. So a task can query a data source (the use case: a monthly Snowflake query kept as a report) and keep the answer under `reports/<time>.md` with the first line as the run's reason, opening no thread and no pull request. The prompt tells the agent it may read and call only those tools.
 
-`workbench config` lists the servers and each task's tools, `task list` and `task log` show a task's tools, and `task approve` repeats the warning.
+What this **loosens**: that one turn runs **without `--safe-mode`** (the CLI turns MCP off under it), so the user's settings and hooks load, as for `fix: pr`; the checkout is the base as committed, so the project's own `CLAUDE.md` and project settings come from it. `--disable-slash-commands` stays, `--restricted` stays, and the tool list stays `Read`, `Grep`, `Glob` plus the listed tools. A report task **without** `mcp_tools` is unchanged and still runs under `--safe-mode`.
+
+What it does not loosen: a report task with MCP tools can read through MCP and can change no file, but **every listed tool is still a capability for an unattended run**: a tool that writes (a `save_` or `execute_` tool on a server that mutates) writes, report or not. List only read tools for a report, and a read tool and a write tool are two entries. The 256 KiB cut-off on a report stays. Only Claude: with `[agents.plan]` on Codex a report task with `mcp_tools` ends `failed` before any turn.
+
+A task that acts through MCP and changes no file can still run as `fix: pr` and ends `nothing-to-do`; it needs `check_command` and a worktree. A mode without those (`fix: act`) is proposed, not built.
+
+`workbench config` lists the servers and each task's tools, `task list` and `task log` show a task's tools, and `task approve` repeats the warning (for a report task too: it can change no file, but a listed tool that writes still writes).
 
 
 ## Units of work: the pending script
@@ -237,7 +243,7 @@ did by hand:
   pull; the command is ended, then killed), because launchd never starts a second copy of a job that is still running. `--pull-main` also fast-forwards `main` before each tick, but only when it is checked out and clean.
 - It prints the wake line, because a sleeping Mac runs nothing: `sudo pmset repeat wakeorpoweron MTWRF 03:55:00`, from the tasks' own times
   (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
-  `every:` get no wake line and a sentence saying why). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
+  `every:` get no wake line and a sentence saying why; a `days: monthly` task runs on a day of the month, which `pmset repeat` cannot name, so it adds no wake: `install` says the machine must be awake and logged in on or after that day (a run missed while it was off happens once on the next tick), and so does `status` when no other task gives a wake). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
   The only program it runs is `launchctl`.
 - `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, the binary copy the launcher runs (missing is a FAIL; older than the `workbench` being run is a warning with the fix, compared only when the running program is `workbench`), each task approved
   and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";

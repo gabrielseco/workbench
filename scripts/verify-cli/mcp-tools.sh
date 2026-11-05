@@ -5,11 +5,13 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/mcp-tools.sh   (the same, on a branch that contains origin/main)
 # A `fix: pr` task that lists tools whose server has a `[mcp_servers.<name>]` table must list as not approved with the tools it may
 # call, `task approve` must repeat that each tool is unattended write access and that the run is without --safe-mode, and
-# `workbench config` must show the server and the task's tools. A task naming a server with no table, a wildcard, or `fix: report`
-# must be a PROBLEM in `task list` and refused by `task approve` (exit 6). Editing the tool list after approval must say STALE.
+# `workbench config` must show the server and the task's tools. A `fix: report` task with tools loads the same way and
+# its `task approve` repeats the capability warning (it can change no file, a listed write tool still writes). A task naming a server
+# with no table, a wildcard, or `days: monthly:31` must be a PROBLEM in `task list` and refused by `task approve` (exit 6); `days: monthly`
+# lists as `monthly 06:00` and approves with "it is due monthly 06:00". Editing the tool list after approval must say STALE.
 # A config with a bad `[mcp_servers.*]` table must be refused. Exit 0 only when every step passed, 1 when one failed, 2 when it
 # refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 leaves the server table out of the config, so "list shows the tools",
-# "approve warns", "config shows the server" and "editing the tools says STALE" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
+# "a report task with tools loads", "approve warns", "config shows the server" and "editing the tools says STALE" must FAIL. The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -46,6 +48,8 @@ task tracker 'at: 21:00\nfix: pr\nmcp_tools: mcp__linear__get_issue, mcp__linear
 task noserver 'fix: pr\nmcp_tools: mcp__jira__get_issue'
 task wild 'fix: pr\nmcp_tools: mcp__linear__*'
 task reporter 'fix: report\nmcp_tools: mcp__linear__get_issue'
+task monthly 'at: 06:00\ndays: monthly\nfix: report'
+task badmonth 'at: 06:00\ndays: monthly:31\nfix: report'
 
 # --- 1. list -------------------------------------------------------------------------------------------------
 
@@ -56,15 +60,25 @@ check "list: a server with no table is a PROBLEM naming it" "got: $(grep '^noser
     bash -c 'grep -E "^noserver +PROBLEM.*server .jira. with no \[mcp_servers" "$1" >/dev/null' _ "$SCRATCH/list.out"
 check "list: a wildcard is a PROBLEM naming the line and the key" "got: $(grep '^wild' "$SCRATCH/list.out")" \
     bash -c 'grep -E "^wild +PROBLEM.*line 3: .mcp_tools. has .mcp__linear__\*." "$1" >/dev/null' _ "$SCRATCH/list.out"
-check "list: fix: report with mcp_tools is a PROBLEM" "got: $(grep '^reporter' "$SCRATCH/list.out")" \
-    bash -c 'grep -E "^reporter +PROBLEM.*needs .fix: pr." "$1" >/dev/null' _ "$SCRATCH/list.out"
+check "list: fix: report with mcp_tools loads and shows the tools" "got: $(grep -A1 '^reporter' "$SCRATCH/list.out")" \
+    bash -c 'grep -E "^reporter +no schedule +fix: report" "$1" >/dev/null && grep -q "^    mcp: may call mcp__linear__get_issue" "$1"' _ "$SCRATCH/list.out"
+check "list: days: monthly reads back as monthly 06:00" "got: $(grep '^monthly' "$SCRATCH/list.out")" \
+    bash -c 'grep -E "^monthly +monthly 06:00 +fix: report" "$1" >/dev/null' _ "$SCRATCH/list.out"
+check "list: days: monthly:31 is a PROBLEM naming the line and the key" "got: $(grep '^badmonth' "$SCRATCH/list.out")" \
+    bash -c 'grep -E "^badmonth +PROBLEM.*line 3: .days. monthly" "$1" >/dev/null' _ "$SCRATCH/list.out"
 
 # --- 2. approve ----------------------------------------------------------------------------------------------
 
 wbp "$SCRATCH/approve.out" task approve tracker; shown "$SCRATCH/approve.out"
 check "approve warns that every run may call the tools unattended and without --safe-mode" "exit $RC: $(head -c 300 "$SCRATCH/approve.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "mcp_tools: every run may call mcp__linear__get_issue" "$2" && grep -q "without --safe-mode" "$2"' _ "$RC" "$SCRATCH/approve.out"
-for t in noserver wild reporter; do
+wbp "$SCRATCH/approve-report.out" task approve reporter; shown "$SCRATCH/approve-report.out"
+check "approve of a report task repeats that each tool is a capability, and that it runs without --safe-mode" "exit $RC: $(head -c 300 "$SCRATCH/approve-report.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "each listed tool is a capability" "$2" && grep -q "fix: report can change no file" "$2" && grep -q "without --safe-mode" "$2"' _ "$RC" "$SCRATCH/approve-report.out"
+wbp "$SCRATCH/approve-monthly.out" task approve monthly; shown "$SCRATCH/approve-monthly.out"
+check "approve of a monthly task says it is due monthly" "exit $RC: $(head -c 300 "$SCRATCH/approve-monthly.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "it is due monthly 06:00" "$2"' _ "$RC" "$SCRATCH/approve-monthly.out"
+for t in noserver wild badmonth; do
     wbp "$SCRATCH/refuse-$t.out" task approve "$t"
     check "approve refuses $t (exit 6)" "exit $RC: $(head -c 200 "$SCRATCH/refuse-$t.out")" test "$RC" = 6
 done

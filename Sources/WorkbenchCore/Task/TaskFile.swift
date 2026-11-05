@@ -166,9 +166,7 @@ public struct TaskDefinition: Sendable, Equatable {
         }
         if let e = entry("mcp_tools") {
             let items = list(e.value)
-            if definition.fix != .pr {
-                add(e.lineNumber, "'mcp_tools' needs 'fix: pr': a report turn is read-only and cannot call MCP tools")
-            } else if items.isEmpty || items.count > McpTool.maxTools {
+            if items.isEmpty || items.count > McpTool.maxTools {
                 add(e.lineNumber, "'mcp_tools' must list 1 to \(McpTool.maxTools) tool names, found '\(e.value)'")
             } else if let bad = items.first(where: { McpTool.split($0) == nil }) {
                 add(e.lineNumber, "'mcp_tools' has '\(bad)', which is not shaped mcp__<server>__<tool> (exact, no wildcard)")
@@ -252,14 +250,31 @@ public struct TaskDefinition: Sendable, Equatable {
         }
         var daySet = Set(1...7)
         if let days {
-            if let parsed = parseDays(days.value) {
+            if let day = monthDay(days.value) {
+                return .monthly(at: TimeOfDay(hour: hour, minute: minute), day: day)
+            } else if days.value.lowercased().hasPrefix("monthly") {
+                let last = TaskSchedule.lastMonthDay
+                let hint = "takes a day of the month from 1 to \(last): monthly or monthly:15"
+                add(days.lineNumber, "'days' monthly \(hint), found '\(days.value)'")
+                return nil
+            } else if let parsed = parseDays(days.value) {
                 daySet = parsed
             } else {
-                add(days.lineNumber, "'days' must be daily, weekdays or names like mon,wed, found '\(days.value)'")
+                add(days.lineNumber, "'days' must be daily, weekdays, monthly or names like mon,wed, found '\(days.value)'")
                 return nil
             }
         }
         return .daily(at: TimeOfDay(hour: hour, minute: minute), days: daySet)
+    }
+
+    /// `monthly` is the 1st, `monthly:15` the 15th; nil for anything else.
+    private static func monthDay(_ value: String) -> Int? {
+        let lowered = value.lowercased().trimmingCharacters(in: .whitespaces)
+        if lowered == "monthly" { return 1 }
+        guard let match = lowered.wholeMatch(of: #/monthly:([0-9]{1,2})/#), let day = Int(match.1),
+            (1...TaskSchedule.lastMonthDay).contains(day)
+        else { return nil }
+        return day
     }
 
     private static func parseDays(_ value: String) -> Set<Int>? {

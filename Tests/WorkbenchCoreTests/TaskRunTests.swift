@@ -102,6 +102,46 @@ private struct Run {
         #expect(run.threads().isEmpty && ended.count == 1)
     }
 
+    @Test func aReportTurnWithMcpToolsGetsTheServerFileForExactlyThoseToolsAndItIsGoneAfter() async throws {
+        let snowflake = "\n[mcp_servers.snowflake]\ntype = \"http\"\nurl = \"https://gateway.example.com/mcp\"\n"
+        let run = try await Run(
+            front: "fix: report\nmcp_tools: mcp__snowflake__execute_query, mcp__snowflake__fetch_query_result",
+            extraConfig: "check_command = \"true\"\n" + snowflake)
+        let seen = MockBox()
+        let agent = ReportAgent(answer: "# Active EOR employments rose\n\nDetails.") { _ in }
+        agent.onRequest = { request in
+            guard let mcp = request.mcp else { return }
+            let mode = (try? FileManager.default.attributesOfItem(atPath: mcp.configFile.path)[.posixPermissions] as? Int) ?? 0
+            seen.set(tools: mcp.tools, file: mcp.configFile, mode: mode)
+        }
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported && result.thread == nil && run.threads().isEmpty)
+        #expect(seen.tools == ["mcp__snowflake__execute_query", "mcp__snowflake__fetch_query_result"])
+        #expect(seen.mode == 0o600, "the file is private to this user")
+        #expect(!FileManager.default.fileExists(atPath: try #require(seen.file).path), "the file is gone when the turn ends")
+        #expect(run.reportFiles().count == 1)
+        let prompt = try #require(agent.requests.first).prompt
+        #expect(prompt.contains("mcp__snowflake__execute_query"))
+    }
+
+    @Test func aReportTaskWithoutMcpToolsHandsTheAgentNoServer() async throws {
+        let run = try await Run(front: "fix: report")
+        let agent = ReportAgent(answer: "# Fine")
+        _ = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(agent.requests.first?.mcp == nil)
+    }
+
+    @Test func aReportTaskWithMcpToolsIsRefusedWhenThePlanAgentIsCodex() async throws {
+        let snowflake = "\n[mcp_servers.snowflake]\ntype = \"http\"\nurl = \"https://gateway.example.com/mcp\"\n"
+        let run = try await Run(
+            front: "fix: report\nmcp_tools: mcp__snowflake__execute_query",
+            extraConfig: "check_command = \"true\"\n[agents.plan]\nprovider = \"codex\"\n" + snowflake)
+        let agent = ReportAgent(answer: "never asked")
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .failed && result.reason?.contains("Claude") == true && agent.requests.isEmpty)
+        #expect(run.reportFiles().isEmpty)
+    }
+
     @Test func aReportThatCannotBeAnsweredFailsAndKeepsNothing() async throws {
         let run = try await Run(front: "fix: report")
         let agent = ReportAgent(answer: nil, failure: "the budget ran out")
@@ -415,6 +455,7 @@ private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
     let notAvailable: String?
 
     let beforeAnswer: (@Sendable (URL) -> Void)?
+    var onRequest: (@Sendable (ReadOnlyRequest) -> Void)?
 
     init(
         answer: String?, failure: String? = nil, unavailable: String? = nil, beforeAnswer: (@Sendable (URL) -> Void)? = nil
@@ -432,7 +473,22 @@ private final class ReportAgent: ReadOnlyAgent, @unchecked Sendable {
             let stray = request.workingDirectory.appendingPathComponent("untracked.txt")
             sawUntracked = FileManager.default.fileExists(atPath: stray.path)
         }
+        onRequest?(request)
         beforeAnswer?(request.workingDirectory)
         return ReadOnlyAnswer(text: answer, costUSD: nil, failure: failure)
     }
+}
+
+/// What a report turn's request held while the turn ran, written from the agent's thread.
+private final class MockBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var toolsSeen: [String] = []
+    private var fileSeen: URL?
+    private var modeSeen = 0
+    func set(tools: [String], file: URL, mode: Int) {
+        lock.withLock { (toolsSeen, fileSeen, modeSeen) = (tools, file, mode) }
+    }
+    var tools: [String] { lock.withLock { toolsSeen } }
+    var file: URL? { lock.withLock { fileSeen } }
+    var mode: Int { lock.withLock { modeSeen } }
 }

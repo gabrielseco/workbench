@@ -154,4 +154,17 @@ struct TaskFileTests {
         let found = problems(Self.task("batch: 0\nfix: merge\nmerge: yes"))
         #expect(found.count == 3)
     }
+
+    @Test func daysMonthlyParsesAsTheFirstOrAGivenDayAndBadOnesAreRefusedWithTheLine() throws {
+        let first = try TaskDefinition.parse(Self.task("at: 06:00\ndays: monthly"), name: "bump")
+        #expect(first.schedule == .monthly(at: TimeOfDay(hour: 6, minute: 0), day: 1))
+        let fifteenth = try TaskDefinition.parse(Self.task("at: 06:00\ndays: monthly:15"), name: "bump")
+        #expect(fifteenth.schedule == .monthly(at: TimeOfDay(hour: 6, minute: 0), day: 15))
+        for bad in ["monthly:0", "monthly:29", "monthly:31", "monthly:", "monthly:x", "monthly 15"] {
+            let found = problems(Self.task("at: 06:00\ndays: \(bad)"))
+            #expect(found.count == 1 && found[0].contains("line 3") && found[0].contains("'days'"), "\(bad): \(found)")
+        }
+        #expect(problems(Self.task("days: monthly")).first?.contains("needs an 'at'") == true)
+        #expect(problems(Self.task("every: 1d\ndays: monthly")).first?.contains("goes with 'at'") == true)
+    }
 }

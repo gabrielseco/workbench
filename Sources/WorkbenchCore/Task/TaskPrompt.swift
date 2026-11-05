@@ -38,8 +38,13 @@ public enum TaskPrompt {
                 "Leave your changes in the working tree. Workbench commits them, runs the project's check and opens the "
                     + "pull request itself: do not push, merge or open one.")
         case .report:
+            let reach =
+                task.definition.mcpTools.isEmpty
+                ? "You may only read: change nothing and run nothing."
+                : "You may read files and call only these tools: \(task.definition.mcpTools.joined(separator: ", ")). "
+                    + "Change nothing and run nothing else."
             parts.append(
-                "You may only read: change nothing and run nothing. Your whole answer is the report, in Markdown. Its first "
+                reach + " Your whole answer is the report, in Markdown. Its first "
                     + "line is a one-line summary of what you found; Workbench keeps the answer as a file and shows that line.")
         }
         let text = neutralised(parts.joined(separator: "\n\n"))

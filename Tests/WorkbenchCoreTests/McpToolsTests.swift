@@ -59,11 +59,10 @@ struct McpTaskFileTests {
         #expect(taskProblems("fix: pr\nmcp_tools: ").count == 1)
         let many = (1...11).map { "mcp__s__t\($0)" }.joined(separator: ", ")
         #expect(taskProblems("fix: pr\nmcp_tools: \(many)").count == 1)
-        // A report turn is read-only and always safe mode: the key is refused, not ignored.
-        #expect(
-            taskProblems("fix: report\nmcp_tools: mcp__linear__get_issue").first?.contains("fix: pr")
-                == true)
-        #expect(taskProblems("mcp_tools: mcp__linear__get_issue").count == 1)
+        // A report task takes the same list and the same checks.
+        #expect(taskProblems("fix: report\nmcp_tools: mcp__linear__get_issue").isEmpty)
+        #expect(taskProblems("fix: report\nmcp_tools: mcp__linear__*").count == 1)
+        #expect(taskProblems("mcp_tools: mcp__linear__get_issue").isEmpty, "report is the default")
     }
 
     @Test func editingTheToolsMakesTheApprovalStaleAndATaskWithoutThemKeepsItsHash() throws {
@@ -100,9 +99,84 @@ struct McpTaskFileTests {
         #expect(library.mcpProblems(servers: config.mcpServers).isEmpty)
     }
 
+    @Test func aReportTaskWithToolsLoadsAndListsThemAndIsRefusedWithoutItsServerTable() async throws {
+        let fx = try TaskFixture(front: "fix: report\nmcp_tools: mcp__linear__get_issue")
+        try FileManager.default.createDirectory(at: fx.project.workbenchDirectory, withIntermediateDirectories: true)
+        try toolsTable.write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+        let library = TaskLibrary(project: fx.project)
+        #expect(throws: TaskFileError.self) { try library.load(fx.name) }
+        #expect(library.summary(fx.name).problem?.contains("'linear'") == true)
+        await #expect(throws: TaskFileError.self) { try await library.approve(fx.name) }
+
+        try (toolsTable + linear).write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+        #expect(try library.load(fx.name).definition.mcpTools == ["mcp__linear__get_issue"])
+        let summary = library.summary(fx.name)
+        #expect(summary.fix == .report && summary.mcpTools == ["mcp__linear__get_issue"])
+    }
+
+    @Test func editingAReportTasksToolsMakesItsApprovalStale() async throws {
+        let fx = try TaskFixture(front: "fix: report\nmcp_tools: mcp__linear__get_issue")
+        try FileManager.default.createDirectory(at: fx.project.workbenchDirectory, withIntermediateDirectories: true)
+        try (toolsTable + linear).write(to: fx.project.configURL, atomically: true, encoding: .utf8)
+        let library = TaskLibrary(project: fx.project)
+        try await library.approve(fx.name)
+        #expect(library.summary(fx.name).approval == .approved)
+        let edited = "fix: report\nmcp_tools: mcp__linear__get_issue, mcp__linear__save_issue"
+        try fx.write(task: "---\n\(edited)\n---\nBump the next countries.\n")
+        #expect(library.summary(fx.name).approval == .stale)
+    }
+
     @Test func noConfigAtAllRefusesATaskThatNamesTools() throws {
         let fx = try TaskFixture(front: "fix: pr\nmcp_tools: mcp__linear__get_issue")
         #expect(throws: TaskFileError.self) { try TaskLibrary(project: fx.project).load(fx.name) }
+    }
+}
+
+struct McpReportInvocationTests {
+    private func request(_ mcp: McpAccess?) -> ReadOnlyRequest {
+        var request = ReadOnlyRequest(
+            prompt: "the prompt", workingDirectory: URL(fileURLWithPath: "/tmp"), model: "opus", budget: 1, timeout: 60)
+        request.mcp = mcp
+        return request
+    }
+
+    @Test func aReportTurnWithToolsGetsTheServerFileAndExactlyThoseToolsAndNoSafeMode() throws {
+        let cfg = try Config.parse(toolsTable + linear)
+        let mcp = try McpAccess.write(
+            tools: ["mcp__linear__get_issue"], servers: cfg.mcpServers, in: try Scratch.directory("mcp"))
+        let args = ClaudeReadOnlyAgent(config: cfg, environment: [:]).arguments(for: request(mcp))
+        #expect(!args.contains("--safe-mode") && args.contains("--disable-slash-commands") && args.contains("--restricted"))
+        let at = try #require(args.firstIndex(of: "--mcp-config"))
+        #expect(args[at + 1] == mcp.configFile.path && args[at + 2] == "--strict-mcp-config")
+        let tools = try #require(args.firstIndex(of: "--tools"))
+        #expect(Array(args[(tools + 1)...].prefix { !$0.hasPrefix("--") }) == ["Read", "Grep", "Glob"])
+        let allowed = try #require(args.firstIndex(of: "--allowedTools"))
+        let list = Array(args[(allowed + 1)...].prefix { !$0.hasPrefix("--") })
+        #expect(list == ["Read", "Grep", "Glob", "mcp__linear__get_issue"])
+        for banned in ["Bash", "Edit", "Write", "mcp__linear__*"] { #expect(!args.contains(banned)) }
+        #expect(args.suffix(2) == ["--", "the prompt"])
+    }
+
+    @Test func aReportTurnNeverAllowsAToolTheProjectDeniesAndKeepsTheDenyList() throws {
+        let before = "denied = [\"Bash(git push:*)\"]"
+        let after = "denied = [\"Bash(git push:*)\", \"mcp__linear__save_issue\"]"
+        let denies = toolsTable.replacingOccurrences(of: before, with: after)
+        let cfg = try Config.parse(denies + linear)
+        let mcp = try McpAccess.write(
+            tools: ["mcp__linear__get_issue", "mcp__linear__save_issue"], servers: cfg.mcpServers,
+            in: try Scratch.directory("mcp"))
+        let args = ClaudeReadOnlyAgent(config: cfg, environment: [:]).arguments(for: request(mcp))
+        let allowed = try #require(args.firstIndex(of: "--allowedTools"))
+        let list = Array(args[(allowed + 1)...].prefix { !$0.hasPrefix("--") })
+        #expect(list == ["Read", "Grep", "Glob", "mcp__linear__get_issue"])
+        let deny = try #require(args.firstIndex(of: "--disallowedTools"))
+        #expect(Array(args[(deny + 1)...].prefix { !$0.hasPrefix("--") }) == ["Bash(git push:*)", "mcp__linear__save_issue"])
+    }
+
+    @Test func aReportTurnWithoutToolsKeepsSafeModeAndLoadsNoServer() throws {
+        let cfg = try Config.parse("safe_mode = false\n" + toolsTable + linear)
+        let args = ClaudeReadOnlyAgent(config: cfg, environment: [:]).arguments(for: request(nil))
+        #expect(args.contains("--safe-mode") && !args.contains("--mcp-config") && !args.contains("--strict-mcp-config"))
     }
 }
 
