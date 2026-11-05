@@ -97,6 +97,16 @@ public struct TaskHistory: Sendable, Equatable {
     /// When the schedule counts from: the last run's start, or the approval when there was none.
     public var scheduleBase: Date? { lastRun?.started ?? approvedAt }
 
+    /// Runs from before `report` was recorded name the file at the end of their summary: `(.workbench/tasks/<n>/reports/<t>.md)`.
+    static func reportPath(inReason reason: String?, outcome: TaskOutcome?) -> String? {
+        guard outcome == .reported, let reason else { return nil }
+        guard let open = reason.range(of: "(.workbench/tasks/", options: .backwards) else { return nil }
+        let rest = reason[open.upperBound...]
+        guard let close = rest.firstIndex(of: ")") else { return nil }
+        let path = ".workbench/tasks/" + rest[..<close]
+        return path.hasSuffix(".md") ? path : nil
+    }
+
     init(events: [Event]) {
         for event in events {
             switch event.kind {
@@ -119,7 +129,9 @@ public struct TaskHistory: Sendable, Equatable {
                 runs[runs.count - 1].reason = event.data["reason"]?.stringValue
                 runs[runs.count - 1].ended = event.date
                 runs[runs.count - 1].pullRequest = event.data["pr"]?.stringValue
-                runs[runs.count - 1].report = event.data["report"]?.stringValue
+                let last = runs.count - 1
+                runs[last].report =
+                    event.data["report"]?.stringValue ?? Self.reportPath(inReason: runs[last].reason, outcome: runs[last].outcome)
                 // What the thread event said stays when the end has nothing to add (a run closed as interrupted).
                 let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
                 if !units.isEmpty { runs[runs.count - 1].units = units }

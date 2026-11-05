@@ -70,7 +70,8 @@ import WorkbenchCore
     }
 
     @Test func anActiveThreadAndTheTimersLinesAreWarningsAndAProblemComesBeforeAWarning() async throws {
-        let weekly = try await entry("weekly-report")
+        var weekly = try await entry("weekly-report")
+        weekly.summary.fix = .pr  // only a task that starts a thread waits for the project to be free
         let timer = TimerCard.lines([
             TimerStatusLine(level: .warn, text: "On battery power"), TimerStatusLine(level: .fail, text: "launchd job missing"),
             TimerStatusLine(level: .ok, text: "FileVault is on"),
@@ -85,6 +86,13 @@ import WorkbenchCore
         #expect(tonight.countText == "3 warnings" && tonight.openByDefault)
         let one = RunTonight.derive(weekly, timer: TimerCard.lines([TimerStatusLine(level: .warn, text: "w")]), activeThread: nil)
         #expect(one.verdict == .checkWarnings && one.countText == "1 warning")
+    }
+
+    @Test func aReportTaskIgnoresTheProjectsActiveThread() async throws {
+        let weekly = try await entry("weekly-report")
+        #expect(weekly.summary.fix == .report)
+        let tonight = RunTonight.derive(weekly, timer: clean, activeThread: "g-2026-11-03-x")
+        #expect(tonight.verdict == .willRun && tonight.warnings.isEmpty, "a report starts no thread, so it never skips for one")
     }
 
     @Test func aTaskThatWaitsForReviewSaysSo() async throws {
