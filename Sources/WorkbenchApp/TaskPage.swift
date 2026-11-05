@@ -84,7 +84,8 @@ struct RunTonight: Equatable {
                     fails: false, text: "It has no schedule: a tick never runs it, so it runs only when you run it.",
                     detail: "workbench task run \(summary.name)"))
         }
-        if let active = activeThread, !entry.isRunning {
+        // A report task starts no thread, so another thread being active does not stop it (the runner only checks for a `pr` task).
+        if let active = activeThread, !entry.isRunning, summary.fix != .report {
             found.append(
                 Warning(
                     fails: false, text: "An earlier thread is still active, so the next run would skip.", detail: active,

@@ -27,6 +27,26 @@ struct TaskRunLogTests {
         #expect(history.lastRun?.outcome == .nothingPending && history.openRun == nil)
     }
 
+    @Test func aReportRunFromBeforeTheFileWasRecordedNamesItInItsSummary() async throws {
+        let fx = try TaskFixture()
+        let writer = try await fx.log.openWriter()
+        let old = "Two countries drop. (.workbench/tasks/t/reports/20261105-112918.md)"
+        try await writer.append(.taskRunStarted, data: ["trigger": "manual"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "reported", "reason": .string(old)])
+        try await writer.append(.taskRunStarted, data: ["trigger": "manual"])
+        let both: JSONValue = [
+            "outcome": "reported", "reason": "x (.workbench/tasks/t/reports/a.md)", "report": ".workbench/tasks/t/reports/b.md",
+        ]
+        try await writer.append(.taskRunEnded, data: both)
+        try await writer.append(.taskRunStarted, data: ["trigger": "manual"])
+        try await writer.append(.taskRunEnded, data: ["outcome": "failed", "reason": "see (.workbench/tasks/t/reports/a.md)"])
+        await writer.close()
+        let runs = try fx.log.history().runs
+        #expect(runs[0].report == ".workbench/tasks/t/reports/20261105-112918.md")
+        #expect(runs[1].report == ".workbench/tasks/t/reports/b.md", "the recorded file wins")
+        #expect(runs[2].report == nil, "only a report run names one")
+    }
+
     @Test func seqHasNoGaps() async throws {
         let fx = try TaskFixture()
         let writer = try await fx.log.openWriter()
