@@ -168,14 +168,15 @@ enum RunAction: Equatable {
         return !parts[2].isEmpty && parts[2] != ".." && parts[2] != "." && parts[4].hasSuffix(".md") && parts[4] != ".."
     }
 
-    static func of(_ run: TaskHistory.Run) -> RunAction? {
+    /// `reportExists` takes the report's path in the project: a report that is gone (moved, deleted) is not offered.
+    static func of(_ run: TaskHistory.Run, reportExists: (String) -> Bool = { _ in true }) -> RunAction? {
         guard let outcome = run.outcome else { return nil }
         switch TaskOutcomeStyle.tone(outcome) {
         case .broken: return .viewLog
         default: break
         }
         if outcome == .staleApproval { return .reapprove }
-        if let report = run.report, isReportPath(report) { return .openReport(report) }
+        if let report = run.report, isReportPath(report), reportExists(report) { return .openReport(report) }
         return run.thread.map(RunAction.openThread)
     }
 }

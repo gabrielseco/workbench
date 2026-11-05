@@ -38,7 +38,8 @@ struct TaskPageView: View {
                         Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, Space.s)
                         ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
                             Divider()
-                            TaskRunRow(run: run, threadKnown: threadKnown(run.thread), perform: perform)
+                            TaskRunRow(
+                                run: run, threadKnown: threadKnown(run.thread), reportExists: reportExists, perform: perform)
                         }
                         Divider()
                     }
@@ -55,6 +56,12 @@ struct TaskPageView: View {
     private func threadKnown(_ id: String?) -> Bool {
         guard let id, let project = store.project else { return false }
         return ThreadStore(project: project).threadIDs().contains(id)
+    }
+
+    /// A report the run named is still on disk: one that was moved or deleted has nothing to open.
+    private func reportExists(_ path: String) -> Bool {
+        guard let project = store.project else { return false }
+        return FileManager.default.fileExists(atPath: project.root.appendingPathComponent(path).path)
     }
 
     private func perform(_ action: RunAction) {
@@ -156,11 +163,12 @@ struct RunTonightCard: View {
 struct TaskRunRow: View {
     var run: TaskHistory.Run
     var threadKnown: Bool
+    var reportExists: (String) -> Bool = { _ in true }
     var perform: (RunAction) -> Void
 
     var body: some View {
         let tone = TaskOutcomeStyle.tone(run.outcome)
-        let action = RunAction.of(run)
+        let action = RunAction.of(run, reportExists: reportExists)
         HStack(alignment: .top, spacing: Space.m) {
             Image(systemName: TaskOutcomeStyle.symbol(run.outcome)).foregroundStyle(Theme.color(for: tone)).frame(width: 16)
                 .padding(.top, Space.xxs)
@@ -196,7 +204,7 @@ struct TaskRunRow: View {
                 Button(action.title) { perform(action) }.plainButton().controlSize(.small)
             }
             // A report run has no thread: its log is how to see what really happened.
-            if case .openReport = action {
+            if run.report.map(RunAction.isReportPath) == true {
                 Button(RunAction.viewLog.title) { perform(.viewLog) }.plainButton().controlSize(.small)
             }
         }

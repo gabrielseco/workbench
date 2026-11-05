@@ -186,6 +186,7 @@ import WorkbenchCore
         var reported = run(date, outcome: .reported)
         reported.report = ".workbench/tasks/t/reports/a.md"
         #expect(RunAction.of(reported) == .openReport(".workbench/tasks/t/reports/a.md"), "a report run opens its report")
+        #expect(RunAction.of(reported, reportExists: { _ in false }) == nil, "a report that is gone has no button")
         let unsafe = [
             "../../payload.app", ".workbench/tasks/t/reports/../../../x.md", "/Applications/X.md",
             ".workbench/tasks/t/reports/a.app",
