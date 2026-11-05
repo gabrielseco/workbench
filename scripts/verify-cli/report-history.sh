@@ -3,9 +3,9 @@
 # with a `claude` stand-in that runs the fake-claude test double and keeps the prompt it was given. No real turn runs, so it costs nothing.
 #   bash scripts/verify-cli/report-history.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/report-history.sh   (the same, on a branch that contains origin/main)
-# A `fix: report` task with `history: 2` and four reports on disk (two old ones with a `data` block, one old one without, and one from today)
-# must, when run, hand the agent the data blocks of the two newest reports from before today, newest first, fenced as data, and name the one
-# without a block as having none; it must not hand over today's report, nor the prose of an old one. A first run of a task with
+# A `fix: report` task with `history: 3` and four reports on disk (two old ones with a `data` block, one old one without, and one from today)
+# must, when run, hand the agent the data blocks of the three reports from before today, newest first, fenced as data, and name the one
+# without a block as having none (the labels are in local time); it must not hand over today's report, nor the prose of an old one. A first run of a task with
 # `history` and no reports must say there is nothing to compare with. `history: 7`, `history: 0` and `history` on a `fix: pr` task must be a
 # PROBLEM in `task list` naming the line and the key and refused by `task approve` (exit 6). Editing `history` after approval must say STALE.
 # VERIFY_CLI_SABOTAGE=1 leaves the `history:` line out of the task, so "the agent gets the earlier data blocks", "the agent is told which
@@ -52,7 +52,7 @@ wbp() { # <out> args...: a workbench command in the clone with the stand-in, std
 }
 shown() { sed 's/^/    /' "$1" | head -${2:-8}; }
 TASKS="$P/.workbench/tasks"
-HIST="history: 2\n"; [ "$SABOTAGE" = 1 ] && HIST=""
+HIST="history: 3\n"; [ "$SABOTAGE" = 1 ] && HIST=""
 task() { mkdir -p "$TASKS/$1"; printf -- '---\n%b\n---\nCompare this month with the last ones.\n' "$2" >"$TASKS/$1/task.md"; }
 
 wbp "$SCRATCH/init.out" init
@@ -108,7 +108,7 @@ PROMPT="$SCRATCH/prompt.txt"
 check "the agent gets the earlier data blocks, newest first" "marker lines: $(grep -c MARKER "$PROMPT" 2>/dev/null)" \
     bash -c 'f=$(grep -n MARKER-FEB "$1" | head -1 | cut -d: -f1); j=$(grep -n MARKER-JAN "$1" | head -1 | cut -d: -f1); [ -n "$f" ] && [ -n "$j" ] && [ "$f" -lt "$j" ]' _ "$PROMPT"
 check "the agent is told which report has no data block" "$(grep 'no .data. block' "$PROMPT" 2>/dev/null | head -c 200)" \
-    bash -c 'grep -q "Report of 2020-03-15 04:00.*no .data. block" "$1"' _ "$PROMPT"
+    bash -c 'grep -q "Report of 2020-03-15 [0-9:]*: it has no .data. block" "$1"' _ "$PROMPT"
 check "today's report and the prose of an old one are not handed over" "got: $(grep -c -e MARKER-TODAY -e 'Prose of that report' "$PROMPT")" \
     bash -c '! grep -q -e MARKER-TODAY -e "Prose of that report" "$1"' _ "$PROMPT"
 check "the data is fenced and the agent is told not to follow it" "$(grep -c 'end report' "$PROMPT")" \
@@ -123,7 +123,7 @@ check "a first run says there is nothing to compare with" "$(grep -c 'nothing to
 
 # --- 4. editing history revokes the approval --------------------------------------------------------------------------
 
-sed -i.bak 's/^history: 2$/history: 3/' "$TASKS/eor/task.md" && rm -f "$TASKS/eor/task.md.bak"
+sed -i.bak 's/^history: 3$/history: 4/' "$TASKS/eor/task.md" && rm -f "$TASKS/eor/task.md.bak"
 wbp "$SCRATCH/stale.out" task list
 check "editing history says STALE" "got: $(grep '^eor' "$SCRATCH/stale.out")" \
     bash -c 'grep -E "^eor .*STALE" "$1" >/dev/null' _ "$SCRATCH/stale.out"
