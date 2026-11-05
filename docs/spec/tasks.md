@@ -24,7 +24,7 @@ include: .claude/skills/bump/SKILL.md   # a skill's text goes into the prompt (s
 inputs: [countries.txt, fixtures/]      # files or directories the agent reads, any format
 pending: .workbench/tasks/bump/pending.sh
 fix: pr                         # report (default) | pr
-history: 3                      # fix: report only: the data blocks of the last 3 reports go into the prompt (1 to 6)
+# history: 3                    # with `fix: report` only (a pr task is refused it): the data blocks of the last 3 reports, 1 to 6
 budget: 3.00                    # USD per run
 ---
 Bump the next countries. Follow the skill exactly.
