@@ -72,9 +72,8 @@ struct StagedScreenshotPreview: View {
                 Text("Not sent yet").role(.caption)
                 Spacer()
                 if decoded != nil, !fits {
-                    Button { actualSize.toggle() } label: {
-                        Image(systemName: actualSize ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    }
+                    let symbol = actualSize ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+                    Button { actualSize.toggle() } label: { Image(systemName: symbol) }
                     .iconButton(size: .compact).accessibilityLabel(actualSize ? "Fit to window" : "Actual size")
                     .help(actualSize ? "Fit to window" : "Actual size")
                 }
@@ -107,7 +106,11 @@ struct StagedScreenshotPreview: View {
         } else {
             Rectangle().fill(Theme.canvas).thumbnail(outlined: true)
                 .overlay {
-                    if missing { Image(systemName: "photo").foregroundStyle(Theme.fg3) } else { ProgressView().controlSize(.small) }
+                    if missing {
+                        Image(systemName: "photo").foregroundStyle(Theme.fg3)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
                 }
         }
     }
@@ -161,7 +164,8 @@ struct StagedScreenshotImage: @unchecked Sendable {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         // The transform may have turned the picture a quarter: the size shown is the decoded one's shape at the file's scale.
         let ratio = CGFloat(max(width, height)) / CGFloat(max(image.width, image.height))
-        return StagedScreenshotImage(image: image, pixels: CGSize(width: CGFloat(image.width) * ratio, height: CGFloat(image.height) * ratio))
+        let pixels = CGSize(width: CGFloat(image.width) * ratio, height: CGFloat(image.height) * ratio)
+        return StagedScreenshotImage(image: image, pixels: pixels)
     }
 }
 
