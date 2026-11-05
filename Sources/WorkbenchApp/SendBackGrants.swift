@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkbenchCore
 
-/// One denied command a person can decide about in the Send back card: a whole call, or one part of a compound (a compound cannot
+/// One denied command a person can decide about in the Review card: a whole call, or one part of a compound (a compound cannot
 /// be granted as a whole). The numbers are core's (`3`, `3.2`), the ones `workbench grant` shows.
 struct GrantRow: Identifiable, Equatable {
     var number: String
@@ -54,7 +54,7 @@ struct SendBackGrants: View {
                 } else {
                     rows
                 }
-                Text("A decision is saved when you make it and stays if you cancel.").role(.caption)
+                Text("A decision is saved when you make it.").role(.caption)
             }
         }
     }

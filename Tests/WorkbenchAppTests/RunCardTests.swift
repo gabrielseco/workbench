@@ -201,10 +201,10 @@ import WorkbenchCore
         let decision = FeedDecision(
             primary: FeedAction(kind: .ship, title: "Ship"),
             more: [
-                FeedAction(kind: .sendBack, title: "Send back…"), FeedAction(kind: .openWorktree, title: "Open worktree"),
+                FeedAction(kind: .openWorktree, title: "Open worktree"),
                 FeedAction(kind: .newGoal, title: "New goal"),
             ])
-        #expect(DecisionCard.shipMenu(decision).map(\.kind) == [.openWorktree, .newGoal], "Request changes is its own button")
+        #expect(DecisionCard.shipMenu(decision).map(\.kind) == [.openWorktree, .newGoal])
     }
 
     @Test func theShipBarIsForTheShipStepOnly() {
@@ -231,7 +231,7 @@ import WorkbenchCore
             number: 1, progress: progress, limit: 1800, tasks: tasks, tail: ["Read a.swift", "Edit b.swift"], stop: stop,
             worktree: FeedAction(kind: .openWorktree, title: "Open worktree"), consumed: [])
         let decision = FeedDecision(
-            primary: FeedAction(kind: .ship, title: "Ship"), more: [FeedAction(kind: .sendBack, title: "Send back…")])
+            primary: FeedAction(kind: .ship, title: "Ship"), more: [FeedAction(kind: .openWorktree, title: "Open worktree")])
         let ship = DecisionCard(step: .ship, why: "", decision: decision, perform: { _ in }, route: "wb/g-1 → main")
         let directory = ProcessInfo.processInfo.environment["WORKBENCH_RENDER_DIR"]
         for dark in [false, true] {

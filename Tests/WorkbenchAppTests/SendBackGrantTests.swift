@@ -159,11 +159,10 @@ private actor Gate {
         let fixture = try await ended()
         let core = Core(try candidates(fixture))
         let store = try await store(core, fixture)
-        store.sendingBack = true
         await store.loadSendBackGrants()
         await store.decide(store.sendBackGrants[0], .thread)
-        store.cancelSendBack()
-        #expect(!store.sendingBack && store.sendBackGrants.isEmpty)
+        store.clearGuidance()
+        #expect(store.sendBackGrants.isEmpty)
         // Opened again, the card reads core's record: the decision is still there, and was made once.
         await store.loadSendBackGrants()
         #expect(store.sendBackGrants[0].status == .granted(.thread) && core.seen == ["1 thread false"])
@@ -197,20 +196,19 @@ private actor Gate {
         let (gate, recorder) = (Gate(), Recorder())
         let store = try await store(Core(try candidates(fixture)), fixture, gate: gate, recorder: recorder)
         await store.loadSendBackGrants()
-        store.sendingBack = true
-        store.sendBackNote = "go on"
+        store.guidanceNote = "go on"
         let first = store.sendBackGrants[0]
         let pending = Task { await store.decide(first, .once) }
         for _ in 0..<100 where store.grantsInFlight == 0 { await Task.yield() }
         #expect(store.grantsInFlight == 1)
-        // Neither another decision nor the send gets past it, and the card stays up with the note.
+        // Neither another decision nor the send gets past it, and the note stays.
         await store.decide(store.sendBackGrants[1], .once)
-        store.sendBack()
-        #expect(recorder.options.isEmpty && store.sendingBack && store.sendBackNote == "go on")
+        store.sendGuidance()
+        #expect(recorder.options.isEmpty && store.guidanceNote == "go on")
         await gate.open()
         await pending.value
-        store.sendBack()
-        #expect(recorder.options.first?.feedback == "go on" && !store.sendingBack)
+        store.sendGuidance()
+        #expect(recorder.options.first?.feedback == "go on")
     }
 
     @Test func aRefusalThatArrivesAfterLeavingTheProjectIsNotShownThere() async throws {

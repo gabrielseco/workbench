@@ -38,10 +38,10 @@ extension ProjectStore {
 
     /// Where a click on a notification (or an `Open` in the popover) goes. The window is brought forward by the caller.
     /// What `Open` and `Send back…` in the popover do before the window is brought forward: show the place, and for a send back open
-    /// the existing card (the popover itself decides nothing).
+    /// the guidance field (the popover itself decides nothing).
     func openFromPopover(_ route: AttentionRoute, sendBack: Bool) {
         show(route, project: project?.root.path)
-        if sendBack && route.isThread && review != nil { (actionError, sendingBack) = (nil, true) }
+        if sendBack && route.isThread && review != nil { (actionError, guidanceFocus) = (nil, guidanceFocus + 1) }
     }
 
     /// A route for another project than the one open is not acted on: it only brings the window forward.

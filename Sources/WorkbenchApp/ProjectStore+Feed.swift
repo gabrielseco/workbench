@@ -51,7 +51,8 @@ extension ProjectStore {
         FeedActionContext(
             snapshot: snapshot, goalPill: goal?.pill, goalCanApprove: goal?.canApprove ?? false, reviewShown: review != nil,
             reviewCanDecide: review?.canDecide ?? false, reviewHasFiles: !(review?.files.isEmpty ?? true), busy: busy != nil,
-            deciding: deciding, starting: starting, runningHere: runningHere, stopping: stopping, herdrFound: herdrFound)
+            deciding: deciding, starting: starting, runningHere: runningHere, stopping: stopping, herdrFound: herdrFound,
+            guidance: guidanceNote, grantsInFlight: grantsInFlight > 0)
     }
 
     func feedDecision(for snapshot: ThreadSnapshot) -> FeedDecision { FeedActions.derive(feedContext(for: snapshot)) }
@@ -67,7 +68,7 @@ extension ProjectStore {
         case .merge: await mergePullRequest()
         case .newGoal: beginNewGoal()
         case .discard: await prepareDiscard()
-        case .sendBack: (actionError, sendingBack) = (nil, true)
+        case .sendGuidance: sendGuidance()
         case .openDiff: await openDiff()
         case .openWorktree: await openWorktree()
         case .openHerdr: await openInHerdr()
