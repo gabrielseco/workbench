@@ -102,7 +102,7 @@ ships, and the mockup gets fixed.
   primary reads `Send to agent` and Accept work stays beside it. The other actions of the step (Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
   the old step screens' own) are in a borderless `…` menu beside it, Discard in red, each disabled for
   the same reason as on the step screen. The card decides nothing: `FeedActions.derive` reads `canShip`, `canMerge`, the goal's
-  `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation, Send back its popover.
+  `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation; guidance is the field under the card.
 - **What an action said** (an error in red, a note in grey, a notice in green, a Herdr handoff) is a row above the card, in the words
   the actions use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
 - **The goal card** says what Approve and run means. While the goal is a draft that no turn has run, and nothing is going on, the card

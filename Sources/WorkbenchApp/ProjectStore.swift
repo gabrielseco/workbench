@@ -81,6 +81,8 @@ struct RecentProject: Equatable, Identifiable {
     var guidanceNotes: [String: String] = [:]
     /// Bumped to focus the guidance field: the menu bar's `Send back…` asks for it.
     var guidanceFocus = 0
+    /// The last request the field has acted on: a field that appears after the request (the window was on Tasks) still takes it.
+    var guidanceFocusServed = 0
     /// The denied calls the Review card offers to decide; read when it opens.
     var sendBackGrants: [GrantRow] = []
     /// Whether a `herdr` was found for the open project: "Open in Herdr" is shown only then.
@@ -369,7 +371,8 @@ struct RecentProject: Equatable, Identifiable {
             do {
                 try await handle.run()
                 // A turn quick enough to end between two polls is never seen to begin: its note is spent all the same.
-                self?.guidanceNotes[thread] = nil
+                // Only in the project the run was started in: another project's thread of the same id has its own text.
+                if self?.generation == mine { self?.guidanceNotes[thread] = nil }
             } catch {
                 failed = true
                 self?.runFailed(error, in: started, generation: mine)

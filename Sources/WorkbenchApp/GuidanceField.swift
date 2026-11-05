@@ -19,6 +19,12 @@ struct GuidanceField: View {
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .card()
-        .onChange(of: store.guidanceFocus) { focused = true }
+        .task(id: store.guidanceFocus) {
+            guard store.guidanceFocus > store.guidanceFocusServed else { return }
+            // A field that has just appeared is not yet in the window: focus set at once is lost.
+            try? await Task.sleep(for: .milliseconds(40))
+            focused = true
+            store.guidanceFocusServed = store.guidanceFocus
+        }
     }
 }
