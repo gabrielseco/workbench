@@ -172,7 +172,7 @@ enum FeedActions {
             title: s.state.review.prReview == nil ? "Review PR" : "Review again",
             help: "Codex reads the pull request, read-only, and says what it found", enabled: !c.busy)
         let merge = FeedAction(
-            kind: .merge, title: mergeTitle(s), help: s.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub",
+            kind: .merge, title: "Merge", help: s.ci?.mergeBlocker ?? "Squash-merges the pull request on GitHub",
             enabled: s.canMerge && !c.busy && !c.deciding)
         if s.state.review.prReview != nil {
             more.append(FeedAction(kind: .showFindings, title: "Show findings", help: "Opens what the latest round found"))
@@ -202,29 +202,14 @@ enum FeedActions {
         guard let round = s.state.review.prReview, round.verdict == "clean", !round.isOpen,
             round.pr == nil || round.pr == s.state.pullRequest?.number
         else { return false }
-        if let head = s.ci?.status?.head, let reviewed = round.headSHA, reviewed != head { return false }
+        // Once GitHub says which commit it is at, a review that did not record its commit cannot be said to cover it.
+        if let head = s.ci?.status?.head, round.headSHA != head { return false }
         return true
     }
 
     /// What the merge waits for, in words.
     private static func waiting(_ s: ThreadSnapshot) -> String {
         s.canMerge ? "the pull request can be merged." : (s.ci?.mergeBlocker ?? "CI is not known.")
-    }
-
-    /// "Merge…" when it can go; otherwise the reason in the label, so a disabled button says why.
-    private static func mergeTitle(_ s: ThreadSnapshot) -> String {
-        if s.canMerge { return "Merge…" }
-        guard reviewIsClean(s) else { return "Merge…" }
-        switch s.ci {
-        case nil, .checking?: return "Merge (checking CI…)"
-        case .unavailable?: return "Merge (CI unknown)"
-        case .known(let status)?:
-            switch status.checksError == nil ? status.checks?.state : nil {
-            case .pending?: return "Merge (CI running…)"
-            case .failed?: return "Merge (CI failed)"
-            default: return "Merge (CI not green)"
-            }
-        }
     }
 }
 

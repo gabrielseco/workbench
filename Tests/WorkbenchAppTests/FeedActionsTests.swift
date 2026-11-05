@@ -226,12 +226,12 @@ import Testing
         #expect(ready.primary?.kind == .merge && ready.why?.contains("merged") == true)
     }
 
-    @Test func aCleanReviewKeepsMergeAsTheButtonAndSaysWhyItIsDisabled() throws {
+    @Test func aCleanReviewKeepsMergeAsTheButtonDisabledUntilCIIsGreen() throws {
         var shipped = try snapshot(.prOpen)
-        shipped.state.review.prReview = Review.PRReview(
-            round: 1, pr: shipped.state.pullRequest?.number, headSHA: nil, verdict: "clean", failure: nil, findingsPath: nil,
-            costUSD: nil)
         let head = String(repeating: "a", count: 40)
+        shipped.state.review.prReview = Review.PRReview(
+            round: 1, pr: shipped.state.pullRequest?.number, headSHA: head, verdict: "clean", failure: nil, findingsPath: nil,
+            costUSD: nil)
         func status(_ bucket: String) -> PRStatus {
             PRStatus(
                 number: 482, state: .open, head: head, checks: PRChecksSummary(checks: [PRCheck(name: "test", bucket: bucket)]),
@@ -239,15 +239,15 @@ import Testing
         }
         shipped.ci = .checking
         var d = decide(shipped)
-        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge (checking CI…)")
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge")
         shipped.ci = .known(status("pending"))
         d = decide(shipped)
-        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge (CI running…)")
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge")
         shipped.ci = .known(status("fail"))
-        #expect(decide(shipped).primary?.title == "Merge (CI failed)")
+        #expect(decide(shipped).primary?.enabled == false && decide(shipped).primary?.help == "CI failed.")
         shipped.ci = .known(status("pass"))
         d = decide(shipped)
-        #expect(d.primary?.kind == .merge && d.primary?.enabled == true && d.primary?.title == "Merge…")
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == true && d.primary?.title == "Merge")
 
         // Findings, or a review of an older commit, leave Review as the next press.
         shipped.ci = .known(status("pending"))
@@ -256,6 +256,11 @@ import Testing
         shipped.state.review.prReview?.verdict = "clean"
         shipped.state.review.prReview?.headSHA = String(repeating: "b", count: 40)
         #expect(decide(shipped).primary?.kind != .merge)
+        shipped.state.review.prReview?.headSHA = nil
+        #expect(decide(shipped).primary?.kind != .merge, "a review with no recorded commit is not known to cover this one")
+        shipped.state.review.prReview?.headSHA = head
+        shipped.state.review.prReview?.pr = 1
+        #expect(decide(shipped).primary?.kind != .merge, "a round of another pull request")
     }
 
     @Test func aPRReviewIsToldInTheStepScreensWords() {
