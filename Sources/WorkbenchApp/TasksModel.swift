@@ -213,8 +213,6 @@ struct TasksReader: Sendable {
     /// The approve card: what would run, and why the last try was refused.
     var approving: TaskCardInfo?
     var approveError: String?
-    /// The run card (`fix: pr` only): what it may cost and what it does.
-    var confirmingRun: TaskCardInfo?
     /// The task a run started here is going for, and what it last said.
     var runningTask: String?
     var runSaid: String?

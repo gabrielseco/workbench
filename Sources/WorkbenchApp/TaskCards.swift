@@ -57,35 +57,3 @@ struct TaskApproveCard: View {
         .onExitCommand { store.tasks.cancelApprove() }
     }
 }
-
-/// Asks before a `fix: pr` run, which spends money and opens a pull request.
-struct TaskRunCard: View {
-    var store: ProjectStore
-    var card: TaskCardInfo
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Run now".uppercased()).textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
-            Text(card.name).textStyle(.title).padding(.top, Space.s)
-            VStack(alignment: .leading, spacing: Space.s) {
-                Text(
-                    card.fix == .pr
-                        ? "It starts a coding turn, and when the check passes it opens a pull request. Nothing merges."
-                        : "It asks a read-only agent about the project and keeps its answer as a report. Nothing is opened.")
-                Text("It may cost \(card.cost).").monospacedDigit()
-                Text("Quitting the app while it runs ends the run as interrupted. Stop ends the turn and records how.")
-                    .foregroundStyle(.secondary)
-            }
-            .textStyle(.callout).padding(.top, Space.s)
-            HStack {
-                Spacer()
-                Button("Cancel") { store.tasks.cancelRun() }.plainButton(size: .regular).keyboardShortcut(.cancelAction)
-                Button("Run now") { Task { await store.tasks.confirmRun(store.project) } }
-                    .primaryButton().keyboardShortcut(.return, modifiers: .command)
-            }
-            .padding(.top, Space.l)
-        }
-        .overlayCard()
-        .onExitCommand { store.tasks.cancelRun() }
-    }
-}

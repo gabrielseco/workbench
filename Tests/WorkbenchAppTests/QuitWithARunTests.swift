@@ -146,7 +146,6 @@ private final class Calls: @unchecked Sendable {
         let entry = try #require(tasks.snapshot?.entries.first { $0.id == "weekly-report" })
         let started = Task {
             await tasks.beginRun(fixture.project, entry, threadRunGoing: false)
-            await tasks.confirmRun(fixture.project)
         }
         while tasks.runningTask == nil { try await Task.sleep(for: .milliseconds(5)) }
         await tasks.stopAndWait(timeout: .seconds(3))
