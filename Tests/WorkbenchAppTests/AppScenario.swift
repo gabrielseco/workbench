@@ -266,7 +266,7 @@ enum AppScenario: String, CaseIterable {
         func run(
             _ name: String, _ start: String, outcome: TaskOutcome?, minutes: Int = 6, trigger: String = "tick",
             units: [String] = [],
-            thread: String? = nil, reason: String? = nil, pr: String? = nil
+            thread: String? = nil, reason: String? = nil, pr: String? = nil, report: String? = nil
         ) async throws {
             let writer = try await TaskRunLog(project: project, name: name).openWriter(now: { box.date })
             at(start)
@@ -281,6 +281,7 @@ enum AppScenario: String, CaseIterable {
                 if let reason { data["reason"] = .string(reason) }
                 if let thread { data["thread"] = .string(thread) }
                 if let pr { data["pr"] = .string(pr) }
+                if let report { data["report"] = .string(report) }
                 try await writer.append(.taskRunEnded, data: .object(data))
             }
             await writer.close()
@@ -330,7 +331,8 @@ enum AppScenario: String, CaseIterable {
             reason: "the turn went over its budget of $1.00; the agent said: still reading the metrics")
         try await run(
             "weekly-report", "2026-10-26T09:10:00.000Z", outcome: .reported, minutes: 3, trigger: "manual", units: ["report"],
-            reason: "would take 1 unit: report")
+            reason: "Two tiers moved (.workbench/tasks/weekly-report/reports/20261026-091000.md)",
+            report: ".workbench/tasks/weekly-report/reports/20261026-091000.md")
 
         try write("nightly-lint", "---\nat: 02:00\nfix: pr\nbudget: 1.50\n---\nFix lint warnings in one folder.\n")
         try await approve("nightly-lint", "2026-10-30T09:00:00.000Z")

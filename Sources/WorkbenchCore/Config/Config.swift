@@ -99,6 +99,10 @@ public struct Config: Sendable, Equatable {
 
     /// The editor `workbench open` starts on a thread's worktree. Only `open` reads it; a run never does.
     public var editor: String?
+
+    /// A folder (absolute or `~/`) every report of a `fix: report` task is also copied into, as `<task>/<date time>.md` with front matter:
+    /// point it at a folder of an Obsidian vault to read reports there. The copy is extra; the report under `.workbench/` stays.
+    public var reportsCopyTo: String?
     /// The `herdr-app` executable the window's "Open in Herdr" runs. Only the window reads it; a run never does.
     public var herdr: String?
 
@@ -145,6 +149,7 @@ public struct Config: Sendable, Equatable {
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type",
             "default_budget_usd", "env_pass", "safe_mode", "project_instructions", "copy", "read_also", "editor", "herdr",
+            "reports_copy_to",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -237,6 +242,13 @@ public struct Config: Sendable, Equatable {
         let setupCommand = command("setup_command")
 
         let editor = string("", "editor").flatMap { editorValue($0.value, line: $0.line, fail: fail) }
+        let reportsCopyTo = string("", "reports_copy_to").flatMap { entry -> String? in
+            guard ReportCopy.folder(entry.value) != nil else {
+                fail(.invalidValue, entry.line, "'reports_copy_to' must be an absolute path or start with ~/")
+                return nil
+            }
+            return entry.value
+        }
         let herdr = string("", "herdr").flatMap { herdrValue($0.value, line: $0.line, fail: fail) }
 
         var appType = AppType.web
@@ -324,6 +336,7 @@ public struct Config: Sendable, Equatable {
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, verifier: verifier, run: run)
         config.editor = editor
+        config.reportsCopyTo = reportsCopyTo
         config.herdr = herdr
         config.readAlso = readAlso
         config.agents = agents
@@ -424,6 +437,7 @@ public struct Config: Sendable, Equatable {
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
+        # reports_copy_to = "~/Obsidian/Vault/Workbench" # also copy each report of a `fix: report` task there (a vault folder)
         # herdr = "/Users/me/.local/bin/herdr-app" # the window's "Open in Herdr"; else `herdr-app` on PATH or in ~/.local/bin
 
         # [pr_review]                      # `workbench pr-review`: Codex reviews the shipped pull request

@@ -64,6 +64,9 @@ struct TaskPageView: View {
             NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
         case .approve, .reapprove: store.tasks.beginApprove(store.project, entry.id)
         case .openThread(let id): Task { await store.select(thread: id) }
+        case .openReport(let path):
+            guard let project = store.project else { return }
+            NSWorkspace.shared.open(project.root.appendingPathComponent(path))
         }
     }
 }
@@ -191,6 +194,10 @@ struct TaskRunRow: View {
             Spacer(minLength: 8)
             if let action, !(action.isThread && !threadKnown) {
                 Button(action.title) { perform(action) }.plainButton().controlSize(.small)
+            }
+            // A report run has no thread: its log is how to see what really happened.
+            if case .openReport = action {
+                Button(RunAction.viewLog.title) { perform(.viewLog) }.plainButton().controlSize(.small)
             }
         }
         .padding(.vertical, Space.s)

@@ -14,13 +14,16 @@ public struct TaskRunResult: Sendable, Equatable {
     public var units: [String] = []
     public var thread: String?
     public var pullRequest: String?
+    /// A `fix: report` run: where its report was saved, relative to the project root.
+    public var report: String?
     /// False when the run could not write its record: another run holds the task's log, or the log cannot be opened.
     public var recorded = true
 
     public init(
         outcome: TaskOutcome, reason: String? = nil, units: [String] = [], thread: String? = nil, pullRequest: String? = nil,
-        recorded: Bool = true
+        report: String? = nil, recorded: Bool = true
     ) {
+        self.report = report
         (self.outcome, self.reason, self.units) = (outcome, reason, units)
         (self.thread, self.pullRequest, self.recorded) = (thread, pullRequest, recorded)
     }
@@ -122,6 +125,7 @@ public struct TaskRunner: Sendable {
         if let reason = result.reason { data["reason"] = .string(reason) }
         if let thread = result.thread { data["thread"] = .string(thread) }
         if let url = result.pullRequest { data["pr"] = .string(url) }
+        if let report = result.report { data["report"] = .string(report) }
         do { try await writer.append(.taskRunEnded, data: .object(data)) } catch {
             result.recorded = false
             result.reason = (result.reason.map { $0 + "; " } ?? "") + "the end of the run could not be recorded: \(error)"

@@ -103,6 +103,15 @@ history: 3
 - **`fix: pr` is refused** at load: `history` reads reports and only a report run writes them, so on a pr task it would silently do nothing. A clear error is better than a key that is accepted and ignored.
 - **Approval.** `history` is in the hash only when the file sets it (like `mcp_tools`): a task without it keeps its approval, and changing or adding it makes the task STALE.
 
+## Reading reports
+
+A `fix: report` run records where its report is (`report` on `task.run.ended`), and the task page's run row says **Open report**
+(whatever opens Markdown on the machine) and **View log** (the task's `runs.jsonl`: a report run starts no thread, so the log is the
+record of what happened). `reports_copy_to = "~/Obsidian/Vault/Workbench"` in `.workbench/config.toml` (an absolute path or `~/`,
+anything else is a config problem) also copies each report to `<folder>/<task>/<yyyy-MM-dd HHmm>.md` with front matter (`task`, `date`,
+`tags: [workbench-report]`), so a vault shows them. The copy is extra: the file under `reports/` stays, `history` reads that one, and
+a copy that cannot be written does not fail the run, the reason says so.
+
 ## Units of work: the pending script
 
 The one thing the engine understands about a task's work is a list of unit ids. `pending` is run from the project root with a
@@ -156,7 +165,7 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 | `task.approved` | `task approve` | `hash` |
 | `task.run.started` | a run is about to begin, before anything is spent | `trigger` (`tick`, `manual`) |
 | `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units`, `hash` (the approval the run ran under) |
-| `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started |
+| `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started, `report` (the report file, relative to the project root) for a `fix: report` run |
 
 A run that stops without a pull request says why in `reason`, in one bounded line: what stopped it, then what the agent said last (600
 characters), the commands the turn was denied (up to three, 120 characters each) and, for a failed check, the last eight lines of its output.
