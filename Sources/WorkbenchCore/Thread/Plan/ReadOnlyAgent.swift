@@ -150,7 +150,11 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
         }
         if let model = request.model { args += ["--model", model] }
         if let effort = request.reasoningEffort { args += ["--effort", effort] }
-        args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools + (request.mcp?.tools ?? [])
+        // A tool the project denies is never allowed here and is denied outright, as in a coding turn: the deny list wins.
+        let denied = config.tools.denied
+        let mcpTools = (request.mcp?.tools ?? []).filter { !denied.contains($0) }
+        args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools + mcpTools
+        if request.mcp != nil, !denied.isEmpty { args += ["--disallowedTools"] + denied }
         args += ["--", request.prompt]
         return args
     }

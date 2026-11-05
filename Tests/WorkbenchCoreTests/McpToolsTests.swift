@@ -157,6 +157,22 @@ struct McpReportInvocationTests {
         #expect(args.suffix(2) == ["--", "the prompt"])
     }
 
+    @Test func aReportTurnNeverAllowsAToolTheProjectDeniesAndKeepsTheDenyList() throws {
+        let before = "denied = [\"Bash(git push:*)\"]"
+        let after = "denied = [\"Bash(git push:*)\", \"mcp__linear__save_issue\"]"
+        let denies = toolsTable.replacingOccurrences(of: before, with: after)
+        let cfg = try Config.parse(denies + linear)
+        let mcp = try McpAccess.write(
+            tools: ["mcp__linear__get_issue", "mcp__linear__save_issue"], servers: cfg.mcpServers,
+            in: try Scratch.directory("mcp"))
+        let args = ClaudeReadOnlyAgent(config: cfg, environment: [:]).arguments(for: request(mcp))
+        let allowed = try #require(args.firstIndex(of: "--allowedTools"))
+        let list = Array(args[(allowed + 1)...].prefix { !$0.hasPrefix("--") })
+        #expect(list == ["Read", "Grep", "Glob", "mcp__linear__get_issue"])
+        let deny = try #require(args.firstIndex(of: "--disallowedTools"))
+        #expect(Array(args[(deny + 1)...].prefix { !$0.hasPrefix("--") }) == ["Bash(git push:*)", "mcp__linear__save_issue"])
+    }
+
     @Test func aReportTurnWithoutToolsKeepsSafeModeAndLoadsNoServer() throws {
         let cfg = try Config.parse("safe_mode = false\n" + toolsTable + linear)
         let args = ClaudeReadOnlyAgent(config: cfg, environment: [:]).arguments(for: request(nil))
