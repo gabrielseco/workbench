@@ -232,8 +232,9 @@ struct ProofShot: Equatable, Identifiable {
     var id: URL { url }
 
     static let shown = 3
-    /// Longest side a thumbnail is decoded at, so a large PNG costs a small image.
-    static let thumbnailPixels = 480
+    /// Longest side a screenshot is decoded at: bounded so a large PNG costs a bounded image, but big enough that a lone shot
+    /// spanning the card (about 1300 pt, 2600 px on Retina) is not a 480 px bitmap stretched five times.
+    static let thumbnailPixels = 1600
 
     /// `list-states.png` is "list states". Only PNGs the verifier recorded, the first few, in the order recorded.
     static func shots(from recorded: [ProofFile], threadDirectory: URL) -> [ProofShot] {
