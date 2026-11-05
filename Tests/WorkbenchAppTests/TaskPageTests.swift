@@ -178,6 +178,14 @@ import WorkbenchCore
         var reported = run(date, outcome: .reported)
         reported.report = ".workbench/tasks/t/reports/a.md"
         #expect(RunAction.of(reported) == .openReport(".workbench/tasks/t/reports/a.md"), "a report run opens its report")
+        let unsafe = [
+            "../../payload.app", ".workbench/tasks/t/reports/../../../x.md", "/Applications/X.md",
+            ".workbench/tasks/t/reports/a.app",
+        ]
+        for bad in unsafe {
+            reported.report = bad
+            #expect(RunAction.of(reported) == nil, "\(bad) is not offered")
+        }
         #expect(RunAction.of(run(date, outcome: nil, thread: "t")) == nil, "a run still going has none")
         #expect(RunAction.viewLog.title == "View log" && RunAction.reapprove.title == "Re-approve")
         #expect(RunAction.openThread("t").title == "Open thread")

@@ -159,6 +159,14 @@ enum RunAction: Equatable {
 
     /// A run that ended badly shows its log; a stale approval offers the approval; any other run with a thread offers the thread; a run
     /// still going, or one with nothing behind it, has none.
+    /// The log is a file a person or a script can edit, and its path is opened with the system: only a Markdown file under a task's
+    /// `reports/` folder in the project is offered, never `..` or another kind of file.
+    static func isReportPath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 5, parts[0] == ".workbench", parts[1] == "tasks", parts[3] == "reports" else { return false }
+        return !parts[2].isEmpty && parts[2] != ".." && parts[2] != "." && parts[4].hasSuffix(".md") && parts[4] != ".."
+    }
+
     static func of(_ run: TaskHistory.Run) -> RunAction? {
         guard let outcome = run.outcome else { return nil }
         switch TaskOutcomeStyle.tone(outcome) {
@@ -166,7 +174,7 @@ enum RunAction: Equatable {
         default: break
         }
         if outcome == .staleApproval { return .reapprove }
-        if let report = run.report { return .openReport(report) }
+        if let report = run.report, isReportPath(report) { return .openReport(report) }
         return run.thread.map(RunAction.openThread)
     }
 }
