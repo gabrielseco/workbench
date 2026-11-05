@@ -300,7 +300,7 @@ verify-cli scenario ships with it. Without it the YOU column is left out and "Ch
 
 [P21](P21-scheduled-tasks.md)'s tasks are shown by a second centre screen, switched from the top of the rail (`Thread | Tasks`).
 Slice A (read only): the task list, the selected task's run timeline and the "Will it run tonight?" card, all from `TaskLibrary`,
-`TaskRunLog` and `TimerService.status()`; fixtures `tasks` and `tasks-empty`. Slice B (built): `Approve…` (a card of what runs) and `Run now` (in-process `TaskRunner`, confirm for `fix: pr`, `Stop`). Slice C: the menu bar item
+`TaskRunLog` and `TimerService.status()`; fixtures `tasks` and `tasks-empty`. Slice B (built): `Approve…` (a card of what runs) and `Run now` (in-process `TaskRunner`, started on the press with no confirm card, `Stop`). Slice C: the menu bar item
 and notifications for a failed or stale task (built in two parts: the attention centre and the notifications, `AttentionItems`,
 `AttentionCenter`, `Notifier`; then the status item and its popover). The window shows one thread per project, so a run's thread opens only when it is the one
 on screen until the thread list ([later](../later/thread-list.md)) exists.

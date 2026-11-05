@@ -38,6 +38,33 @@ import WorkbenchCore
         #expect(store.mode == .thread)
     }
 
+    @Test func runNowStartsWithoutConfirmation() async throws {
+        let (fixture, env) = try await scenario()
+        let started = StartedRuns()
+        let actions = TaskActions(
+            inspect: TaskActions.core.inspect, approve: TaskActions.core.approve,
+            run: { _, name, _, _ in
+                started.add(name)
+                return TaskRunResult(outcome: .reported, reason: "done", units: ["report"])
+            })
+        let tasks = TasksModel(reader: .core(environment: env), actions: actions)
+        await tasks.refresh(fixture.project)
+        let shown = try #require(tasks.snapshot)
+        // One press, of a report task and of a `fix: pr` one: each run starts, and no card opens to ask first.
+        for name in ["weekly-report", "sync-fixtures"] {
+            let entry = try #require(shown.entries.first { $0.id == name })
+            await tasks.beginRun(fixture.project, entry, threadRunGoing: false)
+            #expect(started.names.last == name)
+            #expect(tasks.approving == nil && tasks.actionNote == nil)
+            #expect(tasks.result(of: name, in: fixture.project)?.outcome == .reported)
+        }
+        // A task that may not run still starts nothing, and says why.
+        let unapproved = try #require(shown.entries.first { $0.id == "cleanup-branches" })
+        await tasks.beginRun(fixture.project, unapproved, threadRunGoing: false)
+        #expect(started.names == ["weekly-report", "sync-fixtures"])
+        #expect(tasks.actionNote?.hasPrefix("Not approved") == true)
+    }
+
     @Test func rowsMirrorSummary() async throws {
         let (fixture, env) = try await scenario()
         let shown = try await snapshot(fixture, env)
@@ -286,6 +313,14 @@ private final class ClockHolder: @unchecked Sendable {
         get { lock.withLock { value } }
         set { lock.withLock { value = newValue } }
     }
+}
+
+/// The names of the runs a fake `TaskActions.run` was asked to start, in order.
+private final class StartedRuns: @unchecked Sendable {
+    private let lock = NSLock()
+    private var started: [String] = []
+    var names: [String] { lock.withLock { started } }
+    func add(_ name: String) { lock.withLock { started.append(name) } }
 }
 
 private actor Gate {

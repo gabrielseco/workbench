@@ -63,35 +63,14 @@ extension TasksModel {
 
     // MARK: run
 
-    /// `Run now`: asks first, whatever the task does, because either kind starts an agent that spends.
+    /// `Run now`: starts the run at once. The task was approved, and the runner checks that approval against the file on disk itself.
     func beginRun(_ project: Project?, _ entry: TaskEntry, threadRunGoing: Bool) async {
         guard let project else { return }
         if let why = runUnavailable(entry, threadRunGoing: threadRunGoing) {
             actionNote = why
             return
         }
-        actionNote = nil
-        // What the task is now, not what the list last read: a report task changed to `fix: pr` still asks first.
-        let card: TaskCardInfo
-        do { card = try actions.inspect(project, entry.id) } catch {
-            actionNote = "\(entry.id) cannot run: \(error)"
-            return
-        }
-        confirmingRun = card
-    }
-
-    func cancelRun() { confirmingRun = nil }
-
-    func confirmRun(_ project: Project?) async {
-        guard let project, let card = confirmingRun else { return }
-        confirmingRun = nil
-        // The card named a cost: run only the version it was for.
-        guard let now = try? actions.inspect(project, card.name), now.hash == card.hash, now.cost == card.cost else {
-            actionNote = "\(card.name) was edited after the card was shown: look at it again."
-            await refresh(project)
-            return
-        }
-        await startRun(project, card.name)
+        await startRun(project, entry.id)
     }
 
     private func startRun(_ project: Project, _ name: String) async {

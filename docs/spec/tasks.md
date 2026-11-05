@@ -106,7 +106,7 @@ The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the sa
 timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
 shown. Reading writes nothing. Two buttons write, only through core: `Approve…` (a card shows the settings, the instructions and the
 files the approval binds to, then `TaskLibrary.approve`) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
-a window, with a `Stop`; every run asks first and names the most it may cost, since either kind starts an agent). Quitting the app mid-run ends the run as `interrupted`,
+a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). Quitting the app mid-run ends the run as `interrupted`,
 like a killed `task run`.
 
 The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
