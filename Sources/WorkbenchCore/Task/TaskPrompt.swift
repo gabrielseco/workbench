@@ -28,8 +28,11 @@ public enum TaskPrompt {
         for input in inputs {
             parts.append("Input file \(input.path):\n\(fence) file\n\(input.text)\n\(fence) end file")
         }
+        var historyText = ""
         if let history, let count = task.definition.history {
-            parts += ReportHistory.prompt(history, count: count, fence: fence, calendar: calendar)
+            let section = ReportHistory.prompt(history, count: count, fence: fence, calendar: calendar)
+            parts += section
+            historyText = section.joined(separator: "\n\n")
         }
         if !units.isEmpty {
             let list = units.map { "- \($0.id): \($0.title)" }.joined(separator: "\n")
@@ -51,10 +54,11 @@ public enum TaskPrompt {
                     + "line is a one-line summary of what you found; Workbench keeps the answer as a file and shows that line.")
         }
         let text = neutralised(parts.joined(separator: "\n\n"))
-        // The history has its own allowance, so it takes nothing from the inputs' share.
-        let limit = maxBytes + (history == nil ? 0 : ReportHistory.promptReserve)
-        guard text.utf8.count <= limit, !text.contains("\0") else {
-            throw TaskRunError.promptTooLarge(bytes: text.utf8.count, limit: limit)
+        // The history has its own allowance and takes nothing from the rest: what is not history stays within `maxBytes`.
+        let historyBytes = historyText.utf8.count
+        let limit = maxBytes + historyBytes
+        guard historyBytes <= ReportHistory.promptReserve, text.utf8.count <= limit, !text.contains("\0") else {
+            throw TaskRunError.promptTooLarge(bytes: text.utf8.count - historyBytes, limit: maxBytes)
         }
         return text
     }

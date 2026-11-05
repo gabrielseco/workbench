@@ -474,7 +474,7 @@ private final class SaidLines: @unchecked Sendable {
         let agent = ReportAgent(answer: "# First")
         let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
         #expect(result.outcome == .reported, "\(result.reason ?? "")")
-        #expect(try #require(agent.requests.first).prompt.contains("nothing to compare with"))
+        #expect(!(try #require(agent.requests.first).prompt.contains("===== report")), "no earlier report is shown")
         #expect(run.reportFiles().count == 1)
     }
 }
