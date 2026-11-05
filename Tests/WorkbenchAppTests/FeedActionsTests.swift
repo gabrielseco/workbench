@@ -226,6 +226,38 @@ import Testing
         #expect(ready.primary?.kind == .merge && ready.why?.contains("merged") == true)
     }
 
+    @Test func aCleanReviewKeepsMergeAsTheButtonAndSaysWhyItIsDisabled() throws {
+        var shipped = try snapshot(.prOpen)
+        shipped.state.review.prReview = Review.PRReview(
+            round: 1, pr: shipped.state.pullRequest?.number, headSHA: nil, verdict: "clean", failure: nil, findingsPath: nil,
+            costUSD: nil)
+        let head = String(repeating: "a", count: 40)
+        func status(_ bucket: String) -> PRStatus {
+            PRStatus(
+                number: 482, state: .open, head: head, checks: PRChecksSummary(checks: [PRCheck(name: "test", bucket: bucket)]),
+                checksError: nil)
+        }
+        shipped.ci = .checking
+        var d = decide(shipped)
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge (checking CI…)")
+        shipped.ci = .known(status("pending"))
+        d = decide(shipped)
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge (CI running…)")
+        shipped.ci = .known(status("fail"))
+        #expect(decide(shipped).primary?.title == "Merge (CI failed)")
+        shipped.ci = .known(status("pass"))
+        d = decide(shipped)
+        #expect(d.primary?.kind == .merge && d.primary?.enabled == true && d.primary?.title == "Merge…")
+
+        // Findings, or a review of an older commit, leave Review as the next press.
+        shipped.ci = .known(status("pending"))
+        shipped.state.review.prReview?.verdict = "fix"
+        #expect(decide(shipped).primary?.kind == .reviewPR || decide(shipped).primary?.kind == .reviewAgain)
+        shipped.state.review.prReview?.verdict = "clean"
+        shipped.state.review.prReview?.headSHA = String(repeating: "b", count: 40)
+        #expect(decide(shipped).primary?.kind != .merge)
+    }
+
     @Test func aPRReviewIsToldInTheStepScreensWords() {
         #expect(PRReviewRow.outcome(ok: true, verdict: "clean") == "clean")
         #expect(PRReviewRow.outcome(ok: true, verdict: "fix") == "findings to fix")
