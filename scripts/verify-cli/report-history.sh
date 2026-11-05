@@ -61,6 +61,10 @@ cat >"$P/.workbench/config.toml" <<TOML
 claude_path = "$BIN/claude"
 check_command = "true"
 default_budget_usd = 0.10
+
+[tools]
+available = ["Read", "Edit", "Write"]
+allowed = ["Read", "Edit", "Write"]
 TOML
 
 task eor "fix: report\n${HIST}"
