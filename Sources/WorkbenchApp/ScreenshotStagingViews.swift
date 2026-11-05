@@ -28,7 +28,10 @@ struct StagedThumbnails: View {
             Spacer()
         }
         .sheet(item: Binding(get: { preview }, set: { previewing = $0?.item.id })) { shown in
-            StagedScreenshotPreview(item: shown.item, number: shown.number, count: staging.items.count)
+            ScreenshotPreview(
+                url: shown.item.url,
+                title: staging.items.count > 1 ? "Screenshot \(shown.number) of \(staging.items.count)" : "Screenshot",
+                note: "Not sent yet", closeHelp: "Close (Esc). The screenshot stays attached.")
         }
         // A screenshot that is no longer staged (the composer moved to another thread, or it was sent) is not previewed.
         .onChange(of: staging.items.map(\.id)) { _, ids in
@@ -48,13 +51,22 @@ struct StagedThumbnails: View {
     }
 }
 
-/// One staged screenshot in a sheet sized to it, up to most of the screen. It is shown at its own point size (a Retina screenshot
+/// One screenshot in a sheet sized to it, up to most of the screen. It is shown at its own point size (a Retina screenshot
 /// pixel for pixel), shrunk to fit only when it is bigger, never stretched; when shrunk, a click or the toggle shows it actual size in a
-/// scroll view. The × or Escape goes back to the message with the screenshot still attached.
-struct StagedScreenshotPreview: View {
-    var item: AttachmentStaging.Item
-    var number: Int
-    var count: Int
+/// scroll view. The × or Escape closes it. A `pager` adds previous and next (and the arrow keys) for a set of screenshots.
+struct ScreenshotPreview: View {
+    var url: URL
+    var title: String
+    var note: String?
+    var closeHelp = "Close (Esc)"
+    var pager: Pager?
+
+    struct Pager {
+        var index: Int
+        var count: Int
+        var go: (Int) -> Void
+    }
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @State private var decoded: StagedScreenshotImage?
@@ -68,9 +80,17 @@ struct StagedScreenshotPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack(spacing: Space.m) {
-                Text(count > 1 ? "Screenshot \(number) of \(count)" : "Screenshot").textStyle(.heading)
-                Text("Not sent yet").role(.caption)
+                Text(title).textStyle(.heading).lineLimit(1)
+                if let note { Text(note).role(.caption) }
                 Spacer()
+                if let pager {
+                    Button { pager.go(pager.index - 1) } label: { Image(systemName: "chevron.left") }
+                        .iconButton(size: .compact).keyboardShortcut(.leftArrow, modifiers: [])
+                        .disabled(pager.index == 0).accessibilityLabel("Previous screenshot").help("Previous (←)")
+                    Button { pager.go(pager.index + 1) } label: { Image(systemName: "chevron.right") }
+                        .iconButton(size: .compact).keyboardShortcut(.rightArrow, modifiers: [])
+                        .disabled(pager.index == pager.count - 1).accessibilityLabel("Next screenshot").help("Next (→)")
+                }
                 if decoded != nil, !fits {
                     let symbol = actualSize ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
                     Button { actualSize.toggle() } label: { Image(systemName: symbol) }
@@ -79,14 +99,17 @@ struct StagedScreenshotPreview: View {
                 }
                 Button { dismiss() } label: { Image(systemName: "xmark") }
                     .iconButton(size: .compact).keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("Close preview").help("Close (Esc). The screenshot stays attached.")
+                    .accessibilityLabel("Close preview").help(closeHelp)
             }
             picture.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(Space.xl).frame(width: sheet.width, height: sheet.height)
-        .task(id: item.url) {
-            let url = item.url
+        .task(id: url) {
+            (decoded, missing, actualSize) = (nil, false, false)
+            let url = url
             let loaded = await Task.detached(priority: .userInitiated) { StagedScreenshotImage.decode(url) }.value
+            // Paging cancels this task, but the detached decode still finishes: a superseded one must not replace the current picture.
+            guard !Task.isCancelled else { return }
             (decoded, missing) = (loaded, loaded == nil)
         }
     }
