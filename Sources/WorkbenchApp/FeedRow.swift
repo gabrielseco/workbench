@@ -398,17 +398,23 @@ struct VerifyRow: View {
     var reason: String?
     var proofs: [String]
     var shots: [ProofShot] = []
+    @State private var viewing: Int?
 
     var body: some View {
         if ok, !shots.isEmpty {
             VStack(alignment: .leading, spacing: Space.m) {
                 FeedLine(symbol: "checkmark.circle.fill", tint: Theme.green, title: "Verify passed", detail: nil)
                 HStack(alignment: .top, spacing: Space.m) {
-                    ForEach(shots) { ProofThumbnail(shot: $0) }
+                    ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
+                        ProofThumbnail(shot: shot) { viewing = index }
+                    }
                 }
             }
             .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
             .card()
+            .sheet(isPresented: Binding(get: { viewing != nil }, set: { if !$0 { viewing = nil } })) {
+                ProofGallery(shots: shots, index: viewing ?? 0)
+            }
         } else {
             line
         }
