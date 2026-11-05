@@ -100,12 +100,19 @@ extension TaskRunner {
         do { file = try Self.write(report: body.text, task: name, project: project, at: now()) } catch {
             return failed("the report could not be saved: \(error)")
         }
+        var copyNote = ""
+        if let target = config.reportsCopyTo {
+            do { try ReportCopy.copy(report: body.text, task: name, to: target, at: now(), calendar: calendar) } catch {
+                copyNote = "; the report could not be copied to reports_copy_to: \(error)"
+            }
+        }
         let first = body.text.split(whereSeparator: \.isNewline).first.map { Self.headline(String($0)) } ?? ""
         let saved = file.path.replacingOccurrences(of: project.root.path + "/", with: "")
         var reason = (first.isEmpty ? "report written" : first) + " (\(saved))"
         if body.cut { reason += "; the answer was cut at \(Self.maxReportBytes / 1024) KiB" }
+        reason += copyNote
         if !cleaned { reason += "; the report's checkout could not be removed, the next run clears it" }
-        return TaskRunResult(outcome: .reported, reason: reason, units: ids)
+        return TaskRunResult(outcome: .reported, reason: reason, units: ids, report: saved)
     }
 
     /// The answer as kept: bounded, with no NUL.

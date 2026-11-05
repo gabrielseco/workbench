@@ -39,11 +39,14 @@ public struct TaskHistory: Sendable, Equatable {
         public var reason: String?
         public var units: [String]
         public var thread: String?
+        /// A report run: the report file, relative to the project root.
+        public var report: String?
 
         public init(
             started: Date, ended: Date?, pullRequest: String?, trigger: String, outcome: TaskOutcome?, reason: String?,
-            units: [String], thread: String?
+            units: [String], thread: String?, report: String? = nil
         ) {
+            self.report = report
             (self.started, self.ended, self.pullRequest, self.trigger) = (started, ended, pullRequest, trigger)
             (self.outcome, self.reason, self.units, self.thread) = (outcome, reason, units, thread)
         }
@@ -116,6 +119,7 @@ public struct TaskHistory: Sendable, Equatable {
                 runs[runs.count - 1].reason = event.data["reason"]?.stringValue
                 runs[runs.count - 1].ended = event.date
                 runs[runs.count - 1].pullRequest = event.data["pr"]?.stringValue
+                runs[runs.count - 1].report = event.data["report"]?.stringValue
                 // What the thread event said stays when the end has nothing to add (a run closed as interrupted).
                 let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
                 if !units.isEmpty { runs[runs.count - 1].units = units }

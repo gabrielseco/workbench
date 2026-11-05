@@ -527,3 +527,44 @@ private final class MockBox: @unchecked Sendable {
     var file: URL? { lock.withLock { fileSeen } }
     var mode: Int { lock.withLock { modeSeen } }
 }
+
+@Suite(.processGate) struct TaskReportCopyTests {
+    @Test func aReportIsAlsoCopiedIntoTheFolderTheConfigNamesAndTheRunSaysWhereItIs() async throws {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent("vault-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: vault) }
+        let run = try await Run(
+            front: "fix: report\nbatch: 2\npending: pending.sh",
+            extraConfig: "check_command = \"true\"\nreports_copy_to = \"\(vault.path)\"")
+        let agent = ReportAgent(answer: "# Two tiers moved\n\nThe details.")
+        let result = await run.reporter(agent: agent).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported)
+        let saved = try #require(result.report)
+        #expect(saved.hasPrefix(".workbench/tasks/bump/reports/") && saved.hasSuffix(".md"))
+        #expect(try run.ends()[0].data["report"]?.stringValue == saved, "the run log keeps where the report is")
+        let folder = vault.appendingPathComponent("bump")
+        let copies = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(copies.count == 1)
+        let copy = try String(contentsOf: folder.appendingPathComponent(copies[0]), encoding: .utf8)
+        #expect(copy.hasPrefix("---\ntask: bump\ndate: ") && copy.hasSuffix("---\n\n# Two tiers moved\n\nThe details.\n"))
+        #expect(run.reportFiles().count == 1, "the report under .workbench stays")
+    }
+
+    @Test func aReportWhoseCopyCannotBeWrittenStillSucceedsAndSaysSo() async throws {
+        // A file where the folder should be: the copy cannot be made.
+        let blocker = FileManager.default.temporaryDirectory.appendingPathComponent("vault-\(UUID().uuidString)")
+        try "x".write(to: blocker, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        let run = try await Run(
+            front: "fix: report\nbatch: 2\npending: pending.sh",
+            extraConfig: "check_command = \"true\"\nreports_copy_to = \"\(blocker.path)\"")
+        let result = await run.reporter(agent: ReportAgent(answer: "# Done")).run("bump", trigger: .manual)
+        #expect(result.outcome == .reported && result.report != nil)
+        #expect(result.reason?.contains("could not be copied to reports_copy_to") == true)
+        #expect(run.reportFiles().count == 1)
+    }
+
+    @Test func reportsCopyToMustBeAnAbsolutePathOrStartWithATilde() {
+        #expect(ReportCopy.folder("~/Vault/Workbench") != nil && ReportCopy.folder("/tmp/vault") != nil)
+        #expect(ReportCopy.folder("vault") == nil && ReportCopy.folder("") == nil && ReportCopy.folder("/a\nb") == nil)
+    }
+}

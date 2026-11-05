@@ -144,6 +144,8 @@ enum RunAction: Equatable {
     case approve
     case reapprove
     case openThread(String)
+    /// A report run's report file, relative to the project root: opens in whatever opens Markdown (Obsidian, when it does).
+    case openReport(String)
 
     var title: String {
         switch self {
@@ -151,6 +153,7 @@ enum RunAction: Equatable {
         case .approve: "Approve…"
         case .reapprove: "Re-approve"
         case .openThread: "Open thread"
+        case .openReport: "Open report"
         }
     }
 
@@ -163,6 +166,7 @@ enum RunAction: Equatable {
         default: break
         }
         if outcome == .staleApproval { return .reapprove }
+        if let report = run.report { return .openReport(report) }
         return run.thread.map(RunAction.openThread)
     }
 }
