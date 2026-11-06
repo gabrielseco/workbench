@@ -224,6 +224,8 @@ struct TasksReader: Sendable {
     /// The edit of a task with the agent: what is being asked, what came back. Nothing is written until the person accepts it.
     var editing: TaskEditing?
     var editRequest = ""
+    /// The tasks whose Edit with AI card is open (a project and a task name each): closed until the button is pressed.
+    var editOpen: Set<String> = []
     /// What an edit may spend with this project's goal agent, as it is said; nil with no goal agent. Read with the tasks.
     private(set) var editLimit: String?
     @ObservationIgnored var editStop: DraftStop?

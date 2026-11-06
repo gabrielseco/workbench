@@ -22,6 +22,20 @@ extension TasksModel {
         return editing
     }
 
+    private func editKey(_ name: String, in project: Project?) -> String { "\(project?.root.path ?? "")|\(name)" }
+
+    /// The card is shown once the button opened it, and for as long as an edit of the task is working or waiting for a decision.
+    func isEditShown(_ name: String, in project: Project?) -> Bool {
+        editOpen.contains(editKey(name, in: project)) || editing(name, in: project) != nil
+    }
+
+    /// The button: opens the card, or closes it when it is open and has nothing in it to decide.
+    func toggleEdit(_ name: String, in project: Project?) {
+        guard editing(name, in: project) == nil else { return }
+        let key = editKey(name, in: project)
+        if editOpen.remove(key) == nil { editOpen.insert(key) }
+    }
+
     /// Why `Propose` is off for this task, nil when it can start.
     func editUnavailable(_ entry: TaskEntry) -> String? {
         if entry.summary.problem != nil { return "The task does not load: fix its task.md first." }
@@ -81,6 +95,7 @@ extension TasksModel {
         do {
             try await actions.acceptEdit(project, proposal)
             (editing, editRequest, actionNote) = (nil, "", nil)
+            editOpen.removeAll()
             await refresh(project)
         } catch {
             editing?.phase = .failed("\(error)")

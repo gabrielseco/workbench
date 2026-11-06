@@ -77,13 +77,14 @@ ships, and the mockup gets fixed.
   with Claude` / `Draft with Codex`. While it is open the rail's first row is `New thread · Type to start · free`, selected; the toolbar says
   `$0.00` and `No run`; the footer has no Event log.
 - **A task's page** is in the feed's 680 column: the name (`.title3`, semibold), one line `schedule · opens a PR · N runs · next …`, and
-  `Defined in .workbench/tasks/<name>/task.md. Edit that file, or ask the agent below.` in a monospaced caption, with the task's buttons at
+  `Defined in .workbench/tasks/<name>/task.md. Edit that file, or use Edit with AI.` in a monospaced caption, with the task's buttons at
   the right (Approve while it is not approved, Run now once it is, Stop while a run started here goes). Under it the task's own
   **Will it run tonight?** card: a verdict (`Will run`, `Will run, check the warnings`, `Will not run`) and its warnings, problems first,
   from the task (a file that does not load, an approval missing or stale, a last run that waited for review), the project (another
   thread is still active, so the next run would skip) and the machine (the timer's own lines that warn or fail), each with the one
   button that deals with it (`Approve` / `Re-approve`, `Open thread`); open when it has warnings, one line when it has none. Then the
-  **Edit with AI** card (a text box, `Propose`, and a note that it costs up to the goal draft's budget, is read-only until accepted and
+  **Edit with AI** card, closed until the task's `Edit with AI` button (beside `Run now`) opens it, with the text box focused, and kept
+  open while an edit is working or waiting for a decision (a text box, `Propose`, and a note that it costs up to the goal draft's budget, is read-only until accepted and
   that accepting does not approve): working, it says so with a `Stop`; a proposal shows the settings approval binds to as `key old → new`
   (the first thing to read), the instructions as a `+` / `-` diff, `Accept` and `Discard`; a failure is a red line and `Try again`. Then the
   runs, newest first, under a quiet `TODAY` / `YESTERDAY` / `WED, OCT 28` heading: a mark, the outcome in bold (coloured when it failed or
