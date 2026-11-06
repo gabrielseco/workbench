@@ -213,4 +213,31 @@ import WorkbenchCore
         let after = try await TasksReader.core().read(fixture.project, now)
         #expect(after.activeThread == nil)
     }
+
+    // MARK: The tick log
+
+    @Test func openLogOnlyForTheTickLog() async throws {
+        let log = "/Users/gabriel/Library/Logs/Workbench/task-tick-remote-flows-18fc3025.log"
+        #expect(RunAction.isTickLogPath(log))
+        for bad in [
+            "/etc/passwd", "relative/Library/Logs/Workbench/task-tick-x.log", "/Users/g/Library/Logs/Workbench/other.log",
+            "/Users/g/Library/Logs/Workbench/../../x/task-tick-x.log", "/Users/g/Library/Logs/Workbench/task-tick-.log",
+            "/Users/g/Library/Logs/Workbench/task-tick-x.txt", "/Users/g/Library/Logs/Other/task-tick-x.log",
+            "/Users/g/Library/Logs/Workbench/sub/task-tick-x.log",
+        ] { #expect(!RunAction.isTickLogPath(bad), "\(bad)") }
+        #expect(RunTonight.tickLog(in: "the last tick exited 1: see \(log)") == log)
+        #expect(RunTonight.tickLog(in: "the last tick exited 1: see /etc/passwd") == nil)
+        #expect(RunTonight.tickLog(in: "power: on battery") == nil)
+        // The warning carries the button; a log that is gone keeps its path as text.
+        let weekly = try await entry("weekly-report")
+        let timer = TimerCard.lines([TimerStatusLine(level: .warn, text: "the last tick exited 1: see \(log)")])
+        let warning = try #require(RunTonight.derive(weekly, timer: timer, activeThread: nil).warnings.first)
+        #expect(warning.action == .openLog(log))
+        #expect(RunTonightCard.action(for: warning)?.title == "Open log")
+        let gone = "/nonexistent-home/Library/Logs/Workbench/task-tick-gone.log"
+        #expect(!RunTonightCard.offered(.openLog(gone)), "a log that is not there is not offered")
+        let there = FileManager.default.temporaryDirectory.appendingPathComponent("task-tick-there.log")
+        try "x".write(to: there, atomically: true, encoding: .utf8)
+        #expect(RunTonightCard.offered(.openLog(there.path)) && RunTonightCard.offered(.approve))
+    }
 }

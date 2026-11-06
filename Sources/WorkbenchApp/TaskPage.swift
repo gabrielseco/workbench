@@ -38,6 +38,8 @@ struct RunTonight: Equatable {
     enum Action: Equatable {
         case approve, reapprove
         case openThread(String)
+        /// The timer's tick log named by a warning: only a tick log of this app (`RunAction.isTickLogPath`).
+        case openLog(String)
     }
 
     struct Warning: Equatable {
@@ -100,7 +102,8 @@ struct RunTonight: Equatable {
             // The timer's lines about tasks (`task cleanup-branches: not approved`, this task's own too) are each task's own reasons, which are
             // listed above from the task itself: only what is about the machine is the machine's.
             for line in lines where line.level != .ok && !line.text.hasPrefix("task ") {
-                found.append(Warning(fails: line.level == .fail, text: line.text, detail: nil))
+                let action = tickLog(in: line.text).map(Action.openLog)
+                found.append(Warning(fails: line.level == .fail, text: line.text, detail: nil, action: action))
             }
         case .unknown(let why):
             found.append(Warning(fails: false, text: "The timer could not be read: \(why)", detail: nil))
@@ -108,6 +111,15 @@ struct RunTonight: Equatable {
         let ordered = found.filter(\.fails) + found.filter { !$0.fails }
         let verdict: Verdict = ordered.contains { $0.fails } ? .willNotRun : (ordered.isEmpty ? .willRun : .checkWarnings)
         return RunTonight(verdict: verdict, warnings: ordered)
+    }
+}
+
+extension RunTonight {
+    /// The tick log a line names: `the last tick exited 1: see <path>`, when the path is the timer's own log.
+    static func tickLog(in text: String) -> String? {
+        guard let match = text.firstMatch(of: #/^the last tick exited [0-9]+: see (.+)$/#) else { return nil }
+        let path = String(match.1)
+        return RunAction.isTickLogPath(path) ? path : nil
     }
 }
 
@@ -147,6 +159,8 @@ enum RunAction: Equatable {
     case openThread(String)
     /// A report run's report file, relative to the project root: opens in whatever opens Markdown (Obsidian, when it does).
     case openReport(String)
+    /// The timer's tick log, by absolute path.
+    case openLog(String)
 
     var title: String {
         switch self {
@@ -155,7 +169,18 @@ enum RunAction: Equatable {
         case .reapprove: "Re-approve"
         case .openThread: "Open thread"
         case .openReport: "Open report"
+        case .openLog: "Open log"
         }
+    }
+
+    /// The timer's own log, `~/Library/Logs/Workbench/task-tick-<project>.log`: the path in a warning is text from the timer's output, and
+    /// is opened with the system, so only that shape is offered, never `..` or another folder or kind of file.
+    static func isTickLogPath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 5, parts.first == "", !parts.contains(".."), !parts.contains(".") else { return false }
+        let name = parts[parts.count - 1]
+        return Array(parts.suffix(4).prefix(3)) == ["Library", "Logs", "Workbench"] && name.hasPrefix("task-tick-")
+            && name.hasSuffix(".log") && name.count > "task-tick-.log".count
     }
 
     /// A run that ended badly shows its log; a stale approval offers the approval; any other run with a thread offers the thread; a run

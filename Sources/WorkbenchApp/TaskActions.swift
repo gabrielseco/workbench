@@ -79,6 +79,8 @@ struct TaskActions: Sendable {
     var approve: @Sendable (Project, String, String) async throws -> Void
     /// `TaskRunner.run(name, trigger: .manual)`. The stop switch ends the turn; `notice` is what the run says as it goes.
     var run: @Sendable (Project, String, TaskStopSwitch, @escaping @Sendable (String) -> Void) async -> TaskRunResult
+    /// What a run did, read from its thread's log when its row is opened (never with the task list).
+    var detail: @Sendable (Project, TaskHistory.Run) -> TaskRunDetail = { TaskRunDetail.read(project: $0, run: $1) }
     /// `TaskEditor.propose`: asks the goal agent for a new task.md (the request is the person's words). The stop ends the agent.
     var edit: Edit = TaskActions.coreEdit
     /// `TaskEditor.accept`: writes a proposal that loaded, when the file is still the one it was made from. Never approves.

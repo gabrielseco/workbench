@@ -218,6 +218,9 @@ struct TasksReader: Sendable {
     var runningProject: String?
     /// Why a button did nothing (another run going, the task did not load).
     var actionNote: String?
+    /// The runs whose rows are open, and what each did: read when the row is opened, so a refresh never reads a thread's log.
+    var openRuns: Set<String> = []
+    var runDetails: [String: TaskRunDetail] = [:]
     /// The edit of a task with the agent: what is being asked, what came back. Nothing is written until the person accepts it.
     var editing: TaskEditing?
     var editRequest = ""
