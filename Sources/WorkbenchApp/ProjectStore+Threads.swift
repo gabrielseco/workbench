@@ -62,6 +62,13 @@ extension ProjectStore {
     /// How many threads the rail lists for the project on screen.
     var railLimit: Int { railLimits[project?.root.path ?? ""] ?? RailModel.pageSize }
 
+    /// The thread the rail must list because it is what the window shows: the thread screen's, only while a thread is what is chosen. A task
+    /// page, the new-thread screen or a New task screen over a thread that was open leaves it to the ordinary rules.
+    var railShown: String? {
+        guard mode == .thread, !newThread, case .thread(let snapshot) = screen else { return nil }
+        return snapshot.id
+    }
+
     /// Lists another page of this project's threads.
     func showMoreThreads() {
         railLimits[project?.root.path ?? "", default: RailModel.pageSize] += RailModel.pageSize

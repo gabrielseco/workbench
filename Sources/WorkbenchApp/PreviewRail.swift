@@ -10,7 +10,7 @@ struct PreviewRail: View {
     var body: some View {
         let model = RailModel.derive(
             listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project), composing: store.newThread,
-            limit: store.railLimit, shown: shownThreadID)
+            limit: store.railLimit, shown: store.railShown)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
                 header("THREADS") {

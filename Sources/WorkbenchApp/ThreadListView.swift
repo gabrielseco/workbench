@@ -39,7 +39,7 @@ struct ThreadListView: View {
             if older > 0 {
                 Text(older == 1 ? "1 older thread" : "\(older) older threads")
                     .role(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .help("The log and the workbench command still reach them")
+                    .help(RailModel.olderHelp(older))
             }
         }
         .accessibilityLabel("Threads")

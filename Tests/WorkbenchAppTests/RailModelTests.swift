@@ -290,4 +290,32 @@ import WorkbenchCore
         #expect(RunSettingsLayout.placement(centreWidth: 900 - PreviewRail.width) == .sheet, "the 900 minimum")
         #expect(RunSettingsLayout.placement(centreWidth: 1240 - PreviewRail.width) == .beside)
     }
+
+    @Test func theRailShowsAThreadOnlyWhileAThreadIsWhatIsChosen() async throws {
+        let fixture = try await AppFixture()
+        keptRailFixtures.append(fixture)
+        try await AppScenario.taskThreads.build(in: fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
+        #expect(await store.open(fixture.root))
+        let id = try #require(store.threads.listing.rows.first?.id)
+        await store.select(thread: id)
+        #expect(store.railShown == id, "the thread on screen")
+        // A task chosen in the rail: its page is what shows, so the thread behind it is no longer the one to keep listed.
+        store.selectTask("bump-contract-details")
+        #expect(store.railShown == nil)
+        await store.select(thread: id)
+        #expect(store.railShown == id)
+        // The new-thread screen is not a thread either.
+        store.beginNewGoal()
+        #expect(store.railShown == nil)
+    }
+
+    @Test func theOlderLineNamesTheCommandThatReachesThem() {
+        #expect(RailModel.olderHelp(1).hasPrefix("1 older thread is past"), "one is singular")
+        #expect(RailModel.olderHelp(10).hasPrefix("10 older threads are past"))
+        for count in [1, 10] {
+            let help = RailModel.olderHelp(count)
+            #expect(help.contains("workbench status --all") && help.contains("workbench log <id>"), "\(help)")
+        }
+    }
 }

@@ -68,6 +68,12 @@ struct RailModel: Equatable {
     /// The tasks have been read; until then the section says so rather than claiming there are none.
     var tasksRead: Bool
 
+    /// What the "N older threads" line says when it is hovered: they are past what the app loads, and the command that lists them.
+    static func olderHelp(_ older: Int) -> String {
+        let subject = older == 1 ? "1 older thread is" : "\(older) older threads are"
+        return "\(subject) past the 50 the app loads. `workbench status --all` lists them, `workbench log <id>` shows one."
+    }
+
     /// How many threads are listed, and how many each `Show more` adds.
     static let pageSize = 10
 
