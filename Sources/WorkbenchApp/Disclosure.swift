@@ -15,8 +15,7 @@ struct DisclosureToggle: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityValue(isOpen ? "open" : "closed")
+        .accessibilityLabel("\(label), \(isOpen ? "open" : "closed")")
     }
 }
 
