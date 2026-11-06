@@ -1,0 +1,34 @@
+name: Restore the macOS build
+description: >-
+  The newest debug .build saved for this Xcode and Package.swift (this branch's, else main's), with every file's modification time set
+  to its last commit, so SwiftPM rebuilds only what a change touched. The job needs `fetch-depth: 0`. Save it with `save-key` after the
+  build: only runs that are not pull requests save (the nightly, a manual run), so a pull request starts from main's and never fills the
+  repository's cache with its own pushes.
+inputs:
+  save:
+    description: "Set to 'true' to save the build under save-key (the step after the build uses it)"
+    default: "false"
+outputs:
+  key:
+    description: The key a save uses
+    value: ${{ steps.key.outputs.key }}
+runs:
+  using: composite
+  steps:
+    - name: Name the cache
+      id: key
+      shell: bash
+      run: |
+        echo "prefix=macos-build-xcode$(tr -d '[:space:]' < .xcode-version)-${{ hashFiles('Package.swift', 'Package.resolved') }}-" >> "$GITHUB_OUTPUT"
+        echo "key=macos-build-xcode$(tr -d '[:space:]' < .xcode-version)-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+    - name: Restore the build
+      # A commit never has an exact key of its own to restore, so it always falls back to the prefix: the newest build saved.
+      uses: actions/cache/restore@v4
+      with:
+        path: .build
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ steps.key.outputs.prefix }}
+    - name: Restore each file's last commit time
+      shell: bash
+      run: python3 scripts/restore-file-times.py

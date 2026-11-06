@@ -52,19 +52,30 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+        with:
+          # All of history: the cached build is matched to the files by their last commit time.
+          fetch-depth: 0
       - uses: ./.github/actions/xcode
+      - uses: ./.github/actions/macos-build-cache
+        id: cache
       - name: Runner hardware
         run: |
           echo "cores: $(sysctl -n hw.ncpu)"
           sw_vers
           swift --version
       - name: Build
-        run: swift build
+        run: swift build --build-tests
+      - name: Save the build
+        # What the app workflow's pull requests start from: saved here because only this run (nightly, or by hand) is not a pull request.
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: ${{ steps.cache.outputs.key }}
       - name: Test
         # tee keeps the log for the timings below; pipefail keeps swift's exit code.
         run: |
           set -o pipefail
-          swift test 2>&1 | tee test.log
+          swift test --skip-build 2>&1 | tee test.log
       - name: Soak (100 fake runs, failure matrix, no leaks)
         # Its own step, so descriptor counts are not disturbed by other suites running alongside.
         run: |

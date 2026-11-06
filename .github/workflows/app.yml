@@ -20,6 +20,8 @@ on:
       - "scripts/window-info.swift"
       - "scripts/app-icon.swift"
       - ".github/workflows/app.yml"
+      - ".github/actions/macos-build-cache/**"
+      - "scripts/restore-file-times.py"
       - ".xcode-version"
       - ".github/actions/xcode/**"
       - "scripts/use-xcode.sh"
@@ -36,13 +38,28 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # All of history: the cached build is matched to the files by their last commit time.
+          fetch-depth: 0
       - uses: ./.github/actions/xcode
+      - uses: ./.github/actions/macos-build-cache
+        id: cache
       - name: Toolchain
         run: |
           sw_vers
           swift --version
-      - name: Build the app
-        run: swift build --product WorkbenchApp
+      - name: Build the app and the tests
+        # Everything the next steps run, in one step: `swift test` would otherwise compile the test targets itself, all of them (the
+        # core's 180 files too, with --filter), which was most of that step's two minutes. On a restored build only what changed compiles.
+        run: swift build --build-tests
+      - name: Save the build
+        # Right after the build, not at the end of the job: a failing test run must not throw a good build away. Not for a pull request:
+        # its pushes would fill the repository's cache; it starts from the one the nightly and manual runs save.
+        if: ${{ github.event_name != 'pull_request' || true }}  # TEMPORARY: measuring a warm run inside this PR
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: ${{ steps.cache.outputs.key }}
       - name: Did the packaging change
         id: packaging
         # The bundle is a second, release-mode compile (about four minutes) whose checks are about the plist, the icon and the
@@ -78,7 +95,7 @@ jobs:
           WORKBENCH_RENDER_DIR: ${{ runner.temp }}/renders
         run: |
           set -o pipefail
-          swift test --filter WorkbenchAppTests 2>&1 | tee app-test.log
+          swift test --skip-build --filter WorkbenchAppTests 2>&1 | tee app-test.log
       - name: Upload renders and log
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
