@@ -32,6 +32,9 @@ import WorkbenchCore
                 Button("New goal…") { store.beginNewGoal() }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(store.project == nil)
+                Button("New task…") { store.beginNewTask() }
+                    .keyboardShortcut("n", modifiers: [.shift, .command])
+                    .disabled(store.project == nil)
             }
             CommandGroup(after: .toolbar) {
                 Toggle("Run settings", isOn: Binding(get: { store.runSettingsShowing }, set: { _ in store.toggleRunSettings() }))

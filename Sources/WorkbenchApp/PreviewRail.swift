@@ -5,14 +5,12 @@ import WorkbenchCore
 /// There is no Thread/Tasks switch: choosing a row shows that thread or that task.
 struct PreviewRail: View {
     var store: ProjectStore
-    /// The tasks whose threads are listed under them. Not kept between launches.
-    @State private var expanded: Set<String> = []
-
     static let width: CGFloat = 288
 
     var body: some View {
         let model = RailModel.derive(
-            listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project), composing: store.newThread)
+            listing: store.threads.listing, tasks: store.tasks.snapshot(for: store.project), composing: store.newThread,
+            limit: store.railLimit, shown: store.railShown)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
                 header("THREADS") {
@@ -25,14 +23,9 @@ struct PreviewRail: View {
                     Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
                         .role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                 } else if !model.threads.isEmpty {
-                    ThreadListView(store: store, rows: model.threads, older: model.older)
+                    ThreadListView(store: store, rows: model.threads, hidden: model.hidden, older: model.older)
                 }
-                header(model.scheduledHeader) {
-                    Button { store.beginNewTask() } label: { Image(systemName: "plus") }
-                        .iconButton(size: .small).disabled(store.project == nil)
-                        .accessibilityLabel("New task").help("New task…")
-                }
-                .padding(.top, Space.m)
+                header(model.scheduledHeader).padding(.top, Space.m)
                 if let note = model.scheduledNote {
                     Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                     if model.tasksRead {
@@ -45,15 +38,13 @@ struct PreviewRail: View {
                 let shownTask = shownTaskName
                 ForEach(model.tasks) { row in
                     RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
-                    taskThreads(model.taskThreads[row.key] ?? [], task: row.key)
                 }
+                // The one way in from the rail, besides File ▸ New Task… (⇧⌘N): the `+` above is for threads, so there is one of it.
+                Button("New task…") { store.beginNewTask() }
+                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+                    .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
-        }
-        // The group holding the thread on screen opens when that changes: the thread is chosen, it ends and moves under its task, or the
-        // tasks are read after it. After that the group can be closed.
-        .onChange(of: model.group(holding: shownThreadID), initial: true) { _, task in
-            if let task { expanded.insert(task) }
         }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.
         .task(id: store.project?.root.path) {
@@ -62,33 +53,6 @@ struct PreviewRail: View {
                 await store.tasks.refreshIfDue(store.project, visible: true, force: first)
                 first = false
                 try? await Task.sleep(for: .seconds(5))
-            }
-        }
-    }
-
-    /// A task's finished threads: one line with their count, which opens them under the task. The one on screen opens it by itself.
-    @ViewBuilder private func taskThreads(_ rows: [RailRow], task: String) -> some View {
-        if !rows.isEmpty {
-            let shown = shownThreadID
-            let open = expanded.contains(task)
-            let count = rows.count == 1 ? "1 thread" : "\(rows.count) threads"
-            Button {
-                if expanded.contains(task) { expanded.remove(task) } else { expanded.insert(task) }
-            } label: {
-                HStack(spacing: Space.xs) {
-                    Image(systemName: open ? "chevron.down" : "chevron.right").textStyle(.captionStrong)
-                    Text(count).textStyle(.caption)
-                }
-                .foregroundStyle(.secondary).padding(.leading, Space.xxxl).padding(.vertical, Space.xxs)
-            }
-            .buttonStyle(.plain).accessibilityLabel("\(task): \(count), \(open ? "shown" : "hidden")")
-            if open {
-                ForEach(rows) { row in
-                    RailRowView(row: row, selected: store.mode == .thread && !store.newThread && row.key == shown) {
-                        Task { await store.select(thread: row.key) }
-                    }
-                    .padding(.leading, Space.l)
-                }
             }
         }
     }

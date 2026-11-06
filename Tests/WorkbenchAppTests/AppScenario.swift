@@ -29,7 +29,7 @@ enum AppScenario: String, CaseIterable {
     case tasksEmpty = "tasks-empty"
     case taskThreads = "task-threads"
     case taskDone = "task-done"
-    case threads
+    case threads, manyThreads = "many-threads"
     case chat
     case chatGoal = "chat-goal"
     case chatReplying = "chat-replying"
@@ -197,6 +197,7 @@ enum AppScenario: String, CaseIterable {
             break
         case .chat, .chatGoal, .chatReplying:
             try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
+        case .manyThreads: try await buildManyThreads(in: fixture)
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")

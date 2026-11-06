@@ -247,4 +247,18 @@ import WorkbenchCore
         try "x".write(to: there, atomically: true, encoding: .utf8)
         #expect(RunTonightCard.offered(.openLog(there.path)) && RunTonightCard.offered(.approve))
     }
+
+    @Test func openThreadNeedsNoRailRow() async throws {
+        // A finished thread a task's run made is not in the rail, and the run's button still opens it: it goes by the thread's id.
+        let run = TaskHistory.Run(
+            started: Date(timeIntervalSince1970: 1), ended: Date(timeIntervalSince1970: 2), pullRequest: nil, trigger: "tick",
+            outcome: .prOpened, reason: nil, units: [], thread: "t-done")
+        #expect(RunAction.of(run) == .openThread("t-done"))
+        var snapshot = try await snapshot()
+        let at = try #require(snapshot.entries.firstIndex { $0.id == "bump-contract-details" })
+        snapshot.entries[at].runs = [run]
+        let listing = ThreadListing(rows: [ThreadRow(id: "t-done", title: "t-done", mark: .done, line: "Accepted")])
+        let rail = RailModel.derive(listing: listing, tasks: snapshot)
+        #expect(rail.threads.isEmpty, "not in the rail")
+    }
 }

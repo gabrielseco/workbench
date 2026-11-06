@@ -159,7 +159,7 @@ reason is. It is read when the row is opened and never with the task list, so th
 not ended shows only how long it has gone; a run with no thread, or whose thread was removed, says so. A warning that names the timer's
 tick log offers **Open log** when the file is directly in the user's own `~/Library/Logs/Workbench`, named `task-tick-*.log`, and exists.
 
-**New task…** (a `+` in the rail's Scheduled header, and a button on the empty Tasks page) opens a screen with a name and the person's words.
+**New task…** (a quiet link under the rail's Scheduled list, **File ▸ New Task…** with ⇧⌘N, and a button on the empty Tasks page; the rail's one `+`, on Threads, starts a goal, as ⌘N does) opens a screen with a name and the person's words.
 The name is checked as it is typed (`TaskScaffold.isUsableName`, and not an existing task or folder). **Propose** (`TaskEditor.proposeNew`) gives
 the goal agent the scaffold's template without its script line (`TaskEdit.newTemplate`) and the words, each quoted as data, in the same
 one-shot read-only turn as an edit (no thread, `[agents.goal]`, the same cost note), asked not to add `mcp_tools`, `pending`, `include` or

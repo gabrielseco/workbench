@@ -14,6 +14,10 @@ struct RailRow: Equatable, Identifiable {
 
     var id: String { "\(kind.rawValue)-\(key)" }
 
+    /// What the row says in words, now that the row itself is one line: the hover text, and what an assistive technology reads.
+    var help: String { "\(title): \(line)" }
+    var accessibility: String { "\(title), \(mark.word), \(line)" }
+
     static func thread(_ row: ThreadRow) -> RailRow {
         RailRow(kind: .thread, key: row.id, title: row.title, mark: row.mark, line: row.line)
     }
@@ -53,50 +57,70 @@ struct RailRow: Equatable, Identifiable {
 struct RailModel: Equatable {
     /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.
     var composing: RailRow?
+    /// The threads listed: the ones that need you, are working or are broken (always), the newest of the rest up to the limit, and the one
+    /// on screen; newest first, as the listing is.
     var threads: [RailRow]
+    /// How many of the rest the limit left out: what `Show more` would add.
+    var hidden: Int
+    /// How many older threads the listing itself left out (past the loader's cap).
     var older: Int
     var tasks: [RailRow]
-    /// A task's finished threads (done or idle), newest first, by task name: they are listed under it, not in `threads`.
-    var taskThreads: [String: [RailRow]] = [:]
     /// The tasks have been read; until then the section says so rather than claiming there are none.
     var tasksRead: Bool
+
+    /// What the "N older threads" line says when it is hovered: they are past what the app loads, and the command that lists them.
+    static func olderHelp(_ older: Int) -> String {
+        let subject = older == 1 ? "1 older thread is" : "\(older) older threads are"
+        return "\(subject) past the 50 the app loads. `workbench status --all` lists them, `workbench log <id>` shows one."
+    }
+
+    /// How many threads are listed, and how many each `Show more` adds.
+    static let pageSize = 10
 
     static let composingRow = RailRow(
         kind: .thread, key: "new-thread", title: "New thread", mark: .idle, line: "Type to start · free")
 
-    static func derive(listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false) -> RailModel {
-        let (own, grouped) = split(listing.rows, tasks: tasks)
+    /// - Parameters:
+    ///   - limit: how many of the threads that do not ask for anything are listed.
+    ///   - shown: the thread on screen, which is always listed, so what is selected can be seen.
+    static func derive(
+        listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false, limit: Int = pageSize, shown: String? = nil
+    ) -> RailModel {
+        let own = split(listing.rows, tasks: tasks, shown: shown)
+        let (visible, hidden) = limited(own, limit: limit, shown: shown)
         return RailModel(
-            composing: composing ? composingRow : nil, threads: own.map(RailRow.thread), older: listing.older,
-            tasks: tasks?.entries.map(RailRow.task) ?? [], taskThreads: grouped.mapValues { $0.map(RailRow.thread) },
-            tasksRead: tasks != nil)
+            composing: composing ? composingRow : nil, threads: visible.map(RailRow.thread), hidden: hidden, older: listing.older,
+            tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
     }
 
-    /// The thread's rows that stay in THREADS, and the finished ones a task started, by task. A thread is a task's when a task's run log
-    /// names it, so threads from before this existed qualify too. One that is working, needs you or is broken stays where it is seen,
-    /// and goes under its task once it ends. Until the tasks are read nothing moves.
-    static func split(_ rows: [ThreadRow], tasks: TasksSnapshot?) -> (own: [ThreadRow], grouped: [String: [ThreadRow]]) {
-        guard let tasks else { return (rows, [:]) }
-        var owner: [String: String] = [:]
-        for entry in tasks.entries {
-            for thread in entry.runs.compactMap(\.thread) where owner[thread] == nil { owner[thread] = entry.id }
-        }
-        var own: [ThreadRow] = []
-        var grouped: [String: [ThreadRow]] = [:]
-        for row in rows {
-            if let task = owner[row.id], row.mark == .done || row.mark == .idle {
-                grouped[task, default: []].append(row)
-            } else {
-                own.append(row)
+    /// A thread that asks for something of the person, or is working, or is broken: listed whatever its age.
+    static func isPinned(_ row: ThreadRow) -> Bool { row.mark == .needsYou || row.mark == .working || row.mark == .broken }
+
+    /// The rows under the limit: every pinned one, the first `limit` of the rest, and the one on screen.
+    static func limited(_ rows: [ThreadRow], limit: Int, shown: String?) -> (rows: [ThreadRow], hidden: Int) {
+        var room = max(0, limit)
+        var kept = Set<String>()
+        var rest = 0
+        for row in rows where !isPinned(row) {
+            rest += 1
+            if room > 0 || row.id == shown {
+                kept.insert(row.id)
+                if room > 0 { room -= 1 }
             }
         }
-        return (own, grouped)
+        let visible = rows.filter { isPinned($0) || kept.contains($0.id) }
+        return (visible, rest - kept.count)
     }
 
-    /// The task whose group holds this thread, if one does: what the rail opens so a chosen thread is never hidden in a closed group.
-    func group(holding thread: String?) -> String? {
-        guard let thread else { return nil }
-        return taskThreads.first { $0.value.contains { $0.key == thread } }?.key
+    /// The thread's rows the rail may list: not the finished ones a task's runs made, which are reached from the task's page. A thread is
+    /// a task's when a task's run log names it, so threads from before this existed qualify too. One that is working, needs you or is
+    /// broken stays where it is seen, and so does the one on screen. Until the tasks are read nothing is left out.
+    static func split(_ rows: [ThreadRow], tasks: TasksSnapshot?, shown: String? = nil) -> [ThreadRow] {
+        guard let tasks else { return rows }
+        let owned = Set(tasks.entries.flatMap { $0.runs.compactMap(\.thread) })
+        return rows.filter { row in
+            !(owned.contains(row.id) && (row.mark == .done || row.mark == .idle) && row.id != shown)
+        }
     }
 
     var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }
