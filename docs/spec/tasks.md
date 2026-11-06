@@ -159,6 +159,13 @@ reason is. It is read when the row is opened and never with the task list, so th
 not ended shows only how long it has gone; a run with no thread, or whose thread was removed, says so. A warning that names the timer's
 tick log offers **Open log** when the file is directly in the user's own `~/Library/Logs/Workbench`, named `task-tick-*.log`, and exists.
 
+An ended run's opened Details also has **Fix this with AI**: it opens the task's Edit with AI card with the run as the request
+(`TaskEdit.runRequest`: when it started and how, how it ended and why, the check's result and output, the refused calls, the agent's last
+message; each only when known, the words from outside quoted behind `> `, cleaned and bounded to 4 KiB, ending with what to answer),
+under anything the person had typed, scrolls to it and focuses the box. It waits until the run's detail has been read (so the box has all
+of it), is not offered for a run that has not ended, and is off while an edit is working or has a proposal waiting. It asks the agent
+nothing: the person adds their words, or presses Propose.
+
 The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
 project's tasks (their runs, without the timer's probes) and tells you, once, when a task breaks or goes stale: a run that ended
 `failed`, `budget-exceeded` or `interrupted` (until a later run ends well), or an approval that is STALE now (until it is approved
