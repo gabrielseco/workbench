@@ -35,6 +35,8 @@ struct RecentProject: Equatable, Identifiable {
     var mode: WindowMode = .thread
     /// The Tasks screen's data, read from the core while that screen is shown.
     let tasks = TasksModel()
+    /// How many of a project's threads the rail lists, by project: `Show more` adds a page. Kept for the session, not on disk.
+    var railLimits: [String: Int] = [:]
     /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
     let attention: AttentionCenter
     private(set) var doctor: DoctorChip = .notRun

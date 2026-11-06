@@ -57,3 +57,13 @@ extension ProjectStore {
         if listing != threads.listing { threads.listing = listing }
     }
 }
+
+extension ProjectStore {
+    /// How many threads the rail lists for the project on screen.
+    var railLimit: Int { railLimits[project?.root.path ?? ""] ?? RailModel.pageSize }
+
+    /// Lists another page of this project's threads.
+    func showMoreThreads() {
+        railLimits[project?.root.path ?? "", default: RailModel.pageSize] += RailModel.pageSize
+    }
+}

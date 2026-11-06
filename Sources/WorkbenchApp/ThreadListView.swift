@@ -3,8 +3,9 @@ import SwiftUI
 /// The project's threads in the rail (P22 slice 5): one row each, newest first. A click shows that thread; it starts and stops nothing.
 struct ThreadListView: View {
     var store: ProjectStore
-    /// The rows of THREADS (the listing without the finished threads a task started) and how many older ones the listing left out.
+    /// The rows of THREADS listed now, how many more `Show more` would add, and how many older ones the listing itself left out.
     var rows: [RailRow]
+    var hidden: Int
     var older: Int
 
     /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
@@ -28,6 +29,12 @@ struct ThreadListView: View {
                 RailRowView(row: row, selected: selectedHere && row.key == shown) {
                     Task { await store.select(thread: row.key) }
                 }
+            }
+            if hidden > 0 {
+                Button("Show \(min(RailModel.pageSize, hidden)) more") { store.showMoreThreads() }
+                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+                    .accessibilityLabel("Show \(min(RailModel.pageSize, hidden)) more threads, \(hidden) hidden")
+                    .help("\(hidden) more thread\(hidden == 1 ? "" : "s") are not listed")
             }
             if older > 0 {
                 Text(older == 1 ? "1 older thread" : "\(older) older threads")
@@ -57,11 +64,9 @@ struct RailRowView: View {
         Button(action: action) {
             HStack(alignment: .center, spacing: Space.m) {
                 RailMark(mark: row.mark).frame(width: 16, height: 16)
-                VStack(alignment: .leading, spacing: Space.xxs) {
-                    Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
-                    Text(row.line).textStyle(.caption).lineLimit(1)
-                        .foregroundStyle(row.mark.lineTint == .quiet ? Color.secondary : row.mark.tint)
-                }
+                // One line: the title and, beside it, the mark. What the row says in words (its state) is the hover text and the
+                // accessibility label, and opening the row says the rest.
+                Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Space.s).padding(.vertical, Space.s)
@@ -70,8 +75,8 @@ struct RailRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(row.title): \(row.line)")
-        .accessibilityLabel("\(row.title), \(row.mark.word), \(row.line)")
+        .help(row.help)
+        .accessibilityLabel(row.accessibility)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
