@@ -218,7 +218,6 @@ public struct TaskEditor: Sendable {
         return result
     }
 
-
     /// The answer as a proposal, only when it loads as the task file would.
     func proposal(name: String, source: String, answer: String) throws -> TaskProposal {
         let text = try TaskEdit.file(fromAnswer: answer)
@@ -232,7 +231,7 @@ public struct TaskEditor: Sendable {
             task: name, text: text, changes: TaskChanges.compare(old: old.definition, new: new.definition), source: source)
     }
 
-    /// The answer for a task that does not exist yet, only when it loads as a task of that name would, and does not still say TODO.
+    /// The answer for a task that does not exist yet, only when it loads as a task of that name would, and no longer holds the scaffold's placeholder line.
     func newProposal(name: String, answer: String) throws -> TaskProposal {
         let text = try TaskEdit.file(fromAnswer: answer)
         let loaded: LoadedTask
