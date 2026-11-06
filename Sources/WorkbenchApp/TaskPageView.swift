@@ -69,7 +69,7 @@ struct TaskPageView: View {
         case .viewLog:
             guard let project = store.project else { return }
             NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
-        case .approve, .reapprove: store.tasks.beginApprove(store.project, entry.id)
+        case .approve, .reapprove: Task { await store.tasks.approve(store.project, entry.id) }
         case .openThread(let id): Task { await store.select(thread: id) }
         case .openReport(let path):
             guard let project = store.project else { return }

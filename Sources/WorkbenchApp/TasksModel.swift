@@ -210,9 +210,6 @@ struct TasksReader: Sendable {
     private(set) var reads = 0
 
     // What the two buttons are doing. Only they write, and only through `TaskActions` (core).
-    /// The approve card: what would run, and why the last try was refused.
-    var approving: TaskCardInfo?
-    var approveError: String?
     /// The task a run started here is going for, and what it last said.
     var runningTask: String?
     var runSaid: String?

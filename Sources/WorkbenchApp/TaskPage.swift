@@ -151,7 +151,7 @@ enum RunAction: Equatable {
     var title: String {
         switch self {
         case .viewLog: "View log"
-        case .approve: "Approve…"
+        case .approve: "Approve"
         case .reapprove: "Re-approve"
         case .openThread: "Open thread"
         case .openReport: "Open report"

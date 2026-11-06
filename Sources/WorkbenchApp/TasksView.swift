@@ -141,9 +141,9 @@ struct TaskButtons: View {
                     .help("Ends the agent's turn; the run records how it ended")
             } else {
                 if needsApproval {
-                    Button("Approve…") { tasks.beginApprove(store.project, entry.id) }
+                    Button("Approve") { Task { await tasks.approve(store.project, entry.id) } }
                         .primaryButton().disabled(tasks.isRunning)
-                        .help("Shows what would run with nobody watching, then records the approval")
+                        .help("Records the approval: the task then runs on its schedule with nobody watching")
                 }
                 Button("Run now") {
                     Task { await tasks.beginRun(store.project, entry, threadRunGoing: store.runningProjectPath != nil) }

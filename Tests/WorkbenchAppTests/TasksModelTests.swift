@@ -55,7 +55,7 @@ import WorkbenchCore
             let entry = try #require(shown.entries.first { $0.id == name })
             await tasks.beginRun(fixture.project, entry, threadRunGoing: false)
             #expect(started.names.last == name)
-            #expect(tasks.approving == nil && tasks.actionNote == nil)
+            #expect(tasks.actionNote == nil)
             #expect(tasks.result(of: name, in: fixture.project)?.outcome == .reported)
         }
         // A task that may not run still starts nothing, and says why.

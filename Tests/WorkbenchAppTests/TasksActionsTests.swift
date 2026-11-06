@@ -67,10 +67,7 @@ import WorkbenchCore
         let tasks = model(env)
         await tasks.refresh(fixture.project)
         #expect(try entry(tasks, "cleanup-branches").summary.approval == .never)
-        tasks.beginApprove(fixture.project, "cleanup-branches")
-        #expect(tasks.approving?.name == "cleanup-branches")
-        await tasks.confirmApprove(fixture.project)
-        #expect(tasks.approving == nil)
+        await tasks.approve(fixture.project, "cleanup-branches")
         #expect(try entry(tasks, "cleanup-branches").summary.approval == .approved)
         let history = try TaskRunLog(project: fixture.project, name: "cleanup-branches").history()
         #expect(history.approvedHash == (try TaskLibrary(project: fixture.project).load("cleanup-branches")).hash)
@@ -80,18 +77,15 @@ import WorkbenchCore
         let (fixture, env) = try await scenario()
         let tasks = model(env)
         await tasks.refresh(fixture.project)
-        tasks.beginApprove(fixture.project, "update-docs")
-        let card = try #require(tasks.approving)
+        let card = try TaskActions.core.inspect(fixture.project, "update-docs")
         let shown = Dictionary(uniqueKeysWithValues: card.settings.map { ($0.label, $0.value) })
         #expect(shown["when"] == "mon,thu 07:30")
         #expect(shown["budget"] == "$1.00 a run")
         #expect(shown["fix"]?.hasPrefix("report") == true)
         #expect(card.instructions == "Check the docs for stale pages.")
-        #expect(tasks.selectedIsStale(fixture.project))
-        // A task that does not load cannot be approved: no card, and the core says why.
-        tasks.cancelApprove()
-        tasks.beginApprove(fixture.project, "broken-task")
-        #expect(tasks.approving == nil)
+        // A task that does not load cannot be approved: nothing is recorded, and the core says why.
+        await tasks.approve(fixture.project, "broken-task")
+        #expect(try entry(tasks, "broken-task").summary.approval != .approved)
         #expect(tasks.actionNote?.contains("colour") == true)
         // A `fix: pr` task states its most it may cost.
         let sync = try TaskActions.core.inspect(fixture.project, "sync-fixtures")
@@ -114,7 +108,7 @@ import WorkbenchCore
         #expect(codex.cost.hasPrefix("no dollar cap: the report agent is Codex"))
     }
 
-    @Test func approveRefusalStaysOpen() async throws {
+    @Test func approveRefusalIsSaidAndRecordsNothing() async throws {
         let (fixture, env) = try await scenario()
         let name = "scaffolded"
         let folder = fixture.project.taskFileURL(name).deletingLastPathComponent()
@@ -123,13 +117,9 @@ import WorkbenchCore
             .write(to: fixture.project.taskFileURL(name), atomically: true, encoding: .utf8)
         let tasks = model(env)
         await tasks.refresh(fixture.project)
-        tasks.beginApprove(fixture.project, name)
-        await tasks.confirmApprove(fixture.project)
-        #expect(tasks.approving != nil)
-        #expect(tasks.approveError != nil)
+        await tasks.approve(fixture.project, name)
+        #expect(tasks.actionNote?.contains("cannot be approved") == true)
         #expect(!FileManager.default.fileExists(atPath: fixture.project.taskRunsURL(name).path))
-        tasks.cancelApprove()
-        #expect(tasks.approving == nil && tasks.approveError == nil)
     }
 
     /// Rewrites a task's file, as an editor would, and approves it again as the CLI would.
@@ -138,25 +128,14 @@ import WorkbenchCore
         if approve { try await TaskLibrary(project: project).approve(name) }
     }
 
-    @Test func whatIsApprovedIsWhatWasShown() async throws {
+    @Test func approvingBindsTheFileAsItIsNow() async throws {
         let (fixture, env) = try await scenario()
         let tasks = model(env)
         await tasks.refresh(fixture.project)
-        tasks.beginApprove(fixture.project, "cleanup-branches")
-        let shown = try #require(tasks.approving)
-        // Edited in an editor while the card is open: the new text must not be approved unseen.
         try await edit(fixture.project, "cleanup-branches", "---\nat: 05:00\nfix: pr\nbudget: 9.00\n---\nDo something else.\n")
-        await tasks.confirmApprove(fixture.project)
-        #expect(tasks.approving != nil)
-        #expect(tasks.approveError?.contains("edited after it was shown") == true)
+        await tasks.approve(fixture.project, "cleanup-branches")
         let history = try TaskRunLog(project: fixture.project, name: "cleanup-branches").history()
-        #expect(history.approvedHash == nil)
-        // Looking again shows the new version, and that one can be approved.
-        tasks.cancelApprove()
-        tasks.beginApprove(fixture.project, "cleanup-branches")
-        #expect(tasks.approving?.hash != shown.hash)
-        await tasks.confirmApprove(fixture.project)
-        #expect(tasks.approving == nil)
+        #expect(history.approvedHash == (try TaskLibrary(project: fixture.project).load("cleanup-branches")).hash)
     }
 
     @Test func aRunBelongsToItsProject() async throws {
