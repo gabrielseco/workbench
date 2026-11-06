@@ -58,15 +58,15 @@ ships, and the mockup gets fixed.
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
   chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
   has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, **Threads** with a `+` (the New goal card, until the
-  new-thread screen) and then **Scheduled · N** with the project's tasks. A thread row is newest first (at most 50, then "N older
-  threads"); a task row follows. Each row has a mark at the left (working a spinner, needs you an amber dot with a halo, done a check,
-  idle a hollow ring, broken a cross), the title on one line (`.callout`, semibold) and a `.caption` state line coloured by the same mark
-  (blue running, amber needs you, green done, red broken, `.secondary` for idle); the selected row sits on `Theme.raised`. A click shows
-  that thread, with its feed and settings, or that task's page; it starts
-  and stops nothing. A task's line is its schedule, then what keeps it from running (`needs a fix`, `approval stale`, `not approved`) or
-  how its last run ended. The spine is not drawn twice. A thread a task started (its run log names it) is not in Threads once it is over
-  (done or idle: accepted, shipped, abandoned): a line under its task, `N threads`, opens them, indented, newest first, and choosing one
-  opens its group once (it can be closed again). While such a thread is working, needs you or is broken it stays in Threads. Until the tasks are read nothing moves.
+  new-thread screen) and then **Scheduled · N** with the project's tasks. The rail lists the newest **ten** threads, newest first, plus every thread that
+  needs you, is working or is broken (whatever its age) and the one on screen; a `Show 10 more` link adds ten at a time (the loader still stops at 50, then
+  "N older threads"). A task row follows each section's own list. Each row is **one line**: a mark at the left (working a spinner, needs you an amber dot with
+  a halo, done a check, idle a hollow ring, broken a cross) and the title (`.callout`, semibold); the words of its state (a thread's `Accepted`, a task's
+  `weekdays 04:00 · pr-opened`, `needs a fix`, `approval stale`, `not approved`) are its hover text and accessibility label, and the selected row sits on
+  `Theme.raised`. A click shows that thread, with its feed and settings, or that task's page; it starts and stops nothing. The spine is not drawn twice.
+  A thread a task started (its run log names it) is not in the rail once it is over (done or idle): it is one click from the task's page (each run's
+  `Open thread`), and listed while it is on screen so the selection can be seen; one that is working, needs you or is broken stays in Threads.
+  Under the Scheduled list a quiet `New task…` link opens the New task screen (File ▸ New Task…, ⇧⌘N; the one `+`, on Threads, starts a goal, as ⌘N does).
 - **The new-thread screen** is what the rail's `+` and ⌘N open: in the feed's 680 column
   under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
