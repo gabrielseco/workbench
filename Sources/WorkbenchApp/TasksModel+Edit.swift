@@ -36,6 +36,22 @@ extension TasksModel {
         if editOpen.remove(key) == nil { editOpen.insert(key) }
     }
 
+    /// Why Fix this is off for a run of this task, nil when it works: an edit that is working or waiting is the person's to finish first.
+    func fixUnavailable(_ name: String, in project: Project?) -> String? {
+        editing(name, in: project) == nil ? nil : "An edit is open: accept or discard it first."
+    }
+
+    /// Opens the card with what went wrong in this run in its box, under whatever the person had typed. Asks the agent nothing: the
+    /// person adds their words, or presses Propose, and only then is anything spent.
+    func fixThis(_ project: Project?, _ name: String, _ run: TaskHistory.Run, detail: TaskRunDetail?) {
+        guard run.outcome != nil, fixUnavailable(name, in: project) == nil else { return }
+        let text = TaskEdit.runRequest(run: run, detail: detail)
+        let typed = editRequest.trimmingCharacters(in: .whitespacesAndNewlines)
+        editRequest = typed.isEmpty ? text : typed + "\n\n" + text
+        if !isEditShown(name, in: project) { toggleEdit(name, in: project) }
+        editFocus += 1
+    }
+
     /// Why `Propose` is off for this task, nil when it can start.
     func editUnavailable(_ entry: TaskEntry) -> String? {
         if entry.summary.problem != nil { return "The task does not load: fix its task.md first." }
