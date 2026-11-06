@@ -237,7 +237,7 @@ import WorkbenchCore
     @Test func theDecisionCardDrawsItsPrimaryButtonAndItsMenuInLightAndDark() throws {
         let primary = FeedAction(kind: .accept, title: "Accept work")
         let menu = [
-            FeedAction(kind: .sendBack, title: "Send back…"), FeedAction(kind: .discard, title: "Discard…", destructive: true),
+            FeedAction(kind: .openDiff, title: "Open diff"), FeedAction(kind: .discard, title: "Discard…", destructive: true),
         ]
         for dark in [false, true] {
             let full = try image(card(FeedDecision(primary: primary, more: menu)), width: 760, height: 120, dark: dark)

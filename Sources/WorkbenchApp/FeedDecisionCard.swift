@@ -12,9 +12,8 @@ struct DecisionCard: View {
     var route: String?
 
     /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
-    /// What the ship bar's `…` keeps: every other action of the decision, so Open worktree and New goal do not vanish; `Request changes`
-    /// is its own button.
-    static func shipMenu(_ decision: FeedDecision) -> [FeedAction] { decision.more.filter { $0.kind != .sendBack } }
+    /// What the ship bar's `…` keeps: every other action of the decision, so Open worktree and New goal do not vanish.
+    static func shipMenu(_ decision: FeedDecision) -> [FeedAction] { decision.more }
 
     static func isReadyToShip(_ decision: FeedDecision) -> Bool { decision.primary?.kind == .ship }
 
@@ -40,9 +39,6 @@ struct DecisionCard: View {
             }
             Spacer(minLength: 12)
             MoreActionsMenu(actions: Self.shipMenu(decision), perform: perform)
-            if let back = decision.more.first(where: { $0.kind == .sendBack }) {
-                ActionButton(action: back, title: "Request changes", perform: perform)
-            }
             if let ship = decision.primary {
                 ActionButton(action: ship, kind: .primary, perform: perform)
             }

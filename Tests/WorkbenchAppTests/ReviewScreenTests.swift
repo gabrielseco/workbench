@@ -283,44 +283,48 @@ private final class Recorder: @unchecked Sendable {
     @Test func sendBackNeedsANote() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
-        store.sendingBack = true
         for blank in ["", "  \n"] {
-            store.sendBackNote = blank
-            store.sendBack()
+            store.guidanceNote = blank
+            store.sendGuidance()
             #expect(store.actionError == "Say what to change: a note is required.")
         }
-        // A refused send leaves the card up, so what was written is not lost.
-        #expect(recorder.options.isEmpty && store.sendingBack)
+        #expect(recorder.options.isEmpty)
     }
 
     @Test func sendBackStartsATurnWithTheNote() async throws {
         let recorder = Recorder()
         let store = try await store(recorder)
-        store.sendingBack = true
-        store.sendBackNote = "handle the empty list"
-        store.sendBack()
-        #expect(!store.sendingBack)
+        store.guidanceNote = "handle the empty list"
+        store.sendGuidance()
         let options = try #require(recorder.options.first)
         #expect(options.feedback == "handle the empty list" && options.budgetOverride == nil)
         // The run here ends at once, before any poll could see the turn begin: the spent note must still be gone.
-        for _ in 0..<100 where !store.sendBackNote.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
-        #expect(store.sendBackNote.isEmpty)
+        for _ in 0..<100 where !store.guidanceNote.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(store.guidanceNote.isEmpty)
     }
 
-    @Test func aRunThatWillNotStartBringsTheCardBackWithTheNote() async throws {
+    @Test func aRunThatWillNotStartKeepsTheNote() async throws {
         struct Refused: Error {}
         for (runError, makeRunError) in [(Refused?.none, Refused()), (Refused(), nil)] as [(Refused?, Refused?)] {
             let store = try await store(Recorder(), runError: runError, makeRunError: makeRunError)
-            store.sendingBack = true
-            store.sendBackNote = "handle the empty list"
-            store.sendBack()
+            store.guidanceNote = "handle the empty list"
+            store.sendGuidance()
             // The refusal of an asynchronous start arrives a moment later.
-            for _ in 0..<100 where !store.sendingBack || store.actionError == nil { try await Task.sleep(for: .milliseconds(20)) }
-            #expect(store.sendingBack && store.sendBackNote == "handle the empty list")
+            for _ in 0..<100 where store.actionError == nil { try await Task.sleep(for: .milliseconds(20)) }
+            #expect(store.guidanceNote == "handle the empty list")
             #expect(store.actionError?.hasPrefix("The run did not start") == true)
-            store.cancelSendBack()
-            #expect(!store.sendingBack && store.sendBackNote.isEmpty)
         }
+    }
+
+    @Test func theNoteIsPerThreadAndGoneWhenTheProjectChanges() async throws {
+        let store = try await store(Recorder())
+        let thread = try #require(store.currentThread)
+        store.guidanceNote = "mine"
+        #expect(store.guidanceNotes[thread] == "mine")
+        store.guidanceNotes["other"] = "theirs"
+        #expect(store.guidanceNote == "mine", "another thread's text is not shown here")
+        store.clearGuidance()
+        #expect(store.guidanceNote.isEmpty && store.guidanceNotes.isEmpty)
     }
 
     @Test func viewDiffReadsOneFilesPatchFromCore() async throws {

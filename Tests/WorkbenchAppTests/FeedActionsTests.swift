@@ -113,7 +113,8 @@ import Testing
         let shown = try snapshot(.needsYou)
         let decision = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true }
         #expect(decision.primary?.kind == .accept && decision.primary?.enabled == true)
-        #expect(kinds(decision.more).prefix(3) == [.reviewDetails, .sendBack, .discard])
+        #expect(kinds(decision.more).prefix(2) == [.reviewDetails, .discard])
+        #expect(!kinds(decision.more).contains(.sendGuidance) && decision.takesGuidance)
         #expect(decision.secondary?.kind == .openDiff, "what changed is one plain button beside Accept, not in the menu")
         #expect(!kinds(decision.more).contains(.openDiff))
         #expect(decision.title == "Accept the work", "under NEXT the heading is the press, not the step's name")
@@ -186,7 +187,28 @@ import Testing
         #expect(help[.openDiff]?.contains("editor") == true)
         #expect(help[.openWorktree]?.contains("editor") == true)
         #expect(help[.openHerdr]?.contains("Herdr") == true)
-        #expect(help[.discard]?.isEmpty == false && help[.sendBack]?.isEmpty == false)
+        #expect(help[.discard]?.isEmpty == false && help[.openDiff]?.isEmpty == false)
+    }
+
+    @Test func guidanceFieldTurnsThePrimaryIntoTheSendAndKeepsAccept() throws {
+        let shown = try snapshot(.needsYou)
+        func review(_ text: String, grants: Bool = false) -> FeedDecision {
+            decide(shown) {
+                $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true
+                $0.guidance = text; $0.grantsInFlight = grants
+            }
+        }
+        for blank in ["", "  \n"] {
+            let empty = review(blank)
+            #expect(empty.primary?.kind == .accept && empty.secondary?.kind == .openDiff && empty.takesGuidance)
+        }
+        let writing = review("handle the empty list")
+        #expect(writing.primary?.kind == .sendGuidance && writing.primary?.enabled == true)
+        #expect(writing.secondary?.kind == .accept, "the decision is still there beside the send")
+        #expect(kinds(writing.more).contains(.openDiff) && writing.takesGuidance)
+        #expect(review("go on", grants: true).primary?.enabled == false, "a send waits for a grant being saved")
+        // Not in review (a turn running, accepted): no field.
+        #expect(!decide(shown) { $0.reviewShown = false }.takesGuidance)
     }
 
     @Test func everyStateHasAtMostOnePrimaryAndNoButtonTwice() throws {

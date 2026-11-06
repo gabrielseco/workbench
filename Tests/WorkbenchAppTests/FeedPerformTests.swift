@@ -147,8 +147,8 @@ import Testing
         let store = try await store(calls)
         await store.perform(.newGoal)
         #expect(store.newThread)
-        await store.perform(.sendBack)
-        #expect(store.sendingBack && store.actionError == nil, "the popover opens; nothing is sent")
+        await store.perform(.sendGuidance)
+        #expect(store.actionError == "Say what to change: a note is required.", "an empty field sends nothing")
         await store.perform(.reviewDetails)
         #expect(calls.all.isEmpty, "the review's details are the view's to open")
     }

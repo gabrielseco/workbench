@@ -67,9 +67,11 @@ struct FeedScreen: View {
         if snapshot.watchesPullRequest, let ci = snapshot.ci { PullRequestCIView(ci: ci, store: store) }
         let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
         if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard, runCard?.stop == nil {
+            let decision = store.feedDecision(for: snapshot)
             DecisionCard(
-                step: step, why: why, decision: store.feedDecision(for: snapshot), perform: perform,
+                step: step, why: why, decision: decision, perform: perform,
                 route: snapshot.base.map { "\(WorktreeManager.branch(for: snapshot.id)) → \($0)" })
+            if decision.takesGuidance { GuidanceField(store: store) }
         }
     }
 

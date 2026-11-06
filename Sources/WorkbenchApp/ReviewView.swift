@@ -29,6 +29,7 @@ struct ReviewView: View {
             }
             .padding(Space.xxxl).frame(maxWidth: .infinity, alignment: .leading)
         }
+        .task { await store.loadSendBackGrants() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.refreshReview() }
         }
@@ -127,12 +128,14 @@ struct ReviewView: View {
     @ViewBuilder private var denied: some View {
         if !review.denied.isEmpty {
             section("Denied calls") {
-                ForEach(review.denied) { item in
-                    Text("\(item.text) ×\(item.count)")
-                        .textStyle(.monoCallout, .amber)
+                // The grant rows say each call; without them (a Codex turn takes no grants) the counts are all there is.
+                if store.sendBackGrants.isEmpty {
+                    ForEach(review.denied) { item in
+                        Text("\(item.text) ×\(item.count)").textStyle(.monoCallout, .amber)
+                    }
                 }
-                Text("Decide each one in Send back before you send the work back.")
-                    .role(.caption)
+                SendBackGrants(store: store)
+                Text("Decide each one here before you send guidance to the agent.").role(.caption)
             }
         }
     }

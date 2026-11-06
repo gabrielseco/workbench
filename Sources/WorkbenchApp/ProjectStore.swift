@@ -76,12 +76,14 @@ struct RecentProject: Equatable, Identifiable {
     var newThreadText = ""
     /// Whether the project card under the project pill is up.
     var pickingProject = false
-    /// Whether the Send back card is up; the Review screen's button sets it, `sendBack` clears it once a turn has started.
-    var sendingBack = false
-    /// What is written in the Send back card. It lives here, not in the card, so a send that the run refuses to start does not
-    /// lose it; it is cleared when a turn has begun, on Cancel and when the project changes.
-    var sendBackNote = ""
-    /// The denied calls the card offers to decide; read when it opens.
+    /// What is written in each thread's guidance field. It lives here, not in the view, so a send that the run refuses to start does not
+    /// lose it and another thread does not see it; it is cleared when a turn has begun and when the project changes.
+    var guidanceNotes: [String: String] = [:]
+    /// Bumped to focus the guidance field: the menu bar's `Send back…` asks for it.
+    var guidanceFocus = 0
+    /// The last request the field has acted on: a field that appears after the request (the window was on Tasks) still takes it.
+    var guidanceFocusServed = 0
+    /// The denied calls the Review card offers to decide; read when it opens.
     var sendBackGrants: [GrantRow] = []
     /// Whether a `herdr` was found for the open project: "Open in Herdr" is shown only then.
     var herdrFound = false
@@ -207,7 +209,7 @@ struct RecentProject: Equatable, Identifiable {
             generation += 1
             (pickingProject, newThread) = (false, false)
             newThreadText = ""
-            cancelSendBack()
+            clearGuidance()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
             (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
             screen = .notAGitRepository(path: url.path)
@@ -220,7 +222,7 @@ struct RecentProject: Equatable, Identifiable {
         (pickingProject, newThread) = (false, false)
         // What was typed was for the project it was typed in: never offered to another.
         newThreadText = ""
-        cancelSendBack()
+        clearGuidance()
         current.pendingDiscard = nil
         prReviewShown = nil
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
@@ -276,7 +278,7 @@ struct RecentProject: Equatable, Identifiable {
         let session = current
         if let after = session.awaitingAfterTurn, case .thread(let shown) = screen {
             if shown.state.lastTurn > after {
-                sendBackNote = ""
+                guidanceNotes[shown.id] = nil
                 endRunStart(session)
             }
         }
@@ -350,13 +352,11 @@ struct RecentProject: Equatable, Identifiable {
         let started = session(project, thread)
         guard ownedRun == nil else {
             started.actionError = "A run is already going."
-            if started === current { reopenSendBack() }
             return
         }
         let handle: RunHandle
         do { handle = try actions.makeRun(project, thread, options) } catch {
             started.actionError = "The run did not start: \(error)"
-            if started === current { reopenSendBack() }
             return
         }
         // The turn is not in the log until the worktree is cut and setup has run: say so until it is.
@@ -371,7 +371,8 @@ struct RecentProject: Equatable, Identifiable {
             do {
                 try await handle.run()
                 // A turn quick enough to end between two polls is never seen to begin: its note is spent all the same.
-                if self?.sendingBack == false { self?.sendBackNote = "" }
+                // Only in the project the run was started in: another project's thread of the same id has its own text.
+                if self?.generation == mine { self?.guidanceNotes[thread] = nil }
             } catch {
                 failed = true
                 self?.runFailed(error, in: started, generation: mine)
@@ -457,7 +458,6 @@ struct RecentProject: Equatable, Identifiable {
         endRunStart(session)
         // On the thread it was started for: the window may be showing another by now.
         session.actionError = "The run did not start: \(error)"
-        if session === current { reopenSendBack() }
     }
 
     /// Polls every 250 ms while the thread is working and every 2 s otherwise, until `stopPolling`.

@@ -98,11 +98,11 @@ ships, and the mockup gets fixed.
   broken (a failed or timed-out turn, a failed check or verify, a damaged log), grey everything else. Every row also says it in a
   symbol and words, never by colour alone.
 - **The decision card** is the last row: the step and why, from the spine and attention, and **one** prominent button for the next press
-  (Approve and run, Run, Stop turn, Accept work, Ship, Review PR, Merge…, New goal…). The other actions of the step (Send back…,
-  Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
+  (Approve and run, Run, Stop turn, Accept work, Ship, Review PR, Merge…, New goal…). While a thread is in review a **guidance field** sits under the card (kept per thread): with text in it the
+  primary reads `Send to agent` and Accept work stays beside it. The other actions of the step (Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
   the old step screens' own) are in a borderless `…` menu beside it, Discard in red, each disabled for
   the same reason as on the step screen. The card decides nothing: `FeedActions.derive` reads `canShip`, `canMerge`, the goal's
-  `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation, Send back its popover.
+  `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation; guidance is the field under the card.
 - **What an action said** (an error in red, a note in grey, a notice in green, a Herdr handoff) is a row above the card, in the words
   the actions use, and goes when the next action starts. The pull request's CI summary sits there too while it is watched.
 - **The goal card** says what Approve and run means. While the goal is a draft that no turn has run, and nothing is going on, the card
@@ -125,7 +125,7 @@ ships, and the mockup gets fixed.
   the *Next* card is not drawn while the card is). Under it, `Judge` and `Verify` as grey rings with what they will do, each only when it is on for the goal. A refused call and the
   agent's words stay rows of their own. A finished turn is `Run finished · 5 tasks · 3 files · +7 −1 · $1.88` with `View diff`;
   `Verify passed` is a card with up to three screenshot thumbnails and their names; when the next press is Ship the foot is `Ready to ship`
-  (the branch and base, then `Request changes` where a send-back is allowed, and `Ship`). Not in the artboard and not built: the steer
+  (the branch and base, then `Ship`; there is no send-back after Accept). Not in the artboard and not built: the steer
   input, the verify card's command chips.
 - **Buttons and switches:** the screen's main action is `.primaryButton()`, the artboards' inverse pill (`inv` fill, `invfg`
   label, radius 7, 34 high; 40 % when disabled), and every other plain button is `.plainButton()` (raised fill, hairline border, radius 7,
@@ -206,7 +206,7 @@ VoiceOver (`Workbench, 2 things need you`); the system draws the item as a templ
 the colour (amber, red when something broke) is a bonus. Its popover (320 wide, the window style) follows mockup 5: the project in
 capitals and one pill (`Needs you` amber, `Broken` red, `Working` blue, `Quiet` grey), a card per item (amber or red mark, title,
 the one-line reason, and for a thread in review the criteria row), then `Event log`, `Quit` and `Pause notifications`. A card's first
-`Open review` or `Open task` is the one prominent button; `Send back…` opens the window with the card that decides it. The popover
+`Open review` or `Open task` is the one prominent button; `Send back…` opens the window with the guidance field focused. The popover
 decides nothing and writes nothing. Quiet says `Nothing needs you` with the project's own one-line state; a log that cannot be read
 is red with the core's words; many items scroll in the popover. When the system will not let the app notify, the popover says so once.
 

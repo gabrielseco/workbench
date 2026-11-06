@@ -6,7 +6,7 @@ import WorkbenchCore
 struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
-        case discard, sendBack, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
+        case discard, sendGuidance, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
         case showFindings, refreshCI, openPR
     }
 
@@ -29,6 +29,8 @@ struct FeedDecision: Equatable {
     var why: String?
     /// Replaces the spine step's title as the heading (a chat is on no step).
     var title: String?
+    /// The guidance field is under the card: the work is in review and a turn can still be asked for.
+    var takesGuidance = false
 }
 
 /// What the decision depends on, gathered by the store so the function itself reads no state and a test can set each one.
@@ -47,6 +49,9 @@ struct FeedActionContext {
     var runningHere = false
     var stopping = false
     var herdrFound = false
+    /// What is typed in the guidance field, and whether a grant is still being saved (a send waits for it).
+    var guidance = ""
+    var grantsInFlight = false
 }
 
 enum FeedActions {
@@ -89,12 +94,14 @@ enum FeedActions {
             let accept = FeedAction(
                 kind: .accept, title: "Accept work", help: "Commits the work on its branch",
                 enabled: c.reviewCanDecide && !c.deciding && !c.busy)
+            let writing = !c.guidance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let send = FeedAction(
+                kind: .sendGuidance, title: "Send to agent", help: "Starts the next turn with what you wrote",
+                enabled: !c.busy && !c.starting && !c.grantsInFlight)
             more.append(
                 FeedAction(
                     kind: .reviewDetails, title: "Review details…",
                     help: "Each criterion and how it was assessed, the check, the judge and the changed files"))
-            more.append(
-                FeedAction(kind: .sendBack, title: "Send back…", help: "Asks for another turn, with a note", enabled: !c.busy))
             more.append(
                 FeedAction(
                     kind: .discard, title: "Discard…", help: "Shows what would be removed, and asks first", enabled: !c.busy,
@@ -104,7 +111,12 @@ enum FeedActions {
                 enabled: !c.busy && c.reviewHasFiles)
             worktree()
             more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
-            return FeedDecision(primary: accept, secondary: diff, more: more, title: "Accept the work")
+            // Writing turns the primary into the send; Accept stays beside it and Open diff goes in the menu.
+            if writing {
+                more.insert(diff, at: 0)
+                return FeedDecision(primary: send, secondary: accept, more: more, title: "Accept the work", takesGuidance: true)
+            }
+            return FeedDecision(primary: accept, secondary: diff, more: more, title: "Accept the work", takesGuidance: true)
         }
         if let run = s.run {
             worktree()

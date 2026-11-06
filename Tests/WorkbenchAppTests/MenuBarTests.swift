@@ -128,19 +128,24 @@ import WorkbenchCore
 }
 
 @MainActor @Suite struct MenuBarRouteTests {
-    @Test func sendBackOpensTheCard() async throws {
+    @Test func sendBackFocusesTheGuidanceField() async throws {
         let fixture = try await AppFixture()
         try await AppScenario.needsYou.build(in: fixture)
         let store = ProjectStore(preferences: MemoryPreferences())
         #expect(await store.open(fixture.project.root))
-        // Open review brings the thread screen and opens no card; Send back… opens the existing one, only for a thread in review.
+        // Open review brings the thread screen and opens no card; Send back… asks for the guidance field, only for a thread in review.
         store.mode = .tasks
         store.openFromPopover(.thread("invoice-pagination"), sendBack: false)
-        #expect(store.mode == .thread && !store.sendingBack)
+        #expect(store.mode == .thread && store.guidanceFocus == 0)
         store.openFromPopover(.task("bump"), sendBack: true)
-        #expect(!store.sendingBack, "a task has nothing to send back")
+        #expect(store.guidanceFocus == 0, "a task has nothing to send back")
         store.openFromPopover(.thread("invoice-pagination"), sendBack: true)
-        #expect(store.sendingBack == (store.review != nil))
+        #expect((store.guidanceFocus == 1) == (store.review != nil))
+        // With the new-thread screen up, the route still brings the thread (and its field) forward; what was typed stays.
+        store.beginNewGoal()
+        store.newThreadText = "half a goal"
+        store.openFromPopover(.thread("invoice-pagination"), sendBack: true)
+        #expect(!store.newThread && store.newThreadText == "half a goal")
     }
 
     @Test func pausingIsAPreferenceTheToggleRedraws() {
