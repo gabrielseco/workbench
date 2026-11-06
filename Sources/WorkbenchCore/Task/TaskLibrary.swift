@@ -42,14 +42,25 @@ public struct TaskLibrary: Sendable {
     }
 
     public func load(_ name: String) throws -> LoadedTask {
+        try loadText(try source(name), name: name)
+    }
+
+    /// The task file's text, read as `load` reads it: inside the project after links are followed, a regular file, bounded.
+    func source(_ name: String) throws -> String {
         guard SafeNames.isThreadID(name), FileManager.default.fileExists(atPath: project.taskFileURL(name).path) else {
             throw TaskFileError.notFound(".workbench/tasks/\(name)/task.md")
         }
-        let files = TaskFiles(project: project)
-        let data = try files.read(".workbench/tasks/\(name)/task.md", limit: TaskFiles.maxTaskFileBytes)
+        let data = try TaskFiles(project: project).read(".workbench/tasks/\(name)/task.md", limit: TaskFiles.maxTaskFileBytes)
         guard let text = String(data: data, encoding: .utf8) else {
             throw TaskFileError.unreadable(".workbench/tasks/\(name)/task.md")
         }
+        return text
+    }
+
+    /// A task's text loaded as `load` would load it (parsed, its MCP servers defined, its script and skill files readable), whether
+    /// or not the text is the file's: how a proposed edit is checked before it is offered.
+    func loadText(_ text: String, name: String) throws -> LoadedTask {
+        let files = TaskFiles(project: project)
         let definition = try TaskDefinition.parse(text, name: name)
         try Self.requireMcpServers(definition, project: project)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }

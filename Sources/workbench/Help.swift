@@ -119,7 +119,8 @@ enum Help {
         "task": Extra(
             changes:
                 "task new: creates .workbench/tasks/<name>/ with task.md and pending.sh; task list and task log: nothing; "
-                + "read-only; task approve: appends task.approved to the task's own run log "
+                + "read-only; task edit: nothing, unless --accept, which rewrites task.md (an approval it had then reads stale); "
+                + "task approve: appends task.approved to the task's own run log "
                 + "(.workbench/tasks/<name>/runs.jsonl); task timer: install writes the launcher and a copy of the binary under "
                 + "~/.workbench/timers/ and the agent in ~/Library/LaunchAgents and loads it with launchctl, remove undoes "
                 + "that, status reads; task run and task tick: append task.run.started and task.run.ended there and, with "
