@@ -45,6 +45,13 @@ struct PreviewRail: View {
                     .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
+            // One focus stop for the whole rail, so the arrows walk the threads and on into the tasks instead of stopping at the section edge.
+            .focusable()
+            .focusEffectDisabled()
+            .onMoveCommand { direction in
+                guard direction == .up || direction == .down else { return }
+                move(up: direction == .up, model: model)
+            }
         }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.
         .task(id: store.project?.root.path) {
@@ -54,6 +61,24 @@ struct PreviewRail: View {
                 first = false
                 try? await Task.sleep(for: .seconds(5))
             }
+        }
+    }
+
+    /// The row above or below the one shown, threads first and then tasks; nil at either end or when none is shown.
+    private func move(up: Bool, model: RailModel) {
+        let ids = model.threads.map { "t:" + $0.key } + model.tasks.map { "k:" + $0.key }
+        var shown: String?
+        if let task = shownTaskName {
+            shown = "k:" + task
+        } else if store.mode == .thread, !store.newThread, let thread = shownThreadID {
+            shown = "t:" + thread
+        }
+        guard let next = ThreadListView.neighbour(of: shown, in: ids, up: up) else { return }
+        let key = String(next.dropFirst(2))
+        if next.hasPrefix("t:") {
+            Task { await store.select(thread: key) }
+        } else {
+            store.selectTask(key)
         }
     }
 
