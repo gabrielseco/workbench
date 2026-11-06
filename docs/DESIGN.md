@@ -83,7 +83,7 @@ ships, and the mockup gets fixed.
   from the task (a file that does not load, an approval missing or stale, a last run that waited for review), the project (another
   thread is still active, so the next run would skip) and the machine (the timer's own lines that warn or fail), each with the one
   button that deals with it (`Approve` / `Re-approve`, `Open thread`); open when it has warnings, one line when it has none. Then the
-  **New task** is a `+` in the rail's Scheduled header (and a button on the empty Tasks page) that opens a screen in the main area: `New task`
+  **New task** is a quiet `New task…` link under the rail's Scheduled list (the rail has one `+`, on Threads; also File ▸ New Task… ⇧⌘N, and a button on the empty Tasks page) that opens a screen in the main area: `New task`
   with `Cancel`, a `NAME` field (focused; a red line says what is wrong with a name as it is typed), a `WHAT IT SHOULD DO` box, `Propose` and
   `Create empty task` (same size), and a note saying what Propose costs or that it needs a goal agent. Working shows a busy line with `Stop`; a
   proposal shows the same settings-and-diff view as Edit with AI with `Accept` and `Discard`; Accept opens the new task's page.

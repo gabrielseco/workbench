@@ -25,12 +25,7 @@ struct PreviewRail: View {
                 } else if !model.threads.isEmpty {
                     ThreadListView(store: store, rows: model.threads, hidden: model.hidden, older: model.older)
                 }
-                header(model.scheduledHeader) {
-                    Button { store.beginNewTask() } label: { Image(systemName: "plus") }
-                        .iconButton(size: .small).disabled(store.project == nil)
-                        .accessibilityLabel("New task").help("New task…")
-                }
-                .padding(.top, Space.m)
+                header(model.scheduledHeader).padding(.top, Space.m)
                 if let note = model.scheduledNote {
                     Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                     if model.tasksRead {
@@ -44,6 +39,10 @@ struct PreviewRail: View {
                 ForEach(model.tasks) { row in
                     RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
                 }
+                // The one way in from the rail, besides File ▸ New Task… (⇧⌘N): the `+` above is for threads, so there is one of it.
+                Button("New task…") { store.beginNewTask() }
+                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+                    .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
         }
