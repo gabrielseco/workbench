@@ -29,8 +29,7 @@ enum AppScenario: String, CaseIterable {
     case tasksEmpty = "tasks-empty"
     case taskThreads = "task-threads"
     case taskDone = "task-done"
-    case threads
-    case manyThreads = "many-threads"
+    case threads, manyThreads = "many-threads"
     case chat
     case chatGoal = "chat-goal"
     case chatReplying = "chat-replying"
@@ -198,22 +197,7 @@ enum AppScenario: String, CaseIterable {
             break
         case .chat, .chatGoal, .chatReplying:
             try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
-        case .manyThreads:
-            // The rail's ten and Show more: fourteen finished threads (accepted, abandoned, discarded), and the oldest of all one that needs
-            // you, which the limit never hides.
-            try await fixture.addThread("a-old-review", approved: true, title: "Review the contract version bump")
-            try fixture.append("a-old-review", .turnStarted, turn: 1, data: ["session_id": "s1"])
-            try fixture.append("a-old-review", .turnEnded, turn: 1, data: ["result": "succeeded", "cost_usd": 0.8])
-            try fixture.append("a-old-review", .checkStarted, turn: 1)
-            try fixture.append(
-                "a-old-review", .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a"], "tests_failed": []])
-            let decisions = ["accepted", "abandoned", "discarded"]
-            for index in 1...14 {
-                let id = String(format: "t%02d-finished", index)
-                try await fixture.addThread(id, approved: true, title: "Finished thread number \(index)")
-                try fixture.turn(id, 1, cost: 0.5)
-                try fixture.decide(id, decisions[index % decisions.count])
-            }
+        case .manyThreads: try await buildManyThreads(in: fixture)
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
