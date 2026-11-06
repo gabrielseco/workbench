@@ -137,8 +137,8 @@ request opened by hand for a unit is not seen. A `report` run does the work of n
 The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the same data and no other: a task's `task list` line
 (`TaskLibrary.summary`), its runs and their reasons (`TaskRunLog`'s history, the reason cleaned as `task log` cleans it) and the
 timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
-shown. Reading writes nothing. Two buttons write, only through core: `Approve…` (a card shows the settings, the instructions and the
-files the approval binds to, then `TaskLibrary.approve`) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
+shown. Reading writes nothing. Two buttons write, only through core: `Approve` (the press approves the task as it is on disk now, with no card to show it first: `TaskLibrary.approve` binds the hash read at
+that moment, and a refusal is shown as a note) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
 a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). Quitting the app mid-run ends the run as `interrupted`,
 like a killed `task run`.
 
