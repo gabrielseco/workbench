@@ -226,6 +226,8 @@ struct TasksReader: Sendable {
     var editRequest = ""
     /// The tasks whose Edit with AI card is open (a project and a task name each): closed until the button is pressed.
     var editOpen: Set<String> = []
+    /// Bumped when something asks for the card's text box (Fix this): the card focuses it and the page scrolls to it.
+    var editFocus = 0
     /// What an edit may spend with this project's goal agent, as it is said; nil with no goal agent. Read with the tasks.
     private(set) var editLimit: String?
     @ObservationIgnored var editStop: DraftStop?

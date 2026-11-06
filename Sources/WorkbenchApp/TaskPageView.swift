@@ -11,49 +11,71 @@ struct TaskPageView: View {
     var body: some View {
         let header = TaskPage.header(entry, now: snapshot.readAt)
         let tonight = RunTonight.derive(entry, timer: snapshot.timer, activeThread: snapshot.activeThread)
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.xl) {
-                if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path { BusyBar(text: said) }
-                HStack(alignment: .top, spacing: Space.m) {
-                    VStack(alignment: .leading, spacing: Space.xs) {
-                        Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
-                        Text(header.line).role(.detail).lineLimit(2)
-                        Text("Defined in \(header.path). Edit that file, or use Edit with AI.")
-                            .textStyle(.mono, .subtle).textSelection(.enabled)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xl) {
+                    if let said = store.tasks.runSaid, store.tasks.runningProject == store.project?.root.path {
+                        BusyBar(text: said)
                     }
-                    Spacer(minLength: 8)
-                    TaskButtons(store: store, entry: entry)
-                }
-                if let note = store.tasks.actionNote {
-                    Text(note).role(.caption).textSelection(.enabled)
-                }
-                if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
-                RunTonightCard(tonight: tonight, perform: perform).id(entry.id)
-                if store.tasks.isEditShown(entry.id, in: store.project) { TaskEditCard(store: store, entry: entry).id(entry.id) }
-                if entry.runs.isEmpty {
-                    Text("Never run. It runs at the next tick, or by hand: workbench task run \(entry.summary.name)")
-                        .role(.detail).textSelection(.enabled)
-                }
-                ForEach(Array(RunDay.groups(runs: entry.runs, now: snapshot.readAt).enumerated()), id: \.offset) { _, group in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, Space.s)
-                        ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
-                            Divider()
-                            TaskRunRow(
-                                run: run, threadKnown: threadKnown(run.thread), reportExists: reportExists,
-                                detail: store.tasks.detail(store.project, entry.id, run),
-                                isOpen: store.tasks.isOpen(store.project, entry.id, run),
-                                toggle: { Task { await store.tasks.toggleRun(store.project, entry.id, run) } }, perform: perform)
+                    HStack(alignment: .top, spacing: Space.m) {
+                        VStack(alignment: .leading, spacing: Space.xs) {
+                            Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
+                            Text(header.line).role(.detail).lineLimit(2)
+                            Text("Defined in \(header.path). Edit that file, or use Edit with AI.")
+                                .textStyle(.mono, .subtle).textSelection(.enabled)
                         }
-                        Divider()
+                        Spacer(minLength: 8)
+                        TaskButtons(store: store, entry: entry)
+                    }
+                    if let note = store.tasks.actionNote {
+                        Text(note).role(.caption).textSelection(.enabled)
+                    }
+                    if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
+                    RunTonightCard(tonight: tonight, perform: perform).id(entry.id)
+                    if store.tasks.isEditShown(entry.id, in: store.project) {
+                        TaskEditCard(store: store, entry: entry).id(Self.editCardID(entry.id))
+                    }
+                    if entry.runs.isEmpty {
+                        Text("Never run. It runs at the next tick, or by hand: workbench task run \(entry.summary.name)")
+                            .role(.detail).textSelection(.enabled)
+                    }
+                    ForEach(Array(RunDay.groups(runs: entry.runs, now: snapshot.readAt).enumerated()), id: \.offset) { _, group in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(group.heading).textStyle(.captionStrong, .secondary).padding(.bottom, Space.s)
+                            ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
+                                Divider()
+                                TaskRunRow(
+                                    run: run, threadKnown: threadKnown(run.thread), reportExists: reportExists,
+                                    detail: store.tasks.detail(store.project, entry.id, run),
+                                    isOpen: store.tasks.isOpen(store.project, entry.id, run),
+                                    toggle: { Task { await store.tasks.toggleRun(store.project, entry.id, run) } },
+                                    fix: run.outcome == nil ? nil : { fixThis(run) },
+                                    fixOff: store.tasks.fixUnavailable(
+                                    entry.id, in: store.project, detail: store.tasks.detail(store.project, entry.id, run)),
+                                perform: perform)
+                            }
+                            Divider()
+                        }
                     }
                 }
+                .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
+                .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.xl).frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: FeedLayout.maxColumn, alignment: .leading)
-            .padding(.horizontal, Spacing.gutter).padding(.vertical, Space.xl).frame(maxWidth: .infinity)
+            // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
+            .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
+            // Fix this opened the card below the runs: show the box the person is to answer.
+            .task(id: store.tasks.editFocus) {
+                guard store.tasks.editFocus > 0 else { return }
+                try? await Task.sleep(for: .milliseconds(80))
+                proxy.scrollTo(Self.editCardID(entry.id), anchor: .center)
+            }
         }
-        // Looking at a task is seeing what broke in it: its items stop counting, and a newer failure counts again.
-        .task(id: "\(entry.id)|\(store.attention.items.map(\.id))") { store.attention.markSeen(shown: entry) }
+    }
+
+    static func editCardID(_ task: String) -> String { "edit-card-\(task)" }
+
+    private func fixThis(_ run: TaskHistory.Run) {
+        store.tasks.fixThis(store.project, entry.id, run, detail: store.tasks.detail(store.project, entry.id, run))
     }
 
     /// A run's thread is one the window can show: its folder is still there (cleaned ones are not), however old it is.
@@ -180,6 +202,10 @@ struct TaskRunRow: View {
     var detail: TaskRunDetail?
     var isOpen = false
     var toggle: () -> Void = {}
+    /// Opens the edit card with this run in its box; nil for a run that has not ended.
+    var fix: (() -> Void)?
+    /// Why it cannot be pressed now, nil when it can.
+    var fixOff: String?
     var perform: (RunAction) -> Void
 
     var body: some View {
@@ -220,6 +246,11 @@ struct TaskRunRow: View {
                         RunDetailView(facts: RunDetailFacts.make(detail, running: run.outcome == nil)).padding(.top, Space.xs)
                     } else {
                         ProgressView().controlSize(.small).padding(.top, Space.xs)
+                    }
+                    if let fix {
+                        Button("Fix this with AI", action: fix).plainButton(size: .compact).disabled(fixOff != nil)
+                            .help(fixOff ?? "Opens Edit with AI with this run's facts; nothing is asked until you propose")
+                            .padding(.top, Space.xs)
                     }
                 }
             }

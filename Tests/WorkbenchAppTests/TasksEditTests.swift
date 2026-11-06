@@ -239,4 +239,61 @@ import WorkbenchCore
         tasks.discardEdit()
         #expect(tasks.isEditShown(entry.id, in: fixture.project))
     }
+
+    // MARK: Fix this
+
+    private let endedRun = TaskHistory.Run(
+        started: Date(timeIntervalSince1970: 1_793_000_000), ended: Date(timeIntervalSince1970: 1_793_000_090), pullRequest: nil,
+        trigger: "tick", outcome: .failed, reason: "the check failed", units: [], thread: "g-x")
+
+    @Test func fixThisFillsTheBoxAndAsksNothing() async throws {
+        let (fixture, tasks) = try await scenario()
+        let entry = try entry(tasks)
+        let before = tasks.editFocus
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: TaskRunDetail(source: .read, denied: 2))
+        #expect(tasks.isEditShown(entry.id, in: fixture.project), "the card is open, from closed")
+        #expect(tasks.editRequest.contains("ended: failed.") && tasks.editRequest.contains("Why: the check failed"))
+        #expect(tasks.editRequest.contains("refused 2 tool calls") && tasks.editRequest.hasSuffix("happen again?"))
+        #expect(tasks.editFocus == before + 1, "the box is asked to take the focus")
+        #expect(calls.requests.isEmpty && tasks.editing == nil, "nothing was asked of the agent: that is Propose's")
+        // From the card already open it still fills the box and asks for the focus again.
+        tasks.discardEdit()
+        tasks.editRequest = ""
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: TaskRunDetail(source: .noThread))
+        #expect(tasks.isEditShown(entry.id, in: fixture.project) && tasks.editFocus == before + 2)
+        #expect(calls.requests.isEmpty)
+    }
+
+    @Test func fixThisKeepsWhatWasTyped() async throws {
+        let (fixture, tasks) = try await scenario()
+        let entry = try entry(tasks)
+        tasks.editRequest = "  skip the vendor folder \n"
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: TaskRunDetail(source: .noThread))
+        #expect(tasks.editRequest.hasPrefix("skip the vendor folder\n\nThe run that started "), "\(tasks.editRequest)")
+    }
+
+    @Test func fixThisIsOnlyWhereItCanWork() async throws {
+        let (fixture, tasks) = try await scenario()
+        let entry = try entry(tasks)
+        // A run that has not ended has no outcome to fix.
+        var going = endedRun
+        going.ended = nil
+        going.outcome = nil
+        let read = TaskRunDetail(source: .read, denied: 1)
+        tasks.fixThis(fixture.project, entry.id, going, detail: read)
+        #expect(tasks.editRequest.isEmpty && !tasks.isEditShown(entry.id, in: fixture.project))
+        // The detail is still being read: pressing now would leave out the check and the refusals, so it waits for them.
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: nil)?.contains("Reading") == true)
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: nil)
+        #expect(tasks.editRequest.isEmpty && !tasks.isEditShown(entry.id, in: fixture.project), "nothing is filled from a part")
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: read) == nil)
+        // An edit waiting for a decision is the person's to finish first: the button says so, and does nothing.
+        tasks.editRequest = "x"
+        await tasks.proposeEdit(fixture.project, entry)
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: read)?.contains("accept or discard") == true)
+        let waiting = tasks.editRequest
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: read)
+        #expect(tasks.editRequest == waiting, "the proposal's request is not rewritten under it")
+        #expect(tasks.fixUnavailable("update-docs", in: fixture.project, detail: read) == nil, "another task is free")
+    }
 }

@@ -83,6 +83,7 @@ ships, and the mockup gets fixed.
   from the task (a file that does not load, an approval missing or stale, a last run that waited for review), the project (another
   thread is still active, so the next run would skip) and the machine (the timer's own lines that warn or fail), each with the one
   button that deals with it (`Approve` / `Re-approve`, `Open thread`); open when it has warnings, one line when it has none. Then the
+  **Fix this with AI** (in an ended run's opened Details) opens that card with the run's facts in its box and scrolls to it. The
   **Edit with AI** card, closed until the task's `Edit with AI` button (beside `Run now`) opens it, with the text box focused, and kept
   open while an edit is working or waiting for a decision (a text box, `Propose`, and a note that it costs up to the goal draft's budget, is read-only until accepted and
   that accepting does not approve): working, it says so with a `Stop`; a proposal shows the settings approval binds to as `key old → new`

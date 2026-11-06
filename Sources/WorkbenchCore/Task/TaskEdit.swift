@@ -114,6 +114,54 @@ public enum TaskEdit {
         return "up to $" + String(format: "%.2f", NSDecimalNumber(decimal: budgetUSD).doubleValue)
     }
 
+    /// The most a request made from a run may be: well under `requestLimit`, so the person can add their own words.
+    public static let runRequestLimit = 4 << 10
+
+    /// A run as the request for the editor: when it started and how it ended and why, the check, what it was refused and what the agent
+    /// said last, each only when known, then what to answer. The words that came from outside (the agent, the check's output) are quoted,
+    /// every line behind `> `, so they are data to the editor and cannot read as its instructions. It is a start for the person to edit,
+    /// not a message sent: nothing is asked of the agent until they propose.
+    public static func runRequest(
+        run: TaskHistory.Run, detail: TaskRunDetail?, timeZone: TimeZone = .current
+    ) -> String {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.timeZone = timeZone
+        format.dateFormat = "yyyy-MM-dd HH:mm"
+        // Every word that is not ours is cleaned to one bounded line here, whoever built the run or the detail: the trigger comes from a log
+        // file and the detail's text from an agent, and the reader that made them is not the only way to make them.
+        func line(_ text: String, _ limit: Int) -> String { TaskExplanation.clean(text, limit: limit) }
+        let outcome = run.outcome?.rawValue ?? "not yet"
+        let header = "The run that started \(format.string(from: run.started)) (\(line(run.trigger, 40))) ended: \(outcome)."
+        let ask = "What should change in this task so this does not happen again?"
+        var optional: [[String]] = []
+        if let reason = run.reason {
+            let text = line(reason, TaskExplanation.maxReason)
+            if !text.isEmpty { optional.append(["Why: " + text]) }
+        }
+        if let detail {
+            if let check = detail.check {
+                var block = ["The check: \(line(check.result, 40))" + (check.seconds.map { " (\($0)s)" } ?? "") + "."]
+                let tail = check.tail.suffix(TaskExplanation.maxCheckLines).map { line($0, TaskExplanation.maxCheckLine) }
+                if !tail.isEmpty { block += ["Its output ended with:"] + tail.map { "> " + $0 } }
+                optional.append(block)
+            }
+            if detail.denied > 0 {
+                optional.append(["It was refused \(detail.denied) tool call\(detail.denied == 1 ? "" : "s")."])
+            }
+            if let message = detail.agentMessage.map({ line($0, TaskExplanation.maxMessage) }), !message.isEmpty {
+                optional.append(["The agent said:", "> " + message])
+            }
+        }
+        // Over the limit, whole blocks go, the agent's words first, never a block cut in the middle.
+        func text(_ blocks: [[String]]) -> String {
+            ([[header]] + blocks + [[ask]]).map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
+        }
+        var kept = optional
+        while text(kept).utf8.count > runRequestLimit, !kept.isEmpty { kept.removeLast() }
+        return text(kept)
+    }
+
     /// Every line behind `> `, so nothing in the file or the request can read as the prompt's own structure.
     static func quote(_ text: String) -> String {
         let cleaned = text.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\0", with: "")

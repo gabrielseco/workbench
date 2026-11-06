@@ -30,6 +30,7 @@ struct TaskEditCard: View {
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .card()
+        .onChange(of: store.tasks.editFocus) { focused = true }
         .task {
             // A field that has just appeared is not yet in the window: focus set at once is lost.
             try? await Task.sleep(for: .milliseconds(40))

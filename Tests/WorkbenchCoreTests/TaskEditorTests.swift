@@ -282,4 +282,90 @@ private func editing(
         let request = try! #require(lines.firstIndex { $0.hasPrefix("## The request") })
         #expect(file < request, "the file comes before the request")
     }
+
+    // MARK: A run as the request
+
+    private func failedRun(reason: String? = "the check failed") -> TaskHistory.Run {
+        TaskHistory.Run(
+            started: Date(timeIntervalSince1970: 1_793_000_000), ended: Date(timeIntervalSince1970: 1_793_000_090),
+            pullRequest: nil, trigger: "tick", outcome: .failed, reason: reason, units: [], thread: "g-x")
+    }
+
+    @Test func aRunBecomesARequest() {
+        let detail = TaskRunDetail(
+            source: .read, duration: 90, costUSD: 0.5, setup: TaskRunDetail.Step(result: "passed", seconds: 3),
+            check: TaskRunDetail.Check(result: "failed", seconds: 5, tail: ["FAIL a", "FAIL b"]), denied: 2,
+            agentMessage: "I updated PBYR-5087")
+        let text = TaskEdit.runRequest(run: failedRun(), detail: detail, timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        #expect(
+            text == """
+                The run that started 2026-10-26 07:33 (tick) ended: failed.
+
+                Why: the check failed
+
+                The check: failed (5s).
+                Its output ended with:
+                > FAIL a
+                > FAIL b
+
+                It was refused 2 tool calls.
+
+                The agent said:
+                > I updated PBYR-5087
+
+                What should change in this task so this does not happen again?
+                """, "\(text)")
+        // Only what is known: a run with no thread has its reason and nothing else.
+        let bare = TaskEdit.runRequest(run: failedRun(reason: nil), detail: nil)
+        #expect(bare.hasSuffix("ended: failed.\n\nWhat should change in this task so this does not happen again?"), "\(bare)")
+        let one = TaskRunDetail(source: .read, denied: 1)
+        #expect(TaskEdit.runRequest(run: failedRun(), detail: one).contains("refused 1 tool call."))
+    }
+
+    @Test func aRunRequestTrustsNoInputItWasGiven() {
+        // Built by hand, not by the reader that cleans: every field from outside still comes out one clean, bounded, quoted line.
+        var run = failedRun(reason: "r\u{1B}[31m\nsecond")
+        run.trigger = String(repeating: "t", count: 5_000) + "\nforged line\u{1B}"
+        let detail = TaskRunDetail(
+            source: .read, check: TaskRunDetail.Check(
+                result: "failed\nforged", seconds: 1, tail: ["first\nsecond\u{1B}", String(repeating: "x", count: 5_000)]),
+            denied: 1, agentMessage: "first\nsecond\u{1B}[2J")
+        let text = TaskEdit.runRequest(run: run, detail: detail)
+        #expect(text.utf8.count <= TaskEdit.runRequestLimit)
+        #expect(!text.contains("\u{1B}") && !text.contains("\r") && !text.contains("\0"))
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let allowed = [
+            "The run that started", "Why: ", "The check: ", "Its output ended with:", "It was refused", "The agent said:",
+            "What should",
+        ]
+        for line in lines where !line.isEmpty && !line.hasPrefix("> ") {
+            #expect(allowed.contains { line.hasPrefix($0) }, "an unquoted line from outside: \(line.prefix(40))")
+        }
+        #expect(!lines.contains("forged line") && !lines.contains("second") && !lines.contains("forged"))
+        let header = try? #require(lines.first)
+        #expect(header?.contains("(" + String(repeating: "t", count: 39) + "…)") == true, "the trigger is bounded in the header")
+    }
+
+    @Test func aRunRequestIsBoundedAndClean() {
+        let words = String(repeating: "word ", count: 2_000)
+        let detail = TaskRunDetail(
+            source: .read, check: TaskRunDetail.Check(
+                result: "failed", seconds: 1, tail: (1...8).map { _ in String(repeating: "x", count: 160) }),
+            denied: 3, agentMessage: String(repeating: "m", count: 600))
+        let text = TaskEdit.runRequest(run: failedRun(reason: "boom\u{1B}[31m\n" + words), detail: detail)
+        #expect(text.utf8.count <= TaskEdit.runRequestLimit && text.utf8.count < TaskEdit.requestLimit)
+        #expect(!text.contains("\u{1B}") && !text.contains("\r") && !text.contains("\0"))
+        // Nothing from outside is a line of its own: the agent's and the check's words are all behind `> `.
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let allowed = [
+            "The run that started", "Why: ", "The check: ", "Its output ended with:", "It was refused", "The agent said:",
+            "What should",
+        ]
+        for line in lines where !line.isEmpty && !line.hasPrefix("> ") {
+            #expect(allowed.contains { line.hasPrefix($0) }, "\(line.prefix(60))")
+        }
+        #expect(text.hasSuffix("so this does not happen again?"), "the question is always last")
+        // Over the limit whole blocks go, the agent's words first: a block is there whole or not at all.
+        if text.contains("The agent said:") { #expect(text.contains("> " + String(repeating: "m", count: 600))) }
+    }
 }
