@@ -63,6 +63,17 @@ extension TasksModel {
 
     func stopEdit() { editStop?.stop() }
 
+    /// An edit is with the agent: a quit has to end it, or its process goes on spending.
+    var isEditing: Bool { editing?.phase == .working }
+
+    /// Stops the agent of an edit and waits until the edit has ended, at most `timeout` (a quit).
+    func stopEditAndWait(timeout: Duration = .seconds(6)) async {
+        guard isEditing else { return }
+        let deadline = ContinuousClock.now + timeout
+        stopEdit()
+        while isEditing, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+    }
+
     /// Writes the proposal. A refusal (the file changed, a run is going) leaves it shown with the core's words; nothing is written.
     func acceptEdit(_ project: Project?) async {
         guard let project, case .proposed(let proposal, _)? = editing?.phase else { return }

@@ -181,4 +181,36 @@ import WorkbenchCore
         await tasks.proposeEdit(fixture.project, running)
         #expect(tasks.editing == nil && tasks.actionNote != nil)
     }
+
+    @Test func quittingEndsAnEditInProgress() async throws {
+        #expect(QuitPrompt.work(threadRunIn: nil, taskRun: nil, editing: true) == "a task edit is still going.")
+        let (fixture, _) = try await scenario()
+        let gate = Gate()
+        let stops = Calls()
+        let actions = TaskActions(
+            inspect: TaskActions.core.inspect, approve: TaskActions.core.approve, run: TaskActions.core.run,
+            edit: { _, _, _, stop in
+                stop.attach {
+                    stops.ask("stopped")
+                    Task { await gate.open() }
+                }
+                await gate.wait()
+                return TaskEditResult(proposal: nil, provider: .codex, failure: "the draft was stopped")
+            })
+        let tasks = TasksModel(reader: .core(), actions: actions)
+        await tasks.refresh(fixture.project)
+        let entry = try entry(tasks)
+        tasks.editRequest = "x"
+        let running = Task { await tasks.proposeEdit(fixture.project, entry) }
+        try await until("it is working") { tasks.isEditing }
+        await tasks.stopEditAndWait(timeout: .seconds(3))
+        #expect(stops.requests == ["stopped"] && !tasks.isEditing, "the agent was stopped and waited for")
+        await running.value
+
+        // The store's quit confirmation counts it, so a quit is not silent about an agent that is still spending.
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
+        #expect(store.liveWork == nil)
+        store.tasks.editing = TaskEditing(project: fixture.project.root.path, task: entry.id, phase: .working)
+        #expect(store.liveWork == "a task edit is still going.")
+    }
 }
