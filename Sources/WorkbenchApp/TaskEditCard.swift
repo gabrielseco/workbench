@@ -6,6 +6,7 @@ import WorkbenchCore
 struct TaskEditCard: View {
     var store: ProjectStore
     var entry: TaskEntry
+    @FocusState private var focused: Bool
 
     var body: some View {
         let tasks = store.tasks
@@ -29,6 +30,11 @@ struct TaskEditCard: View {
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
         .card()
+        .task {
+            // A field that has just appeared is not yet in the window: focus set at once is lost.
+            try? await Task.sleep(for: .milliseconds(40))
+            focused = true
+        }
     }
 
     @ViewBuilder private func request(_ tasks: TasksModel) -> some View {
@@ -36,7 +42,7 @@ struct TaskEditCard: View {
         PlaceholderTextEditor(
             text: Binding(get: { tasks.editRequest }, set: { tasks.editRequest = $0 }),
             placeholder: "What should change? For example: run at 9 on weekdays, or skip the vendor folder.", style: .body,
-            accessibilityLabel: "What to change in this task"
+            accessibilityLabel: "What to change in this task", focus: $focused
         )
         .frame(minHeight: 56, maxHeight: 140)
         HStack(spacing: Space.m) {

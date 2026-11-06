@@ -18,7 +18,7 @@ struct TaskPageView: View {
                     VStack(alignment: .leading, spacing: Space.xs) {
                         Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
                         Text(header.line).role(.detail).lineLimit(2)
-                        Text("Defined in \(header.path). Edit that file, or ask the agent below.")
+                        Text("Defined in \(header.path). Edit that file, or use Edit with AI.")
                             .textStyle(.mono, .subtle).textSelection(.enabled)
                     }
                     Spacer(minLength: 8)
@@ -29,7 +29,7 @@ struct TaskPageView: View {
                 }
                 if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
                 RunTonightCard(tonight: tonight, perform: perform).id(entry.id)
-                TaskEditCard(store: store, entry: entry).id(entry.id)
+                if store.tasks.isEditShown(entry.id, in: store.project) { TaskEditCard(store: store, entry: entry).id(entry.id) }
                 if entry.runs.isEmpty {
                     Text("Never run. It runs at the next tick, or by hand: workbench task run \(entry.summary.name)")
                         .role(.detail).textSelection(.enabled)

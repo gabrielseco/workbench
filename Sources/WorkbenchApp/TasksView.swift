@@ -148,7 +148,17 @@ struct TaskButtons: View {
                 Button("Run now") {
                     Task { await tasks.beginRun(store.project, entry, threadRunGoing: store.runningProjectPath != nil) }
                 }
-                    .modifier(PrimaryWhen(!needsApproval)).disabled(off != nil).help(off ?? "Runs the task now, as a tick would")
+                    .modifier(PrimaryWhen(!needsApproval, size: .regular)).disabled(off != nil)
+                    .help(off ?? "Runs the task now, as a tick would")
+                let editing = tasks.editing(entry.id, in: store.project) != nil
+                Button(tasks.isEditShown(entry.id, in: store.project) && !editing ? "Close edit" : "Edit with AI") {
+                    tasks.toggleEdit(entry.id, in: store.project)
+                }
+                .plainButton(size: .regular).disabled(editing)
+                .help(
+                    editing
+                        ? "An edit is open: accept or discard it first"
+                        : "Describe a change to this task in words; you review it before anything is written")
             }
         }
     }

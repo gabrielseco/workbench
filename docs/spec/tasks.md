@@ -140,7 +140,8 @@ timer's `status` lines as the card "Will it run tonight?". It re-reads when the 
 shown. Reading writes nothing. Three things write, only through core: `Approve` (the press approves the task as it is on disk now, with no card to show it first: `TaskLibrary.approve` binds the hash read at
 that moment, and a refusal is shown as a note) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
 a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). Quitting the app mid-run ends the run as `interrupted`,
-like a killed `task run`. **Edit with AI** (`TaskEditor`) asks the goal agent once for a new `task.md`: a one-shot read-only turn, no
+like a killed `task run`. **Edit with AI** is a button beside `Run now`: its card is closed until the button opens it (the text box is
+focused), and stays open while an edit is working or waiting for a decision. It (`TaskEditor`) asks the goal agent once for a new `task.md`: a one-shot read-only turn, no
 thread and no worktree, so it needs no active-thread slot and works beside one. The agent is given the file's text and the request, each
 quoted as data, and returns the whole file; core checks that it loads exactly as the file would (`TaskLibrary.loadText`: the keys, the
 MCP servers, the script and skill files) and shows what it changes: each setting approval binds to as old → new, apart from the

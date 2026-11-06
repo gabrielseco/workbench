@@ -213,4 +213,30 @@ import WorkbenchCore
         store.tasks.editing = TaskEditing(project: fixture.project.root.path, task: entry.id, phase: .working)
         #expect(store.liveWork == "a task edit is still going.")
     }
+
+    @Test func theCardIsClosedUntilTheButtonOpensIt() async throws {
+        let (fixture, tasks) = try await scenario()
+        let entry = try entry(tasks)
+        #expect(!tasks.isEditShown(entry.id, in: fixture.project), "closed by default")
+        tasks.toggleEdit(entry.id, in: fixture.project)
+        #expect(tasks.isEditShown(entry.id, in: fixture.project))
+        #expect(!tasks.isEditShown("update-docs", in: fixture.project), "another task's card stays closed")
+        tasks.toggleEdit(entry.id, in: fixture.project)
+        #expect(!tasks.isEditShown(entry.id, in: fixture.project), "the button closes it again")
+
+        // A proposal is waiting: the card stays, and the button cannot close it under the person's decision.
+        tasks.toggleEdit(entry.id, in: fixture.project)
+        tasks.editRequest = "x"
+        await tasks.proposeEdit(fixture.project, entry)
+        tasks.toggleEdit(entry.id, in: fixture.project)
+        #expect(tasks.isEditShown(entry.id, in: fixture.project) && tasks.editing(entry.id, in: fixture.project) != nil)
+        // Accepting writes it and puts the card away; the next edit starts from a closed card.
+        await tasks.acceptEdit(fixture.project)
+        #expect(!tasks.isEditShown(entry.id, in: fixture.project))
+        // Discarding leaves the card open on its text box.
+        tasks.toggleEdit(entry.id, in: fixture.project)
+        await tasks.proposeEdit(fixture.project, entry)
+        tasks.discardEdit()
+        #expect(tasks.isEditShown(entry.id, in: fixture.project))
+    }
 }
