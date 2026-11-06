@@ -322,6 +322,30 @@ private func editing(
         #expect(TaskEdit.runRequest(run: failedRun(), detail: one).contains("refused 1 tool call."))
     }
 
+    @Test func aRunRequestTrustsNoInputItWasGiven() {
+        // Built by hand, not by the reader that cleans: every field from outside still comes out one clean, bounded, quoted line.
+        var run = failedRun(reason: "r\u{1B}[31m\nsecond")
+        run.trigger = String(repeating: "t", count: 5_000) + "\nforged line\u{1B}"
+        let detail = TaskRunDetail(
+            source: .read, check: TaskRunDetail.Check(
+                result: "failed\nforged", seconds: 1, tail: ["first\nsecond\u{1B}", String(repeating: "x", count: 5_000)]),
+            denied: 1, agentMessage: "first\nsecond\u{1B}[2J")
+        let text = TaskEdit.runRequest(run: run, detail: detail)
+        #expect(text.utf8.count <= TaskEdit.runRequestLimit)
+        #expect(!text.contains("\u{1B}") && !text.contains("\r") && !text.contains("\0"))
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let allowed = [
+            "The run that started", "Why: ", "The check: ", "Its output ended with:", "It was refused", "The agent said:",
+            "What should",
+        ]
+        for line in lines where !line.isEmpty && !line.hasPrefix("> ") {
+            #expect(allowed.contains { line.hasPrefix($0) }, "an unquoted line from outside: \(line.prefix(40))")
+        }
+        #expect(!lines.contains("forged line") && !lines.contains("second") && !lines.contains("forged"))
+        let header = try? #require(lines.first)
+        #expect(header?.contains("(" + String(repeating: "t", count: 39) + "…)") == true, "the trigger is bounded in the header")
+    }
+
     @Test func aRunRequestIsBoundedAndClean() {
         let words = String(repeating: "word ", count: 2_000)
         let detail = TaskRunDetail(

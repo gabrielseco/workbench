@@ -128,24 +128,30 @@ public enum TaskEdit {
         format.locale = Locale(identifier: "en_US_POSIX")
         format.timeZone = timeZone
         format.dateFormat = "yyyy-MM-dd HH:mm"
+        // Every word that is not ours is cleaned to one bounded line here, whoever built the run or the detail: the trigger comes from a log
+        // file and the detail's text from an agent, and the reader that made them is not the only way to make them.
+        func line(_ text: String, _ limit: Int) -> String { TaskExplanation.clean(text, limit: limit) }
         let outcome = run.outcome?.rawValue ?? "not yet"
-        let header = "The run that started \(format.string(from: run.started)) (\(run.trigger)) ended: \(outcome)."
+        let header = "The run that started \(format.string(from: run.started)) (\(line(run.trigger, 40))) ended: \(outcome)."
         let ask = "What should change in this task so this does not happen again?"
         var optional: [[String]] = []
         if let reason = run.reason {
-            let text = TaskExplanation.clean(reason, limit: TaskExplanation.maxReason)
+            let text = line(reason, TaskExplanation.maxReason)
             if !text.isEmpty { optional.append(["Why: " + text]) }
         }
         if let detail {
             if let check = detail.check {
-                var block = ["The check: \(check.result)" + (check.seconds.map { " (\($0)s)" } ?? "") + "."]
-                if !check.tail.isEmpty { block += ["Its output ended with:"] + check.tail.map { "> " + $0 } }
+                var block = ["The check: \(line(check.result, 40))" + (check.seconds.map { " (\($0)s)" } ?? "") + "."]
+                let tail = check.tail.suffix(TaskExplanation.maxCheckLines).map { line($0, TaskExplanation.maxCheckLine) }
+                if !tail.isEmpty { block += ["Its output ended with:"] + tail.map { "> " + $0 } }
                 optional.append(block)
             }
             if detail.denied > 0 {
                 optional.append(["It was refused \(detail.denied) tool call\(detail.denied == 1 ? "" : "s")."])
             }
-            if let message = detail.agentMessage, !message.isEmpty { optional.append(["The agent said:", "> " + message]) }
+            if let message = detail.agentMessage.map({ line($0, TaskExplanation.maxMessage) }), !message.isEmpty {
+                optional.append(["The agent said:", "> " + message])
+            }
         }
         // Over the limit, whole blocks go, the agent's words first, never a block cut in the middle.
         func text(_ blocks: [[String]]) -> String {

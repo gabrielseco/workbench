@@ -50,7 +50,9 @@ struct TaskPageView: View {
                                     isOpen: store.tasks.isOpen(store.project, entry.id, run),
                                     toggle: { Task { await store.tasks.toggleRun(store.project, entry.id, run) } },
                                     fix: run.outcome == nil ? nil : { fixThis(run) },
-                                    fixOff: store.tasks.fixUnavailable(entry.id, in: store.project), perform: perform)
+                                    fixOff: store.tasks.fixUnavailable(
+                                    entry.id, in: store.project, detail: store.tasks.detail(store.project, entry.id, run)),
+                                perform: perform)
                             }
                             Divider()
                         }

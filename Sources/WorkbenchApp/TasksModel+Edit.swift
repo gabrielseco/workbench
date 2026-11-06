@@ -36,15 +36,17 @@ extension TasksModel {
         if editOpen.remove(key) == nil { editOpen.insert(key) }
     }
 
-    /// Why Fix this is off for a run of this task, nil when it works: an edit that is working or waiting is the person's to finish first.
-    func fixUnavailable(_ name: String, in project: Project?) -> String? {
-        editing(name, in: project) == nil ? nil : "An edit is open: accept or discard it first."
+    /// Why Fix this is off for a run of this task, nil when it works: what the run did has to be read first, so the box is filled with all
+    /// of it and not a part, and an edit that is working or waiting is the person's to finish.
+    func fixUnavailable(_ name: String, in project: Project?, detail: TaskRunDetail?) -> String? {
+        if editing(name, in: project) != nil { return "An edit is open: accept or discard it first." }
+        return detail == nil ? "Reading what the run did…" : nil
     }
 
     /// Opens the card with what went wrong in this run in its box, under whatever the person had typed. Asks the agent nothing: the
     /// person adds their words, or presses Propose, and only then is anything spent.
     func fixThis(_ project: Project?, _ name: String, _ run: TaskHistory.Run, detail: TaskRunDetail?) {
-        guard run.outcome != nil, fixUnavailable(name, in: project) == nil else { return }
+        guard run.outcome != nil, fixUnavailable(name, in: project, detail: detail) == nil else { return }
         let text = TaskEdit.runRequest(run: run, detail: detail)
         let typed = editRequest.trimmingCharacters(in: .whitespacesAndNewlines)
         editRequest = typed.isEmpty ? text : typed + "\n\n" + text

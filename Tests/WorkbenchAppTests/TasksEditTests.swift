@@ -259,7 +259,7 @@ import WorkbenchCore
         // From the card already open it still fills the box and asks for the focus again.
         tasks.discardEdit()
         tasks.editRequest = ""
-        tasks.fixThis(fixture.project, entry.id, endedRun, detail: nil)
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: TaskRunDetail(source: .noThread))
         #expect(tasks.isEditShown(entry.id, in: fixture.project) && tasks.editFocus == before + 2)
         #expect(calls.requests.isEmpty)
     }
@@ -268,7 +268,7 @@ import WorkbenchCore
         let (fixture, tasks) = try await scenario()
         let entry = try entry(tasks)
         tasks.editRequest = "  skip the vendor folder \n"
-        tasks.fixThis(fixture.project, entry.id, endedRun, detail: nil)
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: TaskRunDetail(source: .noThread))
         #expect(tasks.editRequest.hasPrefix("skip the vendor folder\n\nThe run that started "), "\(tasks.editRequest)")
     }
 
@@ -279,16 +279,21 @@ import WorkbenchCore
         var going = endedRun
         going.ended = nil
         going.outcome = nil
-        tasks.fixThis(fixture.project, entry.id, going, detail: nil)
+        let read = TaskRunDetail(source: .read, denied: 1)
+        tasks.fixThis(fixture.project, entry.id, going, detail: read)
         #expect(tasks.editRequest.isEmpty && !tasks.isEditShown(entry.id, in: fixture.project))
+        // The detail is still being read: pressing now would leave out the check and the refusals, so it waits for them.
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: nil)?.contains("Reading") == true)
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: nil)
+        #expect(tasks.editRequest.isEmpty && !tasks.isEditShown(entry.id, in: fixture.project), "nothing is filled from a part")
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: read) == nil)
         // An edit waiting for a decision is the person's to finish first: the button says so, and does nothing.
-        #expect(tasks.fixUnavailable(entry.id, in: fixture.project) == nil)
         tasks.editRequest = "x"
         await tasks.proposeEdit(fixture.project, entry)
-        #expect(tasks.fixUnavailable(entry.id, in: fixture.project)?.contains("accept or discard") == true)
+        #expect(tasks.fixUnavailable(entry.id, in: fixture.project, detail: read)?.contains("accept or discard") == true)
         let waiting = tasks.editRequest
-        tasks.fixThis(fixture.project, entry.id, endedRun, detail: nil)
+        tasks.fixThis(fixture.project, entry.id, endedRun, detail: read)
         #expect(tasks.editRequest == waiting, "the proposal's request is not rewritten under it")
-        #expect(tasks.fixUnavailable("update-docs", in: fixture.project) == nil, "another task is free")
+        #expect(tasks.fixUnavailable("update-docs", in: fixture.project, detail: read) == nil, "another task is free")
     }
 }
