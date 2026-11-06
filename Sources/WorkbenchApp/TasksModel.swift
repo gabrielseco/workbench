@@ -221,6 +221,8 @@ struct TasksReader: Sendable {
     /// The edit of a task with the agent: what is being asked, what came back. Nothing is written until the person accepts it.
     var editing: TaskEditing?
     var editRequest = ""
+    /// What an edit may spend with this project's goal agent, as it is said; nil with no goal agent. Read with the tasks.
+    private(set) var editLimit: String?
     @ObservationIgnored var editStop: DraftStop?
     @ObservationIgnored var stopSwitch: TaskStopSwitch?
     @ObservationIgnored let actions: TaskActions
@@ -274,6 +276,7 @@ struct TasksReader: Sendable {
             // A selection that is not a task of this project is dropped; one that is (made by a notification) stays.
             if let chosen = selection, !fresh.entries.contains(where: { $0.id == chosen }) { selection = nil }
             snapshot = fresh
+            editLimit = TaskEdit.limit(config: try? Config.load(from: project.configURL))
             error = nil
         } catch {
             guard latestPath == project.root.path else { return }

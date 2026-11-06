@@ -83,7 +83,7 @@ struct TaskActions: Sendable {
     var edit: Edit = TaskActions.coreEdit
     /// `TaskEditor.accept`: writes a proposal that loaded, when the file is still the one it was made from. Never approves.
     var acceptEdit: @Sendable (Project, TaskProposal) async throws -> Void = { project, proposal in
-        try await TaskEditor(project: project).accept(proposal)
+        try TaskEditor(project: project).accept(proposal)
     }
 
     typealias Edit = @Sendable (Project, String, String, DraftStop) async throws -> TaskEditResult

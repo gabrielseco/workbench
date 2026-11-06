@@ -44,8 +44,11 @@ struct TaskEditCard: View {
                 .primaryButton(size: .compact)
                 .disabled(off != nil || tasks.editRequest.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .help(off ?? "Asks the goal agent for a new task.md and shows what it changes. Nothing is written yet.")
-            let most = String(format: "%.2f", NSDecimalNumber(decimal: TaskEdit.budgetUSD).doubleValue)
-            Text("Costs up to $\(most). Read-only until you accept; accepting does not approve.").role(.caption)
+            if let limit = tasks.editLimit {
+                Text("Costs \(limit). Read-only until you accept; accepting does not approve.").role(.caption)
+            } else {
+                Text("Needs a goal agent: set [agents.goal] in .workbench/config.toml, or edit the file by hand.").role(.caption)
+            }
         }
     }
 }

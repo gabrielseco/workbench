@@ -104,6 +104,16 @@ public enum TaskEdit {
     /// The most a proposed file may be: the task file's own limit, so what is offered is what could be loaded.
     static let answerLimit = TaskFiles.maxTaskFileBytes
 
+    /// What an edit may spend, as it is said to a person: a dollar cap where the goal agent's provider can enforce one, its timeout
+    /// where it cannot. Nil with no goal agent.
+    public static func limit(config: Config?) -> String? {
+        guard let config, let agent = config.resolvedGoalAgent else { return nil }
+        guard config.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true else {
+            return "no dollar cap: bounded by \(Int(timeout / 60)) min"
+        }
+        return "up to $" + String(format: "%.2f", NSDecimalNumber(decimal: budgetUSD).doubleValue)
+    }
+
     /// Every line behind `> `, so nothing in the file or the request can read as the prompt's own structure.
     static func quote(_ text: String) -> String {
         let cleaned = text.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\0", with: "")

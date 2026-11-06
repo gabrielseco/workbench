@@ -3,7 +3,7 @@
 # writes, so no real agent is started and it costs nothing.
 #   bash scripts/verify-cli/task-edit.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/task-edit.sh   (the same, on a branch that contains origin/main)
-# With no [agents.goal] the command is refused (exit 6) and nothing changes. With a Codex goal agent a proposal is shown as what it
+# The request is the words after the name (or --request, or --request-file). With no [agents.goal] the command is refused (exit 6) and nothing changes. With a Codex goal agent a proposal is shown as what it
 # changes (a setting approval binds to as old -> new, the instructions as a diff) and nothing is written without --accept; an answer that
 # is not a task file fails (exit 1) and leaves the file byte-identical; with --accept the file is rewritten, and a task that was approved
 # reads stale (accepting never approves).
@@ -74,7 +74,7 @@ check "nothing was written" "task.md changed" cmp -s "$SCRATCH/task.before" "$TA
 # --- 2. a proposal is shown and writes nothing ---------------------------------------------------------------
 
 setgoal codex
-wbp "$SCRATCH/propose.out" task edit bump --request "allow three dollars and skip the vendor folder"
+wbp "$SCRATCH/propose.out" task edit bump "allow three dollars and skip the vendor folder"
 shown "$SCRATCH/propose.out" 14
 check "a proposal: exit 0" "workbench task edit exited $RC" test "$RC" = 0
 check "it shows the budget as a setting that changes" "no budget line" grep -q "budget: (not set) -> 3" "$SCRATCH/propose.out"

@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     static let taskEditUsage =
-        "usage: workbench task edit <name> (--request \"<text>\" | --request-file <path>) [--accept]"
+        "usage: workbench task edit <name> (\"<request>\" | --request \"<text>\" | --request-file <path>) [--accept]"
 
     /// `task edit <name> --request "<text>"`: the goal agent proposes a new task.md, which is checked as the loader would and shown as
     /// what it changes. Nothing is written unless `--accept`, and accepting never approves: an approved task reads stale.
@@ -12,22 +12,18 @@ extension Commands {
         let path = try a.value("--request-file")
         let accept = a.flag("--accept")
         guard let name = a.positional() else { throw CLIError.usage(taskEditUsage) }
+        let words = a.positional()
         try a.requireEmpty()
-        guard (text == nil) != (path == nil) else {
-            throw CLIError.usage("give the request once, as --request or --request-file. " + taskEditUsage)
+        guard [text, path, words].compactMap({ $0 }).count == 1 else {
+            throw CLIError.usage("give the request once, as words, --request or --request-file. " + taskEditUsage)
         }
-        let request = try text ?? readRequestFile(path ?? "")
+        let request = try text ?? words ?? readRequestFile(path ?? "")
         let ctx = try await Context.load()
         let config: Config? =
             FileManager.default.fileExists(atPath: ctx.project.configURL.path)
             ? try Config.load(from: ctx.project.configURL) : nil
-        if let agent = config?.resolvedGoalAgent {
-            let capped = config?.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true
-            out(
-                "editing on \(agent.provider)\(agent.model.map { ", \($0)" } ?? "") (read-only; "
-                    + (capped
-                        ? "up to $\(NSDecimalNumber(decimal: TaskEdit.budgetUSD).stringValue)"
-                        : "no dollar cap: bounded by \(Int(TaskEdit.timeout / 60)) min") + ")...")
+        if let agent = config?.resolvedGoalAgent, let limit = TaskEdit.limit(config: config) {
+            out("editing on \(agent.provider)\(agent.model.map { ", \($0)" } ?? "") (read-only; \(limit))...")
         }
         // Ctrl-C stops the agent instead of leaving it running on its own budget.
         let holder = RunHolder()
@@ -55,7 +51,7 @@ extension Commands {
             out("nothing was written. To write it: run again with --accept (the agent is asked again), or edit the file by hand.")
             return 0
         }
-        do { try await editor.accept(proposal) } catch let error as TaskEditRefusal {
+        do { try editor.accept(proposal) } catch let error as TaskEditRefusal {
             throw CLIError.refused("\(error)")
         }
         out("wrote \(ctx.project.taskFileURL(name).path)")

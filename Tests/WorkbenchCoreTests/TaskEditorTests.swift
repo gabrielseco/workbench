@@ -89,7 +89,7 @@ private func editing(
         let proposal = try #require(try await e.propose().proposal)
         try e.task.write(task: "---\nat: 06:00\nfix: report\n---\nSomeone edited this meanwhile.\n")
         let theirs = e.onDisk
-        await #expect(throws: TaskEditRefusal.changedMeanwhile) { try await e.editor.accept(proposal) }
+        #expect(throws: TaskEditRefusal.changedMeanwhile) { try e.editor.accept(proposal) }
         #expect(e.onDisk == theirs, "nothing was written over the edit")
     }
 
@@ -98,7 +98,7 @@ private func editing(
         try await e.task.library.approve(e.task.name)
         #expect(e.task.library.summary(e.task.name).approval == .approved)
         let proposal = try #require(try await e.propose().proposal)
-        try await e.editor.accept(proposal)
+        try e.editor.accept(proposal)
         #expect(e.onDisk == edited)
         #expect(e.task.library.summary(e.task.name).approval == .stale, "accepting is not approving")
         let history = try e.task.log.history()
@@ -155,10 +155,10 @@ private func editing(
             _ = try await e.propose()
             Issue.record("edited while a run was going")
         } catch let refusal as TaskEditRefusal { #expect(refusal == .running(e.task.name)) }
-        await #expect(throws: TaskEditRefusal.running(e.task.name)) { try await e.editor.accept(proposal) }
+        #expect(throws: TaskEditRefusal.running(e.task.name)) { try e.editor.accept(proposal) }
         #expect(e.onDisk != edited)
         await writer.close()
-        try await e.editor.accept(proposal)
+        try e.editor.accept(proposal)
         #expect(e.onDisk == edited)
     }
 
@@ -170,7 +170,7 @@ private func editing(
         let result = try await e.propose()
         #expect(result.proposal != nil, "\(String(describing: result.failure))")
         #expect(ThreadStore(project: e.task.project).activeThreadID() == active, "the active thread is untouched")
-        try await e.editor.accept(try #require(result.proposal))
+        try e.editor.accept(try #require(result.proposal))
         #expect(ThreadStore(project: e.task.project).activeThreadID() == active)
     }
 
@@ -198,6 +198,65 @@ private func editing(
         for e in [crash, hang, stopped, silent] {
             #expect(e.onDisk == "---\nat: 04:00\ndays: weekdays\nfix: pr\n---\nBump the next countries.\n")
         }
+    }
+
+    @Test func aTaskFileThatIsNotAPlainFileInsideTheProjectIsNotSentToTheAgent() async throws {
+        let e = try await editing()
+        let url = e.task.project.taskFileURL(e.task.name)
+        // A link to a valid task file outside the project: the loader refuses it, so the agent is never given its text.
+        let outside = e.drafting.dir.appendingPathComponent("elsewhere.md")
+        try edited.write(to: outside, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createSymbolicLink(at: url, withDestinationURL: outside)
+        // A named pipe would block a reader with no timeout to end it.
+        let pipe = try await editing()
+        let pipeURL = pipe.task.project.taskFileURL(pipe.task.name)
+        try FileManager.default.removeItem(at: pipeURL)
+        #expect(mkfifo(pipeURL.path, 0o644) == 0)
+        for fixture in [e, pipe] {
+            do {
+                _ = try await fixture.propose()
+                Issue.record("a task file that is not a plain file inside the project was edited")
+            } catch let refusal as TaskEditRefusal {
+                if case .doesNotLoad = refusal {} else { Issue.record("\(refusal)") }
+            }
+            #expect(fixture.drafting.codex?.runs == 0)
+        }
+    }
+
+    @Test func proposingLeavesAnExistingRunLogAsItWas() async throws {
+        let e = try await editing()
+        try await e.task.library.approve(e.task.name)
+        // A run killed mid-line leaves a torn last line, which opening the log as a writer would cut off and keep in a sidecar.
+        let log = e.task.log.url
+        let handle = try FileHandle(forWritingTo: log)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"v\":1,\"seq\":".utf8))
+        try handle.close()
+        let before = try Data(contentsOf: log)
+        let folder = try FileManager.default.contentsOfDirectory(atPath: log.deletingLastPathComponent().path).sorted()
+        let result = try await e.propose()
+        #expect(result.proposal != nil, "\(String(describing: result.failure))")
+        #expect(try Data(contentsOf: log) == before, "the log was not repaired by looking at it")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: log.deletingLastPathComponent().path).sorted() == folder)
+    }
+
+    @Test func theLimitIsSaidPerProvider() async throws {
+        let codex = try await editing()
+        #expect(TaskEdit.limit(config: codex.drafting.config) == "no dollar cap: bounded by 5 min")
+        let claude = try await editing(provider: .claude)
+        #expect(TaskEdit.limit(config: claude.drafting.config) == "up to $0.50")
+        #expect(TaskEdit.limit(config: nil) == nil)
+    }
+
+    @Test func aClaudeAgentThatCrashesLeavesTheFileAlone() async throws {
+        let e = try await editing(provider: .claude, allowUnpriced: false)
+        let before = e.onDisk
+        let environment = e.drafting.claudeEnvironment("crash-after=1")
+        let result = try await e.editor.propose(
+            task: e.task.name, request: "x", config: e.drafting.config, environment: environment)
+        #expect(result.proposal == nil && result.failure != nil, "\(String(describing: result.failure))")
+        #expect(e.onDisk == before)
     }
 
     @Test func claudeIsHardCapped() async throws {

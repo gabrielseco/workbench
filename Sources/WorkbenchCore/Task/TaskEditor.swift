@@ -82,10 +82,10 @@ public struct TaskEditor: Sendable {
         }
         let source: String
         do {
-            source = try String(contentsOf: project.taskFileURL(name), encoding: .utf8)
+            source = try library.source(name)
             _ = try library.loadText(source, name: name)
         } catch { throw TaskEditRefusal.doesNotLoad("\(error)") }
-        if await isRunning(name) { throw TaskEditRefusal.running(name) }
+        if isRunning(name) { throw TaskEditRefusal.running(name) }
 
         guard let provider = config.agentProvider(agent.provider) else {
             throw TaskEditRefusal.unavailable("there is no adapter for \(agent.provider)")
@@ -175,28 +175,54 @@ public struct TaskEditor: Sendable {
 
     /// Writes the proposal as the task file, only if the file is still the one it was made from. Nothing is approved: the task reads
     /// stale if it was approved, and approving it again is a separate step.
-    public func accept(_ proposal: TaskProposal) async throws {
-        let url = project.taskFileURL(proposal.task)
-        guard SafeNames.isThreadID(proposal.task), let now = try? String(contentsOf: url, encoding: .utf8) else {
+    /// The run log's lock is held from the check that no run is going to the end of the write, and the file is read again under it, so a
+    /// run that starts, or an edit made by hand, between the two cannot be written over. Both reads are `load`'s.
+    public func accept(_ proposal: TaskProposal) throws {
+        guard SafeNames.isThreadID(proposal.task) else { throw TaskEditRefusal.noTask(proposal.task) }
+        guard let hold = holdRunLog(proposal.task) else { throw TaskEditRefusal.running(proposal.task) }
+        defer { hold.release() }
+        guard let now = try? TaskLibrary(project: project).source(proposal.task) else {
             throw TaskEditRefusal.noTask(proposal.task)
         }
         guard now == proposal.source else { throw TaskEditRefusal.changedMeanwhile }
-        if await isRunning(proposal.task) { throw TaskEditRefusal.running(proposal.task) }
         guard !proposal.changes.isEmpty else { return }
-        do { try proposal.text.write(to: url, atomically: true, encoding: .utf8) } catch {
+        do { try proposal.text.write(to: project.taskFileURL(proposal.task), atomically: true, encoding: .utf8) } catch {
             throw TaskEditRefusal.unavailable("the task file could not be written: \(error)")
         }
     }
 
     /// Whether a run of the task holds its log: a log nothing has written yet has no run.
-    func isRunning(_ name: String) async -> Bool {
+    func isRunning(_ name: String) -> Bool {
+        guard let hold = holdRunLog(name) else { return true }
+        hold.release()
+        return false
+    }
+
+    /// The lock a run holds on its log, taken without opening the log as a writer: opening one repairs a torn last line and writes a
+    /// sidecar, and an edit must leave the task's folder as it was. Nil when a run holds it. The lock is `flock`'s, on the file's
+    /// own descriptor, as `EventLogWriter` takes it.
+    private struct LogHold {
+        var descriptor: Int32
+        func release() { if descriptor >= 0 { close(descriptor) } }
+    }
+
+    private func holdRunLog(_ name: String) -> LogHold? {
         let url = TaskRunLog(project: project, name: name).url
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        do {
-            let writer = try EventLogWriter.open(at: url, lockTimeout: 0)
-            await writer.close()
-            return false
-        } catch EventLogError.alreadyOpen { return true } catch { return false }
+        guard FileManager.default.fileExists(atPath: url.path) else { return LogHold(descriptor: -1) }
+        let fd = sysOpen(url.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return LogHold(descriptor: -1) }
+        // A short wait, as the writer's own: a child process spawned elsewhere in this process shares the descriptor between fork and
+        // exec, and that is not a run.
+        let deadline = Date().addingTimeInterval(EventLogWriter.defaultLockTimeout)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            guard errno == EWOULDBLOCK || errno == EINTR else { break }
+            if Date() >= deadline {
+                close(fd)
+                return nil
+            }
+            usleep(2_000)
+        }
+        return LogHold(descriptor: fd)
     }
 
     private func clean(_ text: String) -> String {
