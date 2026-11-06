@@ -55,7 +55,7 @@ jobs:
       - name: Save the build
         # Right after the build, not at the end of the job: a failing test run must not throw a good build away. Not for a pull request:
         # its pushes would fill the repository's cache; it starts from the one the nightly and manual runs save.
-        if: ${{ github.event_name != 'pull_request' || true }}  # TEMPORARY: measuring a warm run inside this PR
+        if: ${{ github.event_name != 'pull_request' || true }}  # TEMPORARY: measuring a warm run inside this PR (second run)
         uses: actions/cache/save@v4
         with:
           path: .build
