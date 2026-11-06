@@ -241,6 +241,12 @@ public struct TaskEditor: Sendable {
         guard !loaded.definition.instructions.contains(TaskScaffold.placeholder) else {
             throw TaskEditError.unusable("the instructions still say \(TaskScaffold.placeholder)")
         }
+        // `load` reads the script and the skill but not the input files (they are data, read at each run), and a new task that names one
+        // that is not there would be offered and then fail at its first run.
+        let files = TaskFiles(project: project)
+        for input in loaded.definition.inputs where (try? files.resolve(input)) == nil {
+            throw TaskEditError.unusable("it names an input that does not exist: \(input)")
+        }
         return TaskProposal(
             task: name, text: text, changes: TaskChanges.creating(new: loaded.definition), source: "", isNew: true)
     }

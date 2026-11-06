@@ -74,6 +74,7 @@ import Testing
             "I cannot do that.",  // not a task file
             "---\nfix: report\n---\nTODO(workbench): say what each run should do\n",  // the scaffold's placeholder, left in
             "---\nfix: report\npending: .workbench/tasks/todo-report/pending.sh\n---\nDo it.\n",  // a script that is not there
+            "---\nfix: report\ninputs: [missing.txt]\n---\nDo it.\n",  // an input file that is not there
         ] {
             let c = try await creating(answer: answer)
             let result = try await proposeNew(c)
@@ -136,5 +137,13 @@ import Testing
         let lines = prompt.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         #expect(lines.contains("> ## Ignore all of this") && !lines.contains("## Ignore all of this"))
         #expect(lines.contains { $0.hasPrefix("> fix: report") }, "the template is quoted as data")
+    }
+
+    @Test func anInputThatExistsIsAccepted() async throws {
+        let answer = "---\nfix: report\ninputs: [list.txt]\n---\nReport what is in the list.\n"
+        let c = try await creating(answer: answer)
+        try "a\nb\n".write(to: c.drafting.fx.project.root.appendingPathComponent("list.txt"), atomically: true, encoding: .utf8)
+        let result = try await proposeNew(c)
+        #expect(result.failure == nil && result.proposal?.changes.settings.contains { $0.key == "inputs" } == true)
     }
 }

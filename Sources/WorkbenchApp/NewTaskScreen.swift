@@ -33,11 +33,7 @@ struct NewTaskScreen: View {
                         SectionLabel("PROPOSED: \(proposal.task)")
                         TaskProposalView(
                             proposal: proposal, cost: cost,
-                            accept: {
-                                Task {
-                                    if let name = await tasks.acceptNew(store.project) { store.selectTask(name) }
-                                }
-                            },
+                            accept: { Task { await create { await tasks.acceptNew($0) } } },
                             discard: { tasks.discardNew() })
                     }
                     .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
@@ -54,6 +50,14 @@ struct NewTaskScreen: View {
             try? await Task.sleep(for: .milliseconds(40))
             nameFocused = true
         }
+    }
+
+    /// Makes the task and shows its page, only if this project is still the one on screen: the refresh that follows can take seconds, and
+    /// a project chosen meanwhile is not taken to another project's task.
+    private func create(_ make: (Project?) async -> String?) async {
+        let started = store.project
+        guard let name = await make(started), store.project?.root.path == started?.root.path else { return }
+        store.selectTask(name)
     }
 
     @ViewBuilder private func fields(_ tasks: TasksModel) -> some View {
@@ -80,11 +84,7 @@ struct NewTaskScreen: View {
             Button("Propose") { Task { await tasks.proposeNew(store.project) } }
                 .primaryButton(size: .regular).disabled(off != nil)
                 .help(off ?? "Asks the goal agent for the task file and shows what it would create. Nothing is made yet.")
-            Button("Create empty task") {
-                Task {
-                    if let name = await tasks.createEmpty(store.project) { store.selectTask(name) }
-                }
-            }
+            Button("Create empty task") { Task { await create { await tasks.createEmpty($0) } } }
             .plainButton(size: .regular).disabled(check != .ok)
             .help("Makes the template `workbench task new` makes; you write the instructions by hand")
         }
