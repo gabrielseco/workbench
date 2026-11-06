@@ -93,10 +93,13 @@ extension TasksModel {
         editing = next
     }
 
-    func stopEdit() { editStop?.stop() }
+    func stopEdit() {
+        editStop?.stop()
+        createStop?.stop()
+    }
 
     /// An edit is with the agent: a quit has to end it, or its process goes on spending.
-    var isEditing: Bool { editing?.phase == .working }
+    var isEditing: Bool { editing?.phase == .working || creating?.phase == .working }
 
     /// Stops the agent of an edit and waits until the edit has ended, at most `timeout` (a quit).
     func stopEditAndWait(timeout: Duration = .seconds(6)) async {

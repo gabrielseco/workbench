@@ -38,6 +38,9 @@ public enum TaskScaffold {
     public static let placeholder = "TODO(workbench)"
     static let scriptName = "pending.sh"
 
+    /// Whether `name` can be a task's: the rule `task new` and the editor both apply, for a screen to check a name as it is typed.
+    public static func isUsableName(_ name: String) -> Bool { SafeNames.isThreadID(name) }
+
     public static func create(
         project: Project, name: String, include: String? = nil, inputs: [String] = []
     ) throws -> TaskScaffoldResult {

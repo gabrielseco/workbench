@@ -83,6 +83,12 @@ struct TaskActions: Sendable {
     var detail: @Sendable (Project, TaskHistory.Run) -> TaskRunDetail = { TaskRunDetail.read(project: $0, run: $1) }
     /// `TaskEditor.propose`: asks the goal agent for a new task.md (the request is the person's words). The stop ends the agent.
     var edit: Edit = TaskActions.coreEdit
+    /// `TaskEditor.proposeNew`: asks the goal agent for a task that does not exist yet (name, then the person's words).
+    var proposeNew: Edit = TaskActions.coreProposeNew
+    /// `TaskScaffold.create`: the template `workbench task new` makes, with no agent.
+    var scaffold: @Sendable (Project, String) throws -> Void = { project, name in
+        _ = try TaskScaffold.create(project: project, name: name)
+    }
     /// `TaskEditor.accept`: writes a proposal that loaded, when the file is still the one it was made from. Never approves.
     var acceptEdit: @Sendable (Project, TaskProposal) async throws -> Void = { project, proposal in
         try TaskEditor(project: project).accept(proposal)
@@ -95,6 +101,13 @@ struct TaskActions: Sendable {
         let config: Config? =
             FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
         return try await TaskEditor(project: project).propose(
+            task: name, request: text, config: config, attach: { stop.attach($0) })
+    }
+
+    static let coreProposeNew: Edit = { project, name, text, stop in
+        let config: Config? =
+            FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
+        return try await TaskEditor(project: project).proposeNew(
             task: name, request: text, config: config, attach: { stop.attach($0) })
     }
 

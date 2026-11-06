@@ -25,9 +25,11 @@ struct TasksView: View {
                     .textRole(.error).padding(.horizontal, Space.xl).padding(.vertical, Space.s)
                 Divider()
             }
-            if let snapshot {
+            if store.tasks.creating != nil {
+                NewTaskScreen(store: store)
+            } else if let snapshot {
                 if snapshot.entries.isEmpty {
-                    NoTasks(timer: snapshot.timer)
+                    NoTasks(timer: snapshot.timer, makeOne: { store.beginNewTask() })
                 } else if let entry = store.tasks.selected(in: snapshot) {
                     // The rail lists the tasks; the main area is the selected task's page (design parity 5).
                     TaskPageView(store: store, snapshot: snapshot, entry: entry)
@@ -58,12 +60,15 @@ struct TasksView: View {
 /// No task in the project: says where they are made, since the app does not make them.
 struct NoTasks: View {
     var timer: TimerCard
+    var makeOne: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             Text("No scheduled tasks").textStyle(.display)
             Text("A task is work Workbench does on a schedule, with nobody at the keyboard, and hands back as a pull request.")
                 .role(.detail)
+            Button("New task…", action: makeOne).primaryButton(size: .regular)
+            Text("or, from the terminal:").role(.caption)
             Text("workbench task new <name>").textStyle(.monoCallout).textSelection(.enabled)
             Text("Run it in this project's folder, edit .workbench/tasks/<name>/task.md, then approve it. They show up here.")
                 .role(.detail)

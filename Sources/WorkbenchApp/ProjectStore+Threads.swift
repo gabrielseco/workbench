@@ -27,6 +27,13 @@ extension ProjectStore {
         newThread = false
     }
 
+    /// Opens the New task screen in the main area: the thread stays loaded behind it.
+    func beginNewTask() {
+        tasks.beginNew()
+        mode = .tasks
+        newThread = false
+    }
+
     /// Shows a scheduled task in the main area (the rail's Scheduled section): the thread stays loaded behind it.
     func selectTask(_ name: String) {
         tasks.selection = name
