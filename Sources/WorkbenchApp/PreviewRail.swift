@@ -27,7 +27,12 @@ struct PreviewRail: View {
                 } else if !model.threads.isEmpty {
                     ThreadListView(store: store, rows: model.threads, older: model.older)
                 }
-                header(model.scheduledHeader).padding(.top, Space.m)
+                header(model.scheduledHeader) {
+                    Button { store.beginNewTask() } label: { Image(systemName: "plus") }
+                        .iconButton(size: .small).disabled(store.project == nil)
+                        .accessibilityLabel("New task").help("New task…")
+                }
+                .padding(.top, Space.m)
                 if let note = model.scheduledNote {
                     Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
                     if model.tasksRead {

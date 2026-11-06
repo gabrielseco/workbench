@@ -20,7 +20,9 @@ struct TaskEditCard: View {
                     Button("Stop") { tasks.stopEdit() }.plainButton(size: .compact)
                 }
             case .proposed(let proposal, let cost)?:
-                Proposal(proposal: proposal, cost: cost, store: store)
+                TaskProposalView(
+                    proposal: proposal, cost: cost, accept: { Task { await tasks.acceptEdit(store.project) } },
+                    discard: { tasks.discardEdit() })
             case .failed(let why)?:
                 Text(why).role(.error).textSelection(.enabled)
                 Button("Try again") { tasks.discardEdit() }.plainButton(size: .compact)
@@ -60,11 +62,13 @@ struct TaskEditCard: View {
     }
 }
 
-/// What one proposal changes: the settings approval binds to first, each as old → new, then the instructions as a diff.
-private struct Proposal: View {
+/// What one proposal changes: the settings approval binds to first, each as old → new, then the instructions as a diff. Edit with AI and
+/// New task both show it, each with its own Accept and Discard.
+struct TaskProposalView: View {
     var proposal: TaskProposal
     var cost: String
-    var store: ProjectStore
+    var accept: () -> Void
+    var discard: () -> Void
 
     var body: some View {
         let changes = proposal.changes
@@ -95,10 +99,10 @@ private struct Proposal: View {
             }
             HStack(spacing: Space.m) {
                 if !changes.isEmpty {
-                    Button("Accept") { Task { await store.tasks.acceptEdit(store.project) } }.primaryButton(size: .compact)
-                        .help("Writes this as task.md. The task then needs approving again.")
+                    Button("Accept", action: accept).primaryButton(size: .compact)
+                        .help(proposal.isNew ? "Creates the task, not approved." : "Writes task.md; it then needs approving.")
                 }
-                Button("Discard") { store.tasks.discardEdit() }.plainButton(size: .compact)
+                Button("Discard", action: discard).plainButton(size: .compact)
             }
         }
     }

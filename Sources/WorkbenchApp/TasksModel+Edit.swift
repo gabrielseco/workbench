@@ -58,6 +58,7 @@ extension TasksModel {
     func editUnavailable(_ entry: TaskEntry) -> String? {
         if entry.summary.problem != nil { return "The task does not load: fix its task.md first." }
         if case .working? = editing?.phase { return "An edit is going: one at a time." }
+        if creating?.phase == .working { return "A new task is being asked for: one at a time." }
         if entry.isRunning || runningTask == entry.id { return "A run of this task is going: wait for it to end." }
         return nil
     }
@@ -93,10 +94,13 @@ extension TasksModel {
         editing = next
     }
 
-    func stopEdit() { editStop?.stop() }
+    func stopEdit() {
+        editStop?.stop()
+        createStop?.stop()
+    }
 
     /// An edit is with the agent: a quit has to end it, or its process goes on spending.
-    var isEditing: Bool { editing?.phase == .working }
+    var isEditing: Bool { editing?.phase == .working || creating?.phase == .working }
 
     /// Stops the agent of an edit and waits until the edit has ended, at most `timeout` (a quit).
     func stopEditAndWait(timeout: Duration = .seconds(6)) async {

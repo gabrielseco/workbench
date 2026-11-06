@@ -12,6 +12,8 @@ public enum TaskEditRefusal: Error, Equatable, Sendable, CustomStringConvertible
     case running(String)
     case changedMeanwhile
     case notAProposal
+    case invalidName(String)
+    case taskExists(String)
 
     public var description: String {
         switch self {
@@ -25,6 +27,8 @@ public enum TaskEditRefusal: Error, Equatable, Sendable, CustomStringConvertible
         case .running(let name): "a run of \(name) is going: wait for it to end (an accepted edit would change its file)."
         case .changedMeanwhile: "the task file changed after this proposal was made: ask again."
         case .notAProposal: "there is no proposal to accept: it did not load."
+        case .invalidName(let name): "'\(name)' is not a usable task name: letters, digits, '.', '_' and '-' only."
+        case .taskExists(let name): "a task named \(name) exists already (.workbench/tasks/\(name)); nothing was changed."
         }
     }
 }
@@ -36,9 +40,11 @@ public struct TaskProposal: Sendable, Equatable {
     public var changes: TaskChanges
     /// The file on disk when the proposal was asked for, whole: `accept` writes only over this.
     public var source: String
+    /// The task does not exist yet: accepting creates its folder and file instead of replacing a file.
+    public var isNew: Bool
 
-    public init(task: String, text: String, changes: TaskChanges, source: String) {
-        (self.task, self.text, self.changes, self.source) = (task, text, changes, source)
+    public init(task: String, text: String, changes: TaskChanges, source: String, isNew: Bool = false) {
+        (self.task, self.text, self.changes, self.source, self.isNew) = (task, text, changes, source, isNew)
     }
 }
 
@@ -87,6 +93,61 @@ public struct TaskEditor: Sendable {
         } catch { throw TaskEditRefusal.doesNotLoad("\(error)") }
         if isRunning(name) { throw TaskEditRefusal.running(name) }
 
+        let answer = try await ask(
+            prompt: TaskEdit.prompt(task: name, current: source, request: request), config: config, agent: agent,
+            environment: environment, timeout: timeout, attach: attach)
+        var result = TaskEditResult(
+            proposal: nil, provider: answer.provider, model: answer.model, costUSD: answer.costUSD, failure: answer.failure)
+        if let text = answer.text {
+            do { result.proposal = try proposal(name: name, source: source, answer: text) } catch {
+                result.failure = clean("\(error)")
+            }
+        }
+        return result
+    }
+
+    /// Asks the goal agent for a task that does not exist yet, from the template and the person's words. Nothing is written: the
+    /// proposal loads as a task of that name, and `accept` makes its folder and file only if nobody has made them meanwhile.
+    public func proposeNew(
+        task name: String, request rough: String, config: Config?,
+        environment: [String: String] = ProcessInfo.processInfo.environment, timeout: TimeInterval = TaskEdit.timeout,
+        attach: @Sendable (AgentExecution) -> Void = { _ in }
+    ) async throws -> TaskEditResult {
+        guard let config, let agent = config.resolvedGoalAgent else { throw TaskEditRefusal.noGoalAgent }
+        let request = rough.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !request.isEmpty else { throw TaskEditRefusal.emptyRequest }
+        guard request.utf8.count <= TaskEdit.requestLimit, !request.contains("\0") else { throw TaskEditRefusal.requestTooLong }
+        guard SafeNames.isThreadID(name) else { throw TaskEditRefusal.invalidName(name) }
+        guard !FileManager.default.fileExists(atPath: project.taskDirectory(name).path) else {
+            throw TaskEditRefusal.taskExists(name)
+        }
+        do { try TaskScaffold.requireInsideProject(project) } catch { throw TaskEditRefusal.unavailable("\(error)") }
+        let answer = try await ask(
+            prompt: TaskEdit.newPrompt(task: name, template: TaskEdit.newTemplate(name: name), request: request), config: config,
+            agent: agent, environment: environment, timeout: timeout, attach: attach)
+        var result = TaskEditResult(
+            proposal: nil, provider: answer.provider, model: answer.model, costUSD: answer.costUSD, failure: answer.failure)
+        if let text = answer.text {
+            do { result.proposal = try newProposal(name: name, answer: text) } catch { result.failure = clean("\(error)") }
+        }
+        return result
+    }
+
+    /// What one agent turn came to: its words, or why there are none.
+    private struct Answer {
+        var provider: AgentProviderID
+        var model: String?
+        var costUSD: Double?
+        var failure: String?
+        var text: String?
+    }
+
+    /// One read-only turn of the goal agent in an empty folder outside the checkout, given only the prompt. Refusals are thrown before
+    /// anything is spawned; a turn that fails, is stopped or answers nothing is an `Answer` with its reason.
+    private func ask(
+        prompt: String, config: Config, agent: ResolvedAgent, environment: [String: String], timeout: TimeInterval,
+        attach: @Sendable (AgentExecution) -> Void
+    ) async throws -> Answer {
         guard let provider = config.agentProvider(agent.provider) else {
             throw TaskEditRefusal.unavailable("there is no adapter for \(agent.provider)")
         }
@@ -112,7 +173,6 @@ public struct TaskEditor: Sendable {
         } catch { throw TaskEditRefusal.unavailable("could not make a folder for the edit: \(error)") }
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let prompt = TaskEdit.prompt(task: name, current: source, request: request)
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         var agentRequest: AgentRequest
         if agent.provider == .codex {
@@ -133,7 +193,7 @@ public struct TaskEditor: Sendable {
             _ = try provider.invocation(for: agentRequest)
         } catch { throw TaskEditRefusal.unavailable(ThreadService.draftFailureText(error)) }
 
-        var result = TaskEditResult(proposal: nil, provider: agent.provider, model: agent.model, costUSD: nil, failure: nil)
+        var result = Answer(provider: agent.provider, model: agent.model, costUSD: nil, failure: nil, text: nil)
         let execution: AgentExecution
         do { execution = try AgentRunner.start(provider: provider, request: agentRequest) } catch {
             result.failure = clean(ThreadService.draftFailureText(error))
@@ -149,10 +209,8 @@ public struct TaskEditor: Sendable {
         } else {
             var written: String?
             if case .file(let url)? = completion.answer { written = ThreadService.readAnswer(url) }
-            if let answer = completion.summary ?? written {
-                do { result.proposal = try proposal(name: name, source: source, answer: answer) } catch {
-                    result.failure = clean("\(error)")
-                }
+            if let text = completion.summary ?? written {
+                result.text = text
             } else {
                 result.failure = "the proposal was not usable: no result"
             }
@@ -173,11 +231,53 @@ public struct TaskEditor: Sendable {
             task: name, text: text, changes: TaskChanges.compare(old: old.definition, new: new.definition), source: source)
     }
 
+    /// The answer for a task that does not exist yet, only when it loads as a task of that name would, and no longer holds the scaffold's placeholder line.
+    func newProposal(name: String, answer: String) throws -> TaskProposal {
+        let text = try TaskEdit.file(fromAnswer: answer)
+        let loaded: LoadedTask
+        do { loaded = try TaskLibrary(project: project).loadText(text, name: name) } catch {
+            throw TaskEditError.unusable("it does not load as a task: \(error)")
+        }
+        guard !loaded.definition.instructions.contains(TaskScaffold.placeholder) else {
+            throw TaskEditError.unusable("the instructions still say \(TaskScaffold.placeholder)")
+        }
+        // `load` reads the script and the skill but not the input files (they are data, read at each run), and a new task that names one
+        // that is not there would be offered and then fail at its first run.
+        let files = TaskFiles(project: project)
+        for input in loaded.definition.inputs where (try? files.resolve(input)) == nil {
+            throw TaskEditError.unusable("it names an input that does not exist: \(input)")
+        }
+        return TaskProposal(
+            task: name, text: text, changes: TaskChanges.creating(new: loaded.definition), source: "", isNew: true)
+    }
+
+    /// Makes the folder and file of a task that did not exist: the folder is claimed exclusively, so two accepts of one name, or a folder
+    /// made meanwhile, cannot both succeed, and the one that lost never removes the winner's files. Nothing is approved.
+    private func acceptNew(_ proposal: TaskProposal) throws {
+        guard SafeNames.isThreadID(proposal.task) else { throw TaskEditRefusal.invalidName(proposal.task) }
+        do { try TaskScaffold.requireInsideProject(project) } catch { throw TaskEditRefusal.unavailable("\(error)") }
+        let directory = project.taskDirectory(proposal.task)
+        guard !FileManager.default.fileExists(atPath: directory.path) else { throw TaskEditRefusal.taskExists(proposal.task) }
+        do { try FileManager.default.createDirectory(at: project.tasksDirectory, withIntermediateDirectories: true) } catch {
+            throw TaskEditRefusal.unavailable("the tasks folder could not be made: \(error)")
+        }
+        do { try TaskScaffold.claim(directory, name: proposal.task) } catch let error as TaskScaffoldError {
+            if case .exists = error { throw TaskEditRefusal.taskExists(proposal.task) }
+            throw TaskEditRefusal.unavailable("\(error)")
+        }
+        do { try proposal.text.write(to: project.taskFileURL(proposal.task), atomically: true, encoding: .utf8) } catch {
+            // Only the folder this call claimed goes.
+            try? FileManager.default.removeItem(at: directory)
+            throw TaskEditRefusal.unavailable("the task file could not be written: \(error)")
+        }
+    }
+
     /// Writes the proposal as the task file, only if the file is still the one it was made from. Nothing is approved: the task reads
     /// stale if it was approved, and approving it again is a separate step.
     /// The run log's lock is held from the check that no run is going to the end of the write, and the file is read again under it, so a
     /// run that starts, or an edit made by hand, between the two cannot be written over. Both reads are `load`'s.
     public func accept(_ proposal: TaskProposal) throws {
+        if proposal.isNew { return try acceptNew(proposal) }
         guard SafeNames.isThreadID(proposal.task) else { throw TaskEditRefusal.noTask(proposal.task) }
         guard let hold = holdRunLog(proposal.task) else { throw TaskEditRefusal.running(proposal.task) }
         defer { hold.release() }

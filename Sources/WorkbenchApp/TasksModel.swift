@@ -226,6 +226,11 @@ struct TasksReader: Sendable {
     var editRequest = ""
     /// The tasks whose Edit with AI card is open (a project and a task name each): closed until the button is pressed.
     var editOpen: Set<String> = []
+    /// The New task screen, when it is up: the words typed and what came back. Nothing exists until the person accepts.
+    var creating: NewTaskDraft?
+    /// The New task screen is the one in the main area. Choosing a task in the rail puts it away without losing the draft; the `+` brings it back.
+    var newShown = false
+    @ObservationIgnored var createStop: DraftStop?
     /// Bumped when something asks for the card's text box (Fix this): the card focuses it and the page scrolls to it.
     var editFocus = 0
     /// What an edit may spend with this project's goal agent, as it is said; nil with no goal agent. Read with the tasks.
