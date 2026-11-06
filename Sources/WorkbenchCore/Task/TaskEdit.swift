@@ -5,6 +5,8 @@ public struct TaskSettingChange: Sendable, Equatable {
     public var key: String
     public var old: String?
     public var new: String?
+
+    public init(key: String, old: String?, new: String?) { (self.key, self.old, self.new) = (key, old, new) }
 }
 
 /// One line of the instructions in a diff.
@@ -12,6 +14,8 @@ public struct TaskDiffLine: Sendable, Equatable {
     public enum Kind: Sendable, Equatable { case same, added, removed }
     public var kind: Kind
     public var text: String
+
+    public init(kind: Kind, text: String) { (self.kind, self.text) = (kind, text) }
 }
 
 /// What a proposed edit changes in a task. The settings are the ones approval binds to (`TaskApproval.hash`), each on its own, apart
@@ -20,6 +24,10 @@ public struct TaskChanges: Sendable, Equatable {
     public var settings: [TaskSettingChange]
     /// Every line of the new instructions with the removed ones between, so the diff reads in place.
     public var instructions: [TaskDiffLine]
+
+    public init(settings: [TaskSettingChange], instructions: [TaskDiffLine]) {
+        (self.settings, self.instructions) = (settings, instructions)
+    }
 
     public var instructionsChanged: Bool { instructions.contains { $0.kind != .same } }
     public var isEmpty: Bool { settings.isEmpty && !instructionsChanged }

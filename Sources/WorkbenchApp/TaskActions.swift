@@ -79,6 +79,22 @@ struct TaskActions: Sendable {
     var approve: @Sendable (Project, String, String) async throws -> Void
     /// `TaskRunner.run(name, trigger: .manual)`. The stop switch ends the turn; `notice` is what the run says as it goes.
     var run: @Sendable (Project, String, TaskStopSwitch, @escaping @Sendable (String) -> Void) async -> TaskRunResult
+    /// `TaskEditor.propose`: asks the goal agent for a new task.md (the request is the person's words). The stop ends the agent.
+    var edit: Edit = TaskActions.coreEdit
+    /// `TaskEditor.accept`: writes a proposal that loaded, when the file is still the one it was made from. Never approves.
+    var acceptEdit: @Sendable (Project, TaskProposal) async throws -> Void = { project, proposal in
+        try await TaskEditor(project: project).accept(proposal)
+    }
+
+    typealias Edit = @Sendable (Project, String, String, DraftStop) async throws -> TaskEditResult
+
+    static let coreEdit: Edit = { project, name, text, stop in
+        // A config that is there but broken is its error, with the key, not "no goal agent".
+        let config: Config? =
+            FileManager.default.fileExists(atPath: project.configURL.path) ? try Config.load(from: project.configURL) : nil
+        return try await TaskEditor(project: project).propose(
+            task: name, request: text, config: config, attach: { stop.attach($0) })
+    }
 
     static let core = TaskActions(
         inspect: { project, name in

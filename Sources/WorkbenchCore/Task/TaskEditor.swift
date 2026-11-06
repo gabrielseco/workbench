@@ -36,6 +36,10 @@ public struct TaskProposal: Sendable, Equatable {
     public var changes: TaskChanges
     /// The file on disk when the proposal was asked for, whole: `accept` writes only over this.
     public var source: String
+
+    public init(task: String, text: String, changes: TaskChanges, source: String) {
+        (self.task, self.text, self.changes, self.source) = (task, text, changes, source)
+    }
 }
 
 /// What one edit came to. An answer that does not load is a result, not a thrown error: it has spent what it spent and nothing was
@@ -46,6 +50,12 @@ public struct TaskEditResult: Sendable, Equatable {
     public var model: String?
     public var costUSD: Double?
     public var failure: String?
+
+    public init(
+        proposal: TaskProposal?, provider: AgentProviderID, model: String? = nil, costUSD: Double? = nil, failure: String? = nil
+    ) {
+        (self.proposal, self.provider, self.model, self.costUSD, self.failure) = (proposal, provider, model, costUSD, failure)
+    }
 }
 
 /// Edits a task with the goal agent: asks once for a new `task.md`, checks it as the loader would, and says what it changes. Read-only

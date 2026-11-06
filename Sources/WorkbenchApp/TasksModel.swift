@@ -218,6 +218,10 @@ struct TasksReader: Sendable {
     var runningProject: String?
     /// Why a button did nothing (another run going, the task did not load).
     var actionNote: String?
+    /// The edit of a task with the agent: what is being asked, what came back. Nothing is written until the person accepts it.
+    var editing: TaskEditing?
+    var editRequest = ""
+    @ObservationIgnored var editStop: DraftStop?
     @ObservationIgnored var stopSwitch: TaskStopSwitch?
     @ObservationIgnored let actions: TaskActions
     @ObservationIgnored private var lastRead: Date?

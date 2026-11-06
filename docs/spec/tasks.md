@@ -137,10 +137,19 @@ request opened by hand for a unit is not seen. A `report` run does the work of n
 The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the same data and no other: a task's `task list` line
 (`TaskLibrary.summary`), its runs and their reasons (`TaskRunLog`'s history, the reason cleaned as `task log` cleans it) and the
 timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
-shown. Reading writes nothing. Two buttons write, only through core: `Approve` (the press approves the task as it is on disk now, with no card to show it first: `TaskLibrary.approve` binds the hash read at
+shown. Reading writes nothing. Three things write, only through core: `Approve` (the press approves the task as it is on disk now, with no card to show it first: `TaskLibrary.approve` binds the hash read at
 that moment, and a refusal is shown as a note) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
 a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). Quitting the app mid-run ends the run as `interrupted`,
-like a killed `task run`.
+like a killed `task run`. **Edit with AI** (`TaskEditor`) asks the goal agent once for a new `task.md`: a one-shot read-only turn, no
+thread and no worktree, so it needs no active-thread slot and works beside one. The agent is given the file's text and the request, each
+quoted as data, and returns the whole file; core checks that it loads exactly as the file would (`TaskLibrary.loadText`: the keys, the
+MCP servers, the script and skill files) and shows what it changes: each setting approval binds to as old → new, apart from the
+instructions' line diff. Nothing is written until `Accept`, which writes only over the file the proposal was made from (another edit in
+between refuses it) and is refused while a run of the task is going; it never approves, so an approved task reads STALE until `Approve`.
+The cost is the goal draft's cap (`TaskEdit.budgetUSD`, the same value as `GoalDraft.budgetUSD`); the goal agent is `[agents.goal]`.
+The CLI is `workbench task edit <name> (--request "<text>" | --request-file <path>) [--accept]`: it prints the changes and writes
+nothing without `--accept`; refused (exit 6) with no goal agent, a task that does not load or a run going, and exit 1 when the agent's
+answer was not a usable task file. An edit leaves nothing in the run log.
 
 The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
 project's tasks (their runs, without the timer's probes) and tells you, once, when a task breaks or goes stale: a run that ended
