@@ -43,13 +43,6 @@ struct ThreadListView: View {
             }
         }
         .accessibilityLabel("Threads")
-        .focusable()
-        .onMoveCommand { direction in
-            guard direction == .up || direction == .down,
-                let next = ThreadListView.neighbour(of: shown, in: rows.map(\.key), up: direction == .up)
-            else { return }
-            Task { await store.select(thread: next) }
-        }
     }
 }
 
