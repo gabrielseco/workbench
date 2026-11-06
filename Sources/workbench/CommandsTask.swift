@@ -3,8 +3,8 @@ import WorkbenchCore
 
 extension Commands {
     private static let taskUsage =
-        "usage: workbench task list | task log <name> | task new <name> | task approve <name> | task run <name> | task tick"
-        + " | task timer install|status|remove"
+        "usage: workbench task list | task log <name> | task new <name> | task edit <name> | task approve <name>"
+        + " | task run <name> | task tick | task timer install|status|remove"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
     /// one now; `task tick` runs the ones that are due, one after the other.
@@ -30,6 +30,8 @@ extension Commands {
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench task log <name> [--all]") }
             try a.requireEmpty()
             try await taskLog(name, all: all)
+        case "edit":
+            return try await taskEdit(&a)
         case "approve":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench task approve <name>") }
             try a.requireEmpty()

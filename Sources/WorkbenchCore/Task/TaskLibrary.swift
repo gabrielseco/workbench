@@ -50,6 +50,13 @@ public struct TaskLibrary: Sendable {
         guard let text = String(data: data, encoding: .utf8) else {
             throw TaskFileError.unreadable(".workbench/tasks/\(name)/task.md")
         }
+        return try loadText(text, name: name)
+    }
+
+    /// A task's text loaded as `load` would load it (parsed, its MCP servers defined, its script and skill files readable), whether
+    /// or not the text is the file's: how a proposed edit is checked before it is offered.
+    func loadText(_ text: String, name: String) throws -> LoadedTask {
+        let files = TaskFiles(project: project)
         let definition = try TaskDefinition.parse(text, name: name)
         try Self.requireMcpServers(definition, project: project)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }

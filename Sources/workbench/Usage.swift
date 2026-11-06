@@ -153,6 +153,12 @@ let workbenchUsage = """
                                  start a task: .workbench/tasks/<name>/task.md with every setting explained and fix: report, and
                                  a pending.sh that lists nothing; no agent runs. approve refuses it until its instructions
                                  no longer say TODO(workbench). exit 2 for a bad name or path, 6 when the task exists
+      task edit <name> (--request "<text>" | --request-file <path>) [--accept]
+                                 the goal agent proposes a new task.md (read-only; it is given the file and returns the text),
+                                 which is checked as the loader would and shown as what it changes: each setting approval binds
+                                 to as old -> new, the instructions as a diff. Nothing is written without --accept, and accepting
+                                 never approves: an approved task reads stale until `task approve`. exit 6 when refused (no goal
+                                 agent, a run going, a task that does not load), 1 when the agent gave nothing usable
       task approve <name>        record that the task, as it is now, may run unattended; editing the file or its
                                  pending script revokes it. With fix: pr the task accepts its own work when the check
                                  and the verifier pass and opens the pull request; it never merges
