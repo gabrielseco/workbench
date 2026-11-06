@@ -151,6 +151,13 @@ The CLI is `workbench task edit <name> (--request "<text>" | --request-file <pat
 nothing without `--accept`; refused (exit 6) with no goal agent, a task that does not load or a run going, and exit 1 when the agent's
 answer was not a usable task file. An edit leaves nothing in the run log.
 
+A run's row on the task page has a **Details** toggle. Opened, it reads the run's detail (`TaskRunDetail`, the one reader `task log` also
+renders from): how long it took, what it cost (the turns' `cost_usd` added; unknown is shown as unknown, never $0), how setup and the check
+went with the check's output when it did not pass, the tool calls it was refused, and the agent's last message, each cleaned and bounded as a
+reason is. It is read when the row is opened and never with the task list, so the 30 s refresh does not read a thread's log. A run that has
+not ended shows only how long it has gone; a run with no thread, or whose thread was removed, says so. A warning that names the timer's
+tick log offers **Open log** when the file is directly in the user's own `~/Library/Logs/Workbench`, named `task-tick-*.log`, and exists.
+
 The app also watches while it runs, whatever screen or window is up: every 30 s and when it is activated it re-reads the open
 project's tasks (their runs, without the timer's probes) and tells you, once, when a task breaks or goes stale: a run that ended
 `failed`, `budget-exceeded` or `interrupted` (until a later run ends well), or an approval that is STALE now (until it is approved

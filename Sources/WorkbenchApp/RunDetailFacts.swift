@@ -20,6 +20,10 @@ struct RunDetailFacts: Equatable {
     static func make(_ detail: TaskRunDetail, running: Bool) -> RunDetailFacts {
         var facts: [Fact] = []
         facts.append(Fact(label: "took", value: detail.duration.map(duration) ?? (running ? "still going" : "unknown")))
+        // A run that has not ended has no outcome yet, whatever its thread has recorded so far (shipping goes on after the turn).
+        if running {
+            return RunDetailFacts(facts: facts, checkTail: [], note: "It has not ended: what it did is shown when it has.")
+        }
         var note: String?
         switch detail.source {
         case .noThread: note = "This run started no thread, so there is nothing more to show."

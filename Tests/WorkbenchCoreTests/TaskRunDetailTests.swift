@@ -81,6 +81,23 @@ import Testing
         #expect(TaskRunDetail.read(project: project, run: run(thread: nil, ended: nil)) == TaskRunDetail(source: .noThread))
     }
 
+    @Test func resultWordsFromAnEditedLogAreCleaned() async throws {
+        let project = Project(root: try Scratch.directory("words"))
+        let log = try EventLogWriter.open(at: project.eventsURL("g-x"))
+        let bad = JSONValue.string("passed\u{1B}[31m\nsecond line " + String(repeating: "z", count: 500))
+        try await log.append(.setupRan, data: ["result": bad, "duration_ms": 1000])
+        try await log.append(.turnStarted, turn: 1, data: ["pid": 1])
+        try await log.append(.turnEnded, turn: 1, data: ["result": "succeeded"])
+        try await log.append(.checkStarted, turn: 1)
+        try await log.append(.checkRan, turn: 1, data: ["result": bad, "duration_ms": 1000])
+        await log.close()
+        let detail = TaskRunDetail.read(project: project, run: run(thread: "g-x"))
+        for word in [detail.setup?.result, detail.check?.result] {
+            let text = try #require(word)
+            #expect(!text.contains("\u{1B}") && !text.contains("\n") && text.count <= 40, "\(text)")
+        }
+    }
+
     @Test func outputIsCleanedAndBounded() async throws {
         let project = Project(root: try Scratch.directory("clean"))
         let output = "red \u{1B}[31mtext\n" + String(repeating: "x", count: 5_000) + "\n"

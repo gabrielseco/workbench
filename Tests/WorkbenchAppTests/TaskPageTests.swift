@@ -217,24 +217,31 @@ import WorkbenchCore
     // MARK: The tick log
 
     @Test func openLogOnlyForTheTickLog() async throws {
+        let home = URL(fileURLWithPath: "/Users/gabriel", isDirectory: true)
         let log = "/Users/gabriel/Library/Logs/Workbench/task-tick-remote-flows-18fc3025.log"
-        #expect(RunAction.isTickLogPath(log))
+        #expect(RunAction.isTickLogPath(log, home: home))
         for bad in [
-            "/etc/passwd", "relative/Library/Logs/Workbench/task-tick-x.log", "/Users/g/Library/Logs/Workbench/other.log",
-            "/Users/g/Library/Logs/Workbench/../../x/task-tick-x.log", "/Users/g/Library/Logs/Workbench/task-tick-.log",
-            "/Users/g/Library/Logs/Workbench/task-tick-x.txt", "/Users/g/Library/Logs/Other/task-tick-x.log",
-            "/Users/g/Library/Logs/Workbench/sub/task-tick-x.log",
-        ] { #expect(!RunAction.isTickLogPath(bad), "\(bad)") }
-        #expect(RunTonight.tickLog(in: "the last tick exited 1: see \(log)") == log)
+            "/etc/passwd", "relative/Library/Logs/Workbench/task-tick-x.log", "/Users/gabriel/Library/Logs/Workbench/other.log",
+            "/Users/gabriel/Library/Logs/Workbench/../../x/task-tick-x.log",
+            "/Users/gabriel/Library/Logs/Workbench/task-tick-.log",
+            "/Users/gabriel/Library/Logs/Workbench/task-tick-x.txt", "/Users/gabriel/Library/Logs/Other/task-tick-x.log",
+            "/Users/gabriel/Library/Logs/Workbench/sub/task-tick-x.log",
+            // The right shape, in another folder or another user's.
+            "/tmp/Library/Logs/Workbench/task-tick-x.log", "/Users/someone-else/Library/Logs/Workbench/task-tick-x.log",
+        ] { #expect(!RunAction.isTickLogPath(bad, home: home), "\(bad)") }
+        // The warning carries the button for this user's own tick log, and only for that; a log that is gone keeps its path as text.
+        let mine = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Workbench")
+        let own = mine.appendingPathComponent("task-tick-remote-flows-18fc3025.log").path
+        #expect(RunTonight.tickLog(in: "the last tick exited 1: see \(own)") == own)
         #expect(RunTonight.tickLog(in: "the last tick exited 1: see /etc/passwd") == nil)
+        #expect(RunTonight.tickLog(in: "the last tick exited 1: see /tmp/Library/Logs/Workbench/task-tick-x.log") == nil)
         #expect(RunTonight.tickLog(in: "power: on battery") == nil)
-        // The warning carries the button; a log that is gone keeps its path as text.
         let weekly = try await entry("weekly-report")
-        let timer = TimerCard.lines([TimerStatusLine(level: .warn, text: "the last tick exited 1: see \(log)")])
+        let timer = TimerCard.lines([TimerStatusLine(level: .warn, text: "the last tick exited 1: see \(own)")])
         let warning = try #require(RunTonight.derive(weekly, timer: timer, activeThread: nil).warnings.first)
-        #expect(warning.action == .openLog(log))
+        #expect(warning.action == .openLog(own))
         #expect(RunTonightCard.action(for: warning)?.title == "Open log")
-        let gone = "/nonexistent-home/Library/Logs/Workbench/task-tick-gone.log"
+        let gone = mine.appendingPathComponent("task-tick-surely-not-there-\(UUID().uuidString).log").path
         #expect(!RunTonightCard.offered(.openLog(gone)), "a log that is not there is not offered")
         let there = FileManager.default.temporaryDirectory.appendingPathComponent("task-tick-there.log")
         try "x".write(to: there, atomically: true, encoding: .utf8)

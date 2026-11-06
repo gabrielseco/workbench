@@ -175,12 +175,16 @@ enum RunAction: Equatable {
 
     /// The timer's own log, `~/Library/Logs/Workbench/task-tick-<project>.log`: the path in a warning is text from the timer's output, and
     /// is opened with the system, so only that shape is offered, never `..` or another folder or kind of file.
-    static func isTickLogPath(_ path: String) -> Bool {
+    /// It must be directly in this user's own `Library/Logs/Workbench`, after links are followed: another folder of that name, or another
+    /// user's, is not the timer's.
+    static func isTickLogPath(_ path: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         guard parts.count >= 5, parts.first == "", !parts.contains(".."), !parts.contains(".") else { return false }
         let name = parts[parts.count - 1]
-        return Array(parts.suffix(4).prefix(3)) == ["Library", "Logs", "Workbench"] && name.hasPrefix("task-tick-")
-            && name.hasSuffix(".log") && name.count > "task-tick-.log".count
+        guard name.hasPrefix("task-tick-"), name.hasSuffix(".log"), name.count > "task-tick-.log".count else { return false }
+        let folder = home.appendingPathComponent("Library/Logs/Workbench", isDirectory: true).resolvingSymlinksInPath()
+        let parent = URL(fileURLWithPath: path).deletingLastPathComponent().resolvingSymlinksInPath()
+        return parent.path == folder.path
     }
 
     /// A run that ended badly shows its log; a stale approval offers the approval; any other run with a thread offers the thread; a run

@@ -61,6 +61,12 @@ public struct TaskRunDetail: Sendable, Equatable {
         return detail
     }
 
+    /// A result word from the log (`passed`, `failed`, …), cleaned and bounded: the log is a file that can be edited.
+    private static func word(_ value: JSONValue?) -> String {
+        let text = TaskExplanation.clean(value?.stringValue ?? "", limit: 40)
+        return text.isEmpty ? "?" : text
+    }
+
     /// What a thread's own log says about the run that made it.
     static func read(project: Project, thread: String) -> TaskRunDetail {
         guard FileManager.default.fileExists(atPath: project.eventsURL(thread).path),
@@ -68,11 +74,11 @@ public struct TaskRunDetail: Sendable, Equatable {
         else { return TaskRunDetail(source: .removed) }
         var detail = TaskRunDetail(source: .read)
         if let setup = events.last(where: { $0.kind == .setupRan }) {
-            detail.setup = Step(
-                result: setup.data["result"]?.stringValue ?? "?", seconds: setup.data["duration_ms"]?.intValue.map { $0 / 1000 })
+            let seconds = setup.data["duration_ms"]?.intValue.map { $0 / 1000 }
+            detail.setup = Step(result: word(setup.data["result"]), seconds: seconds)
         }
         if let check = events.last(where: { $0.kind == .checkRan }) {
-            let result = check.data["result"]?.stringValue ?? "?"
+            let result = word(check.data["result"])
             var tail: [String] = []
             if result != "passed", let ref = check.data["output_ref"]?.stringValue,
                 let data = try? Data(contentsOf: project.threadDirectory(thread).appendingPathComponent(ref)) {

@@ -79,8 +79,11 @@ import WorkbenchCore
     }
 
     @Test func aRunStillGoingShowsWhatIsKnown() {
-        let going = RunDetailFacts.make(TaskRunDetail(source: .read, duration: nil, costUSD: nil), running: true)
-        #expect(going.facts.first == RunDetailFacts.Fact(label: "took", value: "still going"))
-        #expect(!going.facts.contains { $0.label == "check" || $0.label == "agent said" })
+        // Its thread may already hold a finished turn and a check (shipping goes on after them): none of that is the run's outcome yet.
+        var recorded = detail
+        recorded.duration = nil
+        let going = RunDetailFacts.make(recorded, running: true)
+        #expect(going.facts == [RunDetailFacts.Fact(label: "took", value: "still going")])
+        #expect(going.checkTail.isEmpty && going.note?.contains("not ended") == true)
     }
 }
