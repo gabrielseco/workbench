@@ -40,7 +40,10 @@ struct TaskPageView: View {
                         ForEach(Array(group.runs.enumerated()), id: \.offset) { _, run in
                             Divider()
                             TaskRunRow(
-                                run: run, threadKnown: threadKnown(run.thread), reportExists: reportExists, perform: perform)
+                                run: run, threadKnown: threadKnown(run.thread), reportExists: reportExists,
+                                detail: store.tasks.detail(store.project, entry.id, run),
+                                isOpen: store.tasks.isOpen(store.project, entry.id, run),
+                                toggle: { Task { await store.tasks.toggleRun(store.project, entry.id, run) } }, perform: perform)
                         }
                         Divider()
                     }
@@ -72,6 +75,7 @@ struct TaskPageView: View {
             NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
         case .approve, .reapprove: Task { await store.tasks.approve(store.project, entry.id) }
         case .openThread(let id): Task { await store.select(thread: id) }
+        case .openLog(let path): NSWorkspace.shared.open(URL(fileURLWithPath: path))
         case .openReport(let path):
             guard let project = store.project else { return }
             NSWorkspace.shared.open(project.root.appendingPathComponent(path))
@@ -137,7 +141,7 @@ struct RunTonightCard: View {
                             }
                         }
                         Spacer(minLength: 8)
-                        if let action = Self.action(for: warning) {
+                        if let action = Self.action(for: warning), Self.offered(action) {
                             Button(action.title) { perform(action) }.plainButton().controlSize(.small)
                         }
                     }
@@ -149,12 +153,19 @@ struct RunTonightCard: View {
         .card(stroke: tonight.verdict == .willRun ? Theme.line : tint.opacity(0.45))
     }
 
-    /// The button for a warning: approval, or the active thread.
+    /// A log that is gone has nothing to open: its path stays text.
+    static func offered(_ action: RunAction) -> Bool {
+        if case .openLog(let path) = action { return FileManager.default.fileExists(atPath: path) }
+        return true
+    }
+
+    /// The button for a warning: approval, the active thread, or the tick log.
     static func action(for warning: RunTonight.Warning) -> RunAction? {
         switch warning.action {
         case .approve?: .approve
         case .reapprove?: .reapprove
         case .openThread(let id)?: .openThread(id)
+        case .openLog(let path)?: .openLog(path)
         case nil: nil
         }
     }
@@ -165,6 +176,10 @@ struct TaskRunRow: View {
     var run: TaskHistory.Run
     var threadKnown: Bool
     var reportExists: (String) -> Bool = { _ in true }
+    /// What the run did, once its row has been opened and read.
+    var detail: TaskRunDetail?
+    var isOpen = false
+    var toggle: () -> Void = {}
     var perform: (RunAction) -> Void
 
     var body: some View {
@@ -198,6 +213,14 @@ struct TaskRunRow: View {
                 if let thread = run.thread, !(threadKnown && action == .openThread(thread)) {
                     Text("thread \(thread)").role(.mono)
                         .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                }
+                DisclosureToggle(label: "Details", isOpen: isOpen, toggle: toggle).padding(.top, Space.xs)
+                if isOpen {
+                    if let detail {
+                        RunDetailView(facts: RunDetailFacts.make(detail, running: run.outcome == nil)).padding(.top, Space.xs)
+                    } else {
+                        ProgressView().controlSize(.small).padding(.top, Space.xs)
+                    }
                 }
             }
             Spacer(minLength: 8)

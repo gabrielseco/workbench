@@ -48,38 +48,17 @@ public enum TaskLogReport {
 
     /// Setup, check and the agent's last message, from the thread's own log.
     static func threadLines(project: Project, thread: String) -> [String] {
-        guard FileManager.default.fileExists(atPath: project.eventsURL(thread).path),
-            let events = try? EventLogReader.read(at: project.eventsURL(thread)).events
-        else { return ["thread log: not found (the thread was removed)"] }
+        let detail = TaskRunDetail.read(project: project, thread: thread)
+        guard detail.source == .read else { return ["thread log: not found (the thread was removed)"] }
         var out: [String] = []
-        if let setup = events.last(where: { $0.kind == .setupRan }) {
-            let secs = (setup.data["duration_ms"]?.intValue).map { " (\($0 / 1000)s)" } ?? ""
-            out.append("setup:    \(setup.data["result"]?.stringValue ?? "?")\(secs)")
+        func seconds(_ value: Int?) -> String { value.map { " (\($0)s)" } ?? "" }
+        if let setup = detail.setup { out.append("setup:    \(setup.result)\(seconds(setup.seconds))") }
+        if let check = detail.check {
+            out.append("check:    \(check.result)\(seconds(check.seconds))")
+            for line in check.tail { out.append("          " + line) }
         }
-        if let check = events.last(where: { $0.kind == .checkRan }) {
-            let result = check.data["result"]?.stringValue ?? "?"
-            let secs = (check.data["duration_ms"]?.intValue).map { " (\($0 / 1000)s)" } ?? ""
-            out.append("check:    \(result)\(secs)")
-            if result != "passed", let ref = check.data["output_ref"]?.stringValue,
-                let data = try? Data(contentsOf: project.threadDirectory(thread).appendingPathComponent(ref)) {
-                let tail = String(decoding: data.suffix(8 << 10), as: UTF8.self).split(separator: "\n")
-                    .suffix(TaskExplanation.maxCheckLines)
-                for line in tail {
-                    out.append("          " + TaskExplanation.clean(String(line), limit: TaskExplanation.maxCheckLine))
-                }
-            }
-        }
-        // The turn's own record of its denials (what `grant` lists), or the streamed events if that is longer.
-        let recorded = events.filter { $0.kind == .turnEnded }.reduce(0) { total, event in
-            if case .array(let calls)? = event.data["denials"] { return total + calls.count }
-            return total
-        }
-        let streamed = events.filter { $0.kind == .agentActivity && $0.data["type"]?.stringValue == "permission_denied" }.count
-        let denied = max(recorded, streamed)
-        if denied > 0 { out.append("denied:   \(denied) tool call(s): `workbench grant \(thread)` lists them") }
-        if let text = lastAgentText(project: project, thread: thread, events: events) {
-            out.append("agent:    \(TaskExplanation.clean(text, limit: TaskExplanation.maxMessage))")
-        }
+        if detail.denied > 0 { out.append("denied:   \(detail.denied) tool call(s): `workbench grant \(thread)` lists them") }
+        if let text = detail.agentMessage { out.append("agent:    \(text)") }
         return out
     }
 
