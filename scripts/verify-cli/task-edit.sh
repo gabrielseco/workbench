@@ -41,6 +41,8 @@ cat >"$FAKE/codex" <<FAKE_SCRIPT
 out=""; prev=""
 for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; done
 echo run >> "$FAKE/runs"
+printf '%s\\n' "\$@" > "$FAKE/prompt.args"
+cat > "$FAKE/prompt.stdin"
 cat "$FAKE/answer" > "\$out"
 echo "fake codex"
 FAKE_SCRIPT
@@ -58,9 +60,9 @@ wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 cp "$cfg" "$SCRATCH/config.base"
 mkdir -p "$P/.workbench/tasks/bump"
-printf -- '---\nat: 04:00\ndays: weekdays\nfix: report\n---\nList the open TODOs.\n' >"$TASK"
+printf -- '---\nat: 04:00\ndays: weekdays\nfix: report\n---\nList the open TODOs.\nNever touch .workbench/notes.txt.\n' >"$TASK"
 cp "$TASK" "$SCRATCH/task.before"
-GOOD='---\nat: 04:00\ndays: weekdays\nfix: report\nbudget: 3\n---\nList the open TODOs.\nSkip the vendor folder.\n'
+GOOD='---\nat: 04:00\ndays: weekdays\nfix: report\nbudget: 3\n---\nList the open TODOs.\nNever touch .workbench/notes.txt.\nSkip the vendor folder.\n'
 printf -- "$GOOD" >"$FAKE/answer"
 
 # --- 1. no [agents.goal] -------------------------------------------------------------------------------------
@@ -82,6 +84,8 @@ check "it shows the new instruction as an added line" "no + line" grep -q "+ Ski
 check "it says nothing was written" "no such line" grep -q "nothing was written" "$SCRATCH/propose.out"
 check "the task file is byte-identical" "task.md changed" cmp -s "$SCRATCH/task.before" "$TASK"
 check "the agent ran once" "the fake ran $(runs) time(s)" test "$(runs)" = 1
+check "the agent was given the file's own .workbench path whole, not <path>" "the path was scrubbed" \
+    bash -c 'cat "$1" "$2" | grep -q "Never touch .workbench/notes.txt."' _ "$FAKE/prompt.args" "$FAKE/prompt.stdin"
 
 # --- 3. an answer that is not a task file ---------------------------------------------------------------------
 

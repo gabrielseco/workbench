@@ -283,6 +283,14 @@ private func editing(
         #expect(file < request, "the file comes before the request")
     }
 
+    @Test func promptKeepsTheFilesOwnPathsAndScrubsTheRequest() {
+        let current = "---\npending: .workbench/tasks/bump/pending.sh\ninclude: .claude/skills/bump/SKILL.md\n---\nDo.\n"
+        let prompt = TaskEdit.prompt(task: "bump", current: current, request: "see /Users/me/secret/x.log")
+        #expect(prompt.contains("> pending: .workbench/tasks/bump/pending.sh"))
+        #expect(prompt.contains("> include: .claude/skills/bump/SKILL.md"))
+        #expect(!prompt.contains("/Users/me"), "a machine path in the request is still scrubbed")
+    }
+
     // MARK: A run as the request
 
     private func failedRun(reason: String? = "the check failed") -> TaskHistory.Run {
