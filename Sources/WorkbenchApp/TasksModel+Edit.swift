@@ -58,6 +58,7 @@ extension TasksModel {
     func editUnavailable(_ entry: TaskEntry) -> String? {
         if entry.summary.problem != nil { return "The task does not load: fix its task.md first." }
         if case .working? = editing?.phase { return "An edit is going: one at a time." }
+        if creating?.phase == .working { return "A new task is being asked for: one at a time." }
         if entry.isRunning || runningTask == entry.id { return "A run of this task is going: wait for it to end." }
         return nil
     }

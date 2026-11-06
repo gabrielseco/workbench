@@ -25,7 +25,7 @@ struct TasksView: View {
                     .textRole(.error).padding(.horizontal, Space.xl).padding(.vertical, Space.s)
                 Divider()
             }
-            if store.tasks.creating != nil {
+            if store.tasks.isNewShown(in: store.project) {
                 NewTaskScreen(store: store)
             } else if let snapshot {
                 if snapshot.entries.isEmpty {

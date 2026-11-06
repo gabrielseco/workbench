@@ -5,6 +5,8 @@ import WorkbenchCore
 @testable import WorkbenchApp
 
 /// The New task screen: the name checked as it is typed, a proposal accepted or discarded, and the empty task with no agent.
+@MainActor private var keptNewFixtures: [AppFixture] = []
+
 @MainActor @Suite struct TasksNewTests {
     private let proposal = TaskProposal(
         task: "todo-report", text: "---\nat: 09:00\nfix: report\n---\nReport the TODOs.\n",
@@ -62,7 +64,7 @@ import WorkbenchCore
         #expect(TaskNameCheck.invalid.message != nil && TaskNameCheck.taken.message != nil && TaskNameCheck.ok.message == nil)
 
         // Propose is off until the name and the words are good, and says which is missing.
-        tasks.beginNew()
+        tasks.beginNew(fixture.project)
         #expect(tasks.proposeNewUnavailable(in: project)?.contains("Name the task") == true)
         tasks.creating?.name = "has space"
         #expect(tasks.proposeNewUnavailable(in: project)?.contains("cannot be used") == true)
@@ -88,7 +90,7 @@ import WorkbenchCore
     @Test func acceptCreatesAndSelects() async throws {
         let (fixture, tasks) = try await scenario()
         try await withGoalAgent(fixture, tasks)
-        tasks.beginNew()
+        tasks.beginNew(fixture.project)
         tasks.creating?.name = "todo-report"
         tasks.creating?.request = "  report the TODOs every weekday at 9 \n"
         #expect(tasks.proposeNewUnavailable(in: fixture.project) == nil)
@@ -106,12 +108,14 @@ import WorkbenchCore
     @Test func discardKeepsTheWords() async throws {
         let (fixture, tasks) = try await scenario()
         try await withGoalAgent(fixture, tasks)
-        tasks.beginNew()
+        tasks.beginNew(fixture.project)
         tasks.creating?.name = "todo-report"
         tasks.creating?.request = "report the TODOs"
         await tasks.proposeNew(fixture.project)
         tasks.discardNew()
-        #expect(tasks.creating == NewTaskDraft(name: "todo-report", request: "report the TODOs", phase: .idle))
+        let words = NewTaskDraft(
+            project: fixture.project.root.path, name: "todo-report", request: "report the TODOs", phase: .idle)
+        #expect(tasks.creating == words)
         // Cancel puts the screen away; it is refused while the agent works.
         tasks.cancelNew()
         #expect(tasks.creating == nil)
@@ -124,7 +128,7 @@ import WorkbenchCore
             },
             accept: { _, _ in throw TaskEditRefusal.taskExists("todo-report") })
         try await withGoalAgent(fixture, failing)
-        failing.beginNew()
+        failing.beginNew(fixture.project)
         failing.creating?.name = "todo-report"
         failing.creating?.request = "x"
         await failing.proposeNew(fixture.project)
@@ -136,7 +140,7 @@ import WorkbenchCore
         // An accept the core refuses (the name was taken meanwhile) stays on the screen with the core's words.
         let (fixture2, refusing) = try await scenario(accept: { _, _ in throw TaskEditRefusal.taskExists("todo-report") })
         try await withGoalAgent(fixture2, refusing)
-        refusing.beginNew()
+        refusing.beginNew(fixture2.project)
         refusing.creating?.name = "todo-report"
         refusing.creating?.request = "x"
         await refusing.proposeNew(fixture2.project)
@@ -154,7 +158,7 @@ import WorkbenchCore
             return TaskEditResult(proposal: nil, provider: .codex)
         })
         // The fixture has no [agents.goal] at all: the empty task is the way through.
-        tasks.beginNew()
+        tasks.beginNew(fixture.project)
         tasks.creating?.name = "by-hand"
         #expect(await tasks.createEmpty(fixture.project) == "by-hand")
         #expect(tasks.creating == nil)
@@ -164,7 +168,7 @@ import WorkbenchCore
         #expect(FileManager.default.fileExists(atPath: script.path))
         #expect(tasks.snapshot?.entries.contains { $0.id == "by-hand" } == true, "the list was read again")
         // The same name twice, a bad name and an empty one create nothing.
-        tasks.beginNew()
+        tasks.beginNew(fixture.project)
         tasks.creating?.name = "by-hand"
         #expect(await tasks.createEmpty(fixture.project) == nil)
         tasks.creating?.name = "bad name"
@@ -183,5 +187,79 @@ import WorkbenchCore
         try Self.config(goal: "claude").write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
         await tasks.refresh(fixture.project)
         #expect(tasks.editLimit == "up to $0.50")
+    }
+
+    @Test func aProposalIsOnlyAcceptedInTheProjectItWasMadeFor() async throws {
+        let (fixture, tasks) = try await scenario()
+        let (other, _) = try await scenario()
+        try await withGoalAgent(fixture, tasks)
+        tasks.beginNew(fixture.project)
+        tasks.creating?.name = "todo-report"
+        tasks.creating?.request = "report the TODOs"
+        await tasks.proposeNew(fixture.project)
+        #expect(tasks.creating?.project == fixture.project.root.path)
+        // Another project is on screen now: it does not see this draft, and nothing can be accepted or created into it.
+        #expect(tasks.draft(in: other.project) == nil && !tasks.isNewShown(in: other.project))
+        #expect(await tasks.acceptNew(other.project) == nil && calls.accepts.isEmpty)
+        #expect(await tasks.createEmpty(other.project) == nil)
+        #expect(!FileManager.default.fileExists(atPath: other.project.taskDirectory("todo-report").path))
+        await tasks.proposeNew(other.project)
+        #expect(calls.asked == ["todo-report"], "asked once, for the project it was begun in")
+        // Opening the screen in the other project starts its own draft rather than carrying the words over.
+        tasks.beginNew(other.project)
+        #expect(tasks.creating == NewTaskDraft(project: other.project.root.path))
+        #expect(await tasks.acceptNew(fixture.project) == nil, "the first project's proposal is gone with its draft")
+    }
+
+    @Test func oneAgentAtATimeAcrossEditAndNew() async throws {
+        let (fixture, tasks) = try await scenario()
+        try await withGoalAgent(fixture, tasks)
+        tasks.beginNew(fixture.project)
+        tasks.creating?.name = "todo-report"
+        tasks.creating?.request = "x"
+        let entry = try #require(tasks.snapshot?.entries.first { $0.id == "update-docs" })
+        // An edit is with the agent: Propose for a new task waits.
+        tasks.editing = TaskEditing(project: fixture.project.root.path, task: entry.id, phase: .working)
+        #expect(tasks.proposeNewUnavailable(in: fixture.project)?.contains("one at a time") == true)
+        tasks.editing = nil
+        #expect(tasks.proposeNewUnavailable(in: fixture.project) == nil)
+        // A new task is with the agent: Propose for an edit waits.
+        tasks.creating?.phase = .working
+        #expect(tasks.editUnavailable(entry)?.contains("one at a time") == true)
+        tasks.editRequest = "y"
+        await tasks.proposeEdit(fixture.project, entry)
+        #expect(tasks.editing == nil && calls.asked.isEmpty, "no second agent was started")
+    }
+
+    @Test func aRequestTheCoreWouldRefuseKeepsProposeOff() async throws {
+        let (fixture, tasks) = try await scenario()
+        try await withGoalAgent(fixture, tasks)
+        tasks.beginNew(fixture.project)
+        tasks.creating?.name = "todo-report"
+        tasks.creating?.request = String(repeating: "x", count: TaskEdit.requestLimit + 1)
+        #expect(tasks.proposeNewUnavailable(in: fixture.project)?.contains("over 16 KiB") == true)
+        tasks.creating?.request = "has a nul \0"
+        #expect(tasks.proposeNewUnavailable(in: fixture.project)?.contains("control character") == true)
+        tasks.creating?.request = "fine"
+        #expect(tasks.proposeNewUnavailable(in: fixture.project) == nil)
+        let atTheLimit = String(repeating: "x", count: TaskEdit.requestLimit)
+        #expect(TaskEdit.requestProblem(atTheLimit) == nil, "the limit itself is allowed")
+    }
+
+    @Test func choosingATaskLeavesTheScreenAndKeepsTheDraft() async throws {
+        let fixture = try await AppFixture()
+        keptNewFixtures.append(fixture)
+        try await AppScenario.tasks.build(in: fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
+        #expect(await store.open(fixture.root))
+        store.beginNewTask()
+        store.tasks.creating?.name = "half-typed"
+        #expect(store.tasks.isNewShown(in: store.project) && store.mode == .tasks)
+        store.selectTask("update-docs")
+        #expect(!store.tasks.isNewShown(in: store.project), "the chosen task's page is what shows")
+        #expect(store.tasks.selection == "update-docs", "the chosen task is selected")
+        #expect(store.tasks.creating?.name == "half-typed", "the words are kept")
+        store.beginNewTask()
+        #expect(store.tasks.isNewShown(in: store.project) && store.tasks.creating?.name == "half-typed", "and brought back")
     }
 }

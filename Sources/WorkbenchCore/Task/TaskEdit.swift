@@ -136,6 +136,15 @@ public enum TaskEdit {
         return "up to $" + String(format: "%.2f", NSDecimalNumber(decimal: budgetUSD).doubleValue)
     }
 
+    /// Why a request cannot be sent as it is, nil when it can: the rules the editor applies, for a screen to apply before it enables a
+    /// button. Empty is the person's to fill, so it is not a problem said aloud.
+    public static func requestProblem(_ request: String) -> String? {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.utf8.count > requestLimit { return "The request is over \(requestLimit / 1024) KiB: shorten it." }
+        if text.contains("\0") { return "The request has a control character." }
+        return nil
+    }
+
     /// The most a request made from a run may be: well under `requestLimit`, so the person can add their own words.
     public static let runRequestLimit = 4 << 10
 

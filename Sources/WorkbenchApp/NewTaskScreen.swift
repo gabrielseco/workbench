@@ -10,7 +10,7 @@ struct NewTaskScreen: View {
 
     var body: some View {
         let tasks = store.tasks
-        let phase = tasks.creating?.phase ?? .idle
+        let phase = tasks.draft(in: store.project)?.phase ?? .idle
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 HStack(alignment: .top, spacing: Space.m) {
@@ -57,7 +57,7 @@ struct NewTaskScreen: View {
     }
 
     @ViewBuilder private func fields(_ tasks: TasksModel) -> some View {
-        let draft = tasks.creating ?? NewTaskDraft()
+        let draft = tasks.draft(in: store.project) ?? NewTaskDraft()
         let check = tasks.nameCheck(draft.name, in: store.project)
         let off = tasks.proposeNewUnavailable(in: store.project)
         VStack(alignment: .leading, spacing: Space.s) {
