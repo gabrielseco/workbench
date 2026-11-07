@@ -33,6 +33,8 @@ wbp() { # <out> args...: a workbench command in the clone, stdout and stderr tog
 shown() { sed 's/^/    /' "$1" | head -${2:-6}; }
 CFG="$P/.workbench/config.toml"
 
+wbp "$SCRATCH/init.out" init
+check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 cat >"$CFG" <<'TOML'
 # keep this comment
 [tools]
