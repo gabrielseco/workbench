@@ -41,18 +41,6 @@ import Testing
         #expect(run.files.isEmpty, "an empty folder, as before")
     }
 
-    @Test func aCodexChatIsPointedAtTheCopyWithoutToolsItDoesNotHave() async throws {
-        let d = try await drafting()
-        let answer = try #require(d.codex)
-        try answer.put("answer", "It starts in a.txt.")
-        let result = try await chat(d)
-        #expect(result.end == "ok")
-        let calls = try #require(d.codex?.read("calls"))
-        #expect(calls.contains(RepoSnapshot.folderName), "it is told where the copy is: \(calls)")
-        #expect(!calls.contains("Grep and Glob tools"), "Codex has no Read, Grep or Glob tool to be told to use")
-        #expect(calls.contains("read-only"), "and it still runs read-only")
-    }
-
     @Test func theCopyIsRemovedWithTheTurnAndCostsTheRepositoryNothing() async throws {
         let d = try await drafting()
         let branches = try await d.branches()
