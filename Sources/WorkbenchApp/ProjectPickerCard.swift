@@ -1,26 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The project card under the pill, over a light veil: a click on the veil closes it.
-struct ProjectPickerLayer: View {
-    var store: ProjectStore
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            if store.pickingProject {
-                Color.black.opacity(0.12).contentShape(Rectangle())
-                    .onTapGesture { store.pickingProject = false }.transition(.opacity)
-                ProjectPickerCard(store: store).padding(.top, Space.giant).padding(.leading, Space.m)
-                    .transition(.opacity.combined(with: .offset(y: -6)))
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: store.pickingProject)
-        .accessibilityAddTraits(store.pickingProject ? .isModal : [])
-    }
-}
-
 /// The card under the project pill: the recent projects with the open one marked, a search field, ↑↓ and ↵, and "Choose folder…" at
-/// the bottom. It has the New goal card's look; a click outside closes it, since nothing typed in it is worth keeping.
+/// the bottom. It stands on `.modal` (Esc, the close button and a click outside close it, since nothing typed in it is worth keeping).
 struct ProjectPickerCard: View {
     var store: ProjectStore
     @State private var query = ""
@@ -31,8 +13,7 @@ struct ProjectPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            search.padding(.top, Space.m)
+            search
             list.padding(.top, Space.m)
             if let error = store.actionError {
                 Text(error).role(.error)
@@ -41,11 +22,6 @@ struct ProjectPickerCard: View {
             Divider().padding(.top, Space.m)
             footer.padding(.top, Space.m)
         }
-        .padding(.horizontal, Space.l).padding(.top, Space.l).padding(.bottom, Space.l)
-        .frame(width: 420)
-        .card(.popover)
-        .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
-        .onExitCommand(perform: close)
         .onAppear {
             store.actionError = nil
             selected = defaultSelection
@@ -58,23 +34,10 @@ struct ProjectPickerCard: View {
         .onChange(of: query) { selected = defaultSelection }
     }
 
-    private func close() { store.pickingProject = false }
-
     /// The first project that can be opened and is not the open one, so ↵ goes back to the previous project.
     private var defaultSelection: String? {
         let open = rows.filter { $0.unavailable == nil }
         return (open.first { !$0.isCurrent } ?? open.first)?.path
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Projects".uppercased())
-                .textStyle(.captionStrong).tracking(0.9).foregroundStyle(.secondary)
-            Spacer()
-            Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
-                .accessibilityLabel("Close the projects panel")
-        }
     }
 
     private var search: some View {
