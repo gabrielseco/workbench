@@ -210,6 +210,11 @@ public struct ThreadState: Sendable, Equatable {
     public var reportedUsage: AgentUsage?
     /// The pull request `workbench ship` opened, nil before one; the latest `pr.opened` counts.
     public var pullRequest: PullRequestRecord?
+    /// The number of the pull request a `pr.merged` event recorded: GitHub said it merged. Only counts for the pull request
+    /// `pullRequest` names (`isMerged`), so a merge of an earlier one says nothing of a later one.
+    public var mergedPullRequest: Int?
+    /// GitHub confirmed the shipped pull request merged, and the log says so: no read of GitHub is needed to know it.
+    public var isMerged: Bool { pullRequest != nil && pullRequest?.number == mergedPullRequest }
     /// True once `clean` deleted the shipped branch (`branch.removed`).
     public var cleaned = false
     /// The conversation of a chat thread; nil on a thread that has none (P22 slice 6).
@@ -411,6 +416,8 @@ public struct ThreadState: Sendable, Equatable {
                     state.pullRequest = PullRequestRecord(
                         number: number, url: url, headSHA: event.data["head_sha"]?.stringValue, seq: event.seq)
                 }
+            case .prMerged:
+                if let number = event.data["number"]?.intValue { state.mergedPullRequest = number }
             case .branchRemoved:
                 state.cleaned = true
             case .reviewDecision:

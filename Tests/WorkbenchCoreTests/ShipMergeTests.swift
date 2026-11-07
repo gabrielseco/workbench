@@ -32,6 +32,26 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         #expect(gh.calls.contains("pr view 12 --json state,headRefOid"))
     }
 
+    @Test func aMergeIsRecordedOnceInTheLogAndNothingElseIs() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shipped(fx, gh)
+        func merged() throws -> Int {
+            try EventLogReader.read(at: fx.project.eventsURL(id)).events.filter { $0.kind == .prMerged }.count
+        }
+        let open = PRStatus(number: 12, state: .open, head: head, checks: nil)
+        let closed = PRStatus(number: 12, state: .closed, head: head, checks: nil)
+        let other = PRStatus(number: 99, state: .merged, head: head, checks: nil)
+        for status in [open, closed, other] { #expect(await fx.service.recordMerge(id: id, status: status) == false) }
+        #expect(try merged() == 0)
+        let done = PRStatus(number: 12, state: .merged, head: head, checks: nil)
+        #expect(await fx.service.recordMerge(id: id, status: done))
+        #expect(await fx.service.recordMerge(id: id, status: done) == false, "once per pull request")
+        #expect(try merged() == 1)
+        let state = ThreadState.derive(from: try EventLogReader.read(at: fx.project.eventsURL(id)).events, id: id)
+        #expect(state.isMerged)
+    }
+
     @Test func checksThatCannotBeReadAreAnErrorOnTheStatusNeverGreen() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)

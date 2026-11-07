@@ -68,6 +68,8 @@ public enum LogFormatter {
             let reason = ThreadState.safeLine(event.data["reason"]?.stringValue ?? "failed", limit: 100)
             let how = event.data["ok"] == true ? "ok" : reason
             return head + "chat turn ended: \(how)" + (event.data["synthetic"] == true ? " (recovered)" : "")
+        case .prMerged:
+            return head + "pull request #\(event.data["number"]?.intValue ?? 0) merged"
         case .worktreeRemoved, .branchRemoved, .branchAhead:
             return head + describeBranch(event)
         default:

@@ -97,8 +97,17 @@ extension ProjectStore {
             guard mine == generation else { return }
             threads.pullRequests[id] = read
             threads.pullRequestsReadAt[id] = .now
+            // A merge goes into the thread's log, so it is known from then on without asking GitHub.
+            if let read, read.state == .merged { _ = await recordMerge(read, thread: id, in: project) }
+            // Each answer is shown as it comes, not after the last thread has been asked about.
+            await refreshThreadList(force: true)
         }
-        await refreshThreadList(force: true)
+    }
+
+    /// Writes `pr.merged` to the thread's log: it only writes a file in the project, so the real writer runs in tests too.
+    private func recordMerge(_ status: PRStatus, thread: String, in project: Project) async -> Bool {
+        guard let git = try? GitRunner.discover() else { return false }
+        return await ThreadService(project: project, git: git).recordMerge(id: thread, status: status)
     }
 
     /// What the thread screen read of its own pull request is the row's too, so the rail and the banner agree.
@@ -106,7 +115,10 @@ extension ProjectStore {
         guard threads.pullRequests[thread] != status else { return }
         threads.pullRequests[thread] = status
         threads.pullRequestsReadAt[thread] = .now
-        Task { await refreshThreadList(force: true) }
+        Task {
+            if let project, let status, status.state == .merged { _ = await recordMerge(status, thread: thread, in: project) }
+            await refreshThreadList(force: true)
+        }
     }
 }
 

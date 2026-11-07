@@ -153,6 +153,19 @@ import WorkbenchCore
         #expect(github.reads == 2, "a merge is final: not asked about again")
     }
 
+    @Test func aMergeIsWrittenToTheLogSoTheNextLaunchKnowsItWithoutAskingGitHub() async throws {
+        struct Offline: Error {}
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        await (try await store(fixture, GitHub(.success(status(.merged))))).refreshPullRequests()
+        let events = try EventLogReader.read(at: fixture.project.eventsURL("a")).events
+        #expect(events.filter { $0.kind == .prMerged }.count == 1)
+        let github = GitHub(.failure(Offline()))
+        let second = try await store(fixture, github)
+        let row = second.threads.listing.rows.first { $0.id == "a" }
+        #expect(row?.mark == .done && row?.line == "PR #7 merged" && github.reads == 0 && !second.pullRequestsAreDue)
+    }
+
     @Test func unavailablePullRequestStatus() async throws {
         struct Offline: Error {}
         let fixture = try await fixture()

@@ -183,7 +183,8 @@ enum ThreadListLoader {
         // Only a status read for the pull request the log names counts: one for an earlier number says nothing of this one.
         let recorded = state.pullRequest
         let status = status.flatMap { $0.number == recorded?.number ? $0 : nil }
-        let outcome = outcome(status)
+        // A merge the log recorded needs no read of GitHub.
+        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome(status)
         let checks = status?.checksError == nil ? status?.checks : nil
         let spine = ThreadSpine.derive(
             state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)
