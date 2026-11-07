@@ -230,7 +230,8 @@ extension ThreadService {
             ? await RepoSnapshotWriter.write(base: base, into: work, repo: project.root, git: git) : nil
         let prompt = Chat.prompt(
             history: history, message: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
-            images: names, newImages: fresh.map(\.name), readFiles: !sends && !names.isEmpty, repo: snapshot)
+            images: names, newImages: fresh.map(\.name), readFiles: !sends && !names.isEmpty, repo: snapshot,
+            usesShell: agent.provider == .codex)
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         var request: AgentRequest
         if agent.provider == .codex {
