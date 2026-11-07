@@ -63,6 +63,20 @@ import Testing
         #expect(closed == ["diff", "review"], "nothing is listening once both are gone")
     }
 
+    @Test func escGoesToTheModalOnTopEvenWhenALowerOneWasOpenedAfterIt() {
+        _ = NSApplication.shared
+        var closed: [String] = []
+        let preview = EscapeKey(), agents = EscapeKey()
+        preview.start(layer: 5) { closed.append("preview") }
+        agents.start(layer: 0) { closed.append("agents") }
+        press(keyCode: 53)
+        #expect(closed == ["preview"], "⌘, opened Agents under the preview: the one you see hears Esc")
+        preview.stop()
+        press(keyCode: 53)
+        #expect(closed == ["preview", "agents"])
+        agents.stop()
+    }
+
     @Test func onlyAPlainEscIsTaken() {
         _ = NSApplication.shared
         var closed = 0

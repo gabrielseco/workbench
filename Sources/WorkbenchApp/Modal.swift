@@ -72,21 +72,22 @@ enum ModalText {
     }
 }
 
-/// Esc for the modals that are up, newest first: only the last one hears it, so a Diff over a Review closes the Diff and the next Esc the
-/// Review. A local key monitor takes the key before the responder chain, and swallows it.
+/// Esc for the modals that are up: only the one on top hears it (the highest `layer`; a later one of the same layer), so a Diff over a Review
+/// closes the Diff and the next Esc the Review, whichever was opened first. A local key monitor takes the key before the responder chain,
+/// and swallows it.
 @MainActor final class EscapeKey {
-    private static var stack: [ObjectIdentifier] = []
+    private static var stack: [(id: ObjectIdentifier, layer: Int)] = []
     private var monitor: Any?
 
-    func start(_ close: @escaping () -> Void) {
+    func start(layer: Int = 0, _ close: @escaping () -> Void) {
         guard monitor == nil else { return }
         let id = ObjectIdentifier(self)
-        Self.stack.append(id)
+        Self.stack.append((id, layer))
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // 53 is Esc; a modified one (⌘⎋) is not ours.
             let held: NSEvent.ModifierFlags = [.command, .control, .option]
             guard event.keyCode == 53, event.modifierFlags.isDisjoint(with: held) else { return event }
-            let isTop = MainActor.assumeIsolated { Self.stack.last == id }
+            let isTop = MainActor.assumeIsolated { Self.top == id }
             guard isTop else { return event }
             MainActor.assumeIsolated { close() }
             return nil
@@ -96,7 +97,11 @@ enum ModalText {
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        Self.stack.removeAll { $0 == ObjectIdentifier(self) }
+        Self.stack.removeAll { $0.id == ObjectIdentifier(self) }
+    }
+
+    private static var top: ObjectIdentifier? {
+        stack.enumerated().max { ($0.element.layer, $0.offset) < ($1.element.layer, $1.offset) }?.element.id
     }
 
     isolated deinit { stop() }
@@ -106,16 +111,18 @@ enum ModalText {
 private struct ModalCard<Accessory: View, Content: View>: View {
     var title: String
     var size: ModalSize
+    var layer: Int
     var close: () -> Void
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
     @State private var key = EscapeKey()
+    @Environment(\.modalRoom) private var window
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack {
-                SectionLabel(title.uppercased())
-                Spacer()
+                SectionLabel(title.uppercased()).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: Space.m)
                 accessory()
                 Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -125,6 +132,8 @@ private struct ModalCard<Accessory: View, Content: View>: View {
         }
         .padding(.horizontal, Space.l).padding(.vertical, Space.l)
         .frame(width: size.width)
+        // A card as wide as its content still stays in the window: a long title is cut, never pushed off the edge.
+        .frame(maxWidth: size.width == nil ? max(window.width - 2 * Space.xl, 0) : nil)
         // A card with no set width is as wide as its content: the header's Spacer would otherwise take all the window.
         .fixedSize(horizontal: size.width == nil, vertical: false)
         .card(.popover)
@@ -132,7 +141,7 @@ private struct ModalCard<Accessory: View, Content: View>: View {
         // Esc closes the topmost modal wherever the keyboard is. It is taken before the responder chain sees it, because the chain closed
         // the wrong thing: a text field behind a card keeps the keyboard though it is disabled, and took Esc for the screen it is on (it
         // closed the New goal screen under a preview and left the card up), and a card with nothing focused heard no Esc at all.
-        .onAppear { key.start(close) }
+        .onAppear { key.start(layer: layer, close) }
         .onDisappear { key.stop() }
     }
 }
@@ -142,6 +151,7 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
     @Binding var isPresented: Bool
     var size: ModalSize
     var placement: ModalPlacement
+    var layer: Int
     var closesOnOutsideClick: Bool
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var presented: () -> Presented
@@ -157,7 +167,7 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
                             Color.black.opacity(0.12).contentShape(Rectangle())
                                 .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
                             ModalCard(
-                                title: title, size: size, close: { isPresented = false }, accessory: accessory,
+                                title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
                                 content: presented)
                                 .padding(.top, placement == .centered ? 0 : Space.giant)
                                 .padding(.leading, placement == .centered ? 0 : Space.m)
@@ -177,25 +187,26 @@ extension View {
     /// A card over the window with a veil behind it, a title, and Esc and a close button as the way out. Every modal in the app is this:
     /// a different look or behaviour is a new `size`, `placement` or prop here, not a `.sheet` or an overlay written in a view
     /// (`scripts/check-banned-apis.sh` fails one). Pass `closesOnOutsideClick: false` where a stray click would lose typed text. `accessory`
-    /// puts controls beside the close button (a pager, a toggle).
+    /// puts controls beside the close button (a pager, a toggle). `layer` says which is on top when two are up: the order they are chained
+    /// in (a later one draws over an earlier one), so Esc closes the one you see (`AppModals.swift` numbers them).
     func modal<Accessory: View, Presented: View>(
-        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered,
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
         closesOnOutsideClick: Bool = true, @ViewBuilder accessory: @escaping () -> Accessory,
         @ViewBuilder content: @escaping () -> Presented
     ) -> some View {
         modifier(
             ModalPresentation(
-                title: title, isPresented: isPresented, size: size, placement: placement,
+                title: title, isPresented: isPresented, size: size, placement: placement, layer: layer,
                 closesOnOutsideClick: closesOnOutsideClick, accessory: accessory, presented: content))
     }
 
     /// The same with nothing beside the close button.
     func modal<Presented: View>(
-        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered,
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
         closesOnOutsideClick: Bool = true, @ViewBuilder content: @escaping () -> Presented
     ) -> some View {
         modal(
-            title, isPresented: isPresented, size: size, placement: placement, closesOnOutsideClick: closesOnOutsideClick,
-            accessory: { EmptyView() }, content: content)
+            title, isPresented: isPresented, size: size, placement: placement, layer: layer,
+            closesOnOutsideClick: closesOnOutsideClick, accessory: { EmptyView() }, content: content)
     }
 }
