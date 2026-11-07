@@ -8,12 +8,11 @@ import Testing
     @Test func eachStyleRoundsByItsOwnRadius() {
         #expect(CardStyle.panel.radius == Radius.card && Radius.card == 12)
         #expect(CardStyle.popover.radius == Radius.popover && Radius.popover == 14)
-        #expect(CardStyle.overlay.radius == Radius.overlay && Radius.overlay == 18)
     }
 
     @Test func aPanelsLineIsCentredOnItsEdgeAndTheSystemCardsAreInsideIt() {
         #expect(!CardStyle.panel.hairlineInside)
-        #expect(CardStyle.popover.hairlineInside && CardStyle.overlay.hairlineInside)
+        #expect(CardStyle.popover.hairlineInside)
     }
 
     /// The alpha of the pixel at (x, y) of a 60 x 60 red square wrapped in a card; nil if it could not be drawn.

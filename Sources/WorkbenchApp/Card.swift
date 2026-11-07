@@ -19,23 +19,19 @@ enum Radius {
     static let quiet: CGFloat = 10
     static let card: CGFloat = 12
     static let popover: CGFloat = 14
-    static let overlay: CGFloat = 18
 }
 
 /// Which surface a card is. Each has its own fill, radius and hairline; the content and the padding inside are the caller's.
 enum CardStyle {
     /// A panel on the thread screens: the goal, the decision, the run, the composer.
     case panel
-    /// A popover card (the project picker).
+    /// A modal card (`Modal.swift`: the project picker, the Agents card).
     case popover
-    /// The modal card laid over the window.
-    case overlay
 
     var radius: CGFloat {
         switch self {
         case .panel: Radius.card
         case .popover: Radius.popover
-        case .overlay: Radius.overlay
         }
     }
 

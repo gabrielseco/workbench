@@ -185,6 +185,10 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
     `ButtonStyles.swift`, `kind` and `size` as props), never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
     (`scripts/check-banned-apis.sh` fails one). Buttons side by side pass the same `size`. `.plain`, `.borderless` and `.link` are for icons,
     rows and links.
+- **A modal is `.modal(...)`** (`Modal.swift`): a card over a veil with a title, and Esc and a close button as the way out, with `size` and `placement`
+  as props. Never `.sheet(`, `.popover(`, `.alert(`, `.confirmationDialog(`, `.fullScreenCover(` or an overlay with your own veil
+  (`scripts/check-banned-apis.sh` fails one and names `.modal`). A look or behaviour it lacks is a new case or prop there, decided once. A few
+  files still use the old calls (`LEGACY_MODAL_FILES` in that script) and are moved over one slice at a time; never add to the list.
 - **Comments say why**, in one line, and are not added to restate code.
 
 ## Using Workbench on this repo

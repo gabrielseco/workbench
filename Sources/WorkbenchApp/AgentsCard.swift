@@ -1,27 +1,6 @@
 import SwiftUI
 import WorkbenchCore
 
-/// The Agents card over a light veil: a click on the veil closes it.
-struct AgentsLayer: View {
-    var store: ProjectStore
-
-    var body: some View {
-        ZStack {
-            if store.showingAgents {
-                Color.black.opacity(0.12).contentShape(Rectangle())
-                    .onTapGesture { store.showingAgents = false }.transition(.opacity)
-                AgentsCard(store: store).transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: store.showingAgents)
-        .accessibilityAddTraits(store.showingAgents ? .isModal : [])
-        // What an edit said is for the card: it is not left on the screen behind it.
-        .onChange(of: store.showingAgents) {
-            if !store.showingAgents { (store.actionError, store.actionNote) = (nil, nil) }
-        }
-    }
-}
-
 /// Each agent role of the open project and what it is set to, with a provider, an effort and a model to change (written to
 /// `.workbench/config.toml` through `ConfigEdit`, as `workbench config set` does). The verifier's model is read-only here.
 struct AgentsCard: View {
@@ -35,14 +14,6 @@ struct AgentsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            HStack {
-                SectionLabel("Agents".uppercased())
-                Spacer()
-                Button { store.showingAgents = false } label: { Image(systemName: "xmark").textStyle(.captionStrong) }
-                    // Nothing in the card takes keyboard focus, so `onExitCommand` alone never sees Escape; a cancel shortcut does.
-                    .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close the agents panel")
-            }
             if let setup = store.agentSetup {
                 VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(setup.rows) { row in
@@ -68,11 +39,8 @@ struct AgentsCard: View {
             Text("Changes are written to .workbench/config.toml, under [agents.<role>]; the rest of the file is left as it is.")
                 .role(.caption).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, Space.l).padding(.vertical, Space.l)
-        .frame(width: 560)
-        .card(.popover)
-        .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
-        .onExitCommand { store.showingAgents = false }
+        // What an edit said is for the card: it is not left on the screen behind it.
+        .onDisappear { (store.actionError, store.actionNote) = (nil, nil) }
         .task {
             store.actionError = nil
             store.actionNote = nil

@@ -68,6 +68,32 @@ dir=$(tree iconlink Good.swift 'struct A: View { var body: some View { Button("x
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail ".plain or .link was refused"
 rm -rf "$dir"
 
+dir=$(tree sheet Bad.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a .sheet( in a view passed ($code)"
+echo "$out" | grep -q 'use .modal(' || fail "the message does not say what to use: $out"
+rm -rf "$dir"
+
+for call in '.popover(isPresented: $on) { Text("y") }' '.alert("x", isPresented: $on) { }' '.confirmationDialog("x", isPresented: $on) { }' \
+    '.fullScreenCover(isPresented: $on) { Text("y") }' '.overlay { Color.black.opacity(0.1) }' '.accessibilityAddTraits(.isModal)' '.card(.popover)'; do
+  dir=$(tree call Bad.swift "struct A: View { var body: some View { Text(\"x\")$call } }")
+  run "$dir" >/dev/null; [ "$?" = 1 ] || fail "$call in a view passed"
+  rm -rf "$dir"
+done
+
+dir=$(tree modalfile Modal.swift 'struct A: View { var body: some View { Text("x").card(.popover).accessibilityAddTraits(.isModal) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the component's own overlay pieces were refused"
+rm -rf "$dir"
+
+dir=$(tree legacy FeedScreen.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a file on the legacy list was refused"
+rm -rf "$dir"
+
+dir=$(tree usemodal Good.swift '// .sheet( is the old way
+struct A: View { var body: some View { Text("x").modal("T", isPresented: $on, size: .small) { Text("y") } } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail ".modal( or a comment was refused"
+rm -rf "$dir"
+
 # and the real tree is clean
 sh "$script" >/dev/null 2>&1 || fail "the repository itself fails the check"
 [ "$status" = 0 ] && echo "banned-apis check: ok"
