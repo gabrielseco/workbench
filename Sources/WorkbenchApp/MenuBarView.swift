@@ -34,7 +34,7 @@ struct MenuBarPopover: View {
             header(model)
             content(model)
             if let note = model.tasksNote {
-                Label(note, systemImage: "exclamationmark.triangle").textStyle(.caption, .amber)
+                Message(.warning, note, size: .caption)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let note = model.deniedNote {
@@ -84,8 +84,7 @@ struct MenuBarPopover: View {
         case .opening(let name):
             Text("Opening \(name)…").textStyle(.heading)
         case .broken(let why):
-            Label(why, systemImage: "xmark.octagon.fill").textRole(.error)
-                .fixedSize(horizontal: false, vertical: true)
+            Message(.error, why)
         case .working(let title):
             Text("Nothing needs you").textStyle(.heading)
             Text("Working: \(title)").textStyle(.callout, .blue).lineLimit(2)
@@ -129,8 +128,7 @@ private struct RowCard: View {
         let tone = row.item.tone
         VStack(alignment: .leading, spacing: Space.xs) {
             HStack(spacing: Space.s) {
-                Image(systemName: tone == .broken ? "xmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(Theme.color(for: tone))
+                StatusMark(tone == .broken ? .failed : .warning)
                 Text(row.item.title).textStyle(.heading).lineLimit(1).truncationMode(.middle)
             }
             Text(row.detail).role(.caption).lineLimit(3)

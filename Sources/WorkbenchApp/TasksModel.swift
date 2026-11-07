@@ -32,13 +32,7 @@ enum TaskOutcomeStyle {
     }
 
     static func symbol(_ outcome: TaskOutcome?) -> String {
-        switch tone(outcome) {
-        case .working: "circle.inset.filled"
-        case .done: "checkmark.circle.fill"
-        case .idle: "minus.circle"
-        case .needsYou: "exclamationmark.circle.fill"
-        case .broken: "xmark.circle.fill"
-        }
+        tone(outcome).outcome?.symbol ?? "circle.inset.filled"
     }
 
     static func tone(_ level: TimerStatusLine.Level) -> TaskTone {
@@ -50,11 +44,7 @@ enum TaskOutcomeStyle {
     }
 
     static func symbol(_ level: TimerStatusLine.Level) -> String {
-        switch level {
-        case .ok: "checkmark.circle.fill"
-        case .warn: "exclamationmark.circle.fill"
-        case .fail: "xmark.circle.fill"
-        }
+        tone(level).outcome?.symbol ?? Outcome.unknown.symbol
     }
 
     /// Approval, in words; a task that does not load says so first.

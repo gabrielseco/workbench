@@ -38,7 +38,7 @@ struct GoalBlocks: View {
             criteria
             outOfScope
             if showsError, let error = store.goalEditError {
-                Label(error, systemImage: "xmark.octagon.fill").textRole(.error)
+                Message(.error, error)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,7 +52,7 @@ struct GoalBlocks: View {
     private var blockers: some View {
         VStack(alignment: .leading, spacing: Space.xxs) {
             ForEach(goal.blockers, id: \.self) {
-                Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).textStyle(.callout)
+                Message(.error, $0)
             }
         }
     }
@@ -142,9 +142,7 @@ struct GoalBlocks: View {
                         }
                     }
                     if let warning = row.warning {
-                        Label("Heads up: \(warning)", systemImage: "exclamationmark.triangle.fill")
-                            .textRole(.warning)
-                            .fixedSize(horizontal: false, vertical: true)
+                        Message(.warning, "Heads up: \(warning)")
                     }
                 }
                 if editable, goal.rows.count > 1 || goal.quick {

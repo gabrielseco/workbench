@@ -154,12 +154,12 @@ struct NewThreadScreen: View {
 
     /// A refusal asks the person to change something: amber, with their text kept. A project with no goal agent can name one.
     @ViewBuilder private var messages: some View {
-        if let problem = staging.problem { MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: problem) }
+        if let problem = staging.problem { Message(.warning, problem) }
         if store.goalAgentOff {
             VStack(alignment: .leading, spacing: Space.s) {
-                MessageRow(
-                    symbol: "exclamationmark.triangle.fill", tint: Theme.amber,
-                    text: "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
+                Message(
+                    .warning,
+                    "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
                         + "[agents.goal] to .workbench/config.toml and drafts this goal.")
                 HStack {
                     ForEach([AgentProviderID.claude, .codex], id: \.rawValue) { provider in
@@ -171,7 +171,7 @@ struct NewThreadScreen: View {
                 }
             }
         } else if let error = store.actionError {
-            MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: error)
+            Message(.warning, error)
         }
     }
 

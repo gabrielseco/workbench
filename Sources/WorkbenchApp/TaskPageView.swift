@@ -114,19 +114,11 @@ struct RunTonightCard: View {
 
     private var open: Bool { expanded ?? tonight.openByDefault }
 
-    private var tint: Color {
+    private var outcome: Outcome {
         switch tonight.verdict {
-        case .willRun: Theme.green
-        case .checkWarnings: Theme.amber
-        case .willNotRun: Theme.red
-        }
-    }
-
-    private var symbol: String {
-        switch tonight.verdict {
-        case .willRun: "checkmark.circle.fill"
-        case .checkWarnings: "exclamationmark.circle.fill"
-        case .willNotRun: "xmark.circle.fill"
+        case .willRun: .passed
+        case .checkWarnings: .warning
+        case .willNotRun: .failed
         }
     }
 
@@ -136,7 +128,7 @@ struct RunTonightCard: View {
                 expanded = !open
             } label: {
                 HStack(spacing: Space.m) {
-                    Image(systemName: symbol).foregroundStyle(tint)
+                    StatusMark(outcome)
                     VStack(alignment: .leading, spacing: Space.xxs) {
                         Text("WILL IT RUN TONIGHT?").textStyle(.captionStrong).tracking(0.6).foregroundStyle(.secondary)
                         Text(tonight.verdict.text).textStyle(.calloutStrong)
@@ -172,7 +164,7 @@ struct RunTonightCard: View {
                 }
             }
         }
-        .card(stroke: tonight.verdict == .willRun ? Theme.line : tint.opacity(0.45))
+        .card(stroke: tonight.verdict == .willRun ? Theme.line : outcome.tint.opacity(0.45))
     }
 
     /// A log that is gone has nothing to open: its path stays text.

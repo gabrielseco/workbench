@@ -11,7 +11,7 @@
 # across lines is found. Known limit: a string literal holding ` //` hides what follows it on that line.
 set -u
 cd "${UI_TOKENS_ROOT:-$(dirname "$0")/..}"
-COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift Space.swift Modal.swift'
+COMPONENTS='Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift Space.swift Modal.swift Outcome.swift'
 exempt=$(echo "$COMPONENTS" | sed 's/ /|/g; s/\./\\./g')
 status=0
 
