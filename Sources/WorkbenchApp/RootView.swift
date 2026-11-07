@@ -96,11 +96,11 @@ struct AgentsPill: View {
             HStack(spacing: Space.s) {
                 Image(systemName: "cpu").textStyle(.captionStrong, .secondary)
                 // A model named by hand can be long: truncate so the base, spend and state keep their room.
-                Text(Self.text(store.agentSetup)).textStyle(.body).lineLimit(1).truncationMode(.tail)
+                Text(Self.text(store.agentSetup)).textStyle(.body).lineLimit(1).truncationMode(.tail).frame(maxWidth: 220)
             }
             .pill(style: .control(hovered: hovered, selected: store.showingAgents), size: .large)
         }
-        .buttonStyle(.plain).frame(maxWidth: 260)
+        .buttonStyle(.plain).fixedSize()
         .disabled(store.project == nil)
         .onHover { hovered = $0 }
         .accessibilityLabel("Agents")
