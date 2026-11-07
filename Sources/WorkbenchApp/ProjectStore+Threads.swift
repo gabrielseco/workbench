@@ -99,7 +99,7 @@ extension ProjectStore {
             threads.pullRequests[id] = read
             threads.pullRequestsReadAt[id] = .now
             // A merge goes into the thread's log, so it is known from then on without asking GitHub.
-            if let read, read.state == .merged { await recordMerge(read, thread: id, in: project) }
+            if let read, read.state == .merged { await recordMerge(read, thread: id, in: project, generation: mine) }
             // Each answer is shown as it comes, not after the last thread has been asked about.
             await refreshThreadList(force: true)
         }
@@ -107,17 +107,20 @@ extension ProjectStore {
 
     /// Writes `pr.merged` to the thread's log (it only writes a file in the project, so the real writer runs in tests too). A write
     /// that failed is kept and tried again on the next poll, so a log another process held does not leave the merge unrecorded.
-    private func recordMerge(_ status: PRStatus, thread: String, in project: Project) async {
-        guard let git = try? GitRunner.discover() else { return }
+    /// `mine` is the project's generation when the merge was read: an answer for a project that is no longer open is dropped, never kept.
+    func recordMerge(_ status: PRStatus, thread: String, in project: Project, generation mine: Int) async {
+        guard mine == generation, let git = try? GitRunner.discover() else { return }
         let result = await ThreadService(project: project, git: git).recordMerge(id: thread, status: status)
+        guard mine == generation else { return }
         if result == .failed { threads.unwrittenMerges[thread] = status } else { threads.unwrittenMerges[thread] = nil }
     }
 
     /// Tries again the merges whose write failed.
     func retryMergeWrites() async {
         guard let project else { return }
+        let mine = generation
         for (thread, status) in threads.unwrittenMerges {
-            await recordMerge(status, thread: thread, in: project)
+            await recordMerge(status, thread: thread, in: project, generation: mine)
         }
         await refreshThreadList(force: true)
     }
@@ -127,8 +130,11 @@ extension ProjectStore {
         guard threads.pullRequests[thread] != status else { return }
         threads.pullRequests[thread] = status
         threads.pullRequestsReadAt[thread] = .now
+        let (project, mine) = (project, generation)
         Task {
-            if let project, let status, status.state == .merged { await recordMerge(status, thread: thread, in: project) }
+            if let project, let status, status.state == .merged {
+                await recordMerge(status, thread: thread, in: project, generation: mine)
+            }
             await refreshThreadList(force: true)
         }
     }

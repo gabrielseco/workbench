@@ -30,6 +30,24 @@ import WorkbenchCore
         #expect(!store.pullRequestCIIsDue && github.count < 1)
     }
 
+    @Test func aMergeReadForAProjectThatIsNoLongerOpenIsNeitherWrittenNorKept() async throws {
+        let fixture = try await AppFixture()
+        keptLoggedMergeFixtures.append(fixture)
+        try await fixture.addThread("a", approved: true, title: "Shipped a")
+        try fixture.turn("a", 1)
+        try fixture.decide("a", "accepted")
+        try fixture.ship("a", number: 7)
+        let store = ProjectStore(preferences: MemoryPreferences(), actions: GoalActions())
+        #expect(await store.open(fixture.root))
+        let merged = PRStatus(number: 7, state: .merged, head: String(repeating: "a", count: 40), checks: nil)
+        // A generation older than the open project's: the answer belongs to a project that was closed.
+        await store.recordMerge(merged, thread: "a", in: fixture.project, generation: store.generation - 1)
+        let events = try EventLogReader.read(at: fixture.project.eventsURL("a")).events
+        #expect(!events.contains { $0.kind == .prMerged } && store.threads.unwrittenMerges.isEmpty)
+        await store.recordMerge(merged, thread: "a", in: fixture.project, generation: store.generation)
+        #expect(try EventLogReader.read(at: fixture.project.eventsURL("a")).events.contains { $0.kind == .prMerged })
+    }
+
     private enum Failure: Error { case notAThread }
     private final class Reads: @unchecked Sendable { var count = 0 }
 }
