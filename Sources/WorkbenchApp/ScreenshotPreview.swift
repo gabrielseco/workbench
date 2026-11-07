@@ -19,7 +19,11 @@ import SwiftUI
     private let staged: (staging: AttachmentStaging, id: UUID)?
     /// Whether it belongs to the thread feed (the verifier's screenshots), so it is not left over another screen.
     let needsFeed: Bool
+    /// The picture on screen. Paging keeps the one before until the next is decoded, so the card does not shrink to its waiting size
+    /// and grow again with every step.
     private(set) var decoded: StagedScreenshotImage?
+    /// The pictures next to the one shown, decoded ahead so a step to them has nothing to wait for.
+    private var neighbours: [URL: StagedScreenshotImage] = [:]
     private(set) var missing = false
     var actualSize = false
 
@@ -55,16 +59,35 @@ import SwiftUI
 
     func go(_ to: Int) {
         index = min(max(to, 0), shots.count - 1)
-        (decoded, missing, actualSize) = (nil, false, false)
+        (missing, actualSize) = (false, false)
+        // A neighbour decoded ahead is there at once; otherwise the picture before stays until this one is decoded.
+        if let ready = neighbours[shot.url] { decoded = ready }
     }
 
-    /// Decodes the shot on screen. Paging cancels the task, but the detached decode still finishes: a superseded one must not replace
-    /// the current picture.
+    /// Decodes the shot on screen, then the ones beside it. Paging cancels the task, but the detached decode still finishes: a
+    /// superseded one must not replace the current picture.
     func load() async {
         let url = shot.url
-        let loaded = await Task.detached(priority: .userInitiated) { StagedScreenshotImage.decode(url) }.value
+        let loaded: StagedScreenshotImage?
+        if let ready = neighbours[url] {
+            loaded = ready
+        } else {
+            loaded = await Task.detached(priority: .userInitiated) { StagedScreenshotImage.decode(url) }.value
+        }
         guard !Task.isCancelled, url == shot.url else { return }
         (decoded, missing) = (loaded, loaded == nil)
+        await decodeNeighbours(of: index)
+    }
+
+    /// Keeps only the pictures beside `index` (at most two), so paging through many large screenshots does not hold them all.
+    private func decodeNeighbours(of index: Int) async {
+        let wanted = [index - 1, index + 1].filter { shots.indices.contains($0) }.map { shots[$0].url }
+        neighbours = neighbours.filter { wanted.contains($0.key) }
+        for url in wanted where neighbours[url] == nil {
+            let image = await Task.detached(priority: .utility) { StagedScreenshotImage.decode(url) }.value
+            guard !Task.isCancelled, index == self.index else { return }
+            neighbours[url] = image
+        }
     }
 
     /// The room the picture can take: the window's, less a margin round the card and the card's own padding and header.

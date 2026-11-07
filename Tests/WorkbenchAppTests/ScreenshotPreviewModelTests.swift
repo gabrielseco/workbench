@@ -29,11 +29,30 @@ import UniformTypeIdentifiers
         #expect(ScreenshotPreviewModel.proof(shots(2), at: 7).index == 1, "an index past the end opens the last")
     }
 
-    @Test func pagingDropsThePictureAndTheZoomOfTheOneBefore() {
-        let model = ScreenshotPreviewModel.proof(shots(2), at: 0)
+    @Test func pagingKeepsThePictureOnScreenUntilTheNextIsDecodedAndDropsTheZoom() async throws {
+        let (small, big) = (try png(width: 600, height: 400), try png(width: 900, height: 700))
+        defer { [small, big].forEach { try? FileManager.default.removeItem(at: $0) } }
+        let model = ScreenshotPreviewModel.proof([ProofShot(url: small, caption: "A"), ProofShot(url: big, caption: "B")], at: 0)
+        await model.load()
+        #expect(model.decoded?.pixels == CGSize(width: 600, height: 400))
         model.actualSize = true
+        // The next one was decoded ahead, so the step shows it at once and the card is not sized to its waiting state in between.
         model.go(1)
-        #expect(model.decoded == nil && !model.actualSize, "the next one starts fitted, and waits for its own decode")
+        #expect(model.decoded?.pixels == CGSize(width: 900, height: 700) && !model.actualSize)
+    }
+
+    @Test func aPictureNotDecodedAheadLeavesTheOneBeforeInPlaceInsteadOfAnEmptyCard() async throws {
+        let sizes = [(600, 400), (900, 700), (700, 500)]
+        let files = try sizes.map { try png(width: $0.0, height: $0.1) }
+        defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
+        let model = ScreenshotPreviewModel.proof(files.map { ProofShot(url: $0, caption: "S") }, at: 0)
+        await model.load()
+        // The third is two steps away, so it was not decoded ahead: the first stays until the third is decoded.
+        model.go(2)
+        #expect(model.decoded?.pixels == CGSize(width: 600, height: 400) && !model.missing)
+        #expect(model.area(scale: 1, room: CGSize(width: 2000, height: 2000)) != ScreenshotPreviewModel.smallest)
+        await model.load()
+        #expect(model.decoded?.pixels == CGSize(width: 700, height: 500))
     }
 
     @Test func aStagedScreenshotIsNumberedAmongItsSiblingsAndGoesStaleWhenItIsRemoved() async throws {
