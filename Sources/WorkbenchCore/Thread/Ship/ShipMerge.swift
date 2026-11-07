@@ -107,22 +107,30 @@ extension ThreadService {
     }
 }
 
+/// What `recordMerge` did, so a caller retries only what failed.
+public enum MergeRecord: Sendable, Equatable {
+    case written, alreadyRecorded
+    /// The status is not the merge of the pull request the log names (open, closed, or another number): nothing to write.
+    case notApplicable
+    /// The log could not be written (held by another process, or not writable): try again.
+    case failed
+}
+
 extension ThreadService {
     /// Writes `pr.merged` for the thread when `status` (what GitHub said just now) is the merge of the pull request the log names, so
-    /// the log alone says it from then on. Nothing is written for a pull request that is not merged, for one the log does not name
-    /// (an earlier number), or for a merge already recorded; returns whether it wrote. A log that is locked or cannot be written
-    /// leaves things as they were and says so by returning false: the next read of GitHub tries again.
+    /// the log alone says it from then on. The check and the write happen under the log's lock, so two callers never both write.
     @discardableResult
-    public func recordMerge(id: String, status: PRStatus) async -> Bool {
-        guard status.state == .merged, SafeNames.isThreadID(id) else { return false }
-        let state = ThreadState.derive(
-            from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
-        guard let recorded = state.pullRequest, recorded.number == status.number, !state.isMerged else { return false }
+    public func recordMerge(id: String, status: PRStatus) async -> MergeRecord {
+        guard status.state == .merged, SafeNames.isThreadID(id) else { return .notApplicable }
         do {
-            try await withLog(id) { log in
+            return try await withLog(id) { log in
+                let state = ThreadState.derive(
+                    from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
+                guard let recorded = state.pullRequest, recorded.number == status.number else { return .notApplicable }
+                if state.isMerged { return .alreadyRecorded }
                 _ = try await log.append(.prMerged, data: ["number": .int(status.number), "head_sha": .string(status.head)])
+                return .written
             }
-            return true
-        } catch { return false }
+        } catch { return .failed }
     }
 }

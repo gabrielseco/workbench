@@ -33,12 +33,14 @@ struct ThreadListing: Equatable, Sendable {
     /// When each was last asked for, so a poll asks again only after `pullRequestInterval`.
     @ObservationIgnored var pullRequestsReadAt: [String: ContinuousClock.Instant] = [:]
     @ObservationIgnored var readingPullRequests = false
+    /// Merges GitHub confirmed whose `pr.merged` could not be written (the log was held): tried again on the next poll.
+    @ObservationIgnored var unwrittenMerges: [String: PRStatus] = [:]
 
     /// How long a listed pull request's status is kept before it is read again.
     static let pullRequestInterval: Duration = .seconds(120)
 
     func forgetPullRequests() {
-        (pullRequests, pullRequestsReadAt) = ([:], [:])
+        (pullRequests, pullRequestsReadAt, unwrittenMerges) = ([:], [:], [:])
     }
 }
 

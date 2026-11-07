@@ -17,7 +17,7 @@ extension ProjectStore {
     /// The pull request on screen, as the scope its CI is kept for; nil when nothing shipped is shown. The generation is in it, so
     /// what was read before another project was opened is never shown again.
     private var pullRequestScope: String? {
-        guard case .thread(let shown) = screen, let pr = shown.state.pullRequest, !shown.state.cleaned,
+        guard case .thread(let shown) = screen, let pr = shown.state.pullRequest, !shown.state.cleaned, !shown.state.isMerged,
             let scope = currentScope
         else { return nil }
         return "\(generation)|\(scope)#\(pr.number)"

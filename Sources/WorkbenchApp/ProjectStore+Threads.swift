@@ -70,6 +70,7 @@ extension ProjectStore {
     func readGitHubIfDue() {
         if pullRequestCIIsDue { Task { await refreshPullRequestCI() } }
         if pullRequestsAreDue { Task { await refreshPullRequests() } }
+        if !threads.unwrittenMerges.isEmpty { Task { await retryMergeWrites() } }
     }
 
     /// The listed threads whose shipped pull request GitHub has not been asked about for `pullRequestInterval`.
@@ -98,16 +99,27 @@ extension ProjectStore {
             threads.pullRequests[id] = read
             threads.pullRequestsReadAt[id] = .now
             // A merge goes into the thread's log, so it is known from then on without asking GitHub.
-            if let read, read.state == .merged { _ = await recordMerge(read, thread: id, in: project) }
+            if let read, read.state == .merged { await recordMerge(read, thread: id, in: project) }
             // Each answer is shown as it comes, not after the last thread has been asked about.
             await refreshThreadList(force: true)
         }
     }
 
-    /// Writes `pr.merged` to the thread's log: it only writes a file in the project, so the real writer runs in tests too.
-    private func recordMerge(_ status: PRStatus, thread: String, in project: Project) async -> Bool {
-        guard let git = try? GitRunner.discover() else { return false }
-        return await ThreadService(project: project, git: git).recordMerge(id: thread, status: status)
+    /// Writes `pr.merged` to the thread's log (it only writes a file in the project, so the real writer runs in tests too). A write
+    /// that failed is kept and tried again on the next poll, so a log another process held does not leave the merge unrecorded.
+    private func recordMerge(_ status: PRStatus, thread: String, in project: Project) async {
+        guard let git = try? GitRunner.discover() else { return }
+        let result = await ThreadService(project: project, git: git).recordMerge(id: thread, status: status)
+        if result == .failed { threads.unwrittenMerges[thread] = status } else { threads.unwrittenMerges[thread] = nil }
+    }
+
+    /// Tries again the merges whose write failed.
+    func retryMergeWrites() async {
+        guard let project else { return }
+        for (thread, status) in threads.unwrittenMerges {
+            await recordMerge(status, thread: thread, in: project)
+        }
+        await refreshThreadList(force: true)
     }
 
     /// What the thread screen read of its own pull request is the row's too, so the rail and the banner agree.
@@ -116,7 +128,7 @@ extension ProjectStore {
         threads.pullRequests[thread] = status
         threads.pullRequestsReadAt[thread] = .now
         Task {
-            if let project, let status, status.state == .merged { _ = await recordMerge(status, thread: thread, in: project) }
+            if let project, let status, status.state == .merged { await recordMerge(status, thread: thread, in: project) }
             await refreshThreadList(force: true)
         }
     }
