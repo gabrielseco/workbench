@@ -165,7 +165,10 @@ import WorkbenchCore
         #expect(store.railLimit == 10)
         store.showMoreThreads()
         store.showMoreThreads()
-        #expect(store.railLimit == 30)
+        #expect(store.railLimit == 30 && store.railExpanded)
+        // Show less goes back to the first page in one press, however many pages were added.
+        store.showFewerThreads()
+        #expect(store.railLimit == 10 && !store.railExpanded)
     }
 
     @Test func theShownThreadIsAlwaysListed() {

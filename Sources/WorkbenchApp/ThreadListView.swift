@@ -36,6 +36,11 @@ struct ThreadListView: View {
                     .accessibilityLabel("Show \(min(RailModel.pageSize, hidden)) more threads, \(hidden) hidden")
                     .help("\(hidden) more thread\(hidden == 1 ? "" : "s") are not listed")
             }
+            if store.railExpanded {
+                Button("Show less") { store.showFewerThreads() }
+                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+                    .accessibilityLabel("Show fewer threads").help("Back to the newest \(RailModel.pageSize) threads")
+            }
             if older > 0 {
                 Text(older == 1 ? "1 older thread" : "\(older) older threads")
                     .role(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
