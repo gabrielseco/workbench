@@ -107,4 +107,14 @@ for rule in 'ProgressView\(\)|Spinner (Busy.swift)|Busy.swift' 'systemName: "xma
         status=1
     fi
 done
+# A single-line text field is `TextInput` (FormControls.swift): the system's bordered, a bare one and the grey well are its looks, and the type
+# style, the symbol, the name and the focus are props. A bare `TextField(` or `.textFieldStyle(.roundedBorder)` in a view is a fourth look.
+hits=$(grep -rnE --include='*.swift' '(^|[^A-Za-z0-9_])TextField\(|textFieldStyle\(\.roundedBorder\)' Sources/WorkbenchApp 2>/dev/null \
+    | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/FormControls.swift:' || true)
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: 'TextField(' in Sources/WorkbenchApp/: use TextInput(placeholder, text:, look: .bare/.bordered/.filled) (FormControls.swift). A look it lacks is a new" >&2
+    echo "       case there, not a field styled in a view. See AGENTS.md, Conventions." >&2
+    status=1
+fi
 exit $status

@@ -181,12 +181,11 @@ struct AgentRow: View {
     }
 
     private var modelField: some View {
-        TextField("Model name", text: $model)
-            .textFieldStyle(.plain).focused($typing).textStyle(.callout)
-            .padding(.horizontal, Space.m).padding(.vertical, Space.xs)
-            .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
-            .disabled(row.provider == nil || row.lockedFields.contains(.model))
-            .accessibilityLabel("\(row.role.rawValue.capitalized) other model")
+        TextInput(
+            "Model name", text: $model, look: .filled, style: .callout, dense: true,
+            label: "\(row.role.rawValue.capitalized) other model", focus: $typing
+        )
+        .disabled(row.provider == nil || row.lockedFields.contains(.model))
             .onSubmit(commitModel)
             .onChange(of: typing) { if !typing { commitModel() } }
     }
