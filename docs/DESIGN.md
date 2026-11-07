@@ -168,6 +168,15 @@ ships, and the mockup gets fixed.
   draft (too long, no goal agent, a draft that did not come out) is an amber row above the panel: the person has to change something
   before it can go on, it is not a broken thread. The New goal card's Chat kind says the same in amber.
 
+## Agents card
+
+The project's agent roles, read-only ([P25](plan/P25-project-agents.md)). A `popover` card centred over a light veil, opened by the rail's `Agents…` link
+(a quiet link under the Scheduled list, as `New task…`). Header: `AGENTS` (`SectionLabel`) and a close button. One row per role in the
+order goal, plan, run, judge, review, ship, verifier: the role in `.calloutStrong` with what it does under it (`.caption`), and at the right the
+provider and model (`.callout`, `Codex · gpt-6.1-terra`, or `Off` in secondary) with where it came from under it (`provider default`,
+`set in the config · effort high`, `no [agents.goal]: chat and drafting are off`). A footer line says the roles are set in `.workbench/config.toml`.
+A chat's footer and the new-thread screen name the goal agent in `.caption`. Nothing on the card writes.
+
 ## Tasks screen
 
 The rail's `Thread | Tasks` switch (a native segmented control) changes the centre between the thread screens and the project's

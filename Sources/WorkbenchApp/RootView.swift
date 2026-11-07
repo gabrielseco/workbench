@@ -18,9 +18,10 @@ struct RootView: View {
             FooterBar(store: store)
         }
         // The popover is modal as the sheet was: what is behind it takes no click and no Tab until it closes.
-        .disabled(store.pickingProject)
+        .disabled(store.pickingProject || store.showingAgents)
         .frame(minWidth: 900, minHeight: 600)
         .overlay(alignment: .topLeading) { ProjectPickerLayer(store: store) }
+        .overlay { AgentsLayer(store: store) }
     }
 }
 

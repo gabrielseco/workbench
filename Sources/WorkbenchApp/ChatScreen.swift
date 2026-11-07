@@ -163,6 +163,13 @@ struct ChatComposer: View {
 
     var body: some View {
         let state = state
+        composerBody(state)
+            // A chat opened on a relaunch has not read the config yet, and a message reads it again: the footer names the agent that
+            // answers, also after the config was edited while the chat was open.
+            .task(id: snapshot.state.chat?.messages.count) { await store.refreshAgentSetup() }
+    }
+
+    private func composerBody(_ state: ChatComposerState) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
             if let said = store.actionError {
                 // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
@@ -210,6 +217,9 @@ struct ChatComposer: View {
         HStack(spacing: Space.m) {
             Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
             Text("Chat only. No worktree, no run, no cost.").role(.caption)
+            if let note = store.chatAgentNote {
+                Text("· \(note)").role(.caption).accessibilityLabel("Agent: \(note)")
+            }
             Spacer(minLength: 12)
             if store.drafting {
                 ProgressView().controlSize(.small)

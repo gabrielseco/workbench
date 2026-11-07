@@ -47,11 +47,18 @@ struct NewThreadState: Equatable {
 
 /// The heading and what it promises.
 struct NewThreadHeading: View {
+    /// What a chat and a drafted goal talk to: nil while the config is not read, `.some(nil)` when the project has no goal agent.
+    var agent: String??
+
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             Text("What do you want to work on?").textStyle(.title)
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
                 .role(.detail)
+            if let agent {
+                Text(agent.map { "Chat and drafting use \($0)." } ?? "No goal agent is set, so chat and drafting are off.")
+                    .role(.caption)
+            }
         }
     }
 }
@@ -99,6 +106,12 @@ struct NewThreadScreen: View {
 
     private var busy: Bool { store.drafting || store.chatReplying }
 
+    /// What the heading says about the agent: nil until the config is read, `.some(nil)` when the project has no goal agent.
+    private var headingAgent: String?? {
+        if let setup = store.agentSetup { return .some(AgentSetup.chatAgent(for: setup)) }
+        return store.agentConfigMissing ? .some(nil) : nil
+    }
+
     private var state: NewThreadState {
         NewThreadState(text: store.newThreadText, screenshots: staging.items.count, pending: staging.pending, busy: busy)
     }
@@ -109,7 +122,7 @@ struct NewThreadScreen: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
-                    NewThreadHeading()
+                    NewThreadHeading(agent: headingAgent)
                     messages
                     composer
                     caption
@@ -127,6 +140,7 @@ struct NewThreadScreen: View {
             try? await Task.sleep(for: .milliseconds(40))
             focused = true
         }
+        .task { await store.refreshAgentSetup() }
     }
 
     private var header: some View {
