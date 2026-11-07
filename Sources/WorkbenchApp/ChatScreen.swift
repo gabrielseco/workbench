@@ -33,12 +33,6 @@ struct ChatComposerState: Equatable {
     var canSend: Bool { !ended && !busy && !isBlank && pending == 0 }
     var canMakeGoal: Bool { !ended && !busy && hasExchange }
 
-    /// One line of text high, growing a line at a time to six: the text box is not left to take what it is given.
-    static func editorHeight(for text: String) -> CGFloat {
-        let lines = min(6, max(1, text.split(separator: "\n", omittingEmptySubsequences: false).count))
-        return 30 + CGFloat(lines - 1) * 20
-    }
-
     enum Key: Equatable { case send, newline }
     /// Return sends; Shift-Return (or Option-Return) goes on a new line.
     static func key(shift: Bool, option: Bool) -> Key { shift || option ? .newline : .send }
@@ -236,6 +230,7 @@ struct ChatComposer: View {
             text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }),
             placeholder: state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…", style: .body,
             hidesScroller: true, showsPlaceholder: state.isBlank, accessibilityLabel: "Message", focus: $focused,
+            growth: .compact,
             onReturn: { press in
                 let key = ChatComposerState.key(
                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option))
@@ -244,9 +239,8 @@ struct ChatComposer: View {
                 return .handled
             }
         )
-        // The text view starts its text at the top edge, so the box is pushed down by Space.s and shortened by as much: one line then sits
-        // level with the + and Send squares beside it, and the row keeps its height.
-        .frame(height: ChatComposerState.editorHeight(for: state.text) - Space.s)
+        // The text view starts its text at the top edge, so the box is pushed down by Space.s: one line then sits level with the + and Send
+        // squares beside it, and the row keeps its height.
         .padding(.top, Space.s)
         .disabled(!state.canType)
         .opacity(state.replying ? 0.6 : 1)

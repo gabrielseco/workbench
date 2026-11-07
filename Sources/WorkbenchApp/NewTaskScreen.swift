@@ -76,9 +76,9 @@ struct NewTaskScreen: View {
             PlaceholderTextEditor(
                 text: Binding(get: { draft.request }, set: { tasks.creating?.request = $0 }),
                 placeholder: "What should it do, and when? For example: every weekday at 9, list the open TODOs and report them.",
-                style: .body, accessibilityLabel: "What the new task should do"
+                style: .body, accessibilityLabel: "What the new task should do", growth: .roomy
             )
-            .frame(minHeight: 96, maxHeight: 200).padding(Space.s).card()
+            .padding(Space.s).card()
         }
         HStack(spacing: Space.m) {
             Button("Propose") { Task { await tasks.proposeNew(store.project) } }

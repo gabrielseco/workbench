@@ -45,9 +45,8 @@ struct TaskEditCard: View {
         PlaceholderTextEditor(
             text: Binding(get: { tasks.editRequest }, set: { tasks.editRequest = $0 }),
             placeholder: "What should change? For example: run at 9 on weekdays, or skip the vendor folder.", style: .body,
-            accessibilityLabel: "What to change in this task", focus: $focused
+            accessibilityLabel: "What to change in this task", focus: $focused, growth: .regular
         )
-        .frame(minHeight: 56, maxHeight: 140)
         HStack(spacing: Space.m) {
             Button("Propose") { Task { await tasks.proposeEdit(store.project, entry) } }
                 .primaryButton(size: .compact)
