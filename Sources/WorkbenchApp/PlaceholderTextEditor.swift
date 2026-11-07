@@ -18,8 +18,13 @@ struct PlaceholderTextEditor: View {
     var showsPlaceholder: Bool?
     var accessibilityLabel: String?
     var focus: FocusState<Bool>.Binding?
+    /// Fits the box to its text, wrapped lines included, between this many lines and that many (then it scrolls). nil leaves the height to the caller.
+    var lines: ClosedRange<Int>?
     /// Return, and the keys that go with it: `.handled` to take it, `.ignored` to let the text view have it (a new line).
     var onReturn: ((KeyPress) -> KeyPress.Result)?
+
+    @State private var contentHeight: CGFloat = 0
+    @State private var lineHeight: CGFloat = 0
 
     /// Where the text view starts its text, relative to the box: the placeholder is drawn here. The leading 5 is the text container's line
     /// fragment padding; the text starts at the top edge.
@@ -34,6 +39,8 @@ struct PlaceholderTextEditor: View {
                 ) { $0.focused($1) }, onReturn
             ) { view, handler in view.onKeyPress(.return, phases: .down, action: handler) }, accessibilityLabel
         ) { $0.accessibilityLabel($1) }
+        .frame(height: fittedHeight)
+        .background(alignment: .topLeading) { if lines != nil { measuring } }
         .background { if hidesScroller { TextScrollerHider() } }
         .overlay(alignment: .topLeading) {
             if showsPlaceholder ?? text.isEmpty, !placeholder.isEmpty {
@@ -42,6 +49,34 @@ struct PlaceholderTextEditor: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+
+    /// The height for the text's rows, clamped to `lines`; nil until measured, so the first frame is not collapsed.
+    private var fittedHeight: CGFloat? {
+        guard let lines, lineHeight > 0 else { return nil }
+        let step = lineHeight + lineSpacing
+        let wrapped = ((contentHeight + lineSpacing) / step).rounded()
+        let rows = min(CGFloat(lines.upperBound), max(CGFloat(lines.lowerBound), wrapped))
+        return lineHeight + (rows - 1) * step
+    }
+
+    /// Two invisible copies of the text in the same face and width: the whole text, for how many rows it wraps into, and one line, for a row.
+    private var measuring: some View {
+        ZStack(alignment: .topLeading) {
+            // A trailing newline is a row to type on, and `Text` drops it, so it gets a space to hold the row.
+            Text(text.hasSuffix("\n") ? text + " " : text).textStyle(style).lineSpacing(lineSpacing)
+                .padding(.horizontal, Self.placeholderInset.leading).fixedSize(horizontal: false, vertical: true)
+                .background(GeometryReader { proxy in
+                    Color.clear.onAppear { contentHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { contentHeight = proxy.size.height }
+                })
+            Text("Ag").textStyle(style).fixedSize()
+                .background(GeometryReader { proxy in
+                    Color.clear.onAppear { lineHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { lineHeight = proxy.size.height }
+                })
+        }
+        .hidden().allowsHitTesting(false).accessibilityHidden(true)
     }
 
     /// A modifier applied only when its value is there: nothing is attached for a box that has no focus binding, no key handler or no label.

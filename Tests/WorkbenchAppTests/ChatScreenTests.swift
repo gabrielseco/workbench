@@ -88,12 +88,6 @@ import WorkbenchCore
         #expect(ChatComposerState.key(shift: false, option: true) == .newline)
     }
 
-    @Test func theTextBoxGrowsALineAtATimeAndStopsAtSix() {
-        #expect(ChatComposerState.editorHeight(for: "") == 30 && ChatComposerState.editorHeight(for: "one line") == 30)
-        #expect(ChatComposerState.editorHeight(for: "a\nb") == 50)
-        #expect(ChatComposerState.editorHeight(for: String(repeating: "x\n", count: 40)) == 130)
-    }
-
     // MARK: The way in
 
     @Test func aChatStartsAChatAndNoDraft() async throws {

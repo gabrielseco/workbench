@@ -12,9 +12,9 @@ struct GuidanceField: View {
             PlaceholderTextEditor(
                 text: Binding(get: { store.guidanceNote }, set: { store.guidanceNote = $0 }),
                 placeholder: "Anything the agent should change? Say what is wrong and what you expect instead.", style: .body,
-                accessibilityLabel: "Guidance for the agent", focus: $focused
+                accessibilityLabel: "Guidance for the agent", focus: $focused,
+                lines: 3...8
             )
-            .frame(minHeight: 72, maxHeight: 160)
             Text("The next turn also gets the failed check's output.").role(.caption)
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
