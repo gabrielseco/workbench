@@ -43,10 +43,6 @@ struct PreviewRail: View {
                 Button("New task…") { store.beginNewTask() }
                     .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
                     .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
-                Button("Agents…") { store.showingAgents = true }
-                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .disabled(store.project == nil).accessibilityLabel("Agents")
-                    .help("Which provider and model each agent role of this project uses")
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
             // One focus stop for the whole rail, so the arrows walk the threads and on into the tasks instead of stopping at the section edge.

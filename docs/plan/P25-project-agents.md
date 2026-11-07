@@ -18,8 +18,8 @@ nothing in the app said so. This phase shows the setup, then lets a person chang
   A row has the provider, the model (nil is the provider's own), the effort and where it came from: `configured` (the table names
   something), `providerDefault` (it names nothing, so the default runs) or `off` (no `[agents.goal]`, so chat and drafting are refused; or
   `[verifier] enabled = false`). It reads `resolvedGoalAgent`, `resolvedPlanAgent` and the other resolvers, so it shows what a command would run.
-- The card is project-level, not part of the Run settings inspector: that one is per thread and writes the goal file. It opens from an `Agents…`
-  link in the rail under Scheduled (as `New task…` does) and closes with Esc, the close button or a click outside.
+- The card is project-level, not part of the Run settings inspector: that one is per thread and writes the goal file. It opens from the agents pill in the
+  top bar (it names the run role's provider and model) or Agents… in the app menu (⌘,), and closes with Esc, the close button or a click outside.
 - A chat's footer and the new-thread screen name the goal agent (`Codex · gpt-6.1-terra`), or say that none is set.
 - Reading writes nothing; a config that does not load shows "could not be read" and the Doctor says why.
 

@@ -56,7 +56,7 @@ ships, and the mockup gets fixed.
 - **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each an 8 pt dot with a 1.5 pt ring (the colour the rail
   draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
-  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
+  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
   has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, **Threads** with a `+` (the New goal card, until the
   new-thread screen) and then **Scheduled · N** with the project's tasks. The rail lists the newest **ten** threads, newest first, plus every thread that
   needs you, is working or is broken (whatever its age) and the one on screen; a `Show 10 more` link adds ten at a time (the loader still stops at 50, then
@@ -171,7 +171,8 @@ ships, and the mockup gets fixed.
 ## Agents card
 
 The project's agent roles, and where they are changed ([P25](plan/P25-project-agents.md)). A `popover` card, 560 wide, centred over a light veil, opened by the
-rail's `Agents…` link (a quiet link under the Scheduled list, as `New task…`). Header: `AGENTS` (`SectionLabel`) and a close button. One row per role in
+agents pill beside the project pill in the top bar (a `.control` pill: a `cpu` mark and the run role's `Codex · model`, or `Agents` when the config is unread)
+or by Agents… in the app menu (⌘,). Header: `AGENTS` (`SectionLabel`) and a close button. One row per role in
 the order goal, plan, run, judge, review, ship, verifier. An editable row has the role in `.calloutStrong` with what it does under it (`.caption`); at the
 right a provider picker (`Claude`, `Codex`, and `Off` for goal) and an effort picker (`Default effort`, low … max); under them a model menu
 (`Default model`, the role's provider's names from `ModelCatalog`, the project's `[providers.<id>] models` and the models its roles use, then `Other…`, which shows a single-line
