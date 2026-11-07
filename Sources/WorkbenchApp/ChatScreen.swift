@@ -230,7 +230,7 @@ struct ChatComposer: View {
             text: Binding(get: { store.chatDraft }, set: { store.chatDraft = $0 }),
             placeholder: state.busy ? "Waiting for the agent…" : "Reply, or keep brainstorming…", style: .body,
             hidesScroller: true, showsPlaceholder: state.isBlank, accessibilityLabel: "Message", focus: $focused,
-            lines: 1...6,
+            growth: .compact,
             onReturn: { press in
                 let key = ChatComposerState.key(
                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option))

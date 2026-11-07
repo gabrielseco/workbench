@@ -76,7 +76,7 @@ struct NewTaskScreen: View {
             PlaceholderTextEditor(
                 text: Binding(get: { draft.request }, set: { tasks.creating?.request = $0 }),
                 placeholder: "What should it do, and when? For example: every weekday at 9, list the open TODOs and report them.",
-                style: .body, accessibilityLabel: "What the new task should do", lines: 4...10
+                style: .body, accessibilityLabel: "What the new task should do", growth: .roomy
             )
             .padding(Space.s).card()
         }
