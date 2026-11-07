@@ -30,6 +30,7 @@ public enum Attention: Sendable, Equatable {
         outcome: PullRequestOutcome = .open, currentHead: String? = nil
     ) -> Attention {
         if state.openTurn != nil || state.openCheck != nil || (state.adviceIsOpen && state.decision == nil) { return .working }
+        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome
         if let decision = state.decision {
             guard decision == "accepted", let pr = state.pullRequest, !state.cleaned, outcome == .open else { return .none }
             return pullRequest(pr, state: state, checks: checks, currentHead: currentHead)

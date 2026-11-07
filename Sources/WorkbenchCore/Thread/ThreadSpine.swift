@@ -51,6 +51,8 @@ public struct ThreadSpine: Sendable, Equatable {
         state: ThreadState, approval: ApprovalState? = nil, outcome: PullRequestOutcome = .open,
         checks: PRChecksSummary? = nil, currentHead: String? = nil
     ) -> ThreadSpine {
+        // A merge the log recorded is the outcome whatever the caller read.
+        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome
         let approved = approval.map { $0 == .approved } ?? (state.approvedGoalHash != nil)
         let review = state.review
         let decided = state.decision != nil

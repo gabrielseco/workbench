@@ -33,12 +33,14 @@ struct ThreadListing: Equatable, Sendable {
     /// When each was last asked for, so a poll asks again only after `pullRequestInterval`.
     @ObservationIgnored var pullRequestsReadAt: [String: ContinuousClock.Instant] = [:]
     @ObservationIgnored var readingPullRequests = false
+    /// Merges GitHub confirmed whose `pr.merged` could not be written (the log was held): tried again on the next poll.
+    @ObservationIgnored var unwrittenMerges: [String: PRStatus] = [:]
 
     /// How long a listed pull request's status is kept before it is read again.
     static let pullRequestInterval: Duration = .seconds(120)
 
     func forgetPullRequests() {
-        (pullRequests, pullRequestsReadAt) = ([:], [:])
+        (pullRequests, pullRequestsReadAt, unwrittenMerges) = ([:], [:], [:])
     }
 }
 
@@ -183,7 +185,8 @@ enum ThreadListLoader {
         // Only a status read for the pull request the log names counts: one for an earlier number says nothing of this one.
         let recorded = state.pullRequest
         let status = status.flatMap { $0.number == recorded?.number ? $0 : nil }
-        let outcome = outcome(status)
+        // A merge the log recorded needs no read of GitHub.
+        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome(status)
         let checks = status?.checksError == nil ? status?.checks : nil
         let spine = ThreadSpine.derive(
             state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)

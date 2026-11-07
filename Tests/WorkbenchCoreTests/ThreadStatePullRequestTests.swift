@@ -37,4 +37,21 @@ import Testing
         story.turn(1)
         #expect(story.state.lastTurnEndedSeq == 2)
     }
+
+    @Test func aMergeCountsOnlyForThePullRequestTheLogNames() {
+        var story = SpineStory()
+        story.approve()
+        story.turn(1)
+        story.decide("accepted")
+        story.ship(number: 482)
+        #expect(!story.state.isMerged)
+        story.add(.prMerged, ["number": 482, "head_sha": "deadbeef"])
+        #expect(story.state.isMerged)
+        // The log says merged, so the spine and attention agree without any read of GitHub.
+        let spine = ThreadSpine.derive(state: story.state)
+        #expect(Attention.derive(spine: spine, state: story.state) == .none)
+        // A later pull request is not the merged one.
+        story.ship(number: 483)
+        #expect(!story.state.isMerged)
+    }
 }

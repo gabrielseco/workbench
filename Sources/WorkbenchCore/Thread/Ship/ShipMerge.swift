@@ -106,3 +106,31 @@ extension ThreadService {
         return after
     }
 }
+
+/// What `recordMerge` did, so a caller retries only what failed.
+public enum MergeRecord: Sendable, Equatable {
+    case written, alreadyRecorded
+    /// The status is not the merge of the pull request the log names (open, closed, or another number): nothing to write.
+    case notApplicable
+    /// The log could not be written (held by another process, or not writable): try again.
+    case failed
+}
+
+extension ThreadService {
+    /// Writes `pr.merged` for the thread when `status` (what GitHub said just now) is the merge of the pull request the log names, so
+    /// the log alone says it from then on. The check and the write happen under the log's lock, so two callers never both write.
+    @discardableResult
+    public func recordMerge(id: String, status: PRStatus) async -> MergeRecord {
+        guard status.state == .merged, SafeNames.isThreadID(id) else { return .notApplicable }
+        do {
+            return try await withLog(id) { log in
+                let state = ThreadState.derive(
+                    from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
+                guard let recorded = state.pullRequest, recorded.number == status.number else { return .notApplicable }
+                if state.isMerged { return .alreadyRecorded }
+                _ = try await log.append(.prMerged, data: ["number": .int(status.number), "head_sha": .string(status.head)])
+                return .written
+            }
+        } catch { return .failed }
+    }
+}
