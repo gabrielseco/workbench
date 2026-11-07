@@ -101,6 +101,34 @@ import WorkbenchCore
         #expect(setup.row(.plan)?.reasoningEffort == "high" && setup.row(.ship)?.model == "haiku")
     }
 
+    @Test func theGoalAgentOffTakesItsWholeTableEvenWithKeysTheCardDoesNotShow() async throws {
+        let (store, fixture) = try await store(
+            config: "[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-5\"\nallow_unpriced = true\n")
+        let off = await store.turnGoalAgentOff()
+        #expect(off && store.actionError == nil, "\(String(describing: store.actionError))")
+        #expect(store.agentSetup?.row(.goal)?.source == .off)
+        #expect(try !text(fixture).contains("allow_unpriced"))
+    }
+
+    @Test func editsToTheSameKeyLandInTheOrderTheyWereMade() async throws {
+        let (store, _) = try await store()
+        let models = ["opus", "sonnet", "haiku", "opus", "sonnet", "haiku"]
+        var tasks: [Task<Bool, Never>] = []
+        for model in models { tasks.append(Task { await store.setAgent(.run, .model, to: model) }) }
+        for task in tasks { _ = await task.value }
+        #expect(store.agentSetup?.row(.run)?.model == "haiku", "the last choice wins")
+    }
+
+    @Test func aRowThatAStageDecidesIsNotEditable() async throws {
+        let stage = "[review]\nstages = [\"pr-review\"]\n[review.stage.pr-review]\nprovider = \"codex\"\n"
+        let (store, _) = try await store(config: stage)
+        let row = try #require(store.agentSetup?.row(.review))
+        #expect(row.lockedBy != nil)
+        let edit = AgentEdit(set: { _, _, _ in true }, goalOff: { true })
+        let editable = try drawn(AgentRow(row: row, edit: edit))
+        #expect(try drawn(AgentRow(row: row)) != editable, "the editable form differs, so the card must not use it")
+    }
+
     private func drawn(_ view: some View, height: CGFloat = 200) throws -> Data? {
         let framed = view.frame(width: 560, height: height).background(Color(nsColor: .windowBackgroundColor))
         let renderer = ImageRenderer(content: framed)

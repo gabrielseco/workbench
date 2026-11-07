@@ -43,7 +43,10 @@ struct AgentsCard: View {
             }
             if let setup = store.agentSetup {
                 VStack(alignment: .leading, spacing: Space.m) {
-                    ForEach(setup.rows) { row in AgentRow(row: row, edit: row.role == .verifier ? nil : edit) }
+                    ForEach(setup.rows) { row in
+                        // The verifier's model is not an agent key, and a stage that decides a role would ignore an edit of its table.
+                        AgentRow(row: row, edit: row.role == .verifier || row.lockedBy != nil ? nil : edit)
+                    }
                 }
             } else if store.agentConfigMissing {
                 Text(
@@ -198,6 +201,7 @@ struct AgentRow: View {
 
     /// Where the setting came from, with the effort when one is set.
     private var detail: String {
+        if let table = row.lockedBy { return "set by \(table): change it in the config" }
         switch row.source {
         case .off: return row.role == .goal ? "no [agents.goal]: chat and drafting are off" : "turned off in the config"
         case .providerDefault: return "provider default"

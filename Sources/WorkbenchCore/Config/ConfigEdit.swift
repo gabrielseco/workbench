@@ -88,8 +88,63 @@ public enum ConfigEdit {
         try edit(key, value: nil, in: project, beforeWrite: {})
     }
 
+    /// Removes the whole `[agents.<role>]` table (every key in it) in one write: the way a role goes off when its keys cannot be taken
+    /// out one at a time (a goal table needs a provider). Comments stay as lines of their own. True when there was a table to remove.
+    public static func removeRole(_ role: AgentRole, in project: Project) throws -> Bool {
+        try transact(in: project, beforeWrite: {}, body: { original, document in
+            let name = "agents.\(role.rawValue)"
+            guard let table = document.tables[name] else { return (nil, false) }
+            var lines = original.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            let hadFinalNewline = original.hasSuffix("\n")
+            if hadFinalNewline { lines.removeLast() }
+            // Highest line first, so the numbers of the lines above stay right.
+            var drop = table.entries.values.map { $0.line - 1 }
+            drop.sort(by: >)
+            for index in drop { lines.remove(at: index) }
+            let header = table.line - 1
+            if let at = commentStart(lines[header]) {
+                lines[header] = String(lines[header].dropFirst(at))
+            } else {
+                lines.remove(at: header)
+                if header > 0, lines[header - 1].trimmingCharacters(in: .whitespaces).isEmpty {
+                    lines.remove(at: header - 1)
+                } else if header < lines.count, lines[header].trimmingCharacters(in: .whitespaces).isEmpty {
+                    lines.remove(at: header)
+                }
+            }
+            return (join(lines, finalNewline: hadFinalNewline), true)
+        })
+    }
+
     /// `beforeWrite` runs between the last read and the write: a test changes the file there.
     static func edit(_ key: Key, value: String?, in project: Project, beforeWrite: () -> Void) throws -> Change {
+        try transact(in: project, beforeWrite: beforeWrite, body: { original, before in
+            let old = stringValue(before, key)
+            if value == nil, old == nil { throw Failure.notSet(key) }
+            if old == value { return (nil, Change(key: key, old: old, new: value)) }
+            let text = try rewritten(original, key: key, value: value, document: before)
+            do {
+                let config = try Config.parse(text)
+                guard stringValue(TOMLSubset.parse(text).document, key) == value else {
+                    throw Failure.invalid("the key was not read back")
+                }
+                if key.field == .provider, let value, config.agents.selection(key.role).provider?.rawValue != value {
+                    throw Failure.invalid("the provider was not read back")
+                }
+            } catch let failure as Failure {
+                throw failure
+            } catch {
+                throw Failure.invalid("\(error)")
+            }
+            return (text, Change(key: key, old: old, new: value))
+        })
+    }
+
+    /// Reads the config under the folder lock, lets `body` say what the new text is (nil: nothing to write), checks that it loads, and writes
+    /// it atomically with the file's mode unless somebody changed the file meanwhile.
+    private static func transact<T>(
+        in project: Project, beforeWrite: () -> Void, body: (String, TOMLDocument) throws -> (String?, T)
+    ) throws -> T {
         let url = project.configURL
         // Two edits at once would each read the same file and the second write would lose the first: one at a time. The lock is
         // on the folder, which is never replaced or removed, so no edit ever waits on a lock another has deleted.
@@ -115,24 +170,9 @@ public enum ConfigEdit {
         } catch {
             throw Failure.doesNotLoad("\(error)")
         }
-        let old = stringValue(before, key)
-        if value == nil, old == nil { throw Failure.notSet(key) }
-        if old == value { return Change(key: key, old: old, new: value) }
-
-        let text = try rewritten(original, key: key, value: value, document: before)
-        do {
-            let config = try Config.parse(text)
-            guard stringValue(TOMLSubset.parse(text).document, key) == value else {
-                throw Failure.invalid("the key was not read back")
-            }
-            if key.field == .provider, let value, config.agents.selection(key.role).provider?.rawValue != value {
-                throw Failure.invalid("the provider was not read back")
-            }
-        } catch let failure as Failure {
-            throw failure
-        } catch {
-            throw Failure.invalid("\(error)")
-        }
+        let (changed, result) = try body(original, before)
+        guard let text = changed else { return result }
+        do { _ = try Config.parse(text) } catch { throw Failure.invalid("\(error)") }
 
         beforeWrite()
         // A change between the read and now is somebody else's: it is not overwritten.
@@ -144,7 +184,7 @@ public enum ConfigEdit {
         } catch {
             throw Failure.notWritten("\(error)")
         }
-        return Change(key: key, old: old, new: value)
+        return result
     }
 
     private static func stringValue(_ document: TOMLDocument, _ key: Key) -> String? {

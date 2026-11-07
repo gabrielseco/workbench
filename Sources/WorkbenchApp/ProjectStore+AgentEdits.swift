@@ -13,14 +13,10 @@ extension ProjectStore {
         }
     }
 
-    /// The goal agent off: its provider, model and effort go together, so the config still loads (a goal table needs a provider).
+    /// The goal agent off: its whole table goes in one write, so the config still loads (a goal table needs a provider).
     @discardableResult
     func turnGoalAgentOff() async -> Bool {
-        await edit(role: .goal) { project in
-            for field in [ConfigEdit.Field.model, .reasoningEffort, .provider] {
-                try Self.remove(ConfigEdit.Key(role: .goal, field: field), in: project)
-            }
-        }
+        await edit(role: .goal) { project in _ = try ConfigEdit.removeRole(.goal, in: project) }
     }
 
     /// Removing a key that is not set is already what was asked.
@@ -31,15 +27,21 @@ extension ProjectStore {
     /// True when the edit was written (or was already what the file said).
     private func edit(role: AgentRole, _ work: @escaping @Sendable (Project) throws -> Void) async -> Bool {
         guard let project else { return false }
-        let failure = await Task.detached { () -> String? in
-            do {
-                try work(project)
-                return nil
-            } catch { return "\(error)" }
-        }.value
+        // One at a time and in the order they were made, off the main thread; the note reads the thread logs, so it is made there too.
+        let (failure, note) = await AgentEditQueue.shared.run { () -> (String?, String?) in
+            do { try work(project) } catch { return ("\(error)", nil) }
+            return (nil, role == .run ? AgentSetup.runChangeNote(in: project) : nil)
+        }
         actionError = failure
-        actionNote = failure == nil && role == .run ? AgentSetup.runChangeNote(in: project) : nil
+        actionNote = note
         await refreshAgentSetup()
         return failure == nil
     }
+}
+
+/// The edits of the Agents card, run one after another in the order they arrived, so a later choice is never overwritten by an earlier one.
+private actor AgentEditQueue {
+    static let shared = AgentEditQueue()
+
+    func run<T: Sendable>(_ work: @Sendable () -> T) -> T { work() }
 }

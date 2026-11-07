@@ -186,4 +186,14 @@ import Testing
         #expect(!change.written && change.old == "opus")
         #expect(try text(p) == original)
     }
+
+    @Test func aRoleTableGoesWholeInOneWriteWithItsCommentsAndOtherKeys() throws {
+        let goal = "[agents.goal] # who drafts\nprovider = \"codex\"\nmodel = \"gpt-6.1-terra\"\nallow_unpriced = true\n"
+        let original = "check_command = \"make\"\n\n" + goal + "\n[agents.run]\nmodel = \"opus\"\n\n" + Self.tools
+        let p = try project(original)
+        #expect(try ConfigEdit.removeRole(.goal, in: p))
+        #expect(try text(p) == "check_command = \"make\"\n\n# who drafts\n\n[agents.run]\nmodel = \"opus\"\n\n" + Self.tools)
+        #expect(try Config.load(from: p.configURL).resolvedGoalAgent == nil)
+        #expect(try !ConfigEdit.removeRole(.goal, in: p), "nothing to remove the second time")
+    }
 }

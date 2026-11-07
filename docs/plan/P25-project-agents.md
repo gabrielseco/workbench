@@ -41,3 +41,10 @@ call off the main thread (`ProjectStore.setAgent`; the goal agent off removes it
 followed by a fresh read of the config, so the card always shows what the file has and a refusal (a value the config would not load, no config file) is said in
 words. The model is a typed name: no list of known models is kept, since it would go stale. `AgentSetup.modelFit` flags only names it knows (`opus`, `sonnet`,
 `haiku`, `claude-*` on Codex; `gpt-*` and the o-series on Claude) and a provider change never clears the model silently. The verifier's model is read-only.
+
+Added by the review of slice 3: `ConfigEdit.removeRole` takes a whole `[agents.<role>]` table out in one write (the goal agent off: a goal table needs a provider, so
+its keys cannot go one at a time, and keys the card does not show, such as `allow_unpriced`, go with it); the card's edits run through one queue, in the order they were
+made; and a role that `[review.stage.pr-review]` decides is shown read-only with the stage's name (editing `[agents.review]` would change nothing).
+
+Next, as its own PR: a model menu per provider (Claude's aliases, the models any role in the config already names, and an optional `models = [...]` in `[providers.<id>]`, plus `Other…`).
+

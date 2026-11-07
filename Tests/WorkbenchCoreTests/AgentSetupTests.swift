@@ -67,6 +67,13 @@ import Testing
         #expect(row?.provider == .claude && row?.model == "opus" && row?.source == .configured, "\(String(describing: row))")
     }
 
+    @Test func aReviewStageThatDecidesTheRoleLocksItsRow() throws {
+        let stage = "[review]\nstages = [\"pr-review\"]\n[review.stage.pr-review]\nprovider = \"claude\"\nmodel = \"opus\""
+        #expect(try setup(stage).row(.review)?.lockedBy == "[review.stage.pr-review]")
+        #expect(try setup("[agents.review]\nprovider = \"claude\"").row(.review)?.lockedBy == nil)
+        #expect(try setup("").rows.allSatisfy { $0.lockedBy == nil })
+    }
+
     @Test func readingWritesNothing() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("agent-setup-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
