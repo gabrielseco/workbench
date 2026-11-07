@@ -337,9 +337,9 @@ import WorkbenchCore
         }
     }
 
-    /// The sheet hosts the existing Review screen: this proves it shows that screen when there is a review and says so when there is
+    /// The modal hosts the existing Review screen: this proves it shows that screen when there is a review and says so when there is
     /// none. What the Review screen draws is its own (a scroll view, which `ImageRenderer` cannot draw), seen in the live app.
-    @Test func theReviewDetailsSheetHostsTheReviewAndSaysWhenThereIsNone() async throws {
+    @Test func theReviewDetailsBodyHostsTheReviewAndSaysWhenThereIsNone() async throws {
         let fixture = try await AppFixture()
         keptFeedFixtures.append(fixture)
         try await fixture.addThread("t1", approved: true)
@@ -352,7 +352,7 @@ import WorkbenchCore
         let empty = ProjectStore(preferences: preferences, screen: .thread(shown), project: fixture.project)
         #expect(empty.review == nil)
         try differs(
-            ReviewDetailsSheet(snapshot: shown, store: reviewing), ReviewDetailsSheet(snapshot: shown, store: empty),
-            "the review in its sheet", width: 760, height: 560)
+            ReviewDetailsBody(snapshot: shown, store: reviewing), ReviewDetailsBody(snapshot: shown, store: empty),
+            "the review in its modal", width: 760, height: 560)
     }
 }

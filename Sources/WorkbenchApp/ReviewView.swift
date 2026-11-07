@@ -7,8 +7,6 @@ struct ReviewView: View {
     var finishedAt: Date?
     var store: ProjectStore
 
-    @State private var diffPath: String?
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.l) {
@@ -27,17 +25,12 @@ struct ReviewView: View {
                 }
                 actions
             }
-            .padding(Space.xxxl).frame(maxWidth: .infinity, alignment: .leading)
+            // It sits in a modal, whose title and padding set the left edge; the right keeps clear of the scroll bar.
+            .padding(.vertical, Space.m).padding(.trailing, Space.m).frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await store.loadSendBackGrants() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.refreshReview() }
-        }
-        .sheet(item: Binding(get: { diffPath.map(DiffTarget.init) }, set: { diffPath = $0?.path })) { target in
-            DiffSheet(store: store, path: target.path)
-        }
-        .sheet(isPresented: Binding(get: { store.pendingDiscard != nil }, set: { if !$0 { store.cancelDiscard() } })) {
-            DiscardSheet(store: store)
         }
     }
 
@@ -90,7 +83,7 @@ struct ReviewView: View {
                 Text("No changes.").role(.detail)
             }
             ForEach(review.files) { file in
-                Button { diffPath = file.path } label: { mono(file.text) }.buttonStyle(.plain)
+                Button { store.feedModals.diffPath = file.path } label: { mono(file.text) }.buttonStyle(.plain)
                     .help("View diff")
             }
             if let note = review.filesNote { Text(note).role(.caption) }
@@ -161,44 +154,39 @@ struct ReviewView: View {
     }
 }
 
-private struct DiffTarget: Identifiable {
-    var path: String
-    var id: String { path }
-}
-
-struct DiffSheet: View {
+/// One file's diff, in the modal over the review.
+struct DiffBody: View {
     var store: ProjectStore
     var path: String
     @State private var text = "Reading…"
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: Space.m) {
             HStack {
-                Text(path).textStyle(.heading)
+                Text(path).textStyle(.heading).lineLimit(1).truncationMode(.middle)
                 Spacer()
-                Button("Open in editor") { Task { await store.openDiff(path: path) } }.disabled(store.busy != nil)
-                Button("Close") { dismiss() }
+                Button("Open in editor") { Task { await store.openDiff(path: path) } }.plainButton(size: .regular)
+                    .disabled(store.busy != nil)
             }
-            // The sheet covers the Review screen, where these are shown otherwise.
+            // The modal covers the Review screen, where these are shown otherwise.
             if let error = store.actionError { Text(error).role(.error) }
             if let note = store.actionNote { Text(note).role(.caption) }
             ScrollView {
                 Text(text).textStyle(.monoCallout).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(height: 360)
         }
-        .padding(Space.xl).frame(width: 760, height: 520)
         .task { text = await store.patchText(path) }
     }
 }
 
-struct DiscardSheet: View {
+/// What discarding would lose, and the yes.
+struct DiscardBody: View {
     var store: ProjectStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            Text("Discard this work").textStyle(.heading)
             if let plan = store.pendingDiscard {
                 ScrollView {
                     Text(plan.render().joined(separator: "\n")).textStyle(.monoCallout)
@@ -209,12 +197,10 @@ struct DiscardSheet: View {
                     Text("Not everything that would be lost could be listed.").role(.warning)
                 }
             }
-            HStack {
-                Spacer()
-                Button("Cancel") { store.cancelDiscard() }
-                Button("Discard", role: .destructive) { Task { await store.confirmDiscard() } }
+            ModalFooter {
+                Button("Cancel") { store.cancelDiscard() }.plainButton(size: .regular)
+                Button("Discard", role: .destructive) { Task { await store.confirmDiscard() } }.primaryButton(size: .regular)
             }
         }
-        .padding(Space.xl).frame(width: 560)
     }
 }

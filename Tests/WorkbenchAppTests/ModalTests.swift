@@ -12,6 +12,8 @@ import Testing
     @Test func theCloseControlKeepsTheLabelsTheCardsHadBefore() {
         #expect(ModalText.closeLabel("Agents") == "Close the agents panel")
         #expect(ModalText.closeLabel("Projects") == "Close the projects panel")
+        #expect(ModalText.closeLabel("PR review") == "Close the PR review panel", "an acronym keeps its capitals")
+        #expect(ModalText.closeLabel("Merge PR #482") == "Close the merge PR #482 panel")
     }
 
     @Test func aCardUnderTheToolbarSitsAtTheLeadingEdgeAndACenteredOneInTheMiddle() {

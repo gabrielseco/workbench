@@ -44,8 +44,6 @@ struct RecentProject: Equatable, Identifiable {
     /// waiting for them, or when what it is doing belongs to another project or thread than the one on screen. Every action that
     /// takes a moment sets it, so a click is never followed by a window that looks asleep.
     var busy: String? { current.busyText }
-    /// The project and thread on screen, as one value to compare.
-    var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
     /// The session of the thread on screen: what the window holds for it (goal, review, errors) lives here, not in the store.
     fileprivate(set) var current: ThreadSession
     /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
@@ -80,6 +78,8 @@ struct RecentProject: Equatable, Identifiable {
     var pickingProject = false
     /// Whether the Agents card (each role's provider and model, read-only) is up.
     var showingAgents = false
+    /// The modals over the feed that no other state decides (`AppModals.swift`).
+    var feedModals = FeedModals()
     /// The open project's agent roles as its config sets them: read when the card or a screen that names the agent appears.
     var agentConfig = AgentConfigState.unread
     /// What is written in each thread's guidance field. It lives here, not in the view, so a send that the run refuses to start does not
@@ -213,7 +213,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (pickingProject, newThread, showingAgents, agentConfig) = (false, false, false, .unread)
+            (pickingProject, newThread, showingAgents, agentConfig, feedModals) = (false, false, false, .unread, FeedModals())
             newThreadText = ""
             clearGuidance()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
@@ -225,7 +225,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        (pickingProject, newThread, showingAgents, agentConfig) = (false, false, false, .unread)
+        (pickingProject, newThread, showingAgents, agentConfig, feedModals) = (false, false, false, .unread, FeedModals())
         // What was typed was for the project it was typed in: never offered to another.
         newThreadText = ""
         clearGuidance()

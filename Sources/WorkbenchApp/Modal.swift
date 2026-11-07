@@ -6,11 +6,14 @@ enum ModalSize {
     case small
     /// A form of a few rows (the Agents card).
     case medium
+    /// A page of text or a list that scrolls (a diff, the review, what Codex found).
+    case large
 
     var width: CGFloat {
         switch self {
         case .small: 420
         case .medium: 560
+        case .large: 760
         }
     }
 }
@@ -26,9 +29,31 @@ enum ModalPlacement {
     var transition: AnyTransition { self == .centered ? .opacity : .opacity.combined(with: .offset(y: -6)) }
 }
 
+/// The row of buttons at the foot of a modal: the actions at the trailing edge, and what goes with them (a busy line) at the leading one.
+struct ModalFooter<Leading: View, Actions: View>: View {
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            leading()
+            Spacer()
+            actions()
+        }
+    }
+}
+
+extension ModalFooter where Leading == EmptyView {
+    init(@ViewBuilder actions: @escaping () -> Actions) { self.init(leading: { EmptyView() }, actions: actions) }
+}
+
 /// What the close control is called to assistive technology, and so to `scripts/verify-app.sh`.
 enum ModalText {
-    static func closeLabel(_ title: String) -> String { "Close the \(title.lowercased()) panel" }
+    static func closeLabel(_ title: String) -> String {
+        // A word that is all capitals (PR) stays as written; the rest is lower case, as the label reads in a sentence.
+        let words = title.split(separator: " ").map { $0 == $0.uppercased() ? String($0) : $0.lowercased() }
+        return "Close the \(words.joined(separator: " ")) panel"
+    }
 }
 
 /// The card, its title and its one way out, which is Esc and the close button.

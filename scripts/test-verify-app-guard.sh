@@ -36,6 +36,8 @@ VERIFY_APPEARANCE=sepia expect 1 "bad VERIFY_APPEARANCE: sepia (want light or da
 VERIFY_APPEARANCE=Light expect 1 "bad VERIFY_APPEARANCE: Light" start no-such-scenario
 VERIFY_APPEARANCE=light expect 1 "no such scenario: no-such-scenario" start no-such-scenario
 VERIFY_APPEARANCE=dark expect 1 "no such scenario: no-such-scenario" start no-such-scenario
+VERIFY_OPEN=sheet expect 1 "bad VERIFY_OPEN: sheet" start no-such-scenario
+VERIFY_OPEN=pr-review expect 1 "no such scenario: no-such-scenario" start no-such-scenario
 expect 1 "no such scenario: no-such-scenario" start no-such-scenario
 # a pid it did not start, whatever the command
 expect 1 "is not a build started by verify-app.sh start" list 1
