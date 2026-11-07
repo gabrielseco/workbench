@@ -210,6 +210,9 @@ struct ChatComposer: View {
         HStack(spacing: Space.m) {
             Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
             Text("Chat only. No worktree, no run, no cost.").role(.caption)
+            if let agent = store.agentSetup?.row(.goal)?.label {
+                Text("· \(agent)").role(.caption).accessibilityLabel("Agent: \(agent)")
+            }
             Spacer(minLength: 12)
             if store.drafting {
                 ProgressView().controlSize(.small)

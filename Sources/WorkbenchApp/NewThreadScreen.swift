@@ -47,11 +47,18 @@ struct NewThreadState: Equatable {
 
 /// The heading and what it promises.
 struct NewThreadHeading: View {
+    /// What a chat and a drafted goal talk to: nil while the config is not read, `.some(nil)` when the project has no goal agent.
+    var agent: String??
+
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             Text("What do you want to work on?").textStyle(.title)
             Text("Talk it through first, or hand it over. Nothing runs and nothing costs until you say so.")
                 .role(.detail)
+            if let agent {
+                Text(agent.map { "Chat and drafting use \($0)." } ?? "No goal agent is set, so chat and drafting are off.")
+                    .role(.caption)
+            }
         }
     }
 }
@@ -109,7 +116,7 @@ struct NewThreadScreen: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
-                    NewThreadHeading()
+                    NewThreadHeading(agent: store.agentSetup.map { AgentSetup.chatAgent(for: $0) })
                     messages
                     composer
                     caption
@@ -127,6 +134,7 @@ struct NewThreadScreen: View {
             try? await Task.sleep(for: .milliseconds(40))
             focused = true
         }
+        .task { await store.refreshAgentSetup() }
     }
 
     private var header: some View {

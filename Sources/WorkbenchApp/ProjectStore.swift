@@ -78,6 +78,10 @@ struct RecentProject: Equatable, Identifiable {
     var newThreadText = ""
     /// Whether the project card under the project pill is up.
     var pickingProject = false
+    /// Whether the Agents card (each role's provider and model, read-only) is up.
+    var showingAgents = false
+    /// The open project's agent roles as its config sets them: read when the card or a screen that names the agent appears.
+    var agentSetup: AgentSetup?
     /// What is written in each thread's guidance field. It lives here, not in the view, so a send that the run refuses to start does not
     /// lose it and another thread does not see it; it is cleared when a turn has begun and when the project changes.
     var guidanceNotes: [String: String] = [:]
@@ -209,7 +213,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (pickingProject, newThread) = (false, false)
+            (pickingProject, newThread, showingAgents, agentSetup) = (false, false, false, nil)
             newThreadText = ""
             clearGuidance()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
@@ -221,7 +225,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        (pickingProject, newThread) = (false, false)
+        (pickingProject, newThread, showingAgents, agentSetup) = (false, false, false, nil)
         // What was typed was for the project it was typed in: never offered to another.
         newThreadText = ""
         clearGuidance()
