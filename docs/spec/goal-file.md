@@ -639,8 +639,8 @@ Notes:
   (18 of 18). We do not re-implement any of that; the worktree and the absence of credentials cover the rest.
 
 **Providers and agents (P9 PR 7).** `[providers.claude]` and `[providers.codex]` take `executable`, a command name or
-path run without a shell, and `models`, a list of up to 50 plain model names (letters, digits and `. _ : / @ [ ] -`, up to 100
-characters each) that the app's Agents card adds to that provider's model menu after the names of `ModelCatalog`; no run reads it, and a
+path run without a shell, and `models`, a list of up to 50 model names (what `[agents.<role>] model` accepts: letters, digits and `. _ : [ ] -`, starting with a letter or digit, up to
+100 characters each) that the app's Agents card adds to that provider's model menu after the names of `ModelCatalog`; no run reads it, and a
 list that is not names is refused naming the key. `[providers.claude]` and `claude_path` name the same executable, so both is refused. An
 `[agents.<role>]` table, for `goal`, `run`, `judge`, `review`, `ship` (the PR description and its refresh) or `plan`
 (`workbench plan`), takes `provider` (`"claude"` or `"codex"`), `model`, `reasoning_effort` and `allow_unpriced`. Every

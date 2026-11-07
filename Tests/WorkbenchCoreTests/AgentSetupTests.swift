@@ -122,7 +122,13 @@ import Testing
     @Test func theModelsKeyIsAListOfPlainNames() throws {
         #expect(try Config.parse("[providers.codex]\nmodels = [\"a\", \"b\"]\n" + Self.tools).agents.models[.codex] == ["a", "b"])
         #expect(try Config.parse(Self.tools).agents.models.isEmpty)
-        for bad in ["\"a\"", "[1]", "[\"has space\"]", "[\"quo\\\"te\"]", "[\"\"]"] {
+        let edge = String(repeating: "a", count: 100)
+        #expect(try Config.parse("[providers.codex]\nmodels = [\"\(edge)\", \"sonnet[1m]\"]\n" + Self.tools).agents.models[.codex]?.count == 2)
+        let long = String(repeating: "a", count: 101)
+        let bads = [
+            "\"a\"", "[1]", "[\"has space\"]", "[\"quo\\\"te\"]", "[\"\"]", "[\"org/model\"]", "[\"a@b\"]", "[\"-lead\"]",
+        ]
+        for bad in bads + ["[\"custom\\n\"]", "[\"\(long)\"]"] {
             #expect(throws: ConfigError.self, "\(bad)") { try Config.parse("[providers.codex]\nmodels = \(bad)\n" + Self.tools) }
         }
         let many = (0..<51).map { "\"m\($0)\"" }.joined(separator: ", ")

@@ -17,6 +17,12 @@ import Testing
         }
     }
 
+    @Test func aTrailingNewlineIsNotPartOfAModelName() {
+        #expect(SafeNames.isModelName("opus"))
+        #expect(!SafeNames.isModelName("opus\n") && !SafeNames.isModelName("opus\r\n") && !SafeNames.isModelName("-opus"))
+        #expect(!AgentsConfig.isModelName(String(repeating: "a", count: 101)) && AgentsConfig.isModelName("sonnet[1m]"))
+    }
+
     @Test func noProviderOffersAnotherProvidersNames() {
         let claude = Set(ModelCatalog.names(for: .claude)), codex = Set(ModelCatalog.names(for: .codex))
         #expect(claude.isDisjoint(with: codex))

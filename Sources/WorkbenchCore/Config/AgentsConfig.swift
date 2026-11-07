@@ -163,8 +163,10 @@ extension AgentsConfig {
         }
     }
 
-    /// What a model name may be: it is written between quotes as it is (`ConfigEdit`), so it holds no quote, backslash or space.
-    static let modelNamePattern = #"^[A-Za-z0-9._:/@\[\]-]{1,100}$"#
+    /// What a menu or `ConfigEdit` may carry as a model: what `[agents.<role>] model` accepts (`SafeNames.isModelName`, which goes to
+    /// `--model`), up to 100 characters, so every name a menu offers is one that can be saved. No quote, backslash or space.
+    static func isModelName(_ name: String) -> Bool { name.count <= 100 && SafeNames.isModelName(name) }
+    static let modelNameRule = "letters, digits and . _ : [ ] -, starting with a letter or digit, up to 100 characters"
     static let modelsLimit = 50
 
     private static func modelNames(_ entry: TOMLEntry, provider id: String, fail: ReviewConfig.Fail) -> [String]? {
@@ -179,10 +181,10 @@ extension AgentsConfig {
         }
         var names: [String] = []
         for item in items {
-            guard case .string(let name) = item, name.range(of: modelNamePattern, options: .regularExpression) != nil else {
+            guard case .string(let name) = item, isModelName(name) else {
                 fail(
                     .invalidValue, entry.line,
-                    "\(subject) must hold plain names (letters, digits and . _ : / @ [ ] -, up to 100 characters)")
+                    "\(subject) must hold plain model names (\(modelNameRule))")
                 return nil
             }
             if !names.contains(name) { names.append(name) }

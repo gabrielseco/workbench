@@ -233,12 +233,7 @@ struct AgentRow: View {
     }
 
     /// The model name looks like another provider's: said on the row, with the way back to the default.
-    private var fitNote: String? {
-        guard let provider = row.provider, let model = row.model,
-            let other = AgentSetup.modelFit(provider: provider, model: model)
-        else { return nil }
-        return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
-    }
+    private var fitNote: String? { AgentModelMenu.fitNote(provider: row.provider, model: row.model) }
 
     /// Where the setting came from, with the effort when one is set.
     private var detail: String {
@@ -276,5 +271,11 @@ enum AgentModelMenu {
     static func options(_ options: [String], including model: String?) -> [String] {
         guard let model, !options.contains(model) else { return options }
         return options + [model]
+    }
+
+    /// The warning for a model whose name belongs to the other provider, or nil.
+    static func fitNote(provider: AgentProviderID?, model: String?) -> String? {
+        guard let provider, let model, let other = AgentSetup.modelFit(provider: provider, model: model) else { return nil }
+        return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
     }
 }
