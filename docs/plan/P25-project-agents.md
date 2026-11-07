@@ -48,3 +48,12 @@ made; and a role that `[review.stage.pr-review]` decides is shown read-only with
 
 Next, as its own PR: a model menu per provider (Claude's aliases, the models any role in the config already names, and an optional `models = [...]` in `[providers.<id>]`, plus `Other…`).
 
+## Model menu
+
+The model of a role is chosen from a menu in the card: `Default model`, the names of the role's provider, `Other…` (which shows the text field). The names are, in this
+order and without repeats: `ModelCatalog` (`Sources/WorkbenchCore/Config/ModelCatalog.swift`, the one file to update when a provider's models change: Claude's aliases `opus`,
+`sonnet`, `haiku`, which follow its latest and do not go stale, and the Codex models its CLI lists as visible, rewritten from the installed CLI by `scripts/update-model-catalog.sh`,
+`--check` to see whether the file is behind), then the project's `[providers.<id>] models = [...]`, then the models any role of that provider already uses (a `pr-review` stage's
+included), so what a project set never drops out of its own menu. Nothing is fetched while the app runs and nothing checks that a chosen model exists: `Other…` is never refused
+for being unknown. The catalog is a Swift file, not a resource read at runtime, so it needs no bundle in the package, the CLI or `bundle-app.sh`.
+

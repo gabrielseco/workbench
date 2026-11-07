@@ -90,4 +90,55 @@ import Testing
         #expect(try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date == modified)
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["config.toml"])
     }
+
+    @Test func modelOptions() throws {
+        let text = """
+            [providers.codex]
+            models = ["gpt-x", "gpt-6.1-sol", "gpt-x"]
+            [agents.run]
+            model = "my-claude-ft"
+            [agents.goal]
+            provider = "codex"
+            model = "gpt-custom"
+            [agents.review]
+            provider = "codex"
+            model = "gpt-6.1-sol"
+            [review]
+            stages = ["pr-review"]
+            [review.stage.pr-review]
+            provider = "codex"
+            model = "stage-model"
+            """
+        let setup = try setup(text)
+        let codex = ModelCatalog.names(for: .codex)
+        let expectedGoal = codex + ["gpt-x", "gpt-custom", "stage-model"]
+        #expect(setup.row(.goal)?.modelOptions == expectedGoal, "catalog, declared, then used, no repeats")
+        let expectedRun = ModelCatalog.names(for: .claude) + ["my-claude-ft"]
+        #expect(setup.row(.run)?.modelOptions == expectedRun, "a role's own model is in its menu")
+        #expect(setup.row(.judge)?.modelOptions == setup.row(.run)?.modelOptions, "roles on one provider share its menu")
+        #expect(try self.setup("").row(.goal)?.modelOptions == [], "a role that is off has no menu")
+    }
+
+    @Test func theModelsKeyIsAListOfPlainNames() throws {
+        #expect(try Config.parse("[providers.codex]\nmodels = [\"a\", \"b\"]\n" + Self.tools).agents.models[.codex] == ["a", "b"])
+        #expect(try Config.parse(Self.tools).agents.models.isEmpty)
+        let edge = String(repeating: "a", count: 100)
+        let edgeConfig = "[providers.codex]\nmodels = [\"\(edge)\", \"sonnet[1m]\"]\n" + Self.tools
+        #expect(try Config.parse(edgeConfig).agents.models[.codex]?.count == 2)
+        let long = String(repeating: "a", count: 101)
+        let bads = [
+            "\"a\"", "[1]", "[\"has space\"]", "[\"quo\\\"te\"]", "[\"\"]", "[\"org/model\"]", "[\"a@b\"]", "[\"-lead\"]",
+        ]
+        for bad in bads + ["[\"custom\\n\"]", "[\"\(long)\"]"] {
+            #expect(throws: ConfigError.self, "\(bad)") { try Config.parse("[providers.codex]\nmodels = \(bad)\n" + Self.tools) }
+        }
+        let many = (0..<51).map { "\"m\($0)\"" }.joined(separator: ", ")
+        #expect(throws: ConfigError.self) { try Config.parse("[providers.claude]\nmodels = [\(many)]\n" + Self.tools) }
+        do {
+            _ = try Config.parse("[providers.codex]\nmodels = [\"has space\"]\n" + Self.tools)
+        } catch let error as ConfigError {
+            let first = error.problems.first
+            #expect(first?.message.contains("'models' in [providers.codex]") == true && first?.line == 2, "\(error)")
+        }
+    }
 }

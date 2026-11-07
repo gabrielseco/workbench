@@ -43,6 +43,8 @@ public struct AgentSetup: Sendable, Equatable {
         public var lockedBy: String?
         /// The keys of this role that table decides (a stage may set only an effort): only those are locked, the others still edit.
         public var lockedFields: Set<ConfigEdit.Field> = []
+        /// The models this role's provider offers in a menu (`AgentSetup.modelOptions`); empty when the role is off.
+        public var modelOptions: [String] = []
         public var id: String { role.id }
 
         /// "Codex · gpt-6.1-terra", "Claude · default model", or nil when the role is off.
@@ -62,7 +64,35 @@ public struct AgentSetup: Sendable, Equatable {
     }
 
     public init(config: Config) {
-        rows = Role.allCases.map { Self.row($0, config) }
+        var rows = Role.allCases.map { Self.row($0, config) }
+        let used = Self.usedModels(rows, config)
+        for index in rows.indices {
+            guard let provider = rows[index].provider else { continue }
+            rows[index].modelOptions = Self.modelOptions(provider: provider, config: config, used: used[provider] ?? [])
+        }
+        self.rows = rows
+    }
+
+    /// A provider's menu: the catalog's names, then the project's `[providers.<id>] models`, then the models its roles already use, without
+    /// repeats and in that order, so a name a project set never drops out of its own menu.
+    static func modelOptions(provider: AgentProviderID, config: Config, used: [String]) -> [String] {
+        var seen = Set<String>()
+        let all = ModelCatalog.names(for: provider) + (config.agents.models[provider] ?? []) + used
+        return all.filter { seen.insert($0).inserted }
+    }
+
+    /// The models set on a role of each provider, in the order the roles are shown (every pr-review stage included).
+    private static func usedModels(_ rows: [Row], _ config: Config) -> [AgentProviderID: [String]] {
+        var used: [AgentProviderID: [String]] = [:]
+        func add(_ provider: AgentProviderID?, _ model: String?) {
+            if let provider, let model { used[provider, default: []].append(model) }
+        }
+        for row in rows { add(row.provider, row.model) }
+        for name in config.review.definitions.keys.sorted() {
+            let stage = config.resolvedReviewAgent(stage: name)
+            add(stage.provider, stage.model)
+        }
+        return used
     }
 
     private static func isSet(_ selection: AgentSelection) -> Bool {

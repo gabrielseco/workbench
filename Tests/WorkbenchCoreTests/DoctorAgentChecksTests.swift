@@ -130,11 +130,15 @@ private func doctorGoal(model: String?) -> DoctorGoal {
     /// A key under [providers.*] or [agents.*] is read by a resolver or refused when the config loads; a key this
     /// table does not know fails here, so a new one cannot be added without saying which.
     @Test func everyKeyHonouredOrReported() throws {
-        let providerValues: [String: String] = ["executable": "\"/bin/echo\""]
+        // Each key with a value and where it is read: `executable` by the resolver, `models` by the app's model menu only.
+        let providerValues: [String: (value: String, read: (Config) -> Bool)] = [
+            "executable": ("\"/bin/echo\"", { $0.executable(for: .claude) == "/bin/echo" }),
+            "models": ("[\"opus-x\"]", { $0.agents.models[.claude] == ["opus-x"] }),
+        ]
         for key in AgentsConfig.providerKeys {
-            let value = try #require(providerValues[key], "[providers.*] key '\(key)' has no case in this test")
-            let cfg = try config("[providers.claude]\n\(key) = \(value)")
-            #expect(cfg.executable(for: .claude) == "/bin/echo", "\(key) is read")
+            let entry = try #require(providerValues[key], "[providers.*] key '\(key)' has no case in this test")
+            let cfg = try config("[providers.claude]\n\(key) = \(entry.value)")
+            #expect(entry.read(cfg), "\(key) is read")
         }
         let selectionValues: [String: String] = ["model": "\"haiku\"", "reasoning_effort": "\"high\"", "allow_unpriced": "true"]
         for role in AgentRole.allCases {

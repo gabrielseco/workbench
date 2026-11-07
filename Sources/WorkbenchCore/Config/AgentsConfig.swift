@@ -71,6 +71,8 @@ public struct ResolvedAgent: Sendable, Equatable {
 /// `[providers.<id>]` and `[agents.<role>]`.
 public struct AgentsConfig: Sendable, Equatable {
     public var executables: [AgentProviderID: String] = [:]
+    /// `[providers.<id>] models`: names this project adds to that provider's model menu (the app's Agents card). Nothing else reads them.
+    public var models: [AgentProviderID: [String]] = [:]
     public var goal: AgentSelection?
     public var run = AgentSelection()
     public var judge = AgentSelection()
@@ -93,7 +95,7 @@ public struct AgentsConfig: Sendable, Equatable {
 
     static let providerPrefix = "providers."
     static let agentPrefix = "agents."
-    static let providerKeys: Set<String> = ["executable"]
+    static let providerKeys: Set<String> = ["executable", "models"]
     static let selectionKeys: Set<String> = ["provider", "model", "reasoning_effort", "allow_unpriced"]
     /// Providers that can be named at all, whatever role they are named for.
     static let knownProviders: [AgentProviderID] = [.claude, .codex]
@@ -146,6 +148,9 @@ extension AgentsConfig {
         for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !providerKeys.contains(key) {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [providers.\(id)]")
         }
+        if let entry = table.entries["models"], let names = modelNames(entry, provider: id, fail: fail) {
+            config.models[provider] = names
+        }
         guard let entry = table.entries["executable"] else { return }
         guard case .string(let value) = entry.value else {
             fail(.wrongType, entry.line, "'executable' must be a string, found \(entry.value.typeName)")
@@ -156,6 +161,35 @@ extension AgentsConfig {
         } else {
             config.executables[provider] = value
         }
+    }
+
+    /// What a menu or `ConfigEdit` may carry as a model: what `[agents.<role>] model` accepts (`SafeNames.isModelName`, which goes to
+    /// `--model`), up to 100 characters, so every name a menu offers is one that can be saved. No quote, backslash or space.
+    static func isModelName(_ name: String) -> Bool { name.count <= 100 && SafeNames.isModelName(name) }
+    static let modelNameRule = "letters, digits and . _ : [ ] -, starting with a letter or digit, up to 100 characters"
+    static let modelsLimit = 50
+
+    private static func modelNames(_ entry: TOMLEntry, provider id: String, fail: ReviewConfig.Fail) -> [String]? {
+        let subject = "'models' in [providers.\(id)]"
+        guard case .array(let items) = entry.value else {
+            fail(.wrongType, entry.line, "\(subject) must be a list of model names, found \(entry.value.typeName)")
+            return nil
+        }
+        guard items.count <= modelsLimit else {
+            fail(.invalidValue, entry.line, "\(subject) takes at most \(modelsLimit) names, found \(items.count)")
+            return nil
+        }
+        var names: [String] = []
+        for item in items {
+            guard case .string(let name) = item, isModelName(name) else {
+                fail(
+                    .invalidValue, entry.line,
+                    "\(subject) must hold plain model names (\(modelNameRule))")
+                return nil
+            }
+            if !names.contains(name) { names.append(name) }
+        }
+        return names
     }
 
     private static func parseAgent(_ name: String, table: TOMLTable, into config: inout AgentsConfig, fail: ReviewConfig.Fail) {

@@ -18,7 +18,7 @@ enum SafeNames {
 
     /// A model name or alias that goes to `--model`: no leading `-`, no whitespace.
     static func isModelName(_ s: String) -> Bool {
-        s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*$"#, options: .regularExpression) != nil
+        s.range(of: #"^[A-Za-z0-9][A-Za-z0-9._:\[\]-]*\z"#, options: .regularExpression) != nil
     }
 
     /// A branch a thread may push to: a safe branch name that is not the repository's mainline.

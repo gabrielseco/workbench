@@ -91,6 +91,8 @@ struct AgentRow: View {
     var row: AgentSetup.Row
     var edit: AgentEdit?
     @State private var model = ""
+    /// `Other…` was chosen: the text field is shown for a name the menu does not have.
+    @State private var other = false
     @FocusState private var typing: Bool
 
     private static let off = "off"
@@ -108,8 +110,10 @@ struct AgentRow: View {
             }
             if edit != nil {
                 HStack(spacing: Space.s) {
-                    modelField
-                    Text(detail).role(.caption).frame(maxWidth: .infinity, alignment: .trailing)
+                    modelMenu
+                    if other { modelField }
+                    Spacer(minLength: Space.s)
+                    Text(detail).role(.caption)
                 }
             }
             if let note = fitNote, let edit {
@@ -121,7 +125,10 @@ struct AgentRow: View {
         }
         .onAppear { model = row.model ?? "" }
         // What is being typed is not replaced by a write that finished meanwhile.
-        .onChange(of: row.model) { if !typing { model = row.model ?? "" } }
+        .onChange(of: row.model) {
+            if !typing { model = row.model ?? "" }
+            other = false
+        }
     }
 
     /// The read-only form: what runs, and where the setting came from.
@@ -171,13 +178,45 @@ struct AgentRow: View {
             })
     }
 
+    /// The provider's models, then `Other…`; a model the config has that no list does is shown too, so what is set is always selected.
+    private var modelMenu: some View {
+        let options = AgentModelMenu.options(row.modelOptions, including: row.model)
+        return Picker("Model", selection: modelChoice) {
+            Text("Default model").tag(AgentModelMenu.defaultTag)
+            ForEach(options, id: \.self) { Text($0).tag($0) }
+            Divider()
+            Text("Other…").tag(AgentModelMenu.otherTag)
+        }
+        // A long name is cut in the picker and whole in the menu: it never pushes the row past the card.
+        .labelsHidden().frame(maxWidth: 220, alignment: .leading).accessibilityLabel("\(row.role.rawValue.capitalized) model")
+        .disabled(row.provider == nil || row.lockedFields.contains(.model))
+    }
+
+    private var modelChoice: Binding<String> {
+        Binding(
+            get: { AgentModelMenu.selection(model: row.model, other: other) },
+            set: { tag in
+                switch AgentModelMenu.choice(for: tag) {
+                case .other:
+                    other = true
+                    typing = true
+                case .defaultModel:
+                    other = false
+                    if row.model != nil { Task { _ = await edit?.set(row.role, .model, nil) } }
+                case .name(let name):
+                    other = false
+                    if name != row.model { Task { _ = await edit?.set(row.role, .model, name) } }
+                }
+            })
+    }
+
     private var modelField: some View {
-        TextField("Default model", text: $model)
+        TextField("Model name", text: $model)
             .textFieldStyle(.plain).focused($typing).textStyle(.callout)
             .padding(.horizontal, Space.m).padding(.vertical, Space.xs)
             .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
             .disabled(row.provider == nil || row.lockedFields.contains(.model))
-            .accessibilityLabel("\(row.role.rawValue.capitalized) model")
+            .accessibilityLabel("\(row.role.rawValue.capitalized) other model")
             .onSubmit(commitModel)
             .onChange(of: typing) { if !typing { commitModel() } }
     }
@@ -195,12 +234,7 @@ struct AgentRow: View {
     }
 
     /// The model name looks like another provider's: said on the row, with the way back to the default.
-    private var fitNote: String? {
-        guard let provider = row.provider, let model = row.model,
-            let other = AgentSetup.modelFit(provider: provider, model: model)
-        else { return nil }
-        return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
-    }
+    private var fitNote: String? { AgentModelMenu.fitNote(provider: row.provider, model: row.model) }
 
     /// Where the setting came from, with the effort when one is set.
     private var detail: String {
@@ -213,5 +247,36 @@ struct AgentRow: View {
         case .providerDefault: return "provider default"
         case .configured: return row.reasoningEffort.map { "set in the config · effort \($0)" } ?? "set in the config"
         }
+    }
+}
+
+/// What the model menu lists and what choosing a line means (pure, so the rules are tested without a window).
+enum AgentModelMenu {
+    static let defaultTag = ""
+    static let otherTag = "\u{1}other"
+
+    enum Choice: Equatable {
+        case defaultModel
+        case other
+        case name(String)
+    }
+
+    static func choice(for tag: String) -> Choice {
+        tag == defaultTag ? .defaultModel : tag == otherTag ? .other : .name(tag)
+    }
+
+    /// The tag of the line shown as selected: `Other…` while it is open, else the role's model (or the default).
+    static func selection(model: String?, other: Bool) -> String { other ? otherTag : (model ?? defaultTag) }
+
+    /// The provider's names, with the role's own model added when no list has it.
+    static func options(_ options: [String], including model: String?) -> [String] {
+        guard let model, !options.contains(model) else { return options }
+        return options + [model]
+    }
+
+    /// The warning for a model whose name belongs to the other provider, or nil.
+    static func fitNote(provider: AgentProviderID?, model: String?) -> String? {
+        guard let provider, let model, let other = AgentSetup.modelFit(provider: provider, model: model) else { return nil }
+        return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
     }
 }

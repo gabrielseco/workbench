@@ -123,7 +123,9 @@ import Testing
         ] {
             #expect(throws: ConfigEdit.Failure.badKey(bad), "\(bad)") { try ConfigEdit.parseKey(bad) }
         }
-        for value in ["", "has space", "quo\"te", "new\nline", "back\\slash", String(repeating: "a", count: 101), "#x"] {
+        for value in ["", "has space", "quo\"te", "new\nline", "back\\slash", String(repeating: "a", count: 101), "#x",
+            "x\n", "org/model", "a@b", "-lead",
+        ] {
             #expect(throws: (any Error).self, "\(value.debugDescription)") {
                 try ConfigEdit.set(key("agents.run.model"), to: value, in: p)
             }
