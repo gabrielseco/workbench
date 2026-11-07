@@ -43,7 +43,7 @@ struct ThreadListing: Equatable, Sendable {
     static let pullRequestInterval: Duration = .seconds(300)
 
     func forgetPullRequests() {
-        (pullRequests, pullRequestsReadAt, unwrittenMerges) = ([:], [:], [:])
+        (pullRequests, pullRequestsReadAt, unwrittenMerges, syncing) = ([:], [:], [:], false)
     }
 }
 

@@ -90,10 +90,14 @@ extension ProjectStore {
         guard let project, !threads.readingPullRequests else { return }
         let due = force ? threads.listing.rows.filter { $0.pullRequest != nil }.map(\.id) : pullRequestsDue
         guard !due.isEmpty else { return }
+        let mine = generation
         threads.readingPullRequests = true
         threads.syncing = due.contains { threads.pullRequestsReadAt[$0] == nil }
-        defer { (threads.readingPullRequests, threads.syncing) = (false, false) }
-        let mine = generation
+        // A read for a project that was closed meanwhile must not switch off what the project now open is showing.
+        defer {
+            threads.readingPullRequests = false
+            if mine == generation { threads.syncing = false }
+        }
         for id in due {
             let read = try? await actions.pullRequestStatus(project, id)
             guard mine == generation else { return }

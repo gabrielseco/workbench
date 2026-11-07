@@ -73,6 +73,16 @@ import WorkbenchCore
         #expect(!store.threads.syncing, "and the line is gone when the reads are done")
     }
 
+    @Test func openingAnotherProjectDropsTheSyncingLineOfTheOneBeforeIt() async throws {
+        let (first, second) = (try await AppFixture(), try await AppFixture())
+        keptLoggedMergeFixtures += [first, second]
+        let store = ProjectStore(preferences: MemoryPreferences(), actions: GoalActions())
+        #expect(await store.open(first.root))
+        store.threads.syncing = true
+        #expect(await store.open(second.root))
+        #expect(!store.threads.syncing)
+    }
+
     private enum Failure: Error { case notAThread }
     private final class Reads: @unchecked Sendable {
         var count = 0
