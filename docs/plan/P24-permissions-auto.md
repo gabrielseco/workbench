@@ -26,9 +26,12 @@ What it shows: `auto` is accepted together with `--restricted`, `--safe-mode` an
 `tool_name`, `tool_input.command`), so `turn.ended.denials`, the activity feed and `workbench grant` need no change; a
 deny rule still wins.
 
-Not measured: a command the classifier itself rejects (the one probe that should have, `curl … | sh`, was stopped by
-the classifier of the session that was running the spike, and was not worked around). A rejection is expected to arrive
-as a `permission_denials` entry too; if a run shows otherwise, `grant` will not list it and this plan needs a task.
+Not measured: a command the classifier itself rejects. `curl … | sh` was stopped by the classifier of the session that
+was running the spike and was not worked around; two harmless probes, `git push --dry-run --force origin main` and
+`chmod -R 777 <missing dir>`, were both **allowed** (runs G, H), and nothing riskier was tried. A rejection is expected
+to arrive as a `permission_denials` entry too, since that is how every denial arrives; if a run shows otherwise,
+`grant` will not list it and this plan needs a task. The PR says this is unproven; it is the first thing to check
+the day a run is refused under `auto`.
 
 ## Known limit
 

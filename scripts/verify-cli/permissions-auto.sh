@@ -83,6 +83,11 @@ print('|'.join(r))")
 echo "    refused: ${refused:-<nothing>}"
 made=$(cat "$WT/scratch/auto-compound/f" 2>/dev/null)
 echo "    the file says: ${made:-<missing>}"
+# The file could also come from the Write tool, so the log must show the Bash call itself, whole.
+bash_calls=$(wb "$T_WB" log "$ID" --json | py "print('|'.join(x['data'].get('summary') or '' for x in lines
+    if x['kind']=='agent.activity' and x['data'].get('type')=='tool' and x['data'].get('name')=='Bash'))")
+check "the turn made the compound Bash call" "Bash calls: ${bash_calls:-<none>}" \
+    bash -c '[[ $1 == *"mkdir -p scratch/auto-compound && printf auto > scratch/auto-compound/f && git add scratch/auto-compound"* ]]' _ "$bash_calls"
 check "the compound command ran: its file is there" "file says '${made:-<missing>}'" bash -c '[ "$1" = auto ]' _ "$made"
 check "and no denial names it" "denied: $refused" bash -c '[[ $1 != *auto-compound* ]]' _ "$refused"
 check "git push was denied and the log names it" "refusals: ${refused:-<nothing>}" bash -c '[[ $1 == *"git push"* ]]' _ "$refused"

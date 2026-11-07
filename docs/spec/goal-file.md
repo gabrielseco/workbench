@@ -376,7 +376,13 @@ Notes:
 
 - The runner passes `--permission-prompts none --restricted --tools <available> --allowedTools <allowed>
   --disallowedTools <denied>`; the prompt follows `--`. Anything not allowed is denied automatically, and
-  the model is told so. That is the whole permission system.
+  the model is told so. With the default `permissions = "allowlist"` that is the whole permission system.
+- **`permissions = "auto"` (P24)** adds `--permission-mode auto`: `claude`'s own classifier decides which commands are safe, so a
+  compound command or a new tool needs no `allowed` entry or grant. `--restricted`, `--permission-prompts none` and
+  `denied` stay, and `denied` still wins over the classifier. A refusal is recorded like any denial (`workbench grant`).
+  **Known limit:** `--restricted` confines the file tools to the worktree, not Bash; under `auto` a Bash command the
+  classifier calls safe can write outside the worktree. What is left is the classifier, `denied`, the minimal
+  environment (no credentials) and review of the diff. Use it on a project where that is acceptable.
 - **`--safe-mode --disable-slash-commands` are passed unless `safe_mode = false`.** They remove everything
   installed on the machine from the run (CLAUDE.md, skills, plugins, hooks, MCP servers, custom agents).
   Measured in task 9: a two-call job went from about 180k tokens of context to 2k, the same result at
