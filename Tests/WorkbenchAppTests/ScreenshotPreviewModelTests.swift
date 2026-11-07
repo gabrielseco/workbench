@@ -29,11 +29,23 @@ import UniformTypeIdentifiers
         #expect(ScreenshotPreviewModel.proof(shots(2), at: 7).index == 1, "an index past the end opens the last")
     }
 
-    @Test func pagingDropsThePictureAndTheZoomOfTheOneBefore() {
-        let model = ScreenshotPreviewModel.proof(shots(2), at: 0)
+    @Test func pagingKeepsThePictureOnScreenUntilTheNextIsDecodedAndDropsTheZoom() async throws {
+        let (small, big) = (try png(width: 600, height: 400), try png(width: 900, height: 700))
+        defer { [small, big].forEach { try? FileManager.default.removeItem(at: $0) } }
+        let model = ScreenshotPreviewModel.proof([ProofShot(url: small, caption: "A"), ProofShot(url: big, caption: "B")], at: 0)
+        await model.load()
+        #expect(model.decoded?.pixels == CGSize(width: 600, height: 400))
         model.actualSize = true
+        // The next one was decoded ahead, so the step shows it at once and the card is not sized to its waiting state in between.
         model.go(1)
-        #expect(model.decoded == nil && !model.actualSize, "the next one starts fitted, and waits for its own decode")
+        #expect(model.decoded?.pixels == CGSize(width: 900, height: 700) && !model.actualSize)
+    }
+
+    @Test func aPictureNotDecodedYetLeavesTheOneBeforeInPlaceInsteadOfAnEmptyCard() throws {
+        let model = ScreenshotPreviewModel.proof(shots(2), at: 0)
+        model.go(1)
+        #expect(!model.missing, "it is being read, not lost")
+        #expect(model.decoded == nil, "nothing was ever shown here, so there is nothing to keep")
     }
 
     @Test func aStagedScreenshotIsNumberedAmongItsSiblingsAndGoesStaleWhenItIsRemoved() async throws {
