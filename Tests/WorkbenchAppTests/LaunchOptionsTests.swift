@@ -86,13 +86,36 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 }
 
 @MainActor @Suite struct LaunchOptionsTests {
-    @Test func aNamedModalIsOpenedAfterTheProjectLoadsAndAnythingElseOpensNothing() {
+    @Test func aModalIsNamedByTheEnvironmentAndAnythingElseNamesNone() {
         func opens(_ value: String?) -> LaunchModal? {
             LaunchOptions.from(environment: value.map { ["WORKBENCH_APP_OPEN": $0] } ?? [:]).opens
         }
         #expect(opens("review") == .review && opens("diff") == .diff && opens("discard") == .discard)
         #expect(opens("pr-review") == .prReview && opens("merge") == .merge)
         #expect(opens(nil) == nil && opens("") == nil && opens("sheet") == nil)
+    }
+
+    @Test func theLaunchOpensTheNamedModalOnceTheProjectHasLoaded() async throws {
+        let fixture = try await AppFixture()
+        try await fixture.addThread("t1", approved: true)
+        try fixture.turn("t1", 1)
+        for name in ["review", "merge", "diff"] {
+            let options = LaunchOptions.from(environment: [
+                "WORKBENCH_SKIP_LOGIN_PATH": "1", "WORKBENCH_APP_PROJECT": fixture.root.path, "WORKBENCH_APP_OPEN": name,
+            ])
+            let store = options.makeStore(preferences: SpyPreferences())
+            await options.start(store, applyLoginPath: {}, setAppearance: { _ in })
+            #expect(store.showsFeed, "the project loaded first")
+            #expect(store.feedModals.confirmingMerge == (name == "merge"), "\(name): the merge question")
+            #expect(store.feedModals.reviewingDetails == (name != "merge"), "\(name): the review")
+            #expect(store.feedModals.diffPath == nil, "this fixture changed no file, so there is no diff to name")
+        }
+        let quiet = LaunchOptions.from(environment: [
+            "WORKBENCH_SKIP_LOGIN_PATH": "1", "WORKBENCH_APP_PROJECT": fixture.root.path,
+        ])
+        let store = quiet.makeStore(preferences: SpyPreferences())
+        await quiet.start(store, applyLoginPath: {}, setAppearance: { _ in })
+        #expect(!store.feedModals.reviewingDetails && !store.feedModals.confirmingMerge, "nothing is opened unless asked")
     }
 
     @Test func theAppearanceIsLightOrDarkAndAnythingElseIsTheSystems() {
