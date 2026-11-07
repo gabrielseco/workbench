@@ -49,6 +49,10 @@ public struct ThreadPorts: Codable, Equatable, Sendable {
     /// The thread's ports, made and recorded on the first call. Nil when the range has no free block left or the file cannot
     /// be written, and the caller then goes without (the run falls back to a port the kernel offers).
     ///
+    /// A thread holds its block only while its worktree exists: a thread that was cleaned, abandoned or discarded keeps its folder
+    /// (the history) but runs nothing, so its block goes back to the range, and its file is removed. Without that, 800 threads over
+    /// the life of a project would use the range up.
+    ///
     /// The lock is on the threads directory itself, so no file is left behind and two threads made at once cannot be given the
     /// same block. `renew` gives the thread a new block even though it has one (its own ports are held by something else).
     /// `isFree` is injected for tests.
@@ -69,9 +73,18 @@ public struct ThreadPorts: Codable, Equatable, Sendable {
         let own = threadsDirectory.appendingPathComponent(id).appendingPathComponent("ports.json")
         if !renew, let mine = read(own), mine.count >= wanted { return ThreadPorts(first: mine.first, count: wanted) }
 
+        let worktrees = threadsDirectory.deletingLastPathComponent().appendingPathComponent("worktrees")
         let taken = ((try? fm.contentsOfDirectory(atPath: threadsDirectory.path)) ?? [])
             .filter { $0 != id && SafeNames.isThreadID($0) }
-            .compactMap { read(threadsDirectory.appendingPathComponent($0).appendingPathComponent("ports.json")) }
+            .compactMap { other -> ThreadPorts? in
+                let file = threadsDirectory.appendingPathComponent(other).appendingPathComponent("ports.json")
+                guard let block = read(file) else { return nil }
+                guard fm.fileExists(atPath: worktrees.appendingPathComponent(other).path) else {
+                    try? fm.removeItem(at: file)
+                    return nil
+                }
+                return block
+            }
         let start = startSlot(for: threadsDirectory)
         for step in 0..<slotCount {
             let slot = (start + step) % slotCount
@@ -97,8 +110,9 @@ public struct ThreadPorts: Codable, Equatable, Sendable {
     /// A damaged or out-of-range file is no block: the next call makes a new one over it.
     static func read(_ url: URL) -> ThreadPorts? {
         guard let data = try? Data(contentsOf: url), let ports = try? JSONDecoder().decode(ThreadPorts.self, from: data),
-            ports.first >= firstPort, ports.count >= 1, ports.count <= maxCount,
-            ports.first + ports.count <= firstPort + slotCount * slotSize
+            (1...maxCount).contains(ports.count),
+            // Bounded before any addition: a file holding Int.max must be ignored, not trap.
+            (firstPort...(firstPort + slotCount * slotSize - ports.count)).contains(ports.first)
         else { return nil }
         return ports
     }

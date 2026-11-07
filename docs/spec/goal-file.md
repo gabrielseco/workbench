@@ -403,7 +403,8 @@ Notes:
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
   with no shell operators or quotes. The runner should tell the model the exact string to use.
 - **Ports per thread.** Every thread has its own block of `ports` ports (config key, 1 to 10, default 1), written to
-  `threads/<id>/ports.json` the first time a step needs it and kept until the thread is cleaned. Blocks are slots of ten from 41000, so a
+  `threads/<id>/ports.json` the first time a step needs it and held while the thread has a worktree (a cleaned or abandoned thread
+  gives its block back and its file is removed the next time a block is handed out). Blocks are slots of ten from 41000, so a
   server that steps to the next port when its own is taken stays in its thread's block; each project starts looking at a slot of its
   own (from its path), a slot with a port in use is passed over, and no two threads of a project share a port. The setup, the check and
   the `[run]` app all get `WORKBENCH_PORT` and `PORT` (the first port), `WORKBENCH_PORT_1`, `_2`, … (the others) and `WORKBENCH_THREAD`,

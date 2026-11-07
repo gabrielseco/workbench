@@ -56,6 +56,30 @@ private final class StopHolder: @unchecked Sendable {
 @Suite(.processGate) struct RunLaunchTests {
     // MARK: Launch
 
+    @Test func anAppIsNeverStartedOnAPortSomethingElseHolds() async throws {
+        let v = try await fixture()
+        let threadsDir = v.fx.project.threadsDirectory
+        let held = try #require(ThreadPorts.assign(threadsDirectory: threadsDir, id: v.id, count: 1))
+        // Another program listens on the thread's port: anything answering there would pass the ready check.
+        let fd = socket(AF_INET, streamSocketType, 0)
+        defer { close(fd) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr = in_addr(s_addr: UInt32(0x7f00_0001).bigEndian)
+        address.sin_port = UInt16(held.first).bigEndian
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        try #require(bound == 0 && listen(fd, 1) == 0)
+
+        let report = try await v.verify("proof=shot.png")
+        #expect(report.ok)
+        let moved = try #require(ThreadPorts.read(threadsDir.appendingPathComponent("\(v.id)/ports.json")))
+        #expect(moved.first != held.first, "the thread moved to a free block")
+        let seen = try String(contentsOf: v.worktree.appendingPathComponent("app.env"), encoding: .utf8)
+        #expect(seen.contains("WORKBENCH_PORT=\(moved.first)") && !seen.contains("WORKBENCH_PORT=\(held.first)\n"))
+    }
+
     @Test func theAppIsUpBeforeTheVerifierStartsAndTheVerifierIsToldAboutIt() async throws {
         let v = try await fixture()
         let dump = FakeClaude.scratch("run-dump")
