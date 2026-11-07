@@ -35,11 +35,7 @@ struct TasksView: View {
                     TaskPageView(store: store, snapshot: snapshot, entry: entry)
                 }
             } else {
-                VStack(spacing: Space.s) {
-                    ProgressView().controlSize(.small)
-                    Text("Reading the tasks…").role(.detail)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                BusyLine("Reading the tasks…", stacked: true).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

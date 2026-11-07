@@ -106,8 +106,41 @@ dir=$(tree outcomefile Outcome.swift 'enum Outcome { var symbol: String { "check
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the Outcome file's own symbols were refused"
 rm -rf "$dir"
 
-dir=$(tree useoutcome Good.swift 'struct A: View { var body: some View { StatusMark(.passed); Message(.error, "x"); Image(systemName: "xmark.circle.fill") } }')
-run "$dir" >/dev/null; [ "$?" = 0 ] || fail "StatusMark, Message or xmark.circle.fill (the remove button) was refused"
+dir=$(tree useoutcome Good.swift 'struct A: View { var body: some View { StatusMark(.passed); Message(.error, "x"); Image(systemName: "circle") } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "StatusMark, Message or a state-less symbol was refused"
+rm -rf "$dir"
+
+dir=$(tree spinner Bad.swift 'struct A: View { var body: some View { ProgressView().controlSize(.small) } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a ProgressView() in a view passed ($code)"
+echo "$out" | grep -q "use Spinner" || fail "the message does not say what to use: $out"
+rm -rf "$dir"
+
+dir=$(tree xmark Bad.swift 'struct A: View { var body: some View { Button {} label: { Image(systemName: "xmark") } } }')
+run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a hand-made close cross passed"
+rm -rf "$dir"
+
+dir=$(tree iconbutton Bad.swift 'struct A: View { var body: some View { Button {} label: { Image(systemName: "plus") }.iconButton() } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a .iconButton( in a view passed ($code)"
+echo "$out" | grep -q "use IconButton.raised" || fail "the message does not say what to use: $out"
+rm -rf "$dir"
+
+for file in Busy.swift IconButton.swift; do
+  dir=$(tree own $file 'struct A: View { var body: some View { ProgressView(); Image(systemName: "xmark") } }')
+  [ "$file" = Busy.swift ] && { run "$dir" >/dev/null; [ "$?" = 1 ] || fail "Busy.swift may not hold an xmark"; } || { run "$dir" >/dev/null; [ "$?" = 1 ] || fail "IconButton.swift may not hold a ProgressView()"; }
+  rm -rf "$dir"
+done
+
+dir=$(tree owncomponents Busy.swift 'struct Spinner: View { var body: some View { ProgressView().controlSize(.small) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "Busy.swift's own ProgressView() was refused"
+rm -rf "$dir"
+dir=$(tree owniconbutton IconButton.swift 'struct IconButton: View { var body: some View { Button {} label: { Image(systemName: "xmark") }.iconButton() } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "IconButton.swift's own cross and .iconButton( were refused"
+rm -rf "$dir"
+
+dir=$(tree determinate Good.swift 'struct A: View { var body: some View { ProgressView(value: 0.5); Spinner(); IconButton.close("x") {} } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a determinate ProgressView(value:), Spinner or IconButton.close was refused"
 rm -rf "$dir"
 
 # and the real tree is clean

@@ -59,10 +59,9 @@ struct ToolbarBar: View {
 /// The open project's name with a folder and a chevron; it opens the project card.
 struct ProjectPill: View {
     var store: ProjectStore
-    @State private var hovered = false
 
     var body: some View {
-        Button {
+        ToolbarPillButton(selected: store.pickingProject) {
             store.pickingProject.toggle()
         } label: {
             HStack(spacing: Space.s) {
@@ -70,10 +69,7 @@ struct ProjectPill: View {
                 Text(store.project?.root.lastPathComponent ?? "Choose project").textStyle(.bodyStrong)
                 Image(systemName: "chevron.down").textStyle(.captionStrong, .secondary)
             }
-            .pill(style: .control(hovered: hovered, selected: store.pickingProject), size: .large)
         }
-        .buttonStyle(.plain).fixedSize()
-        .onHover { hovered = $0 }
         .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
         .help(store.project?.root.path ?? "Choose a project")
     }
@@ -82,13 +78,12 @@ struct ProjectPill: View {
 /// What the project's coding agent is, and the way to the Agents card (also ⌘,): the card was a link at the foot of the rail.
 struct AgentsPill: View {
     var store: ProjectStore
-    @State private var hovered = false
 
     /// "Codex · gpt-6.1-terra" for the run role; "Agents" when the config is unread, missing or has no such row.
     static func text(_ setup: AgentSetup?) -> String { setup?.row(.run)?.label ?? "Agents" }
 
     var body: some View {
-        Button {
+        ToolbarPillButton(selected: store.showingAgents) {
             store.showingAgents.toggle()
         } label: {
             HStack(spacing: Space.s) {
@@ -96,11 +91,8 @@ struct AgentsPill: View {
                 // A model named by hand can be long: truncate so the base, spend and state keep their room.
                 Text(Self.text(store.agentSetup)).textStyle(.body).lineLimit(1).truncationMode(.tail).frame(maxWidth: 220)
             }
-            .pill(style: .control(hovered: hovered, selected: store.showingAgents), size: .large)
         }
-        .buttonStyle(.plain).fixedSize()
         .disabled(store.project == nil)
-        .onHover { hovered = $0 }
         .accessibilityLabel("Agents")
         .help("\(Self.text(store.agentSetup)): which provider and model each agent role of this project uses (⌘,)")
     }
@@ -136,7 +128,7 @@ struct DoctorButton: View {
                 if !compact { Spacer() }
                 switch store.doctor {
                 case .notRun: Text("Not run").foregroundStyle(.secondary)
-                case .running: ProgressView().controlSize(.small)
+                case .running: Spinner()
                 case .healthy(let seconds):
                     Text(String(format: "Healthy · %.1fs", seconds)).foregroundStyle(Theme.green)
                 case .problem: Text("Problem").foregroundStyle(Theme.red)
@@ -177,13 +169,10 @@ struct BusyBar: View {
     var text: String
 
     var body: some View {
-        HStack(spacing: Space.s) {
-            ProgressView().controlSize(.small)
-            Text(text).role(.detail)
-        }
-        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
-        .callout()
-        .accessibilityElement(children: .combine)
+        BusyLine(text)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.s)
+            .callout()
+            .accessibilityElement(children: .combine)
     }
 }
 

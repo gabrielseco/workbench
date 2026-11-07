@@ -123,12 +123,9 @@ struct ReplyingRow: View {
     var store: ProjectStore
 
     var body: some View {
-        HStack(spacing: Space.s) {
-            ProgressView().controlSize(.small)
-            Text("Replying…").textStyle(.callout, .blue)
-            Spacer()
-            Button("Stop") { store.stopChat() }.buttonStyle(.borderless).accessibilityLabel("Stop the reply")
-        }
+        BusyLine(
+            "Replying…", tone: .working, stop: .init(title: "Stop", label: "Stop the reply") { store.stopChat() }, spread: true
+        )
         .accessibilityElement(children: .contain)
     }
 }
@@ -140,11 +137,7 @@ struct ComposerSendButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.up")
-        }
-        .iconButton().disabled(!enabled)
-        .accessibilityLabel("Send the message").help("Sends the message (Return)")
+        IconButton.raised("arrow.up", "Send the message", help: "Sends the message (Return)", action: action).disabled(!enabled)
     }
 }
 
@@ -204,7 +197,7 @@ struct ChatComposer: View {
             HStack(alignment: .bottom, spacing: Space.m) {
                 AddScreenshotsButton(staging: staging, disabled: !state.canType, size: .compact)
                 editor(state)
-                if staging.pending > 0 { ProgressView().controlSize(.small) }
+                if staging.pending > 0 { Spinner() }
                 ComposerSendButton(enabled: state.canSend) { send() }
             }
         }
@@ -222,9 +215,7 @@ struct ChatComposer: View {
             }
             Spacer(minLength: 12)
             if store.drafting {
-                ProgressView().controlSize(.small)
-                Text("Drafting the goal…").textStyle(.callout, .blue)
-                Button("Stop") { store.stopDrafting() }.buttonStyle(.borderless)
+                BusyLine("Drafting the goal…", tone: .working, stop: .init(title: "Stop") { store.stopDrafting() })
             } else {
                 Button { Task { await store.makeChatGoal() } } label: {
                     HStack(spacing: Space.s) {

@@ -124,9 +124,7 @@ private struct ModalCard<Accessory: View, Content: View>: View {
                 SectionLabel(title.uppercased()).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: Space.m)
                 accessory()
-                Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                    .accessibilityLabel(ModalText.closeLabel(title)).help("Close (Esc)")
+                IconButton.close(ModalText.closeLabel(title), help: "Close (Esc)", action: close)
             }
             content()
         }

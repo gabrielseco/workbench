@@ -105,8 +105,7 @@ struct RunSettingsInspector: View {
         HStack {
             Text("Run settings").textStyle(.bodyStrong)
             Spacer(minLength: 8)
-            Button { store.setRunSettings(false) } label: { Image(systemName: "xmark").textStyle(.subheadline) }
-                .buttonStyle(.borderless).help("Close Run settings").accessibilityLabel("Close Run settings")
+            IconButton.close("Close Run settings") { store.setRunSettings(false) }
         }
     }
 
@@ -238,10 +237,7 @@ struct RunSettingsInspector: View {
             }
             Spacer(minLength: 0)
             if removable {
-                Button {
-                    Task { await store.editGoal { $0.removingReadAlso(folder) } }
-                } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless).help("Remove \(folder)")
+                IconButton.close("Remove \(folder)") { Task { await store.editGoal { $0.removingReadAlso(folder) } } }
             }
         }
     }

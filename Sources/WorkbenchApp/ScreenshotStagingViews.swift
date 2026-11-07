@@ -21,8 +21,8 @@ struct StagedThumbnails: View {
                         .frame(width: 44, height: 44).thumbnail().contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).accessibilityLabel("Preview screenshot \(index + 1)").help("Preview screenshot")
-                    Button { staging.remove(item) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).accessibilityLabel("Remove screenshot \(index + 1)").padding(Space.xxs)
+                    IconButton.badge("Remove screenshot \(index + 1)", help: "Remove screenshot") { staging.remove(item) }
+                        .padding(Space.xxs)
                 }
             }
             Spacer()
@@ -69,8 +69,7 @@ struct AddScreenshotsButton: View {
     var size: ButtonSize = .small
 
     var body: some View {
-        Button(action: choose) { Image(systemName: "plus") }
-            .iconButton(size: size).disabled(disabled).accessibilityLabel("Add screenshots…").help("Add screenshots")
+        IconButton.raised("plus", "Add screenshots…", help: "Add screenshots", size: size, action: choose).disabled(disabled)
     }
 
     private func choose() {

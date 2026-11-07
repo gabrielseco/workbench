@@ -137,7 +137,7 @@ struct RunCardView: View {
 
     private func header(elapsed: TimeInterval?) -> some View {
         HStack(spacing: Space.m) {
-            ProgressView().controlSize(.small).frame(width: 16)
+            Spinner(inColumn: true)
             Text("Claude is working").textStyle(.calloutStrong)
             Spacer(minLength: 8)
             if let clock = RunCardModel.clock(elapsed: elapsed, limit: model.limit) {
@@ -165,7 +165,7 @@ struct RunCardView: View {
     @ViewBuilder private func mark(_ state: FeedItem.PlanTask.State) -> some View {
         switch state {
         case .done: Image(systemName: "checkmark").foregroundStyle(Theme.green).frame(width: 14)
-        case .working: ProgressView().controlSize(.mini).frame(width: 14)
+        case .working: Spinner(.mini, inColumn: true)
         case .pending: Image(systemName: "circle").foregroundStyle(Theme.fg3).frame(width: 14)
         }
     }
