@@ -123,7 +123,8 @@ import Testing
         #expect(try Config.parse("[providers.codex]\nmodels = [\"a\", \"b\"]\n" + Self.tools).agents.models[.codex] == ["a", "b"])
         #expect(try Config.parse(Self.tools).agents.models.isEmpty)
         let edge = String(repeating: "a", count: 100)
-        #expect(try Config.parse("[providers.codex]\nmodels = [\"\(edge)\", \"sonnet[1m]\"]\n" + Self.tools).agents.models[.codex]?.count == 2)
+        let edgeConfig = "[providers.codex]\nmodels = [\"\(edge)\", \"sonnet[1m]\"]\n" + Self.tools
+        #expect(try Config.parse(edgeConfig).agents.models[.codex]?.count == 2)
         let long = String(repeating: "a", count: 101)
         let bads = [
             "\"a\"", "[1]", "[\"has space\"]", "[\"quo\\\"te\"]", "[\"\"]", "[\"org/model\"]", "[\"a@b\"]", "[\"-lead\"]",
