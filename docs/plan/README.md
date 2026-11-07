@@ -37,6 +37,7 @@ Phases, in order. Each ends with a demo you can run, not just merged code.
 | [P20](P20-goal-editor.md) | Goal editor | planned: edit the drafted goal in the app (blocks on the Goal screen, written back through a core `GoalEditor`), and a per-goal `skip:` list that turns the verifier, judge or a review stage off for one goal; the popover stays the place you write the request | M |
 | [P21](P21-scheduled-tasks.md) | Scheduled tasks | planned: tasks in `.workbench/tasks/<name>/` that run on a schedule (a time of day, or an interval) through the normal thread path and open a pull request, with an approval bound to the file and its pending script, a run log per task, and `fix: pr` accepting its own work when the check and verifier pass; never merges | L |
 | [P22](P22-chat-feed.md) | Chat feed | planned, nothing built: refactor the app around the chat-feed mockups ([`../design/chat-feed/`](../design/chat-feed/)): a per-thread session instead of one single-thread `ProjectStore`, the feed as data derived from the log, a feed screen behind a preference, auto-advance that stops only for a failed check, a judge disagreement or the budget, a thread list, and a chat before a goal exists; slice 7 made the feed the only window (the old one and its flag are gone), core changes are additive; concurrency stays a separate phase after it | L |
+| [P23](P23-concurrency.md) | Concurrency | slice 1 built (ports per thread); the rest planned: a few threads active at once (sized for three), default one: a stable port block per thread for the run, the check and the setup, the single-thread guard lifted behind `max_active_threads`, `--thread` in the CLI, shared-repo git calls made safe to overlap, `max_concurrent_checks`, the app and quit/recovery for N live threads, ship onto a moved base, a concurrent soak; no queue and no scheduler | L |
 | [P24](P24-permissions-auto.md) | Permissions auto | built: `permissions = "auto"` in the config lets `claude`'s classifier decide what a run may do in its worktree (`--permission-mode auto`) instead of an allowlist entry or a grant per command; `[tools] denied` still wins, default stays the allowlist, Bash is not confined to the worktree | S |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
@@ -55,7 +56,7 @@ At any moment there is **one project** (a git repo you point Workbench at) and *
 - Nothing runs concurrently. Not turns, not checks, not two threads.
 
 [P22](P22-chat-feed.md) changes what the app shows, not this rule: it adds a thread list that shows history and the one live thread, and a chat before a goal
-(a thread in state `chat`: read-only turns, no worktree). Lifting the guard is P23, after P22 slice 5.
+(a thread in state `chat`: read-only turns, no worktree). Lifting the guard is [P23](P23-concurrency.md); its "well" gate below is waived there.
 
 The on-disk layout is still thread-shaped (a folder per thread id) so that lifting this later is deleting a
 guard, not a migration. But no code is written for the many-thread case now.
@@ -95,7 +96,7 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 
 | # | Decision | Proposal | Alternative | Decide in |
 |---|---|---|---|---|
-| D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided |
+| D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided; superseded by [P23](P23-concurrency.md) |
 | D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | **decided**: Swift holds (P1 soak) |
 | D2 | Permissions (current Claude adapter; generalized in P9) | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
 | D3 | Process model | **One process per turn/attempt**, stdin `/dev/null`. Claude uses first-turn `--session-id` then `--resume` (S4); P9 makes native session support optional and provider-qualified | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
