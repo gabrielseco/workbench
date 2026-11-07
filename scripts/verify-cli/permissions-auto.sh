@@ -76,8 +76,9 @@ check "the turn was started with --permission-mode auto" "argv has no --permissi
 check "and still restricted, with no prompt path" "argv lacks --restricted or --permission-prompts none" \
     bash -c '[[ $1 == *"--restricted"* && $1 == *"--permission-prompts none"* && $1 != *bypassPermissions* ]]' _ "$argv"
 
-refused=$(wb "$T_WB" log "$ID" --json | py "r=[x['data'].get('input') or '' for x in lines if x['kind']=='agent.activity'
-    and x['data'].get('type')=='permission_denied']
+# What the turn was refused is on its turn.ended (`denials`), the record `grant` reads.
+refused=$(wb "$T_WB" log "$ID" --json | py "r=[d.get('input') or '' for x in lines if x['kind']=='turn.ended'
+    for d in x['data'].get('denials') or []]
 print('|'.join(r))")
 echo "    refused: ${refused:-<nothing>}"
 made=$(cat "$WT/scratch/auto-compound/f" 2>/dev/null)
