@@ -39,6 +39,8 @@ struct AgentsCard: View {
                 SectionLabel("Agents".uppercased())
                 Spacer()
                 Button { store.showingAgents = false } label: { Image(systemName: "xmark").textStyle(.captionStrong) }
+                    // Nothing in the card takes keyboard focus, so `onExitCommand` alone never sees Escape; a cancel shortcut does.
+                    .keyboardShortcut(.cancelAction)
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close the agents panel")
             }
             if let setup = store.agentSetup {
