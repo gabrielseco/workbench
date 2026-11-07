@@ -45,7 +45,7 @@ private struct ModalCard<Content: View>: View {
                 Spacer()
                 Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).keyboardShortcut(.cancelAction)
-                    .accessibilityLabel(ModalText.closeLabel(title))
+                    .accessibilityLabel(ModalText.closeLabel(title)).help("Close (Esc)")
             }
             content()
         }
