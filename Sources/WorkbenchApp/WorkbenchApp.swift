@@ -36,6 +36,12 @@ import WorkbenchCore
                     .keyboardShortcut("n", modifiers: [.shift, .command])
                     .disabled(store.project == nil)
             }
+            // The one settings the app has are the project's agents, so the standard ⌘, opens them.
+            CommandGroup(replacing: .appSettings) {
+                Button("Agents…") { store.showingAgents.toggle() }
+                    .keyboardShortcut(",", modifiers: .command)
+                    .disabled(store.project == nil)
+            }
             CommandGroup(after: .toolbar) {
                 Toggle("Run settings", isOn: Binding(get: { store.runSettingsShowing }, set: { _ in store.toggleRunSettings() }))
                     .keyboardShortcut("r", modifiers: [.option, .command])
