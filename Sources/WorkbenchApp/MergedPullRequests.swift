@@ -8,11 +8,15 @@ enum MergedPullRequests {
 
     /// More than a person has threads; the file is bounded like everything else.
     static let maxEntries = 2000
+    static let maxBytes = 1_000_000
 
     static func url(_ project: Project) -> URL { project.workbenchDirectory.appendingPathComponent("merged-pull-requests.json") }
 
     private static func read(_ project: Project) -> [String: Entry] {
-        guard let data = try? Data(contentsOf: url(project)), data.count < 1_000_000 else { return [:] }
+        // At most the limit plus one byte is read, so a file that grew by accident is refused without being held.
+        guard let handle = try? FileHandle(forReadingFrom: url(project)) else { return [:] }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maxBytes + 1), data.count <= maxBytes else { return [:] }
         return (try? JSONDecoder().decode([String: Entry].self, from: data)) ?? [:]
     }
 

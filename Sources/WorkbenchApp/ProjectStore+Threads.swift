@@ -97,6 +97,8 @@ extension ProjectStore {
         for id in due {
             let read = try? await actions.pullRequestStatus(project, id)
             guard mine == generation else { return }
+            // A merge the thread screen confirmed meanwhile is not taken back by a read that failed.
+            if read == nil, threads.pullRequests[id]?.state == .merged { continue }
             threads.pullRequests[id] = read
             threads.pullRequestsReadAt[id] = .now
             MergedPullRequests.remember(read, thread: id, in: project)
