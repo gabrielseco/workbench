@@ -66,6 +66,114 @@ import WorkbenchCore
         #expect(ThreadListLoader.mark(attention: .working, state: state, damaged: true) == .broken)
     }
 
+    // MARK: The pull request's fate
+
+    private static let head = "h1"
+
+    /// Accepted, shipped as #7, and its pull request review found things to fix, at the head GitHub reports.
+    private func shippedWithFindings(_ fixture: AppFixture, _ id: String) async throws {
+        try await fixture.addThread(id, approved: true, title: "Shipped \(id)")
+        try fixture.turn(id, 1)
+        try fixture.decide(id, "accepted")
+        try fixture.ship(id, number: 7)
+        let round: [String: JSONValue] = ["round": 1, "pr": 7, "head_sha": .string(Self.head)]
+        try fixture.append(id, .prReviewStarted, data: .object(round))
+        var finished = round
+        (finished["ok"], finished["verdict"]) = (true, "fix")
+        try fixture.append(id, .prReviewFinished, data: .object(finished))
+    }
+
+    private func status(_ state: PRState, number: Int = 7) -> PRStatus {
+        PRStatus(number: number, state: state, head: Self.head, checks: nil)
+    }
+
+    @Test func mergedPullRequestShowsTick() async throws {
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        let listing = ThreadListLoader.load(project: fixture.project, cache: .init(), pullRequests: ["a": status(.merged)])
+        let row = try #require(listing.rows.first)
+        #expect(row.mark == .done && row.line == "PR #7 merged", "\(row)")
+        #expect(row.pullRequest == nil, "a merged pull request is not asked about again")
+        // A closed one is over, not green.
+        let closed = ThreadListLoader.load(project: fixture.project, cache: .init(), pullRequests: ["a": status(.closed)])
+        #expect(closed.rows.first?.mark == .idle && closed.rows.first?.line == "PR #7 closed")
+    }
+
+    @Test func openPullRequestWithFindingsNeedsAttention() async throws {
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        for read in [nil, status(.open)] {
+            let pullRequests = read.map { ["a": $0] } ?? [:]
+            let row = try #require(
+                ThreadListLoader.load(project: fixture.project, cache: .init(), pullRequests: pullRequests).rows.first)
+            #expect(row.mark == .needsYou && row.line == "Needs you · Findings open", "\(String(describing: read))")
+            #expect(row.pullRequest == 7, "still open, so it is read again")
+        }
+    }
+
+    /// What the stand-in GitHub answers, changed by the test between reads.
+    private final class GitHub: @unchecked Sendable {
+        private let lock = NSLock()
+        private var answer: Result<PRStatus, Error>
+        private(set) var reads = 0
+        init(_ answer: Result<PRStatus, Error>) { self.answer = answer }
+        func set(_ answer: Result<PRStatus, Error>) { lock.withLock { self.answer = answer } }
+        func read() throws -> PRStatus {
+            try lock.withLock {
+                reads += 1
+                return answer
+            }
+            .get()
+        }
+    }
+
+    private func store(_ fixture: AppFixture, _ github: GitHub) async throws -> ProjectStore {
+        let store = ProjectStore(
+            preferences: MemoryPreferences(), actions: GoalActions(pullRequestStatus: { _, _ in try github.read() }))
+        #expect(await store.open(fixture.root))
+        return store
+    }
+
+    @Test func refreshUpdatesPullRequestStatus() async throws {
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        try await fixture.addThread("draft")
+        let github = GitHub(.success(status(.open)))
+        let store = try await store(fixture, github)
+        #expect(store.pullRequestsAreDue, "never read")
+        await store.refreshPullRequests()
+        #expect(github.reads == 1, "only the shipped thread is asked about")
+        #expect(store.threads.listing.rows.first { $0.id == "a" }?.mark == .needsYou)
+        #expect(!store.pullRequestsAreDue, "read just now")
+        github.set(.success(status(.merged)))
+        await store.refreshPullRequests(force: true)
+        let row = store.threads.listing.rows.first { $0.id == "a" }
+        #expect(row?.mark == .done && row?.line == "PR #7 merged")
+        await store.refreshPullRequests(force: true)
+        #expect(github.reads == 2, "a merge is final: not asked about again")
+    }
+
+    @Test func unavailablePullRequestStatus() async throws {
+        struct Offline: Error {}
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        let github = GitHub(.failure(Offline()))
+        let store = try await store(fixture, github)
+        await store.refreshPullRequests()
+        #expect(github.reads == 1)
+        #expect(store.threads.listing.rows.first?.mark == .needsYou, "not known to be merged, so its findings still ask")
+        // A status that was read, then a read that fails: what was known is forgotten, not kept as the answer.
+        github.set(.success(status(.open)))
+        await store.refreshPullRequests(force: true)
+        github.set(.failure(Offline()))
+        await store.refreshPullRequests(force: true)
+        #expect(store.threads.pullRequests["a"] == nil && store.threads.listing.rows.first?.mark == .needsYou)
+        // A merged status for another pull request number says nothing of this one.
+        let other = ThreadListLoader.load(
+            project: fixture.project, cache: .init(), pullRequests: ["a": status(.merged, number: 6)])
+        #expect(other.rows.first?.mark == .needsYou)
+    }
+
     // MARK: Cost
 
     @Test func aBigProjectShowsTheNewestRowsReadsOnlyThoseAndAnUnchangedOneReadsNothing() async throws {

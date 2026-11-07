@@ -13,6 +13,8 @@ struct ThreadRow: Equatable, Identifiable, Sendable {
     var mark: ThreadMark
     /// One line of state, in the toolbar pill's words.
     var line: String
+    /// The number of the shipped pull request whose fate only GitHub knows (accepted, not cleaned): what the store reads for the row.
+    var pullRequest: Int?
 }
 
 /// The project's threads for the list: the newest `ThreadListLoader.maxRows`, and how many older ones there are.
@@ -26,6 +28,18 @@ struct ThreadListing: Equatable, Sendable {
     var listing = ThreadListing()
     /// What the files looked like when `listing` was read, so a poll rebuilds only when something moved.
     @ObservationIgnored var signature: ThreadListLoader.Signature?
+    /// What GitHub last said of each listed thread's pull request. A read that failed leaves none, so the row says what the log says.
+    @ObservationIgnored var pullRequests: [String: PRStatus] = [:]
+    /// When each was last asked for, so a poll asks again only after `pullRequestInterval`.
+    @ObservationIgnored var pullRequestsReadAt: [String: ContinuousClock.Instant] = [:]
+    @ObservationIgnored var readingPullRequests = false
+
+    /// How long a listed pull request's status is kept before it is read again.
+    static let pullRequestInterval: Duration = .seconds(120)
+
+    func forgetPullRequests() {
+        (pullRequests, pullRequestsReadAt) = ([:], [:])
+    }
 }
 
 /// Reads the list. Listing a project must not replay every log (they can be megabytes): a thread's age is its first line, read once,
@@ -84,7 +98,9 @@ enum ThreadListLoader {
         return event.ts
     }
 
-    static func load(project: Project, cache: Cache) -> ThreadListing {
+    /// - Parameter pullRequests: what GitHub said of each thread's pull request, when it was read; a thread missing here is derived
+    ///   from its log alone, which never says merged.
+    static func load(project: Project, cache: Cache, pullRequests: [String: PRStatus] = [:]) -> ThreadListing {
         let store = ThreadStore(project: project)
         let ids = store.threadIDs()
         let newestFirst = ids.map { id in (id, cache.createdAt(id) { firstLineCreatedAt(project.eventsURL(id)) }) }
@@ -92,9 +108,10 @@ enum ThreadListLoader {
         let shown = Array(newestFirst.prefix(maxRows)).map(\.0)
         cache.forget(except: Set(shown))
         let rows = shown.map { id -> ThreadRow in
-            let print = [fingerprint(project.eventsURL(id)), fingerprint(project.goalURL(id))]
+            let status = pullRequests[id]
+            let print = [fingerprint(project.eventsURL(id)), fingerprint(project.goalURL(id)), status.map { "\($0)" } ?? ""]
             if let known = cache.row(id, print: print) { return known }
-            let fresh = row(project: project, store: store, id: id)
+            let fresh = row(project: project, store: store, id: id, pullRequest: status)
             cache.remember(fresh, print: print)
             return fresh
         }
@@ -137,8 +154,9 @@ enum ThreadListLoader {
         return ThreadRow(id: id, title: title, mark: .idle, line: "Chat")
     }
 
-    /// One thread's row: its log replayed once, the way the toolbar's pill is derived.
-    static func row(project: Project, store: ThreadStore, id: String) -> ThreadRow {
+    /// One thread's row: its log replayed once, the way the toolbar's pill is derived, with what GitHub said of its pull request when
+    /// that was read (`pullRequest`), the way the thread's own screen applies it.
+    static func row(project: Project, store: ThreadStore, id: String, pullRequest status: PRStatus? = nil) -> ThreadRow {
         let contents: EventLogContents
         do { contents = try EventLogReader.read(at: project.eventsURL(id)) } catch {
             return ThreadRow(id: id, title: id, mark: .broken, line: "The log cannot be read")
@@ -162,20 +180,42 @@ enum ThreadListLoader {
             title = frontMatterTitle(text)
             approval = state.approvedGoalHash != nil ? .approved : .draft
         }
-        let spine = ThreadSpine.derive(state: state, approval: approval)
-        let attention = Attention.derive(spine: spine, state: state)
-        let mark = mark(attention: attention, state: state, damaged: !contents.problems.isEmpty)
-        let line = ThreadSnapshot.stateText(attention: attention, state: state, approval: approval)
-        return ThreadRow(id: id, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? id, mark: mark, line: line)
+        // Only a status read for the pull request the log names counts: one for an earlier number says nothing of this one.
+        let recorded = state.pullRequest
+        let status = status.flatMap { $0.number == recorded?.number ? $0 : nil }
+        let outcome = outcome(status)
+        let checks = status?.checksError == nil ? status?.checks : nil
+        let spine = ThreadSpine.derive(
+            state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)
+        let attention = Attention.derive(
+            spine: spine, state: state, checks: checks, outcome: outcome, currentHead: status?.head)
+        let mark = mark(attention: attention, state: state, damaged: !contents.problems.isEmpty, outcome: outcome)
+        var line = ThreadSnapshot.stateText(attention: attention, state: state, approval: approval)
+        if let recorded, outcome != .open { line = "PR #\(recorded.number) \(outcome == .merged ? "merged" : "closed")" }
+        let unsettled = state.decision == "accepted" && !state.cleaned && outcome == .open
+        return ThreadRow(
+            id: id, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? id, mark: mark, line: line,
+            pullRequest: unsettled ? recorded?.number : nil)
+    }
+
+    /// What GitHub said became of the pull request; open when nothing was read, so a merge is only ever one GitHub confirmed.
+    static func outcome(_ status: PRStatus?) -> PullRequestOutcome {
+        switch status?.state {
+        case .merged?: .merged
+        case .closed?: .closed
+        case .open?, nil: .open
+        }
     }
 
     /// Amber for a thread that needs you, blue for one working, green for one that is over and done, grey for the rest, red for a broken log.
-    static func mark(attention: Attention, state: ThreadState, damaged: Bool) -> ThreadMark {
+    static func mark(
+        attention: Attention, state: ThreadState, damaged: Bool, outcome: PullRequestOutcome = .open
+    ) -> ThreadMark {
         if damaged { return .broken }
         if case .needsYou = attention { return .needsYou }
         if attention == .working { return .working }
-        // Green is for work that went somewhere; a thread thrown away is just over.
-        if state.decision == "discarded" { return .idle }
+        // Green is for work that went somewhere; a thread thrown away, or a pull request closed unmerged, is just over.
+        if state.decision == "discarded" || outcome == .closed { return .idle }
         if state.cleaned || state.pullRequest != nil || state.decision != nil { return .done }
         return .idle
     }

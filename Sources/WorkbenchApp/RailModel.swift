@@ -57,10 +57,10 @@ struct RailRow: Equatable, Identifiable {
 struct RailModel: Equatable {
     /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.
     var composing: RailRow?
-    /// The threads listed: the ones that need you, are working or are broken (always), the newest of the rest up to the limit, and the one
-    /// on screen; newest first, as the listing is.
+    /// The threads listed, at most the limit: the one on screen, then the ones that need you, are working or are broken, then the newest of
+    /// the rest; newest first, as the listing is.
     var threads: [RailRow]
-    /// How many of the rest the limit left out: what `Show more` would add.
+    /// How many threads the limit left out: what `Show more` would add.
     var hidden: Int
     /// How many older threads the listing itself left out (past the loader's cap).
     var older: Int
@@ -96,20 +96,13 @@ struct RailModel: Equatable {
     /// A thread that asks for something of the person, or is working, or is broken: listed whatever its age.
     static func isPinned(_ row: ThreadRow) -> Bool { row.mark == .needsYou || row.mark == .working || row.mark == .broken }
 
-    /// The rows under the limit: every pinned one, the first `limit` of the rest, and the one on screen.
+    /// At most `limit` rows: the one on screen first, then the pinned ones, then the newest of the rest; listed newest first.
     static func limited(_ rows: [ThreadRow], limit: Int, shown: String?) -> (rows: [ThreadRow], hidden: Int) {
-        var room = max(0, limit)
-        var kept = Set<String>()
-        var rest = 0
-        for row in rows where !isPinned(row) {
-            rest += 1
-            if room > 0 || row.id == shown {
-                kept.insert(row.id)
-                if room > 0 { room -= 1 }
-            }
-        }
-        let visible = rows.filter { isPinned($0) || kept.contains($0.id) }
-        return (visible, rest - kept.count)
+        let order = rows.filter { $0.id == shown } + rows.filter { $0.id != shown && isPinned($0) }
+            + rows.filter { $0.id != shown && !isPinned($0) }
+        let kept = Set(order.prefix(max(0, limit)).map(\.id))
+        let visible = rows.filter { kept.contains($0.id) }
+        return (visible, rows.count - visible.count)
     }
 
     /// The thread's rows the rail may list: not the finished ones a task's runs made, which are reached from the task's page. A thread is

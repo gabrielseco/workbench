@@ -1,4 +1,5 @@
 import Foundation
+import WorkbenchCore
 
 /// The thread list (P22 slice 5): which thread the window shows is the person's pick, else the active one, else the newest.
 extension ProjectStore {
@@ -48,13 +49,64 @@ extension ProjectStore {
             (threads.listing, threads.signature) = (ThreadListing(), nil)
             return
         }
-        let (mine, cache) = (generation, threadRowCache)
+        let (mine, cache, pullRequests) = (generation, threadRowCache, threads.pullRequests)
         let moved = await Task.detached { ThreadListLoader.signature(project: project) }.value
         guard mine == generation, force || moved != threads.signature else { return }
-        let listing = await Task.detached { ThreadListLoader.load(project: project, cache: cache) }.value
+        let listing = await Task.detached {
+            ThreadListLoader.load(project: project, cache: cache, pullRequests: pullRequests)
+        }.value
         guard mine == generation else { return }
         threads.signature = moved
         if listing != threads.listing { threads.listing = listing }
+    }
+
+    /// What was read for the project before: its rows and what GitHub said of its pull requests.
+    func forgetThreadList() {
+        (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
+        threads.forgetPullRequests()
+    }
+
+    /// The poll's reads of GitHub, each on its own task: a slow `gh` must not hold up following the log.
+    func readGitHubIfDue() {
+        if pullRequestCIIsDue { Task { await refreshPullRequestCI() } }
+        if pullRequestsAreDue { Task { await refreshPullRequests() } }
+    }
+
+    /// The listed threads whose shipped pull request GitHub has not been asked about for `pullRequestInterval`.
+    private var pullRequestsDue: [String] {
+        threads.listing.rows.compactMap { row in
+            guard row.pullRequest != nil else { return nil }
+            guard let readAt = threads.pullRequestsReadAt[row.id] else { return row.id }
+            return readAt.duration(to: .now) >= ThreadListModel.pullRequestInterval ? row.id : nil
+        }
+    }
+
+    var pullRequestsAreDue: Bool { !threads.readingPullRequests && !pullRequestsDue.isEmpty }
+
+    /// Asks GitHub what became of the listed threads' pull requests, one at a time, and lists them again. A read that fails forgets
+    /// what was known, so the row says what the log says: a merge is shown only once GitHub confirmed it.
+    func refreshPullRequests(force: Bool = false) async {
+        guard let project, !threads.readingPullRequests else { return }
+        let due = force ? threads.listing.rows.filter { $0.pullRequest != nil }.map(\.id) : pullRequestsDue
+        guard !due.isEmpty else { return }
+        threads.readingPullRequests = true
+        defer { threads.readingPullRequests = false }
+        let mine = generation
+        for id in due {
+            let read = try? await actions.pullRequestStatus(project, id)
+            guard mine == generation else { return }
+            threads.pullRequests[id] = read
+            threads.pullRequestsReadAt[id] = .now
+        }
+        await refreshThreadList(force: true)
+    }
+
+    /// What the thread screen read of its own pull request is the row's too, so the rail and the banner agree.
+    func notePullRequest(_ status: PRStatus?, thread: String) {
+        guard threads.pullRequests[thread] != status else { return }
+        threads.pullRequests[thread] = status
+        threads.pullRequestsReadAt[thread] = .now
+        Task { await refreshThreadList(force: true) }
     }
 }
 

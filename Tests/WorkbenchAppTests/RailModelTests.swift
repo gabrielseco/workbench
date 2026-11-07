@@ -127,17 +127,21 @@ import WorkbenchCore
         ThreadListing(rows: (0..<count).map { thread("t\($0)", pinned[$0] ?? .done) })
     }
 
-    @Test func tenThreadsAndTheOnesThatNeedYou() {
-        // 25 threads, newest first; two old ones need you or are working, and one is broken.
+    @Test func initialLimitAndShowMore() {
+        // 25 threads, newest first; three old ones need you, are working or are broken, and an old one is on screen.
         let shown = many(25, pinned: [12: .needsYou, 18: .working, 24: .broken])
-        let model = RailModel.derive(listing: shown, tasks: nil)
-        let rest = (0..<25).filter { ![12, 18, 24].contains($0) }.prefix(10).map { "t\($0)" }
-        let expected = shown.rows.map(\.id).filter { rest.contains($0) || ["t12", "t18", "t24"].contains($0) }
-        #expect(model.threads.map(\.key) == expected)
-        #expect(model.threads.count == 13, "ten of the rest, and the three that ask for something, whatever their age")
-        #expect(model.hidden == 12 && model.older == 0, "22 others, ten listed")
-        // Newest first within what is listed.
-        #expect(model.threads.map(\.key).first == "t0" && model.threads.map(\.key).last == "t24")
+        let model = RailModel.derive(listing: shown, tasks: nil, shown: "t20")
+        #expect(model.threads.count == 10, "ten rows, the selected and the pinned ones among them")
+        #expect(model.threads.map(\.key) == ["t0", "t1", "t2", "t3", "t4", "t5", "t12", "t18", "t20", "t24"])
+        #expect(model.hidden == 15 && model.older == 0)
+        // Show more lists ten more, then the rest.
+        let more = RailModel.derive(listing: shown, tasks: nil, limit: 2 * RailModel.pageSize, shown: "t20")
+        #expect(more.threads.count == 20 && more.hidden == 5)
+        #expect(RailModel.derive(listing: shown, tasks: nil, limit: 3 * RailModel.pageSize).threads.count == 25)
+        // More pinned threads than room: still ten, the newest of them, with the one on screen.
+        let busy = many(15, pinned: Dictionary(uniqueKeysWithValues: (0..<15).map { ($0, ThreadMark.needsYou) }))
+        let capped = RailModel.derive(listing: busy, tasks: nil, shown: "t14")
+        #expect(capped.threads.map(\.key) == (0..<9).map { "t\($0)" } + ["t14"] && capped.hidden == 5)
     }
 
     @Test func showMoreAddsTen() {
@@ -173,10 +177,10 @@ import WorkbenchCore
 
     @Test func theShownThreadIsAlwaysListed() {
         let shown = many(25)
-        // An old thread chosen from the menu bar or a link: it is listed though the ten do not reach it, and takes no other's place.
+        // An old thread chosen from the menu bar or a link: it is listed though the ten do not reach it, in one of the ten places.
         let model = RailModel.derive(listing: shown, tasks: nil, shown: "t20")
-        #expect(model.threads.map(\.key) == (0..<10).map { "t\($0)" } + ["t20"])
-        #expect(model.hidden == 14, "15 left out, now 14")
+        #expect(model.threads.map(\.key) == (0..<9).map { "t\($0)" } + ["t20"])
+        #expect(model.hidden == 15)
         // One inside the ten is just listed.
         #expect(RailModel.derive(listing: shown, tasks: nil, shown: "t3").hidden == 15)
     }

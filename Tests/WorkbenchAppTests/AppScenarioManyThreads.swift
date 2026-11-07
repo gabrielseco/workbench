@@ -1,4 +1,5 @@
 import Foundation
+import WorkbenchCore
 
 extension AppScenario {
     /// The rail's ten and Show more: fourteen finished threads (accepted, abandoned, discarded), and the oldest of all one that needs you,
@@ -16,6 +17,46 @@ extension AppScenario {
             try await fixture.addThread(id, approved: true, title: "Finished thread number \(index)")
             try fixture.turn(id, 1, cost: 0.5)
             try fixture.decide(id, decisions[index % decisions.count])
+        }
+    }
+
+    /// The pull requests the stand-in `gh` says are merged (`merged-prs`, one number a line); the rest it says are open.
+    var mergedPullRequests: [Int] { self == .prMerged ? [480] : [] }
+
+    /// What a scenario ships beside its threads: its config, the pull requests `gh` says are merged, and its repository's files.
+    func writeSideFiles(into target: URL) throws {
+        if let config {
+            try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+        }
+        if !mergedPullRequests.isEmpty {
+            let lines = mergedPullRequests.map { "\($0)\n" }.joined()
+            try lines.write(to: target.appendingPathComponent("merged-prs"), atomically: true, encoding: .utf8)
+        }
+        for (folder, contents) in [("repo", repoFiles), ("worktree", worktreeFiles)] {
+            for (path, content) in contents {
+                let url = target.appendingPathComponent(folder).appendingPathComponent(path)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try content.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
+    /// Two shipped threads whose pull request review found things to fix: #480 has since been merged, #482 is still open.
+    @MainActor func buildPRMerged(in fixture: AppFixture) async throws {
+        let shipped = [("export-csv", "Export the invoice list as CSV", 480), ("invoice-pagination", Self.title, 482)]
+        for (id, title, number) in shipped {
+            try await fixture.addThread(id, approved: true, title: title)
+            try fixture.turn(id, 1, cost: 1.2)
+            try fixture.decide(id, "accepted")
+            try fixture.ship(id, number: number)
+            // Reviewed at the head the stand-in `gh` reports, so the open one's findings are current, not of an older commit.
+            let round: [String: JSONValue] = [
+                "round": 1, "pr": .int(number), "head_sha": "0123456789abcdef0123456789abcdef01234567",
+            ]
+            try fixture.append(id, .prReviewStarted, data: .object(round))
+            var finished = round
+            (finished["ok"], finished["verdict"]) = (true, "fix")
+            try fixture.append(id, .prReviewFinished, data: .object(finished))
         }
     }
 }

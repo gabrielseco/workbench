@@ -45,6 +45,7 @@ extension ProjectStore {
         do { read = .known(try await actions.pullRequestStatus(project, thread)) } catch { read = .unavailable("\(error)") }
         // A merge that answered meanwhile is newer than this read.
         guard pullRequestScope == scope, prCI.readAt == before else { return }
+        notePullRequest(read.status, thread: thread)
         (prCI.ci, prCI.readAt) = (read, .now)
         applyPullRequestCI()
     }
@@ -88,6 +89,7 @@ extension ProjectStore {
                 merged = true
                 // The merge is said on its own thread; the banner is the window's, so only the thread on screen updates it.
                 guard pullRequestScope == scope else { return }
+                notePullRequest(after, thread: thread)
                 (prCI.ci, prCI.readAt) = (.known(after), .now)
                 applyPullRequestCI()
             } catch { session.actionError = "\(error)" }
