@@ -160,4 +160,31 @@ import WorkbenchCore
         let quiet = try drawn(AgentRow(row: fine, edit: edit))
         #expect(warned != quiet, "a Claude name on Codex shows the warning and its button")
     }
+
+    @Test func theMenuLinesMeanDefaultOtherOrAName() {
+        #expect(AgentModelMenu.choice(for: AgentModelMenu.defaultTag) == .defaultModel)
+        #expect(AgentModelMenu.choice(for: AgentModelMenu.otherTag) == .other)
+        #expect(AgentModelMenu.choice(for: "opus") == .name("opus"))
+        #expect(AgentModelMenu.selection(model: nil, other: false) == AgentModelMenu.defaultTag)
+        #expect(AgentModelMenu.selection(model: "opus", other: false) == "opus")
+        #expect(AgentModelMenu.selection(model: "opus", other: true) == AgentModelMenu.otherTag, "Other… while it is open")
+        #expect(AgentModelMenu.options(["opus", "sonnet"], including: "my-ft") == ["opus", "sonnet", "my-ft"])
+        #expect(AgentModelMenu.options(["opus", "sonnet"], including: "opus") == ["opus", "sonnet"])
+        #expect(AgentModelMenu.options(["opus"], including: nil) == ["opus"])
+    }
+
+    @Test func menuFollowsTheProvider() async throws {
+        let config = "[providers.codex]\nmodels = [\"gpt-extra\"]\n[agents.run]\nprovider = \"claude\"\n"
+        let (store, _) = try await store(config: config)
+        #expect(store.agentSetup?.row(.run)?.modelOptions == ModelCatalog.names(for: .claude))
+        await store.setAgent(.run, .provider, to: "codex")
+        #expect(store.agentSetup?.row(.run)?.modelOptions == ModelCatalog.names(for: .codex) + ["gpt-extra"])
+        await store.setAgent(.run, .model, to: "opus")
+        let row = try #require(store.agentSetup?.row(.run))
+        #expect(row.modelOptions.contains("opus"), "a name the config has stays in the menu")
+        let edit = AgentEdit(set: { _, _, _ in true }, goalOff: { true })
+        var fine = row
+        fine.model = "gpt-6.1-sol"
+        #expect(try drawn(AgentRow(row: row, edit: edit)) != drawn(AgentRow(row: fine, edit: edit)), "the warning still shows")
+    }
 }

@@ -14,7 +14,8 @@
 # `allow_unpriced = false` doctor reports the turn as refused. The removed root keys `model`, `judge_model`, `describe_model`
 # and `plan_model` are each refused with a message naming the key and the `[agents.<role>]` table that replaced it.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 leaves the haiku model and the ship model out, writes valid values in the three refused configs,
+# `[providers.codex] models` takes a list of plain names: doctor must accept one and refuse a list with a name that has a space, naming the key.
+# VERIFY_CLI_SABOTAGE=1 also puts a fine name in that list, so the two "bad name" steps must FAIL. It leaves the haiku model and the ship model out, writes valid values in the three refused configs,
 # puts claude instead of codex in the ship and plan tables, and puts each removed key in its table instead of the root, so
 # the judge line step, the three "refused" steps, the coding effort step, the ship line step, the codex line, the two notes and
 # allow_unpriced steps for ship and plan, and the removed-key steps must FAIL. The frame and the other switches are in
@@ -188,4 +189,21 @@ model = \"haiku\""; else line="$key = \"haiku\""; fi
     check "root '$key': the message names [agents.$table]" "no \"'$key' was removed ... [agents.$table]\" message" \
         bash -c 'grep -qF "'"'"'$1'"'"' was removed" "$3" && grep -qF "[agents.$2]" "$3"' _ "$key" "$table" "$SCRATCH/d9-$key.out"
 done
+
+# --- 7. the models a provider's menu lists (P25) ---------------------------------------------------------
+
+BADMODELS='["has space"]'
+[ "$SABOTAGE" = 1 ] && BADMODELS='["a-fine-name"]'
+config "[providers.codex]
+models = [\"gpt-6.1-sol\", \"gpt-6-astra\"]"
+wbp "$SCRATCH/d10.out" doctor --base "$BASE"
+shown "$SCRATCH/d10.out" 3
+check "[providers.codex] models: doctor accepts a list of names" "workbench doctor exited $RC" test "$RC" = 0
+config "[providers.codex]
+models = $BADMODELS"
+wbp "$SCRATCH/d10b.out" doctor --base "$BASE"
+shown "$SCRATCH/d10b.out" 3
+check "a models list with a bad name: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
+check "a models list with a bad name: the message names 'models' in [providers.codex]" \
+    "no \"'models' in [providers.codex]\" message" grep -qF "'models' in [providers.codex]" "$SCRATCH/d10b.out"
 finish

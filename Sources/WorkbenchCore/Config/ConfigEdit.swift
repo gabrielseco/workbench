@@ -74,7 +74,7 @@ public enum ConfigEdit {
 
     /// A value is a plain name: it is written between quotes as it is, so it can hold no quote, backslash, space or newline.
     static func checkValue(_ value: String, for key: Key) throws {
-        guard value.range(of: #"^[A-Za-z0-9._:/@\[\]-]{1,100}$"#, options: .regularExpression) != nil else {
+        guard value.range(of: AgentsConfig.modelNamePattern, options: .regularExpression) != nil else {
             throw Failure.badValue(key, "a name of letters, digits and . _ : / @ [ ] -, up to 100 characters")
         }
     }

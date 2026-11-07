@@ -173,8 +173,9 @@ ships, and the mockup gets fixed.
 The project's agent roles, and where they are changed ([P25](plan/P25-project-agents.md)). A `popover` card, 560 wide, centred over a light veil, opened by the
 rail's `Agents…` link (a quiet link under the Scheduled list, as `New task…`). Header: `AGENTS` (`SectionLabel`) and a close button. One row per role in
 the order goal, plan, run, judge, review, ship, verifier. An editable row has the role in `.calloutStrong` with what it does under it (`.caption`); at the
-right a provider picker (`Claude`, `Codex`, and `Off` for goal) and an effort picker (`Default effort`, low … max); under them a single-line model field
-(placeholder `Default model`, committed with Return or when it loses focus, blank is the provider's default) and, at its right, where the setting came from
+right a provider picker (`Claude`, `Codex`, and `Off` for goal) and an effort picker (`Default effort`, low … max); under them a model menu
+(`Default model`, the role's provider's names from `ModelCatalog`, the project's `[providers.<id>] models` and the models its roles use, then `Other…`, which shows a single-line
+field that commits with Return or when it loses focus; blank is the provider's default) and, at its right, where the setting came from
 (`provider default`, `set in the config · effort high`, `no [agents.goal]: chat and drafting are off`). A model name that looks like the other provider's
 (`opus` on Codex, `gpt-…` on Claude) adds a `.warning` line under the row with a `Use default model` button. The verifier row only reads (its model is
 `[verifier] model`, not an agent key). Every change is one `ConfigEdit` call, the code `workbench config set` runs: a refusal shows under the rows in

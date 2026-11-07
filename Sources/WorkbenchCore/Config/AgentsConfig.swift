@@ -71,6 +71,8 @@ public struct ResolvedAgent: Sendable, Equatable {
 /// `[providers.<id>]` and `[agents.<role>]`.
 public struct AgentsConfig: Sendable, Equatable {
     public var executables: [AgentProviderID: String] = [:]
+    /// `[providers.<id>] models`: names this project adds to that provider's model menu (the app's Agents card). Nothing else reads them.
+    public var models: [AgentProviderID: [String]] = [:]
     public var goal: AgentSelection?
     public var run = AgentSelection()
     public var judge = AgentSelection()
@@ -93,7 +95,7 @@ public struct AgentsConfig: Sendable, Equatable {
 
     static let providerPrefix = "providers."
     static let agentPrefix = "agents."
-    static let providerKeys: Set<String> = ["executable"]
+    static let providerKeys: Set<String> = ["executable", "models"]
     static let selectionKeys: Set<String> = ["provider", "model", "reasoning_effort", "allow_unpriced"]
     /// Providers that can be named at all, whatever role they are named for.
     static let knownProviders: [AgentProviderID] = [.claude, .codex]
@@ -146,6 +148,9 @@ extension AgentsConfig {
         for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !providerKeys.contains(key) {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [providers.\(id)]")
         }
+        if let entry = table.entries["models"], let names = modelNames(entry, provider: id, fail: fail) {
+            config.models[provider] = names
+        }
         guard let entry = table.entries["executable"] else { return }
         guard case .string(let value) = entry.value else {
             fail(.wrongType, entry.line, "'executable' must be a string, found \(entry.value.typeName)")
@@ -156,6 +161,33 @@ extension AgentsConfig {
         } else {
             config.executables[provider] = value
         }
+    }
+
+    /// What a model name may be: it is written between quotes as it is (`ConfigEdit`), so it holds no quote, backslash or space.
+    static let modelNamePattern = #"^[A-Za-z0-9._:/@\[\]-]{1,100}$"#
+    static let modelsLimit = 50
+
+    private static func modelNames(_ entry: TOMLEntry, provider id: String, fail: ReviewConfig.Fail) -> [String]? {
+        let subject = "'models' in [providers.\(id)]"
+        guard case .array(let items) = entry.value else {
+            fail(.wrongType, entry.line, "\(subject) must be a list of model names, found \(entry.value.typeName)")
+            return nil
+        }
+        guard items.count <= modelsLimit else {
+            fail(.invalidValue, entry.line, "\(subject) takes at most \(modelsLimit) names, found \(items.count)")
+            return nil
+        }
+        var names: [String] = []
+        for item in items {
+            guard case .string(let name) = item, name.range(of: modelNamePattern, options: .regularExpression) != nil else {
+                fail(
+                    .invalidValue, entry.line,
+                    "\(subject) must hold plain names (letters, digits and . _ : / @ [ ] -, up to 100 characters)")
+                return nil
+            }
+            if !names.contains(name) { names.append(name) }
+        }
+        return names
     }
 
     private static func parseAgent(_ name: String, table: TOMLTable, into config: inout AgentsConfig, fail: ReviewConfig.Fail) {
