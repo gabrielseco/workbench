@@ -86,11 +86,11 @@ enum Theme {
 extension SpineMark {
     var symbol: String {
         switch self {
-        case .done: "checkmark.circle.fill"
+        case .done: Outcome.passed.symbol
         case .current: "circle.inset.filled"
-        case .needsYou: "exclamationmark.circle.fill"
+        case .needsYou: Outcome.warning.symbol
         case .pending: "circle"
-        case .failed: "xmark.circle.fill"
+        case .failed: Outcome.failed.symbol
         }
     }
 }

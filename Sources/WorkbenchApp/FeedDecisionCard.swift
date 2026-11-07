@@ -114,26 +114,10 @@ struct MessageRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            if let error { MessageRow(symbol: "xmark.octagon.fill", tint: Theme.red, text: error) }
-            if let note { MessageRow(symbol: "info.circle", tint: Theme.grey, text: note) }
-            if let notice { MessageRow(symbol: "checkmark.circle.fill", tint: Theme.green, text: notice) }
-            if let handoff {
-                MessageRow(
-                    symbol: handoff.isProblem ? "xmark.octagon.fill" : "checkmark.circle.fill",
-                    tint: handoff.isProblem ? Theme.red : Theme.green, text: handoff.text)
-            }
-        }
-    }
-}
-
-struct MessageRow: View {
-    var symbol: String
-    var tint: Color
-    var text: String
-
-    var body: some View {
-        IconRow(symbol: symbol, tint: tint) {
-            Text(text).textStyle(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            if let error { Message(.error, error) }
+            if let note { Message(.info, note) }
+            if let notice { Message(.success, notice) }
+            if let handoff { Message(handoff.isProblem ? .error : .success, handoff.text) }
         }
     }
 }

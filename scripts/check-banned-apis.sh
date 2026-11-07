@@ -81,4 +81,16 @@ if [ -n "$hits" ]; then
     echo "       behaviour is a new case or prop there, not a .sheet or an overlay in a view. See AGENTS.md, Conventions." >&2
     status=1
 fi
+# How a result is told is `Outcome` (Outcome.swift): its symbol, colour and word, so the five state colours each keep one meaning and a symbol
+# is never paired with the wrong colour in a view. The symbols that say passed, failed, needs you, unknown and skipped are written in that
+# one file; `StatusMark`, `Message` and `FeedLine(.passed, ...)` are how a view uses them. `xmark.circle.fill` (also the remove button's) and the
+# state-less symbols are not in the list.
+hits=$(grep -rnE --include='*.swift' '"(checkmark\.circle\.fill|exclamationmark\.circle\.fill|exclamationmark\.triangle(\.fill)?|xmark\.octagon\.fill|questionmark\.circle(\.fill)?|minus\.circle(\.fill)?)"' Sources/WorkbenchApp 2>/dev/null \
+    | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/Outcome.swift:' || true)
+if [ -n "$hits" ]; then
+    echo "$hits"
+    echo "error: a result symbol written in a view in Sources/WorkbenchApp/: use an Outcome (StatusMark(.passed), FeedLine(.failed, ...)) or a Message" >&2
+    echo "       (Message(.error, text)). A result the cases lack is a new case in Outcome.swift. See AGENTS.md, Conventions." >&2
+    status=1
+fi
 exit $status

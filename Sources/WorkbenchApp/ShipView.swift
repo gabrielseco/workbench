@@ -8,7 +8,7 @@ struct PRReviewBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             if let shown = store.prReviewShown {
-                Label(shown.headline, systemImage: icon(shown)).textStyle(.heading).foregroundStyle(color(shown))
+                Label(shown.headline, systemImage: outcome(shown).symbol).textStyle(.heading).foregroundStyle(outcome(shown).tint)
                 ForEach(shown.notes, id: \.self) { Text($0).role(.warning) }
                 ScrollView {
                     Text(shown.findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Codex wrote nothing.")
@@ -39,15 +39,12 @@ struct PRReviewBody: View {
         }
     }
 
-    private func icon(_ shown: PRReviewShown) -> String {
-        shown.verdict == .clean ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-    }
-
-    private func color(_ shown: PRReviewShown) -> Color {
+    /// A round that came out clean is done, one with findings needs the person, and one that did not finish failed.
+    private func outcome(_ shown: PRReviewShown) -> Outcome {
         switch shown.verdict {
-        case .clean?: Theme.green
-        case .fix?: Theme.amber
-        case nil: Theme.red
+        case .clean?: .passed
+        case .fix?: .warning
+        case nil: .failed
         }
     }
 }

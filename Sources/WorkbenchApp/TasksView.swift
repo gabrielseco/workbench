@@ -21,8 +21,8 @@ struct TasksView: View {
         let snapshot = store.tasks.snapshot(for: store.project)
         VStack(alignment: .leading, spacing: 0) {
             if let error = store.tasks.error {
-                Label("Could not read the tasks: \(error). Showing the last read.", systemImage: "xmark.octagon.fill")
-                    .textRole(.error).padding(.horizontal, Space.xl).padding(.vertical, Space.s)
+                Message(.error, "Could not read the tasks: \(error). Showing the last read.")
+                    .padding(.horizontal, Space.xl).padding(.vertical, Space.s)
                 Divider()
             }
             if store.tasks.isNewShown(in: store.project) {
@@ -92,7 +92,7 @@ struct TimerCardView: View {
                 expanded = !open
             } label: {
                 HStack(spacing: Space.s) {
-                    Image(systemName: card.worst.map(TaskOutcomeStyle.symbol) ?? "questionmark.circle")
+                    Image(systemName: card.worst.map(TaskOutcomeStyle.symbol) ?? Outcome.unknown.symbol)
                         .foregroundStyle(Theme.color(for: tone))
                     VStack(alignment: .leading, spacing: Space.xxs) {
                         Text("Will it run tonight?").role(.caption)

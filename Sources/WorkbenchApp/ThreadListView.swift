@@ -91,7 +91,7 @@ struct RailMark: View {
                 .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))
         case .done: Image(systemName: "checkmark").textStyle(.captionBold, .green)
         case .idle: Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9)
-        case .broken: Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.red)
+        case .broken: StatusMark(.failed)
         }
     }
 }
@@ -101,10 +101,10 @@ extension ThreadMark {
     var symbol: String {
         switch self {
         case .working: "circle.inset.filled"
-        case .needsYou: "exclamationmark.circle.fill"
-        case .done: "checkmark.circle.fill"
+        case .needsYou: Outcome.warning.symbol
+        case .done: Outcome.passed.symbol
         case .idle: "circle"
-        case .broken: "xmark.octagon.fill"
+        case .broken: Outcome.failed.symbol
         }
     }
 

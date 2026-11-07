@@ -44,8 +44,7 @@ struct ReviewView: View {
     private var criteria: some View {
         section("Criteria") {
             if let problem = review.goalProblem {
-                Label("The goal file is not valid, so the criteria are unknown: \(problem)", systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(Theme.red).textStyle(.callout)
+                Message(.error, "The goal file is not valid, so the criteria are unknown: \(problem)")
             } else if review.criteria.isEmpty, !review.unavailable.isEmpty {
                 Text("None: a quick goal. Check the work against the request.").textStyle(.callout)
                 ForEach(review.unavailable, id: \.self) {
@@ -78,7 +77,7 @@ struct ReviewView: View {
     private var files: some View {
         section("Changed files") {
             if let problem = review.diffProblem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.red).textStyle(.callout)
+                Message(.error, problem)
             } else if review.files.isEmpty {
                 Text("No changes.").role(.detail)
             }

@@ -49,9 +49,7 @@ struct FeedRow: View {
         case .verify(let ok, let reason, let proofs): VerifyRow(ok: ok, reason: reason, proofs: proofs, shots: shots)
         case .plan(let tasks): PlanRow(tasks: tasks)
         case .decision(let text):
-            FeedLine(
-                symbol: ["accepted", "succeeded"].contains(text) ? "checkmark.circle.fill" : "minus.circle.fill",
-                tint: ["accepted", "succeeded"].contains(text) ? Theme.green : Theme.grey, title: text.capitalized, detail: nil)
+            FeedLine(["accepted", "succeeded"].contains(text) ? .passed : .stopped, title: text.capitalized)
         case .pullRequest(let number, let url):
             FeedLine(
                 symbol: "arrow.up.right.circle.fill", tint: Theme.green,
@@ -193,9 +191,7 @@ struct GoalCardRow: View {
             heading
             // Why approval is blocked is said whether or not the goal can be edited: a goal that does not parse has no editor.
             if let blockers = goal?.blockers, !blockers.isEmpty {
-                ForEach(blockers, id: \.self) {
-                    Label($0, systemImage: "xmark.octagon.fill").foregroundStyle(Theme.red).textStyle(.callout)
-                }
+                ForEach(blockers, id: \.self) { Message(.error, $0) }
             }
             if let request = goal?.request, !request.isEmpty { requestText(request) }
             if !rows.isEmpty { criteriaList }
@@ -250,18 +246,19 @@ struct GoalCardRow: View {
         }
     }
 
+    /// The approval as a mark: approved is done, a goal changed since is amber, and a draft is the quiet ring.
     private var approvalSymbol: String {
         switch approval {
-        case .approved?: "checkmark.circle.fill"
-        case .stale?: "exclamationmark.circle.fill"
+        case .approved?: Outcome.passed.symbol
+        case .stale?: Outcome.warning.symbol
         default: "circle"
         }
     }
 
     private var approvalTint: Color {
         switch approval {
-        case .approved?: Theme.green
-        case .stale?: Theme.amber
+        case .approved?: Outcome.passed.tint
+        case .stale?: Outcome.warning.tint
         default: Theme.grey
         }
     }
@@ -278,7 +275,7 @@ struct TurnRow: View {
         HStack(spacing: Space.s) {
             switch phase {
             case .working: ProgressView().controlSize(.small).frame(width: 16)
-            default: Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
+            default: StatusMark(outcome).frame(width: 16)
             }
             Text(title).textStyle(.calloutStrong)
             if let detail { Text(detail).role(.detail) }
@@ -314,23 +311,14 @@ struct TurnRow: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var symbol: String {
+    private var outcome: Outcome {
         switch phase {
-        case .ended("succeeded"): "checkmark.circle.fill"
-        case .ended("stopped"): "minus.circle.fill"
-        case .orphaned: "exclamationmark.circle.fill"
-        case .unrecorded: "questionmark.circle"
-        default: "xmark.circle.fill"
-        }
-    }
-
-    private var tint: Color {
-        switch phase {
-        case .working: Theme.blue
-        case .ended("succeeded"): Theme.green
-        case .ended("stopped"), .unrecorded: Theme.grey
-        case .orphaned: Theme.amber
-        default: Theme.red
+        case .working: .pending
+        case .ended("succeeded"): .passed
+        case .ended("stopped"): .stopped
+        case .unrecorded: .unknown
+        case .orphaned: .warning
+        default: .failed
         }
     }
 
@@ -363,7 +351,7 @@ struct CheckRow: View {
     var body: some View {
         let passed = result == "passed"
         FeedLine(
-            symbol: passed ? "checkmark.circle.fill" : "xmark.circle.fill", tint: passed ? Theme.green : Theme.red,
+            passed ? .passed : .failed,
             title: "Check \(result.replacingOccurrences(of: "_", with: " "))"
                 + (durationMs.map { " · " + TurnRow.duration($0) } ?? ""),
             detail: command, mono: true, inline: true)
@@ -378,14 +366,14 @@ struct JudgeRow: View {
 
     var body: some View {
         if !ok {
-            FeedLine(symbol: "questionmark.circle", tint: Theme.grey, title: "The judge did not answer", detail: nil)
+            FeedLine(.unknown, title: "The judge did not answer")
         } else if unmet == 0 {
             FeedLine(
-                symbol: "checkmark.circle.fill", tint: Theme.green,
+                .passed,
                 title: "Judge agrees · \(criteria) of \(criteria) criteria met", detail: concernText)
         } else {
             FeedLine(
-                symbol: "exclamationmark.circle.fill", tint: Theme.amber,
+                .warning,
                 title: "Judge: \(criteria - unmet) of \(criteria) criteria met", detail: concernText)
         }
     }
@@ -403,7 +391,7 @@ struct VerifyRow: View {
     var body: some View {
         if ok, !shots.isEmpty {
             VStack(alignment: .leading, spacing: Space.m) {
-                FeedLine(symbol: "checkmark.circle.fill", tint: Theme.green, title: "Verify passed", detail: nil)
+                FeedLine(.passed, title: "Verify passed")
                 HStack(alignment: .top, spacing: Space.m) {
                     ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
                         ProofThumbnail(shot: shot) { openPreview(.proof(shots, at: index)) }
@@ -419,7 +407,7 @@ struct VerifyRow: View {
 
     private var line: some View {
         FeedLine(
-            symbol: ok ? "checkmark.circle.fill" : "xmark.circle.fill", tint: ok ? Theme.green : Theme.red,
+            ok ? .passed : .failed,
             title: ok ? "Verify passed" : "Verify failed" + (reason.map { ": \($0)" } ?? ""),
             detail: proofs.isEmpty ? nil : proofs.joined(separator: ", "))
     }
@@ -441,8 +429,7 @@ struct PRReviewRow: View {
         // The step screen's words for it: the core's verdict is "clean" or a list of findings.
         let outcome = Self.outcome(ok: ok, verdict: verdict)
         FeedLine(
-            symbol: clean ? "checkmark.circle.fill" : (ok ? "exclamationmark.circle.fill" : "xmark.circle.fill"),
-            tint: clean ? Theme.green : (ok ? Theme.amber : Theme.red),
+            clean ? .passed : (ok ? .warning : .failed),
             title: "PR review" + (round.map { " round \($0)" } ?? "") + " · " + outcome, detail: nil)
     }
 }
@@ -478,7 +465,7 @@ struct NoticeRow: View {
                 detail: (refusals > 0 ? "\(refusals) of them refused calls. " : "") + "Open the event log to see them.")
         case .logDamaged(let problems, let first):
             FeedLine(
-                symbol: "xmark.octagon.fill", tint: Theme.red,
+                .failed,
                 title: "The log has \(problems) damaged \(problems == 1 ? "line" : "lines"); this shows what could be read.",
                 detail: first + ". Open the event log to see it; Workbench never rewrites it.")
         case .logTailCut:
@@ -487,7 +474,7 @@ struct NoticeRow: View {
                 detail: nil)
         case .goalChangedSinceApproval:
             FeedLine(
-                symbol: "exclamationmark.circle.fill", tint: Theme.amber, title: "The goal changed since it was approved",
+                .warning, title: "The goal changed since it was approved",
                 detail: "Approve it again before it runs.")
         case .earlierNotShown(let count):
             FeedLine(

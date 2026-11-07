@@ -195,7 +195,7 @@ struct PullRequestCIView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xs) {
             HStack(spacing: Space.s) {
-                Label(ci.summary, systemImage: icon).foregroundStyle(color).textStyle(.callout)
+                Label(ci.summary, systemImage: outcome.symbol).foregroundStyle(outcome.tint).textStyle(.callout)
                 Button("Refresh") { Task { await store.refreshPullRequestCI() } }.buttonStyle(.link).textStyle(.callout)
             }
             // The banner sits outside the scrolling content, so a long list scrolls in its own box instead of pushing the window.
@@ -216,7 +216,7 @@ struct PullRequestCIView: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             ForEach(ci.rows, id: \.self) { row in
                 HStack(spacing: Space.s) {
-                    Image(systemName: rowIcon(row.kind)).foregroundStyle(rowColor(row.kind))
+                    StatusMark(rowOutcome(row.kind))
                     Text(row.name).textStyle(.monoCallout)
                     Text(row.word).role(.detail)
                 }
@@ -226,41 +226,22 @@ struct PullRequestCIView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var icon: String {
-        if ci.unavailableReason != nil { return "questionmark.circle.fill" }
-        if ci.isPending { return "clock.fill" }
+    private var outcome: Outcome {
+        if ci.unavailableReason != nil { return .unavailable }
+        if ci.isPending { return .pending }
         switch ci.status?.checks?.state {
-        case .passed?: return "checkmark.circle.fill"
-        case .failed?: return "xmark.circle.fill"
-        default: return "minus.circle"
+        case .passed?: return .passed
+        case .failed?: return .failed
+        default: return .skipped
         }
     }
 
-    private var color: Color {
-        if ci.unavailableReason != nil { return Theme.amber }
-        if ci.isPending { return Theme.blue }
-        switch ci.status?.checks?.state {
-        case .passed?: return Theme.green
-        case .failed?: return Theme.red
-        default: return .secondary
-        }
-    }
-
-    private func rowIcon(_ kind: PullRequestCI.Row.Kind) -> String {
+    private func rowOutcome(_ kind: PullRequestCI.Row.Kind) -> Outcome {
         switch kind {
-        case .passed: "checkmark.circle.fill"
-        case .skipped: "minus.circle"
-        case .running: "clock"
-        case .failed: "xmark.circle.fill"
-        }
-    }
-
-    private func rowColor(_ kind: PullRequestCI.Row.Kind) -> Color {
-        switch kind {
-        case .passed: Theme.green
-        case .skipped: Theme.grey
-        case .running: Theme.blue
-        case .failed: Theme.red
+        case .passed: .passed
+        case .skipped: .skipped
+        case .running: .pending
+        case .failed: .failed
         }
     }
 }

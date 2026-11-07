@@ -173,10 +173,10 @@ struct ChatComposer: View {
         VStack(alignment: .leading, spacing: Space.m) {
             if let said = store.actionError {
                 // A refusal (too long, no goal agent, a draft that did not come out) asks the person to change something: amber.
-                MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: said)
+                Message(.warning, said)
             }
             if let problem = staging.problem {
-                MessageRow(symbol: "exclamationmark.triangle.fill", tint: Theme.amber, text: problem)
+                Message(.warning, problem)
             }
             MessageRows(error: nil, note: store.actionNote, notice: store.notice, handoff: nil)
             if state.ended {
