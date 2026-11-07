@@ -34,6 +34,12 @@ struct AgentsCard: View {
                 VStack(alignment: .leading, spacing: Space.s) {
                     ForEach(setup.rows) { row in AgentRow(row: row) }
                 }
+            } else if store.agentConfigMissing {
+                Text(
+                    "This project has no .workbench/config.toml, so every role runs its provider's default and there is no goal "
+                        + "agent: chat and drafting are off."
+                )
+                    .role(.detail).fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("This project's config could not be read.").role(.detail)
             }

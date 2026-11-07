@@ -106,6 +106,12 @@ struct NewThreadScreen: View {
 
     private var busy: Bool { store.drafting || store.chatReplying }
 
+    /// What the heading says about the agent: nil until the config is read, `.some(nil)` when the project has no goal agent.
+    private var headingAgent: String?? {
+        if let setup = store.agentSetup { return .some(AgentSetup.chatAgent(for: setup)) }
+        return store.agentConfigMissing ? .some(nil) : nil
+    }
+
     private var state: NewThreadState {
         NewThreadState(text: store.newThreadText, screenshots: staging.items.count, pending: staging.pending, busy: busy)
     }
@@ -116,7 +122,7 @@ struct NewThreadScreen: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
-                    NewThreadHeading(agent: store.agentSetup.map { AgentSetup.chatAgent(for: $0) })
+                    NewThreadHeading(agent: headingAgent)
                     messages
                     composer
                     caption

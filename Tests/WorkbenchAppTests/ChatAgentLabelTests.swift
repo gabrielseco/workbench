@@ -36,6 +36,18 @@ import WorkbenchCore
         #expect(none.chatAgentNote == "no goal agent is set, so replies are off")
     }
 
+    @Test func aProjectWithNoConfigFileSaysNoGoalAgentInsteadOfCouldNotRead() async throws {
+        let (store, fixture) = try await store(config: nil)
+        try FileManager.default.removeItem(at: fixture.project.configURL)
+        await store.refreshAgentSetup()
+        #expect(store.agentSetup == nil && store.agentConfigMissing)
+        #expect(store.chatAgentNote == "no goal agent is set, so replies are off")
+        try "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n".write(
+            to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        await store.refreshAgentSetup()
+        #expect(store.agentSetup != nil && !store.agentConfigMissing)
+    }
+
     @Test func aProjectWithNoGoalAgentSaysSoInsteadOfNamingOne() async throws {
         let (store, _) = try await store(config: nil)
         await store.refreshAgentSetup()
