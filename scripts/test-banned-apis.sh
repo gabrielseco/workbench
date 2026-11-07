@@ -85,8 +85,8 @@ dir=$(tree modalfile Modal.swift 'struct A: View { var body: some View { Text("x
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the component's own overlay pieces were refused"
 rm -rf "$dir"
 
-dir=$(tree legacy FeedRow.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
-run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a file on the legacy list was refused"
+dir=$(tree everyfile FeedRow.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
+run "$dir" >/dev/null; [ "$?" = 1 ] || fail "a .sheet( in any view file passed: no file is exempt now"
 rm -rf "$dir"
 
 dir=$(tree usemodal Good.swift '// .sheet( is the old way

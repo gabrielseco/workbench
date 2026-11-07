@@ -398,7 +398,7 @@ struct VerifyRow: View {
     var reason: String?
     var proofs: [String]
     var shots: [ProofShot] = []
-    @State private var viewing: Int?
+    @Environment(\.openScreenshotPreview) private var openPreview
 
     var body: some View {
         if ok, !shots.isEmpty {
@@ -406,15 +406,12 @@ struct VerifyRow: View {
                 FeedLine(symbol: "checkmark.circle.fill", tint: Theme.green, title: "Verify passed", detail: nil)
                 HStack(alignment: .top, spacing: Space.m) {
                     ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
-                        ProofThumbnail(shot: shot) { viewing = index }
+                        ProofThumbnail(shot: shot) { openPreview(.proof(shots, at: index)) }
                     }
                 }
             }
             .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
             .card()
-            .sheet(isPresented: Binding(get: { viewing != nil }, set: { if !$0 { viewing = nil } })) {
-                ProofGallery(shots: shots, index: viewing ?? 0)
-            }
         } else {
             line
         }

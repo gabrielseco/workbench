@@ -19,6 +19,7 @@ struct RootView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .appModals(store)
+        .environment(\.openScreenshotPreview) { store.modals.preview = $0 }
     }
 }
 

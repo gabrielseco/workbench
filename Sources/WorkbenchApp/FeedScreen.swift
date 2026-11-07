@@ -75,8 +75,8 @@ struct FeedScreen: View {
 
     private func perform(_ action: FeedAction) {
         switch action.kind {
-        case .merge: store.feedModals.confirmingMerge = true
-        case .reviewDetails: store.feedModals.reviewingDetails = true
+        case .merge: store.modals.confirmingMerge = true
+        case .reviewDetails: store.modals.reviewingDetails = true
         default: Task { await store.perform(action.kind) }
         }
     }

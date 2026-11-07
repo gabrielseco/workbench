@@ -79,7 +79,7 @@ struct RecentProject: Equatable, Identifiable {
     /// Whether the Agents card (each role's provider and model, read-only) is up.
     var showingAgents = false
     /// The modals over the feed that no other state decides (`AppModals.swift`).
-    var feedModals = FeedModals()
+    var modals = ModalState()
     /// The open project's agent roles as its config sets them: read when the card or a screen that names the agent appears.
     var agentConfig = AgentConfigState.unread
     /// What is written in each thread's guidance field. It lives here, not in the view, so a send that the run refuses to start does not
@@ -213,7 +213,7 @@ struct RecentProject: Equatable, Identifiable {
             // The project that was open is closed: showing this error over it would let its next poll erase the error, and leave
             // Doctor enabled for a project the window no longer names. What is remembered stays, so a relaunch restores it.
             generation += 1
-            (pickingProject, newThread, showingAgents, agentConfig, feedModals) = (false, false, false, .unread, FeedModals())
+            (pickingProject, newThread, showingAgents, agentConfig, modals) = (false, false, false, .unread, ModalState())
             newThreadText = ""
             clearGuidance()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
@@ -225,7 +225,7 @@ struct RecentProject: Equatable, Identifiable {
         remember(located.root.path)
         generation += 1
         // A goal being written belongs to the project it was started in: another project does not inherit it.
-        (pickingProject, newThread, showingAgents, agentConfig, feedModals) = (false, false, false, .unread, FeedModals())
+        (pickingProject, newThread, showingAgents, agentConfig, modals) = (false, false, false, .unread, ModalState())
         // What was typed was for the project it was typed in: never offered to another.
         newThreadText = ""
         clearGuidance()

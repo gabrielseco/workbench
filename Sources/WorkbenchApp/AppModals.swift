@@ -5,13 +5,14 @@ extension View {
     /// at the window, not in the screen that asked, so the rail and the toolbar are behind them too. Each is one `.modal` (`Modal.swift`).
     func appModals(_ store: ProjectStore) -> some View {
         // A modal asked for from the feed is not left behind when the window moves to another screen (⌘N, the Tasks page).
-        onChange(of: store.showsFeed) { if !store.showsFeed { store.feedModals = FeedModals() } }
+        onChange(of: store.showsFeed) { if !store.showsFeed { store.modals = ModalState() } }
+            .onChange(of: store.newThread) { store.modals = ModalState() }
             .modal("Agents", isPresented: Bindable(store).showingAgents, size: .medium) { AgentsCard(store: store) }
             .modal("Projects", isPresented: Bindable(store).pickingProject, size: .small, placement: .topLeading) {
                 ProjectPickerCard(store: store)
             }
             .modal(
-                "Review", isPresented: closing(store.reviewOverFeed) { store.feedModals.reviewingDetails = false }, size: .large,
+                "Review", isPresented: closing(store.reviewOverFeed) { store.modals.reviewingDetails = false }, size: .large,
                 closesOnOutsideClick: false
             ) {
                 if case .thread(let snapshot) = store.screen { ReviewDetailsBody(snapshot: snapshot, store: store) }
@@ -23,11 +24,18 @@ extension View {
                 if case .thread(let snapshot) = store.screen { RunSettingsBody(snapshot: snapshot, store: store) }
             }
             .modal(
-                "Diff", isPresented: closing(store.diffOverFeed != nil) { store.feedModals.diffPath = nil }, size: .large,
+                "Diff", isPresented: closing(store.diffOverFeed != nil) { store.modals.diffPath = nil }, size: .large,
                 closesOnOutsideClick: false
             ) {
                 if let path = store.diffOverFeed { DiffBody(store: store, path: path) }
             }
+            .modal(
+                store.previewShown?.title ?? "Screenshot",
+                isPresented: closing(store.previewShown != nil) { store.modals.preview = nil }, size: .fitting,
+                closesOnOutsideClick: false,
+                accessory: { if let preview = store.previewShown { ScreenshotPreviewControls(model: preview) } },
+                content: { if let preview = store.previewShown { ScreenshotPreviewBody(model: preview) } }
+            )
             .modal(
                 "Discard", isPresented: closing(store.discardOverFeed) { store.cancelDiscard() }, size: .medium,
                 closesOnOutsideClick: false
@@ -41,7 +49,7 @@ extension View {
                 PRReviewBody(store: store)
             }
             .modal(
-                mergeTitle(store), isPresented: closing(store.mergeOverFeed) { store.feedModals.confirmingMerge = false },
+                mergeTitle(store), isPresented: closing(store.mergeOverFeed) { store.modals.confirmingMerge = false },
                 size: .small,
                 closesOnOutsideClick: false
             ) {
@@ -71,13 +79,13 @@ extension ProjectStore {
     /// Opens that modal as its own button or menu would, on the thread on screen.
     func show(_ modal: LaunchModal) async {
         switch modal {
-        case .review: feedModals.reviewingDetails = true
+        case .review: modals.reviewingDetails = true
         case .diff:
-            feedModals.reviewingDetails = true
-            feedModals.diffPath = review?.files.first?.path
+            modals.reviewingDetails = true
+            modals.diffPath = review?.files.first?.path
         case .discard: await prepareDiscard()
         case .prReview: await showPRReview()
-        case .merge: feedModals.confirmingMerge = true
+        case .merge: modals.confirmingMerge = true
         }
     }
 }

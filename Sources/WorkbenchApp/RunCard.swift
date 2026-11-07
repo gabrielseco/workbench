@@ -249,19 +249,6 @@ struct ProofShot: Equatable, Identifiable {
     }
 }
 
-/// The verifier's screenshots as one gallery in a sheet: previous and next, the arrow keys, the caption and "2 of 3".
-struct ProofGallery: View {
-    var shots: [ProofShot]
-    @State var index: Int
-
-    var body: some View {
-        let shot = shots[min(max(index, 0), shots.count - 1)]
-        ScreenshotPreview(
-            url: shot.url, title: shots.count > 1 ? "\(shot.caption) · \(index + 1) of \(shots.count)" : shot.caption,
-            pager: shots.count > 1 ? .init(index: index, count: shots.count) { index = min(max($0, 0), shots.count - 1) } : nil)
-    }
-}
-
 struct ProofThumbnail: View {
     var shot: ProofShot
     var open: () -> Void = {}

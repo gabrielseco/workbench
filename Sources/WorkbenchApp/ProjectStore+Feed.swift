@@ -2,13 +2,15 @@ import Foundation
 
 /// What the modals over the feed that the store has no other state for are showing. They stand at the window, so the rail and the
 /// toolbar are behind them too, and a project switch closes them.
-struct FeedModals {
+struct ModalState {
     /// The review of the latest turn, with every criterion and where it stands.
     var reviewingDetails = false
     /// The merge question for the thread's pull request.
     var confirmingMerge = false
     /// The file whose diff is open over the review.
     var diffPath: String?
+    /// The screenshot on show, from a card's thumbnails or the verifier's row.
+    var preview: ScreenshotPreviewModel?
 }
 
 extension ProjectStore {
@@ -23,9 +25,14 @@ extension ProjectStore {
 
     /// The modals that belong to the feed, as shown: none of them is up over another screen (the New goal screen, Tasks), where the feed
     /// they were opened from is gone. What was open is cleared when the feed leaves (`appModals`), so it is not there on coming back.
-    var reviewOverFeed: Bool { showsFeed && feedModals.reviewingDetails }
-    var mergeOverFeed: Bool { showsFeed && feedModals.confirmingMerge }
-    var diffOverFeed: String? { showsFeed ? feedModals.diffPath : nil }
+    var reviewOverFeed: Bool { showsFeed && modals.reviewingDetails }
+    var mergeOverFeed: Bool { showsFeed && modals.confirmingMerge }
+    var diffOverFeed: String? { showsFeed ? modals.diffPath : nil }
+    /// The preview that is on show: not a staged screenshot that has gone, nor the verifier's over a screen that is not the feed.
+    var previewShown: ScreenshotPreviewModel? {
+        guard let preview = modals.preview, !preview.isStale, showsFeed || !preview.needsFeed else { return nil }
+        return preview
+    }
     var discardOverFeed: Bool { showsFeed && pendingDiscard != nil }
     var prReviewOverFeed: Bool { showsFeed && prReviewShown != nil }
 

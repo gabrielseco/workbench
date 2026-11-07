@@ -61,9 +61,9 @@ struct MergeBody: View {
             Text("Squash-merges it on GitHub at the commit whose checks are green. This cannot be undone from Workbench.")
                 .role(.detail).fixedSize(horizontal: false, vertical: true)
             ModalFooter {
-                Button("Cancel") { store.feedModals.confirmingMerge = false }.plainButton(size: .regular)
+                Button("Cancel") { store.modals.confirmingMerge = false }.plainButton(size: .regular)
                 Button("Merge") {
-                    store.feedModals.confirmingMerge = false
+                    store.modals.confirmingMerge = false
                     Task { await store.mergePullRequest() }
                 }
                 .primaryButton(size: .regular)

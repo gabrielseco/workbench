@@ -63,7 +63,7 @@ rows, disabled. If the diff shows nothing, say so and stop.
 ## 2. Static pass
 
 Do the Rubric's static pass first; it is certain, so it comes before the pixels. A modal in the diff must be `.modal(...)` (`Modal.swift`); a
-`.sheet(` or an overlay with its own veil is a finding, even if the check lets it through (a file on `LEGACY_MODAL_FILES`).
+`.sheet(` or an overlay with its own veil is a finding (the check fails one, but read the diff for a presentation call it does not name).
 
 ## 3. Capture the matrix
 

@@ -106,16 +106,16 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
             let store = options.makeStore(preferences: SpyPreferences())
             await options.start(store, applyLoginPath: {}, setAppearance: { _ in })
             #expect(store.showsFeed, "the project loaded first")
-            #expect(store.feedModals.confirmingMerge == (name == "merge"), "\(name): the merge question")
-            #expect(store.feedModals.reviewingDetails == (name != "merge"), "\(name): the review")
-            #expect(store.feedModals.diffPath == nil, "this fixture changed no file, so there is no diff to name")
+            #expect(store.modals.confirmingMerge == (name == "merge"), "\(name): the merge question")
+            #expect(store.modals.reviewingDetails == (name != "merge"), "\(name): the review")
+            #expect(store.modals.diffPath == nil, "this fixture changed no file, so there is no diff to name")
         }
         let quiet = LaunchOptions.from(environment: [
             "WORKBENCH_SKIP_LOGIN_PATH": "1", "WORKBENCH_APP_PROJECT": fixture.root.path,
         ])
         let store = quiet.makeStore(preferences: SpyPreferences())
         await quiet.start(store, applyLoginPath: {}, setAppearance: { _ in })
-        #expect(!store.feedModals.reviewingDetails && !store.feedModals.confirmingMerge, "nothing is opened unless asked")
+        #expect(!store.modals.reviewingDetails && !store.modals.confirmingMerge, "nothing is opened unless asked")
     }
 
     @Test func theAppearanceIsLightOrDarkAndAnythingElseIsTheSystems() {

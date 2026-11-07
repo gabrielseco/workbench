@@ -83,7 +83,7 @@ struct ReviewView: View {
                 Text("No changes.").role(.detail)
             }
             ForEach(review.files) { file in
-                Button { store.feedModals.diffPath = file.path } label: { mono(file.text) }.buttonStyle(.plain)
+                Button { store.modals.diffPath = file.path } label: { mono(file.text) }.buttonStyle(.plain)
                     .help("View diff")
             }
             if let note = review.filesNote { Text(note).role(.caption) }
