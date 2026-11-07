@@ -240,7 +240,7 @@ Exit codes of `run`: 0 succeeded, 1 failed, 3 stopped, 4 timed out, 5 budget exc
 config or goal.
 
 Per thread, on disk: `goal.md`, `events.jsonl`, `session.json` (`{session_id, confirmed}`),
-`prompts/turn-N.md`, and `runner.json` while a run holds the log.
+`prompts/turn-N.md`, and `runner.json` while a run holds the log, and `ports.json` once a step has been given the thread's ports.
 
 - **Sessions.** `session.json` is written before the first spawn and marked `confirmed` once a stream line
   carries its id. A confirmed session is resumed. An unconfirmed one (a first turn killed before the CLI

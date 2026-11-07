@@ -495,7 +495,7 @@ extension ThreadRunner {
         else { return nil }
         let check = CheckRunner(
             command: command, worktree: worktree,
-            environment: config.childEnvironment(from: options.parentEnvironment),
+            environment: threadEnvironment(config: config, options: options),
             timeout: options.checkTimeoutOverride ?? options.timeoutOverride
                 ?? TimeInterval(goal.turnTimeoutMin) * 60,
             killGrace: options.killGrace)

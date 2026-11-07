@@ -35,7 +35,7 @@ ready_timeout_s = 120                       # 1 to 900
 ## What happens
 
 1. `verifier.started`, then `run.started` (`command`, `port`, the ready check).
-2. Workbench picks a free port and starts the command in the worktree through `ProcessRunner`, on the allowlisted
+2. Workbench starts (the port is the thread's own, from `ports.json`, the same one its setup and check get) the command in the worktree through `ProcessRunner`, on the allowlisted
    environment plus `WORKBENCH_PORT`, `PORT` (Next reads it), `WORKBENCH_THREAD`, `WORKBENCH_GOAL`.
 3. It waits for the ready check, the command's exit, or `ready_timeout_s`. If the app ends first, never comes up or is
    not found: `run.ended` with the reason and the last 20 lines of output, then `verifier.ended` with the same reason.

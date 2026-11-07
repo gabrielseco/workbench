@@ -4,7 +4,7 @@ import Foundation
 ///
 ///     <repo>/.workbench/
 ///       config.toml
-///       threads/<id>/goal.md, events.jsonl, session.json, prompts/turn-N.md, checks/turn-N.log, runner.json
+///       threads/<id>/goal.md, events.jsonl, session.json, prompts/turn-N.md, checks/turn-N.log, runner.json, ports.json
 ///       worktrees/<id>/
 public struct Project: Sendable, Equatable {
     public let root: URL

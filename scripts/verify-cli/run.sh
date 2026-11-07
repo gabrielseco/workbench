@@ -10,7 +10,9 @@
 # at the cap ($VERIFY_CLI_BUDGET_USD, default 0.50, on $VERIFY_CLI_MODEL, default haiku), usually a few cents. Exit 0
 # only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1
 # makes the helper ignore the app and removes the goal copy from the worktree, so the steps that need the app's page in the
-# proof (the marker, the port) and the steps on the goal copy (present, read-only, not a change) must FAIL.
+# proof (the marker, the port), the steps on the goal copy (present, read-only, not a change) and the steps on the thread's
+# ports (the setup was given them) must FAIL. `ports = 2` and a setup script check that a thread's ports are one block that the
+# setup and the app both got, recorded in the thread's ports.json.
 # The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -52,7 +54,15 @@ else
 fi
 HELPER
 [ "$SABOTAGE" = 1 ] && sed -i.bak 's/PROBE_IGNORE_APP:-0/PROBE_IGNORE_APP:-1/' scripts/fetch-page.sh && rm -f scripts/fetch-page.sh.bak
-chmod +x scripts/probe-app.sh scripts/fetch-page.sh
+SETUP_SEEN="${TMPDIR:-/tmp}/verify-cli-run-setup-seen"
+cat >scripts/probe-setup.sh <<SETUP
+#!/bin/sh
+# verify-cli probe setup: what the thread's setup was given, outside the worktree so the diff stays one file.
+printf 'port=%s port1=%s thread=%s\n' "\$WORKBENCH_PORT" "\$WORKBENCH_PORT_1" "\$WORKBENCH_THREAD" >"$SETUP_SEEN"
+SETUP
+[ "$SABOTAGE" = 1 ] && sed -i.bak 's/"\$WORKBENCH_PORT" "\$WORKBENCH_PORT_1"/none none/' scripts/probe-setup.sh && rm -f scripts/probe-setup.sh.bak
+rm -f "$SETUP_SEEN"
+chmod +x scripts/probe-app.sh scripts/fetch-page.sh scripts/probe-setup.sh
 g add -A
 g -c user.name=verify-cli -c user.email=verify-cli@example.invalid commit -q -m "verify-cli: probe app, skill and helper" \
     || die "could not commit the probe in the clone"
@@ -63,6 +73,8 @@ BASE_SHA=$(g rev-parse "$BASE")
 wb "$T_WB" init >/dev/null
 cat >"$P/.workbench/config.toml" <<TOML
 default_budget_usd = $BUDGET_USD
+ports = 2
+setup_command = "scripts/probe-setup.sh"
 
 [agents.run]
 model = "$MODEL"
@@ -144,6 +156,15 @@ check "run.ended: it was ready and was still running when it was stopped" "got: 
 PORT=$(py "s=[x['data'] for x in lines if x['kind']=='run.started']; print(s[-1].get('port') if s else '')" <"$LOG")
 check "run.started names a port" "port '$PORT'" bash -c '[[ $1 =~ ^[0-9]+$ && $1 -gt 1023 ]]' _ "${PORT:-}"
 
+# The thread's ports are one recorded block: the app was started on its first port, and the setup was given both and the name.
+PORTS_FILE="$THREAD_DIR/ports.json"
+check "ports.json records a block of two ports" "content: $(cat "$PORTS_FILE" 2>/dev/null)" \
+    bash -c 'grep -q "\"count\":2" "$1"' _ "$PORTS_FILE"
+check "run.started's port is the first port of the thread's block" "run.started says $PORT, ports.json: $(cat "$PORTS_FILE" 2>/dev/null)" \
+    bash -c 'grep -q "\"first\":$2[,}]" "$1"' _ "$PORTS_FILE" "${PORT:-0}"
+check "the setup was given both ports and the thread's name" "setup saw: $(cat "$SETUP_SEEN" 2>/dev/null), wanted port=$PORT port1=$((${PORT:-0} + 1)) thread=$ID" \
+    grep -qx "port=$PORT port1=$((${PORT:-0} + 1)) thread=$ID" "$SETUP_SEEN"
+
 # The helper can only have fetched the page from the app Workbench started, on the port it picked.
 PROOF="$THREAD_DIR/proof/turn-1/probe.txt"
 check "probe.txt is in the turn's proof folder" "no $PROOF" test -f "$PROOF"
@@ -172,6 +193,7 @@ check "the copy is read-only" "$COPY is writable" bash -c '[ -e "$1" ] && [ ! -w
 check "the copy is there and is not a change in the worktree" "it is missing, or git status in the worktree lists it" \
     bash -c '[ -e "$2" ] && ! git -C "$1" status --porcelain --untracked-files=all | grep -q "goal.md"' _ "$WT" "$COPY"
 
+rm -f "$SETUP_SEEN"
 wb "$T_WB" abandon "$ID" >/dev/null 2>&1
 ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'])")
 check "abandon ends the thread" "status says ended: $ended" test "$ended" = abandoned

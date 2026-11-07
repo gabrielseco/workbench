@@ -12,6 +12,18 @@ extension ThreadRunner {
         try await runSetup(command: command, config: config, goal: goal, worktree: worktree, log: log, options: options)
     }
 
+    /// The allowlisted environment plus the thread's own variables (`WORKBENCH_THREAD`, its ports), for a command Workbench runs in
+    /// the worktree. Without ports (none free) only the thread's name is added, and the command picks its own.
+    func threadEnvironment(config: Config, options: RunOptions) -> [String: String] {
+        var env = config.childEnvironment(from: options.parentEnvironment)
+        if let ports = ThreadStore(project: project).ports(of: threadID, count: config.ports) {
+            env.merge(ports.environment(thread: threadID)) { _, new in new }
+        } else {
+            env["WORKBENCH_THREAD"] = threadID
+        }
+        return env
+    }
+
     /// What the config's `copy` left out of the worktree, said once per file.
     func noteCopy(_ report: CopyReport) {
         for skipped in report.skipped { notify(.advisory("copy: \(skipped)")) }
@@ -26,7 +38,7 @@ extension ThreadRunner {
         command: String, config: Config, goal: Goal, worktree: URL, log: EventLogWriter, options: RunOptions
     ) async throws {
         let runner = SetupRunner(
-            command: command, worktree: worktree, environment: config.childEnvironment(from: options.parentEnvironment),
+            command: command, worktree: worktree, environment: threadEnvironment(config: config, options: options),
             timeout: options.setupTimeoutOverride ?? SetupRunner.defaultTimeout, killGrace: options.killGrace)
         notify(.setupStarted(command: command))
         defer { currentRun = nil }
