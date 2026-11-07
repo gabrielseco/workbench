@@ -25,30 +25,37 @@ public enum Chat {
     static let pathLimit = GoalDraft.pathLimit
 
     /// What the agent may use: with a snapshot it may read the code, and says so; it can never write, run or reach a network.
-    private static func access(repo: RepoSnapshot?, hasImages: Bool) -> String {
+    /// `usesShell`: the agent has no Read, Grep or Glob tools (Codex) and looks at files with read-only shell commands.
+    private static func access(repo: RepoSnapshot?, hasImages: Bool, usesShell: Bool) -> String {
         guard let repo else {
             let screenshots = hasImages ? ", except the screenshots below" : ""
             return "You can read nothing and run nothing\(screenshots): everything you may use is below."
         }
         let left = repo.left > 0 ? " \(repo.left) files (large ones, links, submodules) are not in it." : ""
+        let how =
+            usesShell
+            ? "Read and search them with read-only shell commands (`ls`, `cat`, `rg`, `grep`, `find`)"
+            : "Read and search them with your Read, Grep and Glob tools"
+        let limits = usesShell ? "You cannot change files or search the internet." : "You cannot search the internet."
+        let rule = usesShell ? "change nothing and run nothing else" : "change nothing and run nothing"
         return """
-            You can read the repository but change nothing and run nothing: its tracked files, as they are at the base \
-            commit, are in the folder `\(RepoSnapshot.folderName)/` of your current folder. Read and search them with your \
-            Read, Grep and Glob tools before you answer a question about the code, and say which files you looked at.\(left) \
-            You cannot search the internet.
+            You can read the repository but \(rule): its tracked files, as they are at the base \
+            commit, are in the folder `\(RepoSnapshot.folderName)/` of your current folder. \(how) \
+            before you answer a question about the code, and say which files you looked at.\(left) \(limits)
             """
     }
 
     /// What the agent is asked. The conversation is the person's and the agent's own earlier words, quoted as data.
     public static func prompt(
         history: [ChatMessage], message: String, instructions: String?, paths: [String], pathsCut: Bool,
-        images: [String] = [], newImages: [String] = [], readFiles: Bool = false, repo: RepoSnapshot? = nil
+        images: [String] = [], newImages: [String] = [], readFiles: Bool = false, repo: RepoSnapshot? = nil,
+        usesShell: Bool = false
     ) -> String {
         let hasImages = !images.isEmpty
         var parts: [String] = [
             """
             You are talking with a person about a change they want to make to a codebase, before any goal is written. \
-            \(access(repo: repo, hasImages: hasImages)) Help them think: ask what is unclear, say what you \
+            \(access(repo: repo, hasImages: hasImages, usesShell: usesShell)) Help them think: ask what is unclear, say what you \
             see in the repository files and instructions, point out what could go wrong, and keep the answer \
             short. Do not write code or a complete goal file; when what they want is clear, say so in a sentence and that it \
             can now be made into a goal. Reply in plain text.
