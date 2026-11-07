@@ -303,6 +303,18 @@ private func exit(_ termination: Termination = .exited(0), tail: String = "", la
         #expect(without[tools + 1] == "")
     }
 
+    @Test func aFolderItMayReadGetsReadGrepAndGlobAndNothingThatWritesOrRuns() throws {
+        let args = try argv { $0.readsFolder = true }
+        let tools = try #require(args.firstIndex(of: "--tools"))
+        #expect(Array(args[(tools + 1)...].prefix(3)) == ["Read", "Grep", "Glob"])
+        let allowed = try #require(args.firstIndex(of: "--allowedTools"))
+        #expect(Array(args[(allowed + 1)...].prefix(3)) == ["Read", "Grep", "Glob"])
+        #expect(args.contains("--restricted") && !args.contains("Bash") && !args.contains("Edit") && !args.contains("WebFetch"))
+        // Named files alone, or none, stay as they were.
+        #expect(try !argv { $0.evidenceFiles = ["a.png"] }.contains("Grep"))
+        #expect(try !argv().contains("Glob"))
+    }
+
     @Test func theSessionIsTheCallersSoTheLoggedArgvIsTheRunningOne() throws {
         func sessionID(_ args: [String]) throws -> String { args[try #require(args.firstIndex(of: "--session-id")) + 1] }
         #expect(try sessionID(argv()) == session)

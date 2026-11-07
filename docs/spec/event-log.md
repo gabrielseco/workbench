@@ -386,6 +386,14 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   thread stays a chat. The thread's `thread.created` still says `kind: "chat"` (it began as one), so a chat has a goal exactly when `goal.md`
   exists, and then takes no more messages (`chat` is refused). The drafter is given the conversation, quoted line by line with who said each
   message, in place of the rough request (up to the chat's own 128 KiB, not the 16 KiB of a rough request).
+- **The repository:** a chat turn's folder holds a copy of the repository for the turn (`chat_reads_repo`, on by default): the tracked regular
+  files at the base commit, in `repo/`, written with a scratch index so the repository's own index, branches, worktrees and files are not
+  touched. Not in it: what the commit does not have (an uncommitted edit, an untracked or ignored file such as `.env.local`), links,
+  submodules, `.git`, a file over 512 KiB, and anything past 64 MiB or 20,000 files (a repository whose listing is larger than the git
+  output cap gets no copy). The person's own git config (a smudge or LFS filter) is not read for it. A Claude agent then has `Read`, `Grep`
+  and `Glob` on its folder (and still no tool that writes, runs or reaches a network); a Codex agent reads it inside its read-only sandbox. The
+  folder, copy included, is removed when the turn ends. When the copy cannot be made the turn goes on without it, as before. With
+  `chat_reads_repo = false` the folder is empty and a Claude agent has no tools (screenshots aside).
 - **Screenshots:** `workbench chat --attach <image>` (the app's `+`, paste or drop) sends images with a message. Each is checked as a goal's are
   (`GoalAttachments`: real PNG, JPEG, GIF or WebP bytes, at most 5 per message, 5 MiB and 40 million pixels each) before anything starts,
   kept in the thread's `chat-attachments/` folder (not `attachments/`, which is the goal's and which a run copies into the worktree) and named

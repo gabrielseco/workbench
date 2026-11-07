@@ -222,10 +222,15 @@ extension ThreadService {
             try? FileManager.default.removeItem(at: scratch)
             throw ChatRefusal.unavailable("could not keep the screenshots for the chat: \(error)")
         }
-        let context = await draftContext(base: await defaultBase())
+        let base = await defaultBase()
+        let context = await draftContext(base: base)
+        // The code at the base, copied for this turn and removed with the folder; no copy when it cannot be made or the config says no.
+        let snapshot =
+            config.chatReadsRepo
+            ? await RepoSnapshotWriter.write(base: base, into: work, repo: project.root, git: git) : nil
         let prompt = Chat.prompt(
             history: history, message: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
-            images: names, newImages: fresh.map(\.name), readFiles: !sends && !names.isEmpty)
+            images: names, newImages: fresh.map(\.name), readFiles: !sends && !names.isEmpty, repo: snapshot)
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         var request: AgentRequest
         if agent.provider == .codex {
@@ -241,6 +246,7 @@ extension ThreadService {
                 policy: .readOnlyEvidence, spend: spend, session: .start(proposed: UUID().uuidString.lowercased()),
                 purpose: .goal, environment: environment, limits: limits, evidenceFiles: sends ? [] : names,
                 reasoningEffort: agent.reasoningEffort)
+            request.readsFolder = snapshot != nil
         }
         do {
             if let refusal = request.validate(against: provider) { throw refusal }

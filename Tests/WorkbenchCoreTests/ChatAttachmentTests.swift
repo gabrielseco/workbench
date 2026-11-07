@@ -129,7 +129,8 @@ import Testing
     }
 
     @Test func aClaudeAgentOpensEveryEarlierImageFromItsFolderOnLaterTurns() async throws {
-        let d = try await drafting(provider: .claude, allowUnpriced: false)
+        var d = try await drafting(provider: .claude, allowUnpriced: false)
+        d.config.chatReadsRepo = false  // about the screenshots: with no repository copy they are all the folder holds
         let answer = try d.file("answer.txt", "I see it.")
         let dump = d.dir.appendingPathComponent("dump.json")
         let env = d.claudeEnvironment("answer=\(answer)", "dump=\(dump.path)")

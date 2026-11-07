@@ -71,6 +71,9 @@ public struct Config: Sendable, Equatable {
     /// Put the repository's `AGENTS.md` (else `CLAUDE.md`) in the first prompt of a thread. Safe mode keeps
     /// `claude` itself from reading it, so Workbench does.
     public var projectInstructions: Bool
+    /// Whether a chat before a goal may read the repository: its tracked files at the base commit, copied for the turn
+    /// (`chat_reads_repo`, default true). Off, a chat sees only the file names and the project instructions.
+    public var chatReadsRepo = true
     /// The project's own check (tests, lint). Added to the allowed tools as `Bash(<command>:*)`.
     public var checkCommand: String?
     /// Run once in a new worktree before its first turn (an install step). Run by Workbench, never offered to
@@ -161,8 +164,8 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type", "permissions",
-            "default_budget_usd", "env_pass", "ports", "safe_mode", "project_instructions", "copy", "read_also", "editor",
-            "herdr", "reports_copy_to",
+            "default_budget_usd", "env_pass", "ports", "safe_mode", "project_instructions", "chat_reads_repo", "copy",
+            "read_also", "editor", "herdr", "reports_copy_to",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -242,6 +245,8 @@ public struct Config: Sendable, Equatable {
                     "'project_instructions' must be true or false, found \(entry.value.typeName)")
             }
         }
+
+        let chatReadsRepo = Self.boolValue("chat_reads_repo", document.tables[""]?.entries["chat_reads_repo"], fail: fail)
 
         func command(_ key: String) -> String? {
             guard let (value, line) = string("", key) else { return nil }
@@ -362,6 +367,7 @@ public struct Config: Sendable, Equatable {
             review: review, verifier: verifier, run: run)
         config.permissions = permissions
         config.ports = ports
+        config.chatReadsRepo = chatReadsRepo
         config.editor = editor
         config.reportsCopyTo = reportsCopyTo
         config.herdr = herdr
@@ -370,6 +376,14 @@ public struct Config: Sendable, Equatable {
         config.mcpServers = mcpServers
         config.defaultBudgetConfigured = document.tables[""]?.entries["default_budget_usd"] != nil
         return config
+    }
+
+    /// A true-or-false key that is on when absent; on as well after `fail` has been told.
+    static func boolValue(_ key: String, _ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Bool {
+        guard let entry else { return true }
+        if case .bool(let value) = entry.value { return value }
+        fail(.wrongType, entry.line, "'\(key)' must be true or false, found \(entry.value.typeName)")
+        return true
     }
 
     /// The `ports` key: how many ports a thread gets, one when it is absent or after `fail` has been told.
@@ -463,6 +477,7 @@ public struct Config: Sendable, Equatable {
         # claude_path = "claude"           # name on PATH, or an absolute path
         # safe_mode = true                 # no CLAUDE.md, skills, plugins, hooks or MCP in runs (default)
         # project_instructions = true     # put AGENTS.md (else CLAUDE.md) in the first prompt (default)
+        # chat_reads_repo = true           # a chat before a goal may read the repo's tracked files at the base (a copy)
         # check_command = "scripts/check.sh"
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # copy = [".env.*", "example/.env"] # git-ignored files copied from this checkout into each new worktree

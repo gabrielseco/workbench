@@ -149,6 +149,9 @@ public struct AgentRequest: Sendable, Equatable {
     public var grants: [String]
     /// Files in `workingDirectory` a `readOnlyEvidence` agent may open, by name. With none it has no tools at all.
     public var evidenceFiles: [String]
+    /// A `readOnlyEvidence` agent may also read, search and list everything in `workingDirectory` (`Read`, `Grep`, `Glob`), not only
+    /// the named `evidenceFiles`. The folder is a copy made for the turn (the chat's repository snapshot), never the checkout.
+    public var readsFolder = false
     /// Where an adapter that has the provider write its answer to a file (Codex `-o`) puts it: inside
     /// `outputDirectory`, so outside the checkout the agent works in.
     public var answerFile: URL?
