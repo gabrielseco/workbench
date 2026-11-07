@@ -140,6 +140,21 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         }
     }
 
+    @Test func permissionsIsAllowlistOrAutoAndDefaultsToAllowlist() throws {
+        let tools = "[tools]\navailable = [\"Read\"]\n"
+        #expect(try Config.parse(tools).permissions == .allowlist)
+        #expect(try Config.parse("permissions = \"allowlist\"\n" + tools).permissions == .allowlist)
+        #expect(try Config.parse("permissions = \"auto\"\n" + tools).permissions == .auto)
+        do {
+            _ = try Config.parse("permissions = \"yolo\"\n" + tools)
+            Issue.record("expected a problem")
+        } catch let error as ConfigError {
+            let text = "\(error)"
+            #expect(text.contains("permissions") && text.contains("\"allowlist\"") && text.contains("\"auto\""), "\(text)")
+            #expect(error.problems.first?.line == 1)
+        }
+    }
+
     @Test func theExampleConfigParses() throws {
         let config = try Config.parse(Config.exampleTOML)
         #expect(config.tools.available.contains("Bash"))
@@ -340,6 +355,30 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
         #expect(args[args.firstIndex(of: "--resume")! + 1] == "e79cf457-1714-495a-9ffe-526c12a4852e")
     }
 
+    @Test func autoPermissionsAddOnlyThePermissionModeFlag() throws {
+        let base = "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\"]\ndenied = [\"Bash(git push:*)\"]\n"
+        let turn = TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")
+        let strict = try Config.parse(base).invocation(for: turn).arguments
+        let auto = try Config.parse("permissions = \"auto\"\n" + base).invocation(for: turn).arguments
+
+        #expect(!strict.contains("--permission-mode"))
+        let mode = try #require(auto.firstIndex(of: "--permission-mode"))
+        #expect(auto[mode + 1] == "auto")
+        var withoutMode = auto
+        withoutMode.removeSubrange(mode...(mode + 1))
+        #expect(withoutMode == strict, "auto changes nothing but the mode")
+        // Still confined, still no prompt, and the deny rule is still passed (it wins over the classifier).
+        #expect(auto.contains("--restricted") && auto.contains("--permission-prompts"))
+        #expect(auto[auto.firstIndex(of: "--disallowedTools")! + 1] == "Bash(git push:*)")
+        #expect(!auto.contains("--dangerously-skip-permissions") && !auto.contains("bypassPermissions"))
+    }
+
+    @Test func theConfigPreviewShowsAutoPermissions() throws {
+        let config = try Config.parse("permissions = \"auto\"\n[tools]\navailable = [\"Read\"]\n")
+        let args = try config.previewInvocation().arguments
+        #expect(args.contains("--permission-mode"))
+    }
+
     @Test func restrictedIsAlwaysPassed() throws {
         let config = try Config.parse("[tools]\navailable = [\"Read\"]")
         let args = try config.invocation(for: TurnRequest(sessionID: session, resume: false, budgetUSD: 1, prompt: "x")).arguments
@@ -397,6 +436,11 @@ private func codes(_ text: String) -> [ConfigProblem.Code] { problems(in: text).
 
         let strict = try Config.parse("[tools]\navailable = [\"Read\"]")
         #expect(strict.childEnvironment(from: parent)["ANTHROPIC_API_KEY"] == nil)
+
+        // `permissions = "auto"` gives a run no credentials either.
+        let auto = try Config.parse("permissions = \"auto\"\n[tools]\navailable = [\"Read\"]")
+        #expect(auto.childEnvironment(from: parent)["SSH_AUTH_SOCK"] == nil)
+        #expect(auto.childEnvironment(from: parent)["GITHUB_TOKEN"] == nil)
     }
 
     @Test func userAndLognameAreKept() {

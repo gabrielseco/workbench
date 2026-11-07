@@ -12,6 +12,7 @@ extension Commands {
         out("claude:   \(resolved?.path ?? "NOT FOUND on PATH (\(config.claudePath))")")
         out("check:    \(config.checkCommand ?? "(none)")")
         out("budget:   \(config.defaultBudgetUSD) USD default")
+        out("perms:    \(config.permissions.rawValue)")
         out("tools:    \(config.tools.available.joined(separator: ", "))")
         out("allowed:  \(config.effectiveAllowedTools.joined(separator: ", "))")
         out("denied:   \(config.tools.denied.joined(separator: ", "))")

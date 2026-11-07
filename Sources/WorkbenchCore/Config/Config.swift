@@ -16,6 +16,15 @@ public enum AppType: String, Sendable, Equatable, CaseIterable {
     case desktop
 }
 
+/// `permissions`: who decides which commands a run may use without asking.
+public enum PermissionsMode: String, Sendable, Equatable, CaseIterable {
+    /// Only what `[tools] allowed` lists (and grants add); everything else is denied.
+    case allowlist
+    /// `claude --permission-mode auto`: its own classifier decides what is safe in the worktree. `[tools] denied` still wins,
+    /// and what the classifier rejects is a denial like any other (`workbench grant`). Bash is not confined to the worktree.
+    case auto
+}
+
 /// `[pr_review]`: the Codex review of a shipped pull request (docs/plan/P5-review-loop.md).
 public struct PRReviewConfig: Sendable, Equatable {
     public static let defaultMaxRounds = 3
@@ -73,6 +82,8 @@ public struct Config: Sendable, Equatable {
     /// Other repositories a run may read, read-only (`ReadAlso`): as written in the config, resolved against the project when a run
     /// starts.
     public var readAlso: [String] = []
+    /// How a run's commands are approved (`permissions`): the allowlist alone, or `claude`'s auto mode on top of it.
+    public var permissions: PermissionsMode = .allowlist
     /// What the project's verifier drives. `desktop` needs Screen Recording, which `doctor` checks.
     public var appType: AppType = .web
     /// The dollar cap for a judge, a review and a review loop, and for a new goal's `budget_usd` when `default_budget_usd` is set.
@@ -147,7 +158,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let rootKeys: Set<String> = [
-            "claude_path", "check_command", "setup_command", "app_type",
+            "claude_path", "check_command", "setup_command", "app_type", "permissions",
             "default_budget_usd", "env_pass", "safe_mode", "project_instructions", "copy", "read_also", "editor", "herdr",
             "reports_copy_to",
         ]
@@ -261,6 +272,16 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        var permissions = PermissionsMode.allowlist
+        if let (value, line) = string("", "permissions") {
+            if let parsed = PermissionsMode(rawValue: value) {
+                permissions = parsed
+            } else {
+                let allowed = PermissionsMode.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+                fail(.invalidValue, line, "'permissions' must be \(allowed)")
+            }
+        }
+
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
             switch entry.value {
@@ -335,6 +356,7 @@ public struct Config: Sendable, Equatable {
             appType: appType, defaultBudgetUSD: budget,
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, verifier: verifier, run: run)
+        config.permissions = permissions
         config.editor = editor
         config.reportsCopyTo = reportsCopyTo
         config.herdr = herdr
@@ -432,6 +454,7 @@ public struct Config: Sendable, Equatable {
         # setup_command = "mix deps.get"   # run once in a new worktree before its first turn
         # copy = [".env.*", "example/.env"] # git-ignored files copied from this checkout into each new worktree
         # read_also = ["../backend"]       # other git checkouts a run may READ, never change: absolute, ~/ or relative here
+        # permissions = "allowlist"        # "auto": claude decides what is safe in the worktree; [tools] denied still wins
         # app_type = "web"                 # "desktop" if the verifier captures the screen: doctor checks Screen Recording
         # default_budget_usd = 5.00        # opt in: new goals get this budget_usd (API billing); else timeout_only
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)

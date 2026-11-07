@@ -86,6 +86,8 @@ extension Config {
             "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
             "--permission-prompts", "none", "--restricted",
         ]
+        // Auto mode accepted `--restricted` and `--permission-prompts none` and kept `--disallowedTools` winning (P24 spike).
+        if permissions == .auto { args += ["--permission-mode", "auto"] }
         // The CLI turns MCP servers off under `--safe-mode`, even with `--mcp-config`, so a task with `mcp_tools` runs without it.
         // Skills and commands stay off, and `--strict-mcp-config` keeps every server but the task's out.
         if let mcp = turn.mcp {
