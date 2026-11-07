@@ -71,6 +71,7 @@ private final class StopHolder: @unchecked Sendable {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
         try #require(bound == 0 && listen(fd, 1) == 0)
+        try #require(!AppLauncher.isFree(held.first), "the listener is seen before the run starts")
 
         let report = try await v.verify("proof=shot.png")
         #expect(report.ok)

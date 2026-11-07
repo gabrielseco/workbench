@@ -165,21 +165,44 @@ private func assign(
         #expect(ThreadPorts(first: 41_000, count: 1).environment(thread: "t")["WORKBENCH_PORT_1"] == nil)
     }
 
-    @Test func isFreeSeesARealListener() throws {
-        let port = try #require(AppLauncher.freePort())
-        #expect(AppLauncher.isFree(port))
-        let fd = socket(AF_INET, streamSocketType, 0)
-        defer { close(fd) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr = in_addr(s_addr: UInt32(0x7f00_0001).bigEndian)
-        address.sin_port = UInt16(port).bigEndian
-        let bound = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+    @Test func isFreeSeesAListenerOnEitherLoopbackFamilyOrEveryAddress() throws {
+        // A port the kernel offered can be taken by another test before this one listens, so the whole round is tried again on
+        // a new port when the setup (not the check) was in the way.
+        var finished = false
+        for _ in 0..<8 where !finished { finished = try listenerRound(on: try #require(AppLauncher.freePort())) }
+        #expect(finished, "eight ports in a row were taken before this test could use them")
+    }
+
+    /// One port through every kind of listener; false when the machine got in the way before anything was checked.
+    private func listenerRound(on port: Int) throws -> Bool {
+        guard AppLauncher.isFree(port) else { return false }
+        // Made one at a time: two of them at once would be in each other's way. A host with no IPv6 skips the last.
+        let makers: [(String, () -> Listener?)] = [
+            ("127.0.0.1", { Listener(v6: false, any: false, port: port) }),
+            ("0.0.0.0", { Listener(v6: false, any: true, port: port) }),
+            ("::1", { Listener(v6: true, any: false, port: port) }),
+        ]
+        var seen = 0
+        for (name, make) in makers {
+            guard let listener = make() else {
+                if name == "::1" { continue }
+                return false
+            }
+            #expect(!AppLauncher.isFree(port), "a listener on \(name) is seen")
+            listener.close()
+            guard AppLauncher.isFree(port) else { return false }
+            seen += 1
         }
-        try #require(bound == 0)
-        try #require(listen(fd, 1) == 0)
-        #expect(!AppLauncher.isFree(port))
+        return seen >= 2
+    }
+
+    @Test func aListenerWhoseQueueIsFullIsStillInUse() throws {
+        let port = try #require(AppLauncher.freePort())
+        let listener = try #require(Listener(v6: false, any: false, port: port, backlog: 1))
+        // Nothing accepts, so the first connects fill the queue and the later ones hang instead of being refused.
+        for attempt in 1...4 { #expect(!AppLauncher.isFree(port), "attempt \(attempt)") }
+        listener.close()
+        #expect(AppLauncher.isFree(port))
     }
 
     @Test func thePortsKeyIsAWholeNumberFromOneToTheLimit() throws {
@@ -199,4 +222,45 @@ private final class Box: @unchecked Sendable {
     private var items: [ThreadPorts] = []
     func add(_ ports: ThreadPorts) { lock.withLock { items.append(ports) } }
     var all: [ThreadPorts] { lock.withLock { items } }
+}
+
+/// A listening socket on the loopback, for a test.
+private final class Listener {
+    private var fd: Int32
+
+    init?(v6: Bool, any: Bool, port: Int, backlog: Int32 = 4) {
+        fd = socket(v6 ? AF_INET6 : AF_INET, streamSocketType, 0)
+        guard fd >= 0 else { return nil }
+        var yes: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))  // as a real server does
+        let bound: Int32
+        if v6 {
+            var address = sockaddr_in6()
+            address.sin6_family = sa_family_t(AF_INET6)
+            address.sin6_addr = in6addr_loopback
+            address.sin6_port = UInt16(port).bigEndian
+            bound = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
+            }
+        } else {
+            var address = sockaddr_in()
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_addr = in_addr(s_addr: any ? 0 : UInt32(0x7f00_0001).bigEndian)
+            address.sin_port = UInt16(port).bigEndian
+            bound = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+        }
+        guard bound == 0, listen(fd, backlog) == 0 else {
+            Foundation.close(fd)
+            return nil
+        }
+    }
+
+    func close() {
+        if fd >= 0 { Foundation.close(fd) }
+        fd = -1
+    }
+
+    deinit { close() }
 }

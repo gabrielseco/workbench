@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(Glibc)
+import Glibc
+#endif
+
 /// Starts the project's `[run]` command for one verifier turn and stops it when the turn ends
 /// (docs/plan/P16-run.md). It is the check's machinery (one `ProcessRunner` child, its streams merged, its whole
 /// process tree swept on every ending) with a ready check in front: the verifier is only started once the app is up.
@@ -174,20 +178,54 @@ struct AppLauncher {
         regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
-    /// True when nothing holds `port` on this machine: a socket can be bound to it, then it is closed again. A server on
-    /// any address (`0.0.0.0`, `127.0.0.1`) makes the bind fail; one on `::1` alone does not, which is as far as this looks.
+    /// True when nothing on this machine accepts connections on `port`, on `127.0.0.1` or on `::1`. It asks what the ready check
+    /// asks (does anything answer there), so a server on either family, or on every address, counts, and a port that only has
+    /// connections winding down after a stopped app does not (a bind would call it taken).
     static func isFree(_ port: Int) -> Bool {
         guard (1...65_535).contains(port) else { return false }
-        let fd = socket(AF_INET, streamSocketType, 0)
+        return !accepts(family: AF_INET, port: port) && !accepts(family: AF_INET6, port: port)
+    }
+
+    /// One short, non-blocking connect to the loopback address of `family`. Loopback answers at once, so the wait is only a bound
+    /// for a machine that does something odd. No IPv6 on the host is the same as nothing listening there.
+    private static func accepts(family: Int32, port: Int, wait: Int32 = 250) -> Bool {
+        let fd = socket(family, streamSocketType, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr = in_addr(s_addr: UInt32(0x7f00_0001).bigEndian)
-        address.sin_port = UInt16(port).bigEndian
-        return withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
-        } == 0
+        guard fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) == 0 else { return false }
+        let result: Int32
+        if family == AF_INET {
+            var address = sockaddr_in()
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_addr = in_addr(s_addr: UInt32(0x7f00_0001).bigEndian)
+            address.sin_port = UInt16(port).bigEndian
+            result = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+        } else {
+            var address = sockaddr_in6()
+            address.sin6_family = sa_family_t(AF_INET6)
+            address.sin6_addr = in6addr_loopback
+            address.sin6_port = UInt16(port).bigEndian
+            result = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size))
+                }
+            }
+        }
+        if result == 0 { return true }
+        guard errno == EINPROGRESS else { return false }
+        var waiting = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        // Loopback refuses at once when nothing listens, so a connect still pending after the wait is a listener whose queue is
+        // full: in use. Only a failed poll says nothing.
+        let polled = poll(&waiting, 1, wait)
+        if polled == 0 { return true }
+        guard polled == 1 else { return false }
+        var failure: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        return getsockopt(fd, SOL_SOCKET, SO_ERROR, &failure, &length) == 0 && failure == 0
     }
 
     /// A port nothing listens on: the kernel picks one for a socket that is closed again at once. Only the fallback for a
