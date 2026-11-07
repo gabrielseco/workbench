@@ -17,6 +17,9 @@ struct PreviewRail: View {
                     IconButton.raised("plus", "New goal", help: "New goal…", size: .small) { store.beginNewGoal() }
                         .disabled(store.project == nil)
                 }
+                if store.threads.syncing {
+                    BusyLine("Syncing with GitHub…").padding(.horizontal, Space.s).padding(.vertical, Space.xs)
+                }
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
                 if model.threads.isEmpty && model.composing == nil {
                     EmptyNote(store.project == nil ? "Choose a project to see its threads." : "No threads yet.", size: .small)
