@@ -28,8 +28,8 @@ public enum GoalAgentSetup {
         }
     }
 
-    /// Appends `[agents.goal]` with `provider` to the project's config, leaving every other line as it
-    /// was. A config that does not load afterwards is put back exactly as it was.
+    /// Appends `[agents.goal]` with `provider` to the project's config, leaving every other line as it was (`ConfigEdit` writes it).
+    /// A config that does not load afterwards is left exactly as it was.
     public static func enable(provider: AgentProviderID, in project: Project) throws {
         guard AgentRole.goal.supportedProviders.contains(provider) else { throw Failure.unsupported(provider.rawValue) }
         let url = project.configURL
@@ -38,25 +38,20 @@ public enum GoalAgentSetup {
         }
         guard size <= limit else { throw Failure.tooLarge }
         guard let existing = try? String(contentsOf: url, encoding: .utf8) else { throw Failure.noConfig }
-        let before = existing
-        let hasTable = before.split(separator: "\n").contains {
+        let hasTable = existing.split(separator: "\n").contains {
             $0.trimmingCharacters(in: .whitespaces).hasPrefix("[agents.goal]")
         }
         if hasTable { throw Failure.alreadyThere }
-        let gap = before.isEmpty ? "" : (before.hasSuffix("\n") ? "\n" : "\n\n")
-        let text = before + gap + "[agents.goal]\nprovider = \"\(provider.rawValue)\"\n"
         do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            throw Failure.notWritten("\(error)")
-        }
-        do {
-            guard try Config.load(from: url).resolvedGoalAgent?.provider == provider else {
-                throw Failure.invalid("[agents.goal] was not read")
+            _ = try ConfigEdit.set(ConfigEdit.Key(role: .goal, field: .provider), to: provider.rawValue, in: project)
+        } catch let failure as ConfigEdit.Failure {
+            switch failure {
+            case .noConfig: throw Failure.noConfig
+            case .tooLarge: throw Failure.tooLarge
+            case .notWritten(let why): throw Failure.notWritten(why)
+            case .doesNotLoad(let why), .invalid(let why), .unsafe(let why): throw Failure.invalid(why)
+            default: throw Failure.invalid("\(failure)")
             }
-        } catch {
-            try? existing.write(to: url, atomically: true, encoding: .utf8)
-            throw error as? Failure ?? Failure.invalid("\(error)")
         }
     }
 }

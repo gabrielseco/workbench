@@ -56,7 +56,7 @@ do {
     case "init":
         try await Commands.initProject()
     case "config":
-        try await Commands.config()
+        try await Commands.config(Array(arguments.dropFirst()))
     case "doctor":
         exit(try await Commands.doctor(Array(arguments.dropFirst())))
     case "goal":

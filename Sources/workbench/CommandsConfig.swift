@@ -2,7 +2,13 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    static func config() async throws {
+    static func config(_ arguments: [String]) async throws {
+        switch arguments.first {
+        case nil: break
+        case "set": return try await configEdit(Array(arguments.dropFirst()), setting: true)
+        case "unset": return try await configEdit(Array(arguments.dropFirst()), setting: false)
+        default: throw CLIError.usage("config takes no argument, or set <key> <value>, or unset <key>. ")
+        }
         let ctx = try await Context.load()
         let config = try Config.load(from: ctx.project.configURL)
         let invocation = try config.previewInvocation()
@@ -35,5 +41,30 @@ extension Commands {
             }
         }
         out("command:  \(invocation.displayCommand)")
+    }
+}
+
+extension Commands {
+    /// `config set <key> <value>` and `config unset <key>`: one agent key, written by `ConfigEdit`.
+    static func configEdit(_ arguments: [String], setting: Bool) async throws {
+        let usage = setting ? "usage: workbench config set <key> <value>" : "usage: workbench config unset <key>"
+        guard arguments.count == (setting ? 2 : 1) else { throw CLIError.usage(usage) }
+        let ctx = try await Context.load()
+        do {
+            let key = try ConfigEdit.parseKey(arguments[0])
+            let change =
+                setting
+                ? try ConfigEdit.set(key, to: arguments[1], in: ctx.project) : try ConfigEdit.unset(key, in: ctx.project)
+            let was = change.old ?? "(not set)"
+            let now = change.new ?? "(not set)"
+            out(change.written ? "\(key): \(was) -> \(now)" : "\(key): already \(now), nothing written")
+            if change.written, key.role == .run, let active = ctx.store.activeThreadID() {
+                out(
+                    "note: thread \(active) may have been approved for the old run settings: `workbench run` refuses until "
+                        + "`workbench goal approve` binds the new ones")
+            }
+        } catch let failure as ConfigEdit.Failure {
+            throw CLIError.refused("\(failure)")
+        }
     }
 }
