@@ -153,6 +153,23 @@ import WorkbenchCore
         #expect(github.reads == 2, "a merge is final: not asked about again")
     }
 
+    @Test func aConfirmedMergeIsShownOnTheNextLaunchBeforeGitHubIsAsked() async throws {
+        struct Offline: Error {}
+        let fixture = try await fixture()
+        try await shippedWithFindings(fixture, "a")
+        let first = try await store(fixture, GitHub(.success(status(.merged))))
+        await first.refreshPullRequests()
+        #expect(first.threads.listing.rows.first?.mark == .done)
+        // A new launch: the first listing is already green, and nothing was read for it.
+        let github = GitHub(.failure(Offline()))
+        let second = try await store(fixture, github)
+        let row = second.threads.listing.rows.first { $0.id == "a" }
+        #expect(row?.mark == .done && row?.line == "PR #7 merged" && github.reads == 0, "\(String(describing: row))")
+        // A read that fails does not take a merge back.
+        second.notePullRequest(nil, thread: "a")
+        #expect(second.threads.pullRequests["a"]?.state == .merged && !second.pullRequestsAreDue)
+    }
+
     @Test func unavailablePullRequestStatus() async throws {
         struct Offline: Error {}
         let fixture = try await fixture()

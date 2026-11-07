@@ -234,7 +234,7 @@ struct RecentProject: Equatable, Identifiable {
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         // A thread id means another thread in another project: what was read for the old project is not the new one's.
-        forgetThreadList()
+        forgetThreadList(for: located)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun

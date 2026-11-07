@@ -60,10 +60,12 @@ extension ProjectStore {
         if listing != threads.listing { threads.listing = listing }
     }
 
-    /// What was read for the project before: its rows and what GitHub said of its pull requests.
-    func forgetThreadList() {
+    /// What was read for the project before is dropped: its rows and what GitHub said of its pull requests. The merges GitHub
+    /// confirmed for `project` are kept on disk and come back, so its first listing is already right.
+    func forgetThreadList(for project: Project) {
         (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
         threads.forgetPullRequests()
+        threads.pullRequests = MergedPullRequests.load(project)
     }
 
     /// The poll's reads of GitHub, each on its own task: a slow `gh` must not hold up following the log.
@@ -97,13 +99,18 @@ extension ProjectStore {
             guard mine == generation else { return }
             threads.pullRequests[id] = read
             threads.pullRequestsReadAt[id] = .now
+            MergedPullRequests.remember(read, thread: id, in: project)
+            // Each answer is shown as it comes, not after the last thread has been asked about.
+            await refreshThreadList(force: true)
         }
-        await refreshThreadList(force: true)
     }
 
     /// What the thread screen read of its own pull request is the row's too, so the rail and the banner agree.
     func notePullRequest(_ status: PRStatus?, thread: String) {
+        // A merge cannot be undone: a read that failed does not take it back.
+        if status == nil, threads.pullRequests[thread]?.state == .merged { return }
         guard threads.pullRequests[thread] != status else { return }
+        if let project { MergedPullRequests.remember(status, thread: thread, in: project) }
         threads.pullRequests[thread] = status
         threads.pullRequestsReadAt[thread] = .now
         Task { await refreshThreadList(force: true) }
