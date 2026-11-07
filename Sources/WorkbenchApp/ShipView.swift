@@ -2,7 +2,7 @@ import SwiftUI
 import WorkbenchCore
 
 /// What Codex found in the pull request: the verdict, then its words as written.
-struct PRReviewSheet: View {
+struct PRReviewBody: View {
     var store: ProjectStore
 
     var body: some View {
@@ -23,20 +23,20 @@ struct PRReviewSheet: View {
                     .role(.detail)
             }
             if let error = store.followUpError { Text(error).role(.error) }
-            HStack {
-                // The sheet covers the window's own busy line, so a click on "Fix these findings" shows here that it was taken.
+            ModalFooter {
+                // The modal covers the window's own busy line, so a click on "Fix these findings" shows here that it was taken.
                 if let busy = store.busy {
                     ProgressView().controlSize(.small)
                     Text(busy).role(.detail)
                 }
-                Spacer()
+            } actions: {
                 if let shown = store.prReviewShown, shown.canFix {
-                    Button("Fix these findings") { Task { await store.fixFindings() } }.disabled(store.busy != nil)
+                    Button("Fix these findings") { Task { await store.fixFindings() } }.plainButton(size: .regular)
+                        .disabled(store.busy != nil)
                 }
-                Button("Close") { store.closePRReview() }.keyboardShortcut(.defaultAction)
+                Button("Close") { store.closePRReview() }.keyboardShortcut(.defaultAction).primaryButton(size: .regular)
             }
         }
-        .padding(Space.xl).frame(width: 680)
     }
 
     private func icon(_ shown: PRReviewShown) -> String {
@@ -48,6 +48,26 @@ struct PRReviewSheet: View {
         case .clean?: Theme.green
         case .fix?: Theme.amber
         case nil: Theme.red
+        }
+    }
+}
+
+/// The question before the pull request is merged: what the merge does, and the yes.
+struct MergeBody: View {
+    var store: ProjectStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            Text("Squash-merges it on GitHub at the commit whose checks are green. This cannot be undone from Workbench.")
+                .role(.detail).fixedSize(horizontal: false, vertical: true)
+            ModalFooter {
+                Button("Cancel") { store.feedModals.confirmingMerge = false }.plainButton(size: .regular)
+                Button("Merge") {
+                    store.feedModals.confirmingMerge = false
+                    Task { await store.mergePullRequest() }
+                }
+                .primaryButton(size: .regular)
+            }
         }
     }
 }

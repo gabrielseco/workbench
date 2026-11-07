@@ -293,23 +293,13 @@ struct RunSettingsInspector: View {
     }
 }
 
-/// The inspector over the feed, for a window too narrow to have it beside.
-struct RunSettingsSheet: View {
+/// The inspector over the feed, for a window too narrow to have it beside (a modal titled "Run settings").
+struct RunSettingsBody: View {
     var snapshot: ThreadSnapshot
     var store: ProjectStore
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Run settings").textStyle(.heading)
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction).plainButton()
-            }
-            .padding(.horizontal, Space.xl).padding(.vertical, Space.m)
-            Divider()
-            RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
-        }
-        .frame(width: 420, height: 560).background(Theme.rail)
+        RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
+            .frame(height: 400)
     }
 }

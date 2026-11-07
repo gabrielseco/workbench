@@ -39,4 +39,6 @@ extension ProjectStore {
     }
     var starting: Bool { current.starting }
     var stopping: Bool { current.stopping }
+    /// The project and thread on screen, as one value to compare.
+    var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
 }

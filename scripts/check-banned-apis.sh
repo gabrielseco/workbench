@@ -75,7 +75,7 @@ fi
 # had no way to close on Esc for that reason. A new look or behaviour is a new size, placement or prop in Modal.swift.
 # LEGACY_MODAL_FILES still use the old calls and are moved onto `.modal` one slice at a time (docs/plan/); the list only shrinks, and
 # a new file is never added to it. Known limit: a call in a listed file is not seen, and a presentation API not named here is not either.
-LEGACY_MODAL_FILES='FeedScreen.swift FeedRow.swift ReviewView.swift ScreenshotStagingViews.swift'
+LEGACY_MODAL_FILES='FeedRow.swift ScreenshotStagingViews.swift'
 legacy=$(echo "$LEGACY_MODAL_FILES Modal.swift" | sed 's/ /|/g; s/\./\\./g')
 hits=$(grep -rnE --include='*.swift' '\.(sheet|popover|fullScreenCover|alert|confirmationDialog)\(|Color\.black\.opacity\(|\.isModal|\.card\(\.popover' Sources/WorkbenchApp 2>/dev/null \
     | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -Ev "^Sources/WorkbenchApp/($legacy):" | grep -v '^Sources/WorkbenchApp/Card.swift:' || true)

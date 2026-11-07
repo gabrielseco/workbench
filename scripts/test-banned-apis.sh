@@ -85,7 +85,7 @@ dir=$(tree modalfile Modal.swift 'struct A: View { var body: some View { Text("x
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "the component's own overlay pieces were refused"
 rm -rf "$dir"
 
-dir=$(tree legacy FeedScreen.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
+dir=$(tree legacy FeedRow.swift 'struct A: View { var body: some View { Text("x").sheet(isPresented: $on) { Text("y") } } }')
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a file on the legacy list was refused"
 rm -rf "$dir"
 

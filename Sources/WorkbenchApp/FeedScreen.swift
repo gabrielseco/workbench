@@ -13,8 +13,6 @@ struct FeedScreen: View {
     var snapshot: ThreadSnapshot
     var store: ProjectStore
     @Environment(\.feedDrawsEagerly) private var drawsEagerly
-    @State private var confirmingMerge = false
-    @State private var reviewingDetails = false
 
     /// The feed's own rows, and the next-step card, which is drawn as the decision card instead.
     private var rows: [FeedItem] {
@@ -77,8 +75,8 @@ struct FeedScreen: View {
 
     private func perform(_ action: FeedAction) {
         switch action.kind {
-        case .merge: confirmingMerge = true
-        case .reviewDetails: reviewingDetails = true
+        case .merge: store.feedModals.confirmingMerge = true
+        case .reviewDetails: store.feedModals.reviewingDetails = true
         default: Task { await store.perform(action.kind) }
         }
     }
@@ -130,14 +128,7 @@ struct FeedScreen: View {
             .onChange(of: proxy.size.width, initial: true) { _, width in
                 store.runSettingsFits = RunSettingsLayout.placement(centreWidth: width) == .beside
             }
-            // Too narrow for it beside the feed, it opens over it.
-            .sheet(
-                isPresented: Binding(
-                    get: { store.runSettingsOn && store.runSettingsChosen && !beside },
-                    set: { if !$0 { store.setRunSettings(false) } })
-            ) {
-                RunSettingsSheet(snapshot: snapshot, store: store)
-            }
+            // Too narrow for it beside the feed, it opens over the window as a modal (AppModals.swift).
         }
     }
 
@@ -159,29 +150,10 @@ struct FeedScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // The review's own sheet asks for the discard when it is the one open, so two sheets never ask at once.
-        .sheet(
-            isPresented: Binding(
-                get: { store.pendingDiscard != nil && !reviewingDetails }, set: { if !$0 { store.cancelDiscard() } })
-        ) {
-            DiscardSheet(store: store)
-        }
-        .sheet(isPresented: Binding(get: { store.prReviewShown != nil }, set: { if !$0 { store.closePRReview() } })) {
-            PRReviewSheet(store: store)
-        }
-        .sheet(isPresented: $reviewingDetails) { ReviewDetailsSheet(snapshot: snapshot, store: store) }
-        .confirmationDialog(mergeTitle, isPresented: $confirmingMerge) {
-            Button("Merge") { Task { await store.mergePullRequest() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Squash-merges it on GitHub at the commit whose checks are green. This cannot be undone from Workbench.")
-        }
     }
 
     /// The row is under every thread's title, a chat's too: a chat is the first step of the thread, not outside it.
     static func showsPhaseRow(_ snapshot: ThreadSnapshot) -> Bool { true }
-
-    private var mergeTitle: String { snapshot.state.pullRequest.map { "Merge PR #\($0.number)?" } ?? "Merge?" }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Space.s) {
@@ -287,26 +259,18 @@ struct PhaseRow: View {
 
 /// The review of the latest turn over the feed: the Review screen as it is, with every criterion and where it stands, until the review
 /// has a place of its own in the feed.
-struct ReviewDetailsSheet: View {
+struct ReviewDetailsBody: View {
     var snapshot: ThreadSnapshot
     var store: ProjectStore
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Review").textStyle(.heading)
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, Space.xl).padding(.vertical, Space.m)
-            Divider()
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else {
                 Text("There is nothing to review now.").foregroundStyle(.secondary).padding(Space.xl)
             }
         }
-        .frame(minWidth: 760, minHeight: 560)
+        .frame(height: 520)
     }
 }
