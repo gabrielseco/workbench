@@ -22,6 +22,8 @@ struct MenuBarLabel: View {
 /// What the status item opens (mockup 5): the same store as the window, so it cannot disagree with it. It decides nothing: every
 /// button brings the window forward at the place where the decision is made.
 struct MenuBarPopover: View {
+    /// The popover is this wide; the rows inside wrap to it.
+    static let width: CGFloat = 320
     var store: ProjectStore
     @Environment(\.openWindow) private var openWindow
 
@@ -44,7 +46,7 @@ struct MenuBarPopover: View {
             Divider()
             footer
         }
-        .padding(Spacing.inset).frame(width: 320)
+        .padding(Spacing.inset).frame(width: Self.width)
         .onDisappear { if model.deniedNote != nil { store.attention.sayDeniedOnce() } }
     }
 

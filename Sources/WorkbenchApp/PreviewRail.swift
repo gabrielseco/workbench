@@ -19,8 +19,7 @@ struct PreviewRail: View {
                 }
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
                 if model.threads.isEmpty && model.composing == nil {
-                    Text(store.project == nil ? "Choose a project to see its threads." : "No threads yet.")
-                        .role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
+                    EmptyNote(store.project == nil ? "Choose a project to see its threads." : "No threads yet.", size: .small)
                 } else if !model.threads.isEmpty {
                     ThreadListView(store: store, rows: model.threads, hidden: model.hidden, older: model.older)
                 }

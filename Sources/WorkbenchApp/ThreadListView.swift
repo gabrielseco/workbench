@@ -61,11 +61,11 @@ struct RailRowView: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: Space.m) {
-                RailMark(mark: row.mark).frame(width: 16, height: 16)
+                RailMark(mark: row.mark).symbolColumn(square: true)
                 // One line: the title and, beside it, the mark. What the row says in words (its state) is the hover text and the
                 // accessibility label, and opening the row says the rest.
                 Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 0)
+                Spacer(minLength: Space.none)
             }
             .padding(.horizontal, Space.s).padding(.vertical, Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,10 +87,9 @@ struct RailMark: View {
         switch mark {
         case .working: Spinner(.rail)
         case .needsYou:
-            Circle().fill(Theme.amber).frame(width: 9, height: 9)
-                .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))
+            StatusDot(Theme.amber, filled: true, halo: true)
         case .done: Image(systemName: "checkmark").textStyle(.captionBold, .green)
-        case .idle: Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9)
+        case .idle: StatusDot()
         case .broken: StatusMark(.failed)
         }
     }

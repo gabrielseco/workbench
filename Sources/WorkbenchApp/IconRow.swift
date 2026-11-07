@@ -9,8 +9,24 @@ struct IconRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-            Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
+            Image(systemName: symbol).foregroundStyle(tint).symbolColumn()
             content
         }
+    }
+}
+
+/// The width of the column a row's symbol sits in, so what follows lines up with the symbols of the rows around it.
+enum SymbolColumn {
+    case regular
+    /// For a row of small marks (a plan's steps).
+    case narrow
+
+    var width: CGFloat { self == .regular ? 16 : 14 }
+}
+
+extension View {
+    /// This symbol or mark in its row's column. `square` gives the column a height too (a mark that is drawn, not a symbol).
+    func symbolColumn(_ column: SymbolColumn = .regular, square: Bool = false) -> some View {
+        frame(width: column.width, height: square ? column.width : nil)
     }
 }

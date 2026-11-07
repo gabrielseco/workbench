@@ -84,7 +84,7 @@ struct FeedLine: View {
                     if let detail, !detail.isEmpty { detailText(detail).lineLimit(2) }
                 }
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: Space.none)
         }
         .accessibilityElement(children: .combine)
     }
@@ -107,7 +107,7 @@ struct UserNoteRow: View {
 
     var body: some View {
         HStack {
-            Spacer(minLength: 60)
+            Spacer(minLength: Space.giant + Space.m)
             VStack(alignment: .leading, spacing: Space.xxs) {
                 Text("You · sent back").role(.caption)
                 Text(text).textStyle(.body).textSelection(.enabled)
@@ -139,6 +139,8 @@ struct GoalCardRow: View {
     /// A read-only request this long is folded, as on the Goal screen.
     static let foldedRequest = 500
     /// Criteria shown on the summary; a longer list is the editor's to show whole.
+    /// The column a criterion's id (c1, c2) sits in, so the words after it line up.
+    static let idColumn: CGFloat = 28
     static let shownCriteria = 6
 
     private var rows: [GoalModel.Row] { goal?.rows ?? [] }
@@ -220,7 +222,7 @@ struct GoalCardRow: View {
             ForEach(Array(rows.prefix(Self.shownCriteria)), id: \.id) { row in
                 HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                     Text(row.id).role(.mono)
-                        .frame(width: 28, alignment: .leading)
+                        .frame(width: Self.idColumn, alignment: .leading)
                     VStack(alignment: .leading, spacing: Space.xxs) {
                         Text(row.text).textStyle(.callout).textSelection(.enabled)
                         Text(row.proof).role(.mono)
@@ -275,11 +277,11 @@ struct TurnRow: View {
         HStack(spacing: Space.s) {
             switch phase {
             case .working: Spinner(inColumn: true)
-            default: StatusMark(outcome).frame(width: 16)
+            default: StatusMark(outcome).symbolColumn()
             }
             Text(title).textStyle(.calloutStrong)
             if let detail { Text(detail).role(.detail) }
-            Spacer(minLength: 0)
+            Spacer(minLength: Space.none)
         }
         .padding(.top, Space.s)
         .accessibilityElement(children: .combine)
@@ -337,7 +339,7 @@ struct ToolGroupRow: View {
             Text("\(count) tool \(count == 1 ? "call" : "calls")").textStyle(.callout)
             Text(summaries.joined(separator: " · ") + (count > summaries.count ? " …" : ""))
                 .role(.monoDetail).lineLimit(1).truncationMode(.tail)
-            Spacer(minLength: 0)
+            Spacer(minLength: Space.none)
         }
         .accessibilityElement(children: .combine)
     }

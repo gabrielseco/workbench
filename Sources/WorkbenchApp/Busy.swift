@@ -17,8 +17,8 @@ struct Spinner: View {
 
     var body: some View {
         switch size {
-        case .small: ProgressView().controlSize(.small).frame(width: inColumn ? 16 : nil)
-        case .mini: ProgressView().controlSize(.mini).frame(width: inColumn ? 14 : nil)
+        case .small: ProgressView().controlSize(.small).frame(width: inColumn ? SymbolColumn.regular.width : nil)
+        case .mini: ProgressView().controlSize(.mini).frame(width: inColumn ? SymbolColumn.narrow.width : nil)
         case .rail: ProgressView().controlSize(.small).scaleEffect(0.7).tint(Theme.blue)
         }
     }

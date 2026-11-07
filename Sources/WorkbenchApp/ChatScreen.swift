@@ -84,7 +84,7 @@ struct ChatMessageRow: View {
     var body: some View {
         if message.role == .user {
             HStack(spacing: 0) {
-                Spacer(minLength: 0)
+                Spacer(minLength: Space.none)
                 VStack(alignment: .trailing, spacing: Space.xs) {
                     Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     if !message.images.isEmpty {
@@ -105,12 +105,10 @@ struct ChatMessageRow: View {
             .accessibilityElement(children: .ignore).accessibilityLabel(message.spoken)
         } else {
             HStack(alignment: .top, spacing: Space.m) {
-                Image(systemName: "sparkle").textStyle(.captionMedium, .secondary)
-                    .frame(width: 22, height: 22)
-                    .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line))
+                AgentAvatar()
                 // As tall as the avatar, centred: a one-line reply sits level with the disc, a longer one starts level with it.
                 Text(message.text).textStyle(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: AgentAvatar.side, alignment: .leading)
             }
             .frame(maxWidth: FeedLayout.agentText, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,12 +206,12 @@ struct ChatComposer: View {
     /// Under the panel: what a chat is, and the one prominent button.
     private func footer(_ state: ChatComposerState) -> some View {
         HStack(spacing: Space.m) {
-            Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 9, height: 9).accessibilityHidden(true)
+            StatusDot()
             Text("Chat only. No worktree, no run, no cost.").role(.caption)
             if let note = store.chatAgentNote {
                 Text("· \(note)").role(.caption).accessibilityLabel("Agent: \(note)")
             }
-            Spacer(minLength: 12)
+            Spacer(minLength: Space.m)
             if store.drafting {
                 BusyLine("Drafting the goal…", tone: .working, stop: .init(title: "Stop") { store.stopDrafting() })
             } else {

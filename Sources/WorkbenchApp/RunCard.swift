@@ -139,7 +139,7 @@ struct RunCardView: View {
         HStack(spacing: Space.m) {
             Spinner(inColumn: true)
             Text("Claude is working").textStyle(.calloutStrong)
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.s)
             if let clock = RunCardModel.clock(elapsed: elapsed, limit: model.limit) {
                 Text(clock).role(.monoDetail)
             }
@@ -164,9 +164,9 @@ struct RunCardView: View {
 
     @ViewBuilder private func mark(_ state: FeedItem.PlanTask.State) -> some View {
         switch state {
-        case .done: Image(systemName: "checkmark").foregroundStyle(Theme.green).frame(width: 14)
+        case .done: Image(systemName: "checkmark").foregroundStyle(Theme.green).symbolColumn(.narrow)
         case .working: Spinner(.mini, inColumn: true)
-        case .pending: Image(systemName: "circle").foregroundStyle(Theme.fg3).frame(width: 14)
+        case .pending: Image(systemName: "circle").foregroundStyle(Theme.fg3).symbolColumn(.narrow)
         }
     }
 
@@ -201,7 +201,7 @@ struct PendingStepRow: View {
     var body: some View {
         IconRow(symbol: "circle", tint: Theme.fg3) {
             Text(step.name).textStyle(.calloutStrong)
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.s)
             Text(step.detail).role(.detail).lineLimit(1)
         }
         .accessibilityElement(children: .combine)
