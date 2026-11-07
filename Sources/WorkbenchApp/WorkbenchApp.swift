@@ -38,7 +38,11 @@ import WorkbenchCore
             }
             // The one settings the app has are the project's agents, so the standard ⌘, opens them.
             CommandGroup(replacing: .appSettings) {
-                Button("Agents…") { store.showingAgents.toggle() }
+                // The window may be closed (the app stays resident): bring it back, then show the card.
+                Button("Agents…") {
+                    Self.showWindow()
+                    store.showingAgents = true
+                }
                     .keyboardShortcut(",", modifiers: .command)
                     .disabled(store.project == nil)
             }
