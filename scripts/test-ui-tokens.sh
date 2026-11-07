@@ -28,6 +28,10 @@ banned=(
   'Space|VStack(spacing: wide ? 8 : 4) { Text("x") }'
   'Pill|Color.red.clipShape(Capsule())'
   'Space|Spacer(minLength: 8)' 'Space|Spacer(minLength:0)' 'Space|HStack { Text("x"); Spacer(minLength: 12) }'
+  'named size|Color.red.frame(width: Self.width, height: 440)' 'named size|Color.red.frame(maxWidth: .infinity, height: 20)' 'named size|Color.red.frame(
+    width: 22,
+    height: 22
+)'
   'named size|Color.red.frame(width: 22, height: 22)' 'named size|Color.red.frame(height: 440)' 'named size|Color.red.frame(width:16)'
 )
 for case in "${banned[@]}"; do

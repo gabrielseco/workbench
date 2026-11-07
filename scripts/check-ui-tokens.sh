@@ -7,7 +7,7 @@
 #   padding   .padding(<number>) and spacing: <number> -> Space.*
 #   capsule   Capsule()                     -> Pill
 #   spacer    Spacer(minLength: <number>)   -> Space.*
-#   frame     .frame(width: <n>) and .frame(height: <n>) -> a named size (min and max are not checked)
+#   frame     .frame(width: <n>) and .frame(height: <n>), in any position of the call -> a named size (min and max are not checked)
 # The component files (COMPONENTS) are where the scales and the components hold the numbers. A new component file is added there, in the PR
 # that adds it. The text is read, not parsed: a `//` that starts a comment is dropped, and each file's lines are joined, so a literal split
 # across lines is found. Known limit: a string literal holding ` //` hides what follows it on that line.
@@ -36,5 +36,5 @@ check textstyle '\.font\(' '.textStyle(<TextStyle>, <TextTone>) or a TextRole, n
 check padding '(^|[^A-Za-z])padding\([^)]*[0-9]|[^a-zA-Z]spacing:[^,)]*[1-9]' 'a step of Space (.padding(.horizontal, Space.m), VStack(spacing: Space.s))'
 check capsule 'Capsule\(\)' 'a Pill'
 check spacer 'Spacer\(minLength:[[:space:]]*[0-9]' 'a step of Space (Spacer(minLength: Space.s))'
-check frame '\.frame\((width|height):[[:space:]]*[0-9]' 'a named size (a component, a static let, ModalSize, ModalBodyHeight, SymbolColumn, DotSize)'
+check frame '\.frame\([^)]*(width|height):[[:space:]]*[0-9]' 'a named size (a component, a static let, ModalSize, ModalBodyHeight, SymbolColumn, DotSize)'
 exit $status

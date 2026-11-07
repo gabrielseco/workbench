@@ -15,7 +15,9 @@ import Testing
     @Test func theModalBodyHeightsAreFourDistinctStepsThatGrow() {
         let steps: [ModalBodyHeight] = [.short, .medium, .tall, .page]
         #expect(steps.map(\.points) == steps.map(\.points).sorted() && Set(steps.map(\.points)).count == 4)
-        #expect(ModalBodyHeight.page.points < 600, "the tallest body leaves room for the card's header at the minimum window")
+        // The card adds its padding and its header row, and the window leaves the toolbar and the footer: at 600 pt the tallest still fits.
+        let chrome = 2 * Space.l + 40
+        #expect(ModalBodyHeight.page.points + chrome < 600 - 2 * Space.xl, "the tallest body fits the minimum window")
     }
 
     @Test func theSymbolColumnsAndTheDotsHaveTheirSizes() {
