@@ -13,7 +13,9 @@ import WorkbenchCore
 
     @Test func theAgentsPillNamesTheCodingAgentOrFallsBackToAgents() throws {
         #expect(AgentsPill.text(nil) == "Agents")
-        let config = try Config.parse("[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-6.1-terra\"\n")
+        let config = try Config.parse(
+            "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
+                + "[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-6.1-terra\"\n")
         #expect(AgentsPill.text(AgentSetup(config: config)) == "Codex · gpt-6.1-terra")
     }
 
