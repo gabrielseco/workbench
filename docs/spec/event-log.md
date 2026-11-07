@@ -387,10 +387,11 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   exists, and then takes no more messages (`chat` is refused). The drafter is given the conversation, quoted line by line with who said each
   message, in place of the rough request (up to the chat's own 128 KiB, not the 16 KiB of a rough request).
 - **The repository:** a chat turn's folder holds a copy of the repository for the turn (`chat_reads_repo`, on by default): the tracked regular
-  files at the base commit, in `repo/`, written with a scratch index so the repository's own index, branches, worktrees and files are not
-  touched. Not in it: what the commit does not have (an uncommitted edit, an untracked or ignored file such as `.env.local`), links,
+  files at the base commit, in `repo/`, checked out by a scratch repository of its own that only borrows this repository's objects, so the repository's own index, branches,
+  worktrees, files, config and `info/attributes` are not touched or read. Not in it: what the commit does not have (an uncommitted edit, an untracked or ignored file such as `.env.local`), links,
   submodules, `.git`, a file over 512 KiB, and anything past 64 MiB or 20,000 files (a repository whose listing is larger than the git
-  output cap gets no copy). The person's own git config (a smudge or LFS filter) is not read for it. A Claude agent then has `Read`, `Grep`
+  output cap gets no copy). No git config (global, system or the repository's own) is read for it, so a smudge or LFS filter cannot run and a missing object
+  is never fetched; what the checkout made is checked afterwards (a link or an over-size file is removed, a copy over the total is dropped). A Claude agent then has `Read`, `Grep`
   and `Glob` on its folder (and still no tool that writes, runs or reaches a network); a Codex agent reads it inside its read-only sandbox. The
   folder, copy included, is removed when the turn ends. When the copy cannot be made the turn goes on without it, as before. With
   `chat_reads_repo = false` the folder is empty and a Claude agent has no tools (screenshots aside).

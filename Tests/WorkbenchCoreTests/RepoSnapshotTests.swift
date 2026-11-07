@@ -143,6 +143,52 @@ private struct SnapshotRepo {
         #expect(!FileManager.default.fileExists(atPath: marker.path), "the person's own git config never reaches the copy")
     }
 
+    @Test func aFilterInTheRepositoryOwnConfigIsNotRunEither() async throws {
+        let folder = Scratch.url("snapshot-local-filter").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let marker = folder.appendingPathComponent("ran")
+        let repo = try await SnapshotRepo(extra: [".gitattributes": "*.txt filter=evil\n"], bigFile: false)
+        // The person's own `.git/config`, which turning the global and system config off does not reach, and `info/attributes`.
+        let smudge = "sh -c 'cat; touch \(marker.path)'"
+        _ = try await repo.git.run(["config", "--local", "filter.evil.smudge", smudge], in: repo.root)
+        _ = try await repo.git.run(["config", "--local", "filter.evil.process", "touch \(marker.path)"], in: repo.root)
+        try "*.md filter=evil\n".write(
+            to: repo.root.appendingPathComponent(".git/info/attributes"), atomically: true, encoding: .utf8)
+        let work = repo.folder()
+        _ = try #require(await RepoSnapshotWriter.write(base: "main", into: work, repo: repo.root, git: repo.git))
+        #expect(!FileManager.default.fileExists(atPath: marker.path), "no filter of the repository's own config ran")
+        let found = repo.list(work)
+        #expect(found.contains("-dash.txt") && found.contains("docs/README.md"))
+        let text = try String(contentsOf: work.appendingPathComponent("repo/-dash.txt"), encoding: .utf8)
+        #expect(text == "dash\n", "the committed bytes, as stored")
+    }
+
+    @Test func aMissingObjectIsNotFetchedFromAnywhere() async throws {
+        let repo = try await SnapshotRepo(bigFile: false)
+        // A remote that would be asked if anything tried; the copy must be made without it.
+        _ = try await repo.git.run(["remote", "add", "origin", "file:///nonexistent-wb-remote"], in: repo.root)
+        _ = try await repo.git.run(["config", "--local", "extensions.partialClone", "origin"], in: repo.root)
+        let work = repo.folder()
+        let snapshot = await RepoSnapshotWriter.write(base: "main", into: work, repo: repo.root, git: repo.git)
+        #expect(snapshot != nil && repo.list(work).contains("src/app.swift"), "the objects are local: nothing is fetched")
+    }
+
+    @Test func whatTheCheckoutMadeIsCheckedAndATooLargeFolderIsNoCopy() throws {
+        let folder = Scratch.url("snapshot-keep").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("d"), withIntermediateDirectories: true)
+        let fm = FileManager.default
+        let small = folder.appendingPathComponent("d/small"), big = folder.appendingPathComponent("big")
+        try String(repeating: "a", count: 10).write(to: small, atomically: true, encoding: .utf8)
+        try String(repeating: "b", count: 50).write(to: big, atomically: true, encoding: .utf8)
+        try fm.createSymbolicLink(atPath: folder.appendingPathComponent("link").path, withDestinationPath: "/etc/hosts")
+        #expect(RepoSnapshotWriter.keepWithinLimits(folder, .init(fileBytes: 20, totalBytes: 100, files: 10)))
+        #expect(fm.fileExists(atPath: folder.appendingPathComponent("d/small").path))
+        #expect(!fm.fileExists(atPath: folder.appendingPathComponent("big").path), "over the per-file limit")
+        let link = folder.appendingPathComponent("link").path
+        #expect((try? fm.destinationOfSymbolicLink(atPath: link)) == nil, "the link is gone")
+        #expect(!RepoSnapshotWriter.keepWithinLimits(folder, .init(fileBytes: 20, totalBytes: 5, files: 10)), "past the total")
+    }
+
     @Test func onlyOrdinaryRelativePathsAreChosen() {
         for good in ["a", "src/app.swift", "dir with space/é.txt", "-dash.txt", ".github/workflows/ci.yml", "a/b.c/d"] {
             #expect(RepoSnapshotWriter.isPlain(good), "\(good)")

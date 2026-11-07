@@ -210,8 +210,9 @@ goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread 
 A chat used to be given only the file names and the project instructions, so it could not answer "how does X work here". Now its folder
 holds a read-only copy of the repository's tracked files at the base commit (`chat_reads_repo`, default on; `RepoSnapshotWriter`), and a
 Claude agent has `Read`, `Grep` and `Glob` on it. It still has no tool that writes or runs, no network, no worktree and no branch; the copy
-is made with a scratch index, holds only what git stores at the commit (no uncommitted edits, untracked or ignored files, links,
-submodules or large files), ignores the person's git config, is bounded (512 KiB a file, 64 MiB, 20,000 files) and is removed with the
+is checked out by a scratch repository that only borrows the repository's objects, holds only what git stores at the commit (no
+uncommitted edits, untracked or ignored files, links, submodules or large files), reads no git config (global or the repository's own, so a
+filter cannot run), is bounded (512 KiB a file, 64 MiB, 20,000 files) and is removed with the
 turn. Web search is a separate decision and is not part of this. Spec: `docs/spec/event-log.md`, "The repository".
 *Tests:* the copy has the committed content and none of the working tree's extras; the repository (status, index, branches, worktrees) is
 untouched; a filter in the person's config does not run; a base that is no commit gives no copy and the chat goes on; the key off gives an

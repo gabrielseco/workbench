@@ -14,9 +14,11 @@ public struct RepoSnapshot: Sendable, Equatable {
 /// The repository's tracked files at one commit, written into the folder a chat's agent works in, so it can read and search the
 /// code before a goal exists (docs/plan/P22-chat-feed.md, "Chat reads the repository").
 ///
-/// It is a copy, not a worktree: no branch, no `.git`, and the repository's own index and files are not touched (a scratch index
-/// holds the tree). It holds what git stores at the commit, so an uncommitted change, an untracked file and an ignored one
-/// (`.env.local`) are not in it. Everything is bounded and a failure is "no snapshot", never a failed chat.
+/// It is a copy, not a worktree: no branch, no `.git`, and the repository is not opened for writing at all. The files are checked out
+/// by a scratch repository of their own that only borrows this repository's objects, so none of this repository's config, attributes
+/// file (`.git/info/attributes`) or remotes is read: a clean or smudge filter (LFS, or one the person set) cannot run, and a repository
+/// with missing objects cannot start a network fetch. It holds what git stores at the commit, so an uncommitted change, an untracked file
+/// and an ignored one (`.env.local`) are not in it. Everything is bounded and a failure is "no snapshot", never a failed chat.
 enum RepoSnapshotWriter {
     struct Limits: Sendable, Equatable {
         /// A bigger file is left out: it is not what a person asks about, and the folder is read on every turn.
@@ -43,24 +45,32 @@ enum RepoSnapshotWriter {
         guard !chosen.paths.isEmpty else { return nil }
 
         let folder = work.appendingPathComponent(RepoSnapshot.folderName, isDirectory: true)
-        let index = FileManager.default.temporaryDirectory.appendingPathComponent("wb-snapshot-index-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: index) }
-        // No config of the person's reaches the checkout: a filter (smudge, LFS) must not run to make a file for the model.
-        var environment = git.environment
-        environment["GIT_INDEX_FILE"] = index.path
-        environment["GIT_ATTR_SOURCE"] = commit
-        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-        environment["GIT_CONFIG_NOSYSTEM"] = "1"
-        let scratch = GitRunner(executable: git.executable, environment: environment, timeout: git.timeout)
+        let scratchGit = FileManager.default.temporaryDirectory.appendingPathComponent("wb-snapshot-git-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratchGit) }
+        // No config of the person's reaches the checkout: not the global or system one (a smudge or LFS filter must not run to make a
+        // file for the model), and not the repository's own, which is why the checkout runs in a repository of its own.
+        var plain = git.environment
+        plain["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        plain["GIT_CONFIG_NOSYSTEM"] = "1"
+        let found = try? await git.run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repo)
+        guard let common = found, common.succeeded else { return nil }
+        let objects = common.stdout.trimmingCharacters(in: .whitespacesAndNewlines) + "/objects"
+        var checkout = plain
+        checkout["GIT_DIR"] = scratchGit.path
+        checkout["GIT_WORK_TREE"] = folder.path
+        checkout["GIT_ALTERNATE_OBJECT_DIRECTORIES"] = objects
+        checkout["GIT_ATTR_SOURCE"] = commit
+        let maker = GitRunner(executable: git.executable, environment: plain, timeout: git.timeout)
+        let scratch = GitRunner(executable: git.executable, environment: checkout, timeout: git.timeout)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            guard let read = try? await scratch.run(["read-tree", commit], in: repo), read.succeeded else {
-                throw SnapshotError.git
-            }
+            let made = try? await maker.run(["init", "-q", "--bare", "--template=", scratchGit.path], in: folder)
+            let read = try? await scratch.run(["read-tree", commit], in: folder)
+            guard made?.succeeded == true, read?.succeeded == true else { throw SnapshotError.git }
             var start = 0
             while start < chosen.paths.count {
                 let part = Array(chosen.paths[start..<min(start + chunk, chosen.paths.count)])
-                let out = try? await scratch.run(["checkout-index", "--prefix=\(folder.path)/", "--"] + part, in: repo)
+                let out = try? await scratch.run(["checkout-index", "--"] + part, in: folder)
                 guard out?.succeeded == true else { throw SnapshotError.git }
                 start += chunk
             }
@@ -68,7 +78,10 @@ enum RepoSnapshotWriter {
             try? FileManager.default.removeItem(at: folder)
             return nil
         }
-        removeLinks(in: folder)
+        guard keepWithinLimits(folder, limits) else {
+            try? FileManager.default.removeItem(at: folder)
+            return nil
+        }
         return RepoSnapshot(commit: commit, files: chosen.paths.count, bytes: chosen.bytes, left: chosen.left)
     }
 
@@ -114,13 +127,25 @@ enum RepoSnapshotWriter {
         }
     }
 
-    /// Nothing the checkout made may point out of the folder: a link is removed, whatever put it there.
-    private static func removeLinks(in folder: URL) {
-        guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isSymbolicLinkKey]) else {
-            return
+    /// What the checkout made is checked, not trusted: a link is removed (nothing may point out of the folder), a file over the per-file
+    /// limit is removed, and a folder that is over the total after any conversion is no copy at all. True when the folder may be used.
+    static func keepWithinLimits(_ folder: URL, _ limits: Limits) -> Bool {
+        let keys: [URLResourceKey] = [.isSymbolicLinkKey, .isRegularFileKey, .fileSizeKey]
+        guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) else { return false }
+        var total = 0
+        for case let url as URL in walker {
+            guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
+            if values.isSymbolicLink == true {
+                try? FileManager.default.removeItem(at: url)
+            } else if values.isRegularFile == true {
+                let size = values.fileSize ?? 0
+                if size > limits.fileBytes {
+                    try? FileManager.default.removeItem(at: url)
+                } else {
+                    total += size
+                }
+            }
         }
-        for case let url as URL in walker where (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
-            try? FileManager.default.removeItem(at: url)
-        }
+        return total <= limits.totalBytes
     }
 }
