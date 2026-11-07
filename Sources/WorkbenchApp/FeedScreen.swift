@@ -159,7 +159,7 @@ struct FeedScreen: View {
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.title ?? snapshot.id).textStyle(.section).lineLimit(2)
-                Spacer(minLength: 12)
+                Spacer(minLength: Space.m)
                 let showing = store.runSettingsShowing
                 Button {
                     store.toggleRunSettings()
@@ -243,8 +243,7 @@ struct PhaseRow: View {
                 let dot = PhaseDot.of(step.mark)
                 let tint = Theme.color(for: step.mark)
                 HStack(spacing: Space.s) {
-                    Circle().fill(dot.filled ? tint : Color.clear)
-                        .overlay(Circle().strokeBorder(tint, lineWidth: 1.5)).frame(width: 8, height: 8)
+                    StatusDot(tint, filled: dot.filled)
                     Text(step.title).textStyle(.callout).lineLimit(1)
                         .foregroundStyle(
                             dot.label == .primary ? Color.primary : dot.label == .secondary ? Theme.fg2 : Theme.fg3)
@@ -252,7 +251,7 @@ struct PhaseRow: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(step.spoken)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: Space.none)
         }
     }
 }
@@ -268,9 +267,9 @@ struct ReviewDetailsBody: View {
             if let review = store.review {
                 ReviewView(review: review, finishedAt: snapshot.run?.endedAt, store: store)
             } else {
-                Text("There is nothing to review now.").foregroundStyle(.secondary).padding(Space.xl)
+                EmptyNote("There is nothing to review now.", size: .large)
             }
         }
-        .frame(height: 440)
+        .modalBody(.page)
     }
 }

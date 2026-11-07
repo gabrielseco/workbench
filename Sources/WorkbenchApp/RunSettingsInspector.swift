@@ -104,7 +104,7 @@ struct RunSettingsInspector: View {
     private var heading: some View {
         HStack {
             Text("Run settings").textStyle(.bodyStrong)
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.s)
             IconButton.close("Close Run settings") { store.setRunSettings(false) }
         }
     }
@@ -212,7 +212,7 @@ struct RunSettingsInspector: View {
                 mono(folder)
                 Text(note).role(.caption)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: Space.none)
             if removable {
                 IconButton.close("Remove \(folder)") { Task { await store.editGoal { $0.removingReadAlso(folder) } } }
             }
@@ -272,6 +272,6 @@ struct RunSettingsBody: View {
 
     var body: some View {
         RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
-            .frame(height: 440)
+            .modalBody(.page)
     }
 }

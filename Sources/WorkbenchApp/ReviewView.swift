@@ -168,11 +168,7 @@ struct DiffBody: View {
             // The modal covers the Review screen, where these are shown otherwise.
             if let error = store.actionError { Text(error).role(.error) }
             if let note = store.actionNote { Text(note).role(.caption) }
-            ScrollView {
-                Text(text).textStyle(.monoCallout).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(height: 360)
+            CodeBox(text, height: .tall)
         }
         .task { text = await store.patchText(path) }
     }
@@ -185,11 +181,7 @@ struct DiscardBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             if let plan = store.pendingDiscard {
-                ScrollView {
-                    Text(plan.render().joined(separator: "\n")).textStyle(.monoCallout)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 200)
+                CodeBox(plan.render().joined(separator: "\n"), height: .short)
                 if !plan.fullyShown {
                     Text("Not everything that would be lost could be listed.").role(.warning)
                 }

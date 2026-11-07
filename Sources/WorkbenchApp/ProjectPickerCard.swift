@@ -66,8 +66,7 @@ struct ProjectPickerCard: View {
 
     @ViewBuilder private var list: some View {
         if rows.isEmpty {
-            Text(store.recentPaths.isEmpty ? "No recent projects yet." : "No project matches \"\(query)\".")
-                .role(.detail).padding(.vertical, Space.m).padding(.horizontal, Space.xs)
+            EmptyNote(store.recentPaths.isEmpty ? "No recent projects yet." : "No project matches \"\(query)\".")
         } else {
             ScrollViewReader { scroller in
                 ScrollView {
@@ -132,7 +131,7 @@ private struct ProjectRow: View {
             } label: {
                 HStack(spacing: Space.m) {
                     Image(systemName: entry.isCurrent ? "folder.fill" : "folder")
-                        .foregroundStyle(entry.isCurrent ? Theme.blue : .secondary).frame(width: 18)
+                        .foregroundStyle(entry.isCurrent ? Theme.blue : .secondary).symbolColumn()
                     VStack(alignment: .leading, spacing: Space.xxs) {
                         Text(entry.name).textStyle(entry.isCurrent ? .bodyStrong : .body)
                             .foregroundStyle(available ? .primary : .secondary)
@@ -141,7 +140,7 @@ private struct ProjectRow: View {
                             .foregroundStyle(available ? Color.secondary : Theme.red)
                             .lineLimit(1).truncationMode(.middle)
                     }
-                    Spacer(minLength: 8)
+                    Spacer(minLength: Space.s)
                     if entry.isRunning { Text("Running").pill(Theme.blue) }
                     if entry.isCurrent { Text("Current").pill(Theme.blue) }
                 }

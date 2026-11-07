@@ -74,7 +74,7 @@ private struct GrantRowView: View {
                         .foregroundStyle(row.level == .unsafe ? Theme.red : Theme.amber)
                 }
                 if let reason = row.reasons.first { Text(reason).role(.caption).lineLimit(1) }
-                Spacer(minLength: 8)
+                Spacer(minLength: Space.s)
                 if let decided = row.decided { Text(decided).textStyle(.caption, .green) }
                 choices
             }

@@ -118,7 +118,7 @@ struct GoalBlocks: View {
         HoverRow { hovering in
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                 if style == .feed {
-                    Circle().strokeBorder(Theme.grey, lineWidth: 1.5).frame(width: 11, height: 11).accessibilityHidden(true)
+                    StatusDot(size: .large)
                 } else {
                     Text(row.id).role(.monoDetail)
                 }

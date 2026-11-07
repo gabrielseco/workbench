@@ -80,8 +80,7 @@ struct AgentLineView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.m) {
-            Image(systemName: "sparkle").textStyle(.captionMedium, .secondary).frame(width: 22, height: 22)
-                .background(Theme.raised, in: Circle()).overlay(Circle().stroke(Theme.line)).padding(.top, Space.xxs)
+            AgentAvatar().padding(.top, Space.xxs)
             Text(text).textStyle(.body).fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
@@ -111,7 +110,7 @@ struct DraftGoalCardView: View {
             HStack(spacing: Space.m) {
                 SectionLabel("DRAFT GOAL")
                 Text(header.pill).pill(tint)
-                Spacer(minLength: 8)
+                Spacer(minLength: Space.s)
                 if let hint = header.hint { Text(hint).role(.caption) }
             }
             .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
@@ -120,7 +119,7 @@ struct DraftGoalCardView: View {
             Divider()
             HStack(spacing: Space.m) {
                 Text(DraftGoalCard.footer(goal: goal, base: base)).role(.caption)
-                Spacer(minLength: 8)
+                Spacer(minLength: Space.s)
                 DecisionActions(decision: decision, perform: perform)
             }
             .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)

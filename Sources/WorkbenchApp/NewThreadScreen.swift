@@ -187,7 +187,7 @@ struct NewThreadScreen: View {
                 AddScreenshotsButton(staging: staging, disabled: busy)
                 Text("Paste or drop screenshots.").role(.caption)
                 if staging.pending > 0 { Spinner() }
-                Spacer(minLength: 8)
+                Spacer(minLength: Space.s)
                 if busy {
                     BusyLine(
                         store.drafting ? "Drafting the goal…" : "Waiting for the reply…", tone: .working,

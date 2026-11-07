@@ -10,12 +10,8 @@ struct PRReviewBody: View {
             if let shown = store.prReviewShown {
                 Label(shown.headline, systemImage: outcome(shown).symbol).textStyle(.heading).foregroundStyle(outcome(shown).tint)
                 ForEach(shown.notes, id: \.self) { Text($0).role(.warning) }
-                ScrollView {
-                    Text(shown.findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Codex wrote nothing.")
-                        .textStyle(.monoCallout).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 280)
+                CodeBox(
+                    shown.findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Codex wrote nothing.", height: .medium)
                 Text(
                     "A review reads the code and cannot run tests, so CI has to be green as well. "
                         + "Nothing was posted to the pull request."

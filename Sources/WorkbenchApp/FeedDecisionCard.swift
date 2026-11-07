@@ -37,7 +37,7 @@ struct DecisionCard: View {
                 Text([route, "PR review comes back to this chat"].compactMap { $0 }.joined(separator: " · "))
                     .role(.mono).lineLimit(1).truncationMode(.middle)
             }
-            Spacer(minLength: 12)
+            Spacer(minLength: Space.m)
             MoreActionsMenu(actions: Self.shipMenu(decision), perform: perform)
             if let ship = decision.primary {
                 ActionButton(action: ship, kind: .primary, perform: perform)
@@ -51,7 +51,7 @@ struct DecisionCard: View {
     private var next: some View {
         HStack(alignment: .center, spacing: Space.m) {
             CardTitle("NEXT", title: decision.title ?? step?.title ?? "Nothing left to do", detail: shownWhy)
-            Spacer(minLength: 12)
+            Spacer(minLength: Space.m)
             DecisionActions(decision: decision, perform: perform)
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)

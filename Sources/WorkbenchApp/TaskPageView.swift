@@ -24,7 +24,7 @@ struct TaskPageView: View {
                             Text("Defined in \(header.path). Edit that file, or use Edit with AI.")
                                 .textStyle(.mono, .subtle).textSelection(.enabled)
                         }
-                        Spacer(minLength: 8)
+                        Spacer(minLength: Space.s)
                         TaskButtons(store: store, entry: entry)
                     }
                     if let note = store.tasks.actionNote {
@@ -154,7 +154,7 @@ struct RunTonightCard: View {
                                     .lineLimit(2).textSelection(.enabled)
                             }
                         }
-                        Spacer(minLength: 8)
+                        Spacer(minLength: Space.s)
                         if let action = Self.action(for: warning), Self.offered(action) {
                             Button(action.title) { perform(action) }.plainButton().controlSize(.small)
                         }
@@ -204,7 +204,7 @@ struct TaskRunRow: View {
         let tone = TaskOutcomeStyle.tone(run.outcome)
         let action = RunAction.of(run, reportExists: reportExists)
         HStack(alignment: .top, spacing: Space.m) {
-            Image(systemName: TaskOutcomeStyle.symbol(run.outcome)).foregroundStyle(Theme.color(for: tone)).frame(width: 16)
+            Image(systemName: TaskOutcomeStyle.symbol(run.outcome)).foregroundStyle(Theme.color(for: tone)).symbolColumn()
                 .padding(.top, Space.xxs)
             VStack(alignment: .leading, spacing: Space.xxs) {
                 HStack(spacing: Space.s) {
@@ -246,7 +246,7 @@ struct TaskRunRow: View {
                     }
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.s)
             if let action, !(action.isThread && !threadKnown) {
                 Button(action.title) { perform(action) }.plainButton().controlSize(.small)
             }

@@ -27,6 +27,12 @@ banned=(
   'Space|VStack(spacing: 6) { Text("x") }' 'Space|HStack(alignment: .top, spacing: 10) { Text("x") }'
   'Space|VStack(spacing: wide ? 8 : 4) { Text("x") }'
   'Pill|Color.red.clipShape(Capsule())'
+  'Space|Spacer(minLength: 8)' 'Space|Spacer(minLength:0)' 'Space|HStack { Text("x"); Spacer(minLength: 12) }'
+  'named size|Color.red.frame(width: Self.width, height: 440)' 'named size|Color.red.frame(maxWidth: .infinity, height: 20)' 'named size|Color.red.frame(
+    width: 22,
+    height: 22
+)'
+  'named size|Color.red.frame(width: 22, height: 22)' 'named size|Color.red.frame(height: 440)' 'named size|Color.red.frame(width:16)'
 )
 for case in "${banned[@]}"; do
   want=${case%%|*}; code=${case#*|}
@@ -43,6 +49,7 @@ allowed=(
   'Text("x").textStyle(.caption, .secondary)' 'Text("x").role(.error)' 'RoundedRectangle(cornerRadius: Radius.card)'
   'Text("x").padding(.horizontal, Space.m)' 'Text("x").padding(Spacing.inset)' 'VStack(spacing: Space.s) { Text("x") }'
   'VStack(spacing: 0) { Text("x") }' 'Text("x").lineSpacing(6)' 'Text("x").pill()'
+  'Spacer(minLength: Space.s)' 'Color.red.frame(width: Self.width, height: ModalBodyHeight.page.points)' 'Color.red.frame(maxWidth: 220, minHeight: 56)'
 )
 for code in "${allowed[@]}"; do
   dir=$(tree View.swift "$(view "$code")")

@@ -142,3 +142,19 @@ scale lacks is a new `TextStyle` case, decided once.
 
 Looked at and left: the 19 `Divider()`s are the system divider and need nothing; `Toggle` rows (the inspector's two) and the criteria and
 settings label-and-value rows are two or three each, below the point where a component pays for itself.
+
+
+## Audit 2 (2026-11-07): what was still repeated after the modals
+
+A second read of `Sources/WorkbenchApp` after `Modal` (#458 to #460) found 11 repeated shapes. Four stacked PRs made them components, each with
+a ban in `scripts/check-banned-apis.sh` or `scripts/check-ui-tokens.sh`, so a hand-written one fails CI and names what to use:
+
+| PR | Component | What it replaced | The ban |
+|---|---|---|---|
+| #461 | `Outcome`, `StatusMark`, `Message` | 15 hand-written symbol and colour maps (CI, tasks, turns, checks, judge, verify, PR review, rail), `MessageRow`, loose error labels | the result symbols outside `Outcome.swift` |
+| #462 | `Spinner`, `BusyLine`, `ToolbarPillButton`, `IconButton` | 7 spinner + words (+ Stop) rows, `ProgressView()`, two near-identical toolbar pills, 5 hand-made crosses, `.iconButton(` sites | `ProgressView()`, a bare `xmark`, `.iconButton(` |
+| #463 | `TextInput`, `SwitchRow`, `CardTitle` | 5 bordered fields, 2 grey wells, an editable title, 2 switch rows, the NEXT block twice | `TextField(` and `.roundedBorder` |
+| #464 | `StatusDot`, `AgentAvatar`, `CodeBox` + `ModalBodyHeight`, `EmptyNote`, `symbolColumn()` | status circles of 8, 9 and 11 pt, the agent's disc twice, 3 scrolling mono boxes, 3 empty sentences, symbol columns of 14, 16 and 18, 23 `Spacer(minLength:)` literals | `Spacer(minLength: N)`, `.frame(width|height: N)` |
+
+Not done, on purpose: `FactsGrid` (the two places differ on purpose), a `CardHeader` for the caps-label headers (only NEXT repeats; the rest carry
+different things), and a ban on `min`/`max` frames (about 25 remain; they are limits, not sizes).
