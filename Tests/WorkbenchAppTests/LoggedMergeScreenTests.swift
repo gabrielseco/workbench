@@ -48,6 +48,36 @@ import WorkbenchCore
         #expect(try EventLogReader.read(at: fixture.project.eventsURL("a")).events.contains { $0.kind == .prMerged })
     }
 
+    @Test func theRailSaysItIsSyncingOnlyWhileItAsksGitHubForThreadsItHasNotAskedAboutYet() async throws {
+        let fixture = try await AppFixture()
+        keptLoggedMergeFixtures.append(fixture)
+        try await fixture.addThread("a", approved: true, title: "Shipped a")
+        try fixture.turn("a", 1)
+        try fixture.decide("a", "accepted")
+        try fixture.ship("a", number: 7)
+        let seen = Reads()
+        let box = StoreBox()
+        let open = PRStatus(number: 7, state: .open, head: String(repeating: "a", count: 40), checks: nil)
+        let store = ProjectStore(
+            preferences: MemoryPreferences(),
+            actions: GoalActions(pullRequestStatus: { _, _ in
+                seen.syncing.append(await MainActor.run { box.store?.threads.syncing ?? false })
+                return open
+            }))
+        box.store = store
+        #expect(await store.open(fixture.root))
+        #expect(!store.threads.syncing)
+        await store.refreshPullRequests()
+        await store.refreshPullRequests(force: true)
+        #expect(seen.syncing == [true, false], "the first read syncs, the second is quiet")
+        #expect(!store.threads.syncing, "and the line is gone when the reads are done")
+    }
+
     private enum Failure: Error { case notAThread }
-    private final class Reads: @unchecked Sendable { var count = 0 }
+    private final class Reads: @unchecked Sendable {
+        var count = 0
+        var syncing: [Bool] = []
+    }
+
+    @MainActor private final class StoreBox { var store: ProjectStore? }
 }

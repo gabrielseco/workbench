@@ -33,11 +33,14 @@ struct ThreadListing: Equatable, Sendable {
     /// When each was last asked for, so a poll asks again only after `pullRequestInterval`.
     @ObservationIgnored var pullRequestsReadAt: [String: ContinuousClock.Instant] = [:]
     @ObservationIgnored var readingPullRequests = false
+    /// The first read of GitHub for threads it has not been asked about yet is running: the rail says so. A later read of a pull request
+    /// that is still open is quiet, so the line is not on screen for a second every few minutes.
+    var syncing = false
     /// Merges GitHub confirmed whose `pr.merged` could not be written (the log was held): tried again on the next poll.
     @ObservationIgnored var unwrittenMerges: [String: PRStatus] = [:]
 
     /// How long a listed pull request's status is kept before it is read again.
-    static let pullRequestInterval: Duration = .seconds(120)
+    static let pullRequestInterval: Duration = .seconds(300)
 
     func forgetPullRequests() {
         (pullRequests, pullRequestsReadAt, unwrittenMerges) = ([:], [:], [:])
