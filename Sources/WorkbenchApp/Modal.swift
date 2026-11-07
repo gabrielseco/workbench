@@ -51,6 +51,18 @@ extension ModalFooter where Leading == EmptyView {
     init(@ViewBuilder actions: @escaping () -> Actions) { self.init(leading: { EmptyView() }, actions: actions) }
 }
 
+/// The area a modal has to live in: the window's, which a picture sized to the screen overflowed when the window is smaller.
+private struct ModalRoomKey: EnvironmentKey {
+    static let defaultValue = CGSize(width: 900, height: 600)
+}
+
+extension EnvironmentValues {
+    var modalRoom: CGSize {
+        get { self[ModalRoomKey.self] }
+        set { self[ModalRoomKey.self] = newValue }
+    }
+}
+
 /// What the close control is called to assistive technology, and so to `scripts/verify-app.sh`.
 enum ModalText {
     static func closeLabel(_ title: String) -> String {
@@ -139,16 +151,21 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
             // Modal: what is behind it takes no click and no Tab until it closes.
             .disabled(isPresented)
             .overlay {
-                ZStack(alignment: placement.alignment) {
-                    if isPresented {
-                        Color.black.opacity(0.12).contentShape(Rectangle())
-                            .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
-                        ModalCard(
-                            title: title, size: size, close: { isPresented = false }, accessory: accessory, content: presented)
-                            .padding(.top, placement == .centered ? 0 : Space.giant)
-                            .padding(.leading, placement == .centered ? 0 : Space.m)
-                            .transition(placement.transition)
+                GeometryReader { window in
+                    ZStack(alignment: placement.alignment) {
+                        if isPresented {
+                            Color.black.opacity(0.12).contentShape(Rectangle())
+                                .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
+                            ModalCard(
+                                title: title, size: size, close: { isPresented = false }, accessory: accessory,
+                                content: presented)
+                                .padding(.top, placement == .centered ? 0 : Space.giant)
+                                .padding(.leading, placement == .centered ? 0 : Space.m)
+                                .transition(placement.transition)
+                        }
                     }
+                    .frame(width: window.size.width, height: window.size.height, alignment: placement.alignment)
+                    .environment(\.modalRoom, window.size)
                 }
                 .animation(.easeOut(duration: 0.15), value: isPresented)
                 .accessibilityAddTraits(isPresented ? .isModal : [])

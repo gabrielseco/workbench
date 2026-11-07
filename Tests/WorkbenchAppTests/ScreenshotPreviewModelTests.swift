@@ -1,6 +1,8 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 
 @testable import WorkbenchApp
 
@@ -54,11 +56,50 @@ import Testing
         #expect(model.isStale, "a screenshot that is no longer staged is not previewed")
     }
 
-    @Test func theAreaIsTheImagesOwnSizeWithinTheRoomAndNoSmallerThanTheLeast() throws {
-        let model = ScreenshotPreviewModel.proof(shots(1), at: 0)
-        let room = ScreenshotPreviewModel.room(screen: CGSize(width: 1440, height: 900))
-        #expect(model.area(scale: 2, room: room) == ScreenshotPreviewModel.smallest, "before it is decoded")
-        #expect(room.width < 1440 * 0.9 && room.height < 900 * 0.85, "the modal's own padding and header come out of the room")
+    /// A PNG of `width` × `height` pixels in a file of its own.
+    private func png(width: Int, height: Int) throws -> URL {
+        let context = try #require(
+            CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("preview-model-\(UUID().uuidString).png")
+        let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        return url
+    }
+
+    @Test func theRoomIsTheWindowsAndNotTheScreensSoACardNeverOverflowsASmallWindow() async throws {
+        let window = CGSize(width: 900, height: 600)
+        let room = ScreenshotPreviewModel.room(in: window)
+        #expect(room.width < window.width && room.height < window.height, "a margin, the card's padding and its header come out")
+        let url = try png(width: 3000, height: 2000)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = ScreenshotPreviewModel.proof([ProofShot(url: url, caption: "Big")], at: 0)
+        #expect(model.area(scale: 1, room: room) == ScreenshotPreviewModel.smallest, "before it is decoded")
+        await model.load()
+        #expect(model.decoded != nil)
+        let area = model.area(scale: 1, room: room)
+        #expect(area.width <= room.width && area.height <= room.height, "a picture bigger than the window is bounded by it")
+        #expect(!model.fits(scale: 1, room: room), "so the toggle to its actual size is offered")
+    }
+
+    @Test func aSmallPictureKeepsItsOwnSizeButNeverShrinksBelowTheLeast() async throws {
+        let room = ScreenshotPreviewModel.room(in: CGSize(width: 1400, height: 900))
+        let url = try png(width: 400, height: 300)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = ScreenshotPreviewModel.proof([ProofShot(url: url, caption: "Small")], at: 0)
+        await model.load()
+        let area = model.area(scale: 2, room: room)
+        #expect(area == ScreenshotPreviewModel.smallest, "200 × 150 points is under the least, so the area is the least")
+        #expect(model.fits(scale: 2, room: room))
+        let wide = try png(width: 1600, height: 1000)
+        defer { try? FileManager.default.removeItem(at: wide) }
+        let other = ScreenshotPreviewModel.proof([ProofShot(url: wide, caption: "Wide")], at: 0)
+        await other.load()
+        #expect(other.area(scale: 2, room: room) == CGSize(width: 800, height: 500), "800 × 500 points fits whole")
     }
 
     /// A 1 × 1 PNG.

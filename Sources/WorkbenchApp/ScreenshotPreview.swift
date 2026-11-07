@@ -67,9 +67,11 @@ import SwiftUI
         (decoded, missing) = (loaded, loaded == nil)
     }
 
-    /// The room the picture can take: most of the screen, less the modal's own padding and header.
-    static func room(screen: CGSize) -> CGSize {
-        CGSize(width: screen.width * 0.9 - 2 * Space.l, height: screen.height * 0.85 - 2 * Space.l - Self.header)
+    /// The room the picture can take: the window's, less a margin round the card and the card's own padding and header.
+    static func room(in window: CGSize) -> CGSize {
+        CGSize(
+            width: window.width - 2 * Space.xl - 2 * Space.l,
+            height: window.height - 2 * Space.xl - 2 * Space.l - Self.header)
     }
 
     /// The header row and the gap under it, which the modal adds to the picture's height.
@@ -104,12 +106,11 @@ extension EnvironmentValues {
     }
 }
 
-private var screenSize: CGSize { NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900) }
-
 /// Beside the modal's close button: the note, previous and next (and the arrow keys), and fit or actual size.
 struct ScreenshotPreviewControls: View {
     var model: ScreenshotPreviewModel
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.modalRoom) private var window
 
     var body: some View {
         HStack(spacing: Space.m) {
@@ -122,7 +123,7 @@ struct ScreenshotPreviewControls: View {
                     .iconButton(size: .compact).keyboardShortcut(.rightArrow, modifiers: [])
                     .disabled(model.index == model.shots.count - 1).accessibilityLabel("Next screenshot").help("Next (→)")
             }
-            if model.decoded != nil, !model.fits(scale: displayScale, room: ScreenshotPreviewModel.room(screen: screenSize)) {
+            if model.decoded != nil, !model.fits(scale: displayScale, room: ScreenshotPreviewModel.room(in: window)) {
                 let symbol = model.actualSize ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
                 Button { model.actualSize.toggle() } label: { Image(systemName: symbol) }
                     .iconButton(size: .compact).accessibilityLabel(model.actualSize ? "Fit to window" : "Actual size")
@@ -136,9 +137,10 @@ struct ScreenshotPreviewControls: View {
 struct ScreenshotPreviewBody: View {
     var model: ScreenshotPreviewModel
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.modalRoom) private var window
 
     var body: some View {
-        let room = ScreenshotPreviewModel.room(screen: screenSize)
+        let room = ScreenshotPreviewModel.room(in: window)
         let area = model.area(scale: displayScale, room: room)
         picture(fits: model.fits(scale: displayScale, room: room))
             .frame(width: area.width, height: area.height)
