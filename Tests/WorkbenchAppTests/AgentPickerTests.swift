@@ -119,14 +119,25 @@ import WorkbenchCore
         #expect(store.agentSetup?.row(.run)?.model == "haiku", "the last choice wins")
     }
 
-    @Test func aRowThatAStageDecidesIsNotEditable() async throws {
+    @Test func aRowWhoseStageDecidesOnlyOneKeyStaysEditableForTheOthers() async throws {
+        let stage = "[review]\nstages = [\"pr-review\"]\n[review.stage.pr-review]\nreasoning_effort = \"high\"\n"
+        let (store, _) = try await store(config: stage)
+        let row = try #require(store.agentSetup?.row(.review))
+        #expect(row.lockedFields == [.reasoningEffort])
+        await store.setAgent(.review, .model, to: "gpt-5")
+        #expect(store.actionError == nil, "\(String(describing: store.actionError))")
+        #expect(store.agentSetup?.row(.review)?.model == "gpt-5", "the model is still the card's to change")
+    }
+
+    @Test func aKeyAStageDecidesIsDrawnLockedAndNamesTheStage() async throws {
         let stage = "[review]\nstages = [\"pr-review\"]\n[review.stage.pr-review]\nprovider = \"codex\"\n"
         let (store, _) = try await store(config: stage)
         let row = try #require(store.agentSetup?.row(.review))
-        #expect(row.lockedBy != nil)
+        #expect(row.lockedBy == "[review.stage.pr-review]" && row.lockedFields == [.provider])
+        var free = row
+        (free.lockedBy, free.lockedFields) = (nil, [])
         let edit = AgentEdit(set: { _, _, _ in true }, goalOff: { true })
-        let editable = try drawn(AgentRow(row: row, edit: edit))
-        #expect(try drawn(AgentRow(row: row)) != editable, "the editable form differs, so the card must not use it")
+        #expect(try drawn(AgentRow(row: row, edit: edit)) != drawn(AgentRow(row: free, edit: edit)), "locked and free differ")
     }
 
     private func drawn(_ view: some View, height: CGFloat = 200) throws -> Data? {

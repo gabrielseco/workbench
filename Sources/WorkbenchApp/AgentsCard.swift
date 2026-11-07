@@ -44,8 +44,8 @@ struct AgentsCard: View {
             if let setup = store.agentSetup {
                 VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(setup.rows) { row in
-                        // The verifier's model is not an agent key, and a stage that decides a role would ignore an edit of its table.
-                        AgentRow(row: row, edit: row.role == .verifier || row.lockedBy != nil ? nil : edit)
+                        // The verifier's model is not an agent key; a key a stage decides is locked in its row.
+                        AgentRow(row: row, edit: row.role == .verifier ? nil : edit)
                     }
                 }
             } else if store.agentConfigMissing {
@@ -120,7 +120,8 @@ struct AgentRow: View {
             }
         }
         .onAppear { model = row.model ?? "" }
-        .onChange(of: row.model) { model = row.model ?? "" }
+        // What is being typed is not replaced by a write that finished meanwhile.
+        .onChange(of: row.model) { if !typing { model = row.model ?? "" } }
     }
 
     /// The read-only form: what runs, and where the setting came from.
@@ -139,12 +140,13 @@ struct AgentRow: View {
                 ForEach(AgentSetup.providers, id: \.rawValue) { Text(AgentSetup.name($0)).tag($0.rawValue) }
             }
             .labelsHidden().fixedSize().accessibilityLabel("\(row.role.rawValue.capitalized) provider")
+            .disabled(row.lockedFields.contains(.provider))
             Picker("Effort", selection: effortChoice) {
                 Text("Default effort").tag(Self.providerDefault)
                 ForEach(AgentSetup.efforts, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden().fixedSize().accessibilityLabel("\(row.role.rawValue.capitalized) effort")
-            .disabled(row.provider == nil)
+            .disabled(row.provider == nil || row.lockedFields.contains(.reasoningEffort))
         }
     }
 
@@ -174,7 +176,7 @@ struct AgentRow: View {
             .textFieldStyle(.plain).focused($typing).textStyle(.callout)
             .padding(.horizontal, Space.m).padding(.vertical, Space.xs)
             .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
-            .disabled(row.provider == nil)
+            .disabled(row.provider == nil || row.lockedFields.contains(.model))
             .accessibilityLabel("\(row.role.rawValue.capitalized) model")
             .onSubmit(commitModel)
             .onChange(of: typing) { if !typing { commitModel() } }
@@ -187,7 +189,8 @@ struct AgentRow: View {
         let was = row.model ?? ""
         Task {
             // A refused name is not left in the field: it goes back to what the file has.
-            if await edit?.set(row.role, .model, typed.isEmpty ? nil : typed) == false { model = was }
+            let written = await edit?.set(row.role, .model, typed.isEmpty ? nil : typed)
+            if written == false, model.trimmingCharacters(in: .whitespaces) == typed { model = was }
         }
     }
 
@@ -201,7 +204,10 @@ struct AgentRow: View {
 
     /// Where the setting came from, with the effort when one is set.
     private var detail: String {
-        if let table = row.lockedBy { return "set by \(table): change it in the config" }
+        if let table = row.lockedBy {
+            let keys = row.lockedFields.map(\.rawValue).sorted().joined(separator: ", ")
+            return "\(keys) set by \(table): change it in the config"
+        }
         switch row.source {
         case .off: return row.role == .goal ? "no [agents.goal]: chat and drafting are off" : "turned off in the config"
         case .providerDefault: return "provider default"

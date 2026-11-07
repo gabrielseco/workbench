@@ -97,10 +97,16 @@ public enum ConfigEdit {
             var lines = original.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             let hadFinalNewline = original.hasSuffix("\n")
             if hadFinalNewline { lines.removeLast() }
-            // Highest line first, so the numbers of the lines above stay right.
+            // Highest line first, so the numbers of the lines above stay right; a comment on a key's line stays as a line of its own.
             var drop = table.entries.values.map { $0.line - 1 }
             drop.sort(by: >)
-            for index in drop { lines.remove(at: index) }
+            for index in drop {
+                if let at = commentStart(lines[index]) {
+                    lines[index] = String(lines[index].dropFirst(at))
+                } else {
+                    lines.remove(at: index)
+                }
+            }
             let header = table.line - 1
             if let at = commentStart(lines[header]) {
                 lines[header] = String(lines[header].dropFirst(at))

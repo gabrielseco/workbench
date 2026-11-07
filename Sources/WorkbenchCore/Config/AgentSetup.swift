@@ -41,6 +41,8 @@ public struct AgentSetup: Sendable, Equatable {
         public var source: Source
         /// The table that decides this role instead of its `[agents.<role>]` one, so editing that one would change nothing: the pr-review stage.
         public var lockedBy: String?
+        /// The keys of this role that table decides (a stage may set only an effort): only those are locked, the others still edit.
+        public var lockedFields: Set<ConfigEdit.Field> = []
         public var id: String { role.id }
 
         /// "Codex · gpt-6.1-terra", "Claude · default model", or nil when the role is off.
@@ -84,9 +86,12 @@ public struct AgentSetup: Sendable, Equatable {
         case .review:
             // The pull-request review also reads `[review.stage.pr-review]`, which can name its own provider, model or effort.
             let stage = config.review.stage(ReviewConfig.prReviewStage)
-            let stageSet = stage.map { $0.provider != nil || $0.model != nil || $0.reasoningEffort != nil } ?? false
-            var row = make(config.resolvedReviewAgent(), config.agents.review, also: stageSet)
-            if stageSet { row.lockedBy = "[review.stage.\(ReviewConfig.prReviewStage)]" }
+            var locked: Set<ConfigEdit.Field> = []
+            if stage?.provider != nil { locked.insert(.provider) }
+            if stage?.model != nil { locked.insert(.model) }
+            if stage?.reasoningEffort != nil { locked.insert(.reasoningEffort) }
+            var row = make(config.resolvedReviewAgent(), config.agents.review, also: !locked.isEmpty)
+            if !locked.isEmpty { (row.lockedBy, row.lockedFields) = ("[review.stage.\(ReviewConfig.prReviewStage)]", locked) }
             return row
         case .ship: return make(config.resolvedShipAgent, config.agents.ship)
         case .verifier:
