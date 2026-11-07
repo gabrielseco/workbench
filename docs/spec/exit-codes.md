@@ -51,6 +51,18 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 | 0 |  | done |
 | 2 | `usage`, `invalid-config` | wrong command line, or a config that does not parse |
 
+### `config set`, `config unset`
+
+`config set <key> <value>` and `config unset <key>` change one `agents.<role>.<provider|model|reasoning_effort>` line of `.workbench/config.toml`
+(`ConfigEdit`): they keep every other line and comment, parse the result as a config before writing, and do not overwrite a change made
+meanwhile. They are allowed while a thread is active; changing `agents.run` says the thread's approval may need `goal approve` again.
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | changed (or the key already had that value: nothing written) |
+| 2 | `usage` | wrong command line |
+| 6 | `refused` | a key that is not an agent key, a value the config would not load or that is not a plain name, a key that is not set (unset), no config, a config that does not load as it is, over 256 KiB, with Windows line endings, or changed while it was edited; the file is left as it was |
+
 ### `doctor`
 
 | Code | Kind | When |

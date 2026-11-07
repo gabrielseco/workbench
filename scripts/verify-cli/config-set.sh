@@ -10,7 +10,7 @@
 # `set agents.run.model` still works and says the approval may need binding again; `config --help` names `config set`.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 sends a provider that exists and a key that is an agent key to the two refusals, so the two "refused"
-# steps and the two "file untouched" steps must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# steps and the "file untouched" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
