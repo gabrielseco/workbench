@@ -85,6 +85,13 @@ import Testing
         #expect(try text(onHeader) == "# keep this explanation\n\n" + Self.tools)
     }
 
+    @Test func aCommentOnTheKeysOwnLineStaysWhenTheKeyGoes() throws {
+        let effort = "reasoning_effort = \"high\"\n\n"
+        let p = try project("[agents.run]\nmodel = \"opus\" # chosen after benchmarking\n" + effort + Self.tools)
+        _ = try ConfigEdit.unset(key("agents.run.model"), in: p)
+        #expect(try text(p) == "[agents.run]\n# chosen after benchmarking\n" + effort + Self.tools)
+    }
+
     @Test func aCommentDoesNotStopTheGoalAgentBeingTakenOut() throws {
         let p = try project("[agents.goal]\n# drafting with codex\nprovider = \"codex\"\n\n" + Self.tools)
         _ = try ConfigEdit.unset(key("agents.goal.provider"), in: p)
@@ -103,7 +110,8 @@ import Testing
         #expect(config.agents.goal?.provider == .codex && config.agents.run.model == "opus")
         #expect(config.agents.judge.model == "sonnet" && config.agents.plan.model == "opus")
         #expect(config.agents.ship.model == "haiku")
-        #expect(!FileManager.default.fileExists(atPath: p.configURL.path + ".lock"), "the lock file is gone")
+        let folder = p.configURL.deletingLastPathComponent().path
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder) == ["config.toml"], "no lock file is left")
     }
 
     @Test func refusals() throws {

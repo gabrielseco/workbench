@@ -91,14 +91,16 @@ public enum ConfigEdit {
     /// `beforeWrite` runs between the last read and the write: a test changes the file there.
     static func edit(_ key: Key, value: String?, in project: Project, beforeWrite: () -> Void) throws -> Change {
         let url = project.configURL
-        // Two edits at once would each read the same file and the second write would lose the first: one at a time.
-        let lock = open(url.path + ".lock", O_CREAT | O_RDWR, 0o600)
-        guard lock >= 0 else { throw Failure.notWritten("could not lock the config: \(String(cString: strerror(errno)))") }
-        flock(lock, LOCK_EX)
+        // Two edits at once would each read the same file and the second write would lose the first: one at a time. The lock is
+        // on the folder, which is never replaced or removed, so no edit ever waits on a lock another has deleted.
+        let lock = open(url.deletingLastPathComponent().path, O_RDONLY)
+        guard lock >= 0, flock(lock, LOCK_EX) == 0 else {
+            if lock >= 0 { close(lock) }
+            throw Failure.notWritten("could not lock the config: \(String(cString: strerror(errno)))")
+        }
         defer {
             flock(lock, LOCK_UN)
             close(lock)
-            unlink(url.path + ".lock")
         }
         guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int else {
             throw Failure.noConfig
@@ -172,7 +174,12 @@ public enum ConfigEdit {
             let index = entry.line - 1
             guard index > start, index < next else { throw Failure.unsafe("the key '\(name)' could not be placed") }
             guard let value else {
-                lines.remove(at: index)
+                // A comment on the key's line stays as a line of its own.
+                if let at = commentStart(lines[index]) {
+                    lines[index] = String(lines[index].dropFirst(at))
+                } else {
+                    lines.remove(at: index)
+                }
                 dropEmptyTable(&lines, header: start, document: document, key: key)
                 return join(lines, finalNewline: hadFinalNewline)
             }
