@@ -40,12 +40,14 @@ more than a handful of threads.
 
 ## Slices (one pull request each)
 
-### 1. Ports per thread (no guard change)
+### 1. Ports per thread (no guard change) (built, #447)
 
 A stable port block per thread, chosen when the thread is created and recorded in its folder, so it is the same for the run, the check, the
 setup and every retry, and different between threads. `WORKBENCH_PORT` and `PORT` for the first, `WORKBENCH_PORT_1…` for more (`ports = N`
 in the config, default 1), passed to `[run]`, `check_command` and `setup_command` on the allowlisted environment. `AppLauncher.freePort()`
-becomes a fallback for a thread with no recorded block. Document the pattern for a database name (`…_$WORKBENCH_THREAD`).
+becomes a fallback for a thread with no recorded block.
+
+As built: blocks are slots of ten from 41000 (each project starts at a slot of its own from its path, a port in use is skipped, a block counts only while the thread has a worktree); the in-use check connects to `127.0.0.1` and `::1`; an app is never started on a port something else holds, the thread moves to a free block first. See "Ports per thread" in [`../spec/goal-file.md`](../spec/goal-file.md). Document the pattern for a database name (`…_$WORKBENCH_THREAD`).
 
 Failure cases: a block already in use by something else (the step reports it, never starts on a port it was not given); two threads
 created at once get different blocks; a thread from before this change still runs.
