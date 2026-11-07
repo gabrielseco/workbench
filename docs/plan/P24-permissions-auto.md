@@ -22,9 +22,10 @@ session. Default is `permissions = "allowlist"`, today's behaviour byte for byte
 | E | auto, `echo hi > <a path outside the repo>` | **ran**: the file was written |
 
 What it shows: `auto` is accepted together with `--restricted`, `--safe-mode` and `--permission-prompts none` (unlike
-`bypassPermissions`, which `--restricted` refuses); a refusal looks the same as today (`permission_denials` with
-`tool_name`, `tool_input.command`), so `turn.ended.denials`, the activity feed and `workbench grant` need no change; a
-deny rule still wins.
+`bypassPermissions`, which `--restricted` refuses); a refusal by a **deny rule** looks the same as today
+(`permission_denials` with `tool_name`, `tool_input.command`), so for those `turn.ended.denials`, the activity feed and
+`workbench grant` need no change; a deny rule still wins. Whether a refusal by the classifier itself has that shape is
+the open item below.
 
 Not measured: a command the classifier itself rejects. `curl … | sh` was stopped by the classifier of the session that
 was running the spike and was not worked around; two harmless probes, `git push --dry-run --force origin main` and
