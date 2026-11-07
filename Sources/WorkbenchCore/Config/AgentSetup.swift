@@ -39,6 +39,10 @@ public struct AgentSetup: Sendable, Equatable {
         public var model: String?
         public var reasoningEffort: String?
         public var source: Source
+        /// The table that decides this role instead of its `[agents.<role>]` one, so editing that one would change nothing: the pr-review stage.
+        public var lockedBy: String?
+        /// The keys of this role that table decides (a stage may set only an effort): only those are locked, the others still edit.
+        public var lockedFields: Set<ConfigEdit.Field> = []
         public var id: String { role.id }
 
         /// "Codex · gpt-6.1-terra", "Claude · default model", or nil when the role is off.
@@ -82,8 +86,13 @@ public struct AgentSetup: Sendable, Equatable {
         case .review:
             // The pull-request review also reads `[review.stage.pr-review]`, which can name its own provider, model or effort.
             let stage = config.review.stage(ReviewConfig.prReviewStage)
-            let stageSet = stage.map { $0.provider != nil || $0.model != nil || $0.reasoningEffort != nil } ?? false
-            return make(config.resolvedReviewAgent(), config.agents.review, also: stageSet)
+            var locked: Set<ConfigEdit.Field> = []
+            if stage?.provider != nil { locked.insert(.provider) }
+            if stage?.model != nil { locked.insert(.model) }
+            if stage?.reasoningEffort != nil { locked.insert(.reasoningEffort) }
+            var row = make(config.resolvedReviewAgent(), config.agents.review, also: !locked.isEmpty)
+            if !locked.isEmpty { (row.lockedBy, row.lockedFields) = ("[review.stage.\(ReviewConfig.prReviewStage)]", locked) }
+            return row
         case .ship: return make(config.resolvedShipAgent, config.agents.ship)
         case .verifier:
             // The verifier is Claude only, and on unless `[verifier] enabled = false`.
@@ -100,4 +109,27 @@ public struct AgentSetup: Sendable, Equatable {
     }
 
     public static func chatAgent(for setup: AgentSetup) -> String? { setup.row(.goal)?.label }
+
+    /// The providers a role can be set to, and the efforts `reasoning_effort` takes, for a picker.
+    public static let providers: [AgentProviderID] = [.claude, .codex]
+    public static let efforts = AgentsConfig.efforts
+
+    /// The provider a model name looks like it belongs to, when that is not `provider`: `opus` on Codex is a Claude name, `gpt-6.1` on
+    /// Claude is an OpenAI one. A name that looks like neither is no mismatch: only a name it knows is flagged.
+    public static func modelFit(provider: AgentProviderID, model: String) -> AgentProviderID? {
+        let name = model.lowercased()
+        let claude = ["opus", "sonnet", "haiku"].contains { name == $0 || name.hasPrefix($0 + "[") } || name.hasPrefix("claude-")
+        let openAI = name.hasPrefix("gpt-") || name.range(of: #"^o[0-9]"#, options: .regularExpression) != nil
+        if claude, provider != .claude { return .claude }
+        if openAI, provider != .codex { return .codex }
+        return nil
+    }
+
+    /// Said after the run agent is changed while a coding thread is active: `run` refuses a goal approved for other coding settings.
+    public static func runChangeNote(in project: Project) -> String? {
+        let store = ThreadStore(project: project)
+        guard let active = store.activeThreadID(), !store.state(of: active).isChat else { return nil }
+        return "thread \(active) may have been approved for the old run settings: `workbench run` refuses until "
+            + "`workbench goal approve` binds the new ones"
+    }
 }
