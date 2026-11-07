@@ -14,9 +14,8 @@ struct PreviewRail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
                 header("THREADS") {
-                    Button { store.beginNewGoal() } label: { Image(systemName: "plus") }
-                        .iconButton(size: .small).disabled(store.project == nil)
-                    .accessibilityLabel("New goal").help("New goal…")
+                    IconButton.raised("plus", "New goal", help: "New goal…", size: .small) { store.beginNewGoal() }
+                        .disabled(store.project == nil)
                 }
                 if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
                 if model.threads.isEmpty && model.composing == nil {

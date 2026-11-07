@@ -166,10 +166,8 @@ struct GoalBlocks: View {
                                     CommitField(placeholder: "What must not change", value: item) { new in
                                         edit { $0.replacingOutOfScope(item, with: new) }
                                     }
-                                    Button {
-                                        edit { $0.removingOutOfScope(item) }
-                                    } label: { Image(systemName: "xmark") }
-                                        .buttonStyle(.borderless).help("Remove").opacity(hovering ? 1 : 0.3)
+                                    IconButton.close("Remove \(item)", help: "Remove") { edit { $0.removingOutOfScope(item) } }
+                                        .opacity(hovering ? 1 : 0.3)
                                 } else {
                                     Text("• \(item)")
                                 }

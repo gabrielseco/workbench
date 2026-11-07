@@ -60,3 +60,19 @@ private struct PillFill: ViewModifier {
         }
     }
 }
+
+/// A pill in the toolbar that is a button: it answers the pointer and stays darker while what it opens is open. The label is the caller's.
+struct ToolbarPillButton<Label: View>: View {
+    var selected: Bool
+    var action: () -> Void
+    @ViewBuilder var label: Label
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            label.pill(style: .control(hovered: hovered, selected: selected), size: .large)
+        }
+        .buttonStyle(.plain).fixedSize()
+        .onHover { hovered = $0 }
+    }
+}

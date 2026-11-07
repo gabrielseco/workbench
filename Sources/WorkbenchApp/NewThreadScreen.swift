@@ -186,16 +186,12 @@ struct NewThreadScreen: View {
             HStack(spacing: Space.m) {
                 AddScreenshotsButton(staging: staging, disabled: busy)
                 Text("Paste or drop screenshots.").role(.caption)
-                if staging.pending > 0 { ProgressView().controlSize(.small) }
+                if staging.pending > 0 { Spinner() }
                 Spacer(minLength: 8)
                 if busy {
-                    ProgressView().controlSize(.small)
-                    Text(store.drafting ? "Drafting the goal…" : "Waiting for the reply…").textStyle(.callout)
-                        .foregroundStyle(Theme.blue)
-                    Button("Stop") {
-                        if store.drafting { store.stopDrafting() } else { store.stopChat() }
-                    }
-                    .buttonStyle(.borderless)
+                    BusyLine(
+                        store.drafting ? "Drafting the goal…" : "Waiting for the reply…", tone: .working,
+                        stop: .init(title: "Stop") { if store.drafting { store.stopDrafting() } else { store.stopChat() } })
                 } else {
                     Button { Task { await doItNow() } } label: { Self.labelled("Draft the goal", "⌘↵") }
                         .plainButton(size: .regular).keyboardShortcut(.return, modifiers: .command).disabled(!state.canDoItNow)

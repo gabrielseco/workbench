@@ -25,10 +25,7 @@ struct PRReviewBody: View {
             if let error = store.followUpError { Text(error).role(.error) }
             ModalFooter {
                 // The modal covers the window's own busy line, so a click on "Fix these findings" shows here that it was taken.
-                if let busy = store.busy {
-                    ProgressView().controlSize(.small)
-                    Text(busy).role(.detail)
-                }
+                if let busy = store.busy { BusyLine(busy) }
             } actions: {
                 if let shown = store.prReviewShown, shown.canFix {
                     Button("Fix these findings") { Task { await store.fixFindings() } }.plainButton(size: .regular)

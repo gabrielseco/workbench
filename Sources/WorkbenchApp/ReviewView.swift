@@ -93,13 +93,11 @@ struct ReviewView: View {
     /// it be stopped from the screen that is showing (the Run screen, which has the other Stop, is not).
     @ViewBuilder private var advice: some View {
         if store.runningHere {
-            HStack(spacing: Space.s) {
-                ProgressView().controlSize(.small)
-                Text("Running the advice the project's config asks for (judge, review stages)…").textStyle(.callout)
-                Spacer()
-                Button(store.stopping ? "Stopping…" : "Stop advice") { Task { await store.stopTurn() } }
-                    .disabled(store.stopping)
-            }
+            BusyLine(
+                "Running the advice the project's config asks for (judge, review stages)…", tone: .working,
+                stop: .init(title: store.stopping ? "Stopping…" : "Stop advice", disabled: store.stopping) {
+                    Task { await store.stopTurn() }
+                }, spread: true)
         }
     }
 

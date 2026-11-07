@@ -274,7 +274,7 @@ struct TurnRow: View {
     var body: some View {
         HStack(spacing: Space.s) {
             switch phase {
-            case .working: ProgressView().controlSize(.small).frame(width: 16)
+            case .working: Spinner(inColumn: true)
             default: StatusMark(outcome).frame(width: 16)
             }
             Text(title).textStyle(.calloutStrong)

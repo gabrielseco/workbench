@@ -83,8 +83,8 @@ if [ -n "$hits" ]; then
 fi
 # How a result is told is `Outcome` (Outcome.swift): its symbol, colour and word, so the five state colours each keep one meaning and a symbol
 # is never paired with the wrong colour in a view. The symbols that say passed, failed, needs you, unknown and skipped are written in that
-# one file; `StatusMark`, `Message` and `FeedLine(.passed, ...)` are how a view uses them. `xmark.circle.fill` (also the remove button's) and the
-# state-less symbols are not in the list.
+# one file; `StatusMark`, `Message` and `FeedLine(.passed, ...)` are how a view uses them. `xmark.circle.fill` is not in this list: it is the
+# remove badge, `IconButton.badge`, and is fenced below.
 hits=$(grep -rnE --include='*.swift' '"(checkmark\.circle\.fill|exclamationmark\.circle\.fill|exclamationmark\.triangle(\.fill)?|xmark\.octagon\.fill|questionmark\.circle(\.fill)?|minus\.circle(\.fill)?)"' Sources/WorkbenchApp 2>/dev/null \
     | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' | grep -v '^Sources/WorkbenchApp/Outcome.swift:' || true)
 if [ -n "$hits" ]; then
@@ -93,4 +93,18 @@ if [ -n "$hits" ]; then
     echo "       (Message(.error, text)). A result the cases lack is a new case in Outcome.swift. See AGENTS.md, Conventions." >&2
     status=1
 fi
+# The spinner, the busy line, the toolbar pill and the icon-only button are components (Busy.swift, Pill.swift, IconButton.swift). `ProgressView()`
+# is `Spinner`; `Image(systemName: "xmark")` is `IconButton.close`; `.iconButton(` is `IconButton.raised`, which cannot leave out the name and the
+# tooltip an icon alone does not have. A look or size they lack is a new case there, not a copy beside it. A determinate `ProgressView(value:)` stays.
+for rule in 'ProgressView\(\)|Spinner (Busy.swift)|Busy.swift' 'systemName: "xmark(\.circle\.fill)?"|IconButton.close or IconButton.badge|IconButton.swift' '\.iconButton\(|IconButton.raised|IconButton.swift|ButtonStyles.swift'; do
+    pattern=${rule%%|*}; rest=${rule#*|}; use=${rest%%|*}; files=${rest#*|}
+    exempt=$(echo "$files" | sed 's/|/\\|/g')
+    hits=$(grep -rnE --include='*.swift' "$pattern" Sources/WorkbenchApp 2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' \
+        | grep -Ev "^Sources/WorkbenchApp/($(echo "$files" | sed 's/|/|/g; s/\./\\./g')):" || true)
+    if [ -n "$hits" ]; then
+        echo "$hits"
+        echo "error: '$pattern' written in a view in Sources/WorkbenchApp/: use $use. See AGENTS.md, Conventions." >&2
+        status=1
+    fi
+done
 exit $status

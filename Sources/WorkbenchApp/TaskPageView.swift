@@ -237,7 +237,7 @@ struct TaskRunRow: View {
                     if let detail {
                         RunDetailView(facts: RunDetailFacts.make(detail, running: run.outcome == nil)).padding(.top, Space.xs)
                     } else {
-                        ProgressView().controlSize(.small).padding(.top, Space.xs)
+                        Spinner().padding(.top, Space.xs)
                     }
                     if let fix {
                         Button("Fix this with AI", action: fix).plainButton(size: .compact).disabled(fixOff != nil)

@@ -85,7 +85,7 @@ struct RailMark: View {
 
     var body: some View {
         switch mark {
-        case .working: ProgressView().controlSize(.small).scaleEffect(0.7).tint(Theme.blue)
+        case .working: Spinner(.rail)
         case .needsYou:
             Circle().fill(Theme.amber).frame(width: 9, height: 9)
                 .background(Circle().fill(Theme.amber.opacity(0.24)).frame(width: 15, height: 15))

@@ -116,18 +116,14 @@ struct ScreenshotPreviewControls: View {
         HStack(spacing: Space.m) {
             if let note = model.note { Text(note).role(.caption) }
             if model.isPaged {
-                Button { model.go(model.index - 1) } label: { Image(systemName: "chevron.left") }
-                    .iconButton(size: .compact).keyboardShortcut(.leftArrow, modifiers: [])
-                    .disabled(model.index == 0).accessibilityLabel("Previous screenshot").help("Previous (←)")
-                Button { model.go(model.index + 1) } label: { Image(systemName: "chevron.right") }
-                    .iconButton(size: .compact).keyboardShortcut(.rightArrow, modifiers: [])
-                    .disabled(model.index == model.shots.count - 1).accessibilityLabel("Next screenshot").help("Next (→)")
+                IconButton.raised("chevron.left", "Previous screenshot", help: "Previous (←)") { model.go(model.index - 1) }
+                    .keyboardShortcut(.leftArrow, modifiers: []).disabled(model.index == 0)
+                IconButton.raised("chevron.right", "Next screenshot", help: "Next (→)") { model.go(model.index + 1) }
+                    .keyboardShortcut(.rightArrow, modifiers: []).disabled(model.index == model.shots.count - 1)
             }
             if model.decoded != nil, !model.fits(scale: displayScale, room: ScreenshotPreviewModel.room(in: window)) {
                 let symbol = model.actualSize ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
-                Button { model.actualSize.toggle() } label: { Image(systemName: symbol) }
-                    .iconButton(size: .compact).accessibilityLabel(model.actualSize ? "Fit to window" : "Actual size")
-                    .help(model.actualSize ? "Fit to window" : "Actual size")
+                IconButton.raised(symbol, model.actualSize ? "Fit to window" : "Actual size") { model.actualSize.toggle() }
             }
         }
     }
@@ -165,7 +161,7 @@ struct ScreenshotPreviewBody: View {
                     if model.missing {
                         Image(systemName: "photo").foregroundStyle(Theme.fg3)
                     } else {
-                        ProgressView().controlSize(.small)
+                        Spinner()
                     }
                 }
         }
