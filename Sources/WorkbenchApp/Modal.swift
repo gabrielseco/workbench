@@ -49,7 +49,11 @@ extension ModalFooter where Leading == EmptyView {
 
 /// What the close control is called to assistive technology, and so to `scripts/verify-app.sh`.
 enum ModalText {
-    static func closeLabel(_ title: String) -> String { "Close the \(title.lowercased()) panel" }
+    static func closeLabel(_ title: String) -> String {
+        // A word that is all capitals (PR) stays as written; the rest is lower case, as the label reads in a sentence.
+        let words = title.split(separator: " ").map { $0 == $0.uppercased() ? String($0) : $0.lowercased() }
+        return "Close the \(words.joined(separator: " ")) panel"
+    }
 }
 
 /// The card, its title and its one way out, which is Esc and the close button.

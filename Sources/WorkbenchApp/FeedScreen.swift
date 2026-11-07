@@ -271,6 +271,6 @@ struct ReviewDetailsBody: View {
                 Text("There is nothing to review now.").foregroundStyle(.secondary).padding(Space.xl)
             }
         }
-        .frame(height: 520)
+        .frame(height: 440)
     }
 }

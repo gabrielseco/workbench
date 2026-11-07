@@ -12,6 +12,9 @@ struct LaunchOptions: Equatable {
     /// `WORKBENCH_APPEARANCE` set to `light` or `dark`: this launch draws in that appearance whatever the system is set to, so a check can
     /// show both. Nothing outside the process changes and no preference is written; unset or anything else is the system's.
     var appearance: Appearance?
+    /// `WORKBENCH_APP_OPEN` set to a modal's name: it is open once the project has loaded, so `scripts/verify-app.sh` can shoot the ones
+    /// a button does not reach (they open from a menu, or from a round that needs Codex). Unset or an unknown name opens nothing.
+    var opens: LaunchModal?
 
     enum Appearance: Equatable {
         case light, dark
@@ -30,11 +33,12 @@ struct LaunchOptions: Equatable {
     static func from(environment: [String: String]) -> LaunchOptions {
         let skips = environment["WORKBENCH_SKIP_LOGIN_PATH"].map { !$0.isEmpty } ?? false
         let appearance = Appearance(environment["WORKBENCH_APPEARANCE"])
+        let opens = environment["WORKBENCH_APP_OPEN"].flatMap(LaunchModal.init(rawValue:))
         guard let path = environment["WORKBENCH_APP_PROJECT"], !path.isEmpty else {
-            return LaunchOptions(project: nil, skipsLoginPath: skips, appearance: appearance)
+            return LaunchOptions(project: nil, skipsLoginPath: skips, appearance: appearance, opens: opens)
         }
         return LaunchOptions(
-            project: URL(fileURLWithPath: path), skipsLoginPath: skips, appearance: appearance)
+            project: URL(fileURLWithPath: path), skipsLoginPath: skips, appearance: appearance, opens: opens)
     }
 
     /// The store for these options: the real preferences normally, a throwaway set when a project was named.
@@ -53,5 +57,6 @@ struct LaunchOptions: Equatable {
         if let appearance { setAppearance(appearance.nsAppearance) }
         if !skipsLoginPath { await applyLoginPath() }
         if let project { await store.open(project) } else { await store.restore() }
+        if let opens { await store.show(opens) }
     }
 }

@@ -25,7 +25,8 @@ struct ReviewView: View {
                 }
                 actions
             }
-            .padding(Space.xxxl).frame(maxWidth: .infinity, alignment: .leading)
+            // It sits in a modal, whose title and padding set the left edge; the right keeps clear of the scroll bar.
+            .padding(.vertical, Space.m).padding(.trailing, Space.m).frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await store.loadSendBackGrants() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -174,7 +175,7 @@ struct DiffBody: View {
                 Text(text).textStyle(.monoCallout).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 400)
+            .frame(height: 360)
         }
         .task { text = await store.patchText(path) }
     }

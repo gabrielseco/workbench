@@ -15,7 +15,7 @@ struct PRReviewBody: View {
                         .textStyle(.monoCallout).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: 320)
+                .frame(height: 280)
                 Text(
                     "A review reads the code and cannot run tests, so CI has to be green as well. "
                         + "Nothing was posted to the pull request."

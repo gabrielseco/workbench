@@ -55,7 +55,29 @@ extension View {
     }
 
     private func mergeTitle(_ store: ProjectStore) -> String {
-        if case .thread(let snapshot) = store.screen, let pr = snapshot.state.pullRequest { return "Merge PR #\(pr.number)?" }
-        return "Merge?"
+        if case .thread(let snapshot) = store.screen, let pr = snapshot.state.pullRequest { return "Merge PR #\(pr.number)" }
+        return "Merge"
+    }
+}
+
+/// The modals a launch can open (`LaunchOptions.opens`), by the name `WORKBENCH_APP_OPEN` gives.
+enum LaunchModal: String, Equatable {
+    case review, diff, discard
+    case prReview = "pr-review"
+    case merge
+}
+
+extension ProjectStore {
+    /// Opens that modal as its own button or menu would, on the thread on screen.
+    func show(_ modal: LaunchModal) async {
+        switch modal {
+        case .review: feedModals.reviewingDetails = true
+        case .diff:
+            feedModals.reviewingDetails = true
+            feedModals.diffPath = review?.files.first?.path
+        case .discard: await prepareDiscard()
+        case .prReview: await showPRReview()
+        case .merge: feedModals.confirmingMerge = true
+        }
     }
 }

@@ -300,6 +300,6 @@ struct RunSettingsBody: View {
 
     var body: some View {
         RunSettingsInspector(snapshot: snapshot, goal: store.goal, store: store, showsTitle: false, showsMessages: true)
-            .frame(height: 400)
+            .frame(height: 440)
     }
 }

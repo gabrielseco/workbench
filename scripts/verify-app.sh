@@ -52,6 +52,8 @@
 # pid) shows the cleanup without a crash. Ctrl-C has the same handler as SIGTERM and SIGHUP; no test sends it (a background job ignores it).
 # Environment: VERIFY_APPEARANCE=light|dark draws that build in that appearance whatever the system is set to (WORKBENCH_APPEARANCE in the app, for that
 #   process only), so a screen can be shot in both; anything else is refused before it builds;
+#   VERIFY_OPEN=review|diff|discard|pr-review|merge has the app open that modal once the project has loaded (WORKBENCH_APP_OPEN), for the ones no
+#   button reaches: review, diff and discard on review-changes, pr-review on pr-findings, merge on pr-clean;
 #   VERIFY_WINDOW_SIZE <width>x<height> in points before any capture (default 1100x700, needs Accessibility);
 #   VERIFY_SETTLE_SECONDS wait after the window appears (default 2); WORKBENCH_PROOF_DIR where `shot` writes.
 # The terminal running this needs Screen Recording (start, shot) and Accessibility (press, type, paste, list, resize).
@@ -162,6 +164,7 @@ abort_start() {
 
 start() {
   local scenario="${1:-needs-you}" size="${VERIFY_WINDOW_SIZE:-1100x700}" dir id pid window
+  [[ -z "${VERIFY_OPEN:-}" || "${VERIFY_OPEN:-}" =~ ^(review|diff|discard|pr-review|merge)$ ]] || fail "bad VERIFY_OPEN: $VERIFY_OPEN (want review, diff, discard, pr-review or merge)"
   [[ -z "${VERIFY_APPEARANCE:-}" || "${VERIFY_APPEARANCE:-}" =~ ^(light|dark)$ ]] || fail "bad VERIFY_APPEARANCE: $VERIFY_APPEARANCE (want light or dark)"
   [[ "$scenario" =~ ^[a-z][a-z-]*$ ]] || fail "not a scenario name: $scenario (lower-case letters and dashes)"
   [[ -d "$ROOT/Fixtures/app/$scenario" ]] || fail "no such scenario: $scenario (have: $(scenarios | tr '\n' ' '))"
@@ -274,6 +277,7 @@ STUB
     ${timer_env[@]+"${timer_env[@]}"} \
     ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
     ${VERIFY_APPEARANCE:+WORKBENCH_APPEARANCE="$VERIFY_APPEARANCE"} \
+    ${VERIFY_OPEN:+WORKBENCH_APP_OPEN="$VERIFY_OPEN"} \
     "$dir/Workbench.app/Contents/MacOS/WorkbenchApp" >"$dir/app.log" 2>&1 &
   # The gap between the launch and recording its pid: the seam delivers a SIGTERM exactly here (the handler runs before the next command).
   [[ "${WORKBENCH_VERIFY_FAULT:-}" != in-launch-gap ]] || kill -TERM $$

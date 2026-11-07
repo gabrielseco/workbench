@@ -86,6 +86,15 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
 }
 
 @MainActor @Suite struct LaunchOptionsTests {
+    @Test func aNamedModalIsOpenedAfterTheProjectLoadsAndAnythingElseOpensNothing() {
+        func opens(_ value: String?) -> LaunchModal? {
+            LaunchOptions.from(environment: value.map { ["WORKBENCH_APP_OPEN": $0] } ?? [:]).opens
+        }
+        #expect(opens("review") == .review && opens("diff") == .diff && opens("discard") == .discard)
+        #expect(opens("pr-review") == .prReview && opens("merge") == .merge)
+        #expect(opens(nil) == nil && opens("") == nil && opens("sheet") == nil)
+    }
+
     @Test func theAppearanceIsLightOrDarkAndAnythingElseIsTheSystems() {
         func appearance(_ value: String?) -> LaunchOptions.Appearance? {
             LaunchOptions.from(environment: value.map { ["WORKBENCH_APPEARANCE": $0] } ?? [:]).appearance
