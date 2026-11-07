@@ -91,6 +91,15 @@ public enum ConfigEdit {
     /// `beforeWrite` runs between the last read and the write: a test changes the file there.
     static func edit(_ key: Key, value: String?, in project: Project, beforeWrite: () -> Void) throws -> Change {
         let url = project.configURL
+        // Two edits at once would each read the same file and the second write would lose the first: one at a time.
+        let lock = open(url.path + ".lock", O_CREAT | O_RDWR, 0o600)
+        guard lock >= 0 else { throw Failure.notWritten("could not lock the config: \(String(cString: strerror(errno)))") }
+        flock(lock, LOCK_EX)
+        defer {
+            flock(lock, LOCK_UN)
+            close(lock)
+            unlink(url.path + ".lock")
+        }
         guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int else {
             throw Failure.noConfig
         }
@@ -182,10 +191,8 @@ public enum ConfigEdit {
         return trimmed.isEmpty || trimmed.hasPrefix("#")
     }
 
-    /// `key = "old"  # why` keeps its indent and its comment, with the space before it as it was.
-    private static func replacing(_ line: String, name: String, value: String) -> String {
-        let indent = line.prefix { $0 == " " || $0 == "\t" }
-        var comment = ""
+    /// Where a trailing `# comment` starts in a line (a `#` inside quotes is not one), or nil.
+    private static func commentStart(_ line: String) -> Int? {
         var quote: Character?
         for (offset, ch) in line.enumerated() {
             if let q = quote {
@@ -193,26 +200,37 @@ public enum ConfigEdit {
             } else if ch == "\"" || ch == "'" {
                 quote = ch
             } else if ch == "#" {
-                let head = line.prefix(offset)
-                let gap = head.reversed().prefix { $0 == " " || $0 == "\t" }
-                comment = String(gap.reversed()) + String(line.dropFirst(offset))
-                break
+                return offset
             }
+        }
+        return nil
+    }
+
+    /// `key = "old"  # why` keeps its indent and its comment, with the space before it as it was.
+    private static func replacing(_ line: String, name: String, value: String) -> String {
+        let indent = line.prefix { $0 == " " || $0 == "\t" }
+        var comment = ""
+        if let at = commentStart(line) {
+            let gap = line.prefix(at).reversed().prefix { $0 == " " || $0 == "\t" }
+            comment = String(gap.reversed()) + String(line.dropFirst(at))
         }
         return "\(indent)\(name) = \"\(value)\"\(comment)"
     }
 
-    /// A table the last key was taken out of goes too, unless a comment or another line is in it.
+    /// The table the last key was taken out of goes too, with its header: a comment on the header line or inside the table stays as a
+    /// line of its own, and one blank line next to the header goes with it so the gap is not doubled.
     private static func dropEmptyTable(_ lines: inout [String], header: Int, document: TOMLDocument, key: Key) {
         guard let table = document.tables[key.table], table.entries.count == 1 else { return }
-        var end = header + 1
-        while end < lines.count, lines[end].trimmingCharacters(in: .whitespaces).isEmpty { end += 1 }
-        let nextHeader = end >= lines.count || lines[end].trimmingCharacters(in: .whitespaces).hasPrefix("[")
-        guard nextHeader else { return }
-        var from = header
-        while from > 0, lines[from - 1].trimmingCharacters(in: .whitespaces).isEmpty { from -= 1 }
-        lines.removeSubrange(from..<end)
-        if from > 0, from < lines.count, !lines[from].isEmpty { lines.insert("", at: from) }
+        if let at = commentStart(lines[header]) {
+            lines[header] = String(lines[header].dropFirst(at))
+            return
+        }
+        lines.remove(at: header)
+        if header > 0, lines[header - 1].trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.remove(at: header - 1)
+        } else if header < lines.count, lines[header].trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.remove(at: header)
+        }
     }
 
     private static func join(_ lines: [String], finalNewline: Bool) -> String {

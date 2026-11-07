@@ -76,11 +76,34 @@ import Testing
         }
     }
 
-    @Test func aTableWithACommentIsKeptWhenItsLastKeyGoes() throws {
-        let original = "[agents.run]\n# why opus\nmodel = \"opus\"\n\n" + Self.tools
-        let p = try project(original)
-        _ = try ConfigEdit.unset(key("agents.run.model"), in: p)
-        #expect(try text(p) == "[agents.run]\n# why opus\n\n" + Self.tools)
+    @Test func aCommentInsideOrOnTheHeaderOfATableThatGoesStaysAsALineOfItsOwn() throws {
+        let inside = try project("[agents.run]\n# why opus\nmodel = \"opus\"\n\n" + Self.tools)
+        _ = try ConfigEdit.unset(key("agents.run.model"), in: inside)
+        #expect(try text(inside) == "# why opus\n\n" + Self.tools)
+        let onHeader = try project("[agents.run] # keep this explanation\nmodel = \"opus\"\n\n" + Self.tools)
+        _ = try ConfigEdit.unset(key("agents.run.model"), in: onHeader)
+        #expect(try text(onHeader) == "# keep this explanation\n\n" + Self.tools)
+    }
+
+    @Test func aCommentDoesNotStopTheGoalAgentBeingTakenOut() throws {
+        let p = try project("[agents.goal]\n# drafting with codex\nprovider = \"codex\"\n\n" + Self.tools)
+        _ = try ConfigEdit.unset(key("agents.goal.provider"), in: p)
+        #expect(try Config.load(from: p.configURL).resolvedGoalAgent == nil, "the config loads and has no goal agent")
+        #expect(try text(p).contains("# drafting with codex"))
+    }
+
+    @Test func editsAtTheSameTimeAreNotLostToEachOther() throws {
+        let p = try project(Self.tools)
+        let keys = ["agents.goal.provider", "agents.run.model", "agents.judge.model", "agents.plan.model", "agents.ship.model"]
+        let values = ["codex", "opus", "sonnet", "opus", "haiku"]
+        DispatchQueue.concurrentPerform(iterations: keys.count) { index in
+            _ = try? ConfigEdit.set(ConfigEdit.parseKey(keys[index]), to: values[index], in: p)
+        }
+        let config = try Config.load(from: p.configURL)
+        #expect(config.agents.goal?.provider == .codex && config.agents.run.model == "opus")
+        #expect(config.agents.judge.model == "sonnet" && config.agents.plan.model == "opus")
+        #expect(config.agents.ship.model == "haiku")
+        #expect(!FileManager.default.fileExists(atPath: p.configURL.path + ".lock"), "the lock file is gone")
     }
 
     @Test func refusals() throws {
@@ -118,6 +141,10 @@ import Testing
         let dup = try project(broken)
         #expect(throws: ConfigEdit.Failure.self) { try ConfigEdit.set(key("agents.run.model"), to: "x", in: dup) }
         #expect(try text(dup) == broken, "a config that does not load is not touched")
+        let dotted = "agents.run.model = \"opus\"\n" + Self.tools
+        let inline = try project(dotted)
+        #expect(throws: ConfigEdit.Failure.self) { try ConfigEdit.set(key("agents.run.model"), to: "x", in: inline) }
+        #expect(try text(inline) == dotted, "a form the reader does not accept is not touched")
         let crlf = try project("check_command = \"make\"\r\n" + Self.tools)
         #expect(throws: ConfigEdit.Failure.unsafe("it has Windows line endings")) {
             try ConfigEdit.set(key("agents.run.model"), to: "x", in: crlf)
