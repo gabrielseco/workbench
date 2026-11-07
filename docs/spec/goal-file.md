@@ -330,6 +330,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # claude_path = "claude"                # name on PATH, or an absolute path
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
+# chat_reads_repo = true                # default: a chat before a goal may read the repo's tracked files at the base (a read-only copy)
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
 # ports = 1                             # ports each thread gets for its run, check and setup; WORKBENCH_PORT, PORT, then WORKBENCH_PORT_1…
 # editor = "cursor"                     # `workbench open`: cursor, code, zed, subl, windsurf or one plain command

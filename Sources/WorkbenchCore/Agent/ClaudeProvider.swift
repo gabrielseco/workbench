@@ -87,7 +87,11 @@ public struct ClaudeProvider: AgentProvider {
         if config.safeMode { args += ["--safe-mode", "--disable-slash-commands"] }
         if let model = request.model { args += ["--model", model] }
         if let effort = request.reasoningEffort { args += ["--effort", effort] }
-        args += request.evidenceFiles.isEmpty ? ["--tools", ""] : ["--tools", "Read", "--allowedTools", "Read"]
+        if request.readsFolder {
+            args += ["--tools", "Read", "Grep", "Glob", "--allowedTools", "Read", "Grep", "Glob"]
+        } else {
+            args += request.evidenceFiles.isEmpty ? ["--tools", ""] : ["--tools", "Read", "--allowedTools", "Read"]
+        }
         args += ["--", request.prompt]
         return AgentInvocation(
             executable: config.claudePath, arguments: args, environment: config.childEnvironment(from: request.environment),

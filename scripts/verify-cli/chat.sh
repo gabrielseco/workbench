@@ -10,8 +10,9 @@
 # --abandon-active), and `status --json` says `kind: chat`. `goal draft --from-chat` drafts a goal from the conversation into the same
 # thread (a failed draft leaves the chat as it was; a second one, and a later chat message, are refused), and the goal is approved as any.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 makes the fake agent fail
-# every turn, so the steps that expect a reply, a continued conversation, a chat thread with a reply in its log and a goal drafted
-# from it must FAIL. The frame
+# every turn, so the steps that expect a reply, a continued conversation, a chat thread with a reply in its log, a goal drafted
+# from it and the repository copy in the agent's folder must FAIL. The agent's working folder holds a copy of the repository's tracked
+# files (the fake agent lists it as it runs): the person's untracked and ignored files and `.git` are not in it. The frame
 # and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -55,6 +56,7 @@ case " \$* " in
      } ;;
 esac
 if [ -f "$FAKE/fail" ]; then cat "$FAKE/fail" >&2; exit 1; fi
+if [ -d "\$tree/repo" ]; then ls -A "\$tree/repo" > "$FAKE/repo_ls_\$n"; fi
 cat "$FAKE/answer" > "\$out"
 echo "fake codex"
 FAKE_SCRIPT
@@ -87,10 +89,15 @@ check "nothing was created and nothing ran" "threads: $(threads), runs: $(runs)"
 # --- 2. a first message starts a chat thread ----------------------------------------------------------------
 
 setgoal ""
+# What the person has that git does not: the copy the agent is given must not hold either.
+echo "untracked" >"$P/untracked-note.txt"
+echo "SECRET=1" >"$P/.env.local"
 wbp "$SCRATCH/first.out" chat idea --message "could uploads retry?"
 shown "$SCRATCH/first.out" 6
 check "the first message: exit 0" "workbench chat exited $RC" test "$RC" = 0
 check "the reply is printed" "reply missing" grep -q "What should happen after the fifth try?" "$SCRATCH/first.out"
+check "the agent's folder held a copy of the tracked files, and none of the person's own" "its listing: $(head -c 200 "$FAKE/repo_ls_1" 2>/dev/null | tr '\n' ' ')" \
+    bash -c 'grep -qx "AGENTS.md" "$1" && ! grep -qxE "\.git|\.env\.local|untracked-note\.txt|\.workbench" "$1"' _ "$FAKE/repo_ls_1"
 # The thread is a folder whether or not the turn answered: its name is read from there, so a failed first turn is judged by the steps below.
 ID=$(ls "$P/.workbench/threads" | head -1)
 [[ $ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "the first message made no thread ($(head -3 "$SCRATCH/first.out"))"

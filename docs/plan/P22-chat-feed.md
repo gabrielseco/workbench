@@ -205,6 +205,19 @@ worktree and no branch; an old log with no `chat.*` events opens as before.
 thread (the list shows its first words and "Chat"); **6b**: `workbench goal draft --from-chat` makes the chat into a goal in the same thread (built); **6c**: the app's chat screen. A chat uses the
 goal agent (`[agents.goal]`) with its spend policy; a chat is the active thread while open, so "one project, one active thread" holds.
 
+### Chat reads the repository (follow-up to slice 6)
+
+A chat used to be given only the file names and the project instructions, so it could not answer "how does X work here". Now its folder
+holds a read-only copy of the repository's tracked files at the base commit (`chat_reads_repo`, default on; `RepoSnapshotWriter`), and a
+Claude agent has `Read`, `Grep` and `Glob` on it. It still has no tool that writes or runs, no network, no worktree and no branch; the copy
+is checked out by a scratch repository that only borrows the repository's objects, holds only what git stores at the commit (no
+uncommitted edits, untracked or ignored files, links, submodules or large files), reads no git config (global or the repository's own, so a
+filter cannot run), is bounded (512 KiB a file, 64 MiB, 20,000 files) and is removed with the
+turn. Web search is a separate decision and is not part of this. Spec: `docs/spec/event-log.md`, "The repository".
+*Tests:* the copy has the committed content and none of the working tree's extras; the repository (status, index, branches, worktrees) is
+untouched; a filter in the person's config does not run; a base that is no commit gives no copy and the chat goes on; the key off gives an
+empty folder and no tools; the Claude invocation names exactly `Read`, `Grep` and `Glob`.
+
 ### 7. Flip the default, remove the old window
 
 *Built (7a, #391):* the flag, the View ▸ Chat feed (preview) toggle, the stored preference, `WORKBENCH_CHAT_FEED`, the old palette and the system button styles are gone: the feed is the only window. *Built (7b):* `ThreadPane`, `SpineRail`, `GoalView`, `RunView`, `FinishedBanner`, the New goal popover and its `NewGoalForm`, and the old Tasks list and timeline are deleted (`ReviewView` stays: the feed's Review details sheet draws it). `DESIGN.md`, `docs/mac-app/` (replaced by
@@ -239,5 +252,5 @@ or any non-Mac layout, the Triage integration, and any redesign of the Tasks scr
   one click away as today (`Event log` in the footer).
 - **Two views to keep in step** for as long as the flag exists. The rule is one data layer; the cost is the flip's date. Keep the
   flag's life short: slices 3 to 6 are meant to follow each other.
-- **Chat widens what Workbench is.** It is a thinking space before a goal, not a general assistant: it has no tools that write, no
+- **Chat widens what Workbench is.** It is a thinking space before a goal, not a general assistant: it may read the code (a copy), has no tools that write, no
   worktree, and ends in "Make this a goal" or in being discarded.
