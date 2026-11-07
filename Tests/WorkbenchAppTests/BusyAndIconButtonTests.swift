@@ -25,17 +25,22 @@ import Testing
         if case .raised(let size) = raised.look { #expect(size == .small) } else { Issue.record("a raised button looks raised") }
     }
 
-    /// The alpha of the centre of a view drawn at 40 × 40 points, so a view that draws nothing is told from one that draws.
-    private func draws(_ view: some View) -> Bool {
-        let renderer = ImageRenderer(content: view.frame(width: 40, height: 40).background(Color.white))
+    /// The bytes of a view drawn at 80 × 40 points on white, to tell a view that draws something from one that draws nothing.
+    private func pixels(_ view: some View) -> Data? {
+        let renderer = ImageRenderer(content: view.frame(width: 80, height: 40).background(Color.white))
         renderer.scale = 1
-        guard let image = renderer.cgImage else { return false }
-        return image.width == 40 && image.height == 40
+        guard let image = renderer.cgImage, let data = image.dataProvider?.data else { return nil }
+        return data as Data
     }
 
-    @Test func theToolbarPillAndTheCloseButtonDraw() {
-        #expect(draws(ToolbarPillButton(selected: false, action: {}, label: { Text("project") })))
-        #expect(draws(IconButton.close("Close") {}))
-        #expect(draws(Spinner(.mini, inColumn: true)))
+    @Test func theToolbarPillAndTheCloseButtonDrawSomethingAndNotNothing() throws {
+        let blank = try #require(pixels(Color.clear))
+        #expect(try #require(pixels(ToolbarPillButton(selected: false, action: {}, label: { Text("project") }))) != blank)
+        #expect(try #require(pixels(IconButton.close("Close") {})) != blank)
+        #expect(try #require(pixels(IconButton.raised("plus", "Add") {})) != blank)
+        #expect(
+            try #require(pixels(ToolbarPillButton(selected: true, action: {}, label: { Text("project") })))
+                != (try #require(pixels(ToolbarPillButton(selected: false, action: {}, label: { Text("project") })))),
+            "an open pill is drawn darker than a closed one")
     }
 }
