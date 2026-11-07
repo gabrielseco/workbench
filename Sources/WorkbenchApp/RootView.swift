@@ -95,15 +95,16 @@ struct AgentsPill: View {
         } label: {
             HStack(spacing: Space.s) {
                 Image(systemName: "cpu").textStyle(.captionStrong, .secondary)
-                Text(Self.text(store.agentSetup)).textStyle(.body)
+                // A model named by hand can be long: truncate so the base, spend and state keep their room.
+                Text(Self.text(store.agentSetup)).textStyle(.body).lineLimit(1).truncationMode(.tail)
             }
             .pill(style: .control(hovered: hovered, selected: store.showingAgents), size: .large)
         }
-        .buttonStyle(.plain).fixedSize()
+        .buttonStyle(.plain).frame(maxWidth: 260)
         .disabled(store.project == nil)
         .onHover { hovered = $0 }
         .accessibilityLabel("Agents")
-        .help("Which provider and model each agent role of this project uses (⌘,)")
+        .help("\(Self.text(store.agentSetup)): which provider and model each agent role of this project uses (⌘,)")
     }
 }
 
