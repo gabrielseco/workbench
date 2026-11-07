@@ -61,6 +61,12 @@ import Testing
         #expect(row?.provider == .codex && row?.model == "gpt-6.1-terra")
     }
 
+    @Test func aReviewStageThatNamesItsOwnAgentIsConfiguredNotTheProviderDefault() throws {
+        let text = "[review]\nstages = [\"pr-review\"]\n[review.stage.pr-review]\nprovider = \"claude\"\nmodel = \"opus\""
+        let row = try setup(text).row(.review)
+        #expect(row?.provider == .claude && row?.model == "opus" && row?.source == .configured, "\(String(describing: row))")
+    }
+
     @Test func readingWritesNothing() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("agent-setup-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -26,6 +26,16 @@ import WorkbenchCore
         #expect(store.agentSetup?.row(.goal)?.label == "Codex · gpt-6.1-terra")
     }
 
+    @Test func aChatFooterNamesTheAgentSaysNoneIsSetOrSaysNothingBeforeTheConfigIsRead() async throws {
+        let (named, _) = try await store(config: "[agents.goal]\nprovider = \"codex\"\nmodel = \"gpt-6.1-terra\"")
+        #expect(named.chatAgentNote == nil, "not read yet")
+        await named.refreshAgentSetup()
+        #expect(named.chatAgentNote == "Codex · gpt-6.1-terra")
+        let (none, _) = try await store(config: nil)
+        await none.refreshAgentSetup()
+        #expect(none.chatAgentNote == "no goal agent is set, so replies are off")
+    }
+
     @Test func aProjectWithNoGoalAgentSaysSoInsteadOfNamingOne() async throws {
         let (store, _) = try await store(config: nil)
         await store.refreshAgentSetup()

@@ -14,4 +14,10 @@ extension ProjectStore {
         // The project may have changed while the file was read.
         if self.project?.configURL == url { agentSetup = setup }
     }
+
+    /// What a chat's footer says about its agent: the provider and model, or that none is set. Nil until the config has been read.
+    var chatAgentNote: String? {
+        guard let goal = agentSetup?.row(.goal) else { return nil }
+        return goal.label ?? "no goal agent is set, so replies are off"
+    }
 }

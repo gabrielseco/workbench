@@ -24,7 +24,7 @@ public struct AgentSetup: Sendable, Equatable {
 
     /// Where a row's provider and model came from.
     public enum Source: Sendable, Equatable {
-        /// The config's `[agents.<role>]` table (or `[verifier] model`) names something.
+        /// The config's `[agents.<role>]` table (or `[verifier] model`, or the pr-review stage) names something.
         case configured
         /// The config names nothing, so the provider's own default runs.
         case providerDefault
@@ -66,27 +66,28 @@ public struct AgentSetup: Sendable, Equatable {
     }
 
     private static func row(_ role: Role, _ config: Config) -> Row {
-        func make(_ agent: ResolvedAgent, _ selection: AgentSelection) -> Row {
+        func make(_ agent: ResolvedAgent, _ selection: AgentSelection, also stageSet: Bool = false) -> Row {
             Row(
                 role: role, provider: agent.provider, model: agent.model, reasoningEffort: agent.reasoningEffort,
-                source: isSet(selection) ? .configured : .providerDefault)
+                source: isSet(selection) || stageSet ? .configured : .providerDefault)
         }
+        func off() -> Row { Row(role: role, provider: nil, model: nil, reasoningEffort: nil, source: .off) }
         switch role {
         case .goal:
-            guard let agent = config.resolvedGoalAgent else {
-                return Row(role: role, provider: nil, model: nil, reasoningEffort: nil, source: .off)
-            }
+            guard let agent = config.resolvedGoalAgent else { return off() }
             return make(agent, config.agents.goal ?? AgentSelection())
         case .plan: return make(config.resolvedPlanAgent(), config.agents.plan)
         case .run: return make(config.resolvedRunAgent(), config.agents.run)
         case .judge: return make(config.resolvedJudgeAgent(), config.agents.judge)
-        case .review: return make(config.resolvedReviewAgent(), config.agents.review)
+        case .review:
+            // The pull-request review also reads `[review.stage.pr-review]`, which can name its own provider, model or effort.
+            let stage = config.review.stage(ReviewConfig.prReviewStage)
+            let stageSet = stage.map { $0.provider != nil || $0.model != nil || $0.reasoningEffort != nil } ?? false
+            return make(config.resolvedReviewAgent(), config.agents.review, also: stageSet)
         case .ship: return make(config.resolvedShipAgent, config.agents.ship)
         case .verifier:
-            // The verifier is Claude only; it is on unless `[verifier] enabled = false`.
-            guard config.verifier != nil else {
-                return Row(role: role, provider: nil, model: nil, reasoningEffort: nil, source: .off)
-            }
+            // The verifier is Claude only, and on unless `[verifier] enabled = false`.
+            guard config.verifier != nil else { return off() }
             return Row(
                 role: role, provider: .claude, model: config.verifierModel, reasoningEffort: nil,
                 source: config.verifierModel == nil ? .providerDefault : .configured)
