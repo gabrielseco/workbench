@@ -278,10 +278,16 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         let bin = home.appendingPathComponent(".local/bin")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
+        for name in ["gh", "pr-shots"] {
+            let tool = bin.appendingPathComponent(name)
+            try "#!/bin/sh\n".write(to: tool, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+        }
         let gh = bin.appendingPathComponent("gh")
-        try "#!/bin/sh\n".write(to: gh, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh.path)
-        let parent = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home.path]
+        // An empty directory as PATH, so a gh installed on this machine cannot be the one found.
+        let empty = home.appendingPathComponent("empty").path
+        try FileManager.default.createDirectory(atPath: empty, withIntermediateDirectories: true)
+        let parent = ["PATH": empty, "HOME": home.path]
         #expect(try GitRunner.discover(tool: "gh", from: parent).executable.path == gh.path)
         // Only gh gets the extra places: another tool stays as PATH says.
         #expect(throws: GitError.toolNotFound("pr-shots")) { try GitRunner.discover(tool: "pr-shots", from: parent) }
