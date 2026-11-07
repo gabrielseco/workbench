@@ -1,4 +1,5 @@
 import Testing
+import WorkbenchCore
 
 @testable import WorkbenchApp
 
@@ -49,5 +50,16 @@ import Testing
         #expect(await store.open(fixture.root))
         let modals = store.feedModals
         #expect(!modals.reviewingDetails && !modals.confirmingMerge && modals.diffPath == nil)
+    }
+
+    @Test func theFeedsModalsAreNotUpOnceTheWindowMovesToAnotherScreen() async throws {
+        let (store, fixture) = try await feedStore()
+        withExtendedLifetime(fixture) {}
+        store.feedModals = FeedModals(reviewingDetails: true, confirmingMerge: true, diffPath: "Sources/A.swift")
+        store.prReviewShown = PRReviewShown(pr: 7, round: 1, verdict: .clean, failure: nil, findings: "all good")
+        #expect(store.reviewOverFeed && store.mergeOverFeed && store.diffOverFeed == "Sources/A.swift" && store.prReviewOverFeed)
+        store.newThread = true
+        #expect(!store.reviewOverFeed && !store.mergeOverFeed && store.diffOverFeed == nil, "⌘N: the review is not over New goal")
+        #expect(!store.prReviewOverFeed && !store.discardOverFeed)
     }
 }

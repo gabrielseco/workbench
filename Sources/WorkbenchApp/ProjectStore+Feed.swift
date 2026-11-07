@@ -21,6 +21,14 @@ extension ProjectStore {
         return true
     }
 
+    /// The modals that belong to the feed, as shown: none of them is up over another screen (the New goal screen, Tasks), where the feed
+    /// they were opened from is gone. What was open is cleared when the feed leaves (`appModals`), so it is not there on coming back.
+    var reviewOverFeed: Bool { showsFeed && feedModals.reviewingDetails }
+    var mergeOverFeed: Bool { showsFeed && feedModals.confirmingMerge }
+    var diffOverFeed: String? { showsFeed ? feedModals.diffPath : nil }
+    var discardOverFeed: Bool { showsFeed && pendingDiscard != nil }
+    var prReviewOverFeed: Bool { showsFeed && prReviewShown != nil }
+
     /// The Run settings are over the feed: a person asked for them and the window is too narrow to have them beside it.
     var runSettingsOverFeed: Bool { showsFeed && runSettingsOn && runSettingsChosen && !runSettingsFits }
 

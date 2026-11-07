@@ -4,12 +4,15 @@ extension View {
     /// Every modal of the window, in the order they stack: a later one opens over an earlier one (the discard over the review). They stand
     /// at the window, not in the screen that asked, so the rail and the toolbar are behind them too. Each is one `.modal` (`Modal.swift`).
     func appModals(_ store: ProjectStore) -> some View {
-        modal("Agents", isPresented: Bindable(store).showingAgents, size: .medium) { AgentsCard(store: store) }
+        // A modal asked for from the feed is not left behind when the window moves to another screen (⌘N, the Tasks page).
+        onChange(of: store.showsFeed) { if !store.showsFeed { store.feedModals = FeedModals() } }
+            .modal("Agents", isPresented: Bindable(store).showingAgents, size: .medium) { AgentsCard(store: store) }
             .modal("Projects", isPresented: Bindable(store).pickingProject, size: .small, placement: .topLeading) {
                 ProjectPickerCard(store: store)
             }
             .modal(
-                "Review", isPresented: Bindable(store).feedModals.reviewingDetails, size: .large, closesOnOutsideClick: false
+                "Review", isPresented: closing(store.reviewOverFeed) { store.feedModals.reviewingDetails = false }, size: .large,
+                closesOnOutsideClick: false
             ) {
                 if case .thread(let snapshot) = store.screen { ReviewDetailsBody(snapshot: snapshot, store: store) }
             }
@@ -20,25 +23,26 @@ extension View {
                 if case .thread(let snapshot) = store.screen { RunSettingsBody(snapshot: snapshot, store: store) }
             }
             .modal(
-                "Diff", isPresented: closing(store.feedModals.diffPath != nil) { store.feedModals.diffPath = nil }, size: .large,
+                "Diff", isPresented: closing(store.diffOverFeed != nil) { store.feedModals.diffPath = nil }, size: .large,
                 closesOnOutsideClick: false
             ) {
-                if let path = store.feedModals.diffPath { DiffBody(store: store, path: path) }
+                if let path = store.diffOverFeed { DiffBody(store: store, path: path) }
             }
             .modal(
-                "Discard", isPresented: closing(store.pendingDiscard != nil) { store.cancelDiscard() }, size: .medium,
+                "Discard", isPresented: closing(store.discardOverFeed) { store.cancelDiscard() }, size: .medium,
                 closesOnOutsideClick: false
             ) {
                 DiscardBody(store: store)
             }
             .modal(
-                "PR review", isPresented: closing(store.prReviewShown != nil) { store.closePRReview() }, size: .large,
+                "PR review", isPresented: closing(store.prReviewOverFeed) { store.closePRReview() }, size: .large,
                 closesOnOutsideClick: false
             ) {
                 PRReviewBody(store: store)
             }
             .modal(
-                mergeTitle(store), isPresented: Bindable(store).feedModals.confirmingMerge, size: .small,
+                mergeTitle(store), isPresented: closing(store.mergeOverFeed) { store.feedModals.confirmingMerge = false },
+                size: .small,
                 closesOnOutsideClick: false
             ) {
                 MergeBody(store: store)
