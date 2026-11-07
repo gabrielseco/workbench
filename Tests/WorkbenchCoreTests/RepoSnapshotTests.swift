@@ -55,7 +55,8 @@ private struct SnapshotRepo {
         return out
     }
 
-    func folder() -> URL { Scratch.url("snapshot-work").resolvingSymlinksInPath() }
+    func folder() -> URL { Self.folder() }
+    static func folder() -> URL { Scratch.url("snapshot-work").resolvingSymlinksInPath() }
 
     /// The regular files in the copy, as paths relative to it.
     func list(_ folder: URL) -> Set<String> {
@@ -163,14 +164,27 @@ private struct SnapshotRepo {
         #expect(text == "dash\n", "the committed bytes, as stored")
     }
 
-    @Test func aMissingObjectIsNotFetchedFromAnywhere() async throws {
-        let repo = try await SnapshotRepo(bigFile: false)
-        // A remote that would be asked if anything tried; the copy must be made without it.
-        _ = try await repo.git.run(["remote", "add", "origin", "file:///nonexistent-wb-remote"], in: repo.root)
-        _ = try await repo.git.run(["config", "--local", "extensions.partialClone", "origin"], in: repo.root)
-        let work = repo.folder()
-        let snapshot = await RepoSnapshotWriter.write(base: "main", into: work, repo: repo.root, git: repo.git)
-        #expect(snapshot != nil && repo.list(work).contains("src/app.swift"), "the objects are local: nothing is fetched")
+    @Test func aPartialCloneIsNeverAskedToFetchItsMissingObjects() async throws {
+        let source = try await SnapshotRepo(bigFile: false)
+        _ = try await source.git.run(["config", "uploadpack.allowFilter", "true"], in: source.root)
+        _ = try await source.git.run(["config", "uploadpack.allowAnySHA1InWant", "true"], in: source.root)
+        // A blobless clone: the commits and trees are here, the files' contents are promised by `origin`, which is reachable, so a
+        // fetch would work and would leave a pack behind.
+        let clone = Scratch.url("snapshot-partial").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: clone.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let cloned = try await source.git.run(
+            ["-c", "protocol.file.allow=always", "clone", "-q", "--no-checkout", "--filter=blob:none",
+                "file://\(source.root.path)", clone.path], in: clone.deletingLastPathComponent())
+        try #require(cloned.succeeded, "the partial clone: \(cloned.stderr)")
+        let packFolder = clone.appendingPathComponent(".git/objects/pack").path
+        let packs = { (try? FileManager.default.contentsOfDirectory(atPath: packFolder)) ?? [] }
+        let before = packs().sorted()
+
+        let work = SnapshotRepo.folder()
+        let snapshot = await RepoSnapshotWriter.write(base: "main", into: work, repo: clone, git: source.git)
+        #expect(snapshot == nil, "sizes and contents are not here, so there is no copy")
+        #expect(packs().sorted() == before, "and nothing was fetched into the person's repository")
+        #expect(!FileManager.default.fileExists(atPath: work.appendingPathComponent("repo").path))
     }
 
     @Test func whatTheCheckoutMadeIsCheckedAndATooLargeFolderIsNoCopy() throws {

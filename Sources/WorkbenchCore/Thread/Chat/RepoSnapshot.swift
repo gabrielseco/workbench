@@ -33,28 +33,30 @@ enum RepoSnapshotWriter {
     static func write(
         base: String, into work: URL, repo: URL, git: GitRunner, limits: Limits = Limits()
     ) async -> RepoSnapshot? {
-        guard let resolved = try? await git.run(["rev-parse", "--verify", "--quiet", "\(base)^{commit}"], in: repo),
+        // Looking up the commit asks the repository only for refs and the commit, and never for a missing object from a remote
+        // (`GIT_NO_LAZY_FETCH`, git 2.44 and later; the listing below, which could, runs where there is no remote).
+        var lookups = git.environment
+        lookups["GIT_NO_LAZY_FETCH"] = "1"
+        let lookup = GitRunner(executable: git.executable, environment: lookups, timeout: git.timeout)
+        guard let resolved = try? await lookup.run(["rev-parse", "--verify", "--quiet", "\(base)^{commit}"], in: repo),
             resolved.succeeded
         else { return nil }
         let commit = resolved.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard SafeNames.isCommitSHA(commit),
-            let listed = try? await git.run(["ls-tree", "-r", "-l", "-z", commit], in: repo),
-            listed.succeeded, !listed.outputTruncated
-        else { return nil }
-        let chosen = select(listed.stdout, limits)
-        guard !chosen.paths.isEmpty else { return nil }
+        let found = try? await lookup.run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repo)
+        guard SafeNames.isCommitSHA(commit), let common = found, common.succeeded else { return nil }
+        let objects = common.stdout.trimmingCharacters(in: .whitespacesAndNewlines) + "/objects"
 
         let folder = work.appendingPathComponent(RepoSnapshot.folderName, isDirectory: true)
-        let scratchGit = FileManager.default.temporaryDirectory.appendingPathComponent("wb-snapshot-git-\(UUID().uuidString)")
+        let temporary = FileManager.default.temporaryDirectory
+        let scratchGit = temporary.appendingPathComponent("wb-snapshot-git-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: scratchGit) }
         // No config of the person's reaches the checkout: not the global or system one (a smudge or LFS filter must not run to make a
-        // file for the model), and not the repository's own, which is why the checkout runs in a repository of its own.
+        // file for the model), and not the repository's own, which is why the listing and the checkout run in a repository of their own.
+        // It borrows the objects and has no remote, so a partial clone's missing object is an error here (no copy), never a fetch.
         var plain = git.environment
         plain["GIT_CONFIG_GLOBAL"] = "/dev/null"
         plain["GIT_CONFIG_NOSYSTEM"] = "1"
-        let found = try? await git.run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repo)
-        guard let common = found, common.succeeded else { return nil }
-        let objects = common.stdout.trimmingCharacters(in: .whitespacesAndNewlines) + "/objects"
+        plain["GIT_NO_LAZY_FETCH"] = "1"
         var checkout = plain
         checkout["GIT_DIR"] = scratchGit.path
         checkout["GIT_WORK_TREE"] = folder.path
@@ -62,30 +64,30 @@ enum RepoSnapshotWriter {
         checkout["GIT_ATTR_SOURCE"] = commit
         let maker = GitRunner(executable: git.executable, environment: plain, timeout: git.timeout)
         let scratch = GitRunner(executable: git.executable, environment: checkout, timeout: git.timeout)
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let made = try? await maker.run(["init", "-q", "--bare", "--template=", scratchGit.path], in: folder)
-            let read = try? await scratch.run(["read-tree", commit], in: folder)
-            guard made?.succeeded == true, read?.succeeded == true else { throw SnapshotError.git }
-            var start = 0
-            while start < chosen.paths.count {
-                let part = Array(chosen.paths[start..<min(start + chunk, chosen.paths.count)])
-                let out = try? await scratch.run(["checkout-index", "--"] + part, in: folder)
-                guard out?.succeeded == true else { throw SnapshotError.git }
-                start += chunk
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: folder)
-            return nil
+
+        // The work tree git is told about has to exist; whatever is left of it is removed unless the copy is complete.
+        var complete = false
+        defer { if !complete { try? FileManager.default.removeItem(at: folder) } }
+        guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil,
+            let made = try? await maker.run(["init", "-q", "--bare", "--template=", scratchGit.path], in: temporary),
+            made.succeeded,
+            let listed = try? await scratch.run(["ls-tree", "-r", "-l", "-z", commit], in: temporary),
+            listed.succeeded, !listed.outputTruncated
+        else { return nil }
+        let chosen = select(listed.stdout, limits)
+        guard !chosen.paths.isEmpty else { return nil }
+
+        guard let read = try? await scratch.run(["read-tree", commit], in: folder), read.succeeded else { return nil }
+        var start = 0
+        while start < chosen.paths.count {
+            let part = Array(chosen.paths[start..<min(start + chunk, chosen.paths.count)])
+            guard let out = try? await scratch.run(["checkout-index", "--"] + part, in: folder), out.succeeded else { return nil }
+            start += chunk
         }
-        guard keepWithinLimits(folder, limits) else {
-            try? FileManager.default.removeItem(at: folder)
-            return nil
-        }
+        guard keepWithinLimits(folder, limits) else { return nil }
+        complete = true
         return RepoSnapshot(commit: commit, files: chosen.paths.count, bytes: chosen.bytes, left: chosen.left)
     }
-
-    private enum SnapshotError: Error { case git }
 
     /// The regular files of a `git ls-tree -r -l -z` listing that fit the limits, in tree order. A link, a submodule, a file that
     /// is too large, a name a path should not have and anything past a cap is counted in `left`.
