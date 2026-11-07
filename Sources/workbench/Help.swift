@@ -26,7 +26,11 @@ enum Help {
         "init": Extra(
             changes: "writes .workbench/config.toml in this repository; keeps an existing one",
             example: "workbench init"),
-        "config": Extra(changes: "nothing; read-only", example: "workbench config"),
+        "config": Extra(
+            changes:
+                "config: nothing, read-only; config set and unset: one line of .workbench/config.toml (a table is added or "
+                + "removed with it), nothing else in the file",
+            example: "workbench config set agents.goal.provider claude"),
         "doctor": Extra(
             changes:
                 "nothing in the project or a thread: runs the declared setup, check and "

@@ -12,6 +12,11 @@ let workbenchUsage = """
                                  non-empty target and a place inside another repo unless --nested
       init                       write .workbench/config.toml
       config                     show the resolved config and the command a turn would run
+      config set <key> <value>   change one agent key in .workbench/config.toml, keeping the rest of the file as it is;
+                                 <key> is agents.<role>.<provider|model|reasoning_effort>, <role> one of goal, plan,
+                                 run, judge, review, ship; refused, with the file untouched, when the config would not
+                                 load; prints the old and the new value; allowed while a thread is active
+      config unset <key>         remove that key, so the role runs its provider's default again
       doctor [--base <branch>] [--editor <name-or-command>] [--json]
                                  run the declared setup and check in a throwaway worktree; changes nothing;
                                  works before goal new and after goal approve, refused only while a run is live;
