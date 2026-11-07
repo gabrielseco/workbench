@@ -1,8 +1,28 @@
 import Foundation
 
+/// What the modals over the feed that the store has no other state for are showing. They stand at the window, so the rail and the
+/// toolbar are behind them too, and a project switch closes them.
+struct FeedModals {
+    /// The review of the latest turn, with every criterion and where it stands.
+    var reviewingDetails = false
+    /// The merge question for the thread's pull request.
+    var confirmingMerge = false
+    /// The file whose diff is open over the review.
+    var diffPath: String?
+}
+
 extension ProjectStore {
     /// What is on screen: on, and either a person has chosen or there is room beside the feed (a narrow window shows the default nowhere).
     var runSettingsShowing: Bool { runSettingsOn && (runSettingsChosen || runSettingsFits) }
+
+    /// Whether the thread's feed is what the window shows: the modals that belong to it are not up over another screen.
+    var showsFeed: Bool {
+        guard project != nil, !newThread, mode != .tasks, case .thread = screen else { return false }
+        return true
+    }
+
+    /// The Run settings are over the feed: a person asked for them and the window is too narrow to have them beside it.
+    var runSettingsOverFeed: Bool { showsFeed && runSettingsOn && runSettingsChosen && !runSettingsFits }
 
     /// The header's button and View ▸ Run settings: closes what is shown, opens what is not, so the first press in a narrow window opens it.
     func toggleRunSettings() {

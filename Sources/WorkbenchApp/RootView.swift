@@ -17,11 +17,8 @@ struct RootView: View {
             Divider()
             FooterBar(store: store)
         }
-        .modal("Agents", isPresented: Bindable(store).showingAgents, size: .medium) { AgentsCard(store: store) }
-        .modal("Projects", isPresented: Bindable(store).pickingProject, size: .small, placement: .topLeading) {
-            ProjectPickerCard(store: store)
-        }
         .frame(minWidth: 900, minHeight: 600)
+        .appModals(store)
     }
 }
 
