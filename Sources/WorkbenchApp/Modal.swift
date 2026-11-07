@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// How wide a modal is: a named step, never a number at the call site. A width the steps lack is a new case here, decided once.
@@ -8,12 +9,15 @@ enum ModalSize {
     case medium
     /// A page of text or a list that scrolls (a diff, the review, what Codex found).
     case large
+    /// As wide as its content: a picture shown at its own size (the screenshot preview).
+    case fitting
 
-    var width: CGFloat {
+    var width: CGFloat? {
         switch self {
         case .small: 420
         case .medium: 560
         case .large: 760
+        case .fitting: nil
         }
     }
 }
@@ -47,6 +51,18 @@ extension ModalFooter where Leading == EmptyView {
     init(@ViewBuilder actions: @escaping () -> Actions) { self.init(leading: { EmptyView() }, actions: actions) }
 }
 
+/// The area a modal has to live in: the window's, which a picture sized to the screen overflowed when the window is smaller.
+private struct ModalRoomKey: EnvironmentKey {
+    static let defaultValue = CGSize(width: 900, height: 600)
+}
+
+extension EnvironmentValues {
+    var modalRoom: CGSize {
+        get { self[ModalRoomKey.self] }
+        set { self[ModalRoomKey.self] = newValue }
+    }
+}
+
 /// What the close control is called to assistive technology, and so to `scripts/verify-app.sh`.
 enum ModalText {
     static func closeLabel(_ title: String) -> String {
@@ -56,40 +72,88 @@ enum ModalText {
     }
 }
 
-/// The card, its title and its one way out, which is Esc and the close button.
-private struct ModalCard<Content: View>: View {
+/// Esc for the modals that are up: only the one on top hears it (the highest `layer`; a later one of the same layer), so a Diff over a Review
+/// closes the Diff and the next Esc the Review, whichever was opened first. A local key monitor takes the key before the responder chain,
+/// and swallows it.
+@MainActor final class EscapeKey {
+    private static var stack: [(id: ObjectIdentifier, layer: Int)] = []
+    private var monitor: Any?
+
+    func start(layer: Int = 0, _ close: @escaping () -> Void) {
+        guard monitor == nil else { return }
+        let id = ObjectIdentifier(self)
+        Self.stack.append((id, layer))
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // 53 is Esc; a modified one (⌘⎋) is not ours.
+            let held: NSEvent.ModifierFlags = [.command, .control, .option]
+            guard event.keyCode == 53, event.modifierFlags.isDisjoint(with: held) else { return event }
+            let isTop = MainActor.assumeIsolated { Self.top == id }
+            guard isTop else { return event }
+            MainActor.assumeIsolated { close() }
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        Self.stack.removeAll { $0.id == ObjectIdentifier(self) }
+    }
+
+    private static var top: ObjectIdentifier? {
+        stack.enumerated().max { ($0.element.layer, $0.offset) < ($1.element.layer, $1.offset) }?.element.id
+    }
+
+    isolated deinit { stop() }
+}
+
+/// The card, its title and its one way out, which is Esc (see `EscapeKey`) and the close button.
+private struct ModalCard<Accessory: View, Content: View>: View {
     var title: String
     var size: ModalSize
+    var layer: Int
     var close: () -> Void
+    @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
+    @State private var key = EscapeKey()
+    @Environment(\.modalRoom) private var window
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack {
-                SectionLabel(title.uppercased())
-                Spacer()
+                SectionLabel(title.uppercased()).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: Space.m)
+                accessory()
                 Button(action: close) { Image(systemName: "xmark").textStyle(.captionStrong) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).keyboardShortcut(.cancelAction)
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
                     .accessibilityLabel(ModalText.closeLabel(title)).help("Close (Esc)")
             }
             content()
         }
         .padding(.horizontal, Space.l).padding(.vertical, Space.l)
         .frame(width: size.width)
+        // A card as wide as its content still stays in the window: a long title is cut, never pushed off the edge.
+        .frame(maxWidth: size.width == nil ? max(window.width - 2 * Space.xl, 0) : nil)
+        // A card with no set width is as wide as its content: the header's Spacer would otherwise take all the window.
+        .fixedSize(horizontal: size.width == nil, vertical: false)
         .card(.popover)
         .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
-        // Both ways, because each misses a case: a focused text field takes Esc before a button's shortcut sees it (`onExitCommand` gets
-        // it), and with nothing focused `onExitCommand` hears nothing (the shortcut does).
-        .onExitCommand(perform: close)
+        // Esc closes the topmost modal wherever the keyboard is. It is taken before the responder chain sees it, because the chain closed
+        // the wrong thing: a text field behind a card keeps the keyboard though it is disabled, and took Esc for the screen it is on (it
+        // closed the New goal screen under a preview and left the card up), and a card with nothing focused heard no Esc at all.
+        .onAppear { key.start(layer: layer, close) }
+        .onDisappear { key.stop() }
     }
 }
 
-private struct ModalPresentation<Presented: View>: ViewModifier {
+private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier {
     var title: String
     @Binding var isPresented: Bool
     var size: ModalSize
     var placement: ModalPlacement
+    var layer: Int
     var closesOnOutsideClick: Bool
+    @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var presented: () -> Presented
 
     func body(content: Content) -> some View {
@@ -97,15 +161,21 @@ private struct ModalPresentation<Presented: View>: ViewModifier {
             // Modal: what is behind it takes no click and no Tab until it closes.
             .disabled(isPresented)
             .overlay {
-                ZStack(alignment: placement.alignment) {
-                    if isPresented {
-                        Color.black.opacity(0.12).contentShape(Rectangle())
-                            .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
-                        ModalCard(title: title, size: size, close: { isPresented = false }, content: presented)
-                            .padding(.top, placement == .centered ? 0 : Space.giant)
-                            .padding(.leading, placement == .centered ? 0 : Space.m)
-                            .transition(placement.transition)
+                GeometryReader { window in
+                    ZStack(alignment: placement.alignment) {
+                        if isPresented {
+                            Color.black.opacity(0.12).contentShape(Rectangle())
+                                .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
+                            ModalCard(
+                                title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
+                                content: presented)
+                                .padding(.top, placement == .centered ? 0 : Space.giant)
+                                .padding(.leading, placement == .centered ? 0 : Space.m)
+                                .transition(placement.transition)
+                        }
                     }
+                    .frame(width: window.size.width, height: window.size.height, alignment: placement.alignment)
+                    .environment(\.modalRoom, window.size)
                 }
                 .animation(.easeOut(duration: 0.15), value: isPresented)
                 .accessibilityAddTraits(isPresented ? .isModal : [])
@@ -116,14 +186,27 @@ private struct ModalPresentation<Presented: View>: ViewModifier {
 extension View {
     /// A card over the window with a veil behind it, a title, and Esc and a close button as the way out. Every modal in the app is this:
     /// a different look or behaviour is a new `size`, `placement` or prop here, not a `.sheet` or an overlay written in a view
-    /// (`scripts/check-banned-apis.sh` fails one). Pass `closesOnOutsideClick: false` where a stray click would lose typed text.
-    func modal<Presented: View>(
-        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered,
-        closesOnOutsideClick: Bool = true, @ViewBuilder content: @escaping () -> Presented
+    /// (`scripts/check-banned-apis.sh` fails one). Pass `closesOnOutsideClick: false` where a stray click would lose typed text. `accessory`
+    /// puts controls beside the close button (a pager, a toggle). `layer` says which is on top when two are up: the order they are chained
+    /// in (a later one draws over an earlier one), so Esc closes the one you see (`AppModals.swift` numbers them).
+    func modal<Accessory: View, Presented: View>(
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
+        closesOnOutsideClick: Bool = true, @ViewBuilder accessory: @escaping () -> Accessory,
+        @ViewBuilder content: @escaping () -> Presented
     ) -> some View {
         modifier(
             ModalPresentation(
-                title: title, isPresented: isPresented, size: size, placement: placement,
-                closesOnOutsideClick: closesOnOutsideClick, presented: content))
+                title: title, isPresented: isPresented, size: size, placement: placement, layer: layer,
+                closesOnOutsideClick: closesOnOutsideClick, accessory: accessory, presented: content))
+    }
+
+    /// The same with nothing beside the close button.
+    func modal<Presented: View>(
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
+        closesOnOutsideClick: Bool = true, @ViewBuilder content: @escaping () -> Presented
+    ) -> some View {
+        modal(
+            title, isPresented: isPresented, size: size, placement: placement, layer: layer,
+            closesOnOutsideClick: closesOnOutsideClick, accessory: { EmptyView() }, content: content)
     }
 }

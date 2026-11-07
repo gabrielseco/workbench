@@ -46,16 +46,16 @@ import WorkbenchCore
 
     @Test func openingAProjectClosesTheReviewTheMergeQuestionAndTheDiff() async throws {
         let (store, fixture) = try await feedStore()
-        store.feedModals = FeedModals(reviewingDetails: true, confirmingMerge: true, diffPath: "Sources/A.swift")
+        store.modals = ModalState(reviewingDetails: true, confirmingMerge: true, diffPath: "Sources/A.swift")
         #expect(await store.open(fixture.root))
-        let modals = store.feedModals
+        let modals = store.modals
         #expect(!modals.reviewingDetails && !modals.confirmingMerge && modals.diffPath == nil)
     }
 
     @Test func theFeedsModalsAreNotUpOnceTheWindowMovesToAnotherScreen() async throws {
         let (store, fixture) = try await feedStore()
         withExtendedLifetime(fixture) {}
-        store.feedModals = FeedModals(reviewingDetails: true, confirmingMerge: true, diffPath: "Sources/A.swift")
+        store.modals = ModalState(reviewingDetails: true, confirmingMerge: true, diffPath: "Sources/A.swift")
         store.prReviewShown = PRReviewShown(pr: 7, round: 1, verdict: .clean, failure: nil, findings: "all good")
         #expect(store.reviewOverFeed && store.mergeOverFeed && store.diffOverFeed == "Sources/A.swift" && store.prReviewOverFeed)
         store.newThread = true

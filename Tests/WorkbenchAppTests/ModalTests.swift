@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Testing
 
@@ -6,7 +7,8 @@ import Testing
 /// Every modal is `.modal`: its steps, its labels (which `scripts/verify-app.sh` presses by) and what it draws are decided here.
 @MainActor @Suite struct ModalTests {
     @Test func sizesAreDistinctAndGrow() {
-        #expect(ModalSize.small.width == 420 && ModalSize.medium.width == 560)
+        #expect(ModalSize.small.width == 420 && ModalSize.medium.width == 560 && ModalSize.large.width == 760)
+        #expect(ModalSize.fitting.width == nil, "a picture sets the width of its own card")
     }
 
     @Test func theCloseControlKeepsTheLabelsTheCardsHadBefore() {
@@ -36,5 +38,55 @@ import Testing
         let closed = try #require(corner(presented: false))
         #expect(closed > 0.95, "nothing over the window while it is not shown")
         #expect(open < closed, "the veil darkens what is behind the card")
+    }
+
+    private func press(keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) {
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: keyCode)
+        if let event { NSApp.sendEvent(event) }
+    }
+
+    @Test func escClosesOnlyTheNewestModalAndTheNextEscTheOneUnderIt() {
+        _ = NSApplication.shared
+        var closed: [String] = []
+        let review = EscapeKey(), diff = EscapeKey()
+        review.start { closed.append("review") }
+        diff.start { closed.append("diff") }
+        press(keyCode: 53)
+        #expect(closed == ["diff"], "the diff over the review hears it first")
+        diff.stop()
+        press(keyCode: 53)
+        #expect(closed == ["diff", "review"], "then the review")
+        review.stop()
+        press(keyCode: 53)
+        #expect(closed == ["diff", "review"], "nothing is listening once both are gone")
+    }
+
+    @Test func escGoesToTheModalOnTopEvenWhenALowerOneWasOpenedAfterIt() {
+        _ = NSApplication.shared
+        var closed: [String] = []
+        let preview = EscapeKey(), agents = EscapeKey()
+        preview.start(layer: 5) { closed.append("preview") }
+        agents.start(layer: 0) { closed.append("agents") }
+        press(keyCode: 53)
+        #expect(closed == ["preview"], "⌘, opened Agents under the preview: the one you see hears Esc")
+        preview.stop()
+        press(keyCode: 53)
+        #expect(closed == ["preview", "agents"])
+        agents.stop()
+    }
+
+    @Test func onlyAPlainEscIsTaken() {
+        _ = NSApplication.shared
+        var closed = 0
+        let key = EscapeKey()
+        key.start { closed += 1 }
+        defer { key.stop() }
+        press(keyCode: 36)
+        press(keyCode: 53, modifiers: .command)
+        #expect(closed == 0, "another key, or ⌘⎋, is left to whoever wants it")
+        press(keyCode: 53)
+        #expect(closed == 1)
     }
 }
