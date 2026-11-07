@@ -22,9 +22,7 @@ struct CommitField: View {
     @Environment(\.goalEditSerial) private var serial
 
     var body: some View {
-        TextField(placeholder, text: $text)
-            .textFieldStyle(.plain).textStyle(style)
-            .focused($focused)
+        TextInput(placeholder, text: $text, look: .bare, style: style, focus: $focused)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
             .onChange(of: serial) { _, _ in if !focused { text = value } }
@@ -97,8 +95,7 @@ struct NewLine: View {
 
     var body: some View {
         HStack {
-            TextField(placeholder, text: $text).textFieldStyle(.roundedBorder).focused($focused)
-                .onSubmit(send).onExitCommand(perform: cancel)
+            TextInput(placeholder, text: $text, focus: $focused).onSubmit(send).onExitCommand(perform: cancel)
             Button("Add", action: send).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
             Button("Cancel", action: cancel)
         }
@@ -125,8 +122,8 @@ struct NewCriterionCard: View {
 
     var body: some View {
         GoalCard {
-            TextField("What must hold", text: $text).textFieldStyle(.roundedBorder).focused($focused)
-            TextField("Proof: how it will be shown", text: $proof).textFieldStyle(.roundedBorder).onSubmit(send)
+            TextInput("What must hold", text: $text, focus: $focused)
+            TextInput("Proof: how it will be shown", text: $proof).onSubmit(send)
             HStack {
                 Spacer()
                 Button("Cancel", action: cancel)

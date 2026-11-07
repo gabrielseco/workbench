@@ -440,15 +440,11 @@ struct NextCard: View {
     var why: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.xs) {
-            SectionLabel("NEXT")
-            Text(step?.title ?? "Nothing left to do").textStyle(.heading)
-            Text(why).role(.detail)
-        }
-        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
-        .callout(.outlined)
-        .padding(.top, Space.s)
-        .accessibilityElement(children: .combine)
+        CardTitle("NEXT", title: step?.title ?? "Nothing left to do", detail: why)
+            .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
+            .callout(.outlined)
+            .padding(.top, Space.s)
+            .accessibilityElement(children: .combine)
     }
 }
 

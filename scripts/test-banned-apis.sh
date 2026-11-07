@@ -143,6 +143,20 @@ dir=$(tree determinate Good.swift 'struct A: View { var body: some View { Progre
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a determinate ProgressView(value:), Spinner or IconButton.close was refused"
 rm -rf "$dir"
 
+for field in 'TextField("x", text: $t)' 'TextField("x", text: $t).textFieldStyle(.roundedBorder)'; do
+  dir=$(tree field Bad.swift "struct A: View { var body: some View { $field } }")
+  out=$(run "$dir"); code=$?
+  [ "$code" = 1 ] || fail "$field in a view passed ($code)"
+  echo "$out" | grep -q "use TextInput" || fail "the message does not say what to use: $out"
+  rm -rf "$dir"
+done
+dir=$(tree ownfield FormControls.swift 'struct TextInput: View { var body: some View { TextField("x", text: $t).textFieldStyle(.roundedBorder) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "FormControls.swift's own TextField( was refused"
+rm -rf "$dir"
+dir=$(tree otherfields Good.swift 'struct A: View { var body: some View { TextInput("x", text: $t); MarkdownTextField(text: $t); PlaceholderTextEditor(text: $t) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "TextInput or another name ending in TextField( was refused"
+rm -rf "$dir"
+
 # and the real tree is clean
 sh "$script" >/dev/null 2>&1 || fail "the repository itself fails the check"
 [ "$status" = 0 ] && echo "banned-apis check: ok"

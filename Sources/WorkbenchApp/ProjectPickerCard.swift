@@ -41,20 +41,17 @@ struct ProjectPickerCard: View {
     }
 
     private var search: some View {
-        HStack(spacing: Space.s) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Find a project", text: $query)
-                .textFieldStyle(.plain).focused($focused)
-                .onKeyPress(.downArrow) { move(1) }
-                .onKeyPress(.upArrow) { move(-1) }
-                .onKeyPress(.return) {
-                    guard let selected else { return .ignored }
-                    pick(selected)
-                    return .handled
-                }
+        TextInput("Find a project", text: $query, look: .filled, icon: "magnifyingglass", focus: $focused) { press in
+            switch press.key {
+            case .downArrow: return move(1)
+            case .upArrow: return move(-1)
+            case .return:
+                guard let selected else { return .ignored }
+                pick(selected)
+                return .handled
+            default: return .ignored
+            }
         }
-        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
-        .background(Theme.grey.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     private func move(_ step: Int) -> KeyPress.Result {

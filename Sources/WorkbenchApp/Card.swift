@@ -70,3 +70,24 @@ extension View {
         modifier(CardSurface(style: style, stroke: stroke, strokeWidth: strokeWidth, clips: clips))
     }
 }
+
+/// The top of a block that says what it is: its caps label over its heading, and the sentence under it when there is one. "GOAL" and "NEXT"
+/// are this; the label is `SectionLabel`'s.
+struct CardTitle: View {
+    var label: String
+    var title: String
+    var detail: String?
+    var lineLimit: Int?
+
+    init(_ label: String, title: String, detail: String? = nil, lineLimit: Int? = nil) {
+        (self.label, self.title, self.detail, self.lineLimit) = (label, title, detail, lineLimit)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            SectionLabel(label)
+            Text(title).textStyle(.heading).lineLimit(lineLimit)
+            if let detail { Text(detail).role(.detail) }
+        }
+    }
+}

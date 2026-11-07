@@ -50,11 +50,7 @@ struct DecisionCard: View {
 
     private var next: some View {
         HStack(alignment: .center, spacing: Space.m) {
-            VStack(alignment: .leading, spacing: Space.xs) {
-                SectionLabel("NEXT")
-                Text(decision.title ?? step?.title ?? "Nothing left to do").textStyle(.heading)
-                Text(shownWhy).role(.detail)
-            }
+            CardTitle("NEXT", title: decision.title ?? step?.title ?? "Nothing left to do", detail: shownWhy)
             Spacer(minLength: 12)
             DecisionActions(decision: decision, perform: perform)
         }

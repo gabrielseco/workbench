@@ -66,9 +66,9 @@ struct NewTaskScreen: View {
         let off = tasks.proposeNewUnavailable(in: store.project)
         VStack(alignment: .leading, spacing: Space.s) {
             SectionLabel("NAME")
-            TextField("weekly-todos", text: Binding(get: { draft.name }, set: { tasks.creating?.name = $0 }))
-                .textFieldStyle(.roundedBorder).textStyle(.mono).focused($nameFocused)
-                .accessibilityLabel("Name of the new task")
+            TextInput(
+                "weekly-todos", text: Binding(get: { draft.name }, set: { tasks.creating?.name = $0 }), style: .mono,
+                label: "Name of the new task", focus: $nameFocused)
             if let message = check.message { Text(message).role(.error) }
         }
         VStack(alignment: .leading, spacing: Space.s) {

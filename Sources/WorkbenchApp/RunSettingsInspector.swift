@@ -126,23 +126,11 @@ struct RunSettingsInspector: View {
         section("AFTER THE TURN") {
             ForEach(goal.steps, id: \.name) { step in
                 let on = !step.skipped && step.unavailable == nil
-                // The switch at the left, the label and what it does beside it, as the artboard has them.
-                HStack(alignment: .top, spacing: Space.m) {
-                    Toggle(
-                        step.label,
-                        isOn: Binding(
-                            get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } })
-                    )
-                    .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
-                    .disabled(!editable || step.unavailable != nil)
-                    VStack(alignment: .leading, spacing: Space.xxs) {
-                        Text(step.label).textStyle(.bodyMedium)
-                        if let line = RunSettingsLayout.description(forStep: step.name) {
-                            Text(line).textStyle(.subheadline, .subtle)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
+                SwitchRow(
+                    step.label, details: RunSettingsLayout.description(forStep: step.name).map { [$0] } ?? [],
+                    isOn: Binding(get: { on }, set: { _ in Task { await store.editGoal { $0.togglingSkip(step.name) } } }),
+                    enabled: editable && step.unavailable == nil
+                )
                 .help(
                     step.unavailable.map { "Not available: \($0)" }
                         ?? (step.known ? (on ? "Runs after a turn" : "Skipped for this goal") : "Not a step of this project"))
@@ -157,22 +145,11 @@ struct RunSettingsInspector: View {
 
     /// One switch for the advice: the steps themselves are the switches above, this says whether they run by themselves after a turn.
     private func adviceSwitch(_ advice: AutoAdviceSetting, editable: Bool) -> some View {
-        // The switch at the left and everything it says beside it, one column, as the steps above.
-        HStack(alignment: .top, spacing: Space.m) {
-            Toggle(
-                AutoAdviceSetting.label,
-                isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } })
-            )
-            .toggleStyle(.switch).labelsHidden().switchTint().controlSize(.small)
-            .disabled(!advice.switchEnabled(editable: editable))
-            VStack(alignment: .leading, spacing: Space.xxs) {
-                Text(AutoAdviceSetting.label).textStyle(.bodyMedium)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(advice.line).textStyle(.subheadline, .subtle)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(advice.source).textStyle(.subheadline, .subtle)
-            }
-        }
+        SwitchRow(
+            AutoAdviceSetting.label, details: [advice.line, advice.source],
+            isOn: Binding(get: { advice.on }, set: { _ in Task { await store.toggleAdvice() } }),
+            enabled: advice.switchEnabled(editable: editable)
+        )
         .padding(.top, Space.m)
         .help("Runs the judge and the review stages after a turn that passed, unasked. Each costs what its agent costs.")
     }
@@ -245,8 +222,7 @@ struct RunSettingsInspector: View {
     @ViewBuilder private var addFolder: some View {
         if addingFolder {
             HStack(spacing: Space.s) {
-                TextField("../backend", text: $folderText).textFieldStyle(.roundedBorder).textStyle(.callout)
-                    .onSubmit(commitFolder)
+                TextInput("../backend", text: $folderText, look: .bordered, style: .callout).onSubmit(commitFolder)
                 Button("Add", action: commitFolder).plainButton()
                     .disabled(folderText.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Cancel") { (addingFolder, folderText) = (false, "") }.plainButton()
