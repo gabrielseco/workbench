@@ -79,7 +79,7 @@ struct FeedLine: View {
         IconRow(symbol: symbol, tint: tint) {
             if inline {
                 Text(title).textStyle(.callout, .primary).lineLimit(1).layoutPriority(1)
-                if let detail, !detail.isEmpty { detailText(detail).lineLimit(1) }
+                if let detail, !detail.isEmpty { detailText(detail).lineLimit(3) }
             } else {
                 VStack(alignment: .leading, spacing: Space.xxs) {
                     Text(title).textStyle(.callout, .primary)

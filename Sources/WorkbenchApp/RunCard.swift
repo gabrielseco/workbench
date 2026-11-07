@@ -173,8 +173,9 @@ struct RunCardView: View {
     private var tail: some View {
         VStack(alignment: .leading, spacing: Space.xs) {
             ForEach(Array(model.tail.enumerated()), id: \.offset) { _, line in
-                Text(line).role(.mono).lineLimit(1)
-                    .truncationMode(.middle)
+                // A command can be long: let it wrap, and cut only what passes four lines.
+                Text(line).role(.mono).lineLimit(4)
+                    .truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)

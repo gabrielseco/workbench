@@ -29,12 +29,12 @@ enum AppScenario: String, CaseIterable {
     case tasksEmpty = "tasks-empty"
     case taskThreads = "task-threads"
     case taskDone = "task-done"
-    case threads, manyThreads = "many-threads"
+    case threads, manyThreads = "many-threads", longCommands = "long-commands"
     case chat
     case chatGoal = "chat-goal"
     case chatReplying = "chat-replying"
 
-    private static let title = "Paginate the contractor invoice list"
+    static let title = "Paginate the contractor invoice list"
 
     /// The config a scenario ships, for the ones that show how proofs are judged against the tool set.
     var config: String? {
@@ -193,11 +193,11 @@ enum AppScenario: String, CaseIterable {
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
-        case .noThread, .draftGoal, .tasksEmpty:
-            break
+        case .noThread, .draftGoal, .tasksEmpty: break
         case .chat, .chatGoal, .chatReplying:
             try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
         case .manyThreads: try await buildManyThreads(in: fixture)
+        case .longCommands: try await buildLongCommands(in: fixture)
         case .threads:
             // The thread list: a finished thread, one that needs you, one working and a draft, oldest first.
             try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
