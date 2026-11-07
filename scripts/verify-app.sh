@@ -244,7 +244,9 @@ SWIFT
 
   # `gh-stub` is the `gh` the window reads a shipped pull request's CI and merges with (`WORKBENCH_APP_GH`), so a fixture never asks
   # GitHub. Its checks move on with each read: two running, then one passed, then all green; Merge only writes down that it was asked.
+  # A scenario's `merged-prs` (one number a line) names pull requests it says are merged already.
   mkdir -p "$dir/bin"
+  [[ ! -f "$fixture/merged-prs" ]] || cp "$fixture/merged-prs" "$dir/gh-merged-prs"
   cat >"$dir/bin/gh-stub" <<'STUB'
 #!/bin/sh
 d="@DIR@"
@@ -252,6 +254,7 @@ echo "$@" >>"$d/gh-calls.txt"
 case "$1 $2" in
   "pr view")
     state=OPEN; [ -f "$d/gh-merged" ] && state=MERGED
+    [ -f "$d/gh-merged-prs" ] && grep -qx "$3" "$d/gh-merged-prs" && state=MERGED
     echo "{\"state\":\"$state\",\"headRefOid\":\"0123456789abcdef0123456789abcdef01234567\"}" ;;
   "pr checks")
     n=$(cat "$d/gh-checks-n" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$d/gh-checks-n"

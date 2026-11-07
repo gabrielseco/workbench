@@ -18,6 +18,7 @@ enum AppScenario: String, CaseIterable {
     case prOpen = "pr-open"
     case prFindings = "pr-findings"
     case prClean = "pr-clean"
+    case prMerged = "pr-merged"
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
@@ -150,6 +151,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.ship(id, number: 482)
         case .prClean:
             try await writePRClean(in: fixture, id: id)
+        case .prMerged:
+            try await buildPRMerged(in: fixture)
         case .prFindings:
             // A shipped thread whose pull request review found things to fix: the findings sheet offers a fix round.
             try await fixture.addThread(id, approved: true, title: Self.title)
@@ -361,16 +364,7 @@ enum AppScenario: String, CaseIterable {
             let target = directory.appendingPathComponent(scenario.rawValue)
             try? files.removeItem(at: target)
             try files.createDirectory(at: target, withIntermediateDirectories: true)
-            if let config = scenario.config {
-                try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
-            }
-            for (folder, contents) in [("repo", scenario.repoFiles), ("worktree", scenario.worktreeFiles)] {
-                for (path, content) in contents {
-                    let url = target.appendingPathComponent(folder).appendingPathComponent(path)
-                    try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try content.write(to: url, atomically: true, encoding: .utf8)
-                }
-            }
+            try scenario.writeSideFiles(into: target)
             let tasks = fixture.project.tasksDirectory
             if (try? files.contentsOfDirectory(atPath: tasks.path))?.isEmpty == false {
                 try files.copyItem(at: tasks, to: target.appendingPathComponent("tasks"))

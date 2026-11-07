@@ -234,7 +234,7 @@ struct RecentProject: Equatable, Identifiable {
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         // A thread id means another thread in another project: what was read for the old project is not the new one's.
-        (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
+        forgetThreadList()
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun
@@ -473,8 +473,7 @@ struct RecentProject: Equatable, Identifiable {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh()
-                // On its own task: a slow `gh` must not hold up following the log.
-                if self.pullRequestCIIsDue { Task { await self.refreshPullRequestCI() } }
+                self.readGitHubIfDue()
                 let working = self.isWorking
                 try? await Task.sleep(for: working ? self.intervals.working : self.intervals.idle)
             }
