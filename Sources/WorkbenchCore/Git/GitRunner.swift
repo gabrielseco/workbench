@@ -88,7 +88,10 @@ public struct GitRunner: Sendable {
         extraEnvironment: [String: String] = [:],
         timeout: TimeInterval = 60
     ) throws -> GitRunner {
-        guard let git = ExecutableResolver.resolve(tool, searchPath: parent["PATH"])
+        // A Dock-launched app has a bare PATH (/usr/bin:/bin:...), which misses a Homebrew `gh`: look in the usual install places too.
+        let places = tool == "gh" ? HerdrLocator.extraDirectories(home: parent["HOME"] ?? NSHomeDirectory()) : []
+        let searchPath = ((parent["PATH"] ?? "").split(separator: ":").map(String.init) + places).joined(separator: ":")
+        guard let git = ExecutableResolver.resolve(tool, searchPath: searchPath)
             ?? (tool == "git" ? ExecutableResolver.resolve("/usr/bin/git", searchPath: nil) : nil)
         else { throw tool == "git" ? GitError.gitNotFound : GitError.toolNotFound(tool) }
 
