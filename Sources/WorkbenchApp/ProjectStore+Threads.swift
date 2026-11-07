@@ -73,4 +73,12 @@ extension ProjectStore {
     func showMoreThreads() {
         railLimits[project?.root.path ?? "", default: RailModel.pageSize] += RailModel.pageSize
     }
+
+    /// Whether `Show more` has been used, so `Show less` has something to undo.
+    var railExpanded: Bool { railLimit > RailModel.pageSize }
+
+    /// Back to the first page of threads.
+    func showFewerThreads() {
+        railLimits[project?.root.path ?? ""] = nil
+    }
 }
