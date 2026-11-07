@@ -187,7 +187,8 @@ struct AgentRow: View {
             Divider()
             Text("Other…").tag(AgentModelMenu.otherTag)
         }
-        .labelsHidden().fixedSize().accessibilityLabel("\(row.role.rawValue.capitalized) model")
+        // A long name is cut in the picker and whole in the menu: it never pushes the row past the card.
+        .labelsHidden().frame(maxWidth: 220, alignment: .leading).accessibilityLabel("\(row.role.rawValue.capitalized) model")
         .disabled(row.provider == nil || row.lockedFields.contains(.model))
     }
 
