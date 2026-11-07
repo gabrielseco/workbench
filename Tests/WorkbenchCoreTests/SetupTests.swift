@@ -135,6 +135,27 @@ private func failure(_ block: () async throws -> some Any) async -> RunnerError?
         #expect(created.data["copied"] == .array([.string(".env.local")]))
     }
 
+    @Test func theSetupAndTheCheckAreGivenTheThreadsPortsAndName() async throws {
+        let script = try CheckScript()
+        let setup = try script.write("env > \"$PWD/setup.env\"", name: "setup.sh")
+        let check = try script.write("env > \"$PWD/check.env\"", name: "check.sh")
+        let fx = try await RunnerFixture(
+            extraConfig: "setup_command = \"\(setup)\"\ncheck_command = \"\(check)\"\nports = 2")
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+
+        let ports = try #require(ThreadPorts.read(fx.project.threadDirectory(id).appendingPathComponent("ports.json")))
+        #expect(ports.count == 2)
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        for name in ["setup.env", "check.env"] {
+            let seen = try String(contentsOf: worktree.appendingPathComponent(name), encoding: .utf8)
+            let lines = Set(seen.split(separator: "\n").map(String.init))
+            #expect(lines.contains("WORKBENCH_PORT=\(ports.first)"), "\(name)")
+            #expect(lines.contains("PORT=\(ports.first)") && lines.contains("WORKBENCH_PORT_1=\(ports.first + 1)"), "\(name)")
+            #expect(lines.contains("WORKBENCH_THREAD=\(id)"), "\(name)")
+        }
+    }
+
     @Test func withNoSetupCommandNothingRunsAndNothingIsWritten() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()

@@ -95,7 +95,8 @@ struct AppLauncher {
     /// Starts the command and waits until it is ready, has ended, or `ready_timeout_s` is up. On any failure the app
     /// is already stopped.
     func start(
-        port: Int, threadID: String, goalPath: String, attach: @Sendable (ProcessRun) -> Void = { _ in }
+        port: Int, threadID: String, goalPath: String, ports: ThreadPorts? = nil,
+        attach: @Sendable (ProcessRun) -> Void = { _ in }
     ) async -> Result<Running, Failure> {
         let words = run.command.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
         guard let name = words.first,
@@ -104,6 +105,7 @@ struct AppLauncher {
 
         var env = environment
         for key in Self.portVariables { env[key] = String(port) }
+        if let ports { env.merge(ports.extraEnvironment) { _, new in new } }
         env["WORKBENCH_THREAD"] = threadID
         env["WORKBENCH_GOAL"] = goalPath
         var request = SpawnRequest(
@@ -172,7 +174,24 @@ struct AppLauncher {
         regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
-    /// A port nothing listens on: the kernel picks one for a socket that is closed again at once.
+    /// True when nothing holds `port` on this machine: a socket can be bound to it, then it is closed again. A server on
+    /// any address (`0.0.0.0`, `127.0.0.1`) makes the bind fail; one on `::1` alone does not, which is as far as this looks.
+    static func isFree(_ port: Int) -> Bool {
+        guard (1...65_535).contains(port) else { return false }
+        let fd = socket(AF_INET, streamSocketType, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr = in_addr(s_addr: UInt32(0x7f00_0001).bigEndian)
+        address.sin_port = UInt16(port).bigEndian
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        } == 0
+    }
+
+    /// A port nothing listens on: the kernel picks one for a socket that is closed again at once. Only the fallback for a
+    /// thread that has no ports of its own (`ThreadPorts`), since nothing keeps the port for the caller.
     static func freePort() -> Int? {
         let fd = socket(AF_INET, streamSocketType, 0)
         guard fd >= 0 else { return nil }

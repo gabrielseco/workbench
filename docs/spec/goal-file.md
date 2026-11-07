@@ -331,6 +331,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # safe_mode = true                      # default: no CLAUDE.md, skills, plugins, hooks or MCP in runs
 # project_instructions = true           # default: Workbench puts AGENTS.md (else CLAUDE.md) in the first prompt
 # env_pass = ["ANTHROPIC_API_KEY"]      # extra variables claude may see
+# ports = 1                             # ports each thread gets for its run, check and setup; WORKBENCH_PORT, PORT, then WORKBENCH_PORT_1…
 # editor = "cursor"                     # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
 # [pr_review]                           # `workbench pr-review`: Codex reviews the shipped pull request
 # checklist = "docs/REVIEW.md"          # optional: this project's review invariants, read from the PR head
@@ -401,6 +402,15 @@ Notes:
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
   with no shell operators or quotes. The runner should tell the model the exact string to use.
+- **Ports per thread.** Every thread has its own block of `ports` ports (config key, 1 to 10, default 1), written to
+  `threads/<id>/ports.json` the first time a step needs it and kept until the thread is cleaned. Blocks are slots of ten from 41000, so a
+  server that steps to the next port when its own is taken stays in its thread's block; each project starts looking at a slot of its
+  own (from its path), a slot with a port in use is passed over, and no two threads of a project share a port. The setup, the check and
+  the `[run]` app all get `WORKBENCH_PORT` and `PORT` (the first port), `WORKBENCH_PORT_1`, `_2`, … (the others) and `WORKBENCH_THREAD`,
+  so a project can name its own per-thread things (a test database, a cache directory) after the thread. When the app is about to start
+  on a port something else now holds, the thread is moved to a free block first, since anything answering there would pass the ready check.
+  When the range has no free block the run falls back to a port the kernel offers, and the setup and check get only `WORKBENCH_THREAD`.
+  Workbench starts no servers of its own and gives no database; the project's commands read these variables.
 - **`setup_command` is run by Workbench, not offered to the model.** One plain command, validated like
   `check_command`, run in the new worktree after it is cut and before the first turn: an install step
   (`mix deps.get`, `npm ci`). It uses the check's machinery (minimal environment, merged streams, process
@@ -443,7 +453,7 @@ Notes:
   is up; `ready_timeout_s` is 1 to 900 (default 120). A missing `command`, none or both ready checks, an unknown key or a bad
   value is refused with the key named. Without `[run]` nothing changes. With it, a verifier turn first starts the command in
   the thread's worktree as a child of Workbench (its streams merged, its whole process tree ended on every ending, also on a
-  stop and a timeout), on a free port given as `WORKBENCH_PORT` and `PORT`, and starts `claude` only once the app is ready.
+  stop and a timeout), on the thread's own port given as `WORKBENCH_PORT` and `PORT` (see "Ports per thread"), and starts `claude` only once the app is ready.
   The verifier's environment and prompt then hold `WORKBENCH_RUN_PID`, `WORKBENCH_PORT` and, for `ready_url`,
   `WORKBENCH_RUN_URL`, and the prompt tells it not to start or stop the app. An app that exits, never comes up or is not
   found ends the verifier with `ok: false` and the reason, and spends nothing. The command comes from the project's

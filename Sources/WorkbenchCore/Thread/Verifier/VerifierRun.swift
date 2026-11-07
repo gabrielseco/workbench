@@ -144,7 +144,16 @@ struct VerifierRun {
     private func launch(
         _ runConfig: RunConfig, turn: Int, log: EventLogWriter, attach: @Sendable (ProcessRun) -> Void
     ) async throws -> (app: AppLauncher.Running?, failure: String?) {
-        let port = AppLauncher.freePort()
+        // The thread's own port, the one its check and setup were given, so the app, the browser test and the verifier agree on it
+        // and another thread's app is somewhere else. A kernel-offered port is the fallback when the range had none.
+        let threads = threadDirectory.deletingLastPathComponent()
+        var ports = ThreadPorts.assign(threadsDirectory: threads, id: threadID, count: config.ports)
+        // Whatever answers on the port would pass the ready check, so an app is never started on a port something else holds:
+        // the thread is moved to a free block first (another project's app can sit on the same slot).
+        if let held = ports, !held.all.allSatisfy({ AppLauncher.isFree($0) }) {
+            ports = ThreadPorts.assign(threadsDirectory: threads, id: threadID, count: config.ports, renew: true)
+        }
+        let port = ports?.first ?? AppLauncher.freePort()
         var started: [String: JSONValue] = ["command": .string(runConfig.command), "port": port.map { .int($0) } ?? .null]
         switch runConfig.ready {
         case .url(let url): started["ready_url"] = .string(url)
@@ -162,7 +171,7 @@ struct VerifierRun {
         let launcher = AppLauncher(
             run: runConfig, worktree: worktree, environment: config.childEnvironment(from: environment),
             lifetime: timeout + TimeInterval(runConfig.readyTimeoutS) + 30, killGrace: killGrace)
-        switch await launcher.start(port: port, threadID: threadID, goalPath: goalPath, attach: attach) {
+        switch await launcher.start(port: port, threadID: threadID, goalPath: goalPath, ports: ports, attach: attach) {
         case .success(let app):
             return (app, nil)
         case .failure(let failure):

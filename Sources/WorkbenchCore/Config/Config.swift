@@ -92,6 +92,8 @@ public struct Config: Sendable, Equatable {
     public var defaultBudgetConfigured = false
     /// Extra environment variables passed to `claude`, on top of the fixed minimal set.
     public var envPass: [String]
+    /// How many ports each thread is given (`ThreadPorts`), for its run, check and setup. One is the first, `WORKBENCH_PORT`.
+    public var ports: Int = 1
     public var tools: ToolSet
     public var review: ReviewConfig = ReviewConfig()
     /// `[verifier]`, or nil when the project declares none.
@@ -159,8 +161,8 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type", "permissions",
-            "default_budget_usd", "env_pass", "safe_mode", "project_instructions", "copy", "read_also", "editor", "herdr",
-            "reports_copy_to",
+            "default_budget_usd", "env_pass", "ports", "safe_mode", "project_instructions", "copy", "read_also", "editor",
+            "herdr", "reports_copy_to",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -282,6 +284,8 @@ public struct Config: Sendable, Equatable {
             }
         }
 
+        let ports = portsValue(document.tables[""]?.entries["ports"], fail: fail)
+
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
             switch entry.value {
@@ -357,6 +361,7 @@ public struct Config: Sendable, Equatable {
             envPass: envPass, tools: ToolSet(available: available, allowed: allowed, denied: denied),
             review: review, verifier: verifier, run: run)
         config.permissions = permissions
+        config.ports = ports
         config.editor = editor
         config.reportsCopyTo = reportsCopyTo
         config.herdr = herdr
@@ -365,6 +370,14 @@ public struct Config: Sendable, Equatable {
         config.mcpServers = mcpServers
         config.defaultBudgetConfigured = document.tables[""]?.entries["default_budget_usd"] != nil
         return config
+    }
+
+    /// The `ports` key: how many ports a thread gets, one when it is absent or after `fail` has been told.
+    static func portsValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
+        guard let entry else { return 1 }
+        if case .int(let n) = entry.value, (1...ThreadPorts.maxCount).contains(n) { return n }
+        fail(.invalidValue, entry.line, "'ports' must be a whole number from 1 to \(ThreadPorts.maxCount)")
+        return 1
     }
 
     /// The `editor` key, in the project's config or the global one: the value, or nil after `fail` has been told.
@@ -459,6 +472,8 @@ public struct Config: Sendable, Equatable {
         # default_budget_usd = 5.00        # opt in: new goals get this budget_usd (API billing); else timeout_only
         # env_pass = ["ANTHROPIC_API_KEY"] # extra variables claude, setup and check may see (all run on an allowlist)
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
+        # ports = 1                        # ports each thread gets for its run, check and setup (WORKBENCH_PORT, PORT)
+        #                                  # more come as WORKBENCH_PORT_1, _2; no two threads share one
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
         # reports_copy_to = "~/Obsidian/Vault/Workbench" # also copy each report of a `fix: report` task there (a vault folder)
         # herdr = "/Users/me/.local/bin/herdr-app" # the window's "Open in Herdr"; else `herdr-app` on PATH or in ~/.local/bin
