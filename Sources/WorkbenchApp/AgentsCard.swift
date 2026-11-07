@@ -15,6 +15,10 @@ struct AgentsLayer: View {
         }
         .animation(.easeOut(duration: 0.15), value: store.showingAgents)
         .accessibilityAddTraits(store.showingAgents ? .isModal : [])
+        // What an edit said is for the card: it is not left on the screen behind it.
+        .onChange(of: store.showingAgents) {
+            if !store.showingAgents { (store.actionError, store.actionNote) = (nil, nil) }
+        }
     }
 }
 
@@ -25,8 +29,8 @@ struct AgentsCard: View {
 
     private var edit: AgentEdit {
         AgentEdit(
-            set: { role, field, value in Task { await store.setAgent(role, field, to: value) } },
-            goalOff: { Task { await store.turnGoalAgentOff() } })
+            set: { role, field, value in await store.setAgent(role, field, to: value) },
+            goalOff: { await store.turnGoalAgentOff() })
     }
 
     var body: some View {
@@ -74,8 +78,9 @@ struct AgentsCard: View {
 
 /// What a row can change: one key of its role (a nil value removes it), and the goal agent off.
 struct AgentEdit {
-    var set: (AgentSetup.Role, ConfigEdit.Field, String?) -> Void
-    var goalOff: () -> Void
+    /// Each says whether it was written: a refusal leaves the field on what the file has.
+    var set: (AgentSetup.Role, ConfigEdit.Field, String?) async -> Bool
+    var goalOff: () async -> Bool
 }
 
 /// One role: its name and what it does, and the provider, effort and model it runs. Without `edit` it only reads.
@@ -107,7 +112,7 @@ struct AgentRow: View {
             if let note = fitNote, let edit {
                 HStack(spacing: Space.s) {
                     Text(note).role(.warning).fixedSize(horizontal: false, vertical: true)
-                    Button("Use default model") { edit.set(row.role, .model, nil) }.plainButton(size: .small)
+                    Button("Use default model") { Task { _ = await edit.set(row.role, .model, nil) } }.plainButton(size: .small)
                 }
             }
         }
@@ -144,8 +149,10 @@ struct AgentRow: View {
         Binding(
             get: { row.provider?.rawValue ?? Self.off },
             set: { choice in
-                if choice == Self.off { edit?.goalOff() } else if choice != row.provider?.rawValue || row.source != .configured {
-                    edit?.set(row.role, .provider, choice)
+                if choice == Self.off {
+                    Task { _ = await edit?.goalOff() }
+                } else if choice != row.provider?.rawValue || row.source != .configured {
+                    Task { _ = await edit?.set(row.role, .provider, choice) }
                 }
             })
     }
@@ -155,7 +162,7 @@ struct AgentRow: View {
             get: { row.reasoningEffort ?? Self.providerDefault },
             set: { choice in
                 guard choice != (row.reasoningEffort ?? Self.providerDefault) else { return }
-                edit?.set(row.role, .reasoningEffort, choice == Self.providerDefault ? nil : choice)
+                Task { _ = await edit?.set(row.role, .reasoningEffort, choice == Self.providerDefault ? nil : choice) }
             })
     }
 
@@ -174,7 +181,11 @@ struct AgentRow: View {
     private func commitModel() {
         let typed = model.trimmingCharacters(in: .whitespaces)
         guard typed != (row.model ?? "") else { return }
-        edit?.set(row.role, .model, typed.isEmpty ? nil : typed)
+        let was = row.model ?? ""
+        Task {
+            // A refused name is not left in the field: it goes back to what the file has.
+            if await edit?.set(row.role, .model, typed.isEmpty ? nil : typed) == false { model = was }
+        }
     }
 
     /// The model name looks like another provider's: said on the row, with the way back to the default.

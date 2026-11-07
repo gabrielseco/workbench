@@ -42,7 +42,8 @@ import WorkbenchCore
     @Test func aRefusalIsSaidAndTheFileKeepsWhatItHad() async throws {
         let (store, fixture) = try await store(config: "[agents.run]\nmodel = \"opus\"\n")
         let before = try text(fixture)
-        await store.setAgent(.run, .model, to: "has a space")
+        let written = await store.setAgent(.run, .model, to: "has a space")
+        #expect(!written, "the caller is told, so the field goes back")
         #expect(store.actionError?.contains("cannot be set to that") == true, "\(String(describing: store.actionError))")
         #expect(try text(fixture) == before)
         #expect(store.agentSetup?.row(.run)?.model == "opus", "the picker is back on what the file has")
@@ -110,7 +111,7 @@ import WorkbenchCore
     @Test func aRowIsEditableOnlyWithEditAndWarnsOnAModelFromTheOtherProvider() async throws {
         let (store, _) = try await store(config: "[agents.run]\nprovider = \"codex\"\nmodel = \"opus\"\n")
         let row = try #require(store.agentSetup?.row(.run))
-        let edit = AgentEdit(set: { _, _, _ in }, goalOff: {})
+        let edit = AgentEdit(set: { _, _, _ in true }, goalOff: { true })
         let reading = try drawn(AgentRow(row: row))
         let editable = try drawn(AgentRow(row: row, edit: edit))
         #expect(reading != editable, "the pickers are drawn")
