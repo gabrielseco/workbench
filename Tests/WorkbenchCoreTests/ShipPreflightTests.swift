@@ -273,6 +273,20 @@ private func refusal(_ body: () async throws -> ShipPlan) async -> ShipError? {
         }
     }
 
+    @Test func ghIsFoundInTheUsualPlacesWhenPATHIsBare() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("gh-home-\(UUID().uuidString)")
+        let bin = home.appendingPathComponent(".local/bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let gh = bin.appendingPathComponent("gh")
+        try "#!/bin/sh\n".write(to: gh, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh.path)
+        let parent = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home.path]
+        #expect(try GitRunner.discover(tool: "gh", from: parent).executable.path == gh.path)
+        // Only gh gets the extra places: another tool stays as PATH says.
+        #expect(throws: GitError.toolNotFound("pr-shots")) { try GitRunner.discover(tool: "pr-shots", from: parent) }
+    }
+
     @Test func aCutOffRemoteListingIsRefusedNotReadAsAbsent() throws {
         let sha = String(repeating: "a", count: 40)
         let wanted = "\(sha)\trefs/heads/workbench/t\n"
