@@ -100,4 +100,27 @@ public struct AgentSetup: Sendable, Equatable {
     }
 
     public static func chatAgent(for setup: AgentSetup) -> String? { setup.row(.goal)?.label }
+
+    /// The providers a role can be set to, and the efforts `reasoning_effort` takes, for a picker.
+    public static let providers: [AgentProviderID] = [.claude, .codex]
+    public static let efforts = AgentsConfig.efforts
+
+    /// The provider a model name looks like it belongs to, when that is not `provider`: `opus` on Codex is a Claude name, `gpt-6.1` on
+    /// Claude is an OpenAI one. A name that looks like neither is no mismatch: only a name it knows is flagged.
+    public static func modelFit(provider: AgentProviderID, model: String) -> AgentProviderID? {
+        let name = model.lowercased()
+        let claude = ["opus", "sonnet", "haiku"].contains { name == $0 || name.hasPrefix($0 + "[") } || name.hasPrefix("claude-")
+        let openAI = name.hasPrefix("gpt-") || name.range(of: #"^o[0-9]"#, options: .regularExpression) != nil
+        if claude, provider != .claude { return .claude }
+        if openAI, provider != .codex { return .codex }
+        return nil
+    }
+
+    /// Said after the run agent is changed while a coding thread is active: `run` refuses a goal approved for other coding settings.
+    public static func runChangeNote(in project: Project) -> String? {
+        let store = ThreadStore(project: project)
+        guard let active = store.activeThreadID(), !store.state(of: active).isChat else { return nil }
+        return "thread \(active) may have been approved for the old run settings: `workbench run` refuses until "
+            + "`workbench goal approve` binds the new ones"
+    }
 }

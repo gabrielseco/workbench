@@ -1,6 +1,6 @@
 # P25: Project agents
 
-Status: slices 1 and 2 built; slice 3 planned. A project's `[agents.<role>]` tables decide who chats, drafts, plans, codes, judges, reviews
+Status: built (slices 1, 2 and 3). A project's `[agents.<role>]` tables decide who chats, drafts, plans, codes, judges, reviews
 and writes the PR, and until now the only way to see or change them was the config file: a chat ran on Codex through `agents.goal` and
 nothing in the app said so. This phase shows the setup, then lets a person change it.
 
@@ -10,7 +10,7 @@ nothing in the app said so. This phase shows the setup, then lets a person chang
 |---|---|---|
 | 1 | The **Agents card** (read-only) and the agent named on a chat and on the new-thread screen | `AgentSetup`, a value read from `Config` through the resolvers a run uses; nothing is written |
 | 2 (built) | `workbench config set <key> <value>` and `config unset <key>`, and the core editor behind them (`ConfigEdit`): one key changed, the file's comments and table order kept, the result parsed as a config before it is written, a change made meanwhile not overwritten; allowed while a thread is active (a chat is itself an active thread, and approval already refuses a run whose settings changed, so the command says so instead of blocking) | `ConfigEdit`; `GoalAgentSetup` now calls it; `scripts/verify-cli/config-set.sh` |
-| 3 | Pickers in the card (provider, model, effort per role) that call the editor, and a warning when a model name does not fit its provider | none |
+| 3 (built) | Pickers in the card (provider, effort and a model field per role; the goal agent can be turned off) that call `ConfigEdit`, and a warning with a one-tap `Use default model` when a model name looks like the other provider's | `AgentSetup.modelFit`, `AgentSetup.runChangeNote`; the app's `ProjectStore.setAgent` |
 
 ## Slice 1
 
@@ -33,3 +33,11 @@ trailing comment; a new key goes after the table's last line of content; a missi
 when it was the last key and nothing else is in it), parsed with `Config.parse` and only then written, atomically and with the file's mode. A
 config that does not load as it is, one over 256 KiB, or one with Windows line endings is refused untouched. Other keys (`check_command`,
 `[tools]`, `allow_unpriced`, review stages) are not editable here.
+
+## Slice 3
+
+The card's rows are editable (`AgentRow` with an `AgentEdit`): a provider picker, an effort picker and a model field per role, each change one `ConfigEdit`
+call off the main thread (`ProjectStore.setAgent`; the goal agent off removes its provider, model and effort together, since a goal table needs a provider),
+followed by a fresh read of the config, so the card always shows what the file has and a refusal (a value the config would not load, no config file) is said in
+words. The model is a typed name: no list of known models is kept, since it would go stale. `AgentSetup.modelFit` flags only names it knows (`opus`, `sonnet`,
+`haiku`, `claude-*` on Codex; `gpt-*` and the o-series on Claude) and a provider change never clears the model silently. The verifier's model is read-only.
