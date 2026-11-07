@@ -321,6 +321,7 @@ One fixed set per project, in `.workbench/config.toml` (no named profiles until 
 
 ```toml
 check_command = "scripts/check.sh"      # optional; written exactly as it will be invoked
+# permissions = "allowlist"             # "allowlist" (default): only [tools] allowed and grants. "auto": claude's classifier decides what is safe in the worktree (P24)
 # app_type = "web"                      # "web" (default) or "desktop": desktop makes doctor check Screen Recording for the verifier
 # setup_command = "mix deps.get"        # optional; run once in a new worktree before its first turn
 # copy = [".env.*", "example/.env"]     # optional; git-ignored files copied from your checkout into each new worktree
