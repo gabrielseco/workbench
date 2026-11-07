@@ -35,9 +35,10 @@ import Testing
 
     private func avatarDraws(_ blank: Data) -> Bool { pixels(AgentAvatar()) != blank }
 
+    /// A scroll view is not drawn by an image renderer, so the code box's look is seen live.
     @Test func aCodeBoxKeepsItsTextAndItsHeightAndAnEmptyNoteDrawsItsSizes() throws {
         let box = CodeBox("let x = 1", height: .tall)
-        #expect(box.text == "let x = 1" && box.height == .tall, "(a scroll view is not drawn by an image renderer, so it is seen live)")
+        #expect(box.text == "let x = 1" && box.height == .tall)
         let blank = try #require(pixels(Color.clear, width: 300, height: 200))
         let small = try #require(pixels(EmptyNote("No threads yet.", size: .small), width: 300, height: 200))
         let large = try #require(pixels(EmptyNote("No threads yet.", size: .large), width: 300, height: 200))
