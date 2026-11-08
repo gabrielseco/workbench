@@ -52,7 +52,9 @@ jobs:
             ~/swiftlint-0.65.1/swiftlint lint --quiet
           else
             echo "No SwiftLint binary (the release host did not answer): running the 0.65.1 image from ghcr.io instead"
-            docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.1 swiftlint lint --quiet
+            # Not --quiet: SwiftLint's own last line ("Done linting! Found 0 violations ... in N files") is what shows it read the repository.
+            docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.1 swiftlint lint 2>&1 | tee swiftlint.log | tail -n 3
+            test "${PIPESTATUS[0]}" -eq 0
           fi
       - name: Timing script check
         run: scripts/test-timings-check.sh
