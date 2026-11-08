@@ -23,7 +23,7 @@ struct RootView: View {
     }
 }
 
-/// The project pill, the base, the state pill and the spend meter.
+/// The project pill, the base, the state pill and the spend meter. The agents are not here: the project card's row menu and ⌘, open them.
 struct ToolbarBar: View {
     var store: ProjectStore
 
@@ -36,7 +36,6 @@ struct ToolbarBar: View {
     var body: some View {
         HStack(spacing: Space.m) {
             ProjectPill(store: store)
-            AgentsPill(store: store)
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
@@ -72,29 +71,6 @@ struct ProjectPill: View {
         }
         .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
         .help(store.project?.root.path ?? "Choose a project")
-    }
-}
-
-/// What the project's coding agent is, and the way to the Agents card (also ⌘,): the card was a link at the foot of the rail.
-struct AgentsPill: View {
-    var store: ProjectStore
-
-    /// "Codex · gpt-6.1-terra" for the run role; "Agents" when the config is unread, missing or has no such row.
-    static func text(_ setup: AgentSetup?) -> String { setup?.row(.run)?.label ?? "Agents" }
-
-    var body: some View {
-        ToolbarPillButton(selected: store.showingAgents) {
-            store.showingAgents.toggle()
-        } label: {
-            HStack(spacing: Space.s) {
-                Image(systemName: "cpu").textStyle(.captionStrong, .secondary)
-                // A model named by hand can be long: truncate so the base, spend and state keep their room.
-                Text(Self.text(store.agentSetup)).textStyle(.body).lineLimit(1).truncationMode(.tail).frame(maxWidth: 220)
-            }
-        }
-        .disabled(store.project == nil)
-        .accessibilityLabel("Agents")
-        .help("\(Self.text(store.agentSetup)): which provider and model each agent role of this project uses (⌘,)")
     }
 }
 

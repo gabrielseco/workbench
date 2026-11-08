@@ -13,7 +13,9 @@ extension View {
 
     /// The cards that belong to the window, not to a screen: the agents and the projects.
     private func windowCards(_ store: ProjectStore) -> some View {
-        modal("Agents", isPresented: Bindable(store).showingAgents, size: .medium, layer: Layer.agents.rawValue) {
+        modal(
+            Self.agentsTitle(store), isPresented: Bindable(store).showingAgents, size: .medium, layer: Layer.agents.rawValue
+        ) {
             AgentsCard(store: store)
         }
         .modal(
@@ -22,6 +24,11 @@ extension View {
         ) {
             ProjectPickerCard(store: store)
         }
+    }
+
+    /// `Agents · <folder>`: the card is for one project, and the rail can open it for one that is not the open one.
+    private static func agentsTitle(_ store: ProjectStore) -> String {
+        store.agentsProject.map { "Agents · " + URL(fileURLWithPath: $0).lastPathComponent } ?? "Agents"
     }
 
     /// The modals over the feed, and the screenshot preview, which the new-goal card and the chat composer open too.
@@ -97,7 +104,7 @@ private enum Layer: Int {
 
 /// The modals a launch can open (`LaunchOptions.opens`), by the name `WORKBENCH_APP_OPEN` gives.
 enum LaunchModal: String, Equatable {
-    case review, diff, discard
+    case review, diff, discard, agents
     case prReview = "pr-review"
     case merge
 }
@@ -111,6 +118,7 @@ extension ProjectStore {
             modals.reviewingDetails = true
             modals.diffPath = review?.files.first?.path
         case .discard: await prepareDiscard()
+        case .agents: showAgents()
         case .prReview: await showPRReview()
         case .merge: modals.confirmingMerge = true
         }

@@ -41,7 +41,7 @@ import WorkbenchCore
                 // The window may be closed (the app stays resident): bring it back, then show the card.
                 Button("Agents…") {
                     Self.showWindow()
-                    store.showingAgents = true
+                    store.showAgents()
                 }
                     .keyboardShortcut(",", modifiers: .command)
                     .disabled(store.project == nil)

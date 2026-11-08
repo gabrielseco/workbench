@@ -26,7 +26,8 @@ extension ProjectStore {
 
     /// True when the edit was written (or was already what the file said).
     private func edit(role: AgentRole, _ work: @escaping @Sendable (Project) throws -> Void) async -> Bool {
-        guard let project else { return false }
+        // The card edits the project it was opened for; without a card (a chat's "enable the goal agent") it is the open one.
+        guard let project = agentsProjectValue ?? project else { return false }
         // One at a time and in the order they were made, off the main thread; the note reads the thread logs, so it is made there too.
         let (failure, note) = await AgentEditQueue.shared.run { () -> (String?, String?) in
             do { try work(project) } catch { return ("\(error)", nil) }
@@ -34,7 +35,9 @@ extension ProjectStore {
         }
         actionError = failure
         actionNote = note
-        await refreshAgentSetup()
+        await refreshCardAgents()
+        // The open project's own copy (a chat's agent label, the New goal card) follows when it was the one edited.
+        if project.root == self.project?.root { await refreshAgentSetup() }
         return failure == nil
     }
 }

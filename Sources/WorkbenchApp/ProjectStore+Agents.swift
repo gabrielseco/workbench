@@ -20,6 +20,47 @@ extension ProjectStore {
 
     var agentConfigMissing: Bool { agentConfig == .missing }
 
+    /// Whether an Agents card is up; setting it true opens the open project's, false closes whichever is up.
+    var showingAgents: Bool {
+        get { agentsProject != nil }
+        set { agentsProject = newValue ? project?.root.path : nil }
+    }
+
+    /// What the Agents card shows: the roles of the project it was opened for.
+    var cardAgentSetup: AgentSetup? {
+        if case .read(let setup) = cardAgentConfig { return setup }
+        return nil
+    }
+
+    /// The project the Agents card is about, as core's `Project` (its config file is where edits go).
+    var agentsProjectValue: Project? { agentsProject.map { Project(root: URL(fileURLWithPath: $0)) } }
+
+    /// Opens the Agents card for the project at `path`, or for the open one. A project that is not the open one is edited where it
+    /// is: nothing about the open project changes.
+    func showAgents(for path: String? = nil) {
+        guard let target = path ?? project?.root.path else { return }
+        pickingProject = false
+        // The same card asked for again keeps what it read (its view is mounted and will not load again); another project's starts blank.
+        if agentsProject != target { cardAgentConfig = .unread }
+        agentsProject = target
+    }
+
+    /// Reads the config of the project the card is for. A config that does not load leaves nothing to show; nothing is written.
+    func refreshCardAgents() async {
+        guard let target = agentsProjectValue else {
+            cardAgentConfig = .unread
+            return
+        }
+        let url = target.configURL
+        let found = await Task.detached { Self.readAgentConfig(at: url) }.value
+        if agentsProjectValue?.configURL == url { cardAgentConfig = found }
+    }
+
+    nonisolated static func readAgentConfig(at url: URL) -> AgentConfigState {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        return (try? Config.load(from: url)).map { .read(AgentSetup(config: $0)) } ?? .unreadable
+    }
+
     /// Reads the project's config again for the Agents card and the agent a chat names. A config that does not load leaves nothing to
     /// show (the Doctor and the actions say why); nothing is written.
     func refreshAgentSetup() async {
@@ -28,10 +69,7 @@ extension ProjectStore {
             return
         }
         let url = project.configURL
-        let found: AgentConfigState = await Task.detached {
-            guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
-            return (try? Config.load(from: url)).map { .read(AgentSetup(config: $0)) } ?? .unreadable
-        }.value
+        let found = await Task.detached { Self.readAgentConfig(at: url) }.value
         // The project may have changed while the file was read.
         if self.project?.configURL == url { agentConfig = found }
     }

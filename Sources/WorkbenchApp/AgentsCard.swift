@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkbenchCore
 
-/// Each agent role of the open project and what it is set to, with a provider, an effort and a model to change (written to
+/// Each agent role of the project the card was opened for and what it is set to, with a provider, an effort and a model to change (written to
 /// `.workbench/config.toml` through `ConfigEdit`, as `workbench config set` does). The verifier's model is read-only here.
 struct AgentsCard: View {
     var store: ProjectStore
@@ -14,14 +14,14 @@ struct AgentsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            if let setup = store.agentSetup {
+            if let setup = store.cardAgentSetup {
                 VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(setup.rows) { row in
                         // The verifier's model is not an agent key; a key a stage decides is locked in its row.
                         AgentRow(row: row, edit: row.role == .verifier ? nil : edit)
                     }
                 }
-            } else if store.agentConfigMissing {
+            } else if store.cardAgentConfig == .missing {
                 Text(
                     "This project has no .workbench/config.toml, so every role runs its provider's default and there is no goal "
                         + "agent: chat and drafting are off. Run `workbench init` to make one, then change the roles here."
@@ -41,10 +41,11 @@ struct AgentsCard: View {
         }
         // What an edit said is for the card: it is not left on the screen behind it.
         .onDisappear { (store.actionError, store.actionNote) = (nil, nil) }
-        .task {
+        // Keyed by the project: ⌘, over a card that is already up for another project loads that project's roles.
+        .task(id: store.agentsProject) {
             store.actionError = nil
             store.actionNote = nil
-            await store.refreshAgentSetup()
+            await store.refreshCardAgents()
         }
     }
 }
