@@ -121,11 +121,12 @@ import Testing
             try await log.append(.threadCreated, data: [:])
             await log.close()
         }
-        let newest = try EventLogWriter.open(at: project.eventsURL("a-newest"), now: { Date(timeIntervalSince1970: 2_000_000) })
+        let later = project.eventsURL("a-newest")
+        let newest = try EventLogWriter.open(at: later, now: { Date(timeIntervalSince1970: 2_000_000) })
         try await newest.append(.threadCreated, data: [:])
         for step in [approved, started, ended] { try await newest.append(step.kind, turn: step.turn, data: step.data) }
         await newest.close()
 
-        #expect(ProjectSummaryLoader.read(project: project)?.needsYou == 1, "created later, so counted whatever its name sorts as")
+        #expect(ProjectSummaryLoader.read(project: project)?.needsYou == 1, "created later, so counted whatever its name")
     }
 }
