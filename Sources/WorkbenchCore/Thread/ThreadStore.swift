@@ -4,6 +4,10 @@ public enum ThreadStoreError: Error, Equatable, Sendable, CustomStringConvertibl
     case activeThreadExists(String)
     case threadExists(String)
     case noActiveThread
+    /// Several threads are active and the command did not say which one.
+    case severalActive([String])
+    /// `max_active_threads` threads are already active.
+    case tooManyActive([String], max: Int)
     case invalidName(String)
     /// `workbench doctor` holds the project; a thread started now would run its check next to doctor's.
     case doctorRunning
@@ -13,6 +17,11 @@ public enum ThreadStoreError: Error, Equatable, Sendable, CustomStringConvertibl
         case .doctorRunning: "`workbench doctor` is running in this project; try again when it has finished."
         case .activeThreadExists(let id):
             "thread '\(id)' is still active. Finish it first (accept, discard) or run `workbench abandon`."
+        case .severalActive(let ids):
+            "\(ids.count) threads are active (\(ids.joined(separator: ", "))): name one with --thread."
+        case .tooManyActive(let ids, let max):
+            "\(ids.count) of \(max) allowed threads are active (\(ids.joined(separator: ", "))). Finish one first "
+                + "(accept, discard), run `workbench abandon`, or raise `max_active_threads`."
         case .threadExists(let id): "thread '\(id)' already exists"
         case .noActiveThread: "there is no active thread. Start one with `workbench goal new <name>`."
         case .invalidName(let name):
@@ -162,10 +171,28 @@ public struct ThreadStore: Sendable {
 
     /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
     /// ambiguous, the newest wins; `create` refuses to make a second, so this should be one.
-    public func activeThreadID() -> String? {
+    public func activeThreadIDs() -> [String] {
         summaries()
             .filter(\.isActive)
-            .max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }?.id
+            .sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.map(\.id)
+    }
+
+    /// The most recently created active thread: what a view shows when nobody picked one. A command that changes a thread
+    /// does not use it; with several active it needs a name (`Context.threadID`).
+    public func newestActiveThreadID() -> String? { activeThreadIDs().first }
+
+    /// What a new thread meets: nothing when a slot is free, else the active threads that fill them.
+    public func fullThreads(maxActive: Int) -> [String]? {
+        let active = activeThreadIDs()
+        return active.count >= maxActive ? active : nil
+    }
+
+    /// The thread in the way of a new one, for a flow that may abandon it: nil when a slot is free, the one active thread
+    /// when the cap is one. With a higher cap and no free slot it throws, since no flow picks which of several to end.
+    public func blockingThread(maxActive: Int) throws -> String? {
+        guard let full = fullThreads(maxActive: maxActive) else { return nil }
+        if maxActive == 1 { return full[0] }
+        throw ThreadStoreError.tooManyActive(full, max: maxActive)
     }
 
     /// The thread with a live runner (a turn, check, verify, plan or judge in progress), if any. A crashed runner
@@ -182,10 +209,13 @@ public struct ThreadStore: Sendable {
         }
     }
 
-    /// Makes the thread directory and refuses when another thread is still active (the single-thread rule).
-    public func create(id: String) throws {
+    /// Makes the thread directory and refuses when `maxActive` threads are already active (one is the single-thread rule).
+    public func create(id: String, maxActive: Int = 1) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
-        if let active = activeThreadID() { throw ThreadStoreError.activeThreadExists(active) }
+        if let full = fullThreads(maxActive: maxActive) {
+            throw maxActive == 1
+                ? ThreadStoreError.activeThreadExists(full[0]) : ThreadStoreError.tooManyActive(full, max: maxActive)
+        }
         try requireNoDoctor()
         guard !FileManager.default.fileExists(atPath: project.threadDirectory(id).path) else {
             throw ThreadStoreError.threadExists(id)

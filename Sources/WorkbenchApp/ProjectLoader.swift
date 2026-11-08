@@ -32,7 +32,7 @@ enum ProjectLoader {
     static func currentThread(store: ThreadStore, selected: String? = nil) -> String? {
         // The person's pick, while the thread is still there.
         if let selected, store.threadIDs().contains(selected) { return selected }
-        if let active = store.activeThreadID() { return active }
+        if let active = store.newestActiveThreadID() { return active }
         let newestFirst = store.summaries().sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }
         return newestFirst.first { !store.state(of: $0.id).cleaned }?.id ?? newestFirst.first?.id
     }

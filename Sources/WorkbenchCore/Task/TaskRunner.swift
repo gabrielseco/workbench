@@ -156,7 +156,8 @@ public struct TaskRunner: Sendable {
         // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
         if task.fix == .pr {
             let store = ThreadStore(project: project)
-            if let active = store.activeThreadID() { return busy(active) }
+            let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? 1
+            if let full = store.fullThreads(maxActive: cap) { return busy(full.joined(separator: ", ")) }
             if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
         }
 
@@ -233,7 +234,7 @@ public struct TaskRunner: Sendable {
 
     private func busy(_ what: String) -> TaskRunResult {
         TaskRunResult(
-            outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (one thread at a time)")
+            outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (no free thread slot)")
     }
 
     /// A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
@@ -292,6 +293,8 @@ public struct TaskRunner: Sendable {
                 settings: settings, title: TaskPrompt.title(task: name, units: units))
         } catch ThreadStoreError.activeThreadExists(let active) {
             return busy(active)
+        } catch ThreadStoreError.tooManyActive(let active, _) {
+            return busy(active.joined(separator: ", "))
         } catch { return fail("the thread could not be created: \(error)", units: ids) }
 
         do { _ = try await service.approve(id: id, config: config) } catch {

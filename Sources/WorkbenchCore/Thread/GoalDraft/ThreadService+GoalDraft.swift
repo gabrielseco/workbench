@@ -215,7 +215,7 @@ extension ThreadService {
         case .newThread(let name, let named):
             guard SafeNames.isThreadID(name) else { throw GoalDraftRefusal.invalidName(name) }
             // With `abandonActive` the active thread is abandoned once the draft is good, not before: a failed draft changes nothing.
-            activeAtStart = ThreadStore(project: project).activeThreadID()
+            activeAtStart = try ThreadStore(project: project).blockingThread(maxActive: config.maxActiveThreads)
             if !abandonActive, let active = activeAtStart { throw GoalDraftRefusal.activeThread(active) }
             do { try ThreadStore(project: project).requireNoDoctor() } catch { throw GoalDraftRefusal.doctorRunning }
             if let named { base = named } else { base = await defaultBase() }
@@ -542,7 +542,11 @@ extension ThreadService {
         var abandoned: String?
         if abandonActive {
             // Only the thread that was active when the draft was asked for: one made while the drafter ran is not ours to end.
-            let now = ThreadStore(project: project).activeThreadID()
+            let now: String?
+            do { now = try ThreadStore(project: project).blockingThread(maxActive: config?.maxActiveThreads ?? 1) } catch {
+                result.failure = "the project filled its active threads while drafting; nothing was abandoned or written."
+                return result
+            }
             if now != prepared.activeAtStart {
                 result.failure = "the active thread changed while drafting (\(now ?? "none")); nothing was abandoned or written."
                 return result

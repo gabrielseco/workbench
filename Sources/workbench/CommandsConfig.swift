@@ -58,9 +58,10 @@ extension Commands {
             let was = change.old ?? "(not set)"
             let now = change.new ?? "(not set)"
             out(change.written ? "\(key): \(was) -> \(now)" : "\(key): already \(now), nothing written")
-            if change.written, key.role == .run, let active = ctx.store.activeThreadID() {
+            if change.written, key.role == .run, case let active = ctx.store.activeThreadIDs(), !active.isEmpty {
                 out(
-                    "note: thread \(active) may have been approved for the old run settings: `workbench run` refuses until "
+                    "note: thread \(active.joined(separator: ", ")) may have been approved for the old run settings: "
+                        + "`workbench run` refuses until "
                         + "`workbench goal approve` binds the new ones")
             }
         } catch let failure as ConfigEdit.Failure {

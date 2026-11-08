@@ -125,7 +125,7 @@ private struct Safe {
         let result = try await safe.run()
         #expect(result.outcome == .reported && result.units == ["ROU"])
         // It took nobody's place: the other thread is still the active one.
-        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == active)
+        #expect(ThreadStore(project: safe.fx.project).newestActiveThreadID() == active)
     }
 
     @Test func aTaskThatStartsAThreadIsStillSkippedForAnActiveOne() async throws {
@@ -210,7 +210,7 @@ private struct Safe {
         #expect(TaskRunner.notDiscarded("g-x") == "thread g-x could not be removed and is left for you (workbench abandon)")
         let id = try await service.newThread(name: "tmp", base: "main")
         #expect(await runner.discard(id, service: service))
-        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == nil)
+        #expect(ThreadStore(project: safe.fx.project).newestActiveThreadID() == nil)
         // The service refuses a thread that has already ended: that is a discard that did not happen, and it says so.
         #expect(await runner.discard(id, service: service) == false)
     }
@@ -306,7 +306,7 @@ private struct Safe {
         let first = try await safe.run("write=a.txt")
         #expect(first.outcome == .failed)
         #expect(first.reason?.contains("no turn had started, so the thread was discarded") == true)
-        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == nil)
+        #expect(ThreadStore(project: safe.fx.project).newestActiveThreadID() == nil)
         // The next run is not skipped for a dead thread: it tries, and fails the same way.
         let second = try await safe.run("write=a.txt")
         #expect(second.outcome == .failed)
@@ -316,7 +316,7 @@ private struct Safe {
         let safe = try await Safe(extraConfig: #"check_command = "false""#)
         let result = try await safe.run("write=a.txt")
         #expect(result.outcome == .failed && result.reason?.contains("left for you") == true)
-        #expect(ThreadStore(project: safe.fx.project).activeThreadID() == result.thread)
+        #expect(ThreadStore(project: safe.fx.project).newestActiveThreadID() == result.thread)
         let next = try await safe.run("write=a.txt")
         #expect(next.outcome == .skippedProjectBusy)
     }

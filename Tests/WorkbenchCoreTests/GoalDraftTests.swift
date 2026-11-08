@@ -175,7 +175,7 @@ func drafting(
         let why = String(describing: result.failure)
         #expect(result.id == nil && why.contains("no thread could be made"), "\(why)")
         #expect(d.threads.isEmpty, "the half-made thread is gone")
-        #expect(ThreadStore(project: d.fx.project).activeThreadID() == nil, "it does not block the next draft")
+        #expect(ThreadStore(project: d.fx.project).newestActiveThreadID() == nil, "it does not block the next draft")
         #expect(try await d.draft().id != nil)
     }
 
@@ -359,7 +359,7 @@ func drafting(
 
         for d in [bad, crash, silent, hang, stopped] {
             #expect(d.threads.isEmpty, "no thread directory for a failed draft")
-            #expect(ThreadStore(project: d.fx.project).activeThreadID() == nil)
+            #expect(ThreadStore(project: d.fx.project).newestActiveThreadID() == nil)
             #expect(try await d.branches() == before)
         }
     }
@@ -398,7 +398,7 @@ func drafting(
             abandonActive: true, environment: d.environment)
         let id = try #require(result.id)
         #expect(ThreadStore(project: d.fx.project).state(of: old).decision == "abandoned")
-        #expect(ThreadStore(project: d.fx.project).activeThreadID() == id)
+        #expect(ThreadStore(project: d.fx.project).newestActiveThreadID() == id)
     }
 
     @Test func abandonActiveSaysSoWhenTheNewThreadCouldNotBeMade() async throws {
@@ -418,7 +418,7 @@ func drafting(
         let result = try await d.fx.service.draftGoal(
             target: .newThread(name: "retry", base: "main"), request: "x", config: d.config, abandonActive: true,
             environment: d.environment, attach: { _ in try? ThreadStore(project: d.fx.project).create(id: "g-2026-01-01-other") })
-        let other = try #require(ThreadStore(project: d.fx.project).activeThreadID())
+        let other = try #require(ThreadStore(project: d.fx.project).newestActiveThreadID())
         #expect(result.id == nil && result.failure?.contains("changed while drafting") == true)
         #expect(ThreadStore(project: d.fx.project).state(of: other).decision == nil)
     }

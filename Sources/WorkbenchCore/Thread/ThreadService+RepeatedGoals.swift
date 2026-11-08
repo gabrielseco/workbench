@@ -11,13 +11,13 @@ extension ThreadService {
     /// Makes the thread directory for `plain`, or for `plain-<suffix>` when a thread or a `workbench/<id>`
     /// branch already has that id, so one goal can be started again. The branch check is here because
     /// `WorktreeManager.create` would otherwise refuse the run, after the goal was written.
-    func createThreadDirectory(for plain: String) async throws -> String {
+    func createThreadDirectory(for plain: String, maxActive: Int = 1) async throws -> String {
         var id = plain
         // The plain id is tried first, then `suffixAttempts` suffixed ones.
         for _ in 0...Self.suffixAttempts {
             if try await !idTaken(id) {
                 do {
-                    try ThreadStore(project: project).create(id: id)
+                    try ThreadStore(project: project).create(id: id, maxActive: maxActive)
                     return id
                 } catch ThreadStoreError.threadExists {}  // lost a race for it; take another suffix
             }

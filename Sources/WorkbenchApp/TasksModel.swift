@@ -132,7 +132,7 @@ struct TasksReader: Sendable {
             let service = timerService(project: project, environment: environment)
             return TasksSnapshot(
                 projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now,
-                activeThread: ThreadStore(project: project).activeThreadID())
+                activeThread: ThreadStore(project: project).newestActiveThreadID())
         }
     }
 

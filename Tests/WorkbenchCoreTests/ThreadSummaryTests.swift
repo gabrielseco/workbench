@@ -52,7 +52,7 @@ private func openLog(_ id: String, in project: Project) throws -> EventLogWriter
                 "text": "\"kind\":\"review.decision\",\"data\":{\"decision\":\"discarded\"}",
             ])
         #expect(store.summary(of: "g-b").isActive)
-        #expect(store.activeThreadID() == "g-b")
+        #expect(store.newestActiveThreadID() == "g-b")
     }
 
     @Test func unknownDecisionsAndMissingLogsAreInactiveAndEmpty() async throws {

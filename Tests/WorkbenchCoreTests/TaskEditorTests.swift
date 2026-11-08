@@ -165,13 +165,13 @@ private func editing(
     @Test func doesNotNeedTheThreadSlot() async throws {
         let e = try await editing()
         let active = try await e.drafting.fx.approvedThread()
-        let before = ThreadStore(project: e.task.project).activeThreadID()
+        let before = ThreadStore(project: e.task.project).newestActiveThreadID()
         #expect(before == active)
         let result = try await e.propose()
         #expect(result.proposal != nil, "\(String(describing: result.failure))")
-        #expect(ThreadStore(project: e.task.project).activeThreadID() == active, "the active thread is untouched")
+        #expect(ThreadStore(project: e.task.project).newestActiveThreadID() == active, "the active thread is untouched")
         try e.editor.accept(try #require(result.proposal))
-        #expect(ThreadStore(project: e.task.project).activeThreadID() == active)
+        #expect(ThreadStore(project: e.task.project).newestActiveThreadID() == active)
     }
 
     @Test func stopTimeoutCrash() async throws {

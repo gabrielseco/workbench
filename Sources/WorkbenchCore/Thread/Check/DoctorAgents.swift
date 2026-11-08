@@ -48,7 +48,7 @@ extension Doctor {
     }
 
     func activeGoal() -> DoctorGoal? {
-        guard let id = store.activeThreadID(),
+        guard let id = store.newestActiveThreadID(),
             let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal
         else { return nil }

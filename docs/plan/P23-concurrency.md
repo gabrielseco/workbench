@@ -52,11 +52,16 @@ As built: blocks are slots of ten from 41000 (each project starts at a slot of i
 Failure cases: a block already in use by something else (the step reports it, never starts on a port it was not given); two threads
 created at once get different blocks; a thread from before this change still runs.
 
-### 2. The guard behind a setting
+### 2. The guard behind a setting (built)
 
 `activeThreads()` replaces `activeThreadID()`; `max_active_threads` (default 1) replaces the refusal in `create`. Go through each caller
 and decide it (the list above); the draft and chat paths compare "active at start" with "active now", which becomes "this thread's state".
 Scheduled tasks skip with `skipped-project-busy` only when no slot is free. With the default at 1 every behaviour is unchanged.
+
+As built: `ThreadStore.activeThreadIDs()` (newest first), `newestActiveThreadID()` for views and `blockingThread(maxActive:)` for the
+flows that may abandon; `create(id:maxActive:)` throws `activeThreadExists` at 1 and `tooManyActive` above it. `abandonActive` ends the
+one thread only at a cap of 1 (the app's flow is reworked in slice 5). `Context.threadID` throws `severalActive` (exit 6) without
+`--thread`; slice 3 adds the flag where a command lacks it and the docs for it. Doctor and the app show the newest active thread.
 
 ### 3. The CLI names its thread
 
