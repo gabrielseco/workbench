@@ -1,0 +1,12 @@
+{"data":{},"kind":"thread.created","seq":1,"ts":"2026-10-28T10:00:01.000Z","turn":0,"v":1}
+{"data":{"hash":"h1"},"kind":"goal.approved","seq":2,"ts":"2026-10-28T11:00:00.000Z","turn":0,"v":1}
+{"data":{"session_id":"s1"},"kind":"turn.started","seq":3,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"cost_usd":1.88,"result":"succeeded"},"kind":"turn.ended","seq":4,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{},"kind":"verifier.started","seq":5,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"bytes":2286,"name":"list-states.png","path":"proof\/turn-1\/list-states.png","sha256":"0","source":"verifier"},"kind":"proof.added","seq":6,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"bytes":2285,"name":"empty-states.png","path":"proof\/turn-1\/empty-states.png","sha256":"0","source":"verifier"},"kind":"proof.added","seq":7,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"bytes":2284,"name":"error-states.png","path":"proof\/turn-1\/error-states.png","sha256":"0","source":"verifier"},"kind":"proof.added","seq":8,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"ok":true,"report":"All three criteria hold."},"kind":"verifier.ended","seq":9,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"head_sha":"abc1234","pr":0,"proof":["list-states.png","empty-states.png","error-states.png"],"round":1,"stage":"design"},"kind":"review_stage.started","seq":10,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"head_sha":"abc1234","ok":true,"round":1,"stage":"design","verdict":"fix"},"kind":"review_stage.finished","seq":11,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
+{"data":{"head_sha":"def5678","pr":0,"proof":["list-states.png","empty-states.png","error-states.png"],"round":2,"stage":"design"},"kind":"review_stage.started","seq":12,"ts":"2026-10-28T11:00:00.000Z","turn":1,"v":1}
