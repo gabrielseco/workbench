@@ -20,9 +20,11 @@ public enum ThreadActivity: String, Sendable, Equatable {
         return .idle
     }
 
-    /// A chat thread's mark: blue while a turn is going, otherwise grey (a chat never asks for a decision of its own).
-    public static func chat(state: ThreadState) -> ThreadActivity {
-        state.decision == nil && state.chat?.open == true ? .working : .idle
+    /// A chat thread's mark: red when its log is damaged, blue while a turn is going, otherwise grey (a chat never asks for a decision of
+    /// its own).
+    public static func chat(state: ThreadState, damaged: Bool = false) -> ThreadActivity {
+        if damaged { return .broken }
+        return state.decision == nil && state.chat?.open == true ? .working : .idle
     }
 }
 
@@ -82,9 +84,17 @@ public enum ProjectSummaryLoader {
         func forget(except keys: Set<String>) { lock.withLock { known = known.filter { keys.contains($0.key) } } }
     }
 
-    public static func read(project: Project, cache: Cache = Cache()) -> ProjectSummary {
+    /// The project's summary, or nil when its threads folder could not be listed (a folder that is there but cannot be read, such as a volume
+    /// that went away): that is not "no threads", and the caller keeps the last count. No threads folder at all is a project with none.
+    public static func read(project: Project, cache: Cache = Cache()) -> ProjectSummary? {
         let store = ThreadStore(project: project)
-        let ids = Array(store.threadIDs().sorted(by: >).prefix(maxThreads))
+        let names: [String]
+        do { names = try FileManager.default.contentsOfDirectory(atPath: project.threadsDirectory.path) } catch {
+            let missing = (error as NSError).domain == NSCocoaErrorDomain && (error as NSError).code == NSFileReadNoSuchFileError
+            guard missing else { return nil }
+            names = []
+        }
+        let ids = Array(names.filter { SafeNames.isThreadID($0) }.sorted(by: >).prefix(maxThreads))
         var summary = ProjectSummary()
         var keys = Set<String>()
         for id in ids {
@@ -103,7 +113,9 @@ public enum ProjectSummaryLoader {
         do { contents = try EventLogReader.read(at: project.eventsURL(id)) } catch { return .broken }
         if contents.events.isEmpty && !contents.problems.isEmpty { return .broken }
         let state = store.state(from: contents.events, id: id)
-        if state.isChat, !FileManager.default.fileExists(atPath: project.goalURL(id).path) { return .chat(state: state) }
+        if state.isChat, !FileManager.default.fileExists(atPath: project.goalURL(id).path) {
+            return .chat(state: state, damaged: !contents.problems.isEmpty)
+        }
         var approval: ApprovalState?
         if let handle = try? FileHandle(forReadingFrom: project.goalURL(id)) {
             defer { try? handle.close() }

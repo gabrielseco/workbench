@@ -43,7 +43,7 @@ import Testing
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "this is not an event\nnor is this\n".write(to: url, atomically: true, encoding: .utf8)
 
-        #expect(ProjectSummaryLoader.read(project: project).failed == 1)
+        #expect(ProjectSummaryLoader.read(project: project)?.failed == 1)
     }
 
     @Test func aProjectWithNoThreadsOrNoFolderHoldsNothing() {
@@ -57,15 +57,15 @@ import Testing
         for index in 0..<4 { try await thread(project, "g-2026-11-08-t\(index)", [approved, started, ended]) }
         let cache = ProjectSummaryLoader.Cache()
 
-        #expect(ProjectSummaryLoader.read(project: project, cache: cache).needsYou == 4)
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache)?.needsYou == 4)
         #expect(cache.replays == 4, "the first read replays each thread once")
-        #expect(ProjectSummaryLoader.read(project: project, cache: cache).needsYou == 4)
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache)?.needsYou == 4)
         #expect(cache.replays == 4, "nothing changed: nothing was replayed")
 
         let log = try EventLogWriter.open(at: project.eventsURL("g-2026-11-08-t2"))
         try await log.append(.reviewDecision, data: ["decision": "accepted"])
         await log.close()
-        #expect(ProjectSummaryLoader.read(project: project, cache: cache).needsYou == 3)
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache)?.needsYou == 3)
         #expect(cache.replays == 5, "only the thread that changed")
     }
 
@@ -73,7 +73,7 @@ import Testing
         let project = project()
         try await thread(project, "g-2026-11-08-a", [approved, started, ended])
         let cache = ProjectSummaryLoader.Cache()
-        #expect(ProjectSummaryLoader.read(project: project, cache: cache).needsYou == 1)
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache)?.needsYou == 1)
         try FileManager.default.removeItem(at: project.threadDirectory("g-2026-11-08-a"))
         #expect(ProjectSummaryLoader.read(project: project, cache: cache) == ProjectSummary())
     }
@@ -84,12 +84,31 @@ import Testing
         for index in 0..<ProjectSummaryLoader.maxThreads {
             try await thread(project, String(format: "g-2026-11-08-n%03d", index), [])
         }
-        #expect(ProjectSummaryLoader.read(project: project).needsYou == 0, "the oldest is past the bound")
+        #expect(ProjectSummaryLoader.read(project: project)?.needsYou == 0, "the oldest is past the bound")
     }
 
     @Test func theSummaryAndTheListShareOneRuleForAThreadsMark() {
         #expect(ThreadActivity.chat(state: ThreadState.derive(from: [], id: "c")) == .idle)
         let sum = ProjectSummary(needsYou: 1, failed: 2, running: 3) + ProjectSummary(needsYou: 4)
         #expect(sum == ProjectSummary(needsYou: 5, failed: 2, running: 3))
+    }
+
+    @Test func aThreadsFolderThatCannotBeListedIsNotZero() async throws {
+        let project = project()
+        try FileManager.default.createDirectory(at: project.workbenchDirectory, withIntermediateDirectories: true)
+        // A file where the folder should be: it exists and cannot be listed, as a volume that went away does not answer.
+        try "x".write(to: project.threadsDirectory, atomically: true, encoding: .utf8)
+        #expect(ProjectSummaryLoader.read(project: project) == nil, "the caller keeps the last count")
+    }
+
+    @Test func aChatWithAValidStartAndACorruptTailIsRedNotGrey() async throws {
+        let project = project()
+        let id = "g-2026-11-08-chat"
+        try await thread(project, id, [Step(kind: .chatMessage, data: ["role": "user", "text": "hello"])])
+        let handle = try FileHandle(forWritingTo: project.eventsURL(id))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{ this is not json\n{ nor this\n".utf8))
+        try handle.close()
+        #expect(ProjectSummaryLoader.read(project: project)?.failed == 1)
     }
 }

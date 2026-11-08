@@ -24,6 +24,7 @@ import WorkbenchCore
     }
 
     func begin(_ path: String) -> Bool { reading.insert(path).inserted }
+    /// Called when the read itself has finished, which may be long after the poll gave up on it.
     func end(_ path: String) { reading.remove(path) }
 
     func set(_ summary: ProjectSummary, tasks: ProjectSummary, for path: String) {
@@ -32,6 +33,12 @@ import WorkbenchCore
     }
 
     func lastTasks(for path: String) -> ProjectSummary { lastTasks[path] ?? ProjectSummary() }
+
+    /// A project whose folder is gone has no count: its tile says so.
+    func forget(_ path: String) {
+        counts[path] = nil
+        lastTasks[path] = nil
+    }
 
     /// Forgets what a project that is no longer on the rail (or is gone) had.
     func keep(_ paths: Set<String>) {
@@ -55,19 +62,34 @@ import WorkbenchCore
     }
 
     /// One project's read: its threads, and its tasks (nil when they could not be read). Off the main actor, writes nothing.
-    nonisolated static func read(
-        _ project: Project, cache: ProjectSummaryLoader.Cache, now: Date
-    ) -> (threads: ProjectSummary, tasks: ProjectSummary?) {
-        (ProjectSummaryLoader.read(project: project, cache: cache), (try? TasksReader.entries(project, now: now)).map(tasks))
+    struct Read: Sendable {
+        /// The project's folder cannot be opened now: the tile says so, and nothing is counted.
+        var unavailable = false
+        /// nil when the threads folder could not be listed: the last count stands.
+        var threads: ProjectSummary?
+        /// nil when the tasks could not be read: their last part stands.
+        var tasks: ProjectSummary?
+    }
+
+    /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
+    nonisolated static func read(_ project: Project, cache: ProjectSummaryLoader.Cache, now: Date) -> Read {
+        if ProjectStore.unavailableReason(project.root.path) != nil { return Read(unavailable: true) }
+        return Read(
+            threads: ProjectSummaryLoader.read(project: project, cache: cache),
+            tasks: (try? TasksReader.entries(project, now: now)).map(tasks))
     }
 
     /// `work` on a background queue, its answer if it comes within `seconds`, else nil: a folder that hangs (a network volume that went away)
     /// cannot hold the poll. The work itself cannot be stopped, so it is left to finish by itself.
-    nonisolated static func raced<T: Sendable>(seconds: TimeInterval, _ work: @escaping @Sendable () -> T) async -> T? {
+    /// `finished` is called when the work really ends, answer used or not.
+    nonisolated static func raced<T: Sendable>(
+        seconds: TimeInterval, finished: @escaping @Sendable () -> Void = {}, _ work: @escaping @Sendable () -> T
+    ) async -> T? {
         await withCheckedContinuation { continuation in
             let once = Once()
             DispatchQueue.global(qos: .utility).async {
                 let value = work()
+                finished()
                 if once.first() { continuation.resume(returning: value) }
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {

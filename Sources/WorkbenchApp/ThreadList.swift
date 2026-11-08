@@ -154,9 +154,10 @@ enum ThreadListLoader {
     }
 
     /// A chat thread's row: its first words, and grey while it waits, blue while a turn is going, over once it has ended.
-    static func chatRow(id: String, state: ThreadState) -> ThreadRow {
+    static func chatRow(id: String, state: ThreadState, damaged: Bool = false) -> ThreadRow {
         let title = chatTitle(state: state, id: id)
-        let mark = ThreadMark(activity: .chat(state: state))
+        let mark = ThreadMark(activity: .chat(state: state, damaged: damaged))
+        if damaged { return ThreadRow(id: id, title: title, mark: mark, line: "The log cannot be read") }
         if let decision = state.decision { return ThreadRow(id: id, title: title, mark: mark, line: decision.capitalized) }
         if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: mark, line: "Chat · replying") }
         return ThreadRow(id: id, title: title, mark: mark, line: "Chat")
@@ -175,7 +176,7 @@ enum ThreadListLoader {
         let state = store.state(from: contents.events, id: id)
         // A chat has no goal file until one is made from it: its first words are its title, and its line says Chat.
         if state.isChat, !FileManager.default.fileExists(atPath: project.goalURL(id).path) {
-            return chatRow(id: id, state: state)
+            return chatRow(id: id, state: state, damaged: !contents.problems.isEmpty)
         }
         var title: String?
         var approval: ApprovalState?
