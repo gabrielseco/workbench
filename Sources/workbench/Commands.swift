@@ -31,7 +31,17 @@ struct Context {
         return only
     }
 
-    /// For read-only commands: the active thread, or else the most recently created one.
+    /// For a command that spends money or writes into a thread but may fall back to the latest one: the same as viewing, except
+    /// that several active threads are refused without a name, as for `threadID`.
+    func threadIDForActing(_ named: String?) throws -> String {
+        if named == nil {
+            let active = store.activeThreadIDs()
+            if active.count > 1 { throw ThreadStoreError.severalActive(active) }
+        }
+        return try threadIDForViewing(named)
+    }
+
+    /// For read-only commands: the active thread (the newest when several are), or else the most recently created one.
     func threadIDForViewing(_ named: String?) throws -> String {
         if let named { return try threadID(named) }
         if let active = store.newestActiveThreadID() { return active }
@@ -79,6 +89,16 @@ struct Arguments {
         let value = rest[i + 1]
         rest.removeSubrange(i...(i + 1))
         return value
+    }
+
+    /// The thread a command means: `--thread <id>`, or the id as the first plain argument. Both may be given when they agree.
+    mutating func thread() throws -> String? {
+        let flagged = try value("--thread")
+        let plain = positional()
+        if let flagged, let plain, flagged != plain {
+            throw CLIError.usage("--thread \(flagged) and the argument \(plain) name different threads")
+        }
+        return flagged ?? plain
     }
 
     mutating func positional() -> String? {
@@ -265,7 +285,7 @@ enum Commands {
     static func goalApprove(_ args: [String]) async throws {
         var a = Arguments(args)
         let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
@@ -310,7 +330,7 @@ enum Commands {
         let allowDirty = a.flag("--allow-dirty")
         let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
         let noPlan = a.flag("--no-plan")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
 
         let ctx = try await Context.load()
@@ -328,7 +348,7 @@ enum Commands {
         let budgetText = try a.value("--budget")
         let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
         let note = a.positional()
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         guard let note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw CLIError.usage("send-back needs a note: workbench send-back \"<what to change>\" [--budget <usd>]")
@@ -430,7 +450,7 @@ enum Commands {
 
     static func stop(_ args: [String]) async throws {
         var a = Arguments(args)
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
@@ -443,7 +463,7 @@ enum Commands {
     static func abandon(_ args: [String]) async throws {
         var a = Arguments(args)
         let force = a.flag("--force")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)

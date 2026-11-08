@@ -44,7 +44,7 @@ extension Commands {
         let again = a.flag("--again")
         let model = try a.value("--model")
         let budgetText = try a.value("--budget")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         var budget = Judge.budgetUSD
         if let budgetText {
@@ -55,7 +55,7 @@ extension Commands {
             budget = value
         }
         let ctx = try await Context.load()
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         let config = try Config.load(from: ctx.project.configURL)
         let agent = config.resolvedJudgeAgent(modelFlag: model)
         let capped = config.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true

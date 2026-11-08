@@ -12,7 +12,7 @@ extension Commands {
         let printOnly = a.flag("--print")
         let goal = a.flag("--goal")
         let diff = a.flag("--diff")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         if flag != nil, printOnly { throw CLIError.usage("--editor and --print do not go together") }
         if goal, diff { throw CLIError.usage("--goal and --diff do not go together") }

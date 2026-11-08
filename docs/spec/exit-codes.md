@@ -11,7 +11,7 @@ A code means one thing everywhere; the table says what. What each command can re
 | 3 | `stopped` | A turn or `doctor` was stopped. |
 | 4 | `timed-out` | The turn timed out. |
 | 5 | `budget-exceeded` | The turn went over its budget. |
-| 6 | `refused` | A precondition is not met and nothing was changed. |
+| 6 | `refused` | A precondition is not met and nothing was changed. Also, in a project with several active threads (`max_active_threads`), a command that acts on a thread and was not told which: the message lists them, name one with `--thread <id>` (or the id as the argument). |
 | 7 | `not-found` | The thread, event or file named does not exist. |
 | 10 | `not-accepted` | `ship`: the thread is not accepted. |
 | 11 | `already-shipped` | `ship`: already shipped. |
@@ -360,3 +360,12 @@ named thread is never replaced by another one.
 
 Every `ship` failure is resumed by running `workbench ship` again: nothing is recorded until the PR exists, except
 `branch.ahead` (commits added after `accept`), which is written once per branch head before the push.
+
+## Naming the thread
+
+Every command that takes `[id]` also takes `--thread <id>`; both may be given when they are the same thread, and two different ones
+are a usage error (2). `grant` is the exception: its `--thread` is the scope of a decision, so it takes the id only as an argument.
+Without a name, one active thread is used. With several active, a command that spends money or changes a thread (`run`, `send-back`,
+`stop`, `accept`, `discard`, `abandon`, `ship`, `judge`, `plan`, `verifier`, `pr-review`, `review-stage`, `goal approve`, `open`)
+exits 6 and lists them (`thread … are active (a, b): name one with --thread.`). A command that only reads (`status`, `log`,
+`review`, `next`, `plan show`) shows the newest active thread. A name that is not a thread is 7, as before.

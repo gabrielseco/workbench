@@ -8,10 +8,10 @@ extension Commands {
     static func verifier(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let again = a.flag("--again")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         let config = try Config.load(from: ctx.project.configURL)
         guard let verifier = config.verifier else { throw CLIError.refused("\(VerifierRefusal.notConfigured)") }
         let cap = NSDecimalNumber(decimal: verifier.budgetUSD).stringValue

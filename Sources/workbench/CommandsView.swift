@@ -10,7 +10,7 @@ extension Commands {
         let seqText = try a.value("--seq")
         let transcript = a.flag("--transcript")
         let turnText = try a.value("--turn")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadIDForViewing(named)
@@ -130,7 +130,7 @@ extension Commands {
         var a = Arguments(args)
         let all = a.flag("--all")
         let fetch = a.flag("--fetch")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         if all {
@@ -296,7 +296,7 @@ extension Commands {
         var a = Arguments(args)
         let patch = try a.value("--patch")
         let fetch = a.flag("--fetch")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         if named == nil, ctx.store.threadIDs().isEmpty {
