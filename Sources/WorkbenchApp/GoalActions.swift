@@ -37,7 +37,7 @@ final class DraftStop: @unchecked Sendable {
 }
 
 /// What the screens' buttons do, as core does it. Seams so a test can see the order and the refusals without a repository.
-struct GoalActions: Sendable {
+struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
     typealias DraftGoal = @Sendable (Project, String, String, [URL], DraftStop) async throws -> GoalDraftResult
 
     var approve: @Sendable (Project, String) async throws -> Void
@@ -92,6 +92,8 @@ struct GoalActions: Sendable {
     /// Starts core's follow-up thread for the thread's pull request from a round's findings, and returns its id.
     /// The last argument is the budget the confirm showed: a project whose budget changed since is refused, not started dearer.
     var startFollowUp: @Sendable (Project, String, String, Int, Decimal?) async throws -> String
+    /// Fetches the base and merges it into the thread's branch (`ThreadService.syncBase`); a run to resolve what it left is the caller's.
+    var syncBase: @Sendable (Project, String) async throws -> BaseSyncResult
 
     init(
         approve: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -130,7 +132,8 @@ struct GoalActions: Sendable {
         followUpPlan: @escaping @Sendable (Project, String, Int) async throws -> FollowUpPlan = { _, _, _ in throw Unset() },
         startFollowUp: @escaping @Sendable (Project, String, String, Int, Decimal?) async throws -> String = { _, _, _, _, _ in
             throw Unset()
-        }
+        },
+        syncBase: @escaping @Sendable (Project, String) async throws -> BaseSyncResult = { _, _ in throw Unset() }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.editGoal = editGoal
@@ -145,6 +148,7 @@ struct GoalActions: Sendable {
         (self.pullRequestStatus, self.mergePullRequest) = (pullRequestStatus, mergePullRequest)
         (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
         (self.followUpPlan, self.startFollowUp) = (followUpPlan, startFollowUp)
+        self.syncBase = syncBase
     }
 
     struct Unset: Error, CustomStringConvertible { var description: String { "not available here" } }
@@ -301,6 +305,9 @@ struct GoalActions: Sendable {
                 return try await ThreadService(project: project, git: try GitRunner.discover())
                     .startFollowUp(parent: thread, findings: findings, reviewRound: round, config: config)
             } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") }
+        },
+        syncBase: { project, thread in
+            try await ThreadService(project: project, git: try GitRunner.discover()).syncBase(id: thread)
         })
 
     /// The `gh` that reads and merges the shipped pull request: `WORKBENCH_APP_GH` when the launch sets it (`scripts/verify-app.sh`

@@ -22,6 +22,7 @@ enum AppScenario: String, CaseIterable {
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
+    case reviewBaseMoved = "review-base-moved"
     case verifyShots = "verify-shots"
     case corrupt
     case noThread = "no-thread"
@@ -52,7 +53,7 @@ enum AppScenario: String, CaseIterable {
             // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
             "read_also = [\"../expenses-backend\"]\n\n"
                 + "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
-        case .reviewChanges:
+        case .reviewChanges, .reviewBaseMoved:
             // An editor that only writes down what it was asked to open; verify-app.sh puts its path in.
             // A config that does not load is ignored and the person's own global editor is used: it needs [tools].
             "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n"
@@ -71,7 +72,7 @@ enum AppScenario: String, CaseIterable {
     /// The files at the base commit of the scenario's repository, and the files the thread's worktree has on top of them. Only a scenario
     /// with both has a worktree, which `verify-app.sh start` makes (a fixture cannot commit one).
     var repoFiles: [String: String] {
-        guard self == .reviewChanges else { return [:] }
+        guard hasWorktree else { return [:] }
         return [
             "Sources/Invoices/List.swift": "struct List {\n    func page() -> [Invoice] { all }\n}\n",
             "Sources/Invoices/Totals.swift": "struct Totals {\n    var sum = 0\n}\n",
@@ -80,7 +81,7 @@ enum AppScenario: String, CaseIterable {
     }
 
     var worktreeFiles: [String: String] {
-        guard self == .reviewChanges else { return [:] }
+        guard hasWorktree else { return [:] }
         return [
             "Sources/Invoices/List.swift":
                 "struct List {\n    func page(_ n: Int, size: Int = 25) -> [Invoice] {\n"
@@ -122,9 +123,9 @@ enum AppScenario: String, CaseIterable {
             try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "permission_denied", "tool": "Bash", "input": "git push origin main"])
-        case .needsYou, .reviewChanges:
+        case .needsYou, .reviewChanges, .reviewBaseMoved:
             try await fixture.addThread(id, approved: true, title: Self.title)
-            if self == .reviewChanges {
+            if hasWorktree {
                 // verify-app.sh start fills in the base commit and the worktree it makes.
                 let created: JSONValue = [
                     "path": .string("@WORKTREE@"), "branch": .string("workbench/\(id)"), "base_commit": .string("@BASE@"),

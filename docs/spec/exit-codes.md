@@ -306,6 +306,10 @@ with nothing to commit, `accept` still accepts (exit 0) and prints, after its re
 
 ### `ship`
 
+`ship` prints a `moved:` line before it asks when `origin/<base>` is ahead of the branch (as of the last fetch: it does not fetch),
+with the files both changed; it is a note, not a refusal. An accepted thread has ended and cannot be synced, so the line says what
+to expect from the pull request.
+
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | the PR is open (and with `--watch`: every check passed or was skipped) |

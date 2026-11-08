@@ -70,6 +70,10 @@ extension Commands {
         } else {
             out("then:    open a pull request against \(plan.base)")
         }
+        // As of the last fetch: ship does not fetch the base. An accepted thread cannot be synced, so this only says what to expect.
+        if let moved = try? await ctx.service.baseMovement(id: id, fetch: false), moved.behind > 0 {
+            out("moved:   \(moved.line); the pull request may conflict with it (as of the last fetch)")
+        }
 
         var description: PRDescription?
         if !noDescribe && !plan.updatesExistingBranch {

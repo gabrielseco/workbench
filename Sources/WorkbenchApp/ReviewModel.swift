@@ -59,6 +59,14 @@ struct ReviewModel: Equatable {
     var due: [Due] = []
     /// `Judge not available: …` for each step the goal cannot have (a goal without criteria has no judge or verifier).
     var unavailable: [String] = []
+    /// The base has commits this thread's branch lacks: core's line about them, and the files both sides changed. nil otherwise.
+    var baseMoved: BaseMoved?
+
+    struct BaseMoved: Equatable {
+        var line: String
+        var files: [String]
+        var filesCut: Bool
+    }
 
     static func derive(_ report: ReviewReport) -> ReviewModel {
         let state = report.state
@@ -108,7 +116,11 @@ struct ReviewModel: Equatable {
                 // The command is unique per step; a stage's name is not (it can be `judge`).
                 Due(id: $0.command, command: $0.command, why: $0.why)
             },
-            unavailable: report.unavailableSteps.map { "\($0.name.capitalized) not available: \($0.why)." })
+            unavailable: report.unavailableSteps.map { "\($0.name.capitalized) not available: \($0.why)." },
+            baseMoved: report.baseMovement.flatMap { moved in
+                moved.behind > 0 && report.status == .awaitingReview
+                    ? BaseMoved(line: moved.line, files: moved.overlapping, filesCut: moved.overlapTruncated) : nil
+            })
     }
 
     static func checkText(_ check: Review.Check?) -> String {

@@ -33,6 +33,9 @@ public struct ReviewReport: Sendable, Equatable {
     public var nextSteps: [NextStep] = []
     /// Steps this goal cannot have, with why (`Goal.unavailable`): the judge and the verifier of a goal without criteria.
     public var unavailableSteps: [UnavailableStep] = []
+    /// How far `origin/<base>` has moved on since the branch was cut, as of the last fetch (nothing here touches the network);
+    /// nil when the thread has ended, has no worktree, or origin has no such branch.
+    public var baseMovement: BaseMovement?
 
     public struct UnavailableStep: Sendable, Equatable {
         public var name: String
@@ -411,13 +414,16 @@ public struct ReviewLoader: Sendable {
         let steps = NextSteps.derive(
             events: events, files: changed, config: try? Config.load(from: project.configURL), head: tip,
             skip: skipped, judgeUnavailable: unavailable.contains { $0.name == "judge" }, id: id)
+        // A thread that has ended has nothing to bring the base into.
+        let moved = state.decision == nil
+            ? try? await ThreadService(project: project, git: git).baseMovement(id: id, fetch: false) : nil
         return ReviewReport(
             state: state, title: title, criteria: criteria, approval: approval, goalProblem: problem,
             spendPolicy: spend?.name, spendLine: spend?.line,
             diff: shown,
             threadDirectory: project.threadDirectory(id), branchTip: tip,
             commits: commits?.commits ?? [],
-            commitCount: commits?.count ?? 0, nextSteps: steps, unavailableSteps: unavailable)
+            commitCount: commits?.count ?? 0, nextSteps: steps, unavailableSteps: unavailable, baseMovement: moved.flatMap { $0 })
     }
 
     /// What `accept` shows and what it pins, from one read of git: the diff `review` shows, and the full summary (staged
