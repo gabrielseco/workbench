@@ -22,6 +22,11 @@ struct AllInboxView: View {
                 ForEach(model.done) { rowView($0) }
                 doneToggle
             }
+            if model.older > 0 {
+                Text(model.older == 1 ? "1 older thread not listed" : "\(model.older) older threads not listed")
+                    .role(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+                    .help(InboxModel.olderHelp(model.older))
+            }
         }
         .accessibilityLabel("Inbox of all projects")
     }

@@ -182,6 +182,40 @@ import WorkbenchCore
         #expect(summaries.rows["/p"] == [row("new", .working)], "no rows asked for, none changed")
     }
 
+    @Test func olderThreadsThatAreNotListedAreCountedAcrossProjects() {
+        var api = project("api", [row("a1", .needsYou)])
+        api.older = 3
+        var web = project("web", [])
+        web.older = 2
+        #expect(AllInboxModel.derive([api, web], doneOpen: false).older == 5)
+        #expect(AllInboxModel.derive([project("api", [])], doneOpen: false).older == 0)
+        let summaries = RailSummaries()
+        var read = RailSummaries.Read(rows: [row("x", .working)])
+        read.older = 7
+        summaries.keepRows(from: read, for: "/p")
+        #expect(summaries.older["/p"] == 7, "kept with the rows it belongs to")
+        summaries.forget("/p")
+        #expect(summaries.older["/p"] == nil)
+    }
+
+    @Test func theArrowKeysStepThroughTheDrawnRowsAndKeepTheList() async throws {
+        let open = try await fixture(needsYou: 1)
+        let api = try await fixture(needsYou: 1)
+        let store = await store(open: open, others: [api])
+        await store.reload()
+        await store.select(thread: "n0")
+        await store.showAllProjects()
+        let order = store.allInboxModel().listed.map(\.project)
+        #expect(order == [open, api].map { $0.project.root.path }, "the drawn order: one thread each, in the rail's order")
+        await store.stepAllInbox(up: false)
+        #expect(store.project?.root.path == api.project.root.path, "the next row's project is open")
+        #expect(store.allProjects, "and the list is still up")
+        await store.stepAllInbox(up: false)
+        #expect(store.project?.root.path == api.project.root.path, "nothing below the last row")
+        await store.stepAllInbox(up: true)
+        #expect(store.project?.root.path == open.project.root.path && store.allProjects, "and back up")
+    }
+
     @Test func aClickOpensTheProjectAndShowsTheThreadAndLeavesTheList() async throws {
         let open = try await fixture()
         let api = try await fixture(needsYou: 1)

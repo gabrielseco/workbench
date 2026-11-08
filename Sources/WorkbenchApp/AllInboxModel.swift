@@ -6,6 +6,8 @@ struct ProjectInboxRows: Equatable {
     var name: String
     var initials: String
     var rows: [InboxRow]
+    /// How many older threads the listing left out (past what the app loads): rows that exist and are not here.
+    var older = 0
 }
 
 /// A row of the inbox of all projects: the row, and the project it is in.
@@ -29,6 +31,8 @@ struct AllInboxModel: Equatable {
     /// The finished threads listed now: all of them when Done is open, else only the one on screen.
     var done: [AllInboxRow]
     var doneHidden: Int
+    /// How many older threads of all the projects are not listed, said under the list.
+    var older = 0
 
     /// - Parameter shown: the thread on screen and its project, listed whatever its section, so what is selected can be seen.
     static func derive(
@@ -45,13 +49,19 @@ struct AllInboxModel: Equatable {
         let listed = doneOpen ? finished : finished.filter { isShown($0, shown) }
         return AllInboxModel(
             needsYou: sections[.needsYou] ?? [], waiting: sections[.waiting] ?? [], done: listed,
-            doneHidden: finished.count - listed.count)
+            doneHidden: finished.count - listed.count, older: projects.reduce(0) { $0 + $1.older })
     }
 
     private static func isShown(_ entry: AllInboxRow, _ shown: (project: String, thread: String)?) -> Bool {
         guard let shown else { return false }
         return entry.row.kind == .thread && entry.project == shown.project && entry.row.key == shown.thread
     }
+
+    /// Every row listed, in the order they are drawn.
+    var listed: [AllInboxRow] { needsYou + waiting + done }
+
+    /// The id the arrow keys start from: the thread on screen, in its project.
+    static func id(project: String, thread: String) -> String { project + "|" + InboxRow.thread(thread) }
 
     var finishedCount: Int { done.count + doneHidden }
     var isEmpty: Bool { needsYou.isEmpty && waiting.isEmpty && finishedCount == 0 }

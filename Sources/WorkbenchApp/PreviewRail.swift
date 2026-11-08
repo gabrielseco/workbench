@@ -26,8 +26,12 @@ struct PreviewRail: View {
             .focusable()
             .focusEffectDisabled()
             .onMoveCommand { direction in
-                guard direction == .up || direction == .down, !store.allProjects else { return }
-                move(up: direction == .up, inbox: inbox, model: model)
+                guard direction == .up || direction == .down else { return }
+                if store.allProjects {
+                    Task { await store.stepAllInbox(up: direction == .up) }
+                } else {
+                    move(up: direction == .up, inbox: inbox, model: model)
+                }
             }
         }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.

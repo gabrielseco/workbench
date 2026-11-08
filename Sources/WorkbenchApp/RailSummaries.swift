@@ -9,6 +9,8 @@ import WorkbenchCore
     private(set) var counts: [String: ProjectSummary] = [:]
     /// The rows of each project, read only while the inbox of all projects is up; kept when a read fails, like the counts.
     private(set) var rows: [String: [InboxRow]] = [:]
+    /// How many older threads each project's listing left out, with its rows.
+    private(set) var older: [String: Int] = [:]
     @ObservationIgnored private var caches: [String: ProjectSummaryLoader.Cache] = [:]
     @ObservationIgnored private var listCaches: [String: ThreadListLoader.Cache] = [:]
     /// The tasks' part of each count as last read, used again when the tasks cannot be read this time.
@@ -40,6 +42,7 @@ import WorkbenchCore
     func keepRows(from read: Read, for path: String) {
         guard let rows = read.rows, !read.rowsWithoutTasks || self.rows[path] == nil else { return }
         self.rows[path] = rows
+        older[path] = read.older
     }
 
     func begin(_ path: String) -> Bool { reading.insert(path).inserted }
@@ -61,6 +64,7 @@ import WorkbenchCore
         counts[path] = nil
         lastTasks[path] = nil
         rows[path] = nil
+        older[path] = nil
     }
 
     /// Forgets what a project that is no longer on the rail (or is gone) had.
@@ -69,6 +73,7 @@ import WorkbenchCore
         caches = caches.filter { paths.contains($0.key) }
         lastTasks = lastTasks.filter { paths.contains($0.key) }
         rows = rows.filter { paths.contains($0.key) }
+        older = older.filter { paths.contains($0.key) }
         listCaches = listCaches.filter { paths.contains($0.key) }
     }
 
@@ -99,6 +104,8 @@ import WorkbenchCore
         /// The tasks could not be read, so `rows` lack the automations and may list threads a task's runs made: they stand only when
         /// nothing better was read before.
         var rowsWithoutTasks = false
+        /// Threads past what the listing loads, which `rows` do not have.
+        var older = 0
     }
 
     /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
@@ -112,7 +119,9 @@ import WorkbenchCore
         let threads = ProjectSummaryLoader.read(project: project, cache: cache)
         var read = Read(threads: threads, tasks: entries.map(tasks))
         if let listCache, threads != nil {
-            read.rows = InboxModel.rows(listing: ThreadListLoader.load(project: project, cache: listCache), entries: entries)
+            let listing = ThreadListLoader.load(project: project, cache: listCache)
+            read.rows = InboxModel.rows(listing: listing, entries: entries)
+            read.older = listing.older
             read.rowsWithoutTasks = entries == nil
         }
         return read

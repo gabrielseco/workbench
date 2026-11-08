@@ -16,6 +16,8 @@ struct InboxRow: Equatable, Identifiable {
     var finished = false
 
     var id: String { "\(kind.rawValue)-\(key)" }
+    /// The id of the row a thread has.
+    static func thread(_ id: String) -> String { "\(Kind.thread.rawValue)-\(id)" }
     var isAutomation: Bool { kind == .automation }
     var help: String { "\(title): \(line)" }
     var accessibility: String { "\(title), \(mark.word), \(line)" + (isAutomation ? ", automation" : "") }

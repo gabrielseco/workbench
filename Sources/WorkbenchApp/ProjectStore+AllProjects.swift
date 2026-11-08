@@ -19,12 +19,26 @@ extension ProjectStore {
     /// A project whose folder is gone has none.
     func allInboxProjects() -> [ProjectInboxRows] {
         railTiles().filter { $0.unavailable == nil }.map { tile in
+            let open = tile.path == project?.root.path
             let rows =
-                tile.path == project?.root.path
+                open
                 ? InboxModel.rows(listing: threads.listing, entries: tasks.snapshot(for: project)?.entries, shown: railShown)
                 : railSummaries.rows[tile.path] ?? []
-            return ProjectInboxRows(path: tile.path, name: tile.name, initials: tile.initials, rows: rows)
+            let older = open ? threads.listing.older : railSummaries.older[tile.path] ?? 0
+            return ProjectInboxRows(path: tile.path, name: tile.name, initials: tile.initials, rows: rows, older: older)
         }
+    }
+
+    /// The arrow keys over the inbox of all projects: the row above or below the thread on screen, in the order drawn, opened without
+    /// leaving the list. Nothing happens at either end or when no listed row is on screen.
+    func stepAllInbox(up: Bool) async {
+        let model = allInboxModel()
+        guard case .thread(let snapshot) = screen, mode == .thread, !newThread, let path = project?.root.path,
+            let next = InboxModel.neighbour(
+                of: AllInboxModel.id(project: path, thread: snapshot.id), in: model.listed.map(\.id), up: up),
+            let entry = model.listed.first(where: { $0.id == next })
+        else { return }
+        await open(entry, leavingList: false)
     }
 
     func allInboxModel() -> AllInboxModel {
@@ -35,12 +49,14 @@ extension ProjectStore {
     /// A click on a row of the inbox of all projects: that project is opened (when it is not the one open), then the thread or the
     /// automation's task is shown. The rail goes back to that project's own inbox once it is open; when the project cannot be opened it
     /// says why and the list stays.
-    func open(_ entry: AllInboxRow) async {
+    /// - Parameter leavingList: false for the arrow keys, which step through the list and keep it up.
+    func open(_ entry: AllInboxRow, leavingList: Bool = true) async {
         if entry.project != project?.root.path {
             await pickRecent(entry.project)
             guard project?.root.path == entry.project else { return }
         }
-        allProjects = false
+        // Opening another project goes back to its own inbox (a project tile does); a step through the list keeps this one up.
+        allProjects = !leavingList
         if entry.row.isAutomation {
             selectTask(entry.row.key)
         } else {
