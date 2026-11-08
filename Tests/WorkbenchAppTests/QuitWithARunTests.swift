@@ -29,9 +29,9 @@ private final class Calls: @unchecked Sendable {
 
 @MainActor @Suite struct QuitWithARunTests {
     @Test func aGoalDraftIsWorkToo() async throws {
-        #expect(QuitPrompt.work(threadRunIn: nil, taskRun: nil, drafting: true) == "a goal draft is still going.")
+        #expect(QuitPrompt.work(threadRunsIn: [], taskRun: nil, drafting: true) == "a goal draft is still going.")
         #expect(
-            QuitPrompt.work(threadRunIn: "p", taskRun: nil, drafting: true) == "a run in p and a goal draft are still going.")
+            QuitPrompt.work(threadRunsIn: ["p"], taskRun: nil, drafting: true) == "a run in p and a goal draft are still going.")
         let fixture = try await AppFixture()
         keptFixtures.append(fixture)
         let release = Gate()
@@ -82,12 +82,59 @@ private final class Calls: @unchecked Sendable {
     }
 
     @Test func theQuitPromptSaysWhatItWouldEnd() {
-        #expect(QuitPrompt.work(threadRunIn: nil, taskRun: nil) == nil)
-        #expect(QuitPrompt.work(threadRunIn: "remote-flows", taskRun: nil) == "a run in remote-flows is still going.")
-        #expect(QuitPrompt.work(threadRunIn: nil, taskRun: "bump") == "the task bump is still going.")
+        #expect(QuitPrompt.work(threadRunsIn: [], taskRun: nil) == nil)
+        #expect(QuitPrompt.work(threadRunsIn: ["remote-flows"], taskRun: nil) == "a run in remote-flows is still going.")
+        #expect(QuitPrompt.work(threadRunsIn: [], taskRun: "bump") == "the task bump is still going.")
         #expect(
-            QuitPrompt.work(threadRunIn: "remote-flows", taskRun: "bump")
+            QuitPrompt.work(threadRunsIn: ["remote-flows"], taskRun: "bump")
                 == "a run in remote-flows and the task bump are still going.")
+    }
+
+    @Test func theQuitPromptCountsSeveralRunsOfAProject() {
+        #expect(QuitPrompt.work(threadRunsIn: ["p", "p"], taskRun: nil) == "2 runs in p are still going.")
+        #expect(
+            QuitPrompt.work(threadRunsIn: ["p", "q", "p"], taskRun: nil, drafting: true)
+                == "2 runs in p and a run in q and a goal draft are still going.")
+    }
+
+    @Test func threadsRunSideBySideAndAQuitStopsEveryRun() async throws {
+        let fixture = try await AppFixture()
+        for id in ["t1", "t2"] {
+            try await fixture.addThread(id, approved: true)
+            try fixture.turn(id, 1, result: "interrupted")
+        }
+        keptFixtures.append(fixture)
+        let (calls, gate) = (Calls(), Gate())
+        let actions = GoalActions(
+            makeRun: { _, _, _ in RunHandle(run: { await gate.wait() }, stop: { calls.stop(); await gate.open() }) })
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
+        #expect(await store.open(fixture.root))
+
+        await store.select(thread: "t1")
+        await store.runAgain()
+        await store.select(thread: "t2")
+        await store.runAgain()
+        #expect(store.ownedRuns.count == 2, "the second thread's run was not refused for the first one's")
+        #expect(store.ownedRuns.map(\.thread).sorted() == ["t1", "t2"])
+        #expect(store.actionError == nil, "\(store.actionError ?? "")")
+        #expect(store.runningHere, "the thread on screen is one of them")
+        await store.select(thread: "t1")
+        #expect(store.runningHere, "and so is the other, whichever run was started first")
+        let name = fixture.root.lastPathComponent
+        #expect(store.liveWork == "2 runs in \(name) are still going.")
+
+        await store.stopWorkAndWait()
+        #expect(calls.stopped == 2 && store.ownedRuns.isEmpty && store.liveWork == nil)
+    }
+
+    @Test func aThreadAlreadyRunningIsNotStartedASecondTime() async throws {
+        let (calls, gate) = (Calls(), Gate())
+        let store = try await storeWithARun(calls, gate: gate, endsOnStop: true)
+        await store.runAgain()
+        #expect(store.ownedRuns.count == 1)
+        await store.runAgain()
+        #expect(store.ownedRuns.count == 1, "one run per thread")
+        await store.stopWorkAndWait()
     }
 
     private func storeWithARun(_ calls: Calls, gate: Gate, endsOnStop: Bool) async throws -> ProjectStore {

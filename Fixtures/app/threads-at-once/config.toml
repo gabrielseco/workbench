@@ -1,0 +1,5 @@
+max_active_threads = 3
+
+[tools]
+available = ["Read"]
+allowed = ["Read"]
