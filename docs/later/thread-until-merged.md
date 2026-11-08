@@ -11,7 +11,7 @@ is merged or closed. While it is open Workbench watches the pull request, read-o
 - Review rounds: a new push or a review comment can start the next `pr-review` round or a follow-up turn on the same
   branch (what `--review-loop` does now), asking before each push.
 - The merge: when the PR is merged Workbench runs `clean` for that thread and says which other open PRs now need a
-  rebase (step 9 of the `workbench` skill, done for you). When it is closed unmerged it says so and keeps the branch.
+  rebase (step 9 of the `workbench` skill, done for you); with [auto-sync](auto-sync.md) it brings the base into them too. When it is closed unmerged it says so and keeps the branch.
 
 Workbench never merges. The person does, or says to.
 
