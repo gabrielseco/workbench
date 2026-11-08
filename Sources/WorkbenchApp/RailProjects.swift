@@ -64,6 +64,23 @@ enum RailProjects {
         return moved
     }
 
+    /// Where a key takes you: the rail from the top, the inbox of every project first (`nil`), then each project (its path). `number` is the
+    /// 1-based key (⌘1 is the inbox of all); nil when the rail has no such stop.
+    enum Stop: Equatable { case everything, project(String) }
+
+    static func stop(number: Int, in paths: [String]) -> Stop? {
+        guard number >= 1, number <= paths.count + 1 else { return nil }
+        return number == 1 ? .everything : .project(paths[number - 2])
+    }
+
+    /// The stop `step` places from `current` (`nil` is the inbox of all), stopping at either end: the rail is a list, not a loop.
+    static func stop(from current: String?, by step: Int, in paths: [String]) -> Stop? {
+        let stops: [Stop] = [.everything] + paths.map(Stop.project)
+        let here = current.flatMap { path in paths.firstIndex(of: path).map { $0 + 1 } } ?? 0
+        let target = min(max(here + step, 0), stops.count - 1)
+        return target == here ? nil : stops[target]
+    }
+
     /// Two letters from a folder name: the first letters of its first two words (`expenses-backend` is `eb`), else its first two
     /// letters (`project` is `pr`), lower case as the design has them. A name with one letter or none is padded by what it has.
     static func initials(of name: String) -> String {

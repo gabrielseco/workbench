@@ -46,6 +46,21 @@ import WorkbenchCore
                     .keyboardShortcut(",", modifiers: .command)
                     .disabled(store.project == nil)
             }
+            // The rail has no focus order of its own, so its tiles are reached by menu and key: ⌘1 the inbox of every project, ⌘2… the
+            // projects top to bottom, ⌥⌘↑ and ⌥⌘↓ the tile above and below.
+            CommandMenu("Project") {
+                Button("All projects inbox") { Task { await store.chooseRailStop(number: 1) } }
+                    .keyboardShortcut("1", modifiers: .command)
+                ForEach(Array(store.railTiles().prefix(8).enumerated()), id: \.element.id) { index, tile in
+                    Button(tile.name) { Task { await store.chooseRailStop(number: index + 2) } }
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 2))), modifiers: .command)
+                }
+                Divider()
+                Button("Previous project") { Task { await store.moveRailSelection(by: -1) } }
+                    .keyboardShortcut(.upArrow, modifiers: [.option, .command])
+                Button("Next project") { Task { await store.moveRailSelection(by: 1) } }
+                    .keyboardShortcut(.downArrow, modifiers: [.option, .command])
+            }
             CommandGroup(after: .toolbar) {
                 Toggle("Run settings", isOn: Binding(get: { store.runSettingsShowing }, set: { _ in store.toggleRunSettings() }))
                     .keyboardShortcut("r", modifiers: [.option, .command])
