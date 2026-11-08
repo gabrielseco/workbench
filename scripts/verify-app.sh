@@ -279,6 +279,8 @@ SWIFT
   # A scenario's `merged-prs` (one number a line) names pull requests it says are merged already.
   mkdir -p "$dir/bin"
   [[ ! -f "$fixture/merged-prs" ]] || cp "$fixture/merged-prs" "$dir/gh-merged-prs"
+  # A scenario's `ci-checks` is what every `gh pr checks` read answers instead (`pr-test-failed`: a failed test).
+  [[ ! -f "$fixture/ci-checks" ]] || cp "$fixture/ci-checks" "$dir/gh-ci-checks"
   cat >"$dir/bin/gh-stub" <<'STUB'
 #!/bin/sh
 d="@DIR@"
@@ -289,11 +291,13 @@ case "$1 $2" in
     [ -f "$d/gh-merged-prs" ] && grep -qx "$3" "$d/gh-merged-prs" && state=MERGED
     echo "{\"state\":\"$state\",\"headRefOid\":\"0123456789abcdef0123456789abcdef01234567\"}" ;;
   "pr checks")
+    if [ -f "$d/gh-ci-checks" ]; then cat "$d/gh-ci-checks"; exit 1; fi
     n=$(cat "$d/gh-checks-n" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$d/gh-checks-n"
     if [ "$n" -le 2 ]; then echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pending"},{"name":"lint","bucket":"pending"}]'; exit 8
     elif [ "$n" -le 4 ]; then echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pending"},{"name":"lint","bucket":"pass"}]'; exit 8
     else echo '[{"name":"build","bucket":"pass"},{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'; fi ;;
   "pr merge") touch "$d/gh-merged" ;;
+  "run view") printf 'test\tRun tests\tFAILED: InvoiceListTests.testLastPageIsEmpty\n' ;;
   *) echo "gh-stub: $1 $2 is not stubbed" >&2; exit 1 ;;
 esac
 STUB

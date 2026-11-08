@@ -138,6 +138,22 @@ struct BusyBar: View {
     }
 }
 
+/// Where "Fix failed checks" is, on the thread it was pressed on and on the follow-up that fixes it: the follow-up is not shipped, so it
+/// has no CI banner to carry the line.
+struct CIFixLine: View {
+    var store: ProjectStore
+
+    var body: some View {
+        if let fix = store.ciFixShown(on: store.currentThread) {
+            if fix.active {
+                BusyLine(fix.line, tone: .working)
+            } else {
+                Text(fix.line).role(fix.failed ? .error : .detail)
+            }
+        }
+    }
+}
+
 /// The shipped pull request's CI as GitHub said it last: one line, then one row per check, and why Merge waits when it does.
 struct PullRequestCIView: View {
     var ci: PullRequestCI

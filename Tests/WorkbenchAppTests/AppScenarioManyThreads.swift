@@ -78,6 +78,20 @@ extension AppScenario {
     /// The pull requests the stand-in `gh` says are merged (`merged-prs`, one number a line); the rest it says are open.
     var mergedPullRequests: [Int] { self == .prMerged ? [480] : [] }
 
+    /// The checks the stand-in `gh` reports on every read (`ci-checks`, the JSON `gh pr checks` prints), instead of its usual run
+    /// from running to green; nil keeps that run.
+    var ciChecks: String? {
+        guard self == .prTestFailed else { return nil }
+        let checks = [
+            ("test", "fail"), ("lint", "pass"), ("soak", "pass"), ("release-build", "skipping"), ("macos-test", "skipping"),
+        ]
+        let items = checks.map { name, bucket in
+            "{\"name\":\"\(name)\",\"bucket\":\"\(bucket)\",\"workflow\":\"CI\""
+                + (bucket == "fail" ? ",\"link\":\"https://github.com/o/r/actions/runs/1/job/2\"" : "") + "}"
+        }
+        return "[" + items.joined(separator: ",") + "]\n"
+    }
+
     /// What a scenario ships beside its threads: its config, the pull requests `gh` says are merged, and its repository's files.
     func writeSideFiles(into target: URL) throws {
         if let config {
@@ -90,6 +104,9 @@ extension AppScenario {
         if !mergedPullRequests.isEmpty {
             let lines = mergedPullRequests.map { "\($0)\n" }.joined()
             try lines.write(to: target.appendingPathComponent("merged-prs"), atomically: true, encoding: .utf8)
+        }
+        if let ciChecks {
+            try ciChecks.write(to: target.appendingPathComponent("ci-checks"), atomically: true, encoding: .utf8)
         }
         for (folder, contents) in [("repo", repoFiles), ("worktree", worktreeFiles), ("origin-moved", originMovedFiles)] {
             for (path, content) in contents {

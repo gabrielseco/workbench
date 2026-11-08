@@ -265,8 +265,19 @@ import Testing
         shipped.ci = .known(status("pending"))
         d = decide(shipped)
         #expect(d.primary?.kind == .merge && d.primary?.enabled == false && d.primary?.title == "Merge")
+        // A failed check makes fixing it the next press; Merge stays in the menu, off, saying why.
         shipped.ci = .known(status("fail"))
-        #expect(decide(shipped).primary?.enabled == false && decide(shipped).primary?.help == "CI failed.")
+        d = decide(shipped)
+        #expect(d.primary?.kind == .fixChecks && d.primary?.enabled == true)
+        let merge = d.more.first { $0.kind == .merge }
+        #expect(merge?.enabled == false && merge?.help == "CI failed.")
+        // A failed check is offered whatever its name: the agent reads the log and says if the code cannot fix it.
+        shipped.ci = .known(
+            PRStatus(
+                number: 482, state: .open, head: head,
+                checks: PRChecksSummary(checks: [PRCheck(name: "lint", bucket: "fail")]), checksError: nil))
+        #expect(decide(shipped).primary?.kind == .fixChecks && decide(shipped).primary?.enabled == true)
+        #expect(decide(shipped).more.first { $0.kind == .merge }?.enabled == false)
         shipped.ci = .known(status("pass"))
         d = decide(shipped)
         #expect(d.primary?.kind == .merge && d.primary?.enabled == true && d.primary?.title == "Merge")

@@ -116,6 +116,15 @@ extension ThreadService {
     /// Starts the follow-up thread for `parent`'s pull request: new thread on the same branch (`--update`), its goal
     /// written from the findings and approved here, linked to its parent and root.
     public func startFollowUp(parent: String, findings: String, reviewRound: Int, config: Config) async throws -> String {
+        try await startFollowUpThread(
+            parent: parent, config: config, name: { ReviewLoop.followUpName(root: $0, round: $1) },
+            body: ReviewLoop.body(findings: findings, reviewRound: reviewRound, checkCommand: config.checkCommand))
+    }
+
+    /// A follow-up of either kind (review findings, failed CI tests): the same branch, lineage and `max_rounds` ceiling.
+    func startFollowUpThread(
+        parent: String, config: Config, name: (_ root: String, _ round: Int) -> String, body: GoalBody
+    ) async throws -> String {
         let events = (try? EventLogReader.read(at: project.eventsURL(parent)))?.events ?? []
         guard let opened = events.last(where: { $0.kind == .prOpened }),
             let branch = opened.data["branch"]?.stringValue
@@ -128,9 +137,8 @@ extension ThreadService {
         if used >= allowed { throw FollowUpError.tooMany(used: used, max: config.prReview.maxRounds) }
         let round = used + 1
         let id = try await newThread(
-            name: ReviewLoop.followUpName(root: root, round: round), updating: branch, config: config,
-            lineage: ThreadLineage(parent: parent, root: root, round: round),
-            body: ReviewLoop.body(findings: findings, reviewRound: reviewRound, checkCommand: config.checkCommand))
+            name: name(root, round), updating: branch, config: config,
+            lineage: ThreadLineage(parent: parent, root: root, round: round), body: body)
         try await approve(id: id, config: config)
         return id
     }

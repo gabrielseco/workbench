@@ -71,6 +71,7 @@ struct FeedScreen: View {
     @ViewBuilder private var foot: some View {
         MessageRows(error: store.actionError, note: store.actionNote, notice: store.notice, handoff: store.herdrHandoffOutcome)
         if snapshot.watchesPullRequest, let ci = snapshot.ci { PullRequestCIView(ci: ci, store: store) }
+        CIFixLine(store: store)
         let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
         if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard, runCard?.stop == nil {
             let decision = store.feedDecision(for: snapshot)

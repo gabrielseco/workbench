@@ -72,6 +72,13 @@ enum PullRequestCI: Equatable {
         }
     }
 
+    /// Every failed check, on an open pull request whose checks could be read: what "Fix failed checks" is offered for. Which
+    /// of them the code can fix (a test, a lint, a build) is the agent's to read from the log, not a guess from the name.
+    var failedChecks: [String] {
+        guard status?.state == .open else { return [] }
+        return rows.filter { $0.kind == .failed }.map(\.name)
+    }
+
     /// The one line over the rows: where CI stands, with counts.
     var summary: String {
         switch self {

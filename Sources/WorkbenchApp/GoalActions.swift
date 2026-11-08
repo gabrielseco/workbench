@@ -92,6 +92,11 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
     /// Starts core's follow-up thread for the thread's pull request from a round's findings, and returns its id.
     /// The last argument is the budget the confirm showed: a project whose budget changed since is refused, not started dearer.
     var startFollowUp: @Sendable (Project, String, String, Int, Decimal?) async throws -> String
+    /// The failed checks of the thread's pull request with what CI says of each (its link, the end of its failed log); writes nothing.
+    var failedChecks: @Sendable (Project, String) async throws -> [CIFailedCheck]
+    /// Starts core's follow-up thread that fixes those checks on the pull request's branch, and returns its id. The last argument
+    /// is the budget read just before, as for `startFollowUp`.
+    var startCIFix: @Sendable (Project, String, [CIFailedCheck], Decimal?) async throws -> String
     /// Fetches the base and merges it into the thread's branch (`ThreadService.syncBase`); a run to resolve what it left is the caller's.
     var syncBase: @Sendable (Project, String) async throws -> BaseSyncResult
 
@@ -133,6 +138,10 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
         startFollowUp: @escaping @Sendable (Project, String, String, Int, Decimal?) async throws -> String = { _, _, _, _, _ in
             throw Unset()
         },
+        failedChecks: @escaping @Sendable (Project, String) async throws -> [CIFailedCheck] = { _, _ in throw Unset() },
+        startCIFix: @escaping @Sendable (Project, String, [CIFailedCheck], Decimal?) async throws -> String = { _, _, _, _ in
+            throw Unset()
+        },
         syncBase: @escaping @Sendable (Project, String) async throws -> BaseSyncResult = { _, _ in throw Unset() }
     ) {
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
@@ -148,6 +157,7 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
         (self.pullRequestStatus, self.mergePullRequest) = (pullRequestStatus, mergePullRequest)
         (self.prReview, self.latestPRReview) = (prReview, latestPRReview)
         (self.followUpPlan, self.startFollowUp) = (followUpPlan, startFollowUp)
+        (self.failedChecks, self.startCIFix) = (failedChecks, startCIFix)
         self.syncBase = syncBase
     }
 
@@ -305,6 +315,22 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
                 return try await ThreadService(project: project, git: try GitRunner.discover())
                     .startFollowUp(parent: thread, findings: findings, reviewRound: round, config: config)
             } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") }
+        },
+        failedChecks: { project, thread in
+            try await ThreadService(project: project, git: try GitRunner.discover())
+                .failedCheckDetails(id: thread, gh: pullRequestGH())
+        },
+        startCIFix: { project, thread, failures, shown in
+            let config = try Config.load(from: project.configURL)
+            guard followUpBudget(config) == shown else {
+                throw RefusalText("The project's budget changed since this was read. Press Fix failed checks again.")
+            }
+            do {
+                return try await ThreadService(project: project, git: try GitRunner.discover())
+                    .startCIFix(parent: thread, failures: failures, config: config)
+            } catch let refusal as FollowUpError { throw RefusalText("\(refusal)") } catch let refusal as CIFixError {
+                throw RefusalText("\(refusal)")
+            }
         },
         syncBase: { project, thread in
             try await ThreadService(project: project, git: try GitRunner.discover()).syncBase(id: thread)

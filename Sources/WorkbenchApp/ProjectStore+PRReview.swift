@@ -75,14 +75,21 @@ extension ProjectStore {
         guard let round = fixRoundToShip else { return }
         // Held until the round is done, so a reader can tell the window is still on it.
         defer { fixRoundToShip = nil }
-        guard !runFailed else { return }
+        guard !runFailed else {
+            ciFixStopped(round, "its turn did not finish, so nothing was pushed. Open \(round.thread) to see why and Run again.")
+            return
+        }
         await untilIdle()
         guard let project, round.generation == generation, currentThread == round.thread,
             case .thread(let shown) = screen
-        else { return }
+        else {
+            ciFixStopped(round, "the window moved to another thread, so nothing was pushed. Open \(round.thread) to go on.")
+            return
+        }
         let review = shown.state.review
         guard review.status == .awaitingReview, review.turnResult == RunResult.succeeded.rawValue else {
             notice = "The fix round's turn did not succeed (\(review.turnResult ?? "no result")), so nothing was pushed."
+            ciFixStopped(round, "its turn did not succeed (\(review.turnResult ?? "no result")), so nothing was pushed.")
             return
         }
         let checkCommand = await Task.detached { (try? Config.load(from: project.configURL))?.checkCommand }.value
@@ -91,20 +98,36 @@ extension ProjectStore {
             let check = review.check.flatMap { $0.turn == shown.state.lastTurn ? $0.result : nil }
             guard check == "passed" else {
                 notice = "The check did not pass after the fix round (\(check ?? "it did not run")), so nothing was pushed."
+                ciFixStopped(
+                    round, "the check did not pass after it (\(check ?? "it did not run")), so nothing was pushed. "
+                        + "Open \(round.thread) to look at it.")
                 return
             }
         }
-        guard await accept(message: "fix: address review round \(round.reviewRound)"), round.generation == generation,
-            currentThread == round.thread
-        else { return }
-        guard await ship(), round.generation == generation, currentThread == round.thread else { return }
-        await reviewPullRequest()
+        if round.kind == .failedChecks { ciFix?.phase = .shipping }
+        let message =
+            round.kind == .failedChecks ? "fix: make the failed CI checks pass" : "fix: address review round \(round.reviewRound)"
+        guard await accept(message: message), round.generation == generation, currentThread == round.thread else {
+            ciFixStopped(round, "accepting it was refused (the error above says why), so nothing was pushed.")
+            return
+        }
+        guard await ship(), round.generation == generation, currentThread == round.thread else {
+            ciFixStopped(round, "pushing it to the pull request failed (the error above says why). Press Ship to try again.")
+            return
+        }
+        switch round.kind {
+        case .reviewFindings: await reviewPullRequest()
+        case .failedChecks: await ciFixSubmitted(round)
+        }
     }
 }
 
-/// The fix round the app started from the findings sheet, and the review round whose findings it fixes.
+/// A fix round the app started and follows to its push: from the findings sheet (with the review round whose findings it fixes),
+/// or from "Fix failed checks" on the pull request's CI.
 struct FixRound: Equatable {
+    enum Kind: Equatable { case reviewFindings, failedChecks }
     var thread: String
     var reviewRound: Int
     var generation: Int
+    var kind: Kind = .reviewFindings
 }

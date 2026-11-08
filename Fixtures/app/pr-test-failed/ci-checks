@@ -1,0 +1,1 @@
+[{"name":"test","bucket":"fail","workflow":"CI","link":"https://github.com/o/r/actions/runs/1/job/2"},{"name":"lint","bucket":"pass","workflow":"CI"},{"name":"soak","bucket":"pass","workflow":"CI"},{"name":"release-build","bucket":"skipping","workflow":"CI"},{"name":"macos-test","bucket":"skipping","workflow":"CI"}]
