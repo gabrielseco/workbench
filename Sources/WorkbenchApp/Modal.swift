@@ -26,48 +26,11 @@ enum ModalSize {
 enum ModalPlacement {
     /// In the middle.
     case centered
-    /// Under the toolbar at the left edge.
+    /// Under the toolbar at the left edge, where the pill that opened it is.
     case topLeading
-    /// Beside the project rail, its bottom edge on `bottom` (in `ModalPlacement.windowSpace`) so it comes out of the `+` that opened it; above the
-    /// footer when the place of that tile is not known.
-    case besideRail(bottom: CGFloat?)
 
-    /// The coordinate space of the whole window, for a view that tells where it is (a tile a card opens from).
-    static let windowSpace = "window"
-
-    var alignment: Alignment {
-        switch self {
-        case .centered: .center
-        case .topLeading: .topLeading
-        case .besideRail: .bottomLeading
-        }
-    }
-
-    var transition: AnyTransition {
-        switch self {
-        case .centered: .opacity
-        case .topLeading: .opacity.combined(with: .offset(y: -6))
-        case .besideRail: .opacity.combined(with: .offset(y: 6))
-        }
-    }
-
-    /// How far the card stands from the window's top, leading and bottom edges.
-    struct Insets {
-        var top: CGFloat = 0
-        var leading: CGFloat = 0
-        var bottom: CGFloat = 0
-    }
-
-    func insets(windowHeight: CGFloat) -> Insets {
-        switch self {
-        case .centered: return Insets()
-        case .topLeading: return Insets(top: Space.giant, leading: Space.m)
-        case .besideRail(let bottom):
-            // The card's foot on the tile's foot, never lower than the footer allows.
-            let lift = bottom.map { max(Space.s, windowHeight - $0) } ?? Space.giant
-            return Insets(leading: ProjectRail.width + Space.s, bottom: min(lift, windowHeight / 2))
-        }
-    }
+    var alignment: Alignment { self == .centered ? .center : .topLeading }
+    var transition: AnyTransition { self == .centered ? .opacity : .opacity.combined(with: .offset(y: -6)) }
 }
 
 /// The row of buttons at the foot of a modal: the actions at the trailing edge, and what goes with them (a busy line) at the leading one.
@@ -204,9 +167,8 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
                             ModalCard(
                                 title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
                                 content: presented)
-                                .padding(.top, placement.insets(windowHeight: window.size.height).top)
-                                .padding(.leading, placement.insets(windowHeight: window.size.height).leading)
-                                .padding(.bottom, placement.insets(windowHeight: window.size.height).bottom)
+                                .padding(.top, placement == .centered ? 0 : Space.giant)
+                                .padding(.leading, placement == .centered ? 0 : Space.m)
                                 .transition(placement.transition)
                         }
                     }

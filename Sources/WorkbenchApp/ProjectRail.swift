@@ -1,12 +1,6 @@
 import SwiftUI
 import WorkbenchCore
 
-/// Where the `+` tile ends in the window's space, for the card that opens from it.
-struct RailAddAnchorKey: PreferenceKey {
-    static let defaultValue: CGFloat? = nil
-    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
-}
-
 /// The column of projects (P26): a tile for each, the open one marked, a tile for the inbox of every project (arriving with the inbox view),
 /// and `+` to add one. A tile's menu is where a project's own actions are: its agents, Doctor, the folder, and taking it off the rail.
 struct ProjectRail: View {
@@ -55,12 +49,6 @@ struct ProjectRail: View {
                     RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Theme.line, style: StrokeStyle(dash: [Space.xs])))
         }
         .buttonStyle(.plain)
-        .background(
-            GeometryReader { tile in
-                Color.clear.preference(
-                    key: RailAddAnchorKey.self, value: tile.frame(in: .named(ModalPlacement.windowSpace)).maxY)
-            }
-        )
         .accessibilityLabel("Add project").help("Add a project: the recent ones, or a folder")
     }
 
