@@ -8,6 +8,27 @@ extension RunnerFixture {
     func loadedConfig() throws -> Config { try Config.load(from: project.configURL) }
 }
 
+/// The soak tests count processes and descriptors of the whole test process, so two of them must never overlap: the suites are
+/// separate and Swift Testing runs suites side by side, which let one suite's children and descriptors show up in another's counts.
+/// Each soak test takes this first and lets go at its end.
+actor SoakExclusion {
+    static let shared = SoakExclusion()
+    private var held = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard held else {
+            held = true
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func release() {
+        if waiting.isEmpty { held = false } else { waiting.removeFirst().resume() }
+    }
+}
+
 private let soakEnabled = ProcessInfo.processInfo.environment["WORKBENCH_SOAK"] == "1"
 private let soakRounds = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_ROUNDS"] ?? "") ?? 12
 
@@ -85,6 +106,8 @@ private let soakRounds = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK
     }
 
     @Test func threeThreadsAtOnceEachEndingItsOwnWayLeaveNothingBehind() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         let fx = try await RunnerFixture(extraConfig: "max_active_threads = 3")
         let config = try config(fx)
         let before = openDescriptorCount()
@@ -148,6 +171,8 @@ private let soakRounds = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK
     }
 
     @Test func checksNeverOverlapPastTheCapAndTheOneOverIsRefusedNotQueued() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         let script = try CheckScript()
         let log = script.path("overlap.log")
         let release = script.path("release")
@@ -232,6 +257,8 @@ private let soakRounds = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK
     }
 
     @Test func aSyncAndTwoRunsShareTheRepositoryWithoutTrippingOverEachOther() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         let fx = try await RunnerFixture(extraConfig: "max_active_threads = 3")
         let config = try config(fx)
         _ = try await addOrigin(fx)

@@ -37,6 +37,8 @@ extension SoakTests {
     ]
 
     @Test func manyVerifierRunsEachEndOnce() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         let v = try await VerifierFixture()
         let before = openDescriptorCount()
         var spawned: [pid_t] = []
