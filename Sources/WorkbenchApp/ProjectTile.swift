@@ -17,6 +17,17 @@ struct ProjectTile: View {
     private var available: Bool { project.unavailable == nil }
 
     var body: some View {
+        VStack(spacing: Space.xs) {
+            tile
+            // The name under a project's picture, always: a tooltip waits and a person scanning the rail does not hover.
+            if symbol == nil {
+                Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.middle)
+                    .frame(width: Self.side + Space.l).accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var tile: some View {
         Button(action: action) {
             face
                 .frame(width: Self.side, height: Self.side)
