@@ -22,6 +22,8 @@ extension Commands {
             out("the check has not run on the result yet; this runs it:")
             out("  workbench send-back \"origin/\(moved.base) was merged in; make sure it still passes\"")
             return 0
+        case .failed:
+            return fail(.failed, "git could not merge the base")  // syncBase throws instead; here for completeness
         case .conflicts(let moved, let files, let saved):
             if let saved { out("saved the thread's uncommitted work as \(saved), so the merge starts clean") }
             out("merging origin/\(moved.base) stopped on \(files.count) file(s) with conflicts:")

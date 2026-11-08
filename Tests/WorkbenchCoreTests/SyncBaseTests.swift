@@ -134,6 +134,58 @@ import Testing
         #expect(seen.behind == 1 && seen.overlapping.isEmpty)
         // A look with a fetch that fails is an error, not a stale answer passed off as fresh.
         _ = try await fx.git.run(["remote", "set-url", "origin", fx.repo.appendingPathComponent("no-such.git").path], in: fx.repo)
-        await #expect(throws: ThreadServiceError.self) { _ = try await fx.service.baseMovement(id: id, fetch: true) }
+        do {
+            _ = try await fx.service.baseMovement(id: id, fetch: true)
+            Issue.record("expected the failed fetch to throw")
+        } catch let error as ThreadServiceError {
+            guard case .syncFailed = error else {
+                Issue.record("a failed fetch is a failure, not a refusal: \(error)")
+                return
+            }
+        }
+    }
+
+    @Test func aWorktreeOnAnotherBranchIsRefusedAndNothingIsCommitted() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await thread(fx)
+        try write(worktree, "a.txt", "one\nmine\n")
+        try await landOnMain(fx, "b.txt", "theirs\n")
+        _ = try await fx.git.run(["switch", "-q", "-c", "elsewhere"], in: worktree)
+        let before = try await fx.git.run(["rev-parse", "HEAD"], in: worktree).stdout
+
+        do {
+            _ = try await fx.service.syncBase(id: id)
+            Issue.record("expected a refusal")
+        } catch let error as ThreadServiceError {
+            guard case .syncRefused(let why) = error else {
+                Issue.record("got \(error)")
+                return
+            }
+            #expect(why.contains("elsewhere") && why.contains("workbench/\(id)"))
+        }
+        #expect(try await fx.git.run(["rev-parse", "HEAD"], in: worktree).stdout == before, "nothing was committed")
+        #expect(try String(contentsOf: worktree.appendingPathComponent("a.txt"), encoding: .utf8) == "one\nmine\n")
+        #expect(!(try kinds(fx, id).contains("base.synced")))
+    }
+
+    @Test func aRunHoldingTheThreadRefusesTheSyncBeforeAnythingChanges() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await thread(fx)
+        try write(worktree, "a.txt", "one\nmine\n")
+        try await landOnMain(fx, "b.txt", "theirs\n")
+        // A run holds the thread's log (as `workbench run` does for its whole length), with its runner file naming this process.
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        let member = ProcessTree.member(for: getpid())
+        let info: [String: Any] = [
+            "pid": getpid(), "started_seconds": member?.startSeconds ?? 0, "started_micros": member?.startMicros ?? 0,
+        ]
+        try JSONSerialization.data(withJSONObject: info).write(to: fx.project.runnerURL(id))
+
+        await #expect(throws: ThreadServiceError.self) { _ = try await fx.service.syncBase(id: id) }
+        await log.close()
+        #expect(try String(contentsOf: worktree.appendingPathComponent("a.txt"), encoding: .utf8) == "one\nmine\n")
+        let status = try await fx.git.run(["status", "--porcelain"], in: worktree)
+        #expect(status.stdout.contains("a.txt"), "the work was not committed under the run's feet")
+        #expect(!FileManager.default.fileExists(atPath: worktree.appendingPathComponent("b.txt").path), "nothing was merged")
     }
 }

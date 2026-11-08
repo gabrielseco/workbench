@@ -36,6 +36,8 @@ public enum BaseSyncResult: Sendable, Equatable {
     case merged(BaseMovement, head: String, savedWork: String?)
     /// The merge stopped on these files, which hold conflict markers in the worktree; the merge is left in progress.
     case conflicts(BaseMovement, files: [String], savedWork: String?)
+    /// Git could not merge and there was no conflict to resolve; only recorded, never returned (the sync throws `syncFailed`).
+    case failed(BaseMovement, saved: String?, error: String)
 }
 
 extension ThreadService {
@@ -67,7 +69,7 @@ extension ThreadService {
         var tip: String
         if fetch {
             do { tip = try await manager.fetchRemoteBranch(base) } catch {
-                throw ThreadServiceError.syncRefused("\(error)")
+                throw ThreadServiceError.syncFailed("\(error)")
             }
         } else {
             let known = try await git.run(
@@ -78,7 +80,7 @@ extension ThreadService {
 
         let mergeBase = try await git.run(["merge-base", "HEAD", tip], in: worktree)
         guard mergeBase.succeeded else {
-            throw ThreadServiceError.syncRefused("the thread's branch and origin/\(base) share no history")
+            throw ThreadServiceError.syncFailed("the thread's branch and origin/\(base) share no history")
         }
         let root = mergeBase.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let count = try await git.run(["rev-list", "--count", "HEAD..\(tip)"], in: worktree)
@@ -102,7 +104,7 @@ extension ThreadService {
     private func lines(_ arguments: [String], in directory: URL, separator: Character) async throws -> [String] {
         let result = try await git.run(arguments, in: directory)
         guard result.succeeded else {
-            throw ThreadServiceError.syncRefused("git \(arguments.prefix(2).joined(separator: " ")) failed: \(result.stderr)")
+            throw ThreadServiceError.syncFailed("git \(arguments.prefix(2).joined(separator: " ")) failed: \(result.stderr)")
         }
         return result.stdout.split(separator: separator).map(String.init)
     }
@@ -110,9 +112,19 @@ extension ThreadService {
     /// Brings the base's new commits into the thread's branch, in its worktree: fetch `origin/<base>`, keep any uncommitted work
     /// in a commit of its own, then merge. A clean merge is committed; a conflict leaves the merge in progress with the markers
     /// in the files, for a person or a `send-back` turn to resolve. History is never rewritten, so a branch that was pushed
-    /// needs no force-push. Records `base.synced`.
+    /// needs no force-push. Records `base.synced`. The thread's log is held from the first check to the record, so a run cannot
+    /// start on the worktree in between.
     public func syncBase(id: String) async throws -> BaseSyncResult {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
+        do {
+            return try await withLog(id) { log in try await self.sync(id: id, log: log) }
+        } catch EventLogError.alreadyOpen {
+            throw ThreadServiceError.syncRefused(
+                "a run holds this thread (pid \(runnerPID(id: id).map(String.init) ?? "?")): `workbench stop` it first")
+        }
+    }
+
+    private func sync(id: String, log: EventLogWriter) async throws -> BaseSyncResult {
         if let decision = ThreadStore(project: project).state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
@@ -120,6 +132,14 @@ extension ThreadService {
             throw ThreadServiceError.syncRefused("this thread has no worktree yet, so it has not started from any base")
         }
         let worktree = manager.path(for: id)
+        // The branch is the thread's own: work saved and merged on another one would not be the thread's.
+        let onBranch = try await git.run(["symbolic-ref", "--short", "-q", "HEAD"], in: worktree)
+        let found = onBranch.succeeded ? onBranch.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        guard found == WorktreeManager.branch(for: id) else {
+            throw ThreadServiceError.syncRefused(
+                "the worktree is on '\(found.isEmpty ? "a detached HEAD" : found)', not \(WorktreeManager.branch(for: id)): "
+                    + "switch it back first")
+        }
         let inProgress = try await git.run(["rev-parse", "-q", "--verify", "MERGE_HEAD"], in: worktree)
         guard !inProgress.succeeded else {
             throw ThreadServiceError.syncRefused(
@@ -140,15 +160,15 @@ extension ThreadService {
             let committed = added.succeeded ? try await git.run(["commit", "-q", "-m", message], in: worktree) : added
             guard committed.succeeded else {
                 let why = (committed.stderr + committed.stdout).trimmingCharacters(in: .whitespacesAndNewlines)
-                throw ThreadServiceError.syncRefused(
-                    "the thread's uncommitted work could not be committed, so nothing was merged: \(why)")
+                throw ThreadServiceError.syncFailed(
+                    "the thread's uncommitted work could not be committed, so nothing was merged (its changes are staged "
+                        + "in the worktree): \(why)")
             }
             saved = try await shortHead(worktree)
         }
 
-        let merge = try await git.run(
-            ["merge", "--no-edit", "-m", "chore: bring \(movement.base) into \(WorktreeManager.branch(for: id))", movement.tip],
-            in: worktree)
+        let message = "chore: bring \(movement.base) into \(WorktreeManager.branch(for: id))"
+        let merge = try await git.run(["merge", "--no-edit", "-m", message, movement.tip], in: worktree)
         let result: BaseSyncResult
         if merge.succeeded {
             result = .merged(movement, head: try await shortHead(worktree), savedWork: saved)
@@ -156,11 +176,14 @@ extension ThreadService {
             let unmerged = try await lines(["diff", "--name-only", "--diff-filter=U", "-z"], in: worktree, separator: "\0")
             guard !unmerged.isEmpty else {
                 let why = (merge.stderr + merge.stdout).trimmingCharacters(in: .whitespacesAndNewlines)
-                throw ThreadServiceError.syncRefused("git could not merge origin/\(movement.base): \(why)")
+                let open = try await git.run(["rev-parse", "-q", "--verify", "MERGE_HEAD"], in: worktree).succeeded
+                let state = open ? "the merge is left in progress in \(worktree.path)" : "nothing was merged"
+                try await record(.failed(movement, saved: saved, error: why), log: log)
+                throw ThreadServiceError.syncFailed("git could not merge origin/\(movement.base) (\(state)): \(why)")
             }
             result = .conflicts(movement, files: unmerged.sorted(), savedWork: saved)
         }
-        try await record(result, id: id)
+        try await record(result, log: log)
         return result
     }
 
@@ -169,7 +192,7 @@ extension ThreadService {
         return head.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func record(_ result: BaseSyncResult, id: String) async throws {
+    private func record(_ result: BaseSyncResult, log: EventLogWriter) async throws {
         var data: [String: JSONValue] = [:]
         let movement: BaseMovement
         switch result {
@@ -184,11 +207,16 @@ extension ThreadService {
             data["result"] = "conflicts"
             data["conflicts"] = .array(files.map { .string($0) })
             if let saved { data["saved_work"] = .string(saved) }
+        case .failed(let moved, let saved, let error):
+            movement = moved
+            data["result"] = "failed"
+            data["error"] = .string(String(error.prefix(500)))
+            if let saved { data["saved_work"] = .string(saved) }
         }
         data["base"] = .string(movement.base)
         data["tip"] = .string(String(movement.tip.prefix(12)))
         data["behind"] = .int(movement.behind)
         data["overlapping"] = .array(movement.overlapping.map { .string($0) })
-        try await withLog(id) { log in _ = try await log.append(.baseSynced, data: .object(data)) }
+        _ = try await log.append(.baseSynced, data: .object(data))
     }
 }

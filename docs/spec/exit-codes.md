@@ -197,8 +197,8 @@ never rewritten. A conflict is left in progress in the worktree, with the marker
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | merged, or the base had not moved (`nothing to bring in`) |
-| 1 | `failed` | the merge stopped on conflicts (the files are listed and left in progress), or the fetch or a git call failed |
-| 6 | `refused` | nothing was changed: the thread has ended, has no worktree yet, a run holds it, a merge is already in progress there, origin has no such branch, or several threads are active and none was named |
+| 1 | `failed` | the merge stopped on conflicts (the files are listed and left in progress), or the fetch or a git call failed (the message says what was left: the saved-work commit, a merge in progress, or nothing) |
+| 6 | `refused` | nothing was changed: the thread has ended, has no worktree yet, a run holds it (the thread's log is held for the whole sync, so a run cannot start in between), the worktree is not on `workbench/<id>`, a merge is already in progress there, origin has no such branch, or several threads are active and none was named |
 | 7 | `not-found` | no such thread |
 
 ### `open`
