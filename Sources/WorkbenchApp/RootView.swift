@@ -20,6 +20,8 @@ struct RootView: View {
             FooterBar(store: store)
         }
         .frame(minWidth: 900, minHeight: 600)
+        .coordinateSpace(name: ModalPlacement.windowSpace)
+        .onPreferenceChange(RailAddAnchorKey.self) { store.railAddBottom = $0 }
         .appModals(store)
         .environment(\.openScreenshotPreview) { store.modals.preview = $0 }
     }

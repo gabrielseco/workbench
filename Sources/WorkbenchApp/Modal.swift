@@ -28,14 +28,18 @@ enum ModalPlacement {
     case centered
     /// Under the toolbar at the left edge.
     case topLeading
-    /// Beside the project rail and above the footer, where the `+` at the foot of the rail that opened it is.
-    case railFoot
+    /// Beside the project rail, its bottom edge on `bottom` (in `ModalPlacement.windowSpace`) so it comes out of the `+` that opened it; above the
+    /// footer when the place of that tile is not known.
+    case besideRail(bottom: CGFloat?)
+
+    /// The coordinate space of the whole window, for a view that tells where it is (a tile a card opens from).
+    static let windowSpace = "window"
 
     var alignment: Alignment {
         switch self {
         case .centered: .center
         case .topLeading: .topLeading
-        case .railFoot: .bottomLeading
+        case .besideRail: .bottomLeading
         }
     }
 
@@ -43,7 +47,7 @@ enum ModalPlacement {
         switch self {
         case .centered: .opacity
         case .topLeading: .opacity.combined(with: .offset(y: -6))
-        case .railFoot: .opacity.combined(with: .offset(y: 6))
+        case .besideRail: .opacity.combined(with: .offset(y: 6))
         }
     }
 
@@ -54,11 +58,14 @@ enum ModalPlacement {
         var bottom: CGFloat = 0
     }
 
-    var insets: Insets {
+    func insets(windowHeight: CGFloat) -> Insets {
         switch self {
-        case .centered: Insets()
-        case .topLeading: Insets(top: Space.giant, leading: Space.m)
-        case .railFoot: Insets(leading: ProjectRail.width + Space.s, bottom: Space.giant)
+        case .centered: return Insets()
+        case .topLeading: return Insets(top: Space.giant, leading: Space.m)
+        case .besideRail(let bottom):
+            // The card's foot on the tile's foot, never lower than the footer allows.
+            let lift = bottom.map { max(Space.s, windowHeight - $0) } ?? Space.giant
+            return Insets(leading: ProjectRail.width + Space.s, bottom: min(lift, windowHeight / 2))
         }
     }
 }
@@ -197,8 +204,9 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
                             ModalCard(
                                 title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
                                 content: presented)
-                                .padding(.top, placement.insets.top).padding(.leading, placement.insets.leading)
-                                .padding(.bottom, placement.insets.bottom)
+                                .padding(.top, placement.insets(windowHeight: window.size.height).top)
+                                .padding(.leading, placement.insets(windowHeight: window.size.height).leading)
+                                .padding(.bottom, placement.insets(windowHeight: window.size.height).bottom)
                                 .transition(placement.transition)
                         }
                     }

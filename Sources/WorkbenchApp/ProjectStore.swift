@@ -125,6 +125,8 @@ struct RecentProject: Equatable, Identifiable {
     var recentPaths: [String] = []
     /// The projects on the rail, in order (`ProjectStore+Rail.swift`).
     var railPaths: [String] = []
+    /// Where the rail's `+` ends, in the window's space: the project card opens with its foot there.
+    var railAddBottom: CGFloat?
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
     /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
