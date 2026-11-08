@@ -46,6 +46,19 @@ struct StagedScreenshotImage: @unchecked Sendable {
         return CGSize(width: pixels.width / scale, height: pixels.height / scale)
     }
 
+    /// The pixel size of the picture in `url` as it is shown (a quarter turn in its orientation swaps the sides), read from the file's
+    /// header without decoding it: what a set of screenshots sizes its preview to before any of them is on screen.
+    nonisolated static func shownPixels(_ url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let width = info[kCGImagePropertyPixelWidth] as? Int, let height = info[kCGImagePropertyPixelHeight] as? Int,
+            width > 0, height > 0
+        else { return nil }
+        // Orientations 5 to 8 are turned a quarter (EXIF), so the picture on screen is the other way round.
+        let turned = (5...8).contains(info[kCGImagePropertyOrientation] as? Int ?? 1)
+        return turned ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+    }
+
     nonisolated static func decode(_ url: URL) -> StagedScreenshotImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
             let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
