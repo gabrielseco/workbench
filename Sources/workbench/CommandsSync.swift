@@ -19,7 +19,8 @@ extension Commands {
             if let saved { out("saved the thread's uncommitted work as \(saved), so the merge starts clean") }
             out("merged origin/\(moved.base) (\(moved.behind) commit\(moved.behind == 1 ? "" : "s")) at \(head)")
             out(moved.line)
-            out("the check has not run on the result yet: `workbench send-back \"origin/\(moved.base) was merged in; make sure it still passes\"` runs it")
+            out("the check has not run on the result yet; this runs it:")
+            out("  workbench send-back \"origin/\(moved.base) was merged in; make sure it still passes\"")
             return 0
         case .conflicts(let moved, let files, let saved):
             if let saved { out("saved the thread's uncommitted work as \(saved), so the merge starts clean") }
@@ -28,7 +29,7 @@ extension Commands {
             if files.count > 20 { out("  ... and \(files.count - 20) more") }
             let path = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).path(for: id).path
             out("the merge is left in progress in \(path): resolve the files there, or ask for it with")
-            out("  workbench send-back \"resolve the merge conflicts from bringing in \(moved.base), keeping both sides' intent\"")
+            out("  workbench send-back \"resolve the merge conflicts from bringing in \(moved.base), keeping both sides\"")
             return fail(.failed, "the merge stopped on conflicts")
         }
     }
