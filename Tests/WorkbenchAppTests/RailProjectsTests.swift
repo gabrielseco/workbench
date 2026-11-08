@@ -63,4 +63,31 @@ import Testing
         #expect(RailBadge.running.label(for: "mobile") == "mobile, running")
         #expect(RailBadge.none.label(for: "docs") == "docs")
     }
+
+    @Test func aNumberKeyNamesAStopOnTheRailFromTheTopAndNothingPastItsEnd() {
+        let list = ["/a", "/b"]
+        #expect(RailProjects.stop(number: 1, in: list) == .everything)
+        #expect(RailProjects.stop(number: 2, in: list) == .project("/a"))
+        #expect(RailProjects.stop(number: 3, in: list) == .project("/b"))
+        #expect(RailProjects.stop(number: 4, in: list) == nil)
+        #expect(RailProjects.stop(number: 0, in: list) == nil)
+    }
+
+    @Test func stepsMoveOverTheInboxThenTheProjectsAndStopAtTheEnds() {
+        let list = ["/a", "/b"]
+        #expect(RailProjects.stop(from: nil, by: 1, in: list) == .project("/a"))
+        #expect(RailProjects.stop(from: "/a", by: 1, in: list) == .project("/b"))
+        #expect(RailProjects.stop(from: "/a", by: -1, in: list) == .everything)
+        #expect(RailProjects.stop(from: "/b", by: 1, in: list) == nil, "the last has nothing below")
+        #expect(RailProjects.stop(from: nil, by: -1, in: list) == nil, "the inbox has nothing above")
+        #expect(RailProjects.stop(from: "/gone", by: 1, in: list) == .project("/a"), "a project off the rail counts as the top")
+    }
+
+    @Test func aStepPassesOverAProjectThatCannotBeOpened() {
+        let list = ["/a", "/gone", "/c"]
+        let gone: Set<String> = ["/gone"]
+        #expect(RailProjects.stop(from: "/a", by: 1, in: list, skipping: gone) == .project("/c"))
+        #expect(RailProjects.stop(from: "/c", by: -1, in: list, skipping: gone) == .project("/a"))
+        #expect(RailProjects.stop(from: "/a", by: 1, in: ["/a", "/gone"], skipping: gone) == nil, "nothing openable below")
+    }
 }

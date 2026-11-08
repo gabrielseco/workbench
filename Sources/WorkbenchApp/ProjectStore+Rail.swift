@@ -9,6 +9,27 @@ extension ProjectStore {
         RailProjects.tiles(railPaths) { Self.unavailableReason($0) ?? self.refusedPaths[$0] }
     }
 
+    /// A key's choice on the rail (⌘1 the inbox of every project, ⌘2… the projects in the order of the tiles).
+    func chooseRailStop(number: Int) async {
+        guard let stop = RailProjects.stop(number: number, in: railPaths) else { return }
+        await go(to: stop)
+    }
+
+    /// The tile above (`-1`) or below (`1`) the one that is open; nothing past either end.
+    func moveRailSelection(by step: Int) async {
+        let current = allProjects ? nil : project?.root.path
+        let gone = Set(railTiles().filter { $0.unavailable != nil }.map(\.path))
+        guard let stop = RailProjects.stop(from: current, by: step, in: railPaths, skipping: gone) else { return }
+        await go(to: stop)
+    }
+
+    private func go(to stop: RailProjects.Stop) async {
+        switch stop {
+        case .everything: await showAllProjects()
+        case .project(let path): await pickRecent(path)
+        }
+    }
+
     /// Puts a project on the rail (a project that is opened is kept there). One already on it keeps its place.
     func pin(_ path: String) {
         let next = RailProjects.adding(path, to: railPaths)
