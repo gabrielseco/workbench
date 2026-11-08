@@ -113,11 +113,26 @@ on the old base is weak evidence once it has. So bring the base in with an agent
   `SyncPrompt`'s note. The review screen (`ReviewReport.baseMovement`, read without fetching) says when the base moved with the files
   both sides changed and has `Bring up to date`, which does what `sync --run` does; the `ship` command prints a `moved:` line.
 
-### 7. Soak and raise the default
+### 7. Soak and raise the default (soak built)
 
 A fake-claude soak with three threads at once, with crashes, hangs, ignored SIGTERM and leftover children, asserting one `turn.ended` per
 `turn.started` per thread and no leftover process. Then the default goes above 1, and
 [`later/thread-until-merged.md`](../later/thread-until-merged.md) is unblocked.
+
+As built: `ConcurrentSoakTests` (part of `SoakTests`' filter, so every CI soak step runs it; `WORKBENCH_SOAK_ROUNDS` sets the rounds, 12 by
+default). Three tests:
+
+- **Three threads at once**, round after round, each of the three ending its own way (ok, crash, killed, hang to a timeout, stopped,
+  SIGTERM ignored then killed, a tool child left behind, a flood), created and run at the same moment so three worktrees are cut
+  together. Per thread: a healthy log, no open turn, exactly one `turn.ended` per `turn.started`, no `runner.json` left. After all
+  rounds: no leftover child or fake claude, descriptors flat, no worktree or lock file left in git.
+- **The check cap under load:** three runs with a check that waits to be released and `max_concurrent_checks = 2`: the check
+  command is never running more than twice at once, and exactly one of the three is refused (before any turn, or at the check's gate,
+  as a failed check that says why), never queued.
+- **A sync and two runs together:** `syncBase` fetches and merges while two runs cut worktrees, all through the project's git lock.
+
+Left: raising the `max_active_threads` default above 1, which changes every project's behaviour and the tests that assume one, so
+it is its own change; and unblocking [thread-until-merged](../later/thread-until-merged.md) after it.
 
 ## Failure cases the plan owns
 
