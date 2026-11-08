@@ -417,7 +417,7 @@ private struct Run {
         // No `write=`: the agent finds nothing to change, the check passes, and there is nothing to accept.
         let result = await run.runner().run("bump", trigger: .tick)
         #expect(result.outcome == .nothingToDo && result.isDone && result.thread != nil)
-        #expect(ThreadStore(project: run.fx.project).activeThreadID() == nil)
+        #expect(ThreadStore(project: run.fx.project).newestActiveThreadID() == nil)
         // The thread says how the run went, not that a person abandoned it.
         let state = ThreadStore(project: run.fx.project).state(of: try #require(result.thread))
         #expect(state.decision == "abandoned" && state.decisionBy == "task" && state.decisionLabel == "Succeeded")

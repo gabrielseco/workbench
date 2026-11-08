@@ -234,7 +234,7 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
         #expect(branch.succeeded, "the branch survives")
 
         let next = try await fx.service.newThread(name: "two", base: "main")
-        #expect(ThreadStore(project: fx.project).activeThreadID() == next)
+        #expect(ThreadStore(project: fx.project).newestActiveThreadID() == next)
         await #expect(throws: RunnerError.self) { _ = try await fx.runner(id).run(fx.options()) }
     }
 

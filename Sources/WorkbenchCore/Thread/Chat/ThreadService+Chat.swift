@@ -116,7 +116,7 @@ extension ThreadService {
         let (text, images) = (said.text, said.images)
         var id = existing
         if case .newThread(let name) = target {
-            id = try await createChatThread(name: name, abandonActive: abandonActive)
+            id = try await createChatThread(name: name, abandonActive: abandonActive, maxActive: config.maxActiveThreads)
         }
         guard let id else { throw ChatRefusal.noThread("") }
         let scratch = chatScratch(id)
@@ -161,15 +161,15 @@ extension ThreadService {
     }
 
     /// The thread of a new chat: a folder and a log that says it is a chat. No worktree, no branch and no goal file.
-    private func createChatThread(name: String, abandonActive: Bool) async throws -> String {
+    private func createChatThread(name: String, abandonActive: Bool, maxActive: Int) async throws -> String {
         let store = ThreadStore(project: project)
-        if let active = store.activeThreadID() {
+        if let active = try store.blockingThread(maxActive: maxActive) {
             guard abandonActive else { throw ChatRefusal.activeThread(active) }
             _ = try await abandon(id: active)
         }
         do { try store.requireNoDoctor() } catch { throw ChatRefusal.doctorRunning }
         let day = DateFormatter.dayStamp.string(from: now())
-        let id = try await createThreadDirectory(for: "g-\(day)-\(name)")
+        let id = try await createThreadDirectory(for: "g-\(day)-\(name)", maxActive: maxActive)
         do {
             try await withLog(id) { log in
                 try await log.append(.threadCreated, data: ["kind": "chat", "repo": .string(self.project.root.path)])

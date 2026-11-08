@@ -229,10 +229,11 @@ import Testing
     @Test func aChatIsTheActiveThreadSoAnotherIsRefusedUnlessItAbandonsIt() async throws {
         let d = try await drafting()
         let first = try await chat(d)
-        #expect(ThreadStore(project: d.fx.project).activeThreadID() == first.id)
+        #expect(ThreadStore(project: d.fx.project).newestActiveThreadID() == first.id)
         await #expect(throws: ChatRefusal.activeThread(first.id)) { _ = try await chat(d, .newThread(name: "other")) }
         let second = try await chat(d, .newThread(name: "other"), abandonActive: true)
-        #expect(state(d, first.id).decision == "abandoned" && ThreadStore(project: d.fx.project).activeThreadID() == second.id)
+        let newest = ThreadStore(project: d.fx.project).newestActiveThreadID()
+        #expect(state(d, first.id).decision == "abandoned" && newest == second.id)
     }
 
     @Test func aChatCanBeAbandonedAndThenTakesNoMoreMessages() async throws {

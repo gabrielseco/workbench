@@ -404,6 +404,12 @@ Notes:
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
   with no shell operators or quotes. The runner should tell the model the exact string to use.
+- **Threads at once.** `max_active_threads` (config key, 1 to 8, default 1) is how many threads of a project may be active (not yet
+  accepted, discarded or abandoned) together. `goal new`, `chat`, `goal quick` and a task that opens a thread refuse past it (exit 6,
+  naming the active ones); with 1 the message and behaviour are those of the single-thread rule. `--abandon-active` (the app's New
+  goal flow) ends the one active thread only when the cap is 1: with a higher cap and no free slot it refuses, since no flow picks
+  which of several to end. A command that acts on "the" thread without `--thread` refuses when several are active and names them.
+  Views (`status`, the app) show the newest active one until the app lists them all.
 - **Ports per thread.** Every thread has its own block of `ports` ports (config key, 1 to 10, default 1), written to
   `threads/<id>/ports.json` the first time a step needs it and held while the thread has a worktree (a cleaned or abandoned thread
   gives its block back and its file is removed the next time a block is handed out). Blocks are slots of ten from 41000, so a

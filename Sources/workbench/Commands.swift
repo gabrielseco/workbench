@@ -25,14 +25,16 @@ struct Context {
             }
             return named
         }
-        guard let active = store.activeThreadID() else { throw ThreadStoreError.noActiveThread }
-        return active
+        let active = store.activeThreadIDs()
+        guard let only = active.first else { throw ThreadStoreError.noActiveThread }
+        guard active.count == 1 else { throw ThreadStoreError.severalActive(active) }
+        return only
     }
 
     /// For read-only commands: the active thread, or else the most recently created one.
     func threadIDForViewing(_ named: String?) throws -> String {
         if let named { return try threadID(named) }
-        if let active = store.activeThreadID() { return active }
+        if let active = store.newestActiveThreadID() { return active }
         guard let latest = store.newestThreadID() else { throw ThreadStoreError.noActiveThread }
         return latest
     }

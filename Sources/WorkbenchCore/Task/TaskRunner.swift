@@ -156,8 +156,9 @@ public struct TaskRunner: Sendable {
         // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
         if task.fix == .pr {
             let store = ThreadStore(project: project)
-            if let active = store.activeThreadID() { return busy(active) }
-            if (try? store.requireNoDoctor()) == nil { return busy("a doctor run") }
+            let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? 1
+            if let full = store.fullThreads(maxActive: cap) { return busy(full.joined(separator: ", "), cap: cap) }
+            if (try? store.requireNoDoctor()) == nil { return busy("a doctor run", cap: cap) }
         }
 
         // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
@@ -231,9 +232,10 @@ public struct TaskRunner: Sendable {
         "thread \(id) could not be removed and is left for you (workbench abandon)"
     }
 
-    private func busy(_ what: String) -> TaskRunResult {
-        TaskRunResult(
-            outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (one thread at a time)")
+    private func busy(_ what: String, cap: Int) -> TaskRunResult {
+        let limit = cap == 1 ? "one thread at a time" : "\(cap) threads at most"
+        return TaskRunResult(
+            outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (\(limit))")
     }
 
     /// A base on origin is fetched first, and a fetch that fails stops the run: a stale local branch is what it is there to avoid.
@@ -291,7 +293,9 @@ public struct TaskRunner: Sendable {
                     outOfScope: ["Pushing, merging or opening a pull request: Workbench does that after the check passes."]),
                 settings: settings, title: TaskPrompt.title(task: name, units: units))
         } catch ThreadStoreError.activeThreadExists(let active) {
-            return busy(active)
+            return busy(active, cap: 1)
+        } catch ThreadStoreError.tooManyActive(let active, let cap) {
+            return busy(active.joined(separator: ", "), cap: cap)
         } catch { return fail("the thread could not be created: \(error)", units: ids) }
 
         do { _ = try await service.approve(id: id, config: config) } catch {

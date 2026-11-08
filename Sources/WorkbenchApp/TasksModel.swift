@@ -116,7 +116,8 @@ struct TasksSnapshot: Equatable {
     var entries: [TaskEntry]
     var timer: TimerCard
     var readAt: Date
-    /// The project's active thread, if one is open: a task's next run would skip while it is (the task page says so).
+    /// A thread that fills the project's last free slot (`max_active_threads`), nil while one is free: a task's next run would
+    /// skip while it is set (the task page says so).
     var activeThread: String?
 }
 
@@ -132,8 +133,14 @@ struct TasksReader: Sendable {
             let service = timerService(project: project, environment: environment)
             return TasksSnapshot(
                 projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now,
-                activeThread: ThreadStore(project: project).activeThreadID())
+                activeThread: blockingThread(project))
         }
+    }
+
+    /// A thread filling the last free slot, nil while one is free: what makes a task that opens a pull request skip.
+    private static func blockingThread(_ project: Project) -> String? {
+        let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? 1
+        return ThreadStore(project: project).fullThreads(maxActive: cap)?.first
     }
 
     /// The project's tasks and their runs, without the timer's probes: what the menu bar watches. A folder that cannot be read is a

@@ -158,8 +158,10 @@ public struct AgentSetup: Sendable, Equatable {
     /// Said after the run agent is changed while a coding thread is active: `run` refuses a goal approved for other coding settings.
     public static func runChangeNote(in project: Project) -> String? {
         let store = ThreadStore(project: project)
-        guard let active = store.activeThreadID(), !store.state(of: active).isChat else { return nil }
-        return "thread \(active) may have been approved for the old run settings: `workbench run` refuses until "
+        let coding = store.activeThreadIDs().filter { !store.state(of: $0).isChat }
+        guard !coding.isEmpty else { return nil }
+        let active = coding.count == 1 ? "thread \(coding[0])" : "threads \(coding.joined(separator: ", "))"
+        return "\(active) may have been approved for the old run settings: `workbench run` refuses until "
             + "`workbench goal approve` binds the new ones"
     }
 }

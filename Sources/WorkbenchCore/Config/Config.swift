@@ -97,6 +97,8 @@ public struct Config: Sendable, Equatable {
     public var envPass: [String]
     /// How many ports each thread is given (`ThreadPorts`), for its run, check and setup. One is the first, `WORKBENCH_PORT`.
     public var ports: Int = 1
+    /// How many threads may be active in the project at once (`ThreadStore.create` refuses past it). One keeps the single-thread rule.
+    public var maxActiveThreads: Int = 1
     public var tools: ToolSet
     public var review: ReviewConfig = ReviewConfig()
     /// `[verifier]`, or nil when the project declares none.
@@ -164,8 +166,8 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type", "permissions",
-            "default_budget_usd", "env_pass", "ports", "safe_mode", "project_instructions", "chat_reads_repo", "copy",
-            "read_also", "editor", "herdr", "reports_copy_to",
+            "default_budget_usd", "env_pass", "ports", "max_active_threads", "safe_mode", "project_instructions",
+            "chat_reads_repo", "copy", "read_also", "editor", "herdr", "reports_copy_to",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -290,6 +292,7 @@ public struct Config: Sendable, Equatable {
         }
 
         let ports = portsValue(document.tables[""]?.entries["ports"], fail: fail)
+        let maxActiveThreads = maxActiveThreadsValue(document.tables[""]?.entries["max_active_threads"], fail: fail)
 
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
@@ -367,6 +370,7 @@ public struct Config: Sendable, Equatable {
             review: review, verifier: verifier, run: run)
         config.permissions = permissions
         config.ports = ports
+        config.maxActiveThreads = maxActiveThreads
         config.chatReadsRepo = chatReadsRepo
         config.editor = editor
         config.reportsCopyTo = reportsCopyTo
@@ -391,6 +395,17 @@ public struct Config: Sendable, Equatable {
         guard let entry else { return 1 }
         if case .int(let n) = entry.value, (1...ThreadPorts.maxCount).contains(n) { return n }
         fail(.invalidValue, entry.line, "'ports' must be a whole number from 1 to \(ThreadPorts.maxCount)")
+        return 1
+    }
+
+    /// The most threads that may be active at once; the plan sizes it for three.
+    public static let maxActiveThreadsLimit = 8
+
+    /// The `max_active_threads` key: one when it is absent or after `fail` has been told.
+    static func maxActiveThreadsValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
+        guard let entry else { return 1 }
+        if case .int(let n) = entry.value, (1...maxActiveThreadsLimit).contains(n) { return n }
+        fail(.invalidValue, entry.line, "'max_active_threads' must be a whole number from 1 to \(maxActiveThreadsLimit)")
         return 1
     }
 
@@ -489,6 +504,7 @@ public struct Config: Sendable, Equatable {
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
         # ports = 1                        # ports each thread gets for its run, check and setup (WORKBENCH_PORT, PORT)
         #                                  # more come as WORKBENCH_PORT_1, _2; no two threads share one
+        # max_active_threads = 1           # threads that may be open at once (up to 8); a new goal over it is refused
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
         # reports_copy_to = "~/Obsidian/Vault/Workbench" # also copy each report of a `fix: report` task there (a vault folder)
         # herdr = "/Users/me/.local/bin/herdr-app" # the window's "Open in Herdr"; else `herdr-app` on PATH or in ~/.local/bin

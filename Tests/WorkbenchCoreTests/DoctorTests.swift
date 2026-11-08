@@ -188,7 +188,7 @@ private func expectClean(_ fx: RunnerFixture, sourceLocation: SourceLocation = #
         let report = try await Doctor(project: fx.project, git: fx.git).run(base: "main", options: options())
         #expect(report.passed && report.check.outcome == .passed)
         #expect(try fx.events(id).map(\.seq) == before, "doctor writes nothing to the thread's log")
-        #expect(ThreadStore(project: fx.project).activeThreadID() == id)
+        #expect(ThreadStore(project: fx.project).newestActiveThreadID() == id)
         try await expectClean(fx)
     }
 
