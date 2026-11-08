@@ -33,7 +33,11 @@ extension ProjectStore {
 
     /// Reads the project's tasks every 30 s for as long as the app runs, whatever screen or window is up.
     func startAttentionPolling() {
-        attention.startPolling { [weak self] in await self?.observeAttention(readTasks: true) }
+        attention.startPolling { [weak self] in
+            // Not behind the attention read, which has no limit of its own: a task folder that hangs must not hold every badge.
+            Task { @MainActor in await self?.readRailSummaries() }
+            await self?.observeAttention(readTasks: true)
+        }
     }
 
     /// Where a click on a notification (or an `Open` in the popover) goes. The window is brought forward by the caller.

@@ -1,6 +1,6 @@
 # P26: Project rail and inbox
 
-Status: in progress, slices 1 and 2 built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
+Status: in progress, slices 1 to 3 built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
 the automations view; copied from the Design canvas, 2026-11-08).
 
 Threads can now run side by side (P23), so the window stops being "one project, one thread, and a list". The design makes **projects visible**
@@ -81,13 +81,22 @@ hides the tile (the project stays in the recents), and removing the open project
 press it; the top bar names the project as text, and its pill is gone. The top tile is disabled until slice 4. The open project's tile counts what
 the window reads of it; the others show no badge until slice 3.
 
-### 3. Project summaries (counts for projects not open)
+### 3. Project summaries (counts for projects not open) (built)
 
 `ProjectSummary { needsYou, failed, running }` per rail project, derived from `ThreadRow` marks and the task summary (the rules `RailRow` already
 applies), read on the attention poll, bounded, never writing. The badge and the all-projects count come from it. Quit and recovery unchanged.
 Failure cases: a project whose log is corrupt shows a red badge, not zero; a folder that disappeared; a read that times out keeps the last count;
 the selected project uses the live store, not the poll, so its badge never lags the list beside it.
 Core change: a read-only `ProjectSummaryLoader` in `WorkbenchCore` (Linux-testable); no event format change.
+
+As built: core has `ThreadActivity` (the one rule for a thread's mark, which the app's list now calls too, so the list and the rail cannot
+disagree), `ProjectSummary` and `ProjectSummaryLoader` (the newest 200 threads, each replayed only when its log or goal file changed; the
+`Cache` makes a poll of an unchanged project a `stat` per file). The app's `RailSummaries` reads every rail project on the existing 30 s
+attention poll, one after another, off the main actor and with a 10 s limit (`raced`): a read that does not come back leaves the last
+count, one still in flight is not asked again, and the tasks' part (the rules `RailRow.task` applies) keeps its last value when the tasks
+cannot be read. A tile for a folder that is gone is not read (the tile says so); a project off the rail is forgotten. The open project's
+tile is the window's own reading (`railBadge`), the others are the last summary, and the project the window just left keeps the count it
+had while open. A log that cannot be read is failed (red), not zero.
 
 ### 4. Inbox
 

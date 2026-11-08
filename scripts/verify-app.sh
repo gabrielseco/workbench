@@ -256,7 +256,9 @@ SWIFT
         !*) place="$dir/gone/${entry#!}" ;;
         *)
           place="$dir/rail/$entry"
-          mkdir -p "$place/.workbench/threads" && git -C "$place" init -q -b main ;;
+          mkdir -p "$place/.workbench/threads" && git -C "$place" init -q -b main
+          # What that project holds (its threads), when the scenario ships it: the rail's counts read it.
+          [[ ! -d "$fixture/rail-projects/$entry/threads" ]] || cp -R "$fixture/rail-projects/$entry/threads/." "$place/.workbench/threads/" ;;
       esac
       listed="${listed:+$listed:}$place"
     done <"$fixture/rail"

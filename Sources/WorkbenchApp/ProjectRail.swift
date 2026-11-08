@@ -36,7 +36,11 @@ struct ProjectRail: View {
                 .background(Theme.raised, in: RoundedRectangle(cornerRadius: Radius.card))
         }
         .buttonStyle(.plain).disabled(true)
-        .accessibilityLabel("All projects inbox").help("The inbox of every project: it arrives with the inbox view")
+        .overlay(alignment: .topTrailing) {
+            if let kind = CountBadge.Kind(store.allProjectsBadge()) { CountBadge(kind: kind).offset(x: Space.s, y: -Space.s) }
+        }
+        .accessibilityLabel(store.allProjectsBadge().label(for: "All projects inbox"))
+        .help("The inbox of every project: it arrives with the inbox view")
     }
 
     private var addProject: some View {

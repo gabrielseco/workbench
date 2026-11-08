@@ -38,6 +38,43 @@ extension AppScenario {
     /// with `!` is a folder that is gone, any other is a repository `verify-app.sh start` makes beside it. Empty: the rail is the project alone.
     var railNames: [String] { self == .projectRail ? ["api", "@PROJECT@", "mobile", "!docs", "web"] : [] }
 
+    /// What the other projects of the rail hold (`rail-projects/<name>/threads` in the scenario's folder), by name: `api` two threads that need
+    /// you, `mobile` a turn going, `web` a log that cannot be read. The scenario's own project and `docs` (a folder that is gone) hold none here.
+    enum RailProjectKind: Equatable {
+        case needsYou(Int)
+        case running
+        case brokenLog
+    }
+
+    var railProjectKinds: [String: RailProjectKind] {
+        self == .projectRail ? ["api": .needsYou(2), "mobile": .running, "web": .brokenLog] : [:]
+    }
+
+    /// Writes the threads of the rail's other projects beside the scenario's own (`verify-app.sh start` copies each into its repository).
+    @MainActor func writeRailProjects(into target: URL) async throws {
+        for (name, kind) in railProjectKinds {
+            let fixture = try await AppFixture(git: false)
+            switch kind {
+            case .needsYou(let count):
+                for index in 0..<count {
+                    try await fixture.addThread("n\(index)", approved: true, title: "Thread \(index + 1) of \(name)")
+                    try fixture.turn("n\(index)", 1, cost: 0.8)
+                }
+            case .running:
+                try await fixture.addThread("run", approved: true, title: "A turn going in \(name)")
+                try fixture.append("run", .turnStarted, turn: 1, data: ["session_id": "s1"])
+            case .brokenLog:
+                let log = fixture.project.eventsURL("g-2026-10-28-bad")
+                try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try "not an event\nnot one either\n".write(to: log, atomically: true, encoding: .utf8)
+            }
+            let destination = target.appendingPathComponent("rail-projects/\(name)/threads")
+            let parent = destination.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: fixture.project.threadsDirectory, to: destination)
+        }
+    }
+
     /// The pull requests the stand-in `gh` says are merged (`merged-prs`, one number a line); the rest it says are open.
     var mergedPullRequests: [Int] { self == .prMerged ? [480] : [] }
 

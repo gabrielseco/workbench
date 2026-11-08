@@ -125,6 +125,8 @@ struct RecentProject: Equatable, Identifiable {
     var recentPaths: [String] = []
     /// The projects on the rail, in order (`ProjectStore+Rail.swift`).
     var railPaths: [String] = []
+    /// What the other tiles count, read on the attention poll (`ProjectStore+Summaries.swift`).
+    let railSummaries = RailSummaries()
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
     /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
@@ -226,6 +228,8 @@ struct RecentProject: Equatable, Identifiable {
             screen = .notAGitRepository(path: url.path)
             return false
         }
+        // Leaving a project: its tile keeps what the window last read of it, not what the poll read before.
+        if located.root != project?.root { captureLiveCounts() }
         preferences.projectPath = located.root.path
         remember(located.root.path)
         generation += 1

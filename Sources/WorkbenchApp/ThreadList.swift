@@ -5,6 +5,8 @@ import WorkbenchCore
 /// What a thread's row says: the mark carries the colour and the symbol, the line says it in words.
 enum ThreadMark: String, Equatable, Sendable {
     case working, needsYou, done, idle, broken
+
+    init(activity: ThreadActivity) { self = ThreadMark(rawValue: activity.rawValue) ?? .idle }
 }
 
 struct ThreadRow: Equatable, Identifiable, Sendable {
@@ -92,16 +94,8 @@ enum ThreadListLoader {
         func forget(except ids: Set<String>) { lock.withLock { rows = rows.filter { ids.contains($0.key) } } }
     }
 
-    /// `thread.created`'s time, from the log's first line alone; "" when it cannot be told (the thread sorts last).
-    static func firstLineCreatedAt(_ url: URL) -> String {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
-        defer { try? handle.close() }
-        let head = (try? handle.read(upToCount: 8_192)) ?? Data()
-        guard let line = head.split(separator: UInt8(ascii: "\n"), maxSplits: 1).first,
-            let event = try? JSONDecoder().decode(Event.self, from: Data(line))
-        else { return "" }
-        return event.ts
-    }
+    /// `thread.created`'s time, from the log's first line alone (core's, shared with the rail's counts).
+    static func firstLineCreatedAt(_ url: URL) -> String { ProjectSummaryLoader.firstLineCreatedAt(url) }
 
     /// - Parameter pullRequests: what GitHub said of each thread's pull request, when it was read; a thread missing here is derived
     ///   from its log alone, which never says merged.
@@ -152,11 +146,13 @@ enum ThreadListLoader {
     }
 
     /// A chat thread's row: its first words, and grey while it waits, blue while a turn is going, over once it has ended.
-    static func chatRow(id: String, state: ThreadState) -> ThreadRow {
+    static func chatRow(id: String, state: ThreadState, damaged: Bool = false) -> ThreadRow {
         let title = chatTitle(state: state, id: id)
-        if let decision = state.decision { return ThreadRow(id: id, title: title, mark: .idle, line: decision.capitalized) }
-        if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: .working, line: "Chat · replying") }
-        return ThreadRow(id: id, title: title, mark: .idle, line: "Chat")
+        let mark = ThreadMark(activity: .chat(state: state, damaged: damaged))
+        if damaged { return ThreadRow(id: id, title: title, mark: mark, line: "The log cannot be read") }
+        if let decision = state.decision { return ThreadRow(id: id, title: title, mark: mark, line: decision.capitalized) }
+        if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: mark, line: "Chat · replying") }
+        return ThreadRow(id: id, title: title, mark: mark, line: "Chat")
     }
 
     /// One thread's row: its log replayed once, the way the toolbar's pill is derived, with what GitHub said of its pull request when
@@ -172,7 +168,7 @@ enum ThreadListLoader {
         let state = store.state(from: contents.events, id: id)
         // A chat has no goal file until one is made from it: its first words are its title, and its line says Chat.
         if state.isChat, !FileManager.default.fileExists(atPath: project.goalURL(id).path) {
-            return chatRow(id: id, state: state)
+            return chatRow(id: id, state: state, damaged: !contents.problems.isEmpty)
         }
         var title: String?
         var approval: ApprovalState?
@@ -217,12 +213,7 @@ enum ThreadListLoader {
     static func mark(
         attention: Attention, state: ThreadState, damaged: Bool, outcome: PullRequestOutcome = .open
     ) -> ThreadMark {
-        if damaged { return .broken }
-        if case .needsYou = attention { return .needsYou }
-        if attention == .working { return .working }
-        // Green is for work that went somewhere; a thread thrown away, or a pull request closed unmerged, is just over.
-        if state.decision == "discarded" || outcome == .closed { return .idle }
-        if state.cleaned || state.pullRequest != nil || state.decision != nil { return .done }
-        return .idle
+        // The rule is core's (`ThreadActivity`), shared with the project rail's counts.
+        ThreadMark(activity: .classify(attention: attention, state: state, damaged: damaged, outcome: outcome))
     }
 }
