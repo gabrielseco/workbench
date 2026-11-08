@@ -140,11 +140,10 @@ public actor ThreadRunner {
                 ? RunnerError.claudeNotFound(name) : RunnerError.agentNotFound(provider: "\(agent.provider)", name: name)
         }
 
+        try requireFreeCheckSlot(config: config, store: store)
         let log = try openLog()
         try writeRunnerInfo()
-        defer {
-            try? FileManager.default.removeItem(at: project.runnerURL(threadID))
-        }
+        defer { try? FileManager.default.removeItem(at: project.runnerURL(threadID)) }
         try ThreadStore(project: project).requireNoDoctor()
 
         do {
@@ -485,6 +484,15 @@ public actor ThreadRunner {
 extension ThreadRunner {
     // MARK: The check
 
+    /// Every run ends in a check; with the slots full now, a turn would be spent on a check that is refused.
+    func requireFreeCheckSlot(config: Config, store: ThreadStore) throws {
+        guard config.checkCommand != nil else { return }
+        let busy = store.runningChecks(excluding: threadID)
+        if busy.count >= config.maxConcurrentChecks {
+            throw RunnerError.tooManyChecks(running: busy, max: config.maxConcurrentChecks)
+        }
+    }
+
     /// The project's own check, run here so that a pass is Workbench's evidence and not Claude's claim.
     /// The command is the config's; nothing in the worktree is consulted to choose it.
     private func runCheck(
@@ -501,8 +509,9 @@ extension ThreadRunner {
             killGrace: options.killGrace)
         notify(.checkStarted(turn: report.turn, command: command))
         defer { currentRun = nil }
+        let slot = CheckSlot(project: project, threadID: threadID, max: config.maxConcurrentChecks)
         let ran = try await check.run(
-            turn: report.turn, outputURL: project.checkOutputURL(threadID, turn: report.turn), log: log
+            turn: report.turn, outputURL: project.checkOutputURL(threadID, turn: report.turn), log: log, slot: slot
         ) { [self] process in await attach(process) }
         notify(.checkRan(ran))
         return ran

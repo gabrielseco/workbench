@@ -99,6 +99,8 @@ public struct Config: Sendable, Equatable {
     public var ports: Int = 1
     /// How many threads may be active in the project at once (`ThreadStore.create` refuses past it). One keeps the single-thread rule.
     public var maxActiveThreads: Int = 1
+    /// How many threads may be running their check at once. A check over it is refused, never queued (`CheckSlot`).
+    public var maxConcurrentChecks: Int = 2
     public var tools: ToolSet
     public var review: ReviewConfig = ReviewConfig()
     /// `[verifier]`, or nil when the project declares none.
@@ -166,8 +168,8 @@ public struct Config: Sendable, Equatable {
 
         let rootKeys: Set<String> = [
             "claude_path", "check_command", "setup_command", "app_type", "permissions",
-            "default_budget_usd", "env_pass", "ports", "max_active_threads", "safe_mode", "project_instructions",
-            "chat_reads_repo", "copy", "read_also", "editor", "herdr", "reports_copy_to",
+            "default_budget_usd", "env_pass", "ports", "max_active_threads", "max_concurrent_checks", "safe_mode",
+            "project_instructions", "chat_reads_repo", "copy", "read_also", "editor", "herdr", "reports_copy_to",
         ]
         let toolKeys: Set<String> = ["available", "allowed", "denied"]
 
@@ -293,6 +295,7 @@ public struct Config: Sendable, Equatable {
 
         let ports = portsValue(document.tables[""]?.entries["ports"], fail: fail)
         let maxActiveThreads = maxActiveThreadsValue(document.tables[""]?.entries["max_active_threads"], fail: fail)
+        let maxChecks = maxConcurrentChecksValue(document.tables[""]?.entries["max_concurrent_checks"], fail: fail)
 
         var budget = defaultBudgetUSD
         if let entry = document.tables[""]?.entries["default_budget_usd"] {
@@ -371,6 +374,7 @@ public struct Config: Sendable, Equatable {
         config.permissions = permissions
         config.ports = ports
         config.maxActiveThreads = maxActiveThreads
+        config.maxConcurrentChecks = maxChecks
         config.chatReadsRepo = chatReadsRepo
         config.editor = editor
         config.reportsCopyTo = reportsCopyTo
@@ -400,6 +404,14 @@ public struct Config: Sendable, Equatable {
 
     /// The most threads that may be active at once; the plan sizes it for three.
     public static let maxActiveThreadsLimit = 8
+
+    /// The `max_concurrent_checks` key: two when it is absent or after `fail` has been told.
+    static func maxConcurrentChecksValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
+        guard let entry else { return 2 }
+        if case .int(let n) = entry.value, (1...maxActiveThreadsLimit).contains(n) { return n }
+        fail(.invalidValue, entry.line, "'max_concurrent_checks' must be a whole number from 1 to \(maxActiveThreadsLimit)")
+        return 2
+    }
 
     /// The `max_active_threads` key: one when it is absent or after `fail` has been told.
     static func maxActiveThreadsValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
@@ -504,6 +516,7 @@ public struct Config: Sendable, Equatable {
         # A version manager sets its own: for mise on Elixir, env_pass = ["MIX_HOME", "MIX_ARCHIVES"]
         # ports = 1                        # ports each thread gets for its run, check and setup (WORKBENCH_PORT, PORT)
         #                                  # more come as WORKBENCH_PORT_1, _2; no two threads share one
+        # max_concurrent_checks = 2        # threads that may run their check at once; one over it is refused, not queued
         # max_active_threads = 1           # threads that may be open at once (up to 8); a new goal over it is refused
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
         # reports_copy_to = "~/Obsidian/Vault/Workbench" # also copy each report of a `fix: report` task there (a vault folder)

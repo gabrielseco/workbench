@@ -117,6 +117,19 @@ public struct GitRunner: Sendable {
     }
 
     public func run(_ arguments: [String], in directory: URL) async throws -> GitResult {
+        // Worktrees share one `.git`: a command that changes it runs alone, and a lock file left by one that did not is retried once.
+        guard GitSharedRepository.changesIt(arguments), let common = GitSharedRepository.commonDirectory(from: directory) else {
+            return try await runOnce(arguments, in: directory)
+        }
+        let held = try await GitSharedRepository.acquire(common, arguments: arguments, wait: max(timeout * 2, 30))
+        defer { close(held) }
+        let first = try await runOnce(arguments, in: directory)
+        guard !first.succeeded, GitSharedRepository.isLockFileError(first.stderr) else { return first }
+        try? await Task.sleep(nanoseconds: GitSharedRepository.retryDelayNanoseconds)
+        return try await runOnce(arguments, in: directory)
+    }
+
+    private func runOnce(_ arguments: [String], in directory: URL) async throws -> GitResult {
         let outFile = Self.scratchFile()
         let errFile = Self.scratchFile()
         defer {

@@ -410,6 +410,16 @@ Notes:
   goal flow) ends the one active thread only when the cap is 1: with a higher cap and no free slot it refuses, since no flow picks
   which of several to end. A command that acts on "the" thread without `--thread` refuses when several are active and names them.
   Views (`status`, the app) show the newest active one until the app lists them all.
+- **Checks at once and the shared git directory.** `max_concurrent_checks` (config key, 1 to 8, default 2) is how many threads of a
+  project may be in their check at once. A thread is in its check while its runner is alive and its log has a `check.started`
+  with no `check.ran` (a crashed runner is not counted). `workbench run` with the slots full exits 6 before any turn and names the
+  running threads; a check that finds them full when it is about to start (the slots filled during the turn) is not run: it is
+  recorded as `check.started` and a `check.ran` with `result: failed` and an `error` that names them, and says to run the thread
+  again. Nothing is queued. `doctor` is not counted: it holds the whole project. Worktrees share one `.git`, so a git command that
+  changes it (`fetch`, `push`, `gc`, `worktree add|remove|prune|move`, `branch -d|-D|-m`, `update-ref`, `pack-refs`, `repack`) takes
+  an exclusive lock on that directory, in this process and in any other `workbench` or the app, and a lock-file error from git
+  ("Unable to create '….lock': File exists", "cannot lock ref") is retried once after half a second; a second failure is the
+  command's own failure, with git's message.
 - **Ports per thread.** Every thread has its own block of `ports` ports (config key, 1 to 10, default 1), written to
   `threads/<id>/ports.json` the first time a step needs it and held while the thread has a worktree (a cleaned or abandoned thread
   gives its block back and its file is removed the next time a block is handed out). Blocks are slots of ten from 41000, so a

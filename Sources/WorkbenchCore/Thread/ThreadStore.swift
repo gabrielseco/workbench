@@ -212,6 +212,15 @@ public struct ThreadStore: Sendable {
         }
     }
 
+    /// The threads, other than `excluding`, whose runner is alive and whose check has started and not ended. A crashed runner
+    /// leaves an open check in its log but no live process, so the log alone would count it for ever.
+    public func runningChecks(excluding id: String? = nil) -> [String] {
+        threadIDs().filter { other in
+            guard other != id, runnerPID(id: other) != nil else { return false }
+            return (try? EventLogReader.read(at: project.eventsURL(other)))?.openCheck != nil
+        }
+    }
+
     /// The name a chat was started under: its id is `g-<yyyy-MM-dd>-<name>`. The whole name, never the tail of one, so `foo` is
     /// not the chat `bar-foo`.
     public static func chatName(of id: String) -> String? {
@@ -224,7 +233,7 @@ public struct ThreadStore: Sendable {
 
     /// An exclusive lock on the `threads/` directory itself (no file is left), held while a thread is admitted. The wait is
     /// short and bounded: the critical section is a directory listing and a mkdir.
-    private static func admit(_ directory: URL) throws -> Int32 {
+    static func admit(_ directory: URL) throws -> Int32 {
         let fd = open(directory.path, O_RDONLY | O_CLOEXEC)
         guard fd >= 0 else { throw ThreadStoreError.admissionBusy }
         let deadline = Date().addingTimeInterval(5)
