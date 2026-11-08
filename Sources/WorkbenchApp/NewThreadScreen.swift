@@ -138,7 +138,7 @@ struct NewThreadScreen: View {
         .onDisappear { staging.clear() }
         .task {
             try? await Task.sleep(for: .milliseconds(40))
-            focused = true
+            focused = !store.railFocused
         }
         .task { await store.refreshAgentSetup() }
     }
