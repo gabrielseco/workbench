@@ -1,0 +1,44 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Automations.dc.html": {
+      "h": 900,
+      "title": "Automations: its own view",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 900,
+      "title": "Inbox: threads as inbox, projects in a rail",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-07T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Workbench: projects in a rail, threads as an inbox, automations in their own view",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Automations.dc.html"
+  ],
+  "pages": [],
+  "title": "Workbench: project rail + inbox"
+}

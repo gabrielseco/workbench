@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workbench automations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#14161a}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;box-sizing:border-box;display:flex;flex-direction:column;background:#1b1d21;color:#e8eaed;font-family:-apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;border-radius:14px;overflow:hidden;border:1px solid #2c3037">
+
+<div style="height:40px;flex:none;background:#22272e;display:flex;align-items:center;padding:0 16px;gap:8px;border-bottom:1px solid #2c3037">
+<span style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></span>
+<span style="width:12px;height:12px;border-radius:50%;background:#febc2e"></span>
+<span style="width:12px;height:12px;border-radius:50%;background:#28c840"></span>
+<span style="margin-left:16px;font-size:14px;font-weight:600;color:#9ba1ab">Workbench</span>
+</div>
+
+<div style="height:56px;flex:none;background:#22272e;display:flex;align-items:center;padding:0 20px;gap:16px;border-bottom:1px solid #2c3037">
+<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600">
+<span>project</span>
+<span style="font-size:13px;font-weight:400;color:#9ba1ab;font-family:ui-monospace,Menlo,monospace">base: main</span>
+</div>
+<div style="display:flex;background:#1b1d21;border:1px solid #2c3037;border-radius:10px;padding:3px;gap:2px;margin-left:24px">
+<button style="border:0;background:transparent;color:#9ba1ab;font-size:13px;font-weight:600;padding:7px 16px;border-radius:7px;display:flex;align-items:center;gap:8px">Inbox<span style="background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px">4</span></button>
+<button style="border:0;background:#33394a;color:#e8eaed;font-size:13px;font-weight:600;padding:7px 16px;border-radius:7px;display:flex;align-items:center;gap:8px">Automations<span style="background:#ef6b61;color:#14161a;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px">2</span></button>
+</div>
+<div style="flex:1"></div>
+<button style="border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px">New task…</button>
+</div>
+
+<div style="flex:1;min-height:0;display:flex">
+
+<!-- project rail -->
+<div style="width:72px;flex:none;background:#14161a;border-right:1px solid #2c3037;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:12px">
+<div style="position:relative">
+<button aria-label="All projects inbox" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;display:flex;align-items:center;justify-content:center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8"/><path d="M3 13v6h18v-6h-5l-1.5 2.5h-5L8 13z"/></svg>
+</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">5</span>
+</div>
+<div style="width:28px;height:1px;background:#2c3037"></div>
+<div style="position:relative">
+<span style="position:absolute;left:-14px;top:8px;width:4px;height:28px;border-radius:0 4px 4px 0;background:#7aa7ff"></span>
+<button aria-label="project, 4 need you" style="width:44px;height:44px;border-radius:12px;border:1px solid #7aa7ff;background:#2b3550;color:#e8eaed;font-size:14px;font-weight:700">pr</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">4</span>
+</div>
+<div style="position:relative">
+<button aria-label="api, 1 failed" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">ap</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#ef6b61;color:#14161a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">1</span>
+</div>
+<div style="position:relative">
+<button aria-label="mobile, running" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">mo</button>
+<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#7aa7ff;border:2px solid #14161a;box-sizing:border-box"></span>
+</div>
+<div style="position:relative">
+<button aria-label="docs" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">do</button>
+</div>
+<button aria-label="Add project" style="width:44px;height:44px;border-radius:12px;border:1px dashed #3a4049;background:transparent;color:#9ba1ab;font-size:22px;line-height:1">+</button>
+</div>
+
+<!-- task list -->
+<div style="width:360px;flex:none;background:#1b1d21;border-right:1px solid #2c3037;display:flex;flex-direction:column;min-height:0">
+<div style="padding:18px 20px 12px;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">SCHEDULED · 7</div>
+
+<div style="display:flex;gap:12px;padding:11px 14px;margin:0 8px;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#ef6b61;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">broken-task</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">manual · will not run</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">bump-contract-details</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">weekdays 04:00 · next due now</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">cleanup-branches</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">needs you</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;border:2px solid #7aa7ff;box-sizing:border-box;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">nightly-lint</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">running now</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px;background:#272c35">
+<span style="width:10px;height:10px;border-radius:50%;background:#ef6b61;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">sync-fixtures</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">every 7d · last run failed</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">update-docs</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">mon, thu 07:30 · re-approve</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:11px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#62c48f;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">weekly-report</div><div style="font-size:12px;color:#9ba1ab;margin-top:3px">last run succeeded</div></div>
+</div>
+</div>
+
+<!-- task detail -->
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#1b1d21;padding:28px 48px;gap:22px;overflow:hidden">
+<div style="display:flex;align-items:flex-start;gap:16px">
+<div style="flex:1">
+<div style="font-size:22px;font-weight:600">sync-fixtures</div>
+<div style="font-size:14px;color:#9ba1ab;margin-top:6px">every 7d · opens a PR · 2 runs · next due now</div>
+<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab;margin-top:6px">.workbench/tasks/sync-fixtures/task.md</div>
+</div>
+<button style="border:0;background:#f4f5f7;color:#14161a;font-size:14px;font-weight:700;padding:10px 18px;border-radius:9px">Run now</button>
+<button style="border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:14px;font-weight:600;padding:10px 18px;border-radius:9px">Edit with AI</button>
+</div>
+
+<!-- will it run tonight -->
+<div style="border:1px solid #7a3b38;border-radius:12px;background:#22252b;overflow:hidden">
+<div style="display:flex;align-items:center;gap:14px;padding:14px 20px">
+<span style="width:12px;height:12px;border-radius:50%;background:#ef6b61"></span>
+<div style="flex:1"><div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">WILL IT RUN TONIGHT?</div><div style="font-size:15px;font-weight:600;margin-top:3px">Will not run</div></div>
+<span style="font-size:13px;color:#9ba1ab">4 warnings</span>
+</div>
+<div style="border-top:1px solid #2c3037;padding:12px 20px;font-size:13px;display:flex;align-items:center;gap:14px">
+<div style="flex:1">An earlier thread is still active, so the next run would skip.<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab;margin-top:2px">invoice-pagination</div></div>
+<button style="border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px">Open thread</button>
+</div>
+<div style="border-top:1px solid #2c3037;padding:12px 20px;font-size:13px">The launcher's binary copy is missing: <span style="font-family:ui-monospace,Menlo,monospace">workbench task timer install</span></div>
+<div style="border-top:1px solid #2c3037;padding:12px 20px;font-size:13px">No repeating wake is set, so the Mac may be asleep at run time.</div>
+<div style="border-top:1px solid #2c3037;padding:12px 20px;font-size:13px">FileVault is on: after a restart the timer starts only at login.</div>
+</div>
+
+<!-- history -->
+<div>
+<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab;padding-bottom:10px;border-bottom:1px solid #2c3037">WED, OCT 28</div>
+<div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #2c3037">
+<span style="width:12px;height:12px;border-radius:50%;background:#ef6b61;margin-top:4px;flex:none"></span>
+<div style="flex:1;min-width:0">
+<div style="display:flex;gap:12px;align-items:baseline"><span style="font-size:15px;font-weight:600;color:#ef6b61">failed</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">10:15 · tick · took 22m</span></div>
+<div style="font-size:13px;color:#c9ced6;margin-top:6px">The check failed: two fixture snapshots still differ (expected 41 entries, got 40).</div>
+<button style="margin-top:12px;border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px">Fix this with AI</button>
+</div>
+<button style="align-self:flex-start;border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px">View log</button>
+</div>
+<div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #2c3037;color:#9ba1ab">
+<span style="width:12px;height:12px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box;margin-top:4px;flex:none"></span>
+<div><span style="font-size:15px;font-weight:600">nothing-pending</span> <span style="font-family:ui-monospace,Menlo,monospace;font-size:12px">&nbsp;Oct 21 · 11:15 · tick</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<div style="height:44px;flex:none;background:#22272e;border-top:1px solid #2c3037;display:flex;align-items:center;padding:0 20px;gap:18px;font-size:13px">
+<span style="color:#7aa7ff;font-weight:600">Event log 4</span>
+<span style="color:#c9ced6">Doctor</span>
+<span style="color:#9ba1ab">Not run</span>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

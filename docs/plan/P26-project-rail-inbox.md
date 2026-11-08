@@ -1,0 +1,117 @@
+# P26: Project rail and inbox
+
+Status: planned, nothing built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
+the automations view; copied from the Design canvas, 2026-11-08).
+
+Threads can now run side by side (P23), so the window stops being "one project, one thread, and a list". The design makes **projects visible**
+(a rail of them, each with its count) and turns the thread list into an **inbox** sorted by what needs you. This plan is the gap between that
+design and `main`.
+
+## What the design shows
+
+| Area | Design | Today |
+|---|---|---|
+| Project rail | 72 pt column of project tiles (two letters), a selected bar, a count badge (amber needs you, red failed, blue dot running), a top tile for **all projects' inbox** with the summed count, `+` to add a project | One project at a time; a `ProjectPill` in the top bar opens the project card to switch |
+| Inbox | `INBOX · PROJECT` with `+`, sections **Needs you**, **Waiting** (shipped PR, CI running), **Done** (collapsed: "Show 9 finished threads"); a row is a mark, the title, the reason in words, the spend; an automation that needs approval is a row with an `auto` tag | `PreviewRail`: Threads (flat, `Show more`) then Scheduled tasks |
+| Top bar | project name and `base`, an **Inbox / Automations** switch with counts, spend and state pill in the thread view, `New task…` in the automations view | `ProjectPill`, **`AgentsPill`**, base, spend, state pill; no switch (`WindowMode` thread/tasks is reached from the rail) |
+| Thread detail | title, a stage line (Goal, Run, Review, Accept, Ship, PR review, Clean), goal card, activity lines, a **NEXT** card with the action | `FeedScreen` (chat feed) |
+| Automations | its own view: task list (7, with marks) and the detail with "Will it run tonight?", history, `Run now`, `Edit with AI` | `TasksView`, reached from the rail |
+| Footer | event log, Doctor, `30 min per turn` | `FooterBar` |
+
+The fake window chrome (traffic lights) is the canvas's, not something to build.
+
+## The one thing the design drops: Agents
+
+The top bar has no agents pill. The Agents card (P25) stays and must stay **per project**, so it moves instead of going away:
+
+- **Rail tile menu** (right click or long press on a project tile): `Agents…`, `Doctor`, `Reveal in Finder`, `Remove from rail`. `Agents…` opens the
+  existing card for *that* project, even when it is not the selected one.
+- **⌘,** and the app menu's `Agents…` keep working for the selected project (`WorkbenchApp.swift:44`).
+- **Inbox header button** (decided): a small `cpu` icon button beside the `+` in the `INBOX · PROJECT` header, its tooltip the run role's
+  `Codex · gpt-6.1-terra`. It is the visible way in; the top bar stays as the design draws it. It is not shown in the Automations view, which has
+  the tile menu and ⌘,.
+- The goal agent is still named on a chat and on the new-thread screen (P25 slice 1); that is where it matters.
+
+## What stands in the way
+
+1. **The app holds one project.** `ProjectStore.project`, the polling, `AttentionCenter` and `ThreadListLoader` all follow the selected project.
+   `sessions` is already keyed by `(project path, thread)` and quit/recovery already walks `ownedRuns` across projects
+   (`ProjectStore+Quit.swift`), so a run in another project survives a switch; what is missing is *reading* the other projects' state.
+   P23 lists "many projects at once" as out of scope for running; this phase lifts it only for **showing and switching**. One project still has
+   `max_active_threads` threads, and there is no cross-project scheduler or spend cap.
+2. **The rail must know which projects.** Today: `recentPaths` (up to 10, `ProjectStore+Recents.swift`). The rail needs an explicit, ordered, removable
+   list (pinned projects) in `Preferences`, seeded from the recents.
+3. **Counts for projects that are not open.** Needs a cheap read of each rail project's threads and tasks without loading it: reuse
+   `ThreadListLoader` and the task summary, on the 30 s poll `AttentionCenter` already has, one project after another (bounded: no more than the rail's
+   limit, a failed read keeps the last count, as `lastTasks` does).
+4. **UI rules** (`AGENTS.md`): every new view is a component with props in its own file, added to `COMPONENTS` in `scripts/check-ui-tokens.sh`;
+   spacing from `Space`, type from `TextStyle`/`TextRole`, colour from `Theme`; no literals. The design's hexes map onto `Theme` (amber, blue, red,
+   green, grey), they are not copied.
+
+## Slices (one PR each, in order)
+
+### 1. Agents off the top bar, reachable per project
+
+Remove `AgentsPill` from `ToolbarBar`. `showingAgents` becomes the agents card *for a project path* (`agentsProject: String?`), so it can open for a
+project other than the selected one; `AgentSetup` and `setAgent` read and write that project's config. The inbox header button arrives with slice 4; until then the way in is
+the project card's row menu plus ⌘,. Core change: none.
+Tests: the card opens for a named project and edits that project's config, not the selected one's; ⌘, opens the selected project's.
+verify-app scenario: top bar without the pill, card from the menu.
+
+### 2. Project rail
+
+`ProjectRail` (72 pt), `ProjectTile` (props: `initials`, `selected`, `badge: .needsYou(n) | .failed(n) | .running | none`), `CountBadge`. Replaces
+`ProjectPill`; `+` runs the existing folder chooser; the tile menu from the section above. Preferences gain the ordered `railProjects`.
+Selecting a tile calls the existing `open(_:)`. The top tile is a placeholder until slice 4.
+Tests: `RailProjects` (pure) seeds from recents, orders, removes, drops a project whose folder is gone and says so on the tile; badge precedence
+(failed over needs you over running). A removed project's live runs are not stopped.
+
+### 3. Project summaries (counts for projects not open)
+
+`ProjectSummary { needsYou, failed, running }` per rail project, derived from `ThreadRow` marks and the task summary (the rules `RailRow` already
+applies), read on the attention poll, bounded, never writing. The badge and the all-projects count come from it. Quit and recovery unchanged.
+Failure cases: a project whose log is corrupt shows a red badge, not zero; a folder that disappeared; a read that times out keeps the last count;
+the selected project uses the live store, not the poll, so its badge never lags the list beside it.
+Core change: a read-only `ProjectSummaryLoader` in `WorkbenchCore` (Linux-testable); no event format change.
+
+### 4. Inbox
+
+`InboxModel` replaces `RailModel`'s thread section: **Needs you**, **Waiting** (shipped, CI running or waiting on review), **Done** (collapsed, count),
+in that order, the selected thread kept visible. Row = `ThreadMark`, title, reason line, spend (the rows already carry all four). Automations
+needing approval appear in Needs you with the `auto` tag. The `+` stays `beginNewGoal`. The top tile of the rail shows **all projects**: the same
+sections across projects, each row with its project's tile mark, a click selects the project and the thread.
+Tests: sectioning (every `ThreadMark` lands in exactly one section; order stable; Done hidden count), cross-project merge order, selection survives
+a section change.
+
+### 5. Top bar and Automations view
+
+The Inbox / Automations switch with counts replaces the rail's `Scheduled` section and the "Open the Tasks page" link (`WindowMode` stays; the
+switch is its control). `TasksView` keeps its content and gains the design's header: `New task…` in the bar, list left, detail right, the rail
+still on screen. The base, spend and state pill stay thread-only, as the comment in `ToolbarBar` already requires.
+
+### 6. Thread detail parity
+
+Check `FeedScreen` against the artboard: the stage line, the goal card, the NEXT card. Add only what is missing (likely the stage line as one
+component fed by the thread's state). Out of scope: changing the chat feed itself (P22).
+
+### 7. Docs and menu bar
+
+Update `docs/plan/README.md` (the scope rule's "no project list, no inbox" no longer holds for display), P23's "many projects at once" line, and
+`MenuBarModel`, which today counts one project's attention.
+
+## Verification (every slice that changes what the app shows)
+
+`scripts/verify-app.sh` on a fixture with **three projects** (needs-you, failed, running) and a second thread running, screenshots posted with
+`pr-shots`, one per scenario; `design-review` against the artboards in light and dark at 900x600 (the rail must not squeeze the inbox below its
+minimum). Slices 1, 2 and 4 add a text or list control? Only if so, `scripts/check-text-alignment.py`. No verify-cli scenario: no `workbench`
+command changes. `release-build` label is not needed unless `Package.swift` or concurrency code changes (slice 3 may touch the latter).
+
+## Not in this phase
+
+A project-wide spend cap, a queue, moving threads between projects, drag-reordering tiles (arrows in the menu first), a light-theme artboard
+(the design is dark only; the app follows system appearance through `Theme`, so the light check is by `design-review`, not a new mock).
+
+## Questions for you
+
+1. Should removing a tile also forget the project's recents, or only hide it?
+2. Does "all projects" inbox open a thread in its own project (switching the rail selection), as assumed?

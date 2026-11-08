@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workbench inbox</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#14161a}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;box-sizing:border-box;display:flex;flex-direction:column;background:#1b1d21;color:#e8eaed;font-family:-apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;border-radius:14px;overflow:hidden;border:1px solid #2c3037">
+
+<!-- title bar -->
+<div style="height:40px;flex:none;background:#22272e;display:flex;align-items:center;padding:0 16px;gap:8px;border-bottom:1px solid #2c3037">
+<span style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></span>
+<span style="width:12px;height:12px;border-radius:50%;background:#febc2e"></span>
+<span style="width:12px;height:12px;border-radius:50%;background:#28c840"></span>
+<span style="margin-left:16px;font-size:14px;font-weight:600;color:#9ba1ab">Workbench</span>
+</div>
+
+<!-- top bar -->
+<div style="height:56px;flex:none;background:#22272e;display:flex;align-items:center;padding:0 20px;gap:16px;border-bottom:1px solid #2c3037">
+<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600">
+<span>project</span>
+<span style="font-size:13px;font-weight:400;color:#9ba1ab;font-family:ui-monospace,Menlo,monospace">base: main</span>
+</div>
+<div style="display:flex;background:#1b1d21;border:1px solid #2c3037;border-radius:10px;padding:3px;gap:2px;margin-left:24px">
+<button style="border:0;background:#33394a;color:#e8eaed;font-size:13px;font-weight:600;padding:7px 16px;border-radius:7px;display:flex;align-items:center;gap:8px">Inbox<span style="background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px">4</span></button>
+<button style="border:0;background:transparent;color:#9ba1ab;font-size:13px;font-weight:600;padding:7px 16px;border-radius:7px;display:flex;align-items:center;gap:8px">Automations<span style="background:#ef6b61;color:#14161a;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px">2</span></button>
+</div>
+<div style="flex:1"></div>
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#9ba1ab">$1.88 of $5.00</span>
+<span style="background:#3a3120;color:#f0b64d;font-size:13px;font-weight:600;padding:6px 14px;border-radius:16px">Needs you</span>
+</div>
+
+<!-- body -->
+<div style="flex:1;min-height:0;display:flex">
+
+<!-- project rail -->
+<div style="width:72px;flex:none;background:#14161a;border-right:1px solid #2c3037;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:12px">
+<div style="position:relative">
+<button aria-label="All projects inbox" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;display:flex;align-items:center;justify-content:center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8"></path><path d="M3 13v6h18v-6h-5l-1.5 2.5h-5L8 13z"></path></svg>
+</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">5</span>
+</div>
+<div style="width:28px;height:1px;background:#2c3037"></div>
+
+<div style="position:relative">
+<span style="position:absolute;left:-14px;top:8px;width:4px;height:28px;border-radius:0 4px 4px 0;background:#7aa7ff"></span>
+<button aria-label="project, 4 need you" style="width:44px;height:44px;border-radius:12px;border:1px solid #7aa7ff;background:#2b3550;color:#e8eaed;font-size:14px;font-weight:700">pr</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#f0b64d;color:#1b1d21;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">4</span>
+</div>
+
+<div style="position:relative">
+<button aria-label="api, 1 failed" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">ap</button>
+<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#ef6b61;color:#14161a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 4px;border:2px solid #14161a">1</span>
+</div>
+
+<div style="position:relative">
+<button aria-label="mobile, running" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">mo</button>
+<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#7aa7ff;border:2px solid #14161a;box-sizing:border-box"></span>
+</div>
+
+<div style="position:relative">
+<button aria-label="docs" style="width:44px;height:44px;border-radius:12px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:14px;font-weight:700">do</button>
+</div>
+
+<button aria-label="Add project" style="width:44px;height:44px;border-radius:12px;border:1px dashed #3a4049;background:transparent;color:#9ba1ab;font-size:22px;line-height:1">+</button>
+</div>
+
+<!-- inbox list -->
+<div style="width:380px;flex:none;background:#1b1d21;border-right:1px solid #2c3037;display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px">
+<div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">INBOX · PROJECT</div>
+<button aria-label="New thread" style="width:32px;height:32px;border-radius:8px;border:1px solid #2c3037;background:#23272e;color:#e8eaed;font-size:18px;line-height:1">+</button>
+</div>
+
+<div style="padding:10px 20px 6px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#f0b64d">NEEDS YOU</span>
+<span style="font-size:12px;color:#9ba1ab">4</span>
+</div>
+
+<div style="display:flex;gap:12px;padding:12px 14px;margin:0 8px;border-radius:10px;background:#272c35">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0">
+
+<div style="font-size:12px;color:#9ba1ab;margin-top:3px">Review · accept the work</div><div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Paginate the contractor invoice list</div>
+</div>
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">$1.88</span>
+</div>
+
+<div style="display:flex;gap:12px;padding:12px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Review the contract version bump</div>
+<div style="font-size:12px;color:#9ba1ab;margin-top:3px">Review · accept the work</div>
+</div>
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">$0.80</span>
+</div>
+
+<div style="display:flex;gap:12px;padding:12px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Could uploads retry with backoff?</div>
+<div style="font-size:12px;color:#9ba1ab;margin-top:3px">Chat · agent asked a question</div>
+</div>
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">$0.00</span>
+</div>
+
+<div style="display:flex;gap:12px;padding:12px 14px;margin:2px 8px 0;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;background:#f0b64d;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">update-docs</div>
+<div style="font-size:12px;color:#9ba1ab;margin-top:3px">Automation · edited since approved, re-approve</div>
+</div>
+<span style="font-size:11px;font-weight:600;color:#9ba1ab;border:1px solid #3a4049;border-radius:6px;padding:2px 7px;height:fit-content">auto</span>
+</div>
+
+<div style="padding:18px 20px 6px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#7aa7ff">WAITING</span>
+<span style="font-size:12px;color:#9ba1ab">1</span>
+</div>
+
+<div style="display:flex;gap:12px;padding:12px 14px;margin:0 8px;border-radius:10px">
+<span style="width:10px;height:10px;border-radius:50%;border:2px solid #7aa7ff;box-sizing:border-box;margin-top:5px;flex:none"></span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Export the invoice list as CSV</div>
+<div style="font-size:12px;color:#9ba1ab;margin-top:3px">PR #482 · CI running, 2 checks</div>
+</div>
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">$1.20</span>
+</div>
+
+<div style="padding:18px 20px 6px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">DONE</span>
+<span style="font-size:12px;color:#9ba1ab">9</span>
+</div>
+
+<button style="margin:0 8px;border:0;background:transparent;color:#9ba1ab;font-size:13px;text-align:left;padding:10px 14px;border-radius:10px;display:flex;align-items:center;gap:8px">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+Show 9 finished threads
+</button>
+</div>
+
+<!-- thread detail -->
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#1b1d21">
+<div style="padding:24px 40px 0">
+<div style="font-size:22px;font-weight:600">Paginate the contractor invoice list</div>
+<div style="display:flex;gap:20px;margin-top:14px;font-size:14px;padding-bottom:20px;border-bottom:1px solid #2c3037">
+<span style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#62c48f"></span>Goal</span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#62c48f"></span>Run</span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#f0b64d"></span>Review</span>
+<span style="display:flex;align-items:center;gap:8px;color:#9ba1ab"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box"></span>Accept</span>
+<span style="display:flex;align-items:center;gap:8px;color:#9ba1ab"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box"></span>Ship</span>
+<span style="display:flex;align-items:center;gap:8px;color:#9ba1ab"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box"></span>PR review</span>
+<span style="display:flex;align-items:center;gap:8px;color:#9ba1ab"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #4a515c;box-sizing:border-box"></span>Clean</span>
+</div>
+</div>
+
+<div style="flex:1;min-height:0;padding:28px 40px;display:flex;flex-direction:column;gap:22px">
+<div style="background:#22252b;border:1px solid #2c3037;border-radius:12px;padding:20px 24px">
+<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">GOAL</div>
+<div style="font-size:16px;font-weight:600;margin-top:8px">Paginate the contractor invoice list</div>
+<div style="display:flex;gap:14px;align-items:center;margin-top:8px;font-size:13px">
+<span style="color:#62c48f;font-weight:600">Approved</span>
+<span style="color:#9ba1ab">1 criterion</span>
+</div>
+<div style="display:flex;gap:16px;margin-top:14px;align-items:baseline">
+<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab">c1</span>
+<div><div style="font-size:14px">It works.</div><div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#9ba1ab;margin-top:2px">test: Thing/works</div></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px;font-size:14px">
+<div style="display:flex;gap:12px;align-items:center"><span style="color:#62c48f;font-weight:700">✓</span><span style="font-weight:600">Run finished</span><span style="color:#9ba1ab;font-family:ui-monospace,Menlo,monospace">$1.88</span></div>
+<div style="display:flex;gap:12px;align-items:center"><span style="color:#9ba1ab">✎</span><span>Edit</span><span style="font-family:ui-monospace,Menlo,monospace;color:#c9ced6">Sources/Invoices/List.swift</span></div>
+<div style="display:flex;gap:12px;align-items:center"><span style="color:#9ba1ab">✎</span><span>Write</span><span style="font-family:ui-monospace,Menlo,monospace;color:#c9ced6">Tests/InvoiceListTests.swift</span></div>
+<div style="display:flex;gap:12px;align-items:center"><span style="color:#f0b64d">✋</span><span>Refused Bash</span><span style="font-family:ui-monospace,Menlo,monospace;color:#c9ced6">git push origin main</span></div>
+<div style="display:flex;gap:12px;align-items:center"><span style="color:#62c48f;font-weight:700">✓</span><span>Check passed</span></div>
+</div>
+
+<div style="flex:1"></div>
+
+<div style="background:#22252b;border:1px solid #3a4049;border-radius:12px;padding:18px 24px;display:flex;align-items:center;gap:16px">
+<div style="flex:1">
+<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#9ba1ab">NEXT</div>
+<div style="font-size:16px;font-weight:600;margin-top:6px">Accept the work</div>
+<div style="font-size:13px;color:#9ba1ab;margin-top:2px">turn 1 done</div>
+</div>
+<button style="border:1px solid #3a4049;background:#272c35;color:#e8eaed;font-size:14px;font-weight:600;padding:11px 18px;border-radius:9px">Open diff</button>
+<button style="border:0;background:#f4f5f7;color:#14161a;font-size:14px;font-weight:700;padding:11px 20px;border-radius:9px">Accept work</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- footer -->
+<div style="height:44px;flex:none;background:#22272e;border-top:1px solid #2c3037;display:flex;align-items:center;padding:0 20px;gap:18px;font-size:13px">
+<span style="color:#7aa7ff;font-weight:600">Event log 9</span>
+<span style="color:#c9ced6">Doctor</span>
+<span style="color:#9ba1ab">Not run</span>
+<div style="flex:1"></div>
+<span style="color:#9ba1ab;font-family:ui-monospace,Menlo,monospace">30 min per turn</span>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
