@@ -40,7 +40,8 @@ extension ProjectStore {
     func showAgents(for path: String? = nil) {
         guard let target = path ?? project?.root.path else { return }
         pickingProject = false
-        cardAgentConfig = .unread
+        // The same card asked for again keeps what it read (its view is mounted and will not load again); another project's starts blank.
+        if agentsProject != target { cardAgentConfig = .unread }
         agentsProject = target
     }
 

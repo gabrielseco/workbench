@@ -88,4 +88,21 @@ import WorkbenchCore
         store.showAgents(for: open.project.root.path)
         #expect(!store.pickingProject && store.showingAgents, "the card does not open under the picker")
     }
+
+    @Test func askingForTheSameCardAgainKeepsWhatItReadAndAnotherProjectStartsBlank() async throws {
+        let open = try await fixture("[agents.run]\nmodel = \"sonnet\"")
+        let other = try await fixture("[agents.run]\nmodel = \"opus\"")
+        let store = await store(open: open)
+        store.showAgents()
+        await store.refreshCardAgents()
+        #expect(store.cardAgentSetup != nil)
+
+        store.showAgents()  // ⌘, with the card already up: its view does not load again, so what it read must stay
+        #expect(store.cardAgentSetup?.row(.run)?.model == "sonnet", "the same card is not blanked")
+
+        store.showAgents(for: other.project.root.path)
+        #expect(store.cardAgentConfig == .unread, "another project's card does not show the first one's roles meanwhile")
+        await store.refreshCardAgents()
+        #expect(store.cardAgentSetup?.row(.run)?.model == "opus")
+    }
 }

@@ -41,7 +41,8 @@ struct AgentsCard: View {
         }
         // What an edit said is for the card: it is not left on the screen behind it.
         .onDisappear { (store.actionError, store.actionNote) = (nil, nil) }
-        .task {
+        // Keyed by the project: ⌘, over a card that is already up for another project loads that project's roles.
+        .task(id: store.agentsProject) {
             store.actionError = nil
             store.actionNote = nil
             await store.refreshCardAgents()
