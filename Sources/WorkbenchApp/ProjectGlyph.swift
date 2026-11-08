@@ -1,31 +1,40 @@
 import SwiftUI
 
-/// A project's picture on the rail: a 5 x 5 grid, mirrored left to right, whose cells come from a hash of the project's path. The same
-/// folder always gets the same picture (the hash is FNV-1a, not Swift's per-launch `hashValue`), so a person learns a tile by its shape.
-/// One ink, no colour: blue, green, amber and red are states (docs/DESIGN.md), so a project cannot own one.
-enum ProjectGlyphCells {
-    static let side = 5
-    /// Columns drawn from the hash; the rest mirror them.
-    private static let half = (side + 1) / 2
-    /// A picture with fewer or more cells than this reads as a blank or a block, so the hash is run again.
-    private static let filled = 8...16
+/// What a project's picture is made of, chosen by a hash of its path (FNV-1a, not Swift's per-launch `hashValue`): the same folder always
+/// gets the same picture, so a person learns a tile by its shape. An outline (circle, square, diamond, hexagon), drawn filled or as a ring,
+/// and a small mirrored 3 x 3 mark inside it. One ink, no colour: blue, green, amber and red are states (docs/DESIGN.md).
+struct ProjectGlyphSpec: Equatable {
+    enum Outline: Int, CaseIterable { case circle, square, diamond, hexagon }
 
-    /// `filled[row][column]` for a project path. Pure and total.
-    static func cells(for path: String) -> [[Bool]] {
+    var outline: Outline
+    /// A ring with the mark filled, rather than a solid shape with the mark cut out of it.
+    var ring: Bool
+    /// `marks[row][column]`, mirrored left to right.
+    var marks: [[Bool]]
+
+    private static let marksPerSide = 3
+    /// One cell or a block, and the mark reads as nothing; so the hash is run again.
+    private static let markCount = 3...6
+
+    /// Pure and total.
+    static func of(path: String) -> ProjectGlyphSpec {
         var state = fnv1a(path)
-        for _ in 0..<16 {
-            let grid = grid(from: state)
-            if filled.contains(grid.joined().filter { $0 }.count) { return grid }
+        var spec = make(state)
+        for _ in 0..<16 where !markCount.contains(spec.marks.joined().filter { $0 }.count) {
             state = fnv1a(String(state))
+            spec = make(state)
         }
-        return grid(from: state)
+        return spec
     }
 
-    private static func grid(from bits: UInt64) -> [[Bool]] {
-        (0..<side).map { row in
-            let left = (0..<half).map { column in bits >> UInt64(row * half + column) & 1 == 1 }
-            return left + left.dropLast().reversed()
+    private static func make(_ bits: UInt64) -> ProjectGlyphSpec {
+        let outlines = Outline.allCases
+        let marks = (0..<marksPerSide).map { row -> [Bool] in
+            let edge = bits >> UInt64(8 + row * 2) & 1 == 1
+            let middle = bits >> UInt64(9 + row * 2) & 1 == 1
+            return [edge, middle, edge]
         }
+        return ProjectGlyphSpec(outline: outlines[Int(bits % UInt64(outlines.count))], ring: bits >> 4 & 1 == 1, marks: marks)
     }
 
     private static func fnv1a(_ text: String) -> UInt64 {
@@ -33,21 +42,53 @@ enum ProjectGlyphCells {
     }
 }
 
+private struct OutlineShape: Shape {
+    var outline: ProjectGlyphSpec.Outline
+
+    func path(in rect: CGRect) -> Path {
+        switch outline {
+        case .circle: return Path(ellipseIn: rect)
+        case .square: return Path(roundedRect: rect, cornerRadius: rect.width * 0.22)
+        case .diamond: return polygon(in: rect, [(0.5, 0), (1, 0.5), (0.5, 1), (0, 0.5)])
+        case .hexagon: return polygon(in: rect, [(0.25, 0.03), (0.75, 0.03), (1, 0.5), (0.75, 0.97), (0.25, 0.97), (0, 0.5)])
+        }
+    }
+
+    private func polygon(in rect: CGRect, _ points: [(CGFloat, CGFloat)]) -> Path {
+        var path = Path()
+        let mapped = points.map { CGPoint(x: rect.minX + $0.0 * rect.width, y: rect.minY + $0.1 * rect.height) }
+        path.addLines(mapped)
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct ProjectGlyph: View {
     var path: String
-    var size: CGFloat = 24
+    var size: CGFloat = 30
 
     var body: some View {
-        let cells = ProjectGlyphCells.cells(for: path)
-        Canvas { context, canvasSize in
-            let step = canvasSize.width / CGFloat(ProjectGlyphCells.side)
-            let gap: CGFloat = 1
-            for (row, line) in cells.enumerated() {
+        let spec = ProjectGlyphSpec.of(path: path)
+        Canvas { context, canvas in
+            let whole = CGRect(origin: .zero, size: canvas)
+            let shape = OutlineShape(outline: spec.outline).path(in: whole.insetBy(dx: 1, dy: 1))
+            let inner = whole.insetBy(dx: canvas.width * 0.3, dy: canvas.height * 0.3)
+            let step = inner.width / 3
+            var marks = Path()
+            for (row, line) in spec.marks.enumerated() {
                 for (column, on) in line.enumerated() where on {
-                    let origin = CGPoint(x: CGFloat(column) * step + gap / 2, y: CGFloat(row) * step + gap / 2)
-                    let rect = CGRect(origin: origin, size: CGSize(width: step - gap, height: step - gap))
-                    context.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .foreground)
+                    let origin = CGPoint(x: inner.minX + CGFloat(column) * step, y: inner.minY + CGFloat(row) * step)
+                    let cell = CGRect(origin: origin, size: CGSize(width: step, height: step)).insetBy(dx: 0.5, dy: 0.5)
+                    marks.addRoundedRect(in: cell, cornerSize: CGSize(width: 1.5, height: 1.5))
                 }
+            }
+            if spec.ring {
+                context.stroke(shape, with: .foreground, lineWidth: 2)
+                context.fill(marks, with: .foreground)
+            } else {
+                context.fill(shape, with: .foreground)
+                context.blendMode = .destinationOut
+                context.fill(marks, with: .color(.black))
             }
         }
         .frame(width: size, height: size)
