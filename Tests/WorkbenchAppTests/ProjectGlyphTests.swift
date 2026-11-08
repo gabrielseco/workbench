@@ -8,6 +8,13 @@ import Testing
         #expect(ProjectGlyphSpec.of(path: path) == ProjectGlyphSpec.of(path: path))
     }
 
+    /// Pinned: a hash that changes between launches (Swift's `hashValue`) would pass a comparison inside one process.
+    @Test func thePictureOfAKnownPathIsPinned() {
+        let spec = ProjectGlyphSpec.of(path: "/Users/a/rogal/workbench")
+        #expect(spec.outline == .diamond && spec.ring)
+        #expect(spec.marks == [[true, false, true], [true, true, true], [false, false, false]])
+    }
+
     @Test func theMarkIsMirroredAndNeitherBlankNorSolid() {
         for path in ["", "/a", "/b", "/Users/a/rogal/workbench", "/Users/a/remote/remote-flows"] {
             let marks = ProjectGlyphSpec.of(path: path).marks

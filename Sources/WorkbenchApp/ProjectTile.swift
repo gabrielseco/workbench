@@ -23,6 +23,7 @@ struct ProjectTile: View {
             if symbol == nil {
                 Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.tail)
                     .frame(width: Self.side + Space.s).accessibilityHidden(true)
+                    .contentShape(Rectangle()).onTapGesture(perform: action)
             }
         }
     }
