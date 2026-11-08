@@ -26,11 +26,41 @@ enum ModalSize {
 enum ModalPlacement {
     /// In the middle.
     case centered
-    /// Under the toolbar at the left edge, where the pill that opened it is.
+    /// Under the toolbar at the left edge.
     case topLeading
+    /// Beside the project rail and above the footer, where the `+` at the foot of the rail that opened it is.
+    case railFoot
 
-    var alignment: Alignment { self == .centered ? .center : .topLeading }
-    var transition: AnyTransition { self == .centered ? .opacity : .opacity.combined(with: .offset(y: -6)) }
+    var alignment: Alignment {
+        switch self {
+        case .centered: .center
+        case .topLeading: .topLeading
+        case .railFoot: .bottomLeading
+        }
+    }
+
+    var transition: AnyTransition {
+        switch self {
+        case .centered: .opacity
+        case .topLeading: .opacity.combined(with: .offset(y: -6))
+        case .railFoot: .opacity.combined(with: .offset(y: 6))
+        }
+    }
+
+    /// How far the card stands from the window's top, leading and bottom edges.
+    struct Insets {
+        var top: CGFloat = 0
+        var leading: CGFloat = 0
+        var bottom: CGFloat = 0
+    }
+
+    var insets: Insets {
+        switch self {
+        case .centered: Insets()
+        case .topLeading: Insets(top: Space.giant, leading: Space.m)
+        case .railFoot: Insets(leading: ProjectRail.width + Space.s, bottom: Space.giant)
+        }
+    }
 }
 
 /// The row of buttons at the foot of a modal: the actions at the trailing edge, and what goes with them (a busy line) at the leading one.
@@ -167,8 +197,8 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
                             ModalCard(
                                 title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
                                 content: presented)
-                                .padding(.top, placement == .centered ? 0 : Space.giant)
-                                .padding(.leading, placement == .centered ? 0 : Space.m)
+                                .padding(.top, placement.insets.top).padding(.leading, placement.insets.leading)
+                                .padding(.bottom, placement.insets.bottom)
                                 .transition(placement.transition)
                         }
                     }

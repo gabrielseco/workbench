@@ -19,7 +19,7 @@ extension View {
             AgentsCard(store: store)
         }
         .modal(
-            "Projects", isPresented: Bindable(store).pickingProject, size: .small, placement: .topLeading,
+            "Projects", isPresented: Bindable(store).pickingProject, size: .small, placement: .railFoot,
             layer: Layer.projects.rawValue
         ) {
             ProjectPickerCard(store: store)

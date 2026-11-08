@@ -25,6 +25,13 @@ struct ProjectTile: View {
         .overlay(alignment: .topTrailing) {
             if let kind = CountBadge.Kind(badge) { CountBadge(kind: kind).offset(x: Space.s, y: -Space.s) }
         }
+        // A folder that is gone is said by a mark as well as by dimming: colour is never the only signal.
+        .overlay(alignment: .bottomTrailing) {
+            if !available {
+                Image(systemName: "exclamationmark.circle.fill").textStyle(.captionBold).foregroundStyle(Theme.red)
+                    .background(Theme.rail, in: Circle()).offset(x: Space.xs, y: Space.xs)
+            }
+        }
         .overlay(alignment: .leading) {
             if selected {
                 UnevenRoundedRectangle(bottomTrailingRadius: Radius.thumbnail, topTrailingRadius: Radius.thumbnail)
