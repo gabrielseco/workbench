@@ -28,8 +28,7 @@ struct ProjectTile: View {
         // A folder that is gone is said by a mark as well as by dimming: colour is never the only signal.
         .overlay(alignment: .bottomTrailing) {
             if !available {
-                Image(systemName: "exclamationmark.circle.fill").textStyle(.captionBold).foregroundStyle(Theme.red)
-                    .background(Theme.rail, in: Circle()).offset(x: Space.xs, y: Space.xs)
+                StatusMark(.failed).textStyle(.captionBold).background(Theme.rail, in: Circle()).offset(x: Space.xs, y: Space.xs)
             }
         }
         .overlay(alignment: .leading) {

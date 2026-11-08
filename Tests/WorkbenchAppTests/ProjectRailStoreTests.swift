@@ -43,17 +43,47 @@ private actor Gate {
         #expect(ProjectStore(preferences: preferences).railPaths == ["/z", "/y"])
     }
 
-    @Test func aProjectThatIsOpenedIsPinnedOnceAtTheEndAndRemembered() async throws {
+    @Test func aProjectAddedFromTheCardIsPinnedOnceAtTheEndAndRemembered() async throws {
         let first = try await fixture()
         let second = try await fixture()
         let preferences = MemoryPreferences(projectPath: nil)
         let store = ProjectStore(preferences: preferences)
-        #expect(await store.open(first.root))
-        #expect(await store.open(second.root))
-        #expect(await store.open(first.root))
+        await store.pickRecent(first.project.root.path)
+        await store.pickRecent(second.project.root.path)
+        await store.pickRecent(first.project.root.path)
         let (a, b) = (first.project.root.path, second.project.root.path)
-        #expect(store.railPaths == [a, b], "each once, in the order first opened; reopening does not move a tile")
+        #expect(store.railPaths == [a, b], "each once, in the order first added; choosing one again does not move a tile")
         #expect(preferences.railProjects == [a, b])
+    }
+
+    @Test func aChosenFolderIsPinned() async throws {
+        let chosen = try await fixture()
+        let preferences = MemoryPreferences(projectPath: nil)
+        let store = ProjectStore(preferences: preferences, folderChooser: { chosen.root })
+        await store.chooseFolder()
+        #expect(store.railPaths == [chosen.project.root.path])
+    }
+
+    @Test func restoringTheProjectAtLaunchDoesNotBringBackATileThePersonRemoved() async throws {
+        let open = try await fixture()
+        let preferences = MemoryPreferences(projectPath: open.project.root.path, recentProjects: [open.project.root.path])
+        preferences.railProjects = []  // every tile was taken off the rail; the project stayed open
+        let store = ProjectStore(preferences: preferences)
+        await store.restore()
+        #expect(store.project?.root.path == open.project.root.path)
+        #expect(store.railPaths.isEmpty && preferences.railProjects == [], "a relaunch is not an add")
+    }
+
+    @Test func choosingTheOpenProjectFromTheCardAddsItsTileBack() async throws {
+        let open = try await fixture()
+        let preferences = MemoryPreferences(projectPath: nil)
+        preferences.railProjects = []
+        let store = ProjectStore(preferences: preferences)
+        #expect(await store.open(open.root))
+        #expect(store.railPaths.isEmpty, "opening alone does not pin")
+        store.pickingProject = true
+        await store.pickRecent(open.project.root.path)
+        #expect(store.railPaths == [open.project.root.path] && !store.pickingProject, "the explicit add pins it")
     }
 
     @Test func aTileForAFolderThatIsGoneSaysSoAndKeepsItsPlace() async throws {
@@ -68,8 +98,8 @@ private actor Gate {
         let second = try await fixture()
         let preferences = MemoryPreferences(projectPath: nil)
         let store = ProjectStore(preferences: preferences)
-        #expect(await store.open(first.root))
-        #expect(await store.open(second.root))
+        await store.pickRecent(first.project.root.path)
+        await store.pickRecent(second.project.root.path)
         let (a, b) = (first.project.root.path, second.project.root.path)
 
         await store.removeFromRail(a)
@@ -82,8 +112,8 @@ private actor Gate {
         let first = try await fixture()
         let second = try await fixture()
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil))
-        #expect(await store.open(first.root))
-        #expect(await store.open(second.root))
+        await store.pickRecent(first.project.root.path)
+        await store.pickRecent(second.project.root.path)
         let (a, b) = (first.project.root.path, second.project.root.path)
 
         await store.removeFromRail(b)

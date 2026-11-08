@@ -74,7 +74,7 @@ Tests: `RailProjects` (pure) seeds from recents, orders, removes, drops a projec
 
 As built: `RailProjects` (pure: seeding, adding, removing, moving, initials, names) and `RailBadge`; `ProjectRail` (72 pt), `ProjectTile`, `CountBadge`
 in their own files. `Preferences.railProjects` is nil until the person arranges the rail (then it starts from the recents, oldest first, so a tile
-never jumps), and an empty list is kept as empty. A project that is opened is pinned at the end; reopening does not move it. The tile menu
+never jumps), and an empty list is kept as empty. A project chosen from the project card or the folder panel is pinned at the end (a relaunch restoring the open project is not an add, so a removed tile stays removed); choosing one again does not move it. The tile menu
 (right click) has `Agents…`, `Doctor` (opens the project first), `Reveal in Finder`, `Move up`, `Move down` and `Remove from rail`; removing only
 hides the tile (the project stays in the recents), and removing the open project moves to its neighbour. Two deviations from the sketch above:
 `+` opens the project card (the recents and `Choose folder…`) instead of the folder panel, so a recent project can be added and the harness can
