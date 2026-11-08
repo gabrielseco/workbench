@@ -23,15 +23,17 @@ struct PlaceholderTextEditor: View {
     /// Return, and the keys that go with it: `.handled` to take it, `.ignored` to let the text view have it (a new line).
     var onReturn: ((KeyPress) -> KeyPress.Result)?
 
-    /// How tall a box that fits its text may be, decided once: a chat composer is one line when empty, a note a few, a form field roomy.
+    /// How tall a box that fits its text may be, decided once: a chat composer is one line when empty, a note a few, a form field roomy,
+    /// and a document's text in place (a goal's request) one line when short and a page before it scrolls.
     enum Growth {
-        case compact, regular, roomy
+        case compact, regular, roomy, document
 
         var lines: ClosedRange<Int> {
             switch self {
             case .compact: 1...6
             case .regular: 3...8
             case .roomy: 4...10
+            case .document: 1...16
             }
         }
     }

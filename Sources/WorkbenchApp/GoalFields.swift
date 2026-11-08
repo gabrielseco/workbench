@@ -37,7 +37,8 @@ struct CommitField: View {
     }
 }
 
-/// The request: several lines in the serif face, changed on leaving the field.
+/// The request: several lines in the serif face, changed on leaving the field. The box fits its text, every wrapped line shown, up to a
+/// page; a longer request scrolls inside it. A fixed short box clipped the second line of an ordinary request.
 struct CommitEditor: View {
     var value: String
     /// The serif face of the Goal screen, or the feed's body face.
@@ -50,9 +51,8 @@ struct CommitEditor: View {
 
     var body: some View {
         PlaceholderTextEditor(
-            text: $text, style: style, lineSpacing: lineSpacing, scrollDisabled: true, focus: $focused
+            text: $text, style: style, lineSpacing: lineSpacing, focus: $focused, growth: .document
         )
-        .frame(minHeight: 30)
             .onAppear { text = value }
             .onChange(of: value) { _, new in if !focused { text = new } }
             .onChange(of: serial) { _, _ in if !focused { text = value } }
