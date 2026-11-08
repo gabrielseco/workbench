@@ -404,9 +404,9 @@ Notes:
   `Bash(scripts/check.sh:*)`: `scripts/check.sh` and `scripts/check.sh --fast` run; `./scripts/check.sh`,
   `sh scripts/check.sh` and an absolute path are denied (task 4 smoke test). It must be one plain command,
   with no shell operators or quotes. The runner should tell the model the exact string to use.
-- **Threads at once.** `max_active_threads` (config key, 1 to 8, default 1) is how many threads of a project may be active (not yet
+- **Threads at once.** `max_active_threads` (config key, 1 to 8, default 3) is how many threads of a project may be active (not yet
   accepted, discarded or abandoned) together. `goal new`, `chat`, `goal quick` and a task that opens a thread refuse past it (exit 6,
-  naming the active ones); with 1 the message and behaviour are those of the single-thread rule. `--abandon-active` (the app's New
+  naming the active ones); with 1 the message and behaviour are those of the old single-thread rule (a project that wants it sets `max_active_threads = 1`). `--abandon-active` (the app's New
   goal flow) ends the one active thread only when the cap is 1: with a higher cap and no free slot it refuses, since no flow picks
   which of several to end. A command that acts on "the" thread without `--thread` refuses when several are active and names them.
   `status` shows the newest active one. The app's rail lists every thread with its own mark, a thread's run starts whatever other

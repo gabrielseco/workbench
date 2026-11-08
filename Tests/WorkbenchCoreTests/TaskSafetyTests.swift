@@ -14,7 +14,8 @@ private struct Safe {
     init(
         front: String = "fix: pr\nbatch: 1\npending: pending.sh", extraConfig: String = #"check_command = "true""#
     ) async throws {
-        fx = try await RunnerFixture(extraConfig: extraConfig)
+        // These tests are about a project with one active thread, which is what `max_active_threads = 1` keeps.
+        fx = try await RunnerFixture(extraConfig: "max_active_threads = 1\n" + extraConfig)
         task = try TaskFixture(in: fx.project, front: front)
         gh = try FakeGH(in: fx)
         marker = fx.project.root.appendingPathComponent("pending-ran.txt")

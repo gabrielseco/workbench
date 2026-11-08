@@ -156,7 +156,7 @@ public struct TaskRunner: Sendable {
         // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
         if task.fix == .pr {
             let store = ThreadStore(project: project)
-            let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? 1
+            let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? Config.defaultMaxActiveThreads
             if let full = store.fullThreads(maxActive: cap) { return busy(full.joined(separator: ", "), cap: cap) }
             if (try? store.requireNoDoctor()) == nil { return busy("a doctor run", cap: cap) }
         }

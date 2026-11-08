@@ -95,7 +95,7 @@ extension ThreadService {
         try QuickGoal.readsBack(body, title: title)
         let store = ThreadStore(project: project)
         do { try store.requireNoDoctor() } catch { throw QuickGoalRefusal.doctorRunning }
-        if let active = try store.blockingThread(maxActive: config?.maxActiveThreads ?? 1) {
+        if let active = try store.blockingThread(maxActive: config?.maxActiveThreads ?? Config.defaultMaxActiveThreads) {
             guard abandonActive else { throw QuickGoalRefusal.activeThread(active) }
             try await abandon(id: active)
         }

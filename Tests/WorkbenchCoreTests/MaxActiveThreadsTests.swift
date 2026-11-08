@@ -6,8 +6,9 @@ import Testing
 @Suite struct MaxActiveThreadsConfigTests {
     private let tools = "\n[tools]\navailable = [\"Read\"]\n"
 
-    @Test func oneIsTheDefault() throws {
-        #expect(try Config.parse(tools).maxActiveThreads == 1)
+    @Test func threeIsTheDefault() throws {
+        #expect(try Config.parse(tools).maxActiveThreads == Config.defaultMaxActiveThreads)
+        #expect(Config.defaultMaxActiveThreads == 3)
     }
 
     @Test func aWholeNumberUpToTheLimitIsKept() throws {
@@ -125,5 +126,13 @@ import Testing
 
         let second = try await fx.service.newThread(name: "two", base: "main", config: try config(2))
         #expect(throws: ThreadStoreError.tooManyActive([second, first], max: 2)) { _ = try store.blockingThread(maxActive: 2) }
+    }
+
+    @Test func withNoConfigAtAllTheDefaultStillAllowsSeveralThreads() async throws {
+        let fx = try await RunnerFixture()
+        _ = try await fx.service.newThread(name: "one", base: "main")
+        _ = try await fx.service.newThread(name: "two", base: "main")
+        _ = try await fx.service.newThread(name: "three", base: "main")
+        await #expect(throws: ThreadStoreError.self) { _ = try await fx.service.newThread(name: "four", base: "main") }
     }
 }

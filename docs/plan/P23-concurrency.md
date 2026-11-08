@@ -1,8 +1,8 @@
 # P23: Concurrency
 
 **Outcome:** a project can have a few threads active at once (three is the case this is sized for), each in its own worktree, and none
-can break another: not through a port, a git lock, a quit, a crash or a ship onto a moved base. The default stays one, so nothing
-changes until the setting is raised.
+can break another: not through a port, a git lock, a quit, a crash or a ship onto a moved base. The default is three (it was one until
+the soak passed); `max_active_threads = 1` keeps the single-thread rule.
 
 **Why now:** [`README.md`](README.md) sets a "well" gate before concurrency. It is waived: the app already does a thread's work
 efficiently, and the wait is the limit. D0 is superseded by this phase. The layout is already thread-shaped (a folder and a worktree
@@ -113,7 +113,7 @@ on the old base is weak evidence once it has. So bring the base in with an agent
   `SyncPrompt`'s note. The review screen (`ReviewReport.baseMovement`, read without fetching) says when the base moved with the files
   both sides changed and has `Bring up to date`, which does what `sync --run` does; the `ship` command prints a `moved:` line.
 
-### 7. Soak and raise the default (soak built)
+### 7. Soak and raise the default (built)
 
 A fake-claude soak with three threads at once, with crashes, hangs, ignored SIGTERM and leftover children, asserting one `turn.ended` per
 `turn.started` per thread and no leftover process. Then the default goes above 1, and
@@ -131,8 +131,9 @@ default). Three tests:
   as a failed check that says why), never queued.
 - **A sync and two runs together:** `syncBase` fetches and merges while two runs cut worktrees, all through the project's git lock.
 
-Left: raising the `max_active_threads` default above 1, which changes every project's behaviour and the tests that assume one, so
-it is its own change; and unblocking [thread-until-merged](../later/thread-until-merged.md) after it.
+Then the default went to three (`Config.defaultMaxActiveThreads`), as its own change since it alters every project's behaviour: a
+project that wants the old rule sets `max_active_threads = 1`. [thread-until-merged](../later/thread-until-merged.md) no longer waits
+on concurrency.
 
 ## Failure cases the plan owns
 

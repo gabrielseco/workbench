@@ -210,10 +210,10 @@ func ended(_ events: [Event]) -> [Event] { events.filter { $0.kind == .turnEnded
     }
 
     @Test func aSecondThreadIsRefusedNamingTheActiveOne() async throws {
-        let fx = try await RunnerFixture()
+        let fx = try await RunnerFixture(extraConfig: "max_active_threads = 1")
         let first = try await fx.approvedThread("one")
         do {
-            _ = try await fx.service.newThread(name: "two", base: "main")
+            _ = try await fx.service.newThread(name: "two", base: "main", config: try fx.loadedConfig())
             Issue.record("expected the single-thread guard")
         } catch let error as ThreadStoreError {
             #expect(error == .activeThreadExists(first))

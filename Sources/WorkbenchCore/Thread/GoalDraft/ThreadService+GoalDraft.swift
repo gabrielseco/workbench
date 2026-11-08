@@ -543,7 +543,8 @@ extension ThreadService {
         if abandonActive {
             // Only the thread that was active when the draft was asked for: one made while the drafter ran is not ours to end.
             let now: String?
-            do { now = try ThreadStore(project: project).blockingThread(maxActive: config?.maxActiveThreads ?? 1) } catch {
+            let cap = config?.maxActiveThreads ?? Config.defaultMaxActiveThreads
+            do { now = try ThreadStore(project: project).blockingThread(maxActive: cap) } catch {
                 result.failure = "the project filled its active threads while drafting; nothing was abandoned or written."
                 return result
             }

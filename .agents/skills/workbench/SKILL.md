@@ -10,7 +10,7 @@ Workbench hands a task to Claude in an isolated git worktree and gives back a di
 one lifecycle for every project that uses it; a project's own `.agents/skills/workbench/SKILL.md` adds only what is specific to it
 (its check, its allowlist quirks, its contract steps) and points here. Only follow this when the user asked for Workbench.
 
-State lives in `<project>/.workbench/` (config, threads, worktrees), ignored by git. One project has one active thread; a thread ends
+State lives in `<project>/.workbench/` (config, threads, worktrees), ignored by git. A project has up to `max_active_threads` (default 3) active threads, and with several a command that acts on one takes `--thread <id>`; a thread ends
 with `accept`, `discard` or `abandon`.
 
 ## Before the first command

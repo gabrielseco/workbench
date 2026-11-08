@@ -139,7 +139,7 @@ struct TasksReader: Sendable {
 
     /// A thread filling the last free slot, nil while one is free: what makes a task that opens a pull request skip.
     private static func blockingThread(_ project: Project) -> String? {
-        let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? 1
+        let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? Config.defaultMaxActiveThreads
         return ThreadStore(project: project).fullThreads(maxActive: cap)?.first
     }
 

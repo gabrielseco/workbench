@@ -12,13 +12,13 @@ Order of likely return, each decided on its own once the previous is used daily:
 
 | Item | What it is | Notes |
 |---|---|---|
-| Concurrency | More than one active thread, one project | Lift the single-thread guard; add a thread list. Biggest new risk is shared process and CPU budget, resume races and CI-like contention; needs its own soak. The on-disk layout is already per-thread. |
+| Concurrency | More than one active thread, one project | Built: [P23](../plan/P23-concurrency.md) (default three, `max_active_threads`), with its own soak. |
 | Many projects | A project list, a global store | Revisit D6 (data in `.workbench/` per repo). See [portability](portability.md). `workbench new` and the global defaults file are built ([spec](../spec/new-project.md)); a list and a global thread store are not. |
 | [Portability](portability.md) | Other stacks: dependencies in a fresh worktree, secrets, hooks, toolchain env, per-repo checklists | Try one non-Swift repo after P2 and write down what breaks, before designing the app. |
 | [Project setup](project-setup.md) | `workbench doctor`, a guided `init`, checks for small and large projects | The user declares the commands; Workbench only verifies them. No stack guessing. |
 | [Proof](proof.md) | Typed evidence per criterion, screenshots, optional verifier | Advisory only, never a mandatory gate. |
 | [Triage integration](triage-integration.md) | Start a thread from a PR, status badge | Only once Workbench is used daily. |
-| [Thread list](thread-list.md) | Switch between a project's threads in the app | Needs concurrency: with one active thread the window already follows it, and `New goal…` appears once it is decided. |
-| [Thread until merged](thread-until-merged.md) | A shipped thread stays open, watching its PR, until it is merged | Needs concurrency: it would hold the only active thread. Today `ship --watch` ends and `clean` removes merged threads. |
+| [Thread list](thread-list.md) | Switch between a project's threads in the app | Built as the rail (P22, P23): it lists every thread with its own mark, and several can be active at once. |
+| [Thread until merged](thread-until-merged.md) | A shipped thread stays open, watching its PR, until it is merged | Concurrency is built, so it can be planned: a shipped thread no longer holds the only active thread. Today `ship --watch` ends and `clean` removes merged threads. |
 | [Auto-sync](auto-sync.md) | An open thread brings the base in by itself, and heals what that breaks | Needs the P23 soak: it starts turns nobody asked for. Builds on `workbench sync`, which is manual today. |
 | Profiles | Several named tool sets | One fixed set until the first real need. |

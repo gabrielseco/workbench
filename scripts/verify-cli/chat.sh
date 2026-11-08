@@ -175,14 +175,14 @@ check "a second --from-chat is refused and points at --replace, exit 6" "exit $R
 wbp "$SCRATCH/mg-approve.out" goal approve "$ID" --allow-unrunnable-proofs
 check "the goal can be approved like any other" "goal approve exited $RC" test "$RC" = 0
 
-# --- 6. one active thread -----------------------------------------------------------------------------------
+# --- 6. a second chat beside the first ----------------------------------------------------------------------
+# The project's default allows several threads (max_active_threads, 3): a second chat starts beside the first and `--abandon-active`
+# has nothing to end while a slot is free. The single-thread refusal and what `--abandon-active` ends at a cap of 1 are in
+# threads-at-once.sh and the unit tests; this scenario runs in the main checkout, whose config it must not change.
 
-wbp "$SCRATCH/second-chat.out" chat other --message "a second idea"
-check "a chat is the active thread: another is refused, exit 6" "exit $RC" test "$RC" = 6
-check "it names the active thread" "no thread named" grep -q "$ID" "$SCRATCH/second-chat.out"
-wbp "$SCRATCH/abandon.out" chat other --message "a second idea" --abandon-active
-check "--abandon-active ends the old chat and starts the new one" "exit $RC" test "$RC" = 0
+wbp "$SCRATCH/second-chat.out" chat other --message "a second idea" --abandon-active
+check "a second chat starts beside the first, and --abandon-active ends nothing while a slot is free" "exit $RC" test "$RC" = 0
 wbp "$SCRATCH/all.json" status --all --json
-check "the old chat is abandoned and the new one is a chat" "listing is not as expected" \
-    py "t={x['thread']:x for x in d['threads']}; assert t['$ID']['ended']=='abandoned' and all(x['kind']=='chat' for x in t.values()) and len(t)==2, t" <"$SCRATCH/all.json"
+check "both chats are open, and both are chats" "listing is not as expected" \
+    py "t={x['thread']:x for x in d['threads']}; assert t['$ID']['ended'] is None and all(x['kind']=='chat' for x in t.values()) and len(t)==2, t" <"$SCRATCH/all.json"
 finish
