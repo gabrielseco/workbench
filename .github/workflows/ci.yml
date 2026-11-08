@@ -40,12 +40,20 @@ jobs:
           key: swiftlint-0.65.1-linux-amd64
       - name: Download SwiftLint (only when it is not cached)
         if: steps.swiftlint.outputs.cache-hit != 'true'
+        # A failure here is not the job's: the next step falls back to the same version as a container image, from another host.
+        continue-on-error: true
         run: |
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o swiftlint.zip \
             https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
           unzip -q swiftlint.zip -d ~/swiftlint-0.65.1
       - name: SwiftLint
-        run: ~/swiftlint-0.65.1/swiftlint lint --quiet
+        run: |
+          if [ -x ~/swiftlint-0.65.1/swiftlint ]; then
+            ~/swiftlint-0.65.1/swiftlint lint --quiet
+          else
+            echo "No SwiftLint binary (the release host did not answer): running the 0.65.1 image from ghcr.io instead"
+            docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.1 swiftlint lint --quiet
+          fi
       - name: Timing script check
         run: scripts/test-timings-check.sh
       - name: App bundle script refuses off macOS
