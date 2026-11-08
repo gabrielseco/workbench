@@ -72,6 +72,13 @@ enum PullRequestCI: Equatable {
         }
     }
 
+    /// The failed checks that run tests (`PRCheck.isTest`), on an open pull request whose checks could be read: what "Fix failed
+    /// tests" is offered for. A failed lint or build is not here; fixing those is the person's.
+    var failedTests: [String] {
+        guard status?.state == .open else { return [] }
+        return rows.filter { $0.kind == .failed && PRCheck.isTest(name: $0.name) }.map(\.name)
+    }
+
     /// The one line over the rows: where CI stands, with counts.
     var summary: String {
         switch self {

@@ -41,4 +41,9 @@ extension ProjectStore {
     var stopping: Bool { current.stopping }
     /// The project and thread on screen, as one value to compare.
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
+
+    /// Says what a `working` body moved on to, such as from reading a plan to doing it; nothing when no work is going on.
+    func nowWorking(_ text: String) {
+        sessions.values.first { $0.busyText != nil }?.busyText = text
+    }
 }

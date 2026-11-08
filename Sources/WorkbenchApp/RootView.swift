@@ -158,6 +158,13 @@ struct PullRequestCIView: View {
             if !ci.canMerge, let blocker = ci.mergeBlocker, ci.unavailableReason == nil {
                 Text("Merge waits: \(blocker)").role(.detail)
             }
+            if let fix = store.ciFixShown(on: store.currentThread) {
+                if fix.active {
+                    BusyLine(fix.line, tone: .working)
+                } else {
+                    Text(fix.line).role(fix.failed ? .error : .detail)
+                }
+            }
         }
     }
 

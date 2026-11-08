@@ -7,7 +7,7 @@ struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
         case discard, sendGuidance, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
-        case showFindings, refreshCI, openPR
+        case showFindings, refreshCI, openPR, fixTests
     }
 
     var kind: Kind
@@ -52,6 +52,8 @@ struct FeedActionContext {
     /// What is typed in the guidance field, and whether a grant is still being saved (a send waits for it).
     var guidance = ""
     var grantsInFlight = false
+    /// "Fix failed tests" is going (`CIFixProgress.active`): it is not offered a second time.
+    var ciFixing = false
 }
 
 enum FeedActions {
@@ -200,6 +202,17 @@ enum FeedActions {
         if s.canMerge {
             return FeedDecision(
                 primary: merge, secondary: open, more: [review] + more, why: "CI is green: the pull request can be merged")
+        }
+        // A failed test is the next thing to deal with: Merge waits for it whatever the review said.
+        if let tests = s.ci?.failedTests, !tests.isEmpty {
+            let fix = FeedAction(
+                kind: .fixTests, title: c.ciFixing ? "Fixing tests…" : "Fix failed tests",
+                help: "An agent fixes the failed tests from what CI said, and the fix is pushed to this pull request",
+                enabled: !c.ciFixing && !c.busy && !c.starting && !c.deciding)
+            let failed = (tests.count == 1 ? "Failed test: " : "Failed tests: ") + tests.joined(separator: ", ")
+            return FeedDecision(
+                primary: fix, secondary: open, more: [review, merge] + more,
+                why: failed + ". Merge waits until CI is green.")
         }
         // A clean review leaves nothing but the merge: it stays the button, disabled and saying what it waits for.
         if reviewIsClean(s), s.ci?.ended != true {

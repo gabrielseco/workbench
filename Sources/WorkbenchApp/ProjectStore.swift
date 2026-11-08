@@ -115,8 +115,11 @@ struct RecentProject: Equatable, Identifiable {
     var followUpError: String?
     /// Bumped when the sheet closes: a fix round still being read for it starts nothing.
     @ObservationIgnored var followUpRequest = 0
-    /// A fix round started from the findings sheet: when its run ends well it is accepted, shipped and reviewed without asking.
+    /// A fix round started from the findings sheet or by "Fix failed tests": when its run ends well it is accepted and shipped
+    /// without asking, then reviewed again (findings) or its CI read again (failed tests).
     @ObservationIgnored var fixRoundToShip: FixRound?
+    /// "Fix failed tests" from the pull request's CI: how far it got, shown on the CI lines (`ProjectStore+CIFix.swift`).
+    var ciFix: CIFixProgress?
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
     var deciding = false { didSet { resumeIdleWaiters() } }
@@ -323,11 +326,6 @@ struct RecentProject: Equatable, Identifiable {
         setBusy(text, in: mine)
         defer { if !mine.awaitingRun { setBusy(nil, in: mine) } }
         await body()
-    }
-
-    /// Says what a `working` body moved on to, such as from reading a plan to doing it; nothing when no work is going on.
-    func nowWorking(_ text: String) {
-        sessions.values.first { $0.busyText != nil }?.busyText = text
     }
 
     // MARK: Goal actions

@@ -73,6 +73,11 @@ struct FakeGH {
               if [ -f "$d/fail" ]; then cat "$d/fail" >&2; exit 1; fi
               if [ -f "$d/out" ]; then cat "$d/out"; else echo "https://github.com/o/r/pull/12"; fi
               exit 0 ;;
+            "run view")
+              job=""; prev=""
+              for a in "$@"; do if [ "$prev" = "--job" ]; then job="$a"; fi; prev="$a"; done
+              if [ -f "$d/runlog_$job" ]; then cat "$d/runlog_$job"; exit 0; fi
+              echo "job $job: log not found" >&2; exit 1 ;;
             esac
             exit 2
             """.write(to: script, atomically: true, encoding: .utf8)

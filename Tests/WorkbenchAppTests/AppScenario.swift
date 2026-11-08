@@ -17,7 +17,7 @@ enum AppScenario: String, CaseIterable {
     case accepted
     case prOpen = "pr-open"
     case prFindings = "pr-findings"
-    case prClean = "pr-clean"
+    case prClean = "pr-clean", prTestFailed = "pr-test-failed"
     case prMerged = "pr-merged"
     case cleaned
     case discarded
@@ -154,7 +154,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.turn(id, 1, cost: 1.88)
             try fixture.decide(id, "accepted")
             try fixture.ship(id, number: 482)
-        case .prClean:
+        case .prClean, .prTestFailed:
+            // The same clean review; `pr-test-failed` differs only in the checks its stand-in `gh` reports (`ciChecks`).
             try await writePRClean(in: fixture, id: id)
         case .prMerged:
             try await buildPRMerged(in: fixture)
