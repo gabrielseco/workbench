@@ -371,6 +371,7 @@ enum AppScenario: String, CaseIterable {
             try? files.removeItem(at: target)
             try files.createDirectory(at: target, withIntermediateDirectories: true)
             try scenario.writeSideFiles(into: target)
+            try await scenario.writeRailProjects(into: target)
             let tasks = fixture.project.tasksDirectory
             if (try? files.contentsOfDirectory(atPath: tasks.path))?.isEmpty == false {
                 try files.copyItem(at: tasks, to: target.appendingPathComponent("tasks"))

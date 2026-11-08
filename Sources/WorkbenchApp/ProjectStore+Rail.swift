@@ -34,16 +34,6 @@ extension ProjectStore {
         preferences.railProjects = railPaths
     }
 
-    /// What a project's tile shows. The open project's comes from what the window reads of it (its threads and tasks, as the list beside
-    /// shows them); the others have none until their summaries are read (P26 slice 3).
-    func railBadge(for path: String) -> RailBadge {
-        guard path == project?.root.path else { return .none }
-        let marks = threads.listing.rows.map(\.mark) + (tasks.snapshot(for: project)?.entries.map { RailRow.task($0).mark } ?? [])
-        return RailBadge.from(
-            needsYou: marks.filter { $0 == .needsYou }.count, failed: marks.filter { $0 == .broken }.count,
-            running: marks.contains(.working))
-    }
-
     /// `Doctor` from a tile: the project is opened first, since Doctor reads and shows the open project's config.
     func runDoctor(at path: String) async {
         if path != project?.root.path { await pickRecent(path) }
