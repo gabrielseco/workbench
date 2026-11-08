@@ -91,6 +91,32 @@ import WorkbenchCore
         #expect(events.filter { $0.kind == .prMerged }.count == 1)
     }
 
+    @Test func aPullRequestGitHubSaidClosedIsAskedAboutAgainBecauseItMayBeReopened() async throws {
+        let (open, other) = (try await AppFixture(), try await shipped())
+        keptGitHubFixtures.append(open)
+        let github = GitHub()
+        let store = await store(github, open: open, others: [other])
+        (store.threads.otherListEvery, store.threads.otherAskEvery) = (.zero, .zero)
+        await store.readOtherProjectsPullRequests()
+        await store.readOtherProjectsPullRequests()
+        #expect(github.reads.count == 2)
+    }
+
+    @Test func aThreadPastWhatTheInboxListsIsStillAskedAboutBecauseTheTileCountsIt() async throws {
+        let (open, other) = (try await AppFixture(), try await AppFixture())
+        keptGitHubFixtures.append(open)
+        keptGitHubFixtures.append(other)
+        try await other.addThread("a", approved: true, title: "Shipped a")
+        try other.turn("a", 1)
+        try other.decide("a", "accepted")
+        try other.ship("a", number: 7)
+        for number in 0..<(ThreadListLoader.maxRows + 5) { try await other.addThread(String(format: "t%03d", number)) }
+        let github = GitHub()
+        let store = await store(github, open: open, others: [other])
+        await store.readOtherProjectsPullRequests()
+        #expect(github.reads == ["\(other.root.lastPathComponent)/a"], "the oldest thread, past the 50 the inbox lists")
+    }
+
     @Test func theOpenProjectIsLeftToItsOwnReads() async throws {
         let open = try await shipped()
         let github = GitHub()

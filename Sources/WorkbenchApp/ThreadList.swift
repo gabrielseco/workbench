@@ -66,6 +66,9 @@ struct ThreadListing: Equatable, Sendable {
 
     /// How long before a project that is not open is listed again to see which of its threads are due.
     static let otherListInterval: Duration = .seconds(60)
+    /// The two intervals the background read keeps; tests shorten them.
+    @ObservationIgnored var otherListEvery = ThreadListModel.otherListInterval
+    @ObservationIgnored var otherAskEvery = ThreadListModel.pullRequestInterval
 
     /// Moves to another project: the one left keeps what GitHub said of its threads, and the one reached gets back what it had, so
     /// a switch shows the last known state at once instead of the log alone until `gh` answers again.
@@ -160,12 +163,15 @@ enum ThreadListLoader {
 
     /// - Parameter pullRequests: what GitHub said of each thread's pull request, when it was read; a thread missing here is derived
     ///   from its log alone, which never says merged.
-    static func load(project: Project, cache: Cache, pullRequests: [String: PRStatus] = [:]) -> ThreadListing {
+    ///   - limit: how many of the newest threads are listed.
+    static func load(
+        project: Project, cache: Cache, pullRequests: [String: PRStatus] = [:], limit: Int = maxRows
+    ) -> ThreadListing {
         let store = ThreadStore(project: project)
         let ids = store.threadIDs()
         let newestFirst = ids.map { id in (id, cache.createdAt(id) { firstLineCreatedAt(project.eventsURL(id)) }) }
             .sorted { ($0.1, $0.0) > ($1.1, $1.0) }
-        let shown = Array(newestFirst.prefix(maxRows)).map(\.0)
+        let shown = Array(newestFirst.prefix(limit)).map(\.0)
         cache.forget(except: Set(shown))
         let rows = shown.map { id -> ThreadRow in
             let status = pullRequests[id]

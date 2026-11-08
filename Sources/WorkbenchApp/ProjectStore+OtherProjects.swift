@@ -11,8 +11,8 @@ extension ProjectStore {
         defer { threads.readingOthers = false }
         let model = threads
         for path in railPaths where path != project?.root.path {
-            guard railPaths.contains(path), ProjectStore.unavailableReason(path) == nil else { continue }
-            if let listed = model.otherListedAt[path], listed.duration(to: .now) < ThreadListModel.otherListInterval { continue }
+            guard railPaths.contains(path) else { continue }
+            if let listed = model.otherListedAt[path], listed.duration(to: .now) < model.otherListEvery { continue }
             model.otherListedAt[path] = .now
             await readPullRequests(ofProjectAt: path)
         }
@@ -21,8 +21,16 @@ extension ProjectStore {
     private func readPullRequests(ofProjectAt path: String) async {
         let other = Project(root: URL(fileURLWithPath: path))
         let model = threads
-        let (cache, statuses) = (railSummaries.listCache(for: path), model.pullRequests(for: path))
-        let listing = await Task.detached { ThreadListLoader.load(project: other, cache: cache, pullRequests: statuses) }.value
+        let summaries = railSummaries
+        let cache = summaries.discoveryCache(for: path)
+        // Listed from the logs alone and as far as the counts reach: a thread GitHub said closed is asked about again (it may be reopened),
+        // and none that the tile counts is left out. Bounded like the rail's own reads, so a folder that hangs holds this pass for
+        // `RailSummaries.timeout`, not for good.
+        let listed = await RailSummaries.raced(seconds: RailSummaries.timeout) { () -> ThreadListing? in
+            guard ProjectStore.unavailableReason(path) == nil else { return nil }
+            return ThreadListLoader.load(project: other, cache: cache, limit: ProjectSummaryLoader.maxThreads)
+        }
+        guard let listed, let listing = listed else { return }
         var changed = false
         // A merge that could not be written the last time (the log was held) is written now.
         for (thread, status) in model.unwrittenMerges(for: path) {
@@ -30,7 +38,7 @@ extension ProjectStore {
         }
         for row in listing.rows where row.pullRequest != nil {
             let readAt = model.readAt(row.id, for: path)
-            if let readAt, readAt.duration(to: .now) < ThreadListModel.pullRequestInterval { continue }
+            if let readAt, readAt.duration(to: .now) < model.otherAskEvery { continue }
             // The project may have become the open one, or left the rail, while an earlier thread was asked about.
             guard path != project?.root.path, railPaths.contains(path) else { return }
             let read = try? await actions.pullRequestStatus(other, row.id)

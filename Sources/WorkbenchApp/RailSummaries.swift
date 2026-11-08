@@ -13,6 +13,7 @@ import WorkbenchCore
     private(set) var older: [String: Int] = [:]
     @ObservationIgnored private var caches: [String: ProjectSummaryLoader.Cache] = [:]
     @ObservationIgnored private var listCaches: [String: ThreadListLoader.Cache] = [:]
+    @ObservationIgnored private var discoveryCaches: [String: ThreadListLoader.Cache] = [:]
     /// The tasks' part of each count as last read, used again when the tasks cannot be read this time.
     @ObservationIgnored private var lastTasks: [String: ProjectSummary] = [:]
     /// Projects whose read has not come back: asked again only when it has, so a hung folder holds one thread, not one a poll.
@@ -32,6 +33,15 @@ import WorkbenchCore
         if let known = listCaches[path] { return known }
         let fresh = ThreadListLoader.Cache()
         listCaches[path] = fresh
+        return fresh
+    }
+
+    /// The cache of the background read of GitHub, which lists threads from their logs alone: kept apart from the inbox's, whose rows
+    /// carry what GitHub said and whose limit is not the same.
+    func discoveryCache(for path: String) -> ThreadListLoader.Cache {
+        if let known = discoveryCaches[path] { return known }
+        let fresh = ThreadListLoader.Cache()
+        discoveryCaches[path] = fresh
         return fresh
     }
 
@@ -75,6 +85,7 @@ import WorkbenchCore
         rows = rows.filter { paths.contains($0.key) }
         older = older.filter { paths.contains($0.key) }
         listCaches = listCaches.filter { paths.contains($0.key) }
+        discoveryCaches = discoveryCaches.filter { paths.contains($0.key) }
     }
 
     /// What the tasks of a project add to its count, by the rules the rail's rows apply: a task that needs you, one that failed, one running.
