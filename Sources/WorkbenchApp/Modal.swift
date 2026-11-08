@@ -115,6 +115,9 @@ private struct ModalCard<Accessory: View, Content: View>: View {
                 accessory()
                 IconButton.close(ModalText.closeLabel(title), help: "Close (Esc)", action: close)
             }
+            // The header asks for no width of its own: a card as wide as its content is as wide as the content, and a longer title
+            // (the next screenshot's caption) is cut instead of widening the card from page to page.
+            .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity)
             content()
         }
         .padding(.horizontal, Space.l).padding(.vertical, Space.l)

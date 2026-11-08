@@ -121,6 +121,45 @@ import UniformTypeIdentifiers
         #expect(other.area(scale: 2, room: room) == CGSize(width: 800, height: 500), "800 × 500 points fits whole")
     }
 
+    @Test func pagingBetweenShotsOfDifferentSizesAndShapesKeepsTheSameArea() async throws {
+        let sizes = [(600, 400), (500, 1400), (1600, 300), (300, 200)]
+        let files = try sizes.map { try png(width: $0.0, height: $0.1) }
+        defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
+        let model = ScreenshotPreviewModel.proof(files.map { ProofShot(url: $0, caption: "S") }, at: 0)
+        let room = CGSize(width: 2000, height: 2000)
+        await model.load()
+        let first = model.area(scale: 1, room: room)
+        #expect(first == CGSize(width: 1600, height: 1400), "the widest and the tallest shot both fit whole")
+        for index in files.indices {
+            model.go(index)
+            #expect(model.area(scale: 1, room: room) == first, "page \(index + 1) before it is decoded")
+            await model.load()
+            #expect(model.area(scale: 1, room: room) == first, "page \(index + 1) once it is decoded")
+        }
+    }
+
+    @Test func aSetLargerThanTheWindowIsBoundedByItOnEveryPage() async throws {
+        let files = try [(4000, 800), (700, 3500)].map { try png(width: $0.0, height: $0.1) }
+        defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
+        let model = ScreenshotPreviewModel.proof(files.map { ProofShot(url: $0, caption: "S") }, at: 0)
+        let room = ScreenshotPreviewModel.room(in: CGSize(width: 1200, height: 800))
+        await model.load()
+        #expect(model.area(scale: 1, room: room) == room, "a shot too wide and one too tall: the area is the room")
+        #expect(!model.fits(scale: 1, room: room))
+        model.go(1)
+        await model.load()
+        #expect(model.area(scale: 1, room: room) == room && !model.fits(scale: 1, room: room))
+    }
+
+    @Test func aShotThatCannotBeReadDoesNotSizeTheSet() async throws {
+        let file = try png(width: 800, height: 600)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let gone = URL(fileURLWithPath: "/t/missing-\(UUID().uuidString).png")
+        let model = ScreenshotPreviewModel.proof([ProofShot(url: file, caption: "A"), ProofShot(url: gone, caption: "B")], at: 0)
+        await model.load()
+        #expect(model.area(scale: 1, room: CGSize(width: 2000, height: 2000)) == CGSize(width: 800, height: 600))
+    }
+
     /// A 1 × 1 PNG.
     private static let pixel =
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="

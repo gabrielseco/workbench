@@ -268,6 +268,9 @@ Every screen answers four questions without a click, and a change that touches a
 - **A modal is centred in the window**, horizontally and vertically, whatever opened it: a card is never placed beside, under or over the
   control it came from, and the project card is no exception. `.modal` has no placement to choose (it was removed so that it cannot be
   re-added by accident); a card that seems to need one is a design question for DESIGN.md first, not a new case in `Modal.swift`.
+- **A modal you page through keeps its size.** The screenshot preview sizes a set to its largest shot (bounded by the window) and fits
+  each picture inside it, and a modal's title never widens its card (a long one is cut): the card grew and shrank with every verify
+  screenshot until it did. `ScreenshotPreviewModelTests` checks the area is the same on every page.
 - **A list has a cap, and says what it left out.** Any list that can grow (an inbox section, the rail, a menu, a picker) shows at most
   **10** rows, then a line with the count that is hidden ("Show 14 more"); the one on screen and anything that needs the person stays
   listed whatever the cap. Every section is capped, not only the last one: Needs you and Waiting grew past ten because only Done had a

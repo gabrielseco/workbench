@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// One screenshot, or a set to page through, shown large in a modal sized to it (`AppModals.swift`). It is shown at its own point size (a
+/// One screenshot, or a set to page through, shown large in a modal sized to it, or for a set to its largest shot so paging keeps the card's
+/// size (`AppModals.swift`). It is shown at its own point size (a
 /// Retina screenshot pixel for pixel), shrunk to fit only when it is bigger, never stretched; when shrunk, a click or the toggle shows it
 /// actual size in a scroll view. The model holds what the title, the controls and the picture all read, since they are three views.
 @MainActor @Observable final class ScreenshotPreviewModel {
@@ -24,6 +25,9 @@ import SwiftUI
     private(set) var decoded: StagedScreenshotImage?
     /// The pictures next to the one shown, decoded ahead so a step to them has nothing to wait for.
     private var neighbours: [URL: StagedScreenshotImage] = [:]
+    /// Every shot's pixel size, read from the file headers on the first load (nil for one that cannot be read): a set is shown in one
+    /// area sized to the largest, so paging between screenshots of different sizes and shapes never resizes the card.
+    private(set) var sizes: [CGSize?]?
     private(set) var missing = false
     var actualSize = false
 
@@ -68,6 +72,12 @@ import SwiftUI
     /// superseded one must not replace the current picture.
     func load() async {
         let url = shot.url
+        if isPaged, sizes == nil {
+            // Before the first picture, so the card takes its size once and keeps it.
+            let urls = shots.map(\.url)
+            let read = await Task.detached(priority: .userInitiated) { urls.map(StagedScreenshotImage.shownPixels) }.value
+            if sizes == nil { sizes = read }
+        }
         let loaded: StagedScreenshotImage?
         if let ready = neighbours[url] {
             loaded = ready
@@ -107,10 +117,19 @@ import SwiftUI
         return size.width <= room.width && size.height <= room.height
     }
 
-    /// The picture's area: its own size within `room`, no smaller than `smallest`; a size to wait in until it is decoded.
+    /// The picture's area: its own size within `room`, no smaller than `smallest`; a size to wait in until it is decoded. A set to page
+    /// through takes the size of its largest shot instead, the same for every page, and each picture is fitted inside it.
     func area(scale: CGFloat, room: CGSize) -> CGSize {
-        guard let decoded else { return Self.smallest }
-        let size = decoded.points(at: scale)
+        let size: CGSize
+        if isPaged {
+            guard let sizes else { return Self.smallest }
+            let pixels = sizes.compactMap { $0 }
+            let scale = max(scale, 1)
+            size = CGSize(width: (pixels.map(\.width).max() ?? 0) / scale, height: (pixels.map(\.height).max() ?? 0) / scale)
+        } else {
+            guard let decoded else { return Self.smallest }
+            size = decoded.points(at: scale)
+        }
         return CGSize(
             width: max(Self.smallest.width, min(size.width, room.width)),
             height: max(Self.smallest.height, min(size.height, room.height)))
