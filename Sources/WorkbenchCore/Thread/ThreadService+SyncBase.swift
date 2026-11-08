@@ -103,6 +103,11 @@ extension ThreadService {
 
     private func lines(_ arguments: [String], in directory: URL, separator: Character) async throws -> [String] {
         let result = try await git.run(arguments, in: directory)
+        // A cut listing would be read as a short one: no overlap found is not the same as not all of it read.
+        guard !result.outputTruncated else {
+            let command = arguments.prefix(2).joined(separator: " ")
+            throw ThreadServiceError.syncFailed("git \(command) listed too many files to compare")
+        }
         guard result.succeeded else {
             throw ThreadServiceError.syncFailed("git \(arguments.prefix(2).joined(separator: " ")) failed: \(result.stderr)")
         }
@@ -132,6 +137,15 @@ extension ThreadService {
             throw ThreadServiceError.syncRefused("this thread has no worktree yet, so it has not started from any base")
         }
         let worktree = manager.path(for: id)
+        // A runner that died may have left a turn open and children writing in the worktree: they end here, under the held log,
+        // as for `accept`, so nothing of theirs is committed or merged over.
+        _ = try await log.recoverOrphanedTurn()
+        _ = try await log.recoverOrphanedCheck()
+        let swept = OrphanSweeper.sweep(inside: worktree)
+        if !swept.isEmpty {
+            _ = try await log.append(
+                EventKind(rawValue: "orphans.swept"), data: ["pids": .array(swept.map { .int(Int($0)) })])
+        }
         // The branch is the thread's own: work saved and merged on another one would not be the thread's.
         let onBranch = try await git.run(["symbolic-ref", "--short", "-q", "HEAD"], in: worktree)
         let found = onBranch.succeeded ? onBranch.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : ""

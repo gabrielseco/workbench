@@ -188,4 +188,23 @@ import Testing
         #expect(status.stdout.contains("a.txt"), "the work was not committed under the run's feet")
         #expect(!FileManager.default.fileExists(atPath: worktree.appendingPathComponent("b.txt").path), "nothing was merged")
     }
+
+    @Test func aTurnADeadRunnerLeftOpenIsClosedBeforeTheMerge() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await thread(fx)
+        try write(worktree, "a.txt", "one\nmine\n")
+        try await landOnMain(fx, "b.txt", "theirs\n")
+        let log = try EventLogWriter.open(at: fx.project.eventsURL(id))
+        try await log.append(.turnStarted, turn: 1, data: [:])
+        await log.close()  // the runner is gone: a turn is open and nothing holds the thread
+
+        let result = try await fx.service.syncBase(id: id)
+        guard case .merged = result else {
+            Issue.record("got \(result)")
+            return
+        }
+        let kinds = try kinds(fx, id)
+        #expect(kinds.filter { $0 == "turn.started" }.count == 1 && kinds.filter { $0 == "turn.ended" }.count == 1)
+        #expect(kinds.last == "base.synced", "the turn ended first, then the sync: \(kinds)")
+    }
 }

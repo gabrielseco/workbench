@@ -20,7 +20,7 @@ extension Commands {
             out("merged origin/\(moved.base) (\(moved.behind) commit\(moved.behind == 1 ? "" : "s")) at \(head)")
             out(moved.line)
             out("the check has not run on the result yet; this runs it:")
-            out("  workbench send-back \"origin/\(moved.base) was merged in; make sure it still passes\"")
+            out("  workbench send-back --thread \(id) \"origin/\(moved.base) was merged in; make sure it still passes\"")
             return 0
         case .failed:
             return fail(.failed, "git could not merge the base")  // syncBase throws instead; here for completeness
@@ -31,7 +31,7 @@ extension Commands {
             if files.count > 20 { out("  ... and \(files.count - 20) more") }
             let path = WorktreeManager(repoRoot: ctx.project.root, git: ctx.git).path(for: id).path
             out("the merge is left in progress in \(path): resolve the files there, or ask for it with")
-            out("  workbench send-back \"resolve the merge conflicts from bringing in \(moved.base), keeping both sides\"")
+            out("  workbench send-back --thread \(id) \"resolve the merge conflicts from bringing in \(moved.base)\"")
             return fail(.failed, "the merge stopped on conflicts")
         }
     }
