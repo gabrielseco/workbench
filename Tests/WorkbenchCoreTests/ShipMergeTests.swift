@@ -42,14 +42,38 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         let open = PRStatus(number: 12, state: .open, head: head, checks: nil)
         let closed = PRStatus(number: 12, state: .closed, head: head, checks: nil)
         let other = PRStatus(number: 99, state: .merged, head: head, checks: nil)
-        for status in [open, closed, other] { #expect(await fx.service.recordMerge(id: id, status: status) == .notApplicable) }
+        for status in [open, other] { #expect(await fx.service.recordOutcome(id: id, status: status) == .notApplicable) }
         #expect(try merged() == 0)
         let done = PRStatus(number: 12, state: .merged, head: head, checks: nil)
-        #expect(await fx.service.recordMerge(id: id, status: done) == .written)
-        #expect(await fx.service.recordMerge(id: id, status: done) == .alreadyRecorded, "once per pull request")
+        #expect(await fx.service.recordOutcome(id: id, status: done) == .written)
+        #expect(await fx.service.recordOutcome(id: id, status: done) == .alreadyRecorded, "once per pull request")
         #expect(try merged() == 1)
         let state = ThreadState.derive(from: try EventLogReader.read(at: fx.project.eventsURL(id)).events, id: id)
         #expect(state.isMerged)
+    }
+
+    @Test func aCloseIsWrittenOnceAndAMergeStillOutranksIt() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let id = try await shipped(fx, gh)
+        func events(_ kind: EventKind) throws -> Int {
+            try EventLogReader.read(at: fx.project.eventsURL(id)).events.filter { $0.kind == kind }.count
+        }
+        func state() throws -> ThreadState {
+            ThreadState.derive(from: try EventLogReader.read(at: fx.project.eventsURL(id)).events, id: id)
+        }
+        let closed = PRStatus(number: 12, state: .closed, head: head, checks: nil)
+        let other = PRStatus(number: 99, state: .closed, head: head, checks: nil)
+        #expect(await fx.service.recordOutcome(id: id, status: other) == .notApplicable, "another one's close says nothing")
+        #expect(await fx.service.recordOutcome(id: id, status: closed) == .written)
+        #expect(await fx.service.recordOutcome(id: id, status: closed) == .alreadyRecorded, "once per pull request")
+        #expect(try events(.prClosed) == 1 && state().isClosed && !state().isMerged)
+        // A closed pull request that was reopened and merged: the merge is written, and it outranks the close.
+        let merged = PRStatus(number: 12, state: .merged, head: head, checks: nil)
+        #expect(await fx.service.recordOutcome(id: id, status: merged) == .written)
+        #expect(try state().settledOutcome() == .merged)
+        #expect(await fx.service.recordOutcome(id: id, status: closed) == .alreadyRecorded, "no close after a merge")
+        #expect(try events(.prClosed) == 1)
     }
 
     @Test func twoCallersAtOnceWriteTheMergeOnce() async throws {
@@ -57,8 +81,8 @@ private func shipped(_ fx: RunnerFixture, _ gh: FakeGH) async throws -> String {
         let gh = try FakeGH(in: fx)
         let id = try await shipped(fx, gh)
         let done = PRStatus(number: 12, state: .merged, head: head, checks: nil)
-        async let first = fx.service.recordMerge(id: id, status: done)
-        async let second = fx.service.recordMerge(id: id, status: done)
+        async let first = fx.service.recordOutcome(id: id, status: done)
+        async let second = fx.service.recordOutcome(id: id, status: done)
         let results = await [first, second]
         #expect(results.filter { $0 == .written }.count == 1, "\(results)")
         let events = try EventLogReader.read(at: fx.project.eventsURL(id)).events

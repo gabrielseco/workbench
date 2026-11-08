@@ -215,6 +215,21 @@ public struct ThreadState: Sendable, Equatable {
     public var mergedPullRequest: Int?
     /// GitHub confirmed the shipped pull request merged, and the log says so: no read of GitHub is needed to know it.
     public var isMerged: Bool { pullRequest != nil && pullRequest?.number == mergedPullRequest }
+    /// The number of the pull request a `pr.closed` event recorded: GitHub said it was closed without merging. Counts only for the pull
+    /// request `pullRequest` names (`isClosed`). A reopened pull request is not tracked: the log keeps saying closed until a new
+    /// `pr.opened` (or a merge) supersedes it.
+    public var closedPullRequest: Int?
+    /// GitHub confirmed the shipped pull request was closed without merging, and the log says so.
+    public var isClosed: Bool { pullRequest != nil && pullRequest?.number == closedPullRequest }
+
+    /// What became of the shipped pull request: what the log recorded, else `read` (what GitHub said when the caller asked, `.open`
+    /// when it did not). A merge outranks a close, whichever says it.
+    public func settledOutcome(_ read: PullRequestOutcome = .open) -> PullRequestOutcome {
+        if isMerged || read == .merged { return .merged }
+        if isClosed || read == .closed { return .closed }
+        return .open
+    }
+
     /// True once `clean` deleted the shipped branch (`branch.removed`).
     public var cleaned = false
     /// The conversation of a chat thread; nil on a thread that has none (P22 slice 6).
@@ -416,8 +431,9 @@ public struct ThreadState: Sendable, Equatable {
                     state.pullRequest = PullRequestRecord(
                         number: number, url: url, headSHA: event.data["head_sha"]?.stringValue, seq: event.seq)
                 }
-            case .prMerged:
-                if let number = event.data["number"]?.intValue { state.mergedPullRequest = number }
+            case .prMerged, .prClosed:
+                guard let number = event.data["number"]?.intValue else { break }
+                if event.kind == .prMerged { state.mergedPullRequest = number } else { state.closedPullRequest = number }
             case .branchRemoved:
                 state.cleaned = true
             case .reviewDecision:
