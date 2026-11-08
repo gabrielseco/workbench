@@ -112,7 +112,7 @@ extension ProjectStore {
         case .showFindings: await showPRReview()
         case .refreshCI: await refreshPullRequestCI()
         case .openPR: openPullRequest()
-        case .fixTests: await fixFailedTests()
+        case .fixChecks: await fixFailedChecks()
         case .reviewDetails: break
         }
     }

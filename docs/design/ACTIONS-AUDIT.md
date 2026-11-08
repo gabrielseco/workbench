@@ -57,7 +57,7 @@ Several "Stop" buttons exist too (feed, chat, new-goal popover, tasks), but they
 | Run ended badly | Run again | Open worktree, Open in Herdr |
 | Review | Accept work, plus Open diff beside it | Send back, Discard, Review details, Open worktree, Open in Herdr, Refresh |
 | Accepted | Ship | Open worktree, Open in Herdr, New goal |
-| PR open | Merge (CI green), Fix failed tests (a test check failed), or Review PR | Show findings, Refresh CI, Open worktree, Open in Herdr, New goal |
+| PR open | Merge (CI green), Fix failed checks (a test check failed), or Review PR | Show findings, Refresh CI, Open worktree, Open in Herdr, New goal |
 | Discarded, cleaned | New goal | none (no worktree) |
 
 `derive` already matches this except one row to confirm: it offers Open in Herdr in the draft and approved states, where there is

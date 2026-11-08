@@ -8,11 +8,11 @@ import Testing
 private final class Log: @unchecked Sendable {
     private let lock = NSLock()
     private var items: [String] = []
-    private var fixes: [(failures: [CIFailedTest], budget: Decimal?)] = []
+    private var fixes: [(failures: [CIFailedCheck], budget: Decimal?)] = []
     func add(_ item: String) { lock.withLock { items.append(item) } }
-    func fixed(_ failures: [CIFailedTest], _ budget: Decimal?) { lock.withLock { fixes.append((failures, budget)) } }
+    func fixed(_ failures: [CIFailedCheck], _ budget: Decimal?) { lock.withLock { fixes.append((failures, budget)) } }
     var all: [String] { lock.withLock { items } }
-    var started: [(failures: [CIFailedTest], budget: Decimal?)] { lock.withLock { fixes } }
+    var started: [(failures: [CIFailedCheck], budget: Decimal?)] { lock.withLock { fixes } }
 }
 
 /// GitHub as the store sees it: the status each read answers, the next one after the push.
@@ -44,7 +44,7 @@ private actor Gate {
 @MainActor @Suite struct PRCIFixTests {
     private nonisolated static let head = String(repeating: "a", count: 40)
     private nonisolated static let plan = FollowUpPlan(pr: 7, round: 1, allowed: 2, budget: 5)
-    private nonisolated static let failure = CIFailedTest(
+    private nonisolated static let failure = CIFailedCheck(
         name: "test", workflow: "CI", description: "Process completed with exit code 1.",
         link: "https://github.com/o/r/actions/runs/1/job/2", log: "FAILED: testTotals")
 
@@ -67,7 +67,7 @@ private actor Gate {
 
     fileprivate struct Options {
         var github = GitHub([PRCIFixTests.testFailed])
-        var failures: Result<[CIFailedTest], GoalActions.RefusalText> = .success([PRCIFixTests.failure])
+        var failures: Result<[CIFailedCheck], GoalActions.RefusalText> = .success([PRCIFixTests.failure])
         var plan = PRCIFixTests.plan
         var startError: GoalActions.RefusalText?
         var turnResult = "succeeded"
@@ -132,8 +132,8 @@ private actor Gate {
                 log.add("followUpPlan \(thread) #\(pr)")
                 return o.plan
             },
-            failedTests: { _, thread in
-                log.add("failedTests \(thread)")
+            failedChecks: { _, thread in
+                log.add("failedChecks \(thread)")
                 await o.detailsGate?.wait()
                 return try o.failures.get()
             },
@@ -166,21 +166,21 @@ private actor Gate {
         let log = Log()
         let store = try await makeStore(log)
         let decision = store.feedDecision(for: try shown(store))
-        #expect(decision.primary?.kind == .fixTests && decision.primary?.enabled == true, "a failed test is offered to fix")
+        #expect(decision.primary?.kind == .fixChecks && decision.primary?.enabled == true, "a failed check is offered to fix")
         #expect(decision.more.first { $0.kind == .merge }?.enabled == false, "Merge stays, and stays off")
 
-        await store.perform(.fixTests)
+        await store.perform(.fixChecks)
         let started = try #require(log.started.first)
-        #expect(started.failures == [Self.failure], "the agent gets the failed test with its link, status and log")
+        #expect(started.failures == [Self.failure], "the agent gets the failed check with its link, status and log")
         #expect(started.budget == Self.plan.budget)
-        #expect(log.all.prefix(5) == ["ci t1", "failedTests t1", "followUpPlan t1 #7", "startCIFix t1", "run t2"])
+        #expect(log.all.prefix(5) == ["ci t1", "failedChecks t1", "followUpPlan t1 #7", "startCIFix t1", "run t2"])
         #expect(store.currentThread == "t2")
 
         try await settle(store)
         // The fix goes onto the pull request's branch through the review loop's own steps: accept, then ship to the same PR.
         let after = Array(log.all.drop { $0 != "run t2" })
         #expect(
-            after == ["run t2", "plan t2", "accept t2: fix: make the failed CI tests pass", "ship t2", "ci t2"], "\(after)")
+            after == ["run t2", "plan t2", "accept t2: fix: make the failed CI checks pass", "ship t2", "ci t2"], "\(after)")
         #expect(!log.all.contains { $0.hasPrefix("review") }, "no PR review is started by a CI fix")
     }
 
@@ -191,8 +191,8 @@ private actor Gate {
         options.detailsGate = gate
         let log = Log()
         let store = try await makeStore(log, options)
-        let pressing = Task { await store.fixFailedTests() }
-        for _ in 0..<500 where log.all.last != "failedTests t1" { try await Task.sleep(for: .milliseconds(5)) }
+        let pressing = Task { await store.fixFailedChecks() }
+        for _ in 0..<500 where log.all.last != "failedChecks t1" { try await Task.sleep(for: .milliseconds(5)) }
         #expect(store.ciFixShown(on: "t1")?.phase == .reading && store.ciFixShown(on: "t1")?.line.contains("test") == true)
         #expect(store.busy != nil)
         await gate.open()
@@ -222,7 +222,7 @@ private actor Gate {
         ] {
             let log = Log()
             let store = try await makeStore(log, c.options)
-            await store.fixFailedTests()
+            await store.fixFailedChecks()
             let fix = try #require(store.ciFixShown(on: "t1"), "\(c.name)")
             #expect(fix.failed && fix.line.contains(c.says), "\(c.name): \(fix.line)")
             #expect(!log.all.contains { $0.hasPrefix("run") } && store.currentThread == "t1", "\(c.name)")
@@ -236,7 +236,7 @@ private actor Gate {
             (options.turnResult, options.check) = (result, check)
             let log = Log()
             let store = try await makeStore(log, options)
-            await store.fixFailedTests()
+            await store.fixFailedChecks()
             try await settle(store)
             let fix = try #require(store.ciFixShown(on: "t2"))
             #expect(fix.failed && fix.line.contains("nothing was pushed"), "\(fix.line)")
@@ -254,23 +254,23 @@ private actor Gate {
         let log = Log()
         let store = try await makeStore(log, options)
         #expect(try !shown(store).canMerge)
-        await store.fixFailedTests()
+        await store.fixFailedChecks()
         try await settle(store)
 
         // Read again after the push: the new run, pending, not the failed one; Merge waits for it.
         let pending = try shown(store)
         #expect(pending.id == "t2" && pending.ci?.isPending == true, "\(String(describing: pending.ci))")
-        #expect(pending.ci?.failedTests.isEmpty == true && !pending.canMerge)
+        #expect(pending.ci?.failedChecks.isEmpty == true && !pending.canMerge)
         var decision = store.feedDecision(for: pending)
-        #expect(decision.primary?.kind != .fixTests)
+        #expect(decision.primary?.kind != .fixChecks)
         #expect(([decision.primary] + decision.more).first { $0?.kind == .merge }??.enabled == false)
 
         // CI failed again: still no Merge; the fix is offered again.
         await store.refreshPullRequestCI()
         let failed = try shown(store)
-        #expect(!failed.canMerge && failed.ci?.failedTests == ["test"])
+        #expect(!failed.canMerge && failed.ci?.failedChecks == ["test"])
         decision = store.feedDecision(for: failed)
-        #expect(decision.primary?.kind == .fixTests && decision.more.first { $0.kind == .merge }?.enabled == false)
+        #expect(decision.primary?.kind == .fixChecks && decision.more.first { $0.kind == .merge }?.enabled == false)
 
         // Green: Merge is offered, and only offered; nothing merged by itself.
         await store.refreshPullRequestCI()
@@ -279,19 +279,26 @@ private actor Gate {
         #expect(!log.all.contains { $0.hasPrefix("merge") })
     }
 
+    @Test func anyFailedCheckIsOfferedWhateverItsName() throws {
+        for name in ["lint", "pytest", "ci", "build"] {
+            let ci = PullRequestCI.known(Self.status([(name, "fail"), ("other", "pass")]))
+            #expect(ci.failedChecks == [name], "\(name)")
+        }
+    }
+
     @Test func guardsUnavailableAndDuplicateFixes() async throws {
-        // No failed test: nothing offered, and a press does nothing.
-        for checks in [[("test", "pass"), ("lint", "fail")], [("test", "pending")], [("build-test", "pass")]] {
+        // No failed check: nothing offered, and a press does nothing.
+        for checks in [[("test", "pass"), ("lint", "pass")], [("test", "pending")], [("build-test", "pass")]] {
             var options = Options()
             options.github = GitHub([Self.status(checks)])
             let log = Log()
             let store = try await makeStore(log, options)
             let decision = store.feedDecision(for: try shown(store))
-            #expect(!(([decision.primary] + decision.more).contains { $0?.kind == .fixTests }), "\(checks)")
-            await store.fixFailedTests()
+            #expect(!(([decision.primary] + decision.more).contains { $0?.kind == .fixChecks }), "\(checks)")
+            await store.fixFailedChecks()
             #expect(log.all == ["ci t1"] && store.ciFix == nil, "\(checks): \(log.all)")
         }
-        #expect(PullRequestCI.unavailable("no gh").failedTests.isEmpty && PullRequestCI.checking.failedTests.isEmpty)
+        #expect(PullRequestCI.unavailable("no gh").failedChecks.isEmpty && PullRequestCI.checking.failedChecks.isEmpty)
 
         // Pressed again while the first is going: one fix, and the button says it is going.
         let gate = Gate()
@@ -299,16 +306,16 @@ private actor Gate {
         options.detailsGate = gate
         let log = Log()
         let store = try await makeStore(log, options)
-        let first = Task { await store.fixFailedTests() }
-        for _ in 0..<500 where log.all.last != "failedTests t1" { try await Task.sleep(for: .milliseconds(5)) }
+        let first = Task { await store.fixFailedChecks() }
+        for _ in 0..<500 where log.all.last != "failedChecks t1" { try await Task.sleep(for: .milliseconds(5)) }
         let going = store.feedDecision(for: try shown(store)).primary
-        #expect(going?.kind == .fixTests && going?.enabled == false && going?.title == "Fixing tests…")
-        await store.fixFailedTests()
-        await store.perform(.fixTests)
+        #expect(going?.kind == .fixChecks && going?.enabled == false && going?.title == "Fixing checks…")
+        await store.fixFailedChecks()
+        await store.perform(.fixChecks)
         await gate.open()
         await first.value
         try await settle(store)
-        #expect(log.all.filter { $0 == "failedTests t1" }.count == 1 && log.started.count == 1, "\(log.all)")
+        #expect(log.all.filter { $0 == "failedChecks t1" }.count == 1 && log.started.count == 1, "\(log.all)")
         #expect(log.all.filter { $0.hasPrefix("run") } == ["run t2"])
     }
 }

@@ -104,9 +104,9 @@ extension ProjectStore {
                 return
             }
         }
-        if round.kind == .failedTests { ciFix?.phase = .shipping }
+        if round.kind == .failedChecks { ciFix?.phase = .shipping }
         let message =
-            round.kind == .failedTests ? "fix: make the failed CI tests pass" : "fix: address review round \(round.reviewRound)"
+            round.kind == .failedChecks ? "fix: make the failed CI checks pass" : "fix: address review round \(round.reviewRound)"
         guard await accept(message: message), round.generation == generation, currentThread == round.thread else {
             ciFixStopped(round, "accepting it was refused (the error above says why), so nothing was pushed.")
             return
@@ -117,15 +117,15 @@ extension ProjectStore {
         }
         switch round.kind {
         case .reviewFindings: await reviewPullRequest()
-        case .failedTests: await ciFixSubmitted(round)
+        case .failedChecks: await ciFixSubmitted(round)
         }
     }
 }
 
 /// A fix round the app started and follows to its push: from the findings sheet (with the review round whose findings it fixes),
-/// or from "Fix failed tests" on the pull request's CI.
+/// or from "Fix failed checks" on the pull request's CI.
 struct FixRound: Equatable {
-    enum Kind: Equatable { case reviewFindings, failedTests }
+    enum Kind: Equatable { case reviewFindings, failedChecks }
     var thread: String
     var reviewRound: Int
     var generation: Int

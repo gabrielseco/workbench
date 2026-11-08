@@ -1,7 +1,7 @@
 import Foundation
 import WorkbenchCore
 
-/// Where "Fix failed tests" is, for the CI lines to say: reading CI, starting the fix, its turn, pushing it, done or why not.
+/// Where "Fix failed checks" is, for the CI lines to say: reading CI, starting the fix, its turn, pushing it, done or why not.
 struct CIFixProgress: Equatable {
     enum Phase: Equatable {
         case reading, starting, running, shipping, submitted
@@ -12,8 +12,8 @@ struct CIFixProgress: Equatable {
     /// The thread whose CI failed, and the follow-up that fixes it once there is one: the progress is shown on either.
     var parent: String
     var fix: String?
-    /// The failed test checks it was started for.
-    var tests: [String]
+    /// The failed checks it was started for.
+    var checks: [String]
     var generation: Int
 
     /// Still going: a second press starts nothing.
@@ -26,7 +26,7 @@ struct CIFixProgress: Equatable {
 
     /// The line the CI banner shows under its rows.
     var line: String {
-        let names = tests.joined(separator: ", ")
+        let names = checks.joined(separator: ", ")
         return switch phase {
         case .reading: "Fixing \(names): reading why CI failed…"
         case .starting: "Fixing \(names): starting the fix…"
@@ -40,7 +40,7 @@ struct CIFixProgress: Equatable {
     var failed: Bool { if case .failed = phase { true } else { false } }
 }
 
-/// "Fix failed tests": when the pull request's CI says a test failed, the click is the yes. It reads what CI says of the failed tests,
+/// "Fix failed checks": when the pull request's CI says a check failed, the click is the yes. It reads what CI says of the failed checks,
 /// starts core's follow-up on the pull request's branch with that as its goal (the same follow-up a review round starts, so it
 /// counts against `[pr_review] max_rounds`), runs its turn, and when the turn and the check pass accepts it, pushes it to the same
 /// pull request and reads CI again. It never merges: Merge stays the person's click, offered only once CI is green.
@@ -54,26 +54,26 @@ extension ProjectStore {
         return fix.parent == thread || fix.fix == thread ? fix : nil
     }
 
-    func fixFailedTests() async {
+    func fixFailedChecks() async {
         guard let project, let thread = currentThread, case .thread(let shown) = screen, shown.watchesPullRequest,
-            let ci = shown.ci, let pr = ci.status?.number, !ci.failedTests.isEmpty, !ciFixing, !starting, busy == nil,
+            let ci = shown.ci, let pr = ci.status?.number, !ci.failedChecks.isEmpty, !ciFixing, !starting, busy == nil,
             fixRoundToShip == nil
         else { return }
         let mine = generation
-        ciFix = CIFixProgress(phase: .reading, parent: thread, tests: ci.failedTests, generation: mine)
+        ciFix = CIFixProgress(phase: .reading, parent: thread, checks: ci.failedChecks, generation: mine)
         func fail(_ why: String) {
             guard mine == generation else { return }
             ciFix?.phase = .failed(why)
         }
         var made: String?
         var ran = false
-        await working("Reading why the tests failed…") {
+        await working("Reading why CI failed…") {
             ran = true
             do {
-                let failures = try await actions.failedTests(project, thread)
+                let failures = try await actions.failedChecks(project, thread)
                 guard mine == generation else { return }
-                guard !failures.isEmpty else { return fail("\(CIFixError.noFailedTests)") }
-                ciFix?.tests = failures.map(\.name)
+                guard !failures.isEmpty else { return fail("\(CIFixError.noFailedChecks)") }
+                ciFix?.checks = failures.map(\.name)
                 ciFix?.phase = .starting
                 nowWorking("Starting the fix…")
                 let plan = try await actions.followUpPlan(project, thread, pr)
@@ -81,7 +81,7 @@ extension ProjectStore {
                 if let refusal = plan.refusal { return fail(refusal) }
                 made = try await actions.startCIFix(project, thread, failures, plan.budget)
             } catch {
-                fail("\(error) Fix the cause, then press Fix failed tests again.")
+                fail("\(error) Fix the cause, then press Fix failed checks again.")
             }
         }
         // Another action held the window: nothing was asked of CI, so there is nothing to say.
@@ -91,7 +91,7 @@ extension ProjectStore {
         ciFix?.phase = .running
         await reload()
         guard mine == generation else { return }
-        fixRoundToShip = FixRound(thread: id, reviewRound: 0, generation: mine, kind: .failedTests)
+        fixRoundToShip = FixRound(thread: id, reviewRound: 0, generation: mine, kind: .failedChecks)
         startRun(project, id, generation: mine)
         if !ownedRuns.contains(where: { $0.project == project && $0.thread == id }) {
             fixRoundToShip = nil
@@ -108,7 +108,7 @@ extension ProjectStore {
 
     /// Says on the CI lines why a CI fix round stopped; a review fix round says it in the notice alone.
     func ciFixStopped(_ round: FixRound, _ why: String) {
-        guard round.kind == .failedTests, round.generation == generation, ciFix?.fix == round.thread else { return }
+        guard round.kind == .failedChecks, round.generation == generation, ciFix?.fix == round.thread else { return }
         ciFix?.phase = .failed(why)
     }
 }
