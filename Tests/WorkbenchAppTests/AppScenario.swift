@@ -23,8 +23,7 @@ enum AppScenario: String, CaseIterable {
     case discarded
     case reviewChanges = "review-changes"
     case reviewBaseMoved = "review-base-moved"
-    case verifyShots = "verify-shots"
-    case designStage = "design-stage", designStageRunning = "design-stage-running"
+    case verifyShots = "verify-shots", designStage = "design-stage", designStageRunning = "design-stage-running"
     case corrupt
     case noThread = "no-thread"
     case draftGoal = "draft-goal"
@@ -144,11 +143,8 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .checkStarted, turn: 1)
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
-        case .verifyShots:
+        case .verifyShots, .designStage, .designStageRunning:
             try await writeVerifyShots(in: fixture, id: id)
-        case .designStage, .designStageRunning:
-            try await writeVerifyShots(in: fixture, id: id)
-            try writeDesignStage(in: fixture, id: id, running: self == .designStageRunning)
         case .accepted:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.turn(id, 1, cost: 1.88)
@@ -473,6 +469,7 @@ extension AppScenario {
             try fixture.append(id, .proofAdded, turn: 1, data: recorded)
         }
         try fixture.append(id, .verifierEnded, turn: 1, data: ["ok": true, "report": "All three criteria hold."])
+        if self != .verifyShots { try writeDesignStage(in: fixture, id: id, running: self == .designStageRunning) }
     }
 }
 
