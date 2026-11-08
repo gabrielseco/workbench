@@ -31,6 +31,7 @@ struct ProjectRail: View {
             .focusEffectDisabled()
             .focused($focused)
             .onChange(of: focused) { store.railFocused = focused }
+            .listHasKeys(focused)
             .onMoveCommand { direction in
                 guard direction == .up || direction == .down else { return }
                 Task { await store.moveRailSelection(by: direction == .up ? -1 : 1) }

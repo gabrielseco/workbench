@@ -39,6 +39,9 @@ matters; say which file and line):
   handling in a list or column of them, no Return/Esc, or focus lost after switching project, thread or tab (DESIGN.md, Controls:
   everything you can click can be reached from the keyboard). The PR says which keys it handles. A screen that grabs the caret
   when it opens while the rail (or another list) is being walked with the arrows, so the next key press goes to a text box.
+- A focus stop (`.focusable()`) that draws nothing for focus: `.focusEffectDisabled()` without `.focusRing` / `.selectedFocusRing` (and
+  `.listHasKeys`), so a person walking it with the keys cannot tell it from a list they only clicked (DESIGN.md, Controls: where the
+  keys are is always drawn). The PR shows the list focused and not focused.
 - A text box that is not `PlaceholderTextEditor`, or a change to a text box or its placeholder with no `scripts/check-text-alignment.py`
   result in the PR (empty shot, typed shot, the offset in pixels; the verify-app skill says how).
 

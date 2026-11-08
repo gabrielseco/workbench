@@ -6,6 +6,7 @@ struct AutomationsList: View {
     var store: ProjectStore
     var snapshot: TasksSnapshot
     static let width: CGFloat = 360
+    @FocusState private var focused: Bool
 
     /// The task above or below the one shown, for the arrow keys; nil at either end or when none is shown.
     static func neighbour(of shown: String?, in names: [String], up: Bool) -> String? {
@@ -31,6 +32,10 @@ struct AutomationsList: View {
             // One focus stop for the list, so the arrows walk the tasks.
             .focusable()
             .focusEffectDisabled()
+            .focused($focused)
+            .onChange(of: focused) { store.listFocused = focused }
+            .onDisappear { store.listFocused = false }
+            .listHasKeys(focused)
             .onMoveCommand { direction in
                 guard direction == .up || direction == .down,
                     let next = Self.neighbour(of: selected, in: snapshot.entries.map(\.id), up: direction == .up)

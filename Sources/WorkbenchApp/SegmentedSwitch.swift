@@ -18,6 +18,7 @@ struct SegmentedSwitch: View {
     var selection: String
     var enabled = true
     var action: (String) -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: Space.xxs) {
@@ -30,6 +31,7 @@ struct SegmentedSwitch: View {
                     }
                     .padding(.horizontal, Space.l).padding(.vertical, Space.s)
                     .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
+                    .focusRing(selected && focused, radius: Radius.box)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -37,10 +39,27 @@ struct SegmentedSwitch: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
+        // One focus stop for the switch: Tab lands here and ← → choose, the way the lists' arrows do.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focused)
+        .onMoveCommand { direction in
+            guard direction == .left || direction == .right,
+                let next = Self.neighbour(of: selection, in: segments.map(\.id), left: direction == .left)
+            else { return }
+            action(next)
+        }
         .padding(Space.xxs)
         .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Theme.line))
         .disabled(!enabled)
+    }
+
+    /// The segment left or right of the selected one; nil at either end.
+    static func neighbour(of selected: String, in ids: [String], left: Bool) -> String? {
+        guard let index = ids.firstIndex(of: selected) else { return nil }
+        let next = index + (left ? -1 : 1)
+        return ids.indices.contains(next) ? ids[next] : nil
     }
 
     private func pill(_ count: Int, _ fill: Color) -> some View {
