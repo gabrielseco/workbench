@@ -27,7 +27,8 @@ import Testing
     @Test func creatingAtOnceNeverPassesTheCap() async throws {
         for round in 0..<5 {
             let root = Scratch.url("admit\(round)").resolvingSymlinksInPath()
-            try FileManager.default.createDirectory(at: root.appendingPathComponent(".workbench"), withIntermediateDirectories: true)
+            let workbench = root.appendingPathComponent(".workbench")
+            try FileManager.default.createDirectory(at: workbench, withIntermediateDirectories: true)
             let store = ThreadStore(project: Project(root: root))
             let made = await withTaskGroup(of: Bool.self) { group in
                 for index in 0..<8 {
@@ -41,10 +42,14 @@ import Testing
     }
 
     @Test func aChatIsFoundByItsWholeName() {
-        #expect(ThreadStore.chatName(of: "g-20261108-foo") == "foo")
-        #expect(ThreadStore.chatName(of: "g-20261108-bar-foo") == "bar-foo")
-        #expect(ThreadStore.chatName(of: "g-20261108-bar-foo") != "foo", "a tail of the name is not the name")
+        // The ids the service makes: the day is `yyyy-MM-dd`.
+        let day = DateFormatter.dayStamp.string(from: Date())
+        #expect(ThreadStore.chatName(of: "g-\(day)-foo") == "foo")
+        #expect(ThreadStore.chatName(of: "g-\(day)-bar-foo") == "bar-foo")
+        #expect(ThreadStore.chatName(of: "g-\(day)-2-foo") == "2-foo", "a name that starts with a digit stays whole")
+        #expect(ThreadStore.chatName(of: "g-\(day)-bar-foo") != "foo", "a tail of the name is not the name")
         #expect(ThreadStore.chatName(of: "other") == nil)
+        #expect(ThreadStore.chatName(of: "g-\(day)") == nil)
     }
 }
 

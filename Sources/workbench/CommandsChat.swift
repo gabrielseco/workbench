@@ -66,9 +66,8 @@ extension Commands {
     /// An id continues that thread; a name continues the open chat made under it (`g-<day>-<name>`), and otherwise starts a new one.
     static func resolve(_ named: String, in ctx: Context) -> ChatTarget {
         if FileManager.default.fileExists(atPath: ctx.project.threadDirectory(named).path) { return .existing(id: named) }
-        if let chat = ctx.store.activeThreadIDs().first(where: { ThreadStore.chatName(of: $0) == named && ctx.store.state(of: $0).isChat }) {
-            return .existing(id: chat)
-        }
+        let chats = ctx.store.activeThreadIDs().filter { ThreadStore.chatName(of: $0) == named && ctx.store.state(of: $0).isChat }
+        if let chat = chats.first { return .existing(id: chat) }
         return .newThread(name: named)
     }
 

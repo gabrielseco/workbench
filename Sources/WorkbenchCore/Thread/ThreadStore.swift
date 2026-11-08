@@ -212,11 +212,14 @@ public struct ThreadStore: Sendable {
         }
     }
 
-    /// The name a chat was started under: its id (`g-<day>-<name>`) without the first two parts. The whole name, never the tail of
-    /// one, so `foo` is not the chat `bar-foo`.
+    /// The name a chat was started under: its id is `g-<yyyy-MM-dd>-<name>`. The whole name, never the tail of one, so `foo` is
+    /// not the chat `bar-foo`.
     public static func chatName(of id: String) -> String? {
-        let parts = id.split(separator: "-", maxSplits: 2, omittingEmptySubsequences: false)
-        return parts.count == 3 && parts[0] == "g" ? String(parts[2]) : nil
+        let parts = id.split(separator: "-", maxSplits: 4, omittingEmptySubsequences: false)
+        guard parts.count == 5, parts[0] == "g", parts[1...3].allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else {
+            return nil
+        }
+        return String(parts[4])
     }
 
     /// An exclusive lock on the `threads/` directory itself (no file is left), held while a thread is admitted. The wait is
