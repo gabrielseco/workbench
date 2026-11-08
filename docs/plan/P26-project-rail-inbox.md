@@ -123,8 +123,10 @@ the rail's projects at once and the rail's list is `INBOX · ALL PROJECTS` (`All
 inbox's, with every project's rows: in the rail's order, each project's own order (newest first) within it; Done is one count for all of them
 (`allInboxDoneOpen`). A row carries its project's initials in a neutral outlined pill (blue is a state, never a label) and says the project
 in words to VoiceOver. The other projects' rows are read by the same poll as their counts (`RailSummaries.read` with a `ThreadListLoader`
-cache), only while this list is up; they are listed from their logs alone, so a pull request is never seen merged there (the project's own
-inbox, when it is opened, asks GitHub as before), and a read that fails keeps the last rows. The open project's rows are the window's own,
+cache), only while this list is up; what GitHub said of their pull requests is kept per project (`ThreadListModel.switchProject`) and read
+for every project of the rail in the background (`readOtherProjectsPullRequests`: one `gh` call at a time, a project listed once a minute, a
+thread asked about once in five minutes, a merge written to its log), so these rows and the tiles' counts follow GitHub and the open project's
+list does not start from the logs alone after a switch. A read that fails keeps the last rows. The open project's rows are the window's own,
 live. A click on a row opens that project when it is not the open one, shows the thread (or the automation's task) and goes back to that
 project's own inbox; a project's tile does too, and a project that cannot be opened keeps the list up and says why. Merge order is the rail's,
 not one newest-first list: a thread's row has no timestamp, and a stable list does not reorder under the finger between reads.

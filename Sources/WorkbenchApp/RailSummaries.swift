@@ -13,6 +13,7 @@ import WorkbenchCore
     private(set) var older: [String: Int] = [:]
     @ObservationIgnored private var caches: [String: ProjectSummaryLoader.Cache] = [:]
     @ObservationIgnored private var listCaches: [String: ThreadListLoader.Cache] = [:]
+    @ObservationIgnored private var discoveryCaches: [String: ThreadListLoader.Cache] = [:]
     /// The tasks' part of each count as last read, used again when the tasks cannot be read this time.
     @ObservationIgnored private var lastTasks: [String: ProjectSummary] = [:]
     /// Projects whose read has not come back: asked again only when it has, so a hung folder holds one thread, not one a poll.
@@ -32,6 +33,15 @@ import WorkbenchCore
         if let known = listCaches[path] { return known }
         let fresh = ThreadListLoader.Cache()
         listCaches[path] = fresh
+        return fresh
+    }
+
+    /// The cache of the background read of GitHub, which lists threads from their logs alone: kept apart from the inbox's, whose rows
+    /// carry what GitHub said and whose limit is not the same.
+    func discoveryCache(for path: String) -> ThreadListLoader.Cache {
+        if let known = discoveryCaches[path] { return known }
+        let fresh = ThreadListLoader.Cache()
+        discoveryCaches[path] = fresh
         return fresh
     }
 
@@ -75,6 +85,7 @@ import WorkbenchCore
         rows = rows.filter { paths.contains($0.key) }
         older = older.filter { paths.contains($0.key) }
         listCaches = listCaches.filter { paths.contains($0.key) }
+        discoveryCaches = discoveryCaches.filter { paths.contains($0.key) }
     }
 
     /// What the tasks of a project add to its count, by the rules the rail's rows apply: a task that needs you, one that failed, one running.
@@ -110,16 +121,19 @@ import WorkbenchCore
 
     /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
     /// - Parameter listCache: given when the rows are wanted (the inbox of all projects is up): the threads are then listed as the window
-    ///   lists them, from their logs alone (a pull request is never seen merged here), and the tasks that need approval are rows.
+    ///   lists them, and the tasks that need approval are rows.
+    /// - Parameter pullRequests: what GitHub last said of the project's threads (read in the background); a thread missing here is read
+    ///   from its log alone.
     nonisolated static func read(
-        _ project: Project, cache: ProjectSummaryLoader.Cache, listCache: ThreadListLoader.Cache? = nil, now: Date
+        _ project: Project, cache: ProjectSummaryLoader.Cache, listCache: ThreadListLoader.Cache? = nil, now: Date,
+        pullRequests: [String: PRStatus] = [:]
     ) -> Read {
         if ProjectStore.unavailableReason(project.root.path) != nil { return Read(unavailable: true) }
         let entries = try? TasksReader.entries(project, now: now)
-        let threads = ProjectSummaryLoader.read(project: project, cache: cache)
+        let threads = ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: pullRequests)
         var read = Read(threads: threads, tasks: entries.map(tasks))
         if let listCache, threads != nil {
-            let listing = ThreadListLoader.load(project: project, cache: listCache)
+            let listing = ThreadListLoader.load(project: project, cache: listCache, pullRequests: pullRequests)
             read.rows = InboxModel.rows(listing: listing, entries: entries)
             read.older = listing.older
             read.rowsWithoutTasks = entries == nil

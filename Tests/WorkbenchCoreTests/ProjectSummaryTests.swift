@@ -129,4 +129,41 @@ import Testing
 
         #expect(ProjectSummaryLoader.read(project: project)?.needsYou == 1, "created later, so counted whatever its name")
     }
+
+    // MARK: What GitHub said
+
+    private func shippedWithFindings(_ project: Project, _ id: String) async throws {
+        let head = String(repeating: "a", count: 40)
+        let round: JSONValue = ["round": 1, "pr": 7, "head_sha": .string(head)]
+        try await thread(
+            project, id,
+            [
+                approved, started, ended, decision("accepted"),
+                Step(kind: .prOpened, data: ["url": "https://example.test/pull/7", "number": 7, "head_sha": "abc123"]),
+                Step(kind: .prReviewStarted, data: round),
+                Step(
+                    kind: .prReviewFinished,
+                    data: ["round": 1, "pr": 7, "head_sha": .string(head), "ok": true, "verdict": "fix"]),
+            ])
+    }
+
+    private func status(_ state: PRState, number: Int = 7) -> PRStatus {
+        PRStatus(number: number, state: state, head: String(repeating: "a", count: 40), checks: nil)
+    }
+
+    @Test func aPullRequestGitHubSaysIsOverNoLongerAsksForYou() async throws {
+        let project = project()
+        try await shippedWithFindings(project, "g-2026-11-08-shipped")
+        let cache = ProjectSummaryLoader.Cache()
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache)?.needsYou == 1, "the log alone cannot know")
+        let id = "g-2026-11-08-shipped"
+        #expect(ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: [id: status(.open)])?.needsYou == 1)
+        #expect(
+            ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: [id: status(.merged)]) == ProjectSummary(),
+            "a status that changes is read again though no file did")
+        let closed = ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: [id: status(.closed)])
+        #expect(closed == ProjectSummary())
+        let other = ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: [id: status(.merged, number: 6)])
+        #expect(other?.needsYou == 1, "a status for another pull request says nothing of this one")
+    }
 }
