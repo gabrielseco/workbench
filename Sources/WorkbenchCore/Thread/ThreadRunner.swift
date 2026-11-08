@@ -226,6 +226,7 @@ public actor ThreadRunner {
         // The worktree.
         var worktree: URL
         var baseCommit: String?
+        let baseUpdated = worktreeManager.exists(threadID) ? false : try await updateBaseBeforeStart(goal: goal)
         if worktreeManager.exists(threadID) {
             worktree = worktreeManager.path(for: threadID)
             baseCommit = await recordedBaseCommit(goal: goal)
@@ -258,7 +259,8 @@ public actor ThreadRunner {
 
         // Said whenever the goal's prompt is built, not only when the worktree is cut: a runner killed during
         // the fetch leaves the worktree and no turn, and the retry must still look.
-        if builtFromGoal {
+        // Not after this run brought the base up to date: it was just fetched and compared.
+        if builtFromGoal, !baseUpdated {
             if let gap = await worktreeManager.baseGap(base: goal.base) {
                 if let note = gap.fetchNote { notify(.advisory("\(note); comparing with what is known")) }
                 if gap.behind > 0 {
@@ -558,6 +560,14 @@ extension ThreadRunner {
 }
 
 extension ThreadRunner {
+    /// A new goal starts from what origin has: the local base is fast-forwarded first, and a base that cannot be (offline,
+    /// diverged, changes in the way) throws, so the run stops with why and no worktree is cut. A goal continuing `push_to`
+    /// starts from that branch's fetched tip instead, so its base is left alone. Returns whether origin was asked.
+    fileprivate func updateBaseBeforeStart(goal: Goal) async throws -> Bool {
+        guard goal.pushTo == nil else { return false }
+        return try await worktreeManager.updateBaseFromOrigin(goal.base) != .skipped
+    }
+
     /// Says so when the copy was not written, so a person who opens the worktree and finds no goal knows why. Returns the
     /// names of the goal's screenshots that are now in the worktree, for the prompt to point at.
     fileprivate func copyGoalIntoWorktree() async -> [String] {

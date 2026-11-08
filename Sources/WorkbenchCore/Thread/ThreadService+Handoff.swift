@@ -12,7 +12,9 @@ public struct PreparedHandoff: Equatable, Sendable {
 extension ThreadService {
     /// What a goal handed to another tool (Herdr) is prepared with. The goal is approved first; a thread with no worktree gets one
     /// cut as a run cuts it, recorded with `worktree.created`, so a later run, review or accept finds the same base. The approved goal
-    /// and its screenshots are copied in at `WorktreeManager.goalCopyPath`, where the session is told to read it. A goal with a dollar
+    /// and its screenshots are copied in at `WorktreeManager.goalCopyPath`, where the session is told to read it. Before a worktree is
+    /// cut the base is brought up to date with origin (`WorktreeManager.updateBaseFromOrigin`), and a base that cannot be throws
+    /// `WorktreeError.baseUpdateFailed` with nothing cut. A goal with a dollar
     /// cap is refused before anything is approved or cut: an interactive session cannot enforce one.
     public func prepareHandoff(id: String) async throws -> PreparedHandoff {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
@@ -34,6 +36,9 @@ extension ThreadService {
                 if let decision = ThreadStore(project: project).state(of: id).decision {
                     throw ThreadServiceError.threadEnded(decision)
                 }
+                // As a run does: a new goal starts from what origin has, or not at all. A goal continuing `push_to`
+                // starts from that branch, so its base is left alone.
+                if file.goal.pushTo == nil { try await manager.updateBaseFromOrigin(file.goal.base) }
                 let created = try await manager.create(
                     threadID: id, base: file.goal.base, fetching: file.goal.pushTo, copying: copy)
                 try await log.append(.worktreeCreated, data: created.eventData)
