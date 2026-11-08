@@ -17,6 +17,8 @@ struct SegmentedSwitch: View {
     var segments: [SwitchSegment]
     var selection: String
     var enabled = true
+    /// Told when the switch gains or loses the keys, so a screen that opens under it leaves the caret alone.
+    var onFocus: (Bool) -> Void = { _ in }
     var action: (String) -> Void
     @FocusState private var focused: Bool
 
@@ -43,6 +45,7 @@ struct SegmentedSwitch: View {
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
+        .onChange(of: focused) { onFocus(focused) }
         .onMoveCommand { direction in
             guard direction == .left || direction == .right,
                 let next = Self.neighbour(of: selection, in: segments.map(\.id), left: direction == .left)

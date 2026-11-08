@@ -41,8 +41,9 @@ struct ToolbarBar: View {
                 Text("base: \(base)").textStyle(.monoCallout)
             }
             SegmentedSwitch(
-                segments: store.switchSegments(), selection: store.switchSelection, enabled: store.project != nil
-            ) { store.chooseSwitch($0) }
+                segments: store.switchSegments(), selection: store.switchSelection, enabled: store.project != nil,
+                onFocus: { store.switchFocused = $0 }, action: { store.chooseSwitch($0) }
+            )
             Spacer()
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.

@@ -283,7 +283,7 @@ Every screen answers four questions without a click, and a change that touches a
   whether the keys are on it: the selected item draws the focus ring (`FocusRing.swift`, the system's focus colour, never one of the five
   meaning colours) only while its list has focus. A new focus stop sets `.focused`, `.listHasKeys(_)` and, in its items,
   `.selectedFocusRing(_, radius:)` (or `.focusRing(_, radius:)` for a stop whose item is the stop). `.focusEffectDisabled()` is allowed only
-  with one of them. Every list that is walked with the arrows also sets `store.listFocused` (the project rail sets `railFocused`), and a
+  with one of them. Every list that is walked with the arrows also sets `store.listFocused` (the project rail sets `railFocused`, the switch `switchFocused`), and a
   screen that takes the caret when it opens checks `store.listHasKeys`. The top bar's Inbox / Automations switch is one stop (← →) and
   View ▸ Inbox (⌘I) and View ▸ Automations (⇧⌘A) reach it without Full Keyboard Access, which Tab to a plain control depends on.
 - Keyboard shortcuts where the siblings have them: a card cancels with Esc and confirms with ⌘Return.

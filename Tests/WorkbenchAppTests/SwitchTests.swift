@@ -47,6 +47,9 @@ import WorkbenchCore
         store.listFocused = true
         #expect(store.listHasKeys, "the thread or automations list")
         store.listFocused = false
+        store.switchFocused = true
+        #expect(store.listHasKeys, "the top bar's switch")
+        store.switchFocused = false
         store.railFocused = true
         #expect(store.listHasKeys, "the project rail")
     }

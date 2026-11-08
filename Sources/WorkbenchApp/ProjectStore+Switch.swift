@@ -16,7 +16,7 @@ extension ProjectStore {
     }
 
     /// A rail or list is being walked with the keys: a screen that opens under it must not take the caret.
-    var listHasKeys: Bool { railFocused || listFocused }
+    var listHasKeys: Bool { railFocused || listFocused || switchFocused }
 
     var switchSelection: String { mode == .tasks ? Self.automationsSegment : Self.inboxSegment }
 

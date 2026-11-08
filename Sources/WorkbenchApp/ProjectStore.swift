@@ -35,13 +35,13 @@ struct RecentProject: Equatable, Identifiable {
     var mode: WindowMode = .thread
     /// The Tasks screen's data, read from the core while that screen is shown.
     let tasks = TasksModel()
-    /// How many of a project's threads the rail lists, by project: `Show more` adds a page. Kept for the session, not on disk.
     /// The projects whose Done section is open in the inbox (by path); closed unless the person opened it.
     var inboxDoneOpen: Set<String> = []
     /// The rail lists the inbox of every project (the top tile), not the open project's own; and whether its Done section is open.
     var allProjects = false
     var railFocused = false
-    var listFocused = false  // a list has the keys, like the rail (`listHasKeys`)
+    var listFocused = false
+    var switchFocused = false  // a list or the top bar's switch has the keys, like the rail (`listHasKeys`)
     var allInboxDoneOpen = false
     /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
     let attention: AttentionCenter
