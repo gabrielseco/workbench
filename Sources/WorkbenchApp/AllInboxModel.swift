@@ -26,11 +26,14 @@ extension ProjectInboxRows: Identifiable { var id: String { path } }
 struct AllInboxModel: Equatable {
     var needsYou: [AllInboxRow]
     var waiting: [AllInboxRow]
-    /// The finished threads listed now: all of them when Done is open, else none (there is no one on screen across projects to keep).
+    /// The finished threads listed now: all of them when Done is open, else only the one on screen.
     var done: [AllInboxRow]
     var doneHidden: Int
 
-    static func derive(_ projects: [ProjectInboxRows], doneOpen: Bool) -> AllInboxModel {
+    /// - Parameter shown: the thread on screen and its project, listed whatever its section, so what is selected can be seen.
+    static func derive(
+        _ projects: [ProjectInboxRows], doneOpen: Bool, shown: (project: String, thread: String)? = nil
+    ) -> AllInboxModel {
         var sections: [InboxSection: [AllInboxRow]] = [:]
         for project in projects {
             for row in project.rows {
@@ -39,9 +42,15 @@ struct AllInboxModel: Equatable {
             }
         }
         let finished = sections[.done] ?? []
+        let listed = doneOpen ? finished : finished.filter { isShown($0, shown) }
         return AllInboxModel(
-            needsYou: sections[.needsYou] ?? [], waiting: sections[.waiting] ?? [], done: doneOpen ? finished : [],
-            doneHidden: doneOpen ? 0 : finished.count)
+            needsYou: sections[.needsYou] ?? [], waiting: sections[.waiting] ?? [], done: listed,
+            doneHidden: finished.count - listed.count)
+    }
+
+    private static func isShown(_ entry: AllInboxRow, _ shown: (project: String, thread: String)?) -> Bool {
+        guard let shown else { return false }
+        return entry.row.kind == .thread && entry.project == shown.project && entry.row.key == shown.thread
     }
 
     var finishedCount: Int { done.count + doneHidden }

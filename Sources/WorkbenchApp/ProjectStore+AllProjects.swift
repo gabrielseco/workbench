@@ -21,13 +21,16 @@ extension ProjectStore {
         railTiles().filter { $0.unavailable == nil }.map { tile in
             let rows =
                 tile.path == project?.root.path
-                ? InboxModel.rows(listing: threads.listing, entries: tasks.snapshot(for: project)?.entries)
+                ? InboxModel.rows(listing: threads.listing, entries: tasks.snapshot(for: project)?.entries, shown: railShown)
                 : railSummaries.rows[tile.path] ?? []
             return ProjectInboxRows(path: tile.path, name: tile.name, initials: tile.initials, rows: rows)
         }
     }
 
-    func allInboxModel() -> AllInboxModel { AllInboxModel.derive(allInboxProjects(), doneOpen: allInboxDoneOpen) }
+    func allInboxModel() -> AllInboxModel {
+        let shown = railShown.flatMap { thread in project.map { (project: $0.root.path, thread: thread) } }
+        return AllInboxModel.derive(allInboxProjects(), doneOpen: allInboxDoneOpen, shown: shown)
+    }
 
     /// A click on a row of the inbox of all projects: that project is opened (when it is not the one open), then the thread or the
     /// automation's task is shown. The rail goes back to that project's own inbox once it is open; when the project cannot be opened it

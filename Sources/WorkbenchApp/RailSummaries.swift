@@ -35,6 +35,13 @@ import WorkbenchCore
 
     func setRows(_ rows: [InboxRow], for path: String) { self.rows[path] = rows }
 
+    /// Takes a project's rows from a read. Rows made without the tasks (they could not be read) replace only what was never read: the last
+    /// whole reading stands, with its automations, rather than a list that lacks them.
+    func keepRows(from read: Read, for path: String) {
+        guard let rows = read.rows, !read.rowsWithoutTasks || self.rows[path] == nil else { return }
+        self.rows[path] = rows
+    }
+
     func begin(_ path: String) -> Bool { reading.insert(path).inserted }
     /// Called when the read itself has finished, which may be long after the poll gave up on it.
     func end(_ path: String) { reading.remove(path) }
@@ -89,6 +96,9 @@ import WorkbenchCore
         var tasks: ProjectSummary?
         /// The project's rows for the inbox of all projects, when they were asked for and the threads could be listed.
         var rows: [InboxRow]?
+        /// The tasks could not be read, so `rows` lack the automations and may list threads a task's runs made: they stand only when
+        /// nothing better was read before.
+        var rowsWithoutTasks = false
     }
 
     /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
@@ -103,6 +113,7 @@ import WorkbenchCore
         var read = Read(threads: threads, tasks: entries.map(tasks))
         if let listCache, threads != nil {
             read.rows = InboxModel.rows(listing: ThreadListLoader.load(project: project, cache: listCache), entries: entries)
+            read.rowsWithoutTasks = entries == nil
         }
         return read
     }

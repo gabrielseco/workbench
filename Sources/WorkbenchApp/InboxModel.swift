@@ -107,8 +107,8 @@ struct InboxModel: Equatable {
 
     /// Every row of a project that is not the open one, read from its folders: its threads (the finished ones too) and the tasks that
     /// need approval, for the inbox of all projects. Pure.
-    static func rows(listing: ThreadListing, entries: [TaskEntry]?) -> [InboxRow] {
-        let threads = split(listing.rows, entries: entries).map(InboxRow.init(thread:))
+    static func rows(listing: ThreadListing, entries: [TaskEntry]?, shown: String? = nil) -> [InboxRow] {
+        let threads = split(listing.rows, entries: entries, shown: shown).map(InboxRow.init(thread:))
         let automations = (entries?.map(RailRow.task) ?? []).filter { $0.mark == .needsYou }.map(InboxRow.init(automation:))
         return threads + automations
     }

@@ -87,6 +87,30 @@ import WorkbenchCore
         #expect(keys == ["mine"])
     }
 
+    @Test func theThreadOnScreenIsListedEvenInAClosedDone() {
+        let api = project("api", [row("a1", .needsYou), row("a2", .done, finished: true), row("a3", .done, finished: true)])
+        let web = project("web", [row("a2", .idle, finished: true)])
+        let shown = (project: api.path, thread: "a2")
+        let model = AllInboxModel.derive([api, web], doneOpen: false, shown: shown)
+        #expect(model.done.map(\.id) == [api.path + "|thread-a2"], "that project's thread, not another's of the same id")
+        #expect(model.doneHidden == 2 && model.finishedCount == 3)
+        #expect(AllInboxModel.derive([api, web], doneOpen: false).done.isEmpty, "nothing on screen: all folded")
+    }
+
+    @Test func aTaskRunsThreadOnScreenIsNotFilteredOut() async throws {
+        var entries = try await taskEntries()
+        let at = try #require(entries.firstIndex { $0.id == "bump-contract-details" })
+        entries[at].runs = [
+            TaskHistory.Run(
+                started: Date(timeIntervalSince1970: 1), ended: nil, pullRequest: nil, trigger: "tick", outcome: .prOpened,
+                reason: nil, units: [], thread: "t-run")
+        ]
+        let listing = ThreadListing(rows: [ThreadRow(id: "t-run", title: "t-run", mark: .done, line: "x", finished: true)])
+        #expect(InboxModel.rows(listing: listing, entries: entries).filter { !$0.isAutomation }.isEmpty)
+        let shown = InboxModel.rows(listing: listing, entries: entries, shown: "t-run").filter { !$0.isAutomation }
+        #expect(shown.map(\.key) == ["t-run"], "reached by Open thread on a run: listed while on screen")
+    }
+
     // MARK: The store
 
     private func fixture(needsYou: Int = 0) async throws -> AppFixture {
@@ -127,6 +151,35 @@ import WorkbenchCore
         await store.readRailSummaries()
         #expect(store.railSummaries.rows.isEmpty, "the poll reads counts only while the project's own inbox is up")
         #expect(store.railBadge(for: api.project.root.path) == .needsYou(1))
+    }
+
+    @Test func theOpenProjectsOwnShownThreadStaysInAClosedDone() async throws {
+        let open = try await fixture(needsYou: 1)
+        let store = await store(open: open, others: [])
+        await store.reload()
+        await store.select(thread: "n0")
+        try open.decide("n0", "discarded")
+        await store.reload()
+        await store.showAllProjects()
+        let model = store.allInboxModel()
+        #expect(model.done.map(\.row.key) == ["n0"], "finished in the detail pane, still listed while it is on screen")
+    }
+
+    @Test func aTaskReadThatFailsKeepsTheLastWholeRows() {
+        let summaries = RailSummaries()
+        let kept = [row("keep", .needsYou)]
+        summaries.setRows(kept, for: "/p")
+        var partial = RailSummaries.Read(rows: [row("new", .working)])
+        partial.rowsWithoutTasks = true
+        summaries.keepRows(from: partial, for: "/p")
+        #expect(summaries.rows["/p"] == kept, "the automations it lacks are not dropped")
+        summaries.keepRows(from: RailSummaries.Read(rows: [row("whole", .working)]), for: "/p")
+        #expect(summaries.rows["/p"] == [row("whole", .working)], "a whole read replaces them")
+        summaries.forget("/p")
+        summaries.keepRows(from: partial, for: "/p")
+        #expect(summaries.rows["/p"] == [row("new", .working)], "with nothing read before, what there is is listed")
+        summaries.keepRows(from: RailSummaries.Read(), for: "/p")
+        #expect(summaries.rows["/p"] == [row("new", .working)], "no rows asked for, none changed")
     }
 
     @Test func aClickOpensTheProjectAndShowsTheThreadAndLeavesTheList() async throws {

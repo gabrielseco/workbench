@@ -28,7 +28,7 @@ extension ProjectStore {
             guard let threads = read.threads else { continue }
             let tasks = read.tasks ?? summaries.lastTasks(for: path)
             summaries.set(threads + tasks, tasks: tasks, for: path)
-            if let rows = read.rows { summaries.setRows(rows, for: path) }
+            summaries.keepRows(from: read, for: path)
         }
     }
 
