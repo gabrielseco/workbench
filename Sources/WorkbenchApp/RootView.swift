@@ -35,25 +35,24 @@ struct ToolbarBar: View {
         HStack(spacing: Space.m) {
             // The project is named here, as the design has it; switching and adding are the rail's.
             Text(store.project?.root.lastPathComponent ?? "No project").textStyle(.bodyStrong)
+            // The base follows the name on every screen, as the design has it; the spend and the state are the thread's, not shown
+            // over the Automations screen, where amber means something else.
+            if !store.newThread, case .thread(let snapshot) = store.screen, let base = snapshot.base {
+                Text("base: \(base)").textStyle(.monoCallout)
+            }
             SegmentedSwitch(
                 segments: store.switchSegments(), selection: store.switchSelection, enabled: store.project != nil
             ) { store.chooseSwitch($0) }
-            // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
+            Spacer()
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
-                Spacer()
                 Text("$0.00").role(.monoDetail)
                 Text("No run").pill(Theme.grey, size: .regular)
             } else if store.mode == .thread, case .thread(let snapshot) = store.screen {
-                if let base = snapshot.base { Text("base: \(base)").textStyle(.monoCallout) }
-                Spacer()
                 Text(snapshot.spendText).role(.monoDetail)
                 StatePill(snapshot: snapshot)
             } else if store.mode == .tasks, store.project != nil {
-                Spacer()
                 Button("New task…") { store.beginNewTask() }.plainButton(size: .regular).help("Make a scheduled task (⇧⌘N)")
-            } else {
-                Spacer()
             }
         }
         .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)

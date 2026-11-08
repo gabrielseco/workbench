@@ -49,22 +49,59 @@ import WorkbenchCore
         #expect(store.mode == .thread && !store.tasks.isNewShown(in: store.project), "not left half open behind the threads")
     }
 
-    @Test func theAutomationsCountIsUnknownUntilTheTasksAreRead() async throws {
-        let store = try await store()
-        #expect(store.automationCount == nil)
-        let segment = try #require(store.switchSegments().first { $0.id == ProjectStore.automationsSegment })
-        #expect(segment.count == nil && segment.accessibility == "Automations", "not zero: not read")
+    /// A store on the `tasks` scenario (seven tasks, two of them broken), the tasks read.
+    private func tasksStore() async throws -> ProjectStore {
+        let fixture = try await AppFixture()
+        keptSwitchFixtures.append(fixture)
+        try await AppScenario.tasks.build(in: fixture)
+        let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
+        #expect(await store.open(fixture.root))
         await store.tasks.refreshIfDue(store.project, visible: true, force: true)
-        #expect(store.automationCount == 0, "read, and there are none")
+        return store
+    }
+
+    @Test func theAutomationsCountIsWhatFailedAndIsRedInWords() async throws {
+        let quiet = try await store()
+        #expect(quiet.automationsFailing == 0, "nothing read, nothing failed")
+        let plain = try #require(quiet.switchSegments().first { $0.id == ProjectStore.automationsSegment })
+        #expect(plain.accessibility == "Automations")
+        let store = try await tasksStore()
+        let failing = store.automationsFailing
+        #expect(failing == 2, "broken-task and sync-fixtures")
+        let segment = try #require(store.switchSegments().first { $0.id == ProjectStore.automationsSegment })
+        #expect(segment.count == 2 && segment.accessibility == "Automations, 2 failed", "said in words, not only filled red")
     }
 
     @Test func theInboxRailStepsAsideOnlyWhileTheAutomationsListIsOnScreen() async throws {
-        let store = try await store()
+        let empty = try await store()
+        empty.chooseSwitch(ProjectStore.automationsSegment)
+        await empty.tasks.refreshIfDue(empty.project, visible: true, force: true)
+        #expect(!empty.automationsListShown, "no automation: the empty page has no list")
+        empty.beginNewTask()
+        #expect(!empty.automationsListShown, "the New task screen has none either")
+        let store = try await tasksStore()
         #expect(!store.automationsListShown, "the inbox is what is chosen")
         store.chooseSwitch(ProjectStore.automationsSegment)
-        await store.tasks.refreshIfDue(store.project, visible: true, force: true)
-        #expect(store.automationCount == 0 && !store.automationsListShown, "no automation: the empty page has no list")
-        store.beginNewTask()
-        #expect(!store.automationsListShown, "the New task screen has none either")
+        #expect(store.automationsListShown, "tasks to list: the list is the rail's place")
+    }
+
+    @Test func theInboxOfAllProjectsBringsBackTheRailFromAutomations() async throws {
+        let store = try await tasksStore()
+        store.chooseSwitch(ProjectStore.automationsSegment)
+        #expect(store.automationsListShown)
+        await store.showAllProjects()
+        #expect(store.allProjects && store.mode == .thread, "it is an inbox: the threads' side")
+        #expect(!store.automationsListShown, "so the rail it is the list of is on screen")
+    }
+
+    @Test func theArrowKeysStepThroughTheAutomations() async throws {
+        let store = try await tasksStore()
+        let names = try #require(store.tasks.snapshot(for: store.project)).entries.map(\.id)
+        #expect(names.count == 7)
+        #expect(AutomationsList.neighbour(of: names[2], in: names, up: false) == names[3])
+        #expect(AutomationsList.neighbour(of: names[2], in: names, up: true) == names[1])
+        #expect(AutomationsList.neighbour(of: names[0], in: names, up: true) == nil)
+        #expect(AutomationsList.neighbour(of: names[6], in: names, up: false) == nil)
+        #expect(AutomationsList.neighbour(of: nil, in: names, up: false) == nil)
     }
 }

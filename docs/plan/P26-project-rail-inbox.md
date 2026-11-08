@@ -136,7 +136,7 @@ switch is its control). `TasksView` keeps its content and gains the design's hea
 still on screen. The base, spend and state pill stay thread-only, as the comment in `ToolbarBar` already requires.
 
 As built: `SegmentedSwitch` (a component: segments with a title, an optional count and its tone) in the top bar after the project's name,
-`Inbox` (the Needs you count of the project's inbox, amber) and `Automations` (how many tasks, none until they are read); `WindowMode` is its
+`Inbox` (the Needs you count of the project's inbox, amber) and `Automations` (how many failed, red, none when none), as filled pills like the design's; `WindowMode` is its
 state (`ProjectStore.chooseSwitch`; leaving for the inbox also closes a half-open New task screen). `New task…` is a button at the right of the
 bar while Automations is chosen. The rail lost its Scheduled section, the `Open the Tasks page` link and `RailModel`. `AutomationsList` is the
 list at the left of the task's page. **Departure from the plan:** the inbox rail does not stay on screen next to that list, because four columns

@@ -10,28 +10,31 @@ extension ProjectStore {
         InboxModel.derive(listing: threads.listing, tasks: tasks.snapshot(for: project), shown: railShown).needsYou.count
     }
 
-    /// How many automations the project has; nil until they are read.
-    var automationCount: Int? { tasks.snapshot(for: project)?.entries.count }
+    /// How many automations failed or cannot run: red on the switch, as the design has it. Zero until the tasks are read.
+    var automationsFailing: Int {
+        tasks.snapshot(for: project)?.entries.map(RailRow.task).filter { $0.mark == .broken }.count ?? 0
+    }
 
     var switchSelection: String { mode == .tasks ? Self.automationsSegment : Self.inboxSegment }
 
     func switchSegments() -> [SwitchSegment] {
         let asking = inboxNeedsYou
-        let automations = automationCount
+        let failing = automationsFailing
         return [
             SwitchSegment(
-                id: Self.inboxSegment, title: "Inbox", count: asking, tone: .amber,
+                id: Self.inboxSegment, title: "Inbox", count: asking, fill: Theme.amber,
                 accessibility: asking == 0 ? "Inbox" : "Inbox, \(asking) need you"),
             SwitchSegment(
-                id: Self.automationsSegment, title: "Automations", count: automations,
-                accessibility: automations.map { "Automations, \($0)" } ?? "Automations"),
+                id: Self.automationsSegment, title: "Automations", count: failing, fill: Theme.red,
+                accessibility: failing == 0 ? "Automations" : "Automations, \(failing) failed"),
         ]
     }
 
     /// The Automations view shows its own list beside the task's page, so the inbox rail steps aside: four columns do not fit the 900 pt
-    /// window. Not while the New task screen or the empty page is up, which have no list.
+    /// window (the design has the list in the rail's place). Not while the New task screen or the empty page is up, which have no list,
+    /// nor while the inbox of all projects is chosen, which is a rail.
     var automationsListShown: Bool {
-        guard mode == .tasks, !newThread, project != nil, !tasks.isNewShown(in: project) else { return false }
+        guard mode == .tasks, !newThread, !allProjects, project != nil, !tasks.isNewShown(in: project) else { return false }
         return tasks.snapshot(for: project).map { !$0.entries.isEmpty } ?? false
     }
 

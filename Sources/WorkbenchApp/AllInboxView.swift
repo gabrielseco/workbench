@@ -16,7 +16,7 @@ struct AllInboxView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: Space.xxs) {
             section(.needsYou, model.needsYou, tone: .amber)
-            section(.waiting, model.waiting, tone: .secondary)
+            section(.waiting, model.waiting, tone: .blue)
             if model.finishedCount > 0 {
                 InboxSectionHeader(title: InboxSection.done.title, count: model.finishedCount, tone: .secondary)
                 ForEach(model.done) { rowView($0) }
@@ -51,13 +51,10 @@ struct AllInboxView: View {
     @ViewBuilder private var doneToggle: some View {
         if model.doneHidden > 0 {
             let words = model.doneHidden == 1 ? "1 finished thread" : "\(model.doneHidden) finished threads"
-            Button("Show \(words)") { store.toggleAllDoneOpen() }
-                .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                .accessibilityLabel("Show \(words)").help("The threads that are over, in every project")
+            let help = "The threads that are over, in every project"
+            FoldToggle(title: "Show \(words)", expanded: false, help: help) { store.toggleAllDoneOpen() }
         } else if store.allInboxDoneOpen {
-            Button("Hide finished threads") { store.toggleAllDoneOpen() }
-                .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                .accessibilityLabel("Hide finished threads")
+            FoldToggle(title: "Hide finished threads", expanded: true, help: "Close them") { store.toggleAllDoneOpen() }
         }
     }
 }

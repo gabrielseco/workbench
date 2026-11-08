@@ -56,14 +56,14 @@ ships, and the mockup gets fixed.
 - **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each an 8 pt dot with a 1.5 pt ring (the colour the rail
   draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
-  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the **Inbox / Automations switch** (a capsule of two choices right after the project's name, each with its count beside the word: `Inbox` the number that needs you, amber, `Automations` how many there are; the choice is also said in words to VoiceOver), then the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
+  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the **Inbox / Automations switch** (two choices in a bordered capsule after the project's name and its `base:`, the chosen one raised, each with its count in a filled pill beside the word: `Inbox` the number that needs you, amber, `Automations` the number that failed, red, none when none; the count is also said in words to VoiceOver), then the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
   has no Doctor: it is one list, 288 wide, the project's **inbox** (`INBOX · PROJECT`, with the project's Agents button and a `+` that opens the New goal card, until the
   new-thread screen); the tasks are not listed in it, the Automations view lists them. The inbox has three sections in this order, each with its caps label and count: **Needs you** (amber: a thread
-  that asks for something or is broken, then the tasks that need approval, tagged `auto`), **Waiting** (everything not over: a turn going, a draft, accepted and not shipped, a pull request
-  still open) and **Done** (what is over: thrown away, abandoned, cleaned, its pull request merged or closed), which is one link, `Show N finished threads`, until it is opened (per project,
+  that asks for something or is broken, then the tasks that need approval, tagged `auto`), **Waiting** (blue label; everything not over: a turn going, a draft, accepted and not shipped, a pull request
+  still open) and **Done** (what is over: thrown away, abandoned, cleaned, its pull request merged or closed), which is one grey line with a chevron, `Show N finished threads`, until it is opened (per project,
   for the session), then `Hide finished threads`; the thread on screen is listed in its section whichever it is (the loader still stops at 50, then "N older threads"). Each row is **two
   lines** with the spend at the right (`$0.50`, `unknown` when the core cannot tell, none before a first turn): a mark at the left (working a spinner, needs you an amber dot with
-  a halo, done a check, idle a hollow ring, broken a cross), the title (`.callout`, semibold, cut in the middle) and under it the words of its state in the mark's tone (a thread's `Accepted`, a
+  a halo, done a check, idle a hollow ring, broken a cross), the title (`.callout`, semibold, cut in the middle) and under it the words of its state in grey (the mark and the section's colour say how urgent it is) (a thread's `Accepted`, a
   task's `not approved`, `approval stale`); the selected row sits on
   `Theme.raised`. A click shows that thread, with its feed and settings, or that task's page; it starts and stops nothing. The spine is not drawn twice.
   A thread a task started (its run log names it) is not in the rail once it is over (done or idle): it is one click from the task's page (each run's
@@ -191,8 +191,8 @@ are not drawn and the card says to run `workbench init`. A chat's footer and the
 ## Tasks screen
 
 The top bar's `Inbox | Automations` switch changes the centre between the thread screens and the project's scheduled tasks; it
-changes nothing in the thread. The Automations (Tasks) screen is a list of the tasks at the left (`AUTOMATIONS · N`, a row each: the
-mark, the name; 288 wide), and the selected task's page on the right ("Will it run tonight?", then the run timeline). While the list is on
+changes nothing in the thread. The Automations (Tasks) screen is a list of the tasks at the left (`SCHEDULED · N`, 360 wide, a row each: the
+mark, the name and under it the schedule and how the last run went, no `auto` tag), and the selected task's page on the right ("Will it run tonight?", then the run timeline). While the list is on
 screen the inbox rail steps aside: four columns (projects, inbox, list, page) do not fit the 900 pt window. The New task screen and the
 empty page have no list, so the inbox rail stays. It is read only: it shows what `TaskLibrary`, `TaskRunLog` and
 `TimerService.status()` say and writes nothing.

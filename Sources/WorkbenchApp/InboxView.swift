@@ -18,7 +18,7 @@ struct InboxView: View {
         LazyVStack(alignment: .leading, spacing: Space.xxs) {
             if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
             section(.needsYou, model.needsYou, tone: .amber, shown: shown, selectedHere: selectedHere)
-            section(.waiting, model.waiting, tone: .secondary, shown: shown, selectedHere: selectedHere)
+            section(.waiting, model.waiting, tone: .blue, shown: shown, selectedHere: selectedHere)
             if model.finishedCount > 0 {
                 InboxSectionHeader(title: InboxSection.done.title, count: model.finishedCount, tone: .secondary)
                 ForEach(model.done) { row in rowView(row, shown: shown, selectedHere: selectedHere) }
@@ -52,13 +52,10 @@ struct InboxView: View {
     @ViewBuilder private var doneToggle: some View {
         if model.doneHidden > 0 {
             let words = model.doneHidden == 1 ? "1 finished thread" : "\(model.doneHidden) finished threads"
-            Button("Show \(words)") { store.toggleDoneOpen() }
-                .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                .accessibilityLabel("Show \(words)").help("The threads that are over")
+            let help = "The threads that are over"
+            FoldToggle(title: "Show \(words)", expanded: false, help: help) { store.toggleDoneOpen() }
         } else if store.doneOpen {
-            Button("Hide finished threads") { store.toggleDoneOpen() }
-                .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                .accessibilityLabel("Hide finished threads")
+            FoldToggle(title: "Hide finished threads", expanded: true, help: "Close them") { store.toggleDoneOpen() }
         }
     }
 }
