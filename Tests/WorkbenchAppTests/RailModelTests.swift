@@ -197,14 +197,20 @@ import WorkbenchCore
     }
 
     @Test func theStoreRemembersWhichProjectsHaveDoneOpen() async throws {
-        let fixture = try await AppFixture()
-        keptRailFixtures.append(fixture)
-        try await AppScenario.threads.build(in: fixture)
+        let first = try await AppFixture()
+        let second = try await AppFixture()
+        keptRailFixtures.append(contentsOf: [first, second])
+        try await AppScenario.threads.build(in: first)
+        try await AppScenario.threads.build(in: second)
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
-        #expect(await store.open(fixture.root))
+        #expect(await store.open(first.root))
         #expect(!store.doneOpen)
         store.toggleDoneOpen()
         #expect(store.doneOpen)
+        #expect(await store.open(second.root))
+        #expect(!store.doneOpen, "another project's Done is its own")
+        #expect(await store.open(first.root))
+        #expect(store.doneOpen, "and the first one is as it was left")
         store.toggleDoneOpen()
         #expect(!store.doneOpen)
     }
