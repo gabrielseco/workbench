@@ -52,26 +52,6 @@ struct RailRow: Equatable, Identifiable {
     }
 }
 
-/// What the rail lists below the inbox: the project's scheduled tasks (until the Automations view takes them). Pure, so the section is tested
-/// without a window.
-struct RailModel: Equatable {
-    var tasks: [RailRow]
-    /// The tasks have been read; until then the section says so rather than claiming there are none.
-    var tasksRead: Bool
-
-    static func derive(tasks: TasksSnapshot?) -> RailModel {
-        RailModel(tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
-    }
-
-    var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }
-
-    /// What the Scheduled section says when it has no rows.
-    var scheduledNote: String? {
-        guard tasks.isEmpty else { return nil }
-        return tasksRead ? "No scheduled tasks. Make one with workbench task new <name>." : "Reading…"
-    }
-}
-
 extension ThreadMark {
     /// The colour of a state line: only a state that asks something of the person, or says a thing finished, is coloured.
     var lineTint: ThreadMarkTint { self == .idle ? .quiet : .mark }

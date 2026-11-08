@@ -12,13 +12,12 @@ struct PreviewRail: View {
         let inbox = InboxModel.derive(
             listing: store.threads.listing, tasks: snapshot, composing: store.newThread, shown: store.railShown,
             doneOpen: store.doneOpen)
-        let model = RailModel.derive(tasks: snapshot)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
                 if store.allProjects {
                     allProjectsContent
                 } else {
-                    projectContent(inbox: inbox, model: model)
+                    projectContent(inbox: inbox)
                 }
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
@@ -30,7 +29,7 @@ struct PreviewRail: View {
                 if store.allProjects {
                     Task { await store.stepAllInbox(up: direction == .up) }
                 } else {
-                    move(up: direction == .up, inbox: inbox, model: model)
+                    move(up: direction == .up, inbox: inbox)
                 }
             }
         }
@@ -47,8 +46,8 @@ struct PreviewRail: View {
     }
 
     /// The row above or below the one shown, in the order the rail draws them; nil at either end or when none is shown.
-    private func move(up: Bool, inbox: InboxModel, model: RailModel) {
-        let ids = inbox.navigation(scheduled: model.tasks.map(\.key))
+    private func move(up: Bool, inbox: InboxModel) {
+        let ids = inbox.navigation(scheduled: [])
         let thread = store.mode == .thread && !store.newThread ? shownThreadID : nil
         guard let shown = inbox.navigationID(thread: thread, task: shownTaskName),
             let next = InboxModel.neighbour(of: shown, in: ids, up: up)
@@ -73,7 +72,7 @@ struct PreviewRail: View {
     }
 
     /// The open project's own inbox, then its Scheduled tasks.
-    @ViewBuilder private func projectContent(inbox: InboxModel, model: RailModel) -> some View {
+    @ViewBuilder private func projectContent(inbox: InboxModel) -> some View {
         inboxHeader
         if store.threads.syncing {
             BusyLine("Syncing with GitHub…").padding(.horizontal, Space.s).padding(.vertical, Space.xs)
@@ -83,24 +82,6 @@ struct PreviewRail: View {
         } else {
             InboxView(store: store, model: inbox)
         }
-        header(model.scheduledHeader).padding(.top, Space.m)
-        if let note = model.scheduledNote {
-            Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
-            if model.tasksRead {
-                // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
-                Button("Open the Tasks page") { store.showTasks() }
-                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s)
-                    .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
-            }
-        }
-        let shownTask = shownTaskName
-        ForEach(model.tasks) { row in
-            RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
-        }
-        // The one way in from the rail, besides File ▸ New Task… (⇧⌘N): the `+` above is for threads, so there is one of it.
-        Button("New task…") { store.beginNewTask() }
-            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-            .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
     }
 
     /// The list the top tile shows: every project's inbox, under a header that says whose it is.

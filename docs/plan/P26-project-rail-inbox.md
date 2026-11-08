@@ -129,11 +129,19 @@ live. A click on a row opens that project when it is not the open one, shows the
 project's own inbox; a project's tile does too, and a project that cannot be opened keeps the list up and says why. Merge order is the rail's,
 not one newest-first list: a thread's row has no timestamp, and a stable list does not reorder under the finger between reads.
 
-### 5. Top bar and Automations view
+### 5. Top bar and Automations view (built)
 
 The Inbox / Automations switch with counts replaces the rail's `Scheduled` section and the "Open the Tasks page" link (`WindowMode` stays; the
 switch is its control). `TasksView` keeps its content and gains the design's header: `New task…` in the bar, list left, detail right, the rail
 still on screen. The base, spend and state pill stay thread-only, as the comment in `ToolbarBar` already requires.
+
+As built: `SegmentedSwitch` (a component: segments with a title, an optional count and its tone) in the top bar after the project's name,
+`Inbox` (the Needs you count of the project's inbox, amber) and `Automations` (how many tasks, none until they are read); `WindowMode` is its
+state (`ProjectStore.chooseSwitch`; leaving for the inbox also closes a half-open New task screen). `New task…` is a button at the right of the
+bar while Automations is chosen. The rail lost its Scheduled section, the `Open the Tasks page` link and `RailModel`. `AutomationsList` is the
+list at the left of the task's page. **Departure from the plan:** the inbox rail does not stay on screen next to that list, because four columns
+do not fit 900 pt (the first capture at 900x600 had the page squeezed and the window's content overflowing it): it steps aside while the list
+is up (`automationsListShown`), the layout the Tasks screen always had. The switch is how the person goes back.
 
 ### 6. Thread detail parity
 

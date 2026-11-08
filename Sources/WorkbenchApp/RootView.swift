@@ -12,8 +12,10 @@ struct RootView: View {
             HStack(spacing: 0) {
                 ProjectRail(store: store).background(Theme.rail)
                 Divider()
-                PreviewRail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
-                Divider()
+                if !store.automationsListShown {
+                    PreviewRail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
+                    Divider()
+                }
                 Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity).background { Theme.canvas }
             }
             Divider()
@@ -25,7 +27,7 @@ struct RootView: View {
     }
 }
 
-/// The project's name, the base, the state pill and the spend meter. Projects are the rail's, and so are their agents (its tile menu, ⌘,).
+/// The project's name, the Inbox / Automations switch, the base, the state pill and the spend meter. Projects are the rail's, and so are their agents (its tile menu, ⌘,).
 struct ToolbarBar: View {
     var store: ProjectStore
 
@@ -33,6 +35,9 @@ struct ToolbarBar: View {
         HStack(spacing: Space.m) {
             // The project is named here, as the design has it; switching and adding are the rail's.
             Text(store.project?.root.lastPathComponent ?? "No project").textStyle(.bodyStrong)
+            SegmentedSwitch(
+                segments: store.switchSegments(), selection: store.switchSelection, enabled: store.project != nil
+            ) { store.chooseSwitch($0) }
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
@@ -44,6 +49,9 @@ struct ToolbarBar: View {
                 Spacer()
                 Text(snapshot.spendText).role(.monoDetail)
                 StatePill(snapshot: snapshot)
+            } else if store.mode == .tasks, store.project != nil {
+                Spacer()
+                Button("New task…") { store.beginNewTask() }.plainButton(size: .regular).help("Make a scheduled task (⇧⌘N)")
             } else {
                 Spacer()
             }

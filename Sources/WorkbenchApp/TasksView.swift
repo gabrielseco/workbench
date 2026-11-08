@@ -31,8 +31,12 @@ struct TasksView: View {
                 if snapshot.entries.isEmpty {
                     NoTasks(timer: snapshot.timer, makeOne: { store.beginNewTask() })
                 } else if let entry = store.tasks.selected(in: snapshot) {
-                    // The rail lists the tasks; the main area is the selected task's page (design parity 5).
-                    TaskPageView(store: store, snapshot: snapshot, entry: entry)
+                    // The list at the left, the selected task's page at the right (design parity 5, P26 slice 5).
+                    HStack(spacing: 0) {
+                        AutomationsList(store: store, snapshot: snapshot)
+                        Divider()
+                        TaskPageView(store: store, snapshot: snapshot, entry: entry)
+                    }
                 }
             } else {
                 BusyLine("Reading the tasks…", stacked: true).frame(maxWidth: .infinity, maxHeight: .infinity)
