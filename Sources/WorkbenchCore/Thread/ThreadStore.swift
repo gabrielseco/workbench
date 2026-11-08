@@ -247,6 +247,22 @@ public struct ThreadStore: Sendable {
         return fd
     }
 
+    /// The same lock for code that is already async: the wait yields instead of holding a thread, so the holder, which may be
+    /// waiting on the executor itself (a check holds it across a log append), can always run and let go.
+    static func admit(_ directory: URL) async throws -> Int32 {
+        let fd = open(directory.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { throw ThreadStoreError.admissionBusy }
+        let deadline = Date().addingTimeInterval(5)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            guard errno == EWOULDBLOCK || errno == EINTR, Date() < deadline else {
+                close(fd)
+                throw ThreadStoreError.admissionBusy
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        return fd
+    }
+
     /// Makes the thread directory and refuses when `maxActive` threads are already active (one is the single-thread rule).
     public func create(id: String, maxActive: Int = 1) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }

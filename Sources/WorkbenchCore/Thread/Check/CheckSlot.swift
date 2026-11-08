@@ -33,8 +33,8 @@ struct CheckSlot {
         deinit { release() }
     }
 
-    func claim() throws -> Claim {
-        let descriptor = try ThreadStore.admit(project.threadsDirectory)
+    func claim() async throws -> Claim {
+        let descriptor = try await ThreadStore.admit(project.threadsDirectory)
         let busy = ThreadStore(project: project).runningChecks(excluding: threadID)
         return Claim(
             outcome: busy.count >= max ? .refused(Self.message(running: busy, max: max)) : .granted, descriptor: descriptor)

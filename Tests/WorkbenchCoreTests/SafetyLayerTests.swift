@@ -51,6 +51,16 @@ import Testing
         fx.repo.appendingPathComponent(".git/refs/heads/\(branch).lock")
     }
 
+    @Test func aSeparateGitDirectoryIsItsOwnCommonDirectory() throws {
+        let root = Scratch.url("separate").resolvingSymlinksInPath()
+        let gitDir = root.appendingPathComponent("elsewhere.git")
+        let checkout = root.appendingPathComponent("checkout")
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: checkout, withIntermediateDirectories: true)
+        try "gitdir: \(gitDir.path)\n".write(to: checkout.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        #expect(GitSharedRepository.commonDirectory(from: checkout)?.path == gitDir.path)
+    }
+
     @Test func theCommonDirectoryIsTheSameFromTheRepositoryAndFromAWorktree() async throws {
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
@@ -138,7 +148,7 @@ final class Flag: @unchecked Sendable {
         let fx = try await RunnerFixture()
         try await inCheck(fx, "other-a")
         let slot = CheckSlot(project: fx.project, threadID: "mine", max: 2)
-        let claim = try slot.claim()
+        let claim = try await slot.claim()
         #expect(claim.outcome == .granted)
         claim.release()
         #expect(ThreadStore(project: fx.project).runningChecks(excluding: "mine") == ["other-a"])
@@ -148,7 +158,7 @@ final class Flag: @unchecked Sendable {
         let fx = try await RunnerFixture()
         try await inCheck(fx, "other-a")
         try await inCheck(fx, "other-b")
-        let claim = try CheckSlot(project: fx.project, threadID: "mine", max: 2).claim()
+        let claim = try await CheckSlot(project: fx.project, threadID: "mine", max: 2).claim()
         defer { claim.release() }
         guard case .refused(let why) = claim.outcome else {
             Issue.record("expected a refusal")
@@ -168,7 +178,7 @@ final class Flag: @unchecked Sendable {
     @Test func aThreadDoesNotCountItself() async throws {
         let fx = try await RunnerFixture()
         try await inCheck(fx, "mine")
-        let claim = try CheckSlot(project: fx.project, threadID: "mine", max: 1).claim()
+        let claim = try await CheckSlot(project: fx.project, threadID: "mine", max: 1).claim()
         defer { claim.release() }
         #expect(claim.outcome == .granted)
     }
@@ -210,5 +220,26 @@ final class Flag: @unchecked Sendable {
         #expect(error.contains("other-a") && error.contains("other-b"), "\(error)")
         let output = try String(contentsOf: fx.project.checkOutputURL("mine", turn: 1), encoding: .utf8)
         #expect(output.contains("max_concurrent_checks"))
+    }
+
+    @Test func manyChecksClaimingAtOnceAllGetAnAnswer() async throws {
+        let fx = try await RunnerFixture()
+        let project = fx.project
+        try FileManager.default.createDirectory(at: project.threadsDirectory, withIntermediateDirectories: true)
+        let granted = await withTaskGroup(of: Bool?.self) { group in
+            for index in 0..<24 {
+                group.addTask {
+                    let slot = CheckSlot(project: project, threadID: "t\(index)", max: 2)
+                    guard let claim = try? await slot.claim() else { return nil }
+                    // Held across an await, as a check holds it across a log append.
+                    try? await Task.sleep(for: .milliseconds(5))
+                    claim.release()
+                    return claim.outcome == .granted
+                }
+            }
+            return await group.reduce(into: [Bool?]()) { $0.append($1) }
+        }
+        #expect(granted.count == 24)
+        #expect(!granted.contains { $0 == nil }, "none gave up waiting for the lock")
     }
 }

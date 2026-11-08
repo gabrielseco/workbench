@@ -55,7 +55,7 @@ struct CheckRunner {
         turn: Int, outputURL: URL, log: EventLogWriter, slot: CheckSlot? = nil, attach: @Sendable (ProcessRun) async -> Void
     ) async throws -> CheckReport {
         // Counting the checks and recording this one's start are one step, so two threads cannot both take the last slot.
-        let claim = try slot?.claim()
+        let claim = try await slot?.claim()
         try await log.append(.checkStarted, turn: turn, data: ["command": .string(command)])
         let started = Date()
 

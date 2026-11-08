@@ -58,8 +58,9 @@ enum GitSharedRepository {
                 else { return nil }
                 let path = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
                 let gitDir = URL(fileURLWithPath: path, relativeTo: folder).standardizedFileURL
+                // A checkout made with `--separate-git-dir` points at its repository directly, which has no `commondir`.
                 guard let relative = try? String(contentsOf: gitDir.appendingPathComponent("commondir"), encoding: .utf8) else {
-                    return nil
+                    return gitDir
                 }
                 let common = URL(
                     fileURLWithPath: relative.trimmingCharacters(in: .whitespacesAndNewlines), relativeTo: gitDir)
