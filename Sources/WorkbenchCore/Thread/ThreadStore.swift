@@ -11,9 +11,12 @@ public enum ThreadStoreError: Error, Equatable, Sendable, CustomStringConvertibl
     case invalidName(String)
     /// `workbench doctor` holds the project; a thread started now would run its check next to doctor's.
     case doctorRunning
+    /// Another command is admitting a thread at this moment and did not finish within the wait.
+    case admissionBusy
 
     public var description: String {
         switch self {
+        case .admissionBusy: "another thread is being created in this project; try again in a moment."
         case .doctorRunning: "`workbench doctor` is running in this project; try again when it has finished."
         case .activeThreadExists(let id):
             "thread '\(id)' is still active. Finish it first (accept, discard) or run `workbench abandon`."
@@ -209,9 +212,36 @@ public struct ThreadStore: Sendable {
         }
     }
 
+    /// The name a chat was started under: its id (`g-<day>-<name>`) without the first two parts. The whole name, never the tail of
+    /// one, so `foo` is not the chat `bar-foo`.
+    public static func chatName(of id: String) -> String? {
+        let parts = id.split(separator: "-", maxSplits: 2, omittingEmptySubsequences: false)
+        return parts.count == 3 && parts[0] == "g" ? String(parts[2]) : nil
+    }
+
+    /// An exclusive lock on the `threads/` directory itself (no file is left), held while a thread is admitted. The wait is
+    /// short and bounded: the critical section is a directory listing and a mkdir.
+    private static func admit(_ directory: URL) throws -> Int32 {
+        let fd = open(directory.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { throw ThreadStoreError.admissionBusy }
+        let deadline = Date().addingTimeInterval(5)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            guard errno == EWOULDBLOCK || errno == EINTR, Date() < deadline else {
+                close(fd)
+                throw ThreadStoreError.admissionBusy
+            }
+            usleep(2_000)
+        }
+        return fd
+    }
+
     /// Makes the thread directory and refuses when `maxActive` threads are already active (one is the single-thread rule).
     public func create(id: String, maxActive: Int = 1) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
+        // Counting the active threads and making the folder are one step: two commands at once must not both see a free slot.
+        try FileManager.default.createDirectory(at: project.threadsDirectory, withIntermediateDirectories: true)
+        let admission = try Self.admit(project.threadsDirectory)
+        defer { close(admission) }
         if let full = fullThreads(maxActive: maxActive) {
             throw maxActive == 1
                 ? ThreadStoreError.activeThreadExists(full[0]) : ThreadStoreError.tooManyActive(full, max: maxActive)

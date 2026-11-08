@@ -23,6 +23,31 @@ import Testing
     }
 }
 
+@Suite struct MaxActiveThreadsAdmissionTests {
+    @Test func creatingAtOnceNeverPassesTheCap() async throws {
+        for round in 0..<5 {
+            let root = Scratch.url("admit\(round)").resolvingSymlinksInPath()
+            try FileManager.default.createDirectory(at: root.appendingPathComponent(".workbench"), withIntermediateDirectories: true)
+            let store = ThreadStore(project: Project(root: root))
+            let made = await withTaskGroup(of: Bool.self) { group in
+                for index in 0..<8 {
+                    group.addTask { (try? store.create(id: "g-20261108-t\(index)", maxActive: 3)) != nil }
+                }
+                return await group.reduce(0) { $0 + ($1 ? 1 : 0) }
+            }
+            #expect(made == 3, "eight at once, three slots (round \(round))")
+            #expect(store.threadIDs().count == 3)
+        }
+    }
+
+    @Test func aChatIsFoundByItsWholeName() {
+        #expect(ThreadStore.chatName(of: "g-20261108-foo") == "foo")
+        #expect(ThreadStore.chatName(of: "g-20261108-bar-foo") == "bar-foo")
+        #expect(ThreadStore.chatName(of: "g-20261108-bar-foo") != "foo", "a tail of the name is not the name")
+        #expect(ThreadStore.chatName(of: "other") == nil)
+    }
+}
+
 @Suite(.processGate) struct MaxActiveThreadsTests {
     private func config(_ n: Int) throws -> Config {
         try Config.parse("max_active_threads = \(n)\n[tools]\navailable = [\"Read\"]\n")
