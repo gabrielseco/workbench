@@ -111,4 +111,21 @@ import Testing
         try handle.close()
         #expect(ProjectSummaryLoader.read(project: project)?.failed == 1)
     }
+
+    @Test func theNewestAreChosenByWhenTheyWereCreatedNotByTheirNames() async throws {
+        let project = project()
+        // 200 threads named to sort last, all created early; then one that sorts first by name and was created later, needing you.
+        for index in 0..<ProjectSummaryLoader.maxThreads {
+            let url = project.eventsURL(String(format: "z-%03d", index))
+            let log = try EventLogWriter.open(at: url, now: { Date(timeIntervalSince1970: 1_000_000) })
+            try await log.append(.threadCreated, data: [:])
+            await log.close()
+        }
+        let newest = try EventLogWriter.open(at: project.eventsURL("a-newest"), now: { Date(timeIntervalSince1970: 2_000_000) })
+        try await newest.append(.threadCreated, data: [:])
+        for step in [approved, started, ended] { try await newest.append(step.kind, turn: step.turn, data: step.data) }
+        await newest.close()
+
+        #expect(ProjectSummaryLoader.read(project: project)?.needsYou == 1, "created later, so counted whatever its name sorts as")
+    }
 }

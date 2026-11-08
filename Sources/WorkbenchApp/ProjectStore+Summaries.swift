@@ -29,6 +29,12 @@ extension ProjectStore {
         }
     }
 
+    /// The open project's counts as the window reads them now, kept for its tile when the window moves to another project.
+    func captureLiveCounts() {
+        guard let path = project?.root.path, railPaths.contains(path) else { return }
+        railSummaries.setCounts(railCounts(for: path), for: path)
+    }
+
     /// What a tile counts: the window's own reading for the open project (never behind the list beside it), the last summary for the rest.
     func railCounts(for path: String) -> ProjectSummary {
         guard path == project?.root.path else { return railSummaries.counts[path] ?? ProjectSummary() }

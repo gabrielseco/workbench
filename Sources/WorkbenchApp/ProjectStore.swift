@@ -228,6 +228,8 @@ struct RecentProject: Equatable, Identifiable {
             screen = .notAGitRepository(path: url.path)
             return false
         }
+        // Leaving a project: its tile keeps what the window last read of it, not what the poll read before.
+        if located.root != project?.root { captureLiveCounts() }
         preferences.projectPath = located.root.path
         remember(located.root.path)
         generation += 1

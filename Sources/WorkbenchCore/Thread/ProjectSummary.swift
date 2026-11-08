@@ -66,6 +66,7 @@ public enum ProjectSummaryLoader {
     public final class Cache: @unchecked Sendable {
         private let lock = NSLock()
         private var known: [String: (print: String, activity: ThreadActivity)] = [:]
+        private var created: [String: String] = [:]
         /// How many threads were replayed (not taken from here): what a test reads to see that an unchanged project costs nothing.
         public private(set) var replays = 0
 
@@ -81,7 +82,20 @@ public enum ProjectSummaryLoader {
             return fresh
         }
 
-        func forget(except keys: Set<String>) { lock.withLock { known = known.filter { keys.contains($0.key) } } }
+        /// When a thread was created, read once from its log's first line.
+        func createdAt(_ key: String, read: () -> String) -> String {
+            if let known = lock.withLock({ created[key] }) { return known }
+            let value = read()
+            lock.withLock { created[key] = value }
+            return value
+        }
+
+        func forget(except keys: Set<String>) {
+            lock.withLock {
+                known = known.filter { keys.contains($0.key) }
+                created = created.filter { keys.contains($0.key) }
+            }
+        }
     }
 
     /// The project's summary, or nil when its threads folder could not be listed (a folder that is there but cannot be read, such as a volume
@@ -94,7 +108,12 @@ public enum ProjectSummaryLoader {
             guard missing else { return nil }
             names = []
         }
-        let ids = Array(names.filter { SafeNames.isThreadID($0) }.sorted(by: >).prefix(maxThreads))
+        // The newest by when they were created, as the list orders them: an id says nothing of age (a name may start with `a` or `z`).
+        let newestFirst = names.filter { SafeNames.isThreadID($0) }.map { id in
+            (id, cache.createdAt(project.threadDirectory(id).path) { firstLineCreatedAt(project.eventsURL(id)) })
+        }
+        .sorted { ($0.1, $0.0) > ($1.1, $1.0) }
+        let ids = newestFirst.prefix(maxThreads).map(\.0)
         var summary = ProjectSummary()
         var keys = Set<String>()
         for id in ids {
@@ -105,6 +124,17 @@ public enum ProjectSummaryLoader {
         }
         cache.forget(except: keys)
         return summary
+    }
+
+    /// `thread.created`'s time, from the log's first line alone; "" when it cannot be told (the thread sorts last).
+    public static func firstLineCreatedAt(_ url: URL) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 8_192)) ?? Data()
+        guard let line = head.split(separator: UInt8(ascii: "\n"), maxSplits: 1).first,
+            let event = try? JSONDecoder().decode(Event.self, from: Data(line))
+        else { return "" }
+        return event.ts
     }
 
     /// One thread's mark, from its log and goal file alone.

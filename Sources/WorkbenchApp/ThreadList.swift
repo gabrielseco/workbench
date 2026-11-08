@@ -94,16 +94,8 @@ enum ThreadListLoader {
         func forget(except ids: Set<String>) { lock.withLock { rows = rows.filter { ids.contains($0.key) } } }
     }
 
-    /// `thread.created`'s time, from the log's first line alone; "" when it cannot be told (the thread sorts last).
-    static func firstLineCreatedAt(_ url: URL) -> String {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
-        defer { try? handle.close() }
-        let head = (try? handle.read(upToCount: 8_192)) ?? Data()
-        guard let line = head.split(separator: UInt8(ascii: "\n"), maxSplits: 1).first,
-            let event = try? JSONDecoder().decode(Event.self, from: Data(line))
-        else { return "" }
-        return event.ts
-    }
+    /// `thread.created`'s time, from the log's first line alone (core's, shared with the rail's counts).
+    static func firstLineCreatedAt(_ url: URL) -> String { ProjectSummaryLoader.firstLineCreatedAt(url) }
 
     /// - Parameter pullRequests: what GitHub said of each thread's pull request, when it was read; a thread missing here is derived
     ///   from its log alone, which never says merged.

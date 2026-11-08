@@ -100,6 +100,18 @@ private func waitUntil(timeout: TimeInterval, _ condition: @Sendable () -> Bool)
         #expect(store.railBadge(for: first.project.root.path) == .needsYou(1), "its tile keeps its count once it is not open")
     }
 
+    @Test func theProjectTheWindowLeavesKeepsWhatTheWindowLastReadNotTheLastPoll() async throws {
+        let first = try await fixture(needsYou: 1)
+        let second = try await fixture()
+        let store = await store(open: first, others: [second])
+        await store.readRailSummaries()  // the poll says one needs you
+        try first.decide("n0", "accepted")
+        await store.reload()  // the window sees it decided
+        await store.pickRecent(second.project.root.path)
+        #expect(store.railBadge(for: first.project.root.path) == .none, "the count it left with, not the poll's")
+        #expect(store.allProjectsBadge() == .none)
+    }
+
     @Test func aProjectThatIsGoneOrNoLongerOnTheRailHoldsNoCount() async throws {
         let open = try await fixture()
         let other = try await fixture(needsYou: 1)

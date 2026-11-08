@@ -32,6 +32,9 @@ import WorkbenchCore
         counts[path] = summary
     }
 
+    /// A count taken from the window's own reading of a project it is leaving; the tasks' part as last read stays.
+    func setCounts(_ summary: ProjectSummary, for path: String) { counts[path] = summary }
+
     func lastTasks(for path: String) -> ProjectSummary { lastTasks[path] ?? ProjectSummary() }
 
     /// A project whose folder is gone has no count: its tile says so.
