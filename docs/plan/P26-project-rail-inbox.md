@@ -1,6 +1,6 @@
 # P26: Project rail and inbox
 
-Status: planned, nothing built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
+Status: in progress, slice 1 built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
 the automations view; copied from the Design canvas, 2026-11-08).
 
 Threads can now run side by side (P23), so the window stops being "one project, one thread, and a list". The design makes **projects visible**
@@ -50,13 +50,19 @@ The top bar has no agents pill. The Agents card (P25) stays and must stay **per 
 
 ## Slices (one PR each, in order)
 
-### 1. Agents off the top bar, reachable per project
+### 1. Agents off the top bar, reachable per project (built)
 
 Remove `AgentsPill` from `ToolbarBar`. `showingAgents` becomes the agents card *for a project path* (`agentsProject: String?`), so it can open for a
 project other than the selected one; `AgentSetup` and `setAgent` read and write that project's config. The inbox header button arrives with slice 4; until then the way in is
 the project card's row menu plus ⌘,. Core change: none.
 Tests: the card opens for a named project and edits that project's config, not the selected one's; ⌘, opens the selected project's.
 verify-app scenario: top bar without the pill, card from the menu.
+
+As built: `ProjectStore.agentsProject` (a path) with `showAgents(for:)`; `showingAgents` stays as the open project's card (⌘,). The card has its
+own config state (`cardAgentConfig`, read by `refreshCardAgents`), so it shows and edits the project it was opened for, and an edit to the
+open project also refreshes the copy chats and the New goal card read. The card's title is `Agents · <folder>`. The project card's rows have
+an `Actions for <name>` menu with `Agents…` (it closes the project card first, so the Agents card is not under it). `VERIFY_OPEN=agents`
+shows the open project's card for a scenario.
 
 ### 2. Project rail
 
@@ -113,5 +119,7 @@ A project-wide spend cap, a queue, moving threads between projects, drag-reorder
 
 ## Questions for you
 
-1. Should removing a tile also forget the project's recents, or only hide it?
-2. Does "all projects" inbox open a thread in its own project (switching the rail selection), as assumed?
+Answered by default while building (change them on the PR if wrong):
+
+1. Removing a tile **only hides it**: the project stays in the recents (the project card still lists it).
+2. The all-projects inbox **opens a thread in its own project**, switching the rail selection.

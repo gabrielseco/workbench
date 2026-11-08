@@ -76,12 +76,14 @@ struct RecentProject: Equatable, Identifiable {
     var newThreadText = ""
     /// Whether the project card under the project pill is up.
     var pickingProject = false
-    /// Whether the Agents card (each role's provider and model, read-only) is up.
-    var showingAgents = false
+    /// The project whose Agents card is up, by path: any project of the rail, not only the open one (`showAgents(for:)`).
+    var agentsProject: String?
     /// The modals over the feed that no other state decides (`AppModals.swift`).
     var modals = ModalState()
     /// The open project's agent roles as its config sets them: read when the card or a screen that names the agent appears.
     var agentConfig = AgentConfigState.unread
+    /// The roles of `agentsProject` as its config sets them, for the card: that project's, which may not be the open one.
+    var cardAgentConfig = AgentConfigState.unread
     /// What is written in each thread's guidance field. It lives here, not in the view, so a send that the run refuses to start does not
     /// lose it and another thread does not see it; it is cleared when a turn has begun and when the project changes.
     var guidanceNotes: [String: String] = [:]

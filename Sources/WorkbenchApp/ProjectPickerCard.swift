@@ -72,8 +72,11 @@ struct ProjectPickerCard: View {
                 ScrollView {
                     VStack(spacing: Space.xxs) {
                         ForEach(rows) { entry in
-                            ProjectRow(entry: entry, highlighted: entry.path == selected, pick: pick) { store.forget(entry.path) }
-                                .id(entry.path)
+                            ProjectRow(
+                                entry: entry, highlighted: entry.path == selected, pick: pick,
+                                remove: { store.forget(entry.path) }, agents: { store.showAgents(for: entry.path) }
+                            )
+                            .id(entry.path)
                         }
                     }
                 }
@@ -120,6 +123,8 @@ private struct ProjectRow: View {
     var highlighted: Bool
     var pick: (String) -> Void
     var remove: () -> Void
+    /// Opens the Agents card for this project, whether or not it is the open one.
+    var agents: () -> Void
     @State private var hovered = false
 
     private var available: Bool { entry.unavailable == nil }
@@ -152,6 +157,14 @@ private struct ProjectRow: View {
             if !available {
                 Button("Remove", action: remove).controlSize(.small)
                     .accessibilityLabel("Remove \(entry.name) from the list")
+            } else {
+                Menu {
+                    Button("Agents…", action: agents)
+                } label: {
+                    Label("Actions for \(entry.name)", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .help("Actions for \(entry.name)")
             }
         }
         .padding(.horizontal, Space.s).padding(.vertical, Space.s)

@@ -11,14 +11,6 @@ import WorkbenchCore
         #expect(named == "Projects, now remote-flows")
     }
 
-    @Test func theAgentsPillNamesTheCodingAgentOrFallsBackToAgents() throws {
-        #expect(AgentsPill.text(nil) == "Agents")
-        let config = try Config.parse(
-            "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
-                + "[agents.run]\nprovider = \"codex\"\nmodel = \"gpt-6.1-terra\"\n")
-        #expect(AgentsPill.text(AgentSetup(config: config)) == "Codex · gpt-6.1-terra")
-    }
-
     @Test func theVerifyScriptRefusesEveryLabelThatOpensAPanel() throws {
         // The refusal in scripts/verify-app.sh matches the start of a label; every such label has to match it.
         let refused = try #require(
