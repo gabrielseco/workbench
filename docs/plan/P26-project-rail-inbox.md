@@ -11,7 +11,7 @@ design and `main`.
 
 | Area | Design | Today |
 |---|---|---|
-| Project rail | 72 pt column of project tiles (two letters), a selected bar, a count badge (amber needs you, red failed, blue dot running), a top tile for **all projects' inbox** with the summed count, `+` to add a project | One project at a time; a `ProjectPill` in the top bar opens the project card to switch |
+| Project rail | 72 pt column of project tiles (a generated picture, the project's name under it), a selected bar, a count badge (amber needs you, red failed, blue dot running), a top tile for **all projects' inbox** with the summed count, `+` to add a project | One project at a time; a `ProjectPill` in the top bar opens the project card to switch |
 | Inbox | `INBOX · PROJECT` with `+`, sections **Needs you**, **Waiting** (shipped PR, CI running), **Done** (collapsed: "Show 9 finished threads"); a row is a mark, the title, the reason in words, the spend; an automation that needs approval is a row with an `auto` tag | `PreviewRail`: Threads (flat, `Show more`) then Scheduled tasks |
 | Top bar | project name and `base`, an **Inbox / Automations** switch with counts, spend and state pill in the thread view, `New task…` in the automations view | `ProjectPill`, **`AgentsPill`**, base, spend, state pill; no switch (`WindowMode` thread/tasks is reached from the rail) |
 | Thread detail | title, a stage line (Goal, Run, Review, Accept, Ship, PR review, Clean), goal card, activity lines, a **NEXT** card with the action | `FeedScreen` (chat feed) |
