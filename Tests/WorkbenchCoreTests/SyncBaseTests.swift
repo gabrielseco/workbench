@@ -233,4 +233,18 @@ import Testing
         let kinds = try kinds(fx, id)
         #expect(kinds.filter { $0 == "turn.started" }.count == 2 && kinds.filter { $0 == "turn.ended" }.count == 2)
     }
+
+    @Test func theReviewReportsTheMovementWithoutFetchingAndOnlyForAnActiveThread() async throws {
+        let fx = try await RunnerFixture()
+        let (id, worktree) = try await thread(fx)
+        try write(worktree, "a.txt", "one\nmine\n")
+        try await landOnMain(fx, "b.txt", "theirs\n")
+
+        let loader = ReviewLoader(project: fx.project, git: fx.git)
+        let moved = try #require(await loader.load(id: id).baseMovement)
+        #expect(moved.behind == 1 && moved.overlapping.isEmpty)
+
+        try await fx.service.abandon(id: id)
+        #expect(await loader.load(id: id).baseMovement == nil, "an ended thread has nothing to bring the base into")
+    }
 }

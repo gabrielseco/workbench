@@ -134,7 +134,7 @@ private final class Recorder: @unchecked Sendable {
 
     private func store(
         _ recorder: Recorder, accept: AcceptPlan? = nil, acceptError: Error? = nil, runError: Error? = nil,
-        makeRunError: Error? = nil
+        makeRunError: Error? = nil, syncBase: (@Sendable (Project, String) async throws -> BaseSyncResult)? = nil
     ) async throws -> ProjectStore {
         let fixture = try await ended()
         keptFixtures.append(fixture)
@@ -156,10 +156,57 @@ private final class Recorder: @unchecked Sendable {
                 DiscardPlan(id: "t1", worktree: nil, branch: nil, diff: .unavailable(reason: "x"), commits: [])
             },
             discard: { _, _, _ in recorder.add("discard") },
-            patch: { _, _, path in .text("patch of \(path)") })
+            patch: { _, _, path in .text("patch of \(path)") },
+            syncBase: syncBase ?? { _, _ in throw GoalActions.Unset() })
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         return store
+    }
+
+    private nonisolated static func movement(behind: Int = 2, overlapping: [String] = ["a.swift"]) -> BaseMovement {
+        let tip = String(repeating: "b", count: 40)
+        return BaseMovement(base: "main", tip: tip, behind: behind, overlapping: overlapping, overlapTruncated: false)
+    }
+
+    @Test func theReviewSaysTheBaseMovedOnlyWhileTheThreadAwaitsADecision() async throws {
+        let fixture = try await ended()
+        var shown = try report(fixture)
+        #expect(ReviewModel.derive(shown).baseMoved == nil, "nothing moved: nothing is said")
+        shown.baseMovement = Self.movement(behind: 0, overlapping: [])
+        #expect(ReviewModel.derive(shown).baseMoved == nil)
+        shown.baseMovement = Self.movement()
+        let moved = try #require(ReviewModel.derive(shown).baseMoved)
+        #expect(moved.files == ["a.swift"] && moved.line == Self.movement().line)
+
+        try fixture.decide("t1", "accepted")
+        var decided = try report(fixture)
+        decided.baseMovement = Self.movement()
+        #expect(ReviewModel.derive(decided).baseMoved == nil, "an accepted thread has nothing to bring the base into")
+    }
+
+    @Test func bringingTheBaseInStartsATurnFromWhatTheMergeFound() async throws {
+        let recorder = Recorder()
+        let found = BaseSyncResult.conflicts(Self.movement(), files: ["a.swift"], savedWork: nil)
+        let store = try await store(recorder, syncBase: { _, _ in found })
+        await store.bringBaseIn()
+        let options = try #require(recorder.options.last)
+        #expect(options.feedback == SyncPrompt.note(for: found), "the turn starts from the note core wrote")
+        #expect(store.actionError == nil)
+    }
+
+    @Test func aBaseThatHasNotMovedStartsNoTurn() async throws {
+        let recorder = Recorder()
+        let store = try await store(recorder, syncBase: { _, _ in .upToDate(Self.movement(behind: 0, overlapping: [])) })
+        await store.bringBaseIn()
+        #expect(recorder.options.isEmpty && store.notice != nil)
+    }
+
+    @Test func aRefusedSyncSaysSoAndStartsNoTurn() async throws {
+        struct Refused: Error, CustomStringConvertible { var description: String { "a run holds this thread" } }
+        let recorder = Recorder()
+        let store = try await store(recorder, syncBase: { _, _ in throw Refused() })
+        await store.bringBaseIn()
+        #expect(recorder.options.isEmpty && store.actionError == "a run holds this thread")
     }
 
     private nonisolated static let plan = AcceptPlan(

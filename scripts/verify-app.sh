@@ -232,6 +232,18 @@ SWIFT
     cp -R "$fixture/worktree/." "$worktree/"
     sed -i '' -e "s|@BASE@|$base|g" -e "s|@WORKTREE@|$worktree|g" "$dir/project/.workbench/threads/$thread/events.jsonl"
   fi
+  # A scenario with `origin-moved/` has a base that moved on after the worktree was cut: those files are committed on top of the base as
+  # `refs/remotes/origin/main` (what a fetch would have left), and the project's own `main` goes back to the commit the thread started from.
+  if [[ -n "$base" && -d "$fixture/origin-moved" ]]; then
+    local overlay
+    cp -R "$fixture/origin-moved/." "$dir/project/"
+    (cd "$fixture/origin-moved" && find . -type f | sed 's|^\./||') | while IFS= read -r overlay; do
+      git -C "$dir/project" add -- "$overlay"
+    done
+    git -C "$dir/project" -c user.name=verify -c user.email=verify@example.invalid commit -q -m "upstream"
+    git -C "$dir/project" update-ref refs/remotes/origin/main "$(git -C "$dir/project" rev-parse HEAD)"
+    git -C "$dir/project" reset -q --hard "$base"
+  fi
   # A scenario that shows how proofs are judged ships the project's config too. `@EDITOR_STUB@` is an editor that only writes down
   # what it was asked to open, so a button that starts the editor can be pressed without one.
   if [[ -f "$fixture/config.toml" ]]; then

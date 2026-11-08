@@ -20,6 +20,20 @@ extension AppScenario {
         }
     }
 
+    /// Whether `verify-app.sh start` cuts a worktree for the scenario's thread (it needs the repository and worktree files).
+    var hasWorktree: Bool { self == .reviewChanges || self == .reviewBaseMoved }
+
+    /// What the base gained after the thread's worktree was cut (`verify-app.sh start` commits it on `refs/remotes/origin/main`, as
+    /// after a fetch, and leaves the project's own `main` where the thread started): one file the thread changed too, and a new one.
+    var originMovedFiles: [String: String] {
+        guard self == .reviewBaseMoved else { return [:] }
+        return [
+            "Sources/Invoices/List.swift":
+                "struct List {\n    func page() -> [Invoice] { all.sorted(by: \\.date) }\n}\n",
+            "Sources/Invoices/Sorting.swift": "extension Invoice {\n    static let byDate = \\Invoice.date\n}\n",
+        ]
+    }
+
     /// The pull requests the stand-in `gh` says are merged (`merged-prs`, one number a line); the rest it says are open.
     var mergedPullRequests: [Int] { self == .prMerged ? [480] : [] }
 
@@ -32,7 +46,7 @@ extension AppScenario {
             let lines = mergedPullRequests.map { "\($0)\n" }.joined()
             try lines.write(to: target.appendingPathComponent("merged-prs"), atomically: true, encoding: .utf8)
         }
-        for (folder, contents) in [("repo", repoFiles), ("worktree", worktreeFiles)] {
+        for (folder, contents) in [("repo", repoFiles), ("worktree", worktreeFiles), ("origin-moved", originMovedFiles)] {
             for (path, content) in contents {
                 let url = target.appendingPathComponent(folder).appendingPathComponent(path)
                 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

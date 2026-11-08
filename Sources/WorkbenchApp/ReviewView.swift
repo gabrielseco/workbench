@@ -14,6 +14,7 @@ struct ReviewView: View {
                     Text("Review · \(headline(now: context.date))").textStyle(.title)
                 }
                 advice
+                baseMoved
                 criteria
                 files
                 if !review.commits.isEmpty { section("Commits") { ForEach(review.commits, id: \.self) { mono($0) } } }
@@ -111,6 +112,23 @@ struct ReviewView: View {
                     }
                 }
                 Text("Run these in a terminal. None of them blocks Accept.").role(.caption)
+            }
+        }
+    }
+
+    /// The base has commits this thread does not: say so with the files both sides changed, and offer to bring them in. Bringing
+    /// them in starts a turn (the agent resolves what the merge cannot), so the button says it.
+    @ViewBuilder private var baseMoved: some View {
+        if let moved = review.baseMoved {
+            section("Base moved") {
+                Text(moved.line).textStyle(.callout)
+                ForEach(moved.files, id: \.self) { mono($0) }
+                if moved.filesCut { Text("More files than are listed.").role(.caption) }
+                HStack {
+                    Button("Bring up to date") { Task { await store.bringBaseIn() } }.plainButton(size: .regular)
+                        .disabled(store.busy != nil || store.runningHere)
+                    Text("Merges it into this branch, then runs a turn to settle what it finds.").role(.caption)
+                }
             }
         }
     }
