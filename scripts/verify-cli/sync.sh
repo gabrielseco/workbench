@@ -72,6 +72,9 @@ check "sync with nothing to bring in: exit 0 and says so" "exit $RC: $(head -c 2
 wbp "$SCRATCH/r0.out" sync --run
 check "sync --run on a thread with no turn: refused (exit 6) before merging" "exit $RC: $(head -c 200 "$SCRATCH/r0.out")" \
     bash -c 'test "$1" = 6 && ! git -C "$2" rev-parse -q --verify MERGE_HEAD >/dev/null' _ "$RC" "$WT"
+wbp "$SCRATCH/r2.out" sync --run --budget 101
+check "sync --run --budget over the ceiling: usage error (exit 2) before merging" "exit $RC: $(head -c 200 "$SCRATCH/r2.out")" \
+    bash -c 'test "$1" = 2 && ! git -C "$2" rev-parse -q --verify MERGE_HEAD >/dev/null' _ "$RC" "$WT"
 wbp "$SCRATCH/r1.out" sync --budget 1
 check "sync --budget without --run: usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/r1.out")" test "$RC" = 2
 

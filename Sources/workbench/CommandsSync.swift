@@ -17,13 +17,25 @@ extension Commands {
             guard budgetText.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
                 let value = Decimal(string: budgetText, locale: Locale(identifier: "en_US_POSIX")), value > 0
             else { throw CLIError.usage("--budget needs a positive number of dollars, got '\(budgetText)'") }
+            guard value <= RunOptions.budgetCeilingUSD else {
+                throw CLIError.usage("--budget is at most \(RunOptions.budgetCeilingUSD) dollars")
+            }
             budget = value
         }
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
         // Before anything is merged: a turn that is refused afterwards would leave the merge done and the person guessing.
-        if runTurnAfter, ctx.store.state(of: id).lastTurn == 0 {
-            throw CLIError.refused("this thread has had no turn yet: use `workbench sync` alone")
+        if runTurnAfter {
+            if ctx.store.state(of: id).lastTurn == 0 {
+                throw CLIError.refused("this thread has had no turn yet: use `workbench sync` alone")
+            }
+            // The turn's own read-only refusals that can be known now, so a refusal leaves the branch as it was.
+            if let config = try? Config.load(from: ctx.project.configURL), config.checkCommand != nil {
+                let busy = ctx.store.runningChecks(excluding: id)
+                if busy.count >= config.maxConcurrentChecks {
+                    throw RunnerError.tooManyChecks(running: busy, max: config.maxConcurrentChecks)
+                }
+            }
         }
         out("bringing the base into \(id)...")
         let result = try await ctx.service.syncBase(id: id)

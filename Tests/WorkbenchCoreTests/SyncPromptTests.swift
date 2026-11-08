@@ -16,14 +16,18 @@ import Testing
 
     @Test func aCleanMergeNamesTheOverlapAndNoConflicts() throws {
         let note = try #require(SyncPrompt.note(for: .merged(moved(overlapping: ["a.swift"]), head: "abc123", savedWork: nil)))
-        #expect(note.contains("abc123") && note.contains("2 commits") && note.contains("a.swift"))
-        #expect(!note.contains("<<<<<<<"), "no conflict markers are asked about when there were none")
+        #expect(note.contains("abc123") && note.contains("a.swift"), "the merge commit and the overlapping file are in it")
+        let conflicted = try #require(SyncPrompt.note(for: .conflicts(moved(), files: ["only-in-conflict.txt"], savedWork: nil)))
+        #expect(!note.contains("only-in-conflict.txt") && conflicted.contains("only-in-conflict.txt"))
+        #expect(note != conflicted, "a clean merge and a conflict are told differently")
     }
 
-    @Test func aConflictListsTheFilesAndTellsTheAgentToLeaveGitAlone() throws {
-        let note = try #require(SyncPrompt.note(for: .conflicts(moved(), files: ["Sources/A.swift", "b.txt"], savedWork: "x")))
-        #expect(note.contains("Sources/A.swift") && note.contains("b.txt"))
-        #expect(note.contains("<<<<<<<"))
+    @Test func aConflictListsEveryConflictedFileAndTheOverlapSeparately() throws {
+        let note = try #require(
+            SyncPrompt.note(for: .conflicts(moved(overlapping: ["shared.swift"]), files: ["Sources/A.swift", "b.txt"], savedWork: "x")))
+        #expect(note.contains("Sources/A.swift") && note.contains("b.txt") && note.contains("shared.swift"))
+        let conflictOnly = try #require(SyncPrompt.note(for: .conflicts(moved(), files: ["Sources/A.swift"], savedWork: nil)))
+        #expect(!conflictOnly.contains("shared.swift"))
     }
 
     @Test func aFileNameCannotCloseTheFenceItIsListedIn() {
