@@ -6,6 +6,8 @@ extension ProjectStore {
     /// read for, on the attention poll and at once when it is chosen.
     func showAllProjects() async {
         guard !allProjects else { return }
+        // The inbox of every project is an inbox: from Automations it brings the threads back, whose rail it is the list of.
+        mode = .thread
         allProjects = true
         await readRailSummaries()
     }

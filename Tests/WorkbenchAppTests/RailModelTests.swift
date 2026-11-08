@@ -38,29 +38,17 @@ import WorkbenchCore
 
     // MARK: Sections
 
-    @Test func theRailListsTheThreadsThenTheTasksWithTheirCount() async throws {
+    @Test func theInboxListsTheThreadsAndTheTasksThatAsk() async throws {
         let shown = try await listing()
         let tasks = try await tasksSnapshot()
         let inbox = InboxModel.derive(listing: shown, tasks: tasks, doneOpen: true)
-        let model = RailModel.derive(tasks: tasks)
         let keys = inbox.threadRows.map(\.key)
         #expect(Set(keys) == Set(shown.rows.map(\.id)))
         #expect(inbox.threadRows.allSatisfy { $0.kind == .thread })
-        #expect(model.tasks.map(\.key) == tasks.entries.map(\.id) && model.tasks.allSatisfy { $0.kind == .task })
-        #expect(model.scheduledHeader == "SCHEDULED · \(tasks.entries.count)" && model.scheduledNote == nil)
         let asking = tasks.entries.map(RailRow.task).filter { $0.mark == .needsYou }
         #expect(inbox.listed.filter(\.isAutomation).count == asking.count, "a task that asks is in the inbox as well")
-        #expect(Set(inbox.threadRows.map(\.id)).isDisjoint(with: model.tasks.map(\.id)), "a thread and a task never share an id")
-    }
-
-    @Test func aProjectWithNoTasksSaysSoAndOneNotReadYetSaysThatInstead() async throws {
-        let empty = try await tasksSnapshot(.tasksEmpty)
-        #expect(empty.entries.isEmpty, "the tasks-empty fixture has none")
-        let none = RailModel.derive(tasks: empty)
-        #expect(none.scheduledHeader == "SCHEDULED · 0")
-        #expect(none.scheduledNote?.hasPrefix("No scheduled tasks.") == true)
-        let unread = RailModel.derive(tasks: nil)
-        #expect(unread.scheduledNote == "Reading…", "not read yet is not the same as none")
+        let taskIDs = tasks.entries.map(RailRow.task).map(\.id)
+        #expect(Set(inbox.threadRows.map(\.id)).isDisjoint(with: taskIDs), "a thread and a task never share an id")
     }
 
     // MARK: A task's threads
@@ -87,7 +75,6 @@ import WorkbenchCore
         let model = InboxModel.derive(listing: shown, tasks: tasks)
         // A finished thread a task's run made is listed nowhere: not in the inbox, and nothing hangs under the task.
         #expect(model.threadRows.map(\.key) == ["mine"] && model.older == 3)
-        #expect(RailModel.derive(tasks: tasks).tasks.map(\.kind).allSatisfy { $0 == .task }, "the tasks are rows of their own")
         // One that is working, needs you or is broken stays where it is seen.
         let marks: [ThreadMark] = [.working, .needsYou, .broken]
         let active = ThreadListing(rows: marks.map { thread("t-\($0.rawValue)", $0) })

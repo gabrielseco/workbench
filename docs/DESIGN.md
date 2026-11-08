@@ -56,22 +56,22 @@ ships, and the mockup gets fixed.
 - **Header.** The title (`.title3`, semibold, 15 pt, two lines at most), then the **phase row**: the spine's seven steps in one line, each an 8 pt dot with a 1.5 pt ring (the colour the rail
   draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
-  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
-  has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, the project's **inbox** (`INBOX · PROJECT`, with the project's Agents button and a `+` that opens the New goal card, until the
-  new-thread screen) and then **Scheduled · N** with the project's tasks. The inbox has three sections in this order, each with its caps label and count: **Needs you** (amber: a thread
-  that asks for something or is broken, then the tasks that need approval, tagged `auto`), **Waiting** (everything not over: a turn going, a draft, accepted and not shipped, a pull request
-  still open) and **Done** (what is over: thrown away, abandoned, cleaned, its pull request merged or closed), which is one link, `Show N finished threads`, until it is opened (per project,
+  chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the **Inbox / Automations switch** (two choices in a bordered capsule after the project's name and its `base:`, the chosen one raised, each with its count in a filled pill beside the word: `Inbox` the number that needs you, amber, `Automations` the number that failed, red, none when none; the count is also said in words to VoiceOver), then the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
+  has no Doctor: it is one list, 288 wide, the project's **inbox** (`INBOX · PROJECT`, with the project's Agents button and a `+` that opens the New goal card, until the
+  new-thread screen); the tasks are not listed in it, the Automations view lists them. The inbox has three sections in this order, each with its caps label and count: **Needs you** (amber: a thread
+  that asks for something or is broken, then the tasks that need approval, tagged `auto`), **Waiting** (blue label; everything not over: a turn going, a draft, accepted and not shipped, a pull request
+  still open) and **Done** (what is over: thrown away, abandoned, cleaned, its pull request merged or closed), which is one grey line with a chevron, `Show N finished threads`, until it is opened (per project,
   for the session), then `Hide finished threads`; the thread on screen is listed in its section whichever it is (the loader still stops at 50, then "N older threads"). Each row is **two
   lines** with the spend at the right (`$0.50`, `unknown` when the core cannot tell, none before a first turn): a mark at the left (working a spinner, needs you an amber dot with
-  a halo, done a check, idle a hollow ring, broken a cross), the title (`.callout`, semibold, cut in the middle) and under it the words of its state in the mark's tone (a thread's `Accepted`, a
-  task's `not approved`, `approval stale`); a Scheduled row is one line, the title, its words being its hover text and accessibility label, and the selected row sits on
+  a halo, done a check, idle a hollow ring, broken a cross), the title (`.callout`, semibold, cut in the middle) and under it the words of its state in grey (the mark and the section's colour say how urgent it is) (a thread's `Accepted`, a
+  task's `not approved`, `approval stale`); the selected row sits on
   `Theme.raised`. A click shows that thread, with its feed and settings, or that task's page; it starts and stops nothing. The spine is not drawn twice.
   A thread a task started (its run log names it) is not in the rail once it is over (done or idle): it is one click from the task's page (each run's
   `Open thread`), and listed while it is on screen so the selection can be seen; one that is working, needs you or is broken stays in Threads.
   The top tile of the project rail (a tray, with the needs-you count of every project) is the **inbox of all projects**: chosen, it is the selected tile and the rail's
   list is `INBOX · ALL PROJECTS`, the same three sections with every project's rows in the rail's order, each row with its project's initials in a neutral outlined pill (blue is a state, never a
   label); Done is one count and link for all of them; a click opens that project, shows the thread (or the automation's task) and goes back to that project's own inbox; a project tile does too.
-  Under the Scheduled list a quiet `New task…` link opens the New task screen (File ▸ New Task…, ⇧⌘N; the one `+`, on Threads, starts a goal, as ⌘N does).
+  `New task…` is a button at the right of the top bar while Automations is chosen (File ▸ New Task…, ⇧⌘N; the rail's one `+` starts a goal, as ⌘N does).
 - **The new-thread screen** is what the rail's `+` and ⌘N open: in the feed's 680 column
   under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says
   nothing runs and nothing costs until you say so, a composer panel (`Theme.panel`, a hairline, radius 12) with the text box, the staged
@@ -88,7 +88,7 @@ ships, and the mockup gets fixed.
   from the task (a file that does not load, an approval missing or stale, a last run that waited for review), the project (another
   thread is still active, so the next run would skip) and the machine (the timer's own lines that warn or fail), each with the one
   button that deals with it (`Approve` / `Re-approve`, `Open thread`); open when it has warnings, one line when it has none. Then the
-  **New task** is a quiet `New task…` link under the rail's Scheduled list (the rail has one `+`, on Threads; also File ▸ New Task… ⇧⌘N, and a button on the empty Tasks page) that opens a screen in the main area: `New task`
+  **New task** is the `New task…` button at the right of the top bar while Automations is chosen (the rail has one `+`, which starts a goal; also File ▸ New Task… ⇧⌘N, and a button on the empty Automations page) that opens a screen in the main area: `New task`
   with `Cancel`, a `NAME` field (focused; a red line says what is wrong with a name as it is typed), a `WHAT IT SHOULD DO` box, `Propose` and
   `Create empty task` (same size), and a note saying what Propose costs or that it needs a goal agent. Working shows a busy line with `Stop`; a
   proposal shows the same settings-and-diff view as Edit with AI with `Accept` and `Discard`; Accept opens the new task's page.
@@ -190,9 +190,11 @@ are not drawn and the card says to run `workbench init`. A chat's footer and the
 
 ## Tasks screen
 
-The rail's `Thread | Tasks` switch (a native segmented control) changes the centre between the thread screens and the project's
-scheduled tasks; it changes nothing in the thread. The Tasks screen is a left column (the "Will it run tonight?" card, then the
-task list) and the selected task's run timeline on the right. It is read only: it shows what `TaskLibrary`, `TaskRunLog` and
+The top bar's `Inbox | Automations` switch changes the centre between the thread screens and the project's scheduled tasks; it
+changes nothing in the thread. The Automations (Tasks) screen is a list of the tasks at the left (`SCHEDULED · N`, 360 wide, a row each: the
+mark, the name and under it the schedule and how the last run went, no `auto` tag), and the selected task's page on the right ("Will it run tonight?", then the run timeline). While the list is on
+screen the inbox rail steps aside: four columns (projects, inbox, list, page) do not fit the 900 pt window. The New task screen and the
+empty page have no list, so the inbox rail stays. It is read only: it shows what `TaskLibrary`, `TaskRunLog` and
 `TimerService.status()` say and writes nothing.
 
 - **Marks** reuse the five meanings. A run's outcome: `pr-opened` and `reported` green, a run going blue, `nothing-pending`,

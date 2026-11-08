@@ -8,10 +8,16 @@ struct InboxRowView: View {
     /// The project's initials, on a row of the inbox of all projects: whose it is.
     var project: String?
     var accessibility: String?
+    /// The `auto` tag on an automation's row: the inbox has it, the automations' own list does not.
+    var automationTag: Bool
     var action: () -> Void
 
-    init(row: InboxRow, selected: Bool, project: String? = nil, accessibility: String? = nil, action: @escaping () -> Void) {
-        (self.row, self.selected, self.project, self.accessibility, self.action) = (row, selected, project, accessibility, action)
+    init(
+        row: InboxRow, selected: Bool, project: String? = nil, accessibility: String? = nil, automationTag: Bool = true,
+        action: @escaping () -> Void
+    ) {
+        (self.row, self.selected, self.project, self.accessibility) = (row, selected, project, accessibility)
+        (self.automationTag, self.action) = (automationTag, action)
     }
 
     var body: some View {
@@ -22,15 +28,15 @@ struct InboxRowView: View {
                     HStack(spacing: Space.s) {
                         Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
                         if let project { Text(project).pill(style: .outlined) }
-                        if row.isAutomation { Text("auto").pill(Theme.grey) }
+                        if row.isAutomation && automationTag { Text("auto").pill(Theme.grey, style: .outlined) }
                     }
-                    Text(row.line).textStyle(.caption, row.mark.lineTint == .mark ? .state(row.mark.tint) : .secondary)
-                        .lineLimit(1).truncationMode(.tail)
+                    // The reason is grey whatever the mark: the mark and the section's colour say how urgent it is, as the design has it.
+                    Text(row.line).textStyle(.caption, .secondary).lineLimit(1).truncationMode(.tail)
                 }
                 Spacer(minLength: Space.s)
                 if let spend = row.spend { Text(spend).role(.monoDetail) }
             }
-            .padding(.horizontal, Space.s).padding(.vertical, Space.s)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
             .contentShape(Rectangle())
