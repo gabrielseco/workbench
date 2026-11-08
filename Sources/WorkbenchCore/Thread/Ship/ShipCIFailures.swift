@@ -67,7 +67,10 @@ extension ThreadService {
                 let log = try await runner.run(["run", "view", "--job", job, "--log-failed"], in: project.root)
                 let body = Self.withoutCredentials(log.stdout, environment: runner.environment)
                 if log.succeeded, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    failed[index].log = Self.tail(body, limit: Self.failedLogLimit)
+                    // GitRunner keeps the start of an over-long output, so what is left is not the end of the log: say so.
+                    let cut = "[the log is longer than \(GitRunner.outputLimit >> 20) MiB and was cut; this is not its end]\n"
+                    let note = log.outputTruncated ? cut : ""
+                    failed[index].log = note + Self.tail(body, limit: Self.failedLogLimit)
                 } else {
                     let why = Self.withoutCredentials(
                         log.stderr.trimmingCharacters(in: .whitespacesAndNewlines), environment: runner.environment)
@@ -165,9 +168,8 @@ extension ReviewLoop {
     static func ciFixBody(failures: [CIFailedCheck], checkCommand: String?) -> GoalBody {
         let (quote, cut) = quoted(ciReport(failures))
         let note = cut ? "\n\n(The report was cut at \(findingsLimit / 1024) KiB; the check's page on GitHub has the rest.)" : ""
-        let names = failures.map { "`\($0.name)`" }.joined(separator: ", ")
         let request =
-            "CI on the pull request for this branch reported failed checks (\(names)). What CI said is quoted below. Find why "
+            "CI on the pull request for this branch reported failed checks. What CI said of each is quoted below. Find why "
             + "each fails, whether a test, a lint, a build or something else, and fix whatever in this branch causes it, "
             + "or say in your final message why the failure is not in this branch (a flaky run, an outage, "
             + "a setting outside the code). "
