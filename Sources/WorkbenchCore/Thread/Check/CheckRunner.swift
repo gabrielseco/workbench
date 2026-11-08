@@ -52,16 +52,22 @@ struct CheckRunner {
 
     /// - Parameter attach: called once with the running process, so the caller can stop it.
     func run(
-        turn: Int, outputURL: URL, log: EventLogWriter, attach: @Sendable (ProcessRun) async -> Void
+        turn: Int, outputURL: URL, log: EventLogWriter, slot: CheckSlot? = nil, attach: @Sendable (ProcessRun) async -> Void
     ) async throws -> CheckReport {
+        // Counting the checks and recording this one's start are one step, so two threads cannot both take the last slot.
+        let claim = try await slot?.claim()
         try await log.append(.checkStarted, turn: turn, data: ["command": .string(command)])
         let started = Date()
 
         var outcome = Outcome()
+        var refusal: String?
+        if case .refused(let why)? = claim.map({ $0.outcome }) { refusal = why }
+        claim?.release()
         do {
+            if let refusal { throw CheckRefused(reason: refusal) }
             outcome = try await execute(outputURL: outputURL, attach: attach)
         } catch {
-            let reason = "could not run the check: \(error)"
+            let reason = (error as? CheckRefused)?.reason ?? "could not run the check: \(error)"
             outcome.error = reason
             // The reason goes where the output would have been. If that fails too, the event still has it.
             try? FileManager.default.createDirectory(

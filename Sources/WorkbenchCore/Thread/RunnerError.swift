@@ -14,6 +14,8 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
     /// `read_also` names a folder a run cannot be given (missing, not a checkout, the project itself); the text says which.
     case invalidReadAlso(String)
     case alreadyRunning
+    /// `max_concurrent_checks` threads are in their check; nothing was started, so no turn was spent on a check that cannot run.
+    case tooManyChecks(running: [String], max: Int)
     /// A Claude session handed to Herdr is working in this thread's worktree.
     case herdrSessionRunning
     case claudeNotFound(String)
@@ -49,6 +51,7 @@ public enum RunnerError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidBudget(let why): "the budget is not usable: \(why)"
         case .invalidReadAlso(let why): "\(why). Fix read_also in .workbench/config.toml, or remove it."
         case .alreadyRunning: "another `workbench run` holds this thread's log."
+        case .tooManyChecks(let running, let max): CheckSlot.message(running: running, max: max)
         case .herdrSessionRunning:
             "a Claude session handed to Herdr is working in this thread's worktree. Stop it (or let it end) before running."
         case .claudeNotFound(let name): "cannot find `\(name)` on PATH. Set claude_path in .workbench/config.toml."

@@ -212,6 +212,15 @@ public struct ThreadStore: Sendable {
         }
     }
 
+    /// The threads, other than `excluding`, whose runner is alive and whose check has started and not ended. A crashed runner
+    /// leaves an open check in its log but no live process, so the log alone would count it for ever.
+    public func runningChecks(excluding id: String? = nil) -> [String] {
+        threadIDs().filter { other in
+            guard other != id, runnerPID(id: other) != nil else { return false }
+            return (try? EventLogReader.read(at: project.eventsURL(other)))?.openCheck != nil
+        }
+    }
+
     /// The name a chat was started under: its id is `g-<yyyy-MM-dd>-<name>`. The whole name, never the tail of one, so `foo` is
     /// not the chat `bar-foo`.
     public static func chatName(of id: String) -> String? {
@@ -224,7 +233,7 @@ public struct ThreadStore: Sendable {
 
     /// An exclusive lock on the `threads/` directory itself (no file is left), held while a thread is admitted. The wait is
     /// short and bounded: the critical section is a directory listing and a mkdir.
-    private static func admit(_ directory: URL) throws -> Int32 {
+    static func admit(_ directory: URL) throws -> Int32 {
         let fd = open(directory.path, O_RDONLY | O_CLOEXEC)
         guard fd >= 0 else { throw ThreadStoreError.admissionBusy }
         let deadline = Date().addingTimeInterval(5)
@@ -234,6 +243,22 @@ public struct ThreadStore: Sendable {
                 throw ThreadStoreError.admissionBusy
             }
             usleep(2_000)
+        }
+        return fd
+    }
+
+    /// The same lock for code that is already async: the wait yields instead of holding a thread, so the holder, which may be
+    /// waiting on the executor itself (a check holds it across a log append), can always run and let go.
+    static func admit(_ directory: URL) async throws -> Int32 {
+        let fd = open(directory.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { throw ThreadStoreError.admissionBusy }
+        let deadline = Date().addingTimeInterval(5)
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            guard errno == EWOULDBLOCK || errno == EINTR, Date() < deadline else {
+                close(fd)
+                throw ThreadStoreError.admissionBusy
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000)
         }
         return fd
     }

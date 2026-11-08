@@ -68,10 +68,17 @@ one thread only at a cap of 1 (the app's flow is reworked in slice 5). `Context.
 A command that acts on a thread takes `--thread`; without it, one active thread is used and several are refused (exit 6, listing them).
 Update `docs/spec/exit-codes.md`, `cli-json.md`, and the verify-cli scenario that covers the commands.
 
-### 4. The safety layer
+### 4. The safety layer (built)
 
 Shared-repo git calls (`worktree add`, `fetch`, `gc`, the ship pushes) run one at a time per project, and retry once on a lock-file error.
 `max_concurrent_checks` (default 2): a check over the cap is refused with a message naming the running ones. Doctor stays exclusive.
+
+As built: `GitRunner.run` takes a flock on the common `.git` (read from the files, so a worktree and the repository give the same
+one) for the commands that change it, and retries a lock-file error once; `CheckSlot` counts the threads whose runner is alive and
+whose log has an open check, under the same admission lock as thread creation. A run with the slots full is refused up front
+(`RunnerError.tooManyChecks`, exit 6) so no turn is spent on a check that cannot run; a check that finds them full at the gate is
+recorded as a failed check that says why (there is no check-only rerun, so the thread is run again). See "Checks at once and the shared git directory" in
+[`../spec/goal-file.md`](../spec/goal-file.md).
 
 ### 5. The app for N live threads
 
