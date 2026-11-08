@@ -207,4 +207,30 @@ import Testing
         #expect(kinds.filter { $0 == "turn.started" }.count == 1 && kinds.filter { $0 == "turn.ended" }.count == 1)
         #expect(kinds.last == "base.synced", "the turn ended first, then the sync: \(kinds)")
     }
+
+    @Test func theNoteStartsATurnThatSeesTheConflictedFile() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())  // turn 1: the thread has a worktree and a turn behind it
+        _ = try await addOrigin(fx)
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        try write(worktree, "a.txt", "mine\n")
+        try await landOnMain(fx, "a.txt", "theirs\n")
+
+        let result = try await fx.service.syncBase(id: id)
+        guard case .conflicts = result else {
+            Issue.record("got \(result)")
+            return
+        }
+        let note = try #require(SyncPrompt.note(for: result))
+        var options = fx.options()
+        options.feedback = note
+        let report = try await fx.runner(id).run(options)
+
+        #expect(report.turn == 2)
+        let prompt = try String(contentsOf: fx.project.promptURL(id, turn: 2), encoding: .utf8)
+        #expect(prompt.contains("a.txt") && prompt.contains(note), "the turn starts from what the sync found")
+        let kinds = try kinds(fx, id)
+        #expect(kinds.filter { $0 == "turn.started" }.count == 2 && kinds.filter { $0 == "turn.ended" }.count == 2)
+    }
 }
