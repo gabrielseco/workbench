@@ -19,7 +19,7 @@ extension WorktreeManager {
     /// uncommitted changes and refuses when they would be overwritten; a branch checked out nowhere is moved with a
     /// compare-and-swap `update-ref`. A branch that has diverged from origin is left as it is. Any of these, and a fetch
     /// that fails, throws `baseUpdateFailed` saying why, and the caller does not start: a goal must not quietly start from
-    /// a stale base. With no `origin`, or a base origin is not known to have (a local-only branch), it does nothing.
+    /// a stale base. With no `origin`, or a base origin says it does not have (a local-only branch), it does nothing.
     @discardableResult
     public func updateBaseFromOrigin(_ base: String, timeout: TimeInterval = 30) async throws -> BaseUpdate {
         guard SafeNames.isBranchName(base) else { throw WorktreeError.invalidBase(base) }
@@ -28,13 +28,27 @@ extension WorktreeManager {
         guard (try? await git.run(["remote", "get-url", "origin"], in: repoRoot))?.succeeded == true,
             await sha(of: localRef) != nil
         else { return .skipped }
-        // A branch origin is not known to have, and that does not track origin, is a local one: nothing to update from.
+        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
+        // Nothing cached says origin has the branch (origin was added later, or never fetched): origin is asked, since its
+        // branch may already be ahead. Only origin saying it has no such branch makes it a local one.
         let tracksOrigin = try? await git.run(["config", "--get", "branch.\(base).remote"], in: repoRoot)
         let tracked = tracksOrigin?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "origin"
-        let known = await sha(of: remoteRef) != nil
-        guard tracked || known else { return .skipped }
+        if !tracked, await sha(of: remoteRef) == nil {
+            do {
+                let listed = try await fetcher.run(
+                    ["ls-remote", "--exit-code", "--heads", "origin", localRef], in: repoRoot)
+                // `--exit-code` exits 2 when origin answered and has no matching branch.
+                if listed.status == 2 { return .skipped }
+                guard listed.succeeded else {
+                    throw WorktreeError.baseUpdateFailed(
+                        base: base, reason: "could not ask origin for it (\(Self.firstLine(listed)))")
+                }
+            } catch GitError.timedOut {
+                throw WorktreeError.baseUpdateFailed(
+                    base: base, reason: "origin did not answer in \(Int(timeout))s")
+            }
+        }
 
-        let fetcher = GitRunner(executable: git.executable, environment: git.environment, timeout: timeout)
         let refspec = "+\(localRef):\(remoteRef)"
         do {
             let fetched = try await fetcher.run(["fetch", "--no-tags", "--quiet", "origin", refspec], in: repoRoot)
@@ -68,7 +82,11 @@ extension WorktreeManager {
         // Fast-forward: in the checkout that has the branch, or by ref when none has.
         _ = try? await git.run(["worktree", "prune"], in: repoRoot)
         if let checkout = await checkout(of: localRef) {
-            let merged = try await git.run(["merge", "--ff-only", "--quiet", remote], in: checkout)
+            let merged = try await git.run([
+                // Never stash the checkout's changes or overwrite its ignored files: either way git can "succeed" and
+                // leave the person's checkout changed. Refusing is what stops the goal.
+                "merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", "--quiet", remote,
+            ], in: checkout)
             guard merged.succeeded else {
                 throw WorktreeError.baseUpdateFailed(
                     base: base,

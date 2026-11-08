@@ -182,4 +182,109 @@ import Testing
         #expect(try await origin.head("refs/heads/main", in: fx.repo) == tip)
         #expect(try await origin.head("HEAD", in: fx.repo) != tip, "the checkout on another branch was left alone")
     }
+
+    @Test func stopsRatherThanOverwriteAnIgnoredFile() async throws {
+        // Origin starts tracking a path the checkout has as an ignored file: git must not replace it.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        try "secret.txt\n".write(to: fx.repo.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        try await Origin.must(fx.git, ["add", ".gitignore"], in: fx.repo)
+        try await Origin.must(fx.git, ["commit", "-q", "-m", "ignore secret"], in: fx.repo)
+        let origin = try await Origin(for: fx)
+        let before = try await origin.head("refs/heads/main", in: fx.repo)
+        try "theirs\n".write(to: origin.clone.appendingPathComponent("secret.txt"), atomically: true, encoding: .utf8)
+        try await Origin.must(fx.git, ["add", "-f", "secret.txt"], in: origin.clone)
+        try await Origin.must(fx.git, ["commit", "-q", "-m", "track secret"], in: origin.clone)
+        try await Origin.must(fx.git, ["push", "-q", "origin", "HEAD:main"], in: origin.clone)
+        try "mine\n".write(to: fx.repo.appendingPathComponent("secret.txt"), atomically: true, encoding: .utf8)
+
+        _ = try await expectRefused(fx, id)
+
+        #expect(try String(contentsOf: fx.repo.appendingPathComponent("secret.txt"), encoding: .utf8) == "mine\n")
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == before)
+    }
+
+    @Test func stopsOnAnOverlappingEditEvenWithAutoStash() async throws {
+        // With `merge.autoStash`, git could stash the edit, move main and leave conflicts while reporting success.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        try await Origin.must(fx.git, ["config", "merge.autoStash", "true"], in: fx.repo)
+        let before = try await origin.head("refs/heads/main", in: fx.repo)
+        try await origin.advance("a.txt", "theirs\n")
+        try "mine\n".write(to: fx.repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+
+        _ = try await expectRefused(fx, id)
+
+        #expect(try String(contentsOf: fx.repo.appendingPathComponent("a.txt"), encoding: .utf8) == "mine\n")
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == before)
+        let stashes = try await fx.git.run(["stash", "list"], in: fx.repo).stdout
+        #expect(stashes.isEmpty, "nothing was stashed: \(stashes)")
+    }
+
+    @Test func asksOriginWhenNothingCachedSaysItHasTheBase() async throws {
+        // Origin was added to an existing repository and never fetched: its main may already be ahead.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let tip = try await origin.advance()
+        try await Origin.must(fx.git, ["update-ref", "-d", "refs/remotes/origin/main"], in: fx.repo)
+        _ = try await fx.runner(id).run(fx.options())
+        #expect(try baseCommit(fx, id) == tip)
+
+        // The same, with origin unreachable: not taken for a local-only branch.
+        let offline = try await RunnerFixture()
+        let offlineID = try await offline.approvedThread()
+        let gone = offline.repo.deletingLastPathComponent().appendingPathComponent("gone-\(UUID().uuidString).git")
+        try await Origin.must(offline.git, ["remote", "add", "origin", gone.path], in: offline.repo)
+        _ = try await expectRefused(offline, offlineID)
+
+        // Origin answers and has no such branch: a local-only base starts as it is.
+        let local = try await RunnerFixture()
+        let localID = try await local.approvedThread()
+        let empty = local.repo.deletingLastPathComponent().appendingPathComponent("empty-\(UUID().uuidString).git")
+        try await Origin.must(local.git, ["init", "-q", "--bare", empty.path], in: local.repo)
+        try await Origin.must(local.git, ["remote", "add", "origin", empty.path], in: local.repo)
+        let report = try await local.runner(localID).run(local.options())
+        #expect(report.result == .succeeded)
+    }
+
+    /// A thread approved for a handoff: an interactive session cannot enforce a dollar cap, so the goal has none.
+    private func handoffThread(_ fx: RunnerFixture) async throws -> String {
+        let id = try await fx.approvedThread()
+        let url = fx.project.goalURL(id)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.hasPrefix("budget_usd:") ? "spend_policy: timeout_only" : String($0) }
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        return id
+    }
+
+    @Test func aHandoffStartsFromUpdatedMainAndStopsWhenItCannot() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await handoffThread(fx)
+        let origin = try await Origin(for: fx)
+        let tip = try await origin.advance()
+        let service = ThreadService(project: fx.project, git: fx.git)
+        _ = try await service.prepareHandoff(id: id)
+        #expect(try baseCommit(fx, id) == tip)
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == tip)
+
+        // Origin unreachable: nothing is cut.
+        let offline = try await RunnerFixture()
+        let offlineID = try await handoffThread(offline)
+        let offlineOrigin = try await Origin(for: offline)
+        try await offlineOrigin.advance()
+        let gone = offline.repo.deletingLastPathComponent().appendingPathComponent("gone-\(UUID().uuidString).git")
+        try await Origin.must(offline.git, ["remote", "set-url", "origin", gone.path], in: offline.repo)
+        do {
+            _ = try await ThreadService(project: offline.project, git: offline.git).prepareHandoff(id: offlineID)
+            Issue.record("the goal was handed off")
+        } catch let error as WorktreeError {
+            guard case .baseUpdateFailed = error else { throw error }
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: offline.project.worktreesDirectory.appendingPathComponent(offlineID).path))
+        #expect(try baseCommit(offline, offlineID) == nil)
+    }
 }
