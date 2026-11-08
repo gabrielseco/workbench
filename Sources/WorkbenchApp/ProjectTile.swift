@@ -21,8 +21,8 @@ struct ProjectTile: View {
             tile
             // The name under a project's picture, always: a tooltip waits and a person scanning the rail does not hover.
             if symbol == nil {
-                Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.middle)
-                    .frame(width: Self.side + Space.l).accessibilityHidden(true)
+                Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.tail)
+                    .frame(width: Self.side + Space.s).accessibilityHidden(true)
             }
         }
     }

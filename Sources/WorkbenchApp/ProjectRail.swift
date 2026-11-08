@@ -10,7 +10,7 @@ struct ProjectRail: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Space.m) {
+            VStack(spacing: Space.s) {
                 allProjects
                 Divider().frame(width: Space.xxxl - Space.xs)
                 ForEach(store.railTiles()) { tile in

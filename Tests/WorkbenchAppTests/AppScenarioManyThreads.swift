@@ -36,10 +36,10 @@ extension AppScenario {
 
     /// The projects of the rail, in order, by name (`rail` in the scenario's folder): `@PROJECT@` is the scenario's own project, a name
     /// with `!` is a folder that is gone, any other is a repository `verify-app.sh start` makes beside it. Empty: the rail is the project alone.
-    var railNames: [String] { self == .projectRail ? ["api", "@PROJECT@", "mobile", "!docs", "web"] : [] }
+    var railNames: [String] { self == .projectRail ? ["api", "@PROJECT@", "mobile", "!docs", "web-storefront-frontend"] : [] }
 
     /// What the other projects of the rail hold (`rail-projects/<name>/threads` in the scenario's folder), by name: `api` two threads that need
-    /// you, `mobile` a turn going, `web` a log that cannot be read. The scenario's own project and `docs` (a folder that is gone) hold none here.
+    /// you, `mobile` a turn going, `web-storefront-frontend` a log that cannot be read. The scenario's own project and `docs` (a folder that is gone) hold none here.
     enum RailProjectKind: Equatable {
         case needsYou(Int)
         case running
@@ -47,7 +47,7 @@ extension AppScenario {
     }
 
     var railProjectKinds: [String: RailProjectKind] {
-        self == .projectRail ? ["api": .needsYou(2), "mobile": .running, "web": .brokenLog] : [:]
+        self == .projectRail ? ["api": .needsYou(2), "mobile": .running, "web-storefront-frontend": .brokenLog] : [:]
     }
 
     /// Writes the threads of the rail's other projects beside the scenario's own (`verify-app.sh start` copies each into its repository).
