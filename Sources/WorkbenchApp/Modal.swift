@@ -22,17 +22,6 @@ enum ModalSize {
     }
 }
 
-/// Where a modal sits over the window.
-enum ModalPlacement {
-    /// In the middle.
-    case centered
-    /// Under the toolbar at the left edge, where the pill that opened it is.
-    case topLeading
-
-    var alignment: Alignment { self == .centered ? .center : .topLeading }
-    var transition: AnyTransition { self == .centered ? .opacity : .opacity.combined(with: .offset(y: -6)) }
-}
-
 /// The row of buttons at the foot of a modal: the actions at the trailing edge, and what goes with them (a busy line) at the leading one.
 struct ModalFooter<Leading: View, Actions: View>: View {
     @ViewBuilder var leading: () -> Leading
@@ -148,7 +137,6 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
     var title: String
     @Binding var isPresented: Bool
     var size: ModalSize
-    var placement: ModalPlacement
     var layer: Int
     var closesOnOutsideClick: Bool
     @ViewBuilder var accessory: () -> Accessory
@@ -160,19 +148,17 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
             .disabled(isPresented)
             .overlay {
                 GeometryReader { window in
-                    ZStack(alignment: placement.alignment) {
+                    ZStack {
                         if isPresented {
                             Color.black.opacity(0.12).contentShape(Rectangle())
                                 .onTapGesture { if closesOnOutsideClick { isPresented = false } }.transition(.opacity)
                             ModalCard(
                                 title: title, size: size, layer: layer, close: { isPresented = false }, accessory: accessory,
                                 content: presented)
-                                .padding(.top, placement == .centered ? 0 : Space.giant)
-                                .padding(.leading, placement == .centered ? 0 : Space.m)
-                                .transition(placement.transition)
+                                .transition(.opacity)
                         }
                     }
-                    .frame(width: window.size.width, height: window.size.height, alignment: placement.alignment)
+                    .frame(width: window.size.width, height: window.size.height)
                     .environment(\.modalRoom, window.size)
                 }
                 .animation(.easeOut(duration: 0.15), value: isPresented)
@@ -182,29 +168,30 @@ private struct ModalPresentation<Accessory: View, Presented: View>: ViewModifier
 }
 
 extension View {
-    /// A card over the window with a veil behind it, a title, and Esc and a close button as the way out. Every modal in the app is this:
-    /// a different look or behaviour is a new `size`, `placement` or prop here, not a `.sheet` or an overlay written in a view
+    /// A card over the window with a veil behind it, a title, and Esc and a close button as the way out. Every modal in the app is this,
+    /// and every modal is centred in the window (docs/DESIGN.md, Modals): there is no placement to choose, so a card cannot be put
+    /// beside the control that opened it. A different look or behaviour is a new `size` or prop here, not a `.sheet` or an overlay written in a view
     /// (`scripts/check-banned-apis.sh` fails one). Pass `closesOnOutsideClick: false` where a stray click would lose typed text. `accessory`
     /// puts controls beside the close button (a pager, a toggle). `layer` says which is on top when two are up: the order they are chained
     /// in (a later one draws over an earlier one), so Esc closes the one you see (`AppModals.swift` numbers them).
     func modal<Accessory: View, Presented: View>(
-        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, layer: Int = 0,
         closesOnOutsideClick: Bool = true, @ViewBuilder accessory: @escaping () -> Accessory,
         @ViewBuilder content: @escaping () -> Presented
     ) -> some View {
         modifier(
             ModalPresentation(
-                title: title, isPresented: isPresented, size: size, placement: placement, layer: layer,
+                title: title, isPresented: isPresented, size: size, layer: layer,
                 closesOnOutsideClick: closesOnOutsideClick, accessory: accessory, presented: content))
     }
 
     /// The same with nothing beside the close button.
     func modal<Presented: View>(
-        _ title: String, isPresented: Binding<Bool>, size: ModalSize, placement: ModalPlacement = .centered, layer: Int = 0,
+        _ title: String, isPresented: Binding<Bool>, size: ModalSize, layer: Int = 0,
         closesOnOutsideClick: Bool = true, @ViewBuilder content: @escaping () -> Presented
     ) -> some View {
         modal(
-            title, isPresented: isPresented, size: size, placement: placement, layer: layer,
+            title, isPresented: isPresented, size: size, layer: layer,
             closesOnOutsideClick: closesOnOutsideClick, accessory: { EmptyView() }, content: content)
     }
 }

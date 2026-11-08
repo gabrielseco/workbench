@@ -18,10 +18,6 @@ import Testing
         #expect(ModalText.closeLabel("Merge PR #482") == "Close the merge PR #482 panel")
     }
 
-    @Test func aCardUnderTheToolbarSitsAtTheLeadingEdgeAndACenteredOneInTheMiddle() {
-        #expect(ModalPlacement.topLeading.alignment == .topLeading && ModalPlacement.centered.alignment == .center)
-    }
-
     /// The red channel of the window's corner pixel, with the modal shown or not; nil if it could not be drawn.
     private func corner(presented: Bool) -> Double? {
         let view = Color.white.frame(width: 700, height: 500)

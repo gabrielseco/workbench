@@ -186,10 +186,14 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
     `ButtonStyles.swift`, `kind` and `size` as props), never `.bordered`, `.borderedProminent` or a `ButtonStyle` declared in a view
     (`scripts/check-banned-apis.sh` fails one). Buttons side by side pass the same `size`. `.plain`, `.borderless` and `.link` are for icons,
     rows and links.
-- **A modal is `.modal(...)`** (`Modal.swift`): a card over a veil with a title, and Esc and a close button as the way out, with `size`,
-  `placement` and an `accessory` beside the close button as props. Never `.sheet(`, `.popover(`, `.alert(`, `.confirmationDialog(`,
+- **A modal is `.modal(...)`** (`Modal.swift`): a card over a veil with a title, and Esc and a close button as the way out, with `size`
+  and an `accessory` beside the close button as props. It is always centred in the window; there is no placement to choose. Never `.sheet(`, `.popover(`, `.alert(`, `.confirmationDialog(`,
   `.fullScreenCover(` or an overlay with your own veil (`scripts/check-banned-apis.sh` fails one and names `.modal`). A look or behaviour
   it lacks is a new case or prop there, decided once. Every modal is mounted once at the window in `AppModals.swift`.
+- **A mistake a person finds that no check caught becomes a rule in the same PR that fixes it:** a line in `docs/DESIGN.md`, and
+  either a check (`scripts/check-banned-apis.sh`, `check-ui-tokens.sh`) or an item of the `design-review` rubric, so the next one is
+  caught by a tool and not by the person again. Where a component can be made unable to do the wrong thing (a prop removed), do that
+  first. A new variant of a component (a size, a placement, a prop) is not added for one screen: DESIGN.md names it first.
 - **Comments say why**, in one line, and are not added to restate code.
 
 ## Using Workbench on this repo

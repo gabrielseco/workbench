@@ -30,6 +30,8 @@ matters; say which file and line):
 - A `Text` in a row or header with no `lineLimit` or a fixed frame that clips it at 900 wide.
 - An icon-only `Button` or `Image` with no `.help(`.
 - A hand-made control (a shape with `onTapGesture` that acts as a button) where a system one exists.
+- A modal that is not centred in the window in a screenshot, or any code that places one (DESIGN.md, Modals: every modal is centred, whatever opened it).
+- A new variant of a component (a size, a placement, a prop, a case) that DESIGN.md does not name: a finding, even when the component allows it ("a new case there" is for the person to decide in DESIGN.md first).
 - A cost, count or duration shown as a number when the core says it is unknown.
 - A text box that is not `PlaceholderTextEditor`, or a change to a text box or its placeholder with no `scripts/check-text-alignment.py`
   result in the PR (empty shot, typed shot, the offset in pixels; the verify-app skill says how).

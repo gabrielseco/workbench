@@ -257,6 +257,9 @@ Every screen answers four questions without a click, and a change that touches a
 - Anything that opens another app or a file panel says so in its label or its `.help`.
 - Text a person may want to copy (a command, a path, a PR number) is selectable.
 - A sheet or card (`.modal`, `Modal.swift`) has one way out (Esc and a close button) and does not move the screen under it.
+- **A modal is centred in the window**, horizontally and vertically, whatever opened it: a card is never placed beside, under or over the
+  control it came from, and the project card is no exception. `.modal` has no placement to choose (it was removed so that it cannot be
+  re-added by accident); a card that seems to need one is a design question for DESIGN.md first, not a new case in `Modal.swift`.
 - Keyboard shortcuts where the siblings have them: a card cancels with Esc and confirms with ⌘Return.
 - A multi-line text box is `PlaceholderTextEditor` (the placeholder sits where the text view starts its text, measured by
   `scripts/check-text-alignment.py`; a box that grows with its text hides its scroll bar). Never a bare `TextEditor`: CI refuses it.
