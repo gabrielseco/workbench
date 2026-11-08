@@ -122,7 +122,8 @@ struct ReviewView: View {
         if let moved = review.baseMoved {
             section("Base moved") {
                 Text(moved.line).textStyle(.callout)
-                ForEach(moved.files, id: \.self) { mono($0) }
+                // The line names the first three; the rest are listed here.
+                if moved.files.count > 3 { ForEach(moved.files, id: \.self) { mono($0) } }
                 if moved.filesCut { Text("More files than are listed.").role(.caption) }
                 HStack {
                     Button("Bring up to date") { Task { await store.bringBaseIn() } }.plainButton(size: .regular)
