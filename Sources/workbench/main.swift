@@ -83,6 +83,8 @@ do {
         try await Commands.review(Array(arguments.dropFirst()))
     case "next":
         try await Commands.next(Array(arguments.dropFirst()))
+    case "sync":
+        exit(try await Commands.sync(Array(arguments.dropFirst())))
     case "grant":
         try await Commands.grant(Array(arguments.dropFirst()))
     case "open":

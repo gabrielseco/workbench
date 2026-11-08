@@ -71,6 +71,10 @@ enum Help {
         "next": Extra(
             changes: "nothing; read-only, derived from the thread's log and its changed files",
             example: "workbench next"),
+        "sync": Extra(
+            changes: "fetches origin/<base> into your repository; in the thread's worktree commits uncommitted work as its own "
+                + "commit and merges the new base in (a conflict is left in progress there); records base.synced",
+            example: "workbench sync   or   workbench sync --thread <id>"),
         "open": Extra(
             changes: "nothing in the thread or its worktree; --diff builds a folder of its own under the thread, "
                 + "replaced each time; starts the editor (or, with --print, nothing)",

@@ -151,6 +151,8 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
                 #expect(approved["provider"] as? String == "claude" && approved["recorded"] as? Bool == false)
                 current["agents"] = nil
                 current["approved_for"] = nil
+                // P23 slice 6 adds `base_moved`: an older thread has no worktree to compare, so it is null.
+                #expect(current.removeValue(forKey: "base_moved") is NSNull, "\(scenario.name) \(command)")
                 // The spine and attention are derived from the old log on every call; `status` has them, `review` does not.
                 if command == "status" {
                     let spine = try #require(current.removeValue(forKey: "spine") as? [[String: Any]])

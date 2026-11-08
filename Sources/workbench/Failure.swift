@@ -108,7 +108,7 @@ func failureKind(of error: Error) -> FailureKind {
         switch e {
         case .goalInvalid: return .invalidGoal
         case .copyValueInvalid: return .usage
-        case .acceptIncomplete, .discardIncomplete: return .failed
+        case .acceptIncomplete, .discardIncomplete, .syncFailed: return .failed
         default: return .refused
         }
     case let e as RunnerError:

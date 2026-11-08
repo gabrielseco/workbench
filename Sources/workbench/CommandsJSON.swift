@@ -8,12 +8,27 @@ extension Commands {
 
     static func statusKeys() -> [String] {
         ["v", "thread", "ended", "goal", "turns", "open_turn", "running", "last_result", "check", "cost_usd",
-         "notes", "base_gap", "worktree", "progress", "spine", "attention", "kind", "chat"]
+         "notes", "base_gap", "base_moved", "worktree", "progress", "spine", "attention", "kind", "chat"]
     }
 
     static func reviewKeys() -> [String] {
         ["v", "thread", "status", "ended", "title", "approval", "goal_problem", "turns", "last_result", "cost_usd",
-         "base", "worktree", "criteria", "commits", "diff", "check", "denied_tools", "notes", "next", "base_gap"]
+         "base", "worktree", "criteria", "commits", "diff", "check", "denied_tools", "notes", "next", "base_gap", "base_moved"]
+    }
+
+    /// How far the thread's base has moved on since its branch was cut, and which of the thread's files that touched; null when there
+    /// is no worktree or nothing could be compared (a failed fetch is `fetch_note`, never an error here).
+    private static func movedJSON(_ id: String, ctx: Context, fetch: Bool) async -> JSONValue {
+        do {
+            guard let moved = try await ctx.service.baseMovement(id: id, fetch: fetch) else { return .null }
+            return [
+                "base": .string(moved.base), "behind": .int(moved.behind), "tip": .string(String(moved.tip.prefix(12))),
+                "overlapping": .array(moved.overlapping.map { .string($0) }), "overlap_truncated": .bool(moved.overlapTruncated),
+                "fetched": .bool(fetch), "fetch_note": .null,
+            ]
+        } catch {
+            return ["base": .null, "behind": .null, "fetched": .bool(false), "fetch_note": .string("\(error)")]
+        }
     }
 
     private static func gapJSON(_ base: String, ctx: Context, fetch: Bool) async -> JSONValue {
@@ -159,6 +174,7 @@ extension Commands {
         let worktreeValue = worktreeJSON(id: id, ctx: ctx, events: events)
         let progressValue = progressJSON(state: state, id: id, ctx: ctx)
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
+        let moved = await movedJSON(id, ctx: ctx, fetch: fetch)
         let spine = ThreadSpine.derive(state: state, approval: approvalState)
         return [
             "v": .int(jsonVersion), "thread": .string(id), "ended": state.decision.map { .string($0) } ?? .null,
@@ -174,7 +190,7 @@ extension Commands {
             "cost_usd": state.knownCostUSD.map { .double($0) } ?? .null, "plan": planJSON(state),
             "plan_cost_usd": .double(state.planCostUSD),
             "agents": agentsJSON(state), "approved_for": approvedForJSON(state),
-            "notes": noteJSON(state.review.notes), "base_gap": gap,
+            "notes": noteJSON(state.review.notes), "base_gap": gap, "base_moved": moved,
             "worktree": worktreeValue, "progress": progressValue,
             "spine": spineJSON(spine), "attention": attentionJSON(Attention.derive(spine: spine, state: state)),
             "kind": .string(state.isChat ? "chat" : "goal"), "chat": chatJSON(state),
@@ -320,6 +336,7 @@ extension Commands {
         let decision: JSONValue
         if case .decided(let d) = review.status { decision = .string(d) } else { decision = .null }
         let gap: JSONValue = if let base { await gapJSON(base, ctx: ctx, fetch: fetch) } else { .null }
+        let moved = await movedJSON(state.id, ctx: ctx, fetch: fetch)
         return [
             "v": .int(jsonVersion), "thread": .string(state.id), "status": .string(statusString(review.status)),
             "lineage": lineageJSON(state), "follow_ups": followUpsJSON(id: state.id, ctx: ctx),
@@ -356,7 +373,7 @@ extension Commands {
                 }),
             "notes": noteJSON(review.notes),
             "next": .string(ReviewReport.nextStep(for: review.status, openTurn: state.openTurn ?? state.openCheck)),
-            "base_gap": gap,
+            "base_gap": gap, "base_moved": moved,
         ]
     }
 
