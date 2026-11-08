@@ -13,7 +13,7 @@
 # across lines is found. Known limit: a string literal holding ` //` hides what follows it on that line.
 set -u
 cd "${UI_TOKENS_ROOT:-$(dirname "$0")/..}"
-COMPONENTS='FocusRing.swift SegmentedSwitch.swift InboxRowView.swift CountBadge.swift ProjectTile.swift ProjectRail.swift Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift Space.swift Modal.swift Outcome.swift Busy.swift IconButton.swift FormControls.swift Marks.swift CodeBox.swift EmptyNote.swift'
+COMPONENTS='FocusRing.swift SegmentedSwitch.swift InboxRowView.swift CountBadge.swift ProjectTile.swift ProjectGlyph.swift ProjectRail.swift Theme.swift ButtonStyles.swift PlaceholderTextEditor.swift Card.swift Callout.swift Pill.swift SectionLabel.swift IconRow.swift Thumbnail.swift TextRole.swift TextStyle.swift ActionButton.swift Space.swift Modal.swift Outcome.swift Busy.swift IconButton.swift FormControls.swift Marks.swift CodeBox.swift EmptyNote.swift'
 exempt=$(echo "$COMPONENTS" | sed 's/ /|/g; s/\./\\./g')
 status=0
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One project of the rail: two letters in a rounded square, a bar at the edge while it is the open one, and its badge at the corner. A
+/// One project of the rail: its generated picture (`ProjectGlyph`) in a rounded square, a bar at the edge while it is the open one, and its badge at the corner. A
 /// project that cannot be opened is dimmed and says why in its tooltip. It is a button; its menu is the caller's.
 struct ProjectTile: View {
     var project: RailProject
@@ -50,7 +50,7 @@ struct ProjectTile: View {
         if let symbol {
             Image(systemName: symbol).textStyle(.heading, selected ? .primary : .secondary)
         } else {
-            Text(project.initials).textStyle(.bodyStrong).foregroundStyle(available ? .primary : .secondary)
+            ProjectGlyph(path: project.path).foregroundStyle(selected ? Theme.blue : Theme.fg2)
         }
     }
 
